@@ -128,20 +128,25 @@ Each request carries the client's current clock `sent_at`, and the server record
 - All three timestamps are stored, and history is shown by `effective_at`.
 - Lives in `coucou/core/ordering.py` and is unit-tested exhaustively.
 
-### 2.6 Photo size and format limits
+### 2.6 Photo size and format limits: keep originals ⚑
 
-**Client (before queuing):**
-- The photo is drawn on a canvas and re-encoded as **JPEG q≈0.85, long edge ≤ 2048 px**.
-- This keeps outbox blobs small in IndexedDB, strips metadata at source, and turns iPhone **HEIC into JPEG**, because Safari decodes HEIC itself. The server therefore never needs HEIC support.
+The owner wants full-resolution originals kept, because storage on the desktop isn't a concern for now.
+
+**Client:**
+- The phone queues the **original file bytes** unchanged; it does no canvas resizing.
+  - iOS Safari can't draw more than about 16.7 MP on a canvas, so a 48 MP iPhone photo can't be re-encoded on the device anyway.
+  - iOS usually hands the page a JPEG when photos are picked through `<input type=file accept="image/*">`.
+- A small canvas thumbnail is generated for the compose preview only.
 
 **Server:**
-- request body ≤ **10 MB**
-- note ≤ **280 characters**
-- Pillow `verify()`, then re-open
-- decompression-bomb guard at **40 MP**
-- accepted formats: JPEG, PNG, WebP
-- `ImageOps.exif_transpose` is applied, then the image is written as a fresh **JPEG q85, ≤ 2048 px, with no EXIF/XMP/ICC metadata** (sRGB is assumed)
-- The original upload is never written to disk.
+- request body ≤ **40 MB** (configurable); note ≤ **280 characters**
+- Pillow `verify()`, then re-open; decompression-bomb guard at **64 MP**, which covers 48 MP phone cameras
+- accepted formats: JPEG, PNG, WebP, **HEIC/HEIF** (adds the `pillow-heif` dependency for files that Safari passes through unconverted)
+- **Every** stored file is a fresh re-encode with no EXIF, XMP, GPS or maker notes. Orientation is applied first with `exif_transpose`, and the ICC profile is kept only when it's sRGB/Display P3, so colours stay right.
+- Two files are written per photo:
+  1. **Original:** full resolution, JPEG **q95**, written to the history folder (the file you browse).
+  2. **Display copy:** long edge ≤ **3072 px**, JPEG q85, written to a derived cache (`<MEDIA_ROOT>/.display/…`). It is regenerated from the original if missing, and it's what displays and phones download.
+- The uploaded bytes themselves (with metadata) never touch disk. They are processed in memory or in a temporary file that is deleted afterwards.
 
 ### 2.7 Reaction set
 
@@ -213,10 +218,17 @@ The brief says integration tests fake external dependencies. Faking the database
 - Two processes means two systemd units plus one for Funnel. Revocation is "≤ 2 s" rather than instant for already-open sockets.
 - The test layers are explicit: faked repositories where they add value, and the real test SQLite where the question is "does the query scope correctly".
 - Playwright adds a dev-only download of about 300 MB of browsers.
-- Client-side re-encoding makes the server's image path simpler and iOS-safe. It also means the server never keeps the original resolution.
+- Keeping originals means large uploads (up to 40 MB) sit in the phone's outbox until delivered, and adds `pillow-heif`. The history folder grows by roughly 3–8 MB per photo.
 - Phones need HTTPS for WebCrypto, service workers and Wake Lock. Real-device testing from M2 needs Tailscale (`tailscale serve` on the tailnet, or Funnel).
 
-## 4. Open questions for the owner
+## 4. Owner review
 
-- ⚑ items: 2.2 (process split, already chosen), 2.5 (clock-skew rule) and 2.8 (test SQLite in integration tests). Please confirm each on acceptance.
-- Default reaction set (2.7): happy with ❤️ 😂 😮 🥰?
+Resolved in review on 2026-09-27:
+- 2.2 process split: chosen by the owner.
+- 2.3 session TTL: 1 h confirmed.
+- 2.5 clock-skew rule: accepted.
+- 2.6 photos: keep full-resolution originals, display copies at 3072 px.
+- 2.7 default reactions: ❤️ 😂 😮 🥰 confirmed.
+- 2.8 test SQLite for isolation tests: accepted.
+- 2.9 Playwright and 2.10 mypy gate: kept.
+- Logo direction: D (bird in the round window), to be refined for the icons in M3–M4.
