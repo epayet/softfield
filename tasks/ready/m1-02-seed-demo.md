@@ -15,7 +15,7 @@ Implement `manage.py seed_demo`: it creates a small demo world (vault "Famille",
 ### Context
 This is a developer/admin command, so its output is plain English. Don't use `gettext` and don't touch the locale files.
 
-The stub to implement is all of `coucou/management/commands/seed_demo.py` (the `__init__.py` files already exist):
+The stub to implement is all of `coucou/management/commands/seed_demo.py` (`coucou/management/__init__.py` and `coucou/management/commands/__init__.py` already exist):
 
 ```python
 """``manage.py seed_demo``: a small demo world for trying Coucou in the admin. Safe to rerun."""
@@ -32,7 +32,7 @@ class Command(BaseCommand):
         raise NotImplementedError
 ```
 
-The models, all importable with `from coucou.models import Device, Membership, Space, User, Vault`. Only the fields you need are shown:
+The models are all importable with `from coucou.models import Device, Membership, Space, User, Vault`. They are defined in `coucou/models/accounts.py` (User, Vault, Membership), `coucou/models/spaces.py` (Space) and `coucou/models/devices.py` (Device). Only the fields you need are shown:
 
 ```python
 class User(AbstractUser):  # coucou/models/accounts.py
@@ -113,11 +113,3 @@ What the tests in `tests/integration/test_seed_demo.py` check:
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
-
-```yaml
-# --- runner ---
-result: escalated
-reason: pre-flight failed
-attempts: 0
-logs: var/runs/20260927-235135/m1-02-seed-demo
-```
