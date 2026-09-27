@@ -1,0 +1,45 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LM Studio (local)",
+      "options": {
+        "baseURL": "http://127.0.0.1:1234/v1"
+      },
+      "models": {
+        "qwen/qwen3.6-35b-a3b": {
+          "name": "Qwen3.6 35B A3B (LM Studio)",
+          "tool_call": true,
+          "reasoning": true,
+          "limit": { "context": 157440, "output": 32768 }
+        }
+      }
+    }
+  },
+  "model": "lmstudio/qwen/qwen3.6-35b-a3b",
+  "small_model": "lmstudio/qwen/qwen3.6-35b-a3b",
+  "instructions": ["AGENTS.md"],
+  "autoupdate": false,
+  "share": "disabled",
+  "permission": {
+    "edit": "allow",
+    "read": "allow",
+    "glob": "allow",
+    "grep": "allow",
+    "list": "allow",
+    "bash": {
+      "*": "deny",
+      "uv run pytest*": "allow",
+      "uv run ruff*": "allow",
+      "uv run mypy*": "allow",
+      "uv run lint-imports*": "allow"
+    },
+    "external_directory": "deny",
+    "question": "deny",
+    "webfetch": "deny",
+    "websearch": "deny",
+    "task": "deny",
+    "skill": "deny"
+  }
+}
