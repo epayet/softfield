@@ -113,3 +113,11 @@ What the tests in `tests/integration/test_seed_demo.py` check:
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: pre-flight failed
+attempts: 0
+logs: var/runs/20260927-235135/m1-02-seed-demo
+```
