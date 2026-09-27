@@ -79,7 +79,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 ## Headless Claude invocation
 
 - The environment has `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` **removed**, so the Pro login is always used.
-- Flags: `claude -p --output-format json --max-turns N --permission-mode <per job> --allowedTools <per job>`.
+- Flags: `claude -p --output-format json --permission-mode dontAsk --allowedTools <per job>`, with a wall-clock timeout (this CLI version has no turn cap).
 - **Usage limit reached:** parse the reset time, record `paused_until` in `var/runs/state.json`, sleep and resume. Fallback backoff runs from 15 min up to 5 h. The runner never loops tightly.
 
 ## Improving the workflow

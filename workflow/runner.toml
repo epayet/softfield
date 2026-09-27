@@ -1,0 +1,36 @@
+# Runner configuration. Changing caps or rules needs an Accepted ADR (CLAUDE.md);
+# timeouts and prices are operational and can be tuned freely.
+
+[caps]
+max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch)
+headless_claude_runs_per_milestone = 10 # reviews + escalations + narratives
+review_rounds = 3
+default_max_diff = 150                  # added + removed lines
+
+[timeouts]  # seconds
+warmup = 300
+opencode = 1800
+claude = 1800
+gate = 900
+
+[local_model]
+base_url = "http://127.0.0.1:1234"
+model = "qwen/qwen3.6-35b-a3b"          # LM Studio key; its settings are used as-is (JIT)
+opencode_model = "lmstudio/qwen/qwen3.6-35b-a3b"
+
+[claude]
+usage_limit_backoff_min = 900           # 15 min
+usage_limit_backoff_max = 18000         # 5 h
+
+[report]
+narrative = false  # a headless Claude narrative per session costs Pro usage; off by default
+
+# Notional API list prices (USD per million tokens) for the savings estimate only.
+# Source: Anthropic API pricing as of 2026-09. You're on Pro, so this isn't a bill.
+[report.prices."Claude Sonnet 5"]
+input = 2.0
+output = 10.0
+
+[report.prices."Claude Opus 5.5"]
+input = 4.0
+output = 20.0

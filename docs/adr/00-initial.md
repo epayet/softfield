@@ -198,7 +198,7 @@ The brief says integration tests fake external dependencies. Faking the database
 - The runner calls `claude -p` with:
   - `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` **removed** from the environment, so the Pro login is always used
   - an explicit per-job `--allowedTools` list and `--permission-mode`
-  - `--output-format json` and a `--max-turns` cap
+  - `--output-format json`, `--permission-mode dontAsk` (anything outside the allowed tools is denied) and a wall-clock timeout; this CLI version has no turn cap
 - Usage-limit responses are detected. The runner sleeps until the parsed reset time (fallback: exponential backoff from 15 min, max 5 h) and resumes. It never loops tightly.
 
 ### 2.14 Local model invocation
