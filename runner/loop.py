@@ -196,10 +196,19 @@ def _finish_escalation(s: Session, task: Task, rec: TaskRecord, reason: str, log
     s.log(f"{task.id}: escalated ({reason})")
 
 
+def _logs_dir(run_dir: Path, task_id: str) -> Path:
+    """A fresh log folder, so a requeued task's second run doesn't overwrite the first."""
+    logs, n = run_dir / task_id, 1
+    while logs.exists():
+        n += 1
+        logs = run_dir / f"{task_id}-run{n}"
+    logs.mkdir(parents=True)
+    return logs
+
+
 def run_task(s: Session, task: Task) -> TaskRecord:
     rec = TaskRecord(id=task.id, milestone=task.milestone)
-    logs = s.run_dir / task.id
-    logs.mkdir(parents=True, exist_ok=True)
+    logs = rec.logs = _logs_dir(s.run_dir, task.id)
     s.log(f"{task.id}: {task.goal}")
 
     problems = preflight(task, s.repo)
@@ -347,7 +356,7 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         s.report.tasks.append(rec)
         if rec.result != "done" and escalate:
             reason = rec.note or rec.result
-            handle_escalation(s, task, s.run_dir / task.id, reason)
+            handle_escalation(s, task, rec.logs or s.run_dir / task.id, reason)
         if once:
             break
     return close_session(s)

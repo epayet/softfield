@@ -32,6 +32,7 @@ def test_savings_are_priced_from_local_tokens():
     # 1M in * $2 + 0.1M out * $10 = $3.00
     assert "- Claude Sonnet 5: **$3.00**" in text
     assert "| `m1-02-b` | escalated | 3 |" in text
+    assert "| `m1-01-a` | done | 1 | 35 s | 5.0 min |" in text  # warm-up, then model time
     assert "## Headless Claude runs" in text
 
 

@@ -170,3 +170,12 @@ def test_refuses_to_start_on_a_dirty_tree(repo, fake_model):
     (repo / "dirty.txt").write_text("x")
     with pytest.raises(loop.RunnerError, match="clean main"):
         loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
+
+
+def test_a_requeued_task_gets_its_own_log_folder(tmp_path):
+    first = loop._logs_dir(tmp_path, "m1-01-thing")
+    (first / "opencode-1.jsonl").write_text("first run")
+    second = loop._logs_dir(tmp_path, "m1-01-thing")
+    assert first == tmp_path / "m1-01-thing"
+    assert second == tmp_path / "m1-01-thing-run2"
+    assert (first / "opencode-1.jsonl").read_text() == "first run"

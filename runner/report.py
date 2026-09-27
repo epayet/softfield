@@ -22,6 +22,7 @@ class TaskRecord:
     gate_failures: list[str] = field(default_factory=list)
     blocked: str | None = None
     note: str = ""
+    logs: Path | None = None
 
 
 @dataclass
@@ -103,13 +104,14 @@ def render(report: SessionReport, prices: dict[str, Price]) -> str:
         "",
         "## Tasks",
         "",
-        "| Task | Result | Attempts | Model time | Gates time | Local tokens in / out"
+        "| Task | Result | Attempts | Warm-up | Model time | Gates time | Local tokens in / out"
         " | Gate failures |",
-        "|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|",
     ]
     for t in tasks:
         lines.append(
-            f"| `{t.id}` | {t.result} | {t.attempts} | {_minutes(t.model_s)} | "
+            f"| `{t.id}` | {t.result} | {t.attempts} | {_minutes(t.warmup_s)} | "
+            f"{_minutes(t.model_s)} | "
             f"{_minutes(t.gates_s)} | {t.tokens_in:,} / {t.tokens_out:,} | "
             f"{', '.join(t.gate_failures) or '-'} |"
         )
