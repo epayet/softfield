@@ -78,3 +78,11 @@ What the tests expect:
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+logs: var/runs/20260927-234410/m1-01-space-reactions-column
+```
