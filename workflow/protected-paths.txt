@@ -3,16 +3,15 @@
 # This file is itself protected. Keep it current as files appear (see CLAUDE.md).
 
 # Device authentication protocol: server
-coucou/edges/devices/**
-coucou/core/pairing.py
+coucou/devices/**
 # Device authentication protocol + pairing: client JS
-coucou/edges/web/static/coucou/js/crypto/**
-coucou/edges/web/static/coucou/js/auth.js
-coucou/edges/web/static/coucou/js/pairing.js
+coucou/web/static/coucou/js/crypto/**
+coucou/web/static/coucou/js/auth.js
+coucou/web/static/coucou/js/pairing.js
 
 # Authorisation and query scoping
-coucou/core/authz.py
-coucou/edges/**/scoping.py
+coucou/access/**
+coucou/**/scoping.py
 
 # Sessions, cookies, settings, secrets
 coucou/settings/**
@@ -23,21 +22,22 @@ coucou/urls_public.py
 coucou/urls_admin.py
 coucou/asgi_public.py
 coucou/asgi_admin.py
-# (Device claim/revoke admin lives under coucou/edges/devices/**, protected above.
+coucou/serve.py
+# (Device claim/revoke admin lives under coucou/devices/**, protected above.
 #  Plain ModelAdmin registrations elsewhere are local-model work in M1.)
 
 # Uploads and media serving
-coucou/edges/media/**
+coucou/media/**
 
 # WebSocket authentication and routing
-coucou/edges/live/**
+coucou/live/**
 coucou/routing.py
 
 # Service worker scope/caching of authenticated data
-coucou/edges/web/static/coucou/sw.js
+coucou/web/static/coucou/sw.js
 
 # Migrations (any may change the security model; Claude reviews them all)
-coucou/edges/**/migrations/**
+coucou/**/migrations/**
 
 # Deployment, Funnel, systemd
 deploy/**
