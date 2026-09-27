@@ -29,10 +29,11 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    5. no dependency changes (`pyproject.toml` deps, `uv.lock`, `vendor/`)
    6. diff ≤ `max_diff` added + removed lines
    7. `layout`: unit test files match modules by name, one per module
-   8. `ruff check` + `ruff format --check`
-   9. `mypy`
-   10. the task's `tests:`
-   11. all unit + integration tests
+   8. `translations`: every user-facing string has a compiled French translation
+   9. `ruff check` + `ruff format --check`
+   10. `mypy`
+   11. the task's `tests:`
+   12. all unit + integration tests
 6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer.
 7. **Fail:**
    - attempt 2: same branch; the prompt adds the exact gate output

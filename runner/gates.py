@@ -5,6 +5,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 
+from runner import i18n
 from runner.gitops import Git
 from runner.tasks import Task
 
@@ -141,6 +142,12 @@ def gate_layout(ctx: GateContext) -> GateResult:
     return _result("layout", layout_problems(ctx.repo))
 
 
+def gate_translations(ctx: GateContext) -> GateResult:
+    """Every user-facing string has a French translation, compiled (ADR 00, A2)."""
+    problems = i18n.regenerated_problems(ctx.repo, ctx.timeout)
+    return _result("translations", problems + i18n.compiled_out_of_date(ctx.repo))
+
+
 def gate_ruff(ctx: GateContext) -> GateResult:
     check = _command("ruff", ctx, "uv", "run", "ruff", "check", ".")
     if not check.ok:
@@ -177,6 +184,7 @@ GATES: tuple[Callable[[GateContext], GateResult], ...] = (
     gate_dependencies,
     gate_diff_size,
     gate_layout,
+    gate_translations,
     gate_ruff,
     gate_mypy,
     gate_task_tests,

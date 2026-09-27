@@ -48,6 +48,7 @@ Numbered and specific down to function names, e.g. "Implement `validate_reaction
 - **Skeleton first:** Claude commits the stubs (`raise NotImplementedError`) and the failing tests to `main` before the task enters `ready/`.
 - If a task needs more than `max_diff`, split it.
 - Protected paths never appear in `files:`.
+- A task that adds user-facing text lists `coucou/locale/fr/LC_MESSAGES/django.po` and `django.mo` (or `djangojs.*` for JS) in `files:`, and its Steps say which French strings to add.
 
 ## Result footer (appended by the runner)
 

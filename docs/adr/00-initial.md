@@ -28,7 +28,7 @@ This ADR records the decisions already made in the brief (§1) and recommends th
 | Database | **SQLite in WAL mode.** |
 | Frontend | Django templates + **Alpine.js** (sender); plain **ES modules** (display, outbox, cache, crypto). No Node build, no React. Service workers and a web app manifest for both apps. Every asset is self-hosted (vendored Alpine, system fonts only). |
 | Hosting | The desktop plus **Tailscale Funnel** (`*.ts.net` HTTPS). systemd **user** services. When the desktop is off, the server is unreachable. |
-| i18n | English only, with every user-facing string wrapped for Django i18n (`gettext`, `{% translate %}`), ready for French. |
+| i18n | **English and French from the start** (Amendment A2). The Django admin stays English. |
 | Domain | User, Vault, Membership, Space (multiple controllers), Display, MemberDevice, Event (append-only log = history). |
 | Events | Client-generated UUID, client `created_at`, type; server `received_at`. Accepted once per UUID (idempotent). Clients push; the server never pulls. MVP types: `content.posted`, `reaction.added`. |
 | Offline | IndexedDB outbox; retry on open/foreground/`online` (iOS has no background sync); Android Background Sync is an optional extra. A display gets a snapshot on (re)connect, then live updates. |
@@ -243,3 +243,25 @@ Resolved in review on 2026-09-27:
 - **Admin separation** is enforced by an ordinary test (see 2.2), not by an import contract.
 - **Unit tests:** **one unit test file per module.** `coucou/<name>.py` → `tests/unit/test_<name>.py`, never two for the same module. The runner's `layout` gate checks this by file name only.
 - **mypy:** strict across the whole `coucou` package.
+
+### A2 (2026-09-27, owner-directed): English and French from the start
+
+Replaces the brief's "English only for the MVP". Mum reads French, so both languages ship together.
+
+- **Languages:** `LANGUAGES = en, fr`; the source language is English. **The Django admin stays English**: the admin process has no `LocaleMiddleware`, so it always uses `LANGUAGE_CODE = "en"`, and admin-only labels are plain strings, not wrapped for translation.
+- **Who sees which language:**
+  - **phones** follow the person's `User.language`
+  - **displays** follow `Device.language`, set in admin (e.g. Mum's kitchen display in French)
+  - **before a device is paired** (pairing screens), the browser's `Accept-Language` decides, via `LocaleMiddleware`
+  - M2 adds a small middleware that activates the authenticated device's language
+- **Server-side strings:** wrapped with `gettext`/`{% translate %}`, in `coucou/locale/fr/LC_MESSAGES/django.po`.
+- **Client strings:**
+  - JS strings use Django's built-in `JavaScriptCatalog` view (`djangojs.po`), served from the public app and cached by the service worker, so French still works offline
+  - dates and times use `Intl.DateTimeFormat` with the active language
+- **API errors** carry a stable `code` (e.g. `note_too_long`); clients show translated text for the code. Server messages are for logs and tests only.
+- **What isn't translated:** user content (notes), emoji, file names and the history folder.
+- **Enforcement:**
+  - the runner's `translations` gate regenerates the catalogues, fails on any missing or fuzzy French translation, then restores the files
+  - a test checks that the committed catalogues are complete and their `.mo` files are compiled and up to date
+  - compiled `.mo` files are committed, so deploys need no gettext tools
+- **Authoring:** a task that adds user-facing strings lists `coucou/locale/fr/LC_MESSAGES/*.po` and `*.mo` in its `files:` and writes the French translations itself. Claude checks the French at milestone review.

@@ -27,6 +27,7 @@ Also follow [`AGENTS.md`](AGENTS.md). This file lists only what Claude does and 
 - Run the milestone review per `docs/workflow.md` §Review, grading findings as **blocking**, **should-fix** or **nit**.
 - Route each finding: a fix task for the local model, a direct fix, or a draft ADR (which stops the loop).
 - Respect the stop rules and the headless-run cap in `workflow/runner.toml`.
+- Check the French in `coucou/locale/fr/` reads naturally and warmly (the local model writes it; Mum reads it).
 - Write `docs/reviews/mN.md` with what was built, the findings, the backlog, the metrics, the stop reason and workflow observations.
 
 ## ADRs

@@ -4,6 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from runner import i18n
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.loop import RunnerError, run_session
@@ -31,6 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     status = sub.add_parser("status", help="milestone metrics so far")
     status.add_argument("--milestone", type=int, required=True)
     sub.add_parser("check-layout", help="check unit test file naming")
+    sub.add_parser("check-i18n", help="check every user-facing string has a French translation")
     args = parser.parse_args(argv)
 
     repo = _repo()
@@ -49,6 +51,11 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "status":
             m = milestone_metrics(repo, args.milestone)
             print(f"done {m.done}, escalated {m.escalated}, attempts {m.attempts}")
+        elif args.command == "check-i18n":
+            problems = i18n.regenerated_problems(repo, cfg.gate_timeout)
+            problems += i18n.compiled_out_of_date(repo)
+            print("\n".join(problems) or "translations OK")
+            return 1 if problems else 0
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
