@@ -85,3 +85,18 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 ## Improving the workflow
 
 Evidence from milestone reports leads to an ADR, and nothing changes until the owner accepts it. Runner bug fixes that don't change behaviour are exempt.
+
+## Session reports
+
+The owner wants to learn how the frontier + local workflow performs, so every runner session leaves a report.
+
+- **Deterministic part:** the runner writes `docs/sessions/YYYY-MM-DD-HHMM.md` at the end of each session, with no AI involved and no Pro usage. It covers:
+  - tasks attempted, their outcomes and attempts, and wall-clock time per task and phase (warm-up, model, gates)
+  - gate failures by gate, plus BLOCKED and escalation events
+  - **local tokens:** input and output tokens processed by the local model, from OpenCode's JSON events
+  - **headless Claude:** run count and token usage, from `claude -p --output-format json`
+  - **frontier-savings estimate:** local tokens priced at Claude API list prices from `workflow/runner.toml`. This is notional on a Pro plan; it's shown to compare the two sides, not as a bill.
+- **Narrative part:** what went well, what didn't, improvement opportunities and interesting observations.
+  - Claude writes it whenever Claude is in the loop: calibration, milestone reviews, escalations and interactive sessions.
+  - An optional headless narrative at the end of a session (`narrative = true` in `runner.toml`) is **off by default**, because it costs Pro usage and counts toward the milestone cap.
+- Milestone reports (`docs/reviews/mN.md`) summarise the session reports of that milestone.
