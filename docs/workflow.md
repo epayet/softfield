@@ -1,6 +1,6 @@
 # Workflow: how Coucou gets built
 
-> Draft: it reflects the brief §7 and ADR 00, which is still **Proposed**. Changes to anything here need an Accepted ADR (see CLAUDE.md).
+> Reflects the brief §7 and [ADR 00](adr/00-initial.md) (Accepted). Changes to anything here need an Accepted ADR (see CLAUDE.md).
 
 ## Roles
 

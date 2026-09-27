@@ -1,6 +1,6 @@
 # ADR 00: Initial architecture and workflow
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-09-27)
 - **Date:** 2026-09-27
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Supersedes:** the original brief (`docs/original-brief.md`) once Accepted
