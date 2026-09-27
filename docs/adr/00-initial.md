@@ -35,7 +35,7 @@ This ADR records the decisions already made in the brief (§1) and recommends th
 | Media | A human-browsable folder `<MEDIA_ROOT>/<vault>/<space>/YYYY/MM/YYYY-MM-DD_HHMM_<shortid>.jpg` plus a sidecar `.json` (note, author, timestamps). Re-encoded, metadata stripped, served only through authorised views. |
 | Security | Non-extractable ECDSA P-256 keys (WebCrypto) per device; challenge-response; short-lived session; no passwords in the public app; pairing codes claimed in admin; immediate revocation; authorisation derived only from the authenticated device; isolation tests on every endpoint and consumer. |
 | Privacy | No analytics or third-party requests. Telemetry is last-seen plus app version only. Logs never contain note text or photo contents. |
-| Code | Functional core (pure modules inside each app) and imperative shell (the app's other modules), enforced by **import-linter** (see Amendment A1). ruff for lint and format. Type hints throughout. |
+| Code | Business rules as plain functions without side effects (time and IDs passed in), kept apart from Django/IO modules by convention (see Amendment A1). ruff for lint and format. Type hints throughout. |
 | Workflow | Claude + runner + local model, coordinated through files (see `docs/workflow.md`). |
 
 ---
@@ -60,7 +60,6 @@ The brief asks for "a single process with the in-memory channel layer" **and** "
 - **Tests that prove the construction:**
   - The public ASGI app returns 404 for `/admin/` and every admin path.
   - `coucou.urls_public` has no resolver that includes `admin.site.urls`.
-  - An import-linter contract forbids `coucou.urls_public` and the public apps from importing `django.contrib.admin`.
 - **Cross-process signalling (revocation and pairing claims):**
   - The public process runs one asyncio **DB watcher** that polls a small `auth_generation` counter every 1 s. A write from the admin process bumps the counter.
   - When the counter changes, the watcher loads the revoked or changed devices and closes their consumers through the in-memory group layer (`device.<id>` groups).
@@ -150,7 +149,7 @@ The owner wants full-resolution originals kept, because storage on the desktop i
 
 ### 2.7 Reaction set
 
-- Each space has a configurable ordered list of **3–5** emoji, validated in pure logic.
+- Each space has a configurable ordered list of **3–5** emoji, validated by a plain function.
 - The default is **❤️ 😂 😮 🥰**.
 - Emoji render with each device's system emoji font; no emoji web font is bundled.
 
@@ -158,7 +157,7 @@ The owner wants full-resolution originals kept, because storage on the desktop i
 
 The brief says integration tests fake external dependencies. Faking the database for **isolation tests** would prove nothing, though, because vault scoping lives in real queries. Proposal:
 
-- **Unit tests** (`tests/unit/`) cover the pure modules only: fast, no Django, one test file per module (see Amendment A1).
+- **Unit tests** (`tests/unit/`) cover plain functions without side effects: fast, no Django, one test file per module (see Amendment A1).
 - **Integration tests** (`tests/integration/`) fall into two kinds:
   1. **Service tests.** Edge services are wired to **in-memory fakes** of repository Protocols (`EventRepo`, `DeviceRepo` …) and of the clock, ID source and media store, which lets orchestration be tested without the ORM.
   2. **Django tests.** Views, consumers, ORM repositories and **all isolation tests** run against Django's in-memory **test SQLite**, treated as an in-process dependency, not an external one.
@@ -235,13 +234,12 @@ Resolved in review on 2026-09-27:
 
 ## Amendments
 
-### A1 (2026-09-27, owner-directed): one flat Django app
+### A1 (2026-09-27, owner-directed): one flat Django app, purity by convention
 
 - **Layout:** there are no `core/` or `edges/` packages, no `logic/` folders and no per-feature Django apps. The project has **one Django app, `coucou`**, with one `migrations/` folder.
   - Models and admin are small packages split by topic (`coucou/models/{accounts,spaces,events,devices}.py`, and `coucou/admin/` to match), so device code can be a protected path of its own.
-  - Pure modules sit flat in `coucou/` (e.g. `coucou/ordering.py`) beside shell modules (`repos.py`, `scoping.py`, `views/`, `live/`).
-- **Pure modules:** the functional-core rule is unchanged; only where the code lives changes.
-  - **Source of truth:** the `pure modules` contract in `.importlinter`, a protected file maintained by Claude.
-  - **Allowed imports:** listed modules may import only the stdlib and other listed modules. import-linter enforces this.
-- **Unit tests:** **exactly one unit test file per pure module, and one module per file.** `coucou/<name>.py` ↔ `tests/unit/test_<name>.py`. The `layout` gate checks this both ways against the `.importlinter` list.
+  - Other modules sit flat in `coucou/`.
+- **Purity is a convention, not a gate.** Business rules are written as plain functions with time and IDs passed in (e.g. `coucou/ordering.py`), which keeps them easy to unit test. Modules aren't marked, and **import-linter is not used**. Reviews catch drift.
+- **Admin separation** is enforced by an ordinary test (see 2.2), not by an import contract.
+- **Unit tests:** **one unit test file per module.** `coucou/<name>.py` → `tests/unit/test_<name>.py`, never two for the same module. The runner's `layout` gate checks this by file name only.
 - **mypy:** strict across the whole `coucou` package.

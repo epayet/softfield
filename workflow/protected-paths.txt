@@ -55,6 +55,5 @@ opencode.json
 AGENTS.md
 CLAUDE.md
 docs/adr/**
-.importlinter
 pyproject.toml
 uv.lock

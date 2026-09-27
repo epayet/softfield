@@ -32,8 +32,7 @@
       "*": "deny",
       "uv run pytest*": "allow",
       "uv run ruff*": "allow",
-      "uv run mypy*": "allow",
-      "uv run lint-imports*": "allow"
+      "uv run mypy*": "allow"
     },
     "external_directory": "deny",
     "question": "deny",

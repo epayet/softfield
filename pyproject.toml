@@ -30,7 +30,6 @@ dev = [
     "mypy>=1.13",
     "django-stubs[compatible-mypy]>=5.1",
     "types-pyyaml>=6",
-    "import-linter>=2.1",
     "pytest-playwright>=0.5",
 ]
 
@@ -71,7 +70,7 @@ module = ["tests.*"]
 disallow_untyped_defs = false
 
 [[tool.mypy.overrides]]
-module = ["channels.*", "pillow_heif.*", "importlinter.*"]
+module = ["channels.*", "pillow_heif.*"]
 ignore_missing_imports = true
 
 [tool.django-stubs]

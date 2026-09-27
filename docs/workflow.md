@@ -28,8 +28,8 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    4. existing test files unchanged (SHA-256 against main)
    5. no dependency changes (`pyproject.toml` deps, `uv.lock`, `vendor/`)
    6. diff ≤ `max_diff` added + removed lines
-   7. `ruff check` + `ruff format --check`
-   8. `lint-imports` (purity contract)
+   7. `layout`: unit test files match modules by name, one per module
+   8. `ruff check` + `ruff format --check`
    9. `mypy`
    10. the task's `tests:`
    11. all unit + integration tests
