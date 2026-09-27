@@ -10,9 +10,9 @@ id: m1-03-space-reaction-set        # unique; m<milestone>-<nn>-<slug>
 milestone: 1
 depends_on: [m1-02-space-model]     # task ids; [] if none
 files:                              # the ONLY paths the task may change
-  - coucou/spaces/reactions.py
+  - coucou/reactions.py
 tests:                              # the tests that define done (already exist, currently failing)
-  - tests/unit/spaces/test_reactions.py
+  - tests/unit/test_reactions.py
 max_diff: 150                       # added+removed lines, optional (default 150)
 finding: m1-F2                      # optional: the review finding this fixes
 ---
@@ -32,7 +32,7 @@ Everything the model needs, **pasted in**, so it never has to explore:
 The runner's pre-flight checks that every quoted path exists and every quoted `def`/`class` name is found.
 
 ### Pattern to follow
-One existing file whose style and structure to copy, e.g. `coucou/events/ordering.py`.
+One existing file whose style and structure to copy, e.g. `coucou/ordering.py`.
 
 ### Steps
 Numbered and specific down to function names, e.g. "Implement `validate_reaction_set(emojis: Sequence[str]) -> ReactionSet` raising `InvalidReactionSet` when…".

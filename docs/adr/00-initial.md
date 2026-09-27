@@ -126,7 +126,7 @@ Each request carries the client's current clock `sent_at`, and the server record
   - Clamping to `received_at` ensures an event can never come from the future.
 - **"Current content"** is the content event with the greatest `(effective_at, received_at, event_id)`. This is deterministic, and ties can't flip.
 - All three timestamps are stored, and history is shown by `effective_at`.
-- Lives in `coucou/events/ordering.py` and is unit-tested exhaustively.
+- Lives in `coucou/ordering.py` and is unit-tested exhaustively.
 
 ### 2.6 Photo size and format limits: keep originals ⚑
 
@@ -158,7 +158,7 @@ The owner wants full-resolution originals kept, because storage on the desktop i
 
 The brief says integration tests fake external dependencies. Faking the database for **isolation tests** would prove nothing, though, because vault scoping lives in real queries. Proposal:
 
-- **Unit tests** (`tests/unit/<app>/`) cover the pure modules only: fast, no Django, one test file per module (see Amendment A1).
+- **Unit tests** (`tests/unit/`) cover the pure modules only: fast, no Django, one test file per module (see Amendment A1).
 - **Integration tests** (`tests/integration/`) fall into two kinds:
   1. **Service tests.** Edge services are wired to **in-memory fakes** of repository Protocols (`EventRepo`, `DeviceRepo` …) and of the clock, ID source and media store, which lets orchestration be tested without the ORM.
   2. **Django tests.** Views, consumers, ORM repositories and **all isolation tests** run against Django's in-memory **test SQLite**, treated as an in-process dependency, not an external one.
@@ -235,11 +235,13 @@ Resolved in review on 2026-09-27:
 
 ## Amendments
 
-### A1 (2026-09-27, owner-directed): feature apps, pure modules inside them
+### A1 (2026-09-27, owner-directed): one flat Django app
 
-- **Layout:** there are no `coucou/core` or `coucou/edges` packages, and no `logic/` sub-folders. The code is organised by **feature app** (`coucou/accounts`, `spaces`, `events`, `devices`, `access`, `live`, `media`, `web`). Each app's pure modules sit next to its Django modules, e.g. `coucou/events/ordering.py` beside `coucou/events/models.py`.
+- **Layout:** there are no `core/` or `edges/` packages, no `logic/` folders and no per-feature Django apps. The project has **one Django app, `coucou`**, with one `migrations/` folder.
+  - Models and admin are small packages split by topic (`coucou/models/{accounts,spaces,events,devices}.py`, and `coucou/admin/` to match), so device code can be a protected path of its own.
+  - Pure modules sit flat in `coucou/` (e.g. `coucou/ordering.py`) beside shell modules (`repos.py`, `scoping.py`, `views/`, `live/`).
 - **Pure modules:** the functional-core rule is unchanged; only where the code lives changes.
   - **Source of truth:** the `pure modules` contract in `.importlinter`, a protected file maintained by Claude.
   - **Allowed imports:** listed modules may import only the stdlib and other listed modules. import-linter enforces this.
-- **Unit tests:** **exactly one unit test file per pure module, and one module per file.** `coucou/<app>/<name>.py` ↔ `tests/unit/<app>/test_<name>.py`. The `layout` gate checks this both ways against the `.importlinter` list.
-- **mypy:** strict across the whole `coucou` package, which removes the need for a second list of pure modules.
+- **Unit tests:** **exactly one unit test file per pure module, and one module per file.** `coucou/<name>.py` ↔ `tests/unit/test_<name>.py`. The `layout` gate checks this both ways against the `.importlinter` list.
+- **mypy:** strict across the whole `coucou` package.
