@@ -43,3 +43,11 @@ The test allows at most 3 queries for the whole list, so the vaults must be pref
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 63
+gate_failures: []
+```
