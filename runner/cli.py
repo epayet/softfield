@@ -7,6 +7,7 @@ from pathlib import Path
 from runner import i18n
 from runner.config import load_config
 from runner.gates import layout_problems
+from runner.gitops import Git
 from runner.loop import RunnerError, run_session
 from runner.milestone import milestone_metrics, review_milestone
 
@@ -31,6 +32,9 @@ def main(argv: list[str] | None = None) -> int:
     review.add_argument("--base", help="git ref the milestone started from (default mN-start)")
     status = sub.add_parser("status", help="milestone metrics so far")
     status.add_argument("--milestone", type=int, required=True)
+    commits = sub.add_parser("commits", help="list the commits the local model made")
+    commits.add_argument("--milestone", type=int, required=True)
+    commits.add_argument("--base", help="git ref to list from (default mN-start)")
     sub.add_parser("check-layout", help="check unit test file naming")
     sub.add_parser("check-i18n", help="check every user-facing string has a French translation")
     args = parser.parse_args(argv)
@@ -51,6 +55,11 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "status":
             m = milestone_metrics(repo, args.milestone)
             print(f"done {m.done}, escalated {m.escalated}, attempts {m.attempts}")
+        elif args.command == "commits":
+            found = Git(repo).local_model_commits(args.base or f"m{args.milestone}-start")
+            for c in found:
+                print(f"{c.sha[:9]}  {c.task}  attempts {c.attempts}  {c.size} lines  ({c.author})")
+            print(f"{len(found)} local-model commit(s)")
         elif args.command == "check-i18n":
             problems = i18n.regenerated_problems(repo, cfg.gate_timeout)
             problems += i18n.compiled_out_of_date(repo)

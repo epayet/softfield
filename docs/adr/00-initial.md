@@ -272,3 +272,13 @@ The owner sets the context length in LM Studio and changes it as they see fit (1
 
 - `opencode.json` has no `limit` for the local model.
 - The runner no longer compares the two. It records the context LM Studio actually loaded in the session report, as information only.
+
+### A4 (2026-09-28, owner-directed): every commit says who made it
+
+The owner wants to see which commits the local agents made. Until now the runner's squash-merges named the local model only in the message body, under the owner's git identity, and runner and headless-Claude commits looked like the owner's own.
+
+- **Local-model merges** are authored by `Coucou local model <local-model@coucou.invalid>`; the committer stays the owner. They end with the trailers `Agent: local-model`, `Task: <id>`, `Model: <LM Studio key>` and `Attempts: <n>`. WIP commits on task branches carry the same author.
+- **Runner bookkeeping** (task moves, session reports, review metrics) is authored by `Coucou runner <runner@coucou.invalid>`, with `Agent: runner`.
+- **Headless Claude** (escalations, reviews) commits carry `Agent: claude-headless`; **interactive Claude** commits carry `Co-Authored-By: Claude …`. Owner commits carry nothing.
+- **Listing:** `uv run runner commits --milestone N` lists the local-model commits since `mN-start` (sha, task, attempts, lines changed). Commits from before A4 are recognised by their body text; history isn't rewritten.
+- **Reports:** the session report shows each merged task's commit, and `docs/reviews/mN.md` includes the listing.

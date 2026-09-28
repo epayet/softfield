@@ -20,7 +20,13 @@ from runner.claude import (
 )
 from runner.config import Config, read_protected
 from runner.gates import BLOCKED_FILE, GateContext, GateResult, parse_blocked, run_gates
-from runner.gitops import Git
+from runner.gitops import (
+    LOCAL_MODEL_AGENT,
+    LOCAL_MODEL_AUTHOR,
+    RUNNER_AUTHOR,
+    Git,
+    with_trailers,
+)
 from runner.local_model import (
     loaded_context_length,
     run_opencode,
@@ -39,6 +45,8 @@ from runner.tasks import (
 )
 
 MAIN = "main"
+RUNNER_AGENT = "runner"
+CLAUDE_HEADLESS_AGENT = "claude-headless"
 
 
 class RunnerError(RuntimeError):
@@ -47,6 +55,18 @@ class RunnerError(RuntimeError):
 
 def now() -> datetime:
     return datetime.now().astimezone()
+
+
+def runner_commit(s: "Session", message: str) -> bool:
+    """The runner's own bookkeeping (task moves, reports), attributed to it (ADR 00 A4)."""
+    return s.git.commit_all(with_trailers(message, agent=RUNNER_AGENT), author=RUNNER_AUTHOR)
+
+
+def local_wip_commit(s: "Session", message: str) -> bool:
+    """The model's work on its task branch; squashed away on merge, kept on escalation."""
+    return s.git.commit_all(
+        with_trailers(message, agent=LOCAL_MODEL_AGENT), author=LOCAL_MODEL_AUTHOR
+    )
 
 
 @dataclass
@@ -187,7 +207,7 @@ def _finish_escalation(s: Session, task: Task, rec: TaskRecord, reason: str, log
             "logs": logs.relative_to(s.repo).as_posix(),
         },
     )
-    s.git.commit_all(f"runner: escalate {task.id} ({reason})")
+    runner_commit(s, f"runner: escalate {task.id} ({reason})")
     rec.note = reason
     s.log(f"{task.id}: escalated ({reason})")
 
@@ -246,11 +266,11 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             else:
                 rec.blocked = category
                 rec.result = "blocked"
-                s.git.commit_all(f"wip {task.id} attempt {attempt} (blocked)")
+                local_wip_commit(s, f"wip {task.id} attempt {attempt} (blocked)")
                 _finish_escalation(s, task, rec, f"BLOCKED: {category}", logs)
                 return rec
 
-        s.git.commit_all(f"wip {task.id} attempt {attempt}")
+        local_wip_commit(s, f"wip {task.id} attempt {attempt}")
         started = time.monotonic()
         results = run_gates(GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout))
         rec.gates_s += time.monotonic() - started
@@ -277,11 +297,18 @@ def run_task(s: Session, task: Task) -> TaskRecord:
 
 def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
     branch = f"task/{task.id}"
-    s.git.squash_merge(
+    rec.commit = s.git.squash_merge(
         branch,
         MAIN,
-        f"{task.id}: {task.goal}\n\nImplemented by the local model ({s.cfg.lm_model}) via the"
-        f" runner in {rec.attempts} attempt(s).",
+        with_trailers(
+            f"{task.id}: {task.goal}\n\nImplemented by the local model ({s.cfg.lm_model}) via"
+            f" the runner in {rec.attempts} attempt(s).",
+            agent=LOCAL_MODEL_AGENT,
+            task=task.id,
+            model=s.cfg.lm_model,
+            attempts=str(rec.attempts),
+        ),
+        author=LOCAL_MODEL_AUTHOR,
     )
     target = s.tasks_dir("done") / task.path.name
     s.git.move(task.path, target)
@@ -294,7 +321,7 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
             "gate_failures": rec.gate_failures or "[]",
         },
     )
-    s.git.commit_all(f"runner: {task.id} done")
+    runner_commit(s, f"runner: {task.id} done")
     s.git.run("branch", "-D", branch)
     rec.result = "done"
     s.log(f"{task.id}: merged after {rec.attempts} attempt(s)")
@@ -327,7 +354,12 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     notes = logs / "escalation.md"
     if notes.is_file():
         s.report.notes.append(f"Escalation {task.id} ({outcome}): " + notes.read_text().strip())
-    s.git.commit_all(f"escalation {task.id}: {outcome or 'no decision'} (by Claude)")
+    s.git.commit_all(
+        with_trailers(
+            f"escalation {task.id}: {outcome or 'no decision'} (by Claude)",
+            agent=CLAUDE_HEADLESS_AGENT,
+        )
+    )
 
 
 # --- the session ------------------------------------------------------------------
@@ -374,7 +406,7 @@ def close_session(s: Session) -> SessionReport:
             allowed_tools=EDIT_TOOLS,
         )
         call_claude(s, job, milestone, "session")
-    s.git.commit_all(f"runner: session report {path.stem}")
+    runner_commit(s, f"runner: session report {path.stem}")
     s.log(f"Session report: {path.relative_to(s.repo)}")
     return s.report
 

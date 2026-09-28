@@ -23,6 +23,7 @@ class TaskRecord:
     blocked: str | None = None
     note: str = ""
     logs: Path | None = None
+    commit: str = ""  # the squash-merge sha on main, when the task merged
 
 
 @dataclass
@@ -105,15 +106,16 @@ def render(report: SessionReport, prices: dict[str, Price]) -> str:
         "## Tasks",
         "",
         "| Task | Result | Attempts | Warm-up | Model time | Gates time | Local tokens in / out"
-        " | Gate failures |",
-        "|---|---|---|---|---|---|---|---|",
+        " | Gate failures | Commit |",
+        "|---|---|---|---|---|---|---|---|---|",
     ]
     for t in tasks:
         lines.append(
             f"| `{t.id}` | {t.result} | {t.attempts} | {_minutes(t.warmup_s)} | "
             f"{_minutes(t.model_s)} | "
             f"{_minutes(t.gates_s)} | {t.tokens_in:,} / {t.tokens_out:,} | "
-            f"{', '.join(t.gate_failures) or '-'} |"
+            f"{', '.join(t.gate_failures) or '-'} | "
+            f"{f'`{t.commit[:9]}`' if t.commit else '-'} |"
         )
     lines += ["", "## Frontier savings (notional)", ""]
     lines.append(

@@ -93,6 +93,14 @@ def test_task_merges_on_first_attempt(repo, fake_model):
     assert "task/m1-01-thing" not in git(repo, "branch")
     assert list((repo / "docs" / "sessions").glob("*.md"))
     assert git(repo, "status", "--porcelain") == ""
+    # Who did what is visible in the log (ADR 00 A4).
+    merge = report.tasks[0].commit
+    assert git(repo, "log", "-1", "--format=%an", merge).strip() == "Coucou local model"
+    assert "Agent: local-model\nTask: m1-01-thing\nModel: m\nAttempts: 1" in git(
+        repo, "log", "-1", "--format=%B", merge
+    )
+    assert git(repo, "log", "-1", "--format=%an%n%B").startswith("Coucou runner\nrunner: session")
+    assert f"`{merge[:9]}`" in next((repo / "docs" / "sessions").glob("*.md")).read_text()
 
 
 def test_retry_gets_gate_output_and_can_recover(repo, fake_model):

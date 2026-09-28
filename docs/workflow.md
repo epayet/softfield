@@ -36,7 +36,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    10. `mypy`
    11. the task's `tests:`
    12. all unit + integration tests, skipping the `tests:` files of *other* tasks still in `ready/` or `escalated/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
-6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer.
+6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `Coucou local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit).
 7. **Fail:**
    - attempt 2: same branch; the prompt adds the exact gate output
    - attempt 3: reset the branch; fresh prompt plus "previous attempt failed because…"
@@ -84,6 +84,20 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 - The environment has `ANTHROPIC_API_KEY`, `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN` **removed**, so the Pro login is always used.
 - Flags: `claude -p --output-format json --permission-mode dontAsk --allowedTools <per job>`, with a wall-clock timeout (this CLI version has no turn cap).
 - **Usage limit reached:** parse the reset time, record `paused_until` in `var/runs/state.json`, sleep and resume. Fallback backoff runs from 15 min up to 5 h. The runner never loops tightly.
+
+## Who made each commit
+
+[ADR 00 A4](adr/00-initial.md): every automated commit says who made it.
+
+| Made by | Author | Trailer |
+|---|---|---|
+| Local model (merges and task-branch WIP) | `Coucou local model` | `Agent: local-model`, plus `Task:`, `Model:`, `Attempts:` on merges |
+| Runner bookkeeping | `Coucou runner` | `Agent: runner` |
+| Headless Claude (escalations, reviews) | owner | `Agent: claude-headless` |
+| Interactive Claude | owner | `Co-Authored-By: Claude …` |
+| Owner | owner | none |
+
+`uv run runner commits --milestone N` lists the local model's commits since `mN-start`. Milestone reports include that list.
 
 ## Improving the workflow
 

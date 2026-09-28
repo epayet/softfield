@@ -8,7 +8,9 @@ from runner import prompts
 from runner.claude import CHECK_TOOLS, EDIT_TOOLS, GIT_READ_TOOLS, ClaudeJob
 from runner.config import Config
 from runner.gates import GateResult
+from runner.gitops import with_trailers
 from runner.loop import (
+    CLAUDE_HEADLESS_AGENT,
     MAIN,
     RunnerError,
     Session,
@@ -17,6 +19,7 @@ from runner.loop import (
     open_session,
     run_e2e,
     run_task,
+    runner_commit,
 )
 from runner.review import (
     ReviewFileError,
@@ -149,7 +152,11 @@ def review_milestone(cfg: Config, milestone: int, base: str) -> str:
         except ReviewFileError as exc:
             stop = f"review output unusable: {exc}"
             break
-        s.git.commit_all(f"review m{milestone} round {round_no} (by Claude)")
+        s.git.commit_all(
+            with_trailers(
+                f"review m{milestone} round {round_no} (by Claude)", agent=CLAUDE_HEADLESS_AGENT
+            )
+        )
         seen.update(update_seen(seen, round_))
         count = sum(f.actionable for f in round_.findings)
         previous = rounds[-1] if rounds else None
@@ -162,7 +169,7 @@ def review_milestone(cfg: Config, milestone: int, base: str) -> str:
             break
     _write_metrics(s, milestone, rounds, stop)
     close_session(s)
-    s.git.commit_all(f"runner: m{milestone} review metrics")
+    runner_commit(s, f"runner: m{milestone} review metrics")
     if s.git.current_branch() != MAIN:
         raise RunnerError("review loop ended off main")
     return stop
