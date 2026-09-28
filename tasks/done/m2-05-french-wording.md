@@ -40,3 +40,11 @@ In `coucou/locale/fr/LC_MESSAGES/django.po`, change only the `msgstr` of these `
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 122
+gate_failures: []
+```
