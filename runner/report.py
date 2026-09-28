@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from runner.config import Price
+from runner.usage import ClaudeUsage, short
 
 
 @dataclass
@@ -51,10 +51,6 @@ def _minutes(seconds: float) -> str:
     return f"{seconds / 60:.1f} min" if seconds >= 60 else f"{seconds:.0f} s"
 
 
-def _money(value: float) -> str:
-    return f"${value:.2f}" if value >= 0.01 else f"${value:.4f}"
-
-
 def observations(report: SessionReport) -> list[str]:
     """Deterministic, cheap observations; the narrative adds judgement on top."""
     obs: list[str] = []
@@ -89,7 +85,7 @@ def observations(report: SessionReport) -> list[str]:
     return obs
 
 
-def render(report: SessionReport, prices: dict[str, Price]) -> str:
+def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
     ended = report.ended or report.started
     tasks = report.tasks
     done = [t for t in tasks if t.result == "done"]
@@ -117,24 +113,19 @@ def render(report: SessionReport, prices: dict[str, Price]) -> str:
             f"{', '.join(t.gate_failures) or '-'} | "
             f"{f'`{t.commit[:9]}`' if t.commit else '-'} |"
         )
-    lines += ["", "## Frontier savings (notional)", ""]
+    lines += ["", "## Local model vs Claude", ""]
     lines.append(
-        f"The local model processed **{local_in:,} input** and **{local_out:,} output** tokens."
-        " At API list prices that work would have cost:"
+        f"The local model processed **{short(local_in + local_out)} tokens**"
+        f" ({local_in:,} in, {local_out:,} out) on {len(tasks)} task(s), on your own GPU."
+        " Claude would need roughly as many to do the same work itself."
     )
-    lines.append("")
-    for name, price in prices.items():
-        cost = local_in / 1e6 * price.input + local_out / 1e6 * price.output
-        lines.append(f"- {name}: **{_money(cost)}**")
-    claude_in = sum(r.tokens_in + r.cache_read for r in report.claude_runs)
-    claude_out = sum(r.tokens_out for r in report.claude_runs)
-    lines += [
-        "",
-        f"Claude itself used {claude_in:,} input (incl. cache reads) and {claude_out:,} output"
-        " tokens in this session. On Pro these are usage, not dollars; the figures above show"
-        " how much work stayed off the frontier model. They overstate real savings a little:"
-        " Claude would need fewer tokens than the local model for the same task.",
-    ]
+    if claude is not None:
+        lines += [
+            "",
+            f"Claude used **{short(claude.new)} new tokens** during this session, plus"
+            f" {short(claude.cached)} re-read from its cache (interactive and headless,"
+            " from Claude Code's transcripts).",
+        ]
     if report.claude_runs:
         lines += [
             "",
@@ -158,8 +149,8 @@ def render(report: SessionReport, prices: dict[str, Price]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def write(repo: Path, report: SessionReport, prices: dict[str, Price]) -> Path:
+def write(repo: Path, report: SessionReport, claude: ClaudeUsage | None = None) -> Path:
     path = repo / "docs" / "sessions" / f"{report.started:%Y-%m-%d-%H%M}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(render(report, prices), encoding="utf-8")
+    path.write_text(render(report, claude), encoding="utf-8")
     return path

@@ -98,7 +98,7 @@ NARRATIVE = """\
 Read {report}, the runner's report of the last build session, and the logs it mentions under
 var/runs/. Replace the text under "## Narrative" with 5-12 lines for the owner, who wants to
 learn how the frontier + local workflow performs: what went well, what didn't, what the
-frontier savings mean here, and concrete improvement opportunities (task size, context,
+local-vs-Claude token split means here, and concrete improvement opportunities (task size, context,
 prompts, gates). Edit only that section.
 """
 

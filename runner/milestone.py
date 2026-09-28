@@ -1,14 +1,15 @@
 """The milestone review loop (docs/workflow.md) and milestone metrics."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 
 from runner import prompts
 from runner.claude import CHECK_TOOLS, EDIT_TOOLS, GIT_READ_TOOLS, ClaudeJob
 from runner.config import Config
 from runner.gates import GateResult
-from runner.gitops import with_trailers
+from runner.gitops import Git, GitError, with_trailers
 from runner.loop import (
     CLAUDE_HEADLESS_AGENT,
     MAIN,
@@ -30,8 +31,10 @@ from runner.review import (
 )
 from runner.state import save_state
 from runner.tasks import blocked_ids, load_dir, pick_next, task_ids
+from runner.usage import claude_tokens, transcripts_dir, work_summary
 
 _FOOTER_RE = re.compile(r"# --- runner ---\n(.*?)```", re.DOTALL)
+_TOKENS_RE = re.compile(r"^tokens: (\d+)\b", re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -39,6 +42,8 @@ class MilestoneMetrics:
     done: int
     escalated: int
     attempts: list[int]
+    tasks: list[str] = field(default_factory=list)  # short names of the merged tasks
+    local_tokens: int = 0
 
     @property
     def escalation_rate(self) -> float:
@@ -59,19 +64,50 @@ def footer_fields(text: str) -> dict[str, str]:
     return fields
 
 
+def footer_tokens(text: str) -> int:
+    """Local-model tokens over every runner footer (a requeued task has several)."""
+    return sum(int(n) for n in _TOKENS_RE.findall(text))
+
+
 def milestone_metrics(repo: Path, milestone: int) -> MilestoneMetrics:
-    done = escalated = 0
+    done = escalated = tokens = 0
     attempts: list[int] = []
+    tasks: list[str] = []
     for folder in ("done", "escalated"):
         for path in sorted((repo / "tasks" / folder).glob(f"m{milestone}-*.md")):
-            fields = footer_fields(path.read_text(encoding="utf-8"))
+            text = path.read_text(encoding="utf-8")
+            fields = footer_fields(text)
+            tokens += footer_tokens(text)
             if fields.get("attempts", "").isdigit():
                 attempts.append(int(fields["attempts"]))
             if folder == "done":
                 done += 1
+                tasks.append(re.sub(r"^m\d+-\d+-", "", path.stem))
             else:
                 escalated += 1
-    return MilestoneMetrics(done=done, escalated=escalated, attempts=attempts)
+    return MilestoneMetrics(done, escalated, attempts, tasks, tokens)
+
+
+def _commit_time(repo: Path, ref: str) -> datetime | None:
+    try:
+        return datetime.fromisoformat(Git(repo).run("log", "-1", "--format=%cI", ref).strip())
+    except GitError:
+        return None
+
+
+def milestone_summary(repo: Path, milestone: int, base: str | None = None) -> str:
+    """The "who did the work" paragraph: local tokens from the task footers, Claude's from
+    its transcripts from the milestone's base commit (default: the ``mN-start`` tag) to the
+    next milestone's start tag, if there is one."""
+    m = milestone_metrics(repo, milestone)
+    ref = base or f"m{milestone}-start"
+    started = _commit_time(repo, ref)
+    if started is None:
+        return f"**Who did the work in M{milestone}.** Unknown: there's no `{ref}` yet."
+    claude = claude_tokens(
+        transcripts_dir(repo), started, _commit_time(repo, f"m{milestone + 1}-start")
+    )
+    return work_summary(f"M{milestone}", m.tasks, m.local_tokens, claude)
 
 
 def _run_ready_tasks(s: Session, milestone: int) -> None:
@@ -86,7 +122,7 @@ def _run_ready_tasks(s: Session, milestone: int) -> None:
         s.report.tasks.append(run_task(s, task))
 
 
-def _write_metrics(s: Session, milestone: int, rounds: list[int], stop: str) -> None:
+def _write_metrics(s: Session, milestone: int, base: str, rounds: list[int], stop: str) -> None:
     m = milestone_metrics(s.repo, milestone)
     path = s.repo / "docs" / "reviews" / f"m{milestone}-metrics.md"
     avg = sum(m.attempts) / len(m.attempts) if m.attempts else 0
@@ -102,6 +138,8 @@ def _write_metrics(s: Session, milestone: int, rounds: list[int], stop: str) -> 
                 f"- Headless Claude runs used: {s.state.runs_used(milestone)}"
                 f" of {s.cfg.headless_runs_per_milestone}",
                 f"- Loop stopped because: {stop}",
+                "",
+                milestone_summary(s.repo, milestone, base),
                 "",
             ]
         ),
@@ -167,7 +205,7 @@ def review_milestone(cfg: Config, milestone: int, base: str) -> str:
         if reason:
             stop = reason
             break
-    _write_metrics(s, milestone, rounds, stop)
+    _write_metrics(s, milestone, base, rounds, stop)
     close_session(s)
     runner_commit(s, f"runner: m{milestone} review metrics")
     if s.git.current_branch() != MAIN:

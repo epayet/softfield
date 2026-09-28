@@ -6,12 +6,6 @@ from pathlib import Path
 
 
 @dataclass(frozen=True)
-class Price:
-    input: float
-    output: float
-
-
-@dataclass(frozen=True)
 class Config:
     repo: Path
     max_attempts: int
@@ -28,7 +22,6 @@ class Config:
     backoff_min: int
     backoff_max: int
     narrative: bool
-    prices: dict[str, Price]
 
     @property
     def runs_dir(self) -> Path:
@@ -55,10 +48,6 @@ def load_config(repo: Path) -> Config:
         backoff_min=data["claude"]["usage_limit_backoff_min"],
         backoff_max=data["claude"]["usage_limit_backoff_max"],
         narrative=report.get("narrative", False),
-        prices={
-            name: Price(input=p["input"], output=p["output"])
-            for name, p in report.get("prices", {}).items()
-        },
     )
 
 

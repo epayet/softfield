@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from runner import gates, loop
-from runner.config import Config, Price
+from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import OpencodeRun, TokenTotals
 from runner.report import SessionReport
@@ -31,7 +31,6 @@ def _config(repo: Path) -> Config:
         backoff_min=1,
         backoff_max=2,
         narrative=False,
-        prices={"Claude Sonnet 5": Price(2.0, 10.0)},
     )
 
 

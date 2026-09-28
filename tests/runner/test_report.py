@@ -1,10 +1,9 @@
 from datetime import UTC, datetime, timedelta
 
-from runner.config import Price
 from runner.report import ClaudeRunRecord, SessionReport, TaskRecord, observations, render
+from runner.usage import ClaudeUsage
 
 T0 = datetime(2026, 9, 27, 14, 0, tzinfo=UTC)
-PRICES = {"Claude Sonnet 5": Price(input=2.0, output=10.0)}
 
 
 def _report() -> SessionReport:
@@ -27,10 +26,10 @@ def _report() -> SessionReport:
     return report
 
 
-def test_savings_are_priced_from_local_tokens():
-    text = render(_report(), PRICES)
-    # 1M in * $2 + 0.1M out * $10 = $3.00
-    assert "- Claude Sonnet 5: **$3.00**" in text
+def test_local_and_claude_tokens_are_compared():
+    text = render(_report(), ClaudeUsage(new=420_000, cached=9_000_000))
+    assert "processed **1.1M tokens** (1,000,000 in, 100,000 out) on 2 task(s)" in text
+    assert "Claude used **420k new tokens** during this session, plus 9.0M re-read" in text
     assert "| `m1-02-b` | escalated | 3 |" in text
     assert "| `m1-01-a` | done | 1 | 35 s | 5.0 min |" in text  # warm-up, then model time
     assert "## Headless Claude runs" in text

@@ -112,7 +112,7 @@ The owner wants to learn how the frontier + local workflow performs, so every ru
   - gate failures by gate, plus BLOCKED and escalation events
   - **local tokens:** input and output tokens processed by the local model, from OpenCode's JSON events
   - **headless Claude:** run count and token usage, from `claude -p --output-format json`
-  - **frontier-savings estimate:** local tokens priced at Claude API list prices from `workflow/runner.toml`. This is notional on a Pro plan; it's shown to compare the two sides, not as a bill.
+  - **local model vs Claude:** local tokens, and Claude's own tokens (new, and re-read from its cache) from Claude Code's transcripts, which cover interactive and headless sessions. Rough by design, with no prices. Each task's footer records its local tokens, and the milestone metrics end with a "who did the work" paragraph (`uv run runner status --milestone N` prints it any time).
 - **Narrative part:** what went well, what didn't, improvement opportunities and interesting observations.
   - Claude writes it whenever Claude is in the loop: calibration, milestone reviews, escalations and interactive sessions.
   - An optional headless narrative at the end of a session (`narrative = true` in `runner.toml`) is **off by default**, because it costs Pro usage and counts toward the milestone cap.

@@ -9,7 +9,7 @@ from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
 from runner.loop import RunnerError, run_session
-from runner.milestone import milestone_metrics, review_milestone
+from runner.milestone import milestone_metrics, milestone_summary, review_milestone
 
 
 def _repo() -> Path:
@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "status":
             m = milestone_metrics(repo, args.milestone)
             print(f"done {m.done}, escalated {m.escalated}, attempts {m.attempts}")
+            print(milestone_summary(repo, args.milestone))
         elif args.command == "commits":
             found = Git(repo).local_model_commits(args.base or f"m{args.milestone}-start")
             for c in found:

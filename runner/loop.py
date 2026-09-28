@@ -43,6 +43,7 @@ from runner.tasks import (
     preflight,
     task_ids,
 )
+from runner.usage import claude_tokens, transcripts_dir
 
 MAIN = "main"
 RUNNER_AGENT = "runner"
@@ -206,6 +207,7 @@ def _finish_escalation(
             "result": "escalated",
             "reason": reason,
             "attempts": rec.attempts,
+            "tokens": rec.tokens_in + rec.tokens_out,
             "logs": logs.relative_to(s.repo).as_posix(),
         },
     )
@@ -329,6 +331,7 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
             "attempts": rec.attempts,
             "duration_s": round(rec.model_s + rec.gates_s),
             "gate_failures": rec.gate_failures or "[]",
+            "tokens": rec.tokens_in + rec.tokens_out,
         },
     )
     runner_commit(s, messages.done_message(task.id, rec))
@@ -407,7 +410,8 @@ def close_session(s: Session) -> SessionReport:
     if not s.report.tasks and not s.report.claude_runs:
         s.log("Nothing to do.")
         return s.report
-    path = report_mod.write(s.repo, s.report, s.cfg.prices)
+    claude = claude_tokens(transcripts_dir(s.repo), s.report.started, s.report.ended)
+    path = report_mod.write(s.repo, s.report, claude)
     if s.cfg.narrative and s.report.tasks:
         milestone = s.report.tasks[0].milestone
         job = ClaudeJob(

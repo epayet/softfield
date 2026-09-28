@@ -48,4 +48,5 @@ result: escalated
 reason: BLOCKED: invalid
 attempts: 2
 logs: var/runs/20260928-145423/m2-01-pair-page-code
+tokens: 276724  # backfilled from docs/sessions/
 ```

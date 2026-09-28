@@ -53,4 +53,5 @@ result: done
 attempts: 1
 duration_s: 89
 gate_failures: []
+tokens: 45131  # backfilled from docs/sessions/
 ```
