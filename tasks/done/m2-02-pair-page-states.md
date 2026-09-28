@@ -49,3 +49,11 @@ French: warm and simple, always **vous** (never tu), and **with all its accents*
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 129
+gate_failures: []
+```
