@@ -7,7 +7,7 @@ from pathlib import Path, PurePosixPath
 
 from runner import i18n
 from runner.gitops import Git
-from runner.tasks import Task
+from runner.tasks import Task, queued_tests
 
 ALWAYS_ALLOWED = ("docs/discoveries.md",)
 DEPENDENCY_FILES = ("pyproject.toml", "uv.lock")
@@ -164,6 +164,7 @@ def gate_task_tests(ctx: GateContext) -> GateResult:
 
 
 def gate_all_tests(ctx: GateContext) -> GateResult:
+    skipped = sorted(queued_tests(ctx.repo / "tasks", ctx.task.id))
     return _command(
         "all-tests",
         ctx,
@@ -174,6 +175,7 @@ def gate_all_tests(ctx: GateContext) -> GateResult:
         "tests/unit",
         "tests/integration",
         "tests/runner",
+        *(f"--ignore={path}" for path in skipped),
     )
 
 

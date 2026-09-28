@@ -105,6 +105,20 @@ def load_dir(directory: Path, default_max_diff: int) -> list[Task]:
     return [parse_task(p, default_max_diff) for p in sorted(directory.glob("*.md"))]
 
 
+def queued_tests(tasks_dir: Path, current: str) -> set[str]:
+    """Test files of the other tasks still in ``ready/`` or ``escalated/`` (ADR 01, item 1).
+
+    Their skeleton tests fail until those tasks are done, so the all-tests gate skips them.
+    """
+    tests: set[str] = set()
+    for name in ("ready", "escalated"):
+        for path in sorted((tasks_dir / name).glob("*.md")):
+            if path.stem != current:
+                meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+                tests.update(_str_tuple(meta, "tests", required=False))
+    return tests
+
+
 def task_ids(directory: Path) -> set[str]:
     return {p.stem for p in directory.glob("*.md")}
 

@@ -10,6 +10,7 @@ from runner.tasks import (
     parse_task,
     pick_next,
     preflight,
+    queued_tests,
 )
 from tests.runner.conftest import write_task
 
@@ -81,3 +82,18 @@ def test_footer(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
     append_footer(path, {"result": "done", "attempts": 2})
     assert path.read_text().endswith("# --- runner ---\nresult: done\nattempts: 2\n```\n")
+
+
+def test_queued_tests_are_the_other_queued_tasks_tests(tmp_path: Path):
+    tasks = tmp_path / "tasks"
+    write_task(tasks / "ready", "m1-01-current")
+    other = write_task(tasks / "ready", "m1-02-other")
+    other.write_text(other.read_text().replace("test_thing.py", "test_other.py"))
+    escalated = write_task(tasks / "escalated", "m1-03-stuck")
+    escalated.write_text(escalated.read_text().replace("test_thing.py", "test_stuck.py"))
+    done = write_task(tasks / "done", "m1-00-old")
+    done.write_text(done.read_text().replace("test_thing.py", "test_old.py"))
+    assert queued_tests(tasks, "m1-01-current") == {
+        "tests/unit/test_other.py",
+        "tests/unit/test_stuck.py",
+    }

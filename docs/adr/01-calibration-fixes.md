@@ -1,6 +1,6 @@
 # ADR 01: Workflow fixes from the calibration run
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-09-28; all three items)
 - **Date:** 2026-09-27
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Evidence:** calibration run, 2026-09-27: `docs/sessions/2026-09-27-2344.md` and `docs/sessions/2026-09-27-2351.md`

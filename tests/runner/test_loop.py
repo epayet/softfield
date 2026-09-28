@@ -7,8 +7,10 @@ import pytest
 
 from runner import gates, loop
 from runner.config import Config, Price
+from runner.gates import GateResult
 from runner.local_model import OpencodeRun, TokenTotals
 from runner.report import SessionReport
+from runner.tasks import parse_task
 from tests.runner.conftest import git, write_task
 
 
@@ -179,3 +181,13 @@ def test_a_requeued_task_gets_its_own_log_folder(tmp_path):
     assert first == tmp_path / "m1-01-thing"
     assert second == tmp_path / "m1-01-thing-run2"
     assert (first / "opencode-1.jsonl").read_text() == "first run"
+
+
+def test_retry_prompt_ends_with_the_gate_output(repo: Path):
+    task = parse_task(write_task(repo / "tasks" / "ready", "m1-01-thing"), 150)
+    first = loop._prompt(task, 1, None)
+    assert "uv run mypy" in first
+    retry = loop._prompt(task, 2, GateResult("ruff", False, "tasks/ready/m1-01-thing.md"))
+    assert retry.index("### Goal") < retry.index("IMPORTANT")
+    assert retry.rstrip().endswith("tasks/ready/m1-01-thing.md\n```")
+    assert "CATEGORY: needs-file" in retry

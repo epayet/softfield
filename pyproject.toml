@@ -45,7 +45,7 @@ packages = ["coucou", "runner"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = ["**/migrations/**"]
+extend-exclude = ["**/migrations/**", "*.md"]  # Markdown never gates code (ADR 01, item 2)
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "DTZ", "PT", "TID"]

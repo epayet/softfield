@@ -3,34 +3,49 @@
 from runner.tasks import Task
 
 LOCAL = """\
-You are implementing one small task in the Coucou repository.
-
-Rules (AGENTS.md has the full list):
-- Change only the files listed under `files:` in the task. Nothing else.
-- Never edit existing tests or protected paths. Never add dependencies. Never run git.
-- When done, run the task's tests: `uv run pytest -q {tests}` and make them pass.
-  Then run `uv run ruff format {files}` and `uv run ruff check {files}`.
-- If you can't continue, write BLOCKED.md exactly as AGENTS.md describes, then stop.
-{extra}
-The task file follows.
+Implement the task below in the Coucou repository. Change only the files listed under
+`files:`. Never edit existing tests and never run git. If you're stuck, write BLOCKED.md
+as AGENTS.md describes, then stop.
 
 {task}
-"""
 
-RETRY = """
-IMPORTANT: your previous attempt failed the `{gate}` gate. Fix exactly that. Gate output:
+Finish by running `uv run pytest -q {tests}`, `uv run ruff format {files}`,
+`uv run ruff check {files}` and `uv run mypy coucou tests runner`, and fix what they report.
+{extra}"""
+
+# On a retry the gate output goes last: the local model follows the end of a long prompt best
+# (ADR 01, item 3).
+_NOT_YOURS = (
+    "If the failing file isn't listed under `files:`, you can't fix it: write BLOCKED.md with\n"
+    "`CATEGORY: needs-file` naming that file, and stop."
+)
+
+RETRY = (
+    """
+IMPORTANT: your previous attempt failed the `{gate}` gate. Fix exactly that.
+"""
+    + _NOT_YOURS
+    + """
+Gate output:
 ```
 {output}
 ```
 """
+)
 
-FRESH = """
-WARNING: a previous attempt at this task failed the `{gate}` gate and the branch has been
-reset. Avoid repeating it. What went wrong last time:
+FRESH = (
+    """
+WARNING: a previous attempt failed the `{gate}` gate and the branch has been reset.
+Don't repeat it.
+"""
+    + _NOT_YOURS
+    + """
+What went wrong last time:
 ```
 {output}
 ```
 """
+)
 
 ESCALATION = """\
 You are handling an escalated task in the Coucou repo. Follow CLAUDE.md (Escalations).

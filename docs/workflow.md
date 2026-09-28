@@ -20,7 +20,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 3. **Pre-flight:** every file in the task's Context and `Pattern to follow` exists, and every quoted symbol is found (`def`/`class` grep). If not, escalate at once.
 4. **Local model:**
    - Warm up LM Studio with one sequential request, which JIT-loads it with the owner's settings. Warn if `loaded_context_length` ≠ `limit.context` in `opencode.json`.
-   - Run `opencode run --title <id> -f <task> "<fixed instruction>"`, with a wall-clock timeout.
+   - Run `opencode run --title <id> -f <task> "<fixed instruction>"`, with a wall-clock timeout. The instruction is short: the task, then the exact commands to finish with. On a retry, the gate output comes last, because the local model follows the end of a long prompt best ([ADR 01](adr/01-calibration-fixes.md)).
 5. **Gates, in order, stopping at the first failure:**
    1. `BLOCKED.md` present → see below
    2. only `files:` changed (plus `docs/discoveries.md`)
@@ -30,10 +30,10 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    6. diff ≤ `max_diff` added + removed lines
    7. `layout`: unit test files match modules by name, one per module
    8. `translations`: every user-facing string has a compiled French translation
-   9. `ruff check` + `ruff format --check`
+   9. `ruff check` + `ruff format --check` (Python files only; Markdown is excluded, [ADR 01](adr/01-calibration-fixes.md))
    10. `mypy`
    11. the task's `tests:`
-   12. all unit + integration tests
+   12. all unit + integration tests, skipping the `tests:` files of *other* tasks still in `ready/` or `escalated/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
 6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer.
 7. **Fail:**
    - attempt 2: same branch; the prompt adds the exact gate output

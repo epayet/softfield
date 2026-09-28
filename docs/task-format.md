@@ -45,6 +45,8 @@ Numbered and specific down to function names, e.g. "Implement `validate_reaction
 ## Sizing rules
 
 - 1–3 files and one concept per task.
+- **Keep the spec short** ([ADR 01](adr/01-calibration-fixes.md)): the local model drops instructions from long prompts. Aim for Context ≤ ~60 lines and ≤ 5 short Steps, and paste only what the model calls or implements. Spell out test expectations only where the test file doesn't make them obvious, and put the one crucial instruction last.
+- Backtick the full repo path of every file whose signatures you paste (pre-flight searches those files), and never backtick a bare file name.
 - **Skeleton first:** Claude commits the stubs (`raise NotImplementedError`) and the failing tests to `main` before the task enters `ready/`.
 - If a task needs more than `max_diff`, split it.
 - Protected paths never appear in `files:`.

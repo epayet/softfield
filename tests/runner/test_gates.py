@@ -1,10 +1,19 @@
+from pathlib import Path
+
+from runner import gates
 from runner.gates import (
+    GateContext,
+    GateResult,
     dependency_changes,
+    gate_all_tests,
     layout_problems,
     outside_allowed,
     parse_blocked,
     touching_protected,
 )
+from runner.gitops import Git
+from runner.tasks import parse_task
+from tests.runner.conftest import write_task
 
 
 def test_outside_allowed_permits_discoveries():
@@ -52,3 +61,20 @@ def test_parse_blocked():
     assert parse_blocked("I'm stuck") is None
     assert parse_blocked("CATEGORY: vibes") is None
     assert parse_blocked("") is None
+
+
+def test_all_tests_skips_other_queued_tasks_tests(repo: Path, monkeypatch):
+    current = write_task(repo / "tasks" / "ready", "m1-01-current")
+    other = write_task(repo / "tasks" / "ready", "m1-02-other")
+    other.write_text(other.read_text().replace("test_thing.py", "test_other.py"))
+    calls: list[tuple[str, ...]] = []
+
+    def fake_command(name: str, ctx: GateContext, *args: str) -> GateResult:
+        calls.append(args)
+        return GateResult(name, True, "")
+
+    monkeypatch.setattr(gates, "_command", fake_command)
+    ctx = GateContext(repo, Git(repo), parse_task(current, 150), "main", (), 60)
+    assert gate_all_tests(ctx).ok
+    assert "--ignore=tests/unit/test_other.py" in calls[0]
+    assert "--ignore=tests/unit/test_thing.py" not in calls[0]
