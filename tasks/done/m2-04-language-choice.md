@@ -39,3 +39,11 @@ The rules (ADR 00, Amendment A2):
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 77
+gate_failures: []
+```
