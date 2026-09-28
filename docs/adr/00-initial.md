@@ -207,7 +207,7 @@ The brief says integration tests fake external dependencies. Faking the database
   - the project `opencode.json` (model `lmstudio/qwen/qwen3.6-35b-a3b`)
   - `--title`, so no extra LLM title call is made
   - the task file attached
-- The runner **never changes LM Studio's model settings.** Before each OpenCode call, it sends one sequential warm-up request so that JIT loading happens once, with the owner's settings. It also checks LM Studio's `loaded_context_length` against `limit.context` in `opencode.json` and warns on mismatch.
+- The runner **never changes LM Studio's model settings.** Before each OpenCode call, it sends one sequential warm-up request so that JIT loading happens once, with the owner's settings. ~~It also checks LM Studio's `loaded_context_length` against `limit.context` in `opencode.json` and warns on mismatch.~~ Replaced by A3.
 - **Interactive questions are denied** (`permission.question: "deny"`). Questions go through the BLOCKED protocol.
 
 ---
@@ -265,3 +265,10 @@ Replaces the brief's "English only for the MVP". Mum reads French, so both langu
   - a test checks that the committed catalogues are complete and their `.mo` files are compiled and up to date
   - compiled `.mo` files are committed, so deploys need no gettext tools
 - **Authoring:** a task that adds user-facing strings lists `coucou/locale/fr/LC_MESSAGES/*.po` and `*.mo` in its `files:` and writes the French translations itself. Claude checks the French at milestone review.
+
+### A3 (2026-09-28, owner-directed): the model's context length lives only in LM Studio
+
+The owner sets the context length in LM Studio and changes it as they see fit (157,440 at M0, 183,808 from M1). The repo doesn't restate it.
+
+- `opencode.json` has no `limit` for the local model.
+- The runner no longer compares the two. It records the context LM Studio actually loaded in the session report, as information only.

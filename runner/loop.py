@@ -22,7 +22,6 @@ from runner.config import Config, read_protected
 from runner.gates import BLOCKED_FILE, GateContext, GateResult, parse_blocked, run_gates
 from runner.gitops import Git
 from runner.local_model import (
-    configured_context_length,
     loaded_context_length,
     run_opencode,
     warmup,
@@ -147,16 +146,13 @@ def call_claude(s: Session, job: ClaudeJob, milestone: int, subject: str) -> Cla
 
 
 def _check_context(s: Session) -> None:
+    """Record the context LM Studio loaded, for the report. The owner sets it there, not here."""
     if s.context_checked:
         return
     s.context_checked = True
     loaded = loaded_context_length(s.cfg.lm_base_url, s.cfg.lm_model)
-    configured = configured_context_length(s.repo, s.cfg.opencode_model)
-    if loaded and configured and loaded != configured:
-        s.report.notes.append(
-            f"LM Studio loaded the model with {loaded:,} tokens of context but opencode.json"
-            f" says {configured:,}. OpenCode compacts based on its number; worth aligning."
-        )
+    if loaded:
+        s.report.notes.append(f"LM Studio loaded the model with {loaded:,} tokens of context.")
 
 
 def _read_blocked(repo: Path) -> str | None:

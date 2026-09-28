@@ -19,7 +19,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 2. Create the branch `task/<id>` from `main`.
 3. **Pre-flight:** every file in the task's Context and `Pattern to follow` exists, and every quoted symbol is found (`def`/`class` grep). If not, escalate at once.
 4. **Local model:**
-   - Warm up LM Studio with one sequential request, which JIT-loads it with the owner's settings. Warn if `loaded_context_length` ≠ `limit.context` in `opencode.json`.
+   - Warm up LM Studio with one sequential request, which JIT-loads it with the owner's settings. The session report notes the context LM Studio loaded; `opencode.json` doesn't set one (ADR 00 A3).
    - Run `opencode run --title <id> -f <task> "<fixed instruction>"`, with a wall-clock timeout. The instruction is short: the task, then the exact commands to finish with. On a retry, the gate output comes last, because the local model follows the end of a long prompt best ([ADR 01](adr/01-calibration-fixes.md)).
 5. **Gates, in order, stopping at the first failure:**
    1. `BLOCKED.md` present → see below

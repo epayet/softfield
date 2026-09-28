@@ -49,7 +49,6 @@ def fake_model(monkeypatch):
     monkeypatch.setattr(loop, "run_opencode", run_opencode)
     monkeypatch.setattr(loop, "warmup", lambda *a: 0.1)
     monkeypatch.setattr(loop, "loaded_context_length", lambda *a: None)
-    monkeypatch.setattr(loop, "configured_context_length", lambda *a: None)
     file_gates = tuple(
         g
         for g in gates.GATES

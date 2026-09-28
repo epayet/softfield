@@ -75,15 +75,6 @@ def loaded_context_length(base_url: str, model: str) -> int | None:
     return int(value) if value else None
 
 
-def configured_context_length(repo: Path, opencode_model: str) -> int | None:
-    """``limit.context`` for the model in the project's opencode.json."""
-    provider, _, model = opencode_model.partition("/")
-    config = json.loads((repo / "opencode.json").read_text(encoding="utf-8"))
-    entry = config.get("provider", {}).get(provider, {}).get("models", {}).get(model, {})
-    value = entry.get("limit", {}).get("context")
-    return int(value) if value else None
-
-
 def run_opencode(
     repo: Path, model: str, title: str, prompt: str, timeout: int, log_path: Path
 ) -> OpencodeRun:
