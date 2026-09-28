@@ -26,7 +26,7 @@ What the page must say (`tests/integration/test_paired_page.py` checks it):
 - phone: a `<h1>` "You're connected!" and "Soon you'll be able to send moments from here."
 - French for all four strings, in `coucou/locale/fr/LC_MESSAGES/django.po` (compiled to `django.mo` with `msgfmt`).
 
-The Content-Security-Policy forbids `style=` attributes and inline scripts. The French is warm and simple, and always **vous**.
+The Content-Security-Policy forbids `style=` attributes and inline scripts. The French is warm and simple, always **vous**, and **with all its accents** (é, è, à, ç…).
 
 ### Pattern to follow
 `coucou/templates/coucou/pair.html`

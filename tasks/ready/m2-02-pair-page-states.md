@@ -34,7 +34,7 @@ In `coucou/templates/coucou/pair.html`, these elements are still empty:
 
 The script `coucou/static/coucou/js/pairing.js` shows and hides them. **Keep every existing `id`, `data-*` and `hidden` attribute exactly as they are.** No `style=` attributes and no inline `<script>`: the Content-Security-Policy forbids them.
 
-French: warm and simple, and always **vous** (never tu). French typography puts a space before `:` `!` `?`. Add entries to `coucou/locale/fr/LC_MESSAGES/django.po` after the existing ones, as `msgid "..."` / `msgstr "..."` pairs.
+French: warm and simple, always **vous** (never tu), and **with all its accents** (é, è, à, ç…). French typography puts a space before `:` `!` `?`. Add entries to `coucou/locale/fr/LC_MESSAGES/django.po` after the existing ones, as `msgid "..."` / `msgstr "..."` pairs.
 
 ### Pattern to follow
 `coucou/templates/coucou/paired.html`

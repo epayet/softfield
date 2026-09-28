@@ -76,13 +76,15 @@ def layout_problems(repo: Path) -> list[str]:
     return problems
 
 
+BLOCKED_CATEGORY_WITHIN = 5  # lines; a heading above the category is fine (ADR 04 item 2)
+
+
 def parse_blocked(text: str) -> str | None:
-    """The category on the first line of BLOCKED.md, or None if it isn't valid."""
-    first = text.strip().splitlines()[0] if text.strip() else ""
-    if first.upper().startswith("CATEGORY:"):
-        category = first.split(":", 1)[1].strip().lower()
-        if category in BLOCKED_CATEGORIES:
-            return category
+    """The category from the first ``CATEGORY:`` line near the top of BLOCKED.md, or None."""
+    for line in text.strip().splitlines()[:BLOCKED_CATEGORY_WITHIN]:
+        if line.strip().upper().startswith("CATEGORY:"):
+            category = line.split(":", 1)[1].strip().lower()
+            return category if category in BLOCKED_CATEGORIES else None
     return None
 
 

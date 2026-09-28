@@ -13,7 +13,7 @@ These rules apply to Claude and the local model alike. When a task file and this
 6. Type-hint everything. Code must pass ruff (lint + format) and mypy.
 7. No third-party network calls, CDNs, fonts, analytics or trackers. Every asset is self-hosted.
 8. Never log note text or photo contents.
-9. **English and French:** wrap every user-facing string (`gettext`, `{% translate %}`, JS `gettext()`), and add its French translation to `coucou/locale/fr/LC_MESSAGES/` in the same task, then run `uv run python manage.py compilemessages`. API errors use stable codes, not sentences. Admin-only text stays plain English. Keep the tone light and warm in both languages.
+9. **English and French:** wrap every user-facing string (`gettext`, `{% translate %}`, JS `gettext()`), and add its French translation to `coucou/locale/fr/LC_MESSAGES/` in the same task, with all its accents (é, è, à, ç…), then compile it: `msgfmt -o coucou/locale/fr/LC_MESSAGES/django.mo coucou/locale/fr/LC_MESSAGES/django.po`. API errors use stable codes, not sentences. Admin-only text stays plain English. Keep the tone light and warm in both languages.
 
 ## Tests
 10. **One unit test file per module:** `coucou/<name>.py` → `tests/unit/test_<name>.py`. Never create a second unit test file for the same module. Unit tests don't touch Django; integration tests use `tests/fakes/` or Django's test DB. See `docs/testing.md`.

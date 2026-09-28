@@ -61,6 +61,10 @@ def test_parse_blocked():
     assert parse_blocked("I'm stuck") is None
     assert parse_blocked("CATEGORY: vibes") is None
     assert parse_blocked("") is None
+    # ADR 04 item 2: a heading above the category is fine, within the first 5 lines.
+    assert parse_blocked("# BLOCKED.md\n\nCATEGORY: needs-file\nmsgfmt is denied") == "needs-file"
+    assert parse_blocked("a\nb\nc\nd\ne\nCATEGORY: needs-info") is None
+    assert parse_blocked("# BLOCKED\nCATEGORY: vibes\nCATEGORY: needs-info") is None
 
 
 def test_all_tests_skips_other_queued_tasks_tests(repo: Path, monkeypatch):

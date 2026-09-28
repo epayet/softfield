@@ -109,7 +109,7 @@ def compiled_out_of_date(repo: Path) -> list[str]:
             if not mo.is_file() or mo.read_bytes() != fresh.read_bytes():
                 problems.append(
                     f"{mo.relative_to(repo)} is out of date: run "
-                    "`uv run python manage.py compilemessages`"
+                    f"`msgfmt -o {mo.relative_to(repo)} {po.relative_to(repo)}`"
                 )
     return problems
 

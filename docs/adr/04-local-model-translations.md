@@ -1,6 +1,6 @@
 # ADR 04: The local model can't compile translations
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-09-28): item 1 as the alternative, allow `msgfmt` in OpenCode; item 2 as proposed
 - **Date:** 2026-09-28
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Evidence:** M2 session 2026-09-28 14:54 (`var/runs/20260928-145423/m2-01-pair-page-code/`), and `docs/sessions/2026-09-28-1454.md`
@@ -18,16 +18,20 @@ This cost:
 
 m2-02 and m2-03 are queued and would block in the same way. The mistake is mine: I didn't check that the model's allowed commands could produce every file its task lists.
 
-## Decisions (proposed)
+## Decisions
 
-### 1. ⚑ The runner compiles `.mo` files, not the model
+### 1. ⚑ The model may run `msgfmt` (owner's choice)
+
+**Decided:** add `"msgfmt *": "allow"` to `opencode.json`. AGENTS.md rule 9 and the `translations` gate's message now name the exact `msgfmt` command, instead of `compilemessages` (which stays denied). The runner-compiles option below was not chosen.
+
+**Originally proposed:**
 
 **Change:**
 - After each local-model attempt, and before the gates, the runner runs `msgfmt -o <mo> <po>` for every `.po` file listed in the task's `files:`, so the result joins the attempt's commit.
 - Specs stop asking the model to compile, and AGENTS.md rule 9 drops "then run compilemessages".
 - A `.mo` that is out of date can't happen anymore, and the `translations` gate still checks for missing and fuzzy French.
 
-**Alternative:** add `"msgfmt *": "allow"` to `opencode.json`. That's one line, but it widens what the model may run, and it relies on the model remembering a step it already fumbled.
+**The alternative, chosen:** add `"msgfmt *": "allow"` to `opencode.json`. That's one line, but it widens what the model may run, and it relies on the model remembering a step it already fumbled.
 
 ### 2. A `BLOCKED.md` category is read from its first `CATEGORY:` line
 
