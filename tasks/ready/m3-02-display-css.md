@@ -16,7 +16,7 @@ Style the display: calm, full screen, readable from across a room.
 `coucou/static/coucou/css/display.css` only has the `[hidden]` rule. The page is `coucou/templates/coucou/display.html`:
 - `<main id="display">` holds three `data-state` sections, `#offline` and `#floats`.
 - The `moment` section holds `#moment-photo` (an `<img>`), `#moment-note` (a `<p>`) and `#reactions`, which is filled with `<button>`s, one emoji each.
-- `render.js` adds the class `entering` to the `moment` section for 600 ms when a new moment arrives. It adds `<span class="float">` inside `#floats` for 2.5 s when someone reacts.
+- `coucou/static/coucou/js/render.js` adds the class `entering` to the `moment` section for 600 ms when a new moment arrives. It adds `<span class="float">` inside `#floats` for 2.5 s when someone reacts.
 
 The look:
 - **Background and fonts:** a dark, warm background (`#1c1b1a`) and soft light text. System fonts only (`system-ui`), with no web fonts.
@@ -39,12 +39,3 @@ The look:
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
-
-```yaml
-# --- runner ---
-result: escalated
-reason: pre-flight failed
-attempts: 0
-tokens: 0
-logs: var/runs/20260928-233431/m3-02-display-css
-```
