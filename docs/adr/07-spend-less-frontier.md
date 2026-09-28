@@ -6,7 +6,7 @@
 
 ## Context
 
-The owner asked whether the local model really saves their Claude Pro allowance: 9% of the week was used by the start of M3.
+The owner asked whether the local model really saves their Claude Pro allowance: 9% of the week had been used partway through M3.
 
 **The numbers for M3 so far** (`uv run runner status --milestone 3`, weighted by API price):
 
