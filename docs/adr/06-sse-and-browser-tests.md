@@ -1,6 +1,6 @@
 # ADR 06: Server-sent events instead of WebSockets; JavaScript tested in the browser
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-09-28; both items as drafted, including the WebSocket fallback if the Funnel test fails, the Chromium download, and UI-only JS for the local model)
 - **Date:** 2026-09-28
 - **Deciders:** project owner (accepts), Claude (drafts)
 
