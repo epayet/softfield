@@ -23,18 +23,23 @@ The calibration ran two small M1 tasks through the whole pipeline. The local mod
 
 **Change.** Add `extend-exclude = ["*.md"]` next to the existing migrations exclude in `pyproject.toml`'s `[tool.ruff]`, so ruff never gates on docs or task specs. (Snippets in specs should still be tidy, but a formatting slip in prose must not block code.)
 
-### 3. ⚑ The local model's instruction mentions mypy and "not your file → BLOCKED"
+### 3. ⚑ Shorter prompts for the local model, with the key instruction last
 
-**Problem.** The fixed prompt (`runner/prompts.py`, `LOCAL`) tells the model to run pytest and ruff, but not mypy. The model never ran mypy in 5 attempts, even when the task's Steps asked it to. And when the ruff gate failed on the task file, the retry read "IMPORTANT: … fix exactly that", ran ruff on its own files, and replied "all gates pass". It should have written `BLOCKED.md` (`needs-file`) and let Claude fix the spec at once.
+**Problem.** The owner reports that the local model struggles to follow every instruction in a long prompt, and the calibration logs agree:
+- The model **never ran mypy** in 5 attempts, even though the task's Steps asked for it. The fixed prompt (`runner/prompts.py`, `LOCAL`) mentions only pytest and ruff.
+- On the m1-01 retry, the gate output said ruff failed on the *task file*. The model ran ruff on its own files and replied "all gates pass". It should have written `BLOCKED.md`. The runner puts the retry notice **before** the task, so it sits in the middle of the prompt: after OpenCode's system prompt, AGENTS.md (~430 words) and the rules, and before 460–680 words of task.
 
-**Change.** Add two lines to `LOCAL`:
-- "Then run `uv run mypy coucou`." (after the ruff line)
-- "If a gate fails on a file that isn't in `files:`, you can't fix it: write BLOCKED.md with `CATEGORY: needs-file` naming that file, and stop."
+Adding more rules to the prompt would make this worse.
+
+**Change.**
+- **Retries: the gate output goes last.** `RETRY`/`FRESH` move to the end of the prompt, after the task, and gain one line: "If the failing file isn't in `files:`, you can't fix it: write BLOCKED.md with `CATEGORY: needs-file` and stop."
+- **`LOCAL` gets shorter, not longer.** It keeps only what the gates can't catch cheaply: the allowed files and "don't edit tests". It ends with one line: "Finish by running: `<exact commands>`", with pytest, ruff and mypy filled in by the runner for this task. The gates already enforce everything else, and AGENTS.md is loaded by OpenCode anyway.
+- **Task specs get a length budget** (in `docs/task-format.md`): Context ≤ ~60 lines, Steps ≤ 5 short items. Paste only what the model calls or implements. Spell out the test expectations only where the test file doesn't make them obvious (the model reads the tests anyway).
 
 ## Consequences
 
 - M1 can be queued as one batch and run unattended (item 1).
-- Spec formatting slips no longer cost model attempts (item 2), and spec errors that do slip through reach Claude after 1 attempt instead of 3 (item 3).
+- Spec formatting slips no longer cost model attempts (item 2). Prompts get shorter, and a retry's gate output is the last thing the model reads (item 3). Whether that fixes "ignored the gate output" and "skipped mypy" is measurable in M1's session reports.
 - Item 1 loosens checking slightly: a task could break a queued task's tests unnoticed until that task runs. Its own `task-tests` gate would then fail with the cause visible in the logs.
 - The size is roughly 15 lines of runner code plus runner tests, one config line and a sentence in `docs/workflow.md`.
 
