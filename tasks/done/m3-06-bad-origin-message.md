@@ -36,3 +36,12 @@ The other `data-error` lines in `coucou/templates/coucou/pair.html`.
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 87
+gate_failures: []
+tokens: 71869
+```
