@@ -12,6 +12,7 @@ Also follow [`AGENTS.md`](AGENTS.md). This file lists only what Claude does and 
 - Break milestones into tasks per [`docs/task-format.md`](docs/task-format.md): 1–3 files, one concept each, `max_diff` ≈ 150.
 - **Skeleton first:** write the signatures, stubs and **failing tests** yourself and commit them to main. The local model makes them pass.
 - Paste every signature and type the task needs into Context. The local model must never need to explore.
+- Follow [`docs/task-writing.md`](docs/task-writing.md) (reference implementation first, one test file per task, short specs).
 - Anything touching a protected path is yours to implement, not a task.
 
 ## Protected paths
