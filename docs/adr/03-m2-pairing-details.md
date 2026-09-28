@@ -1,6 +1,6 @@
 # ADR 03: Pairing details ADR 00 leaves open
 
-- **Status:** Proposed. The owner chose every option below on 2026-09-28; it becomes Accepted when the owner marks it so.
+- **Status:** Accepted (by the owner, 2026-09-28; every option below was chosen by the owner)
 - **Date:** 2026-09-28
 - **Deciders:** project owner (accepts), Claude (drafts)
 
