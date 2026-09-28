@@ -38,3 +38,11 @@ The Content-Security-Policy forbids `style=` attributes and inline scripts. The 
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 131
+gate_failures: []
+```
