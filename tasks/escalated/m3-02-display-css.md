@@ -39,3 +39,12 @@ The look:
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: pre-flight failed
+attempts: 0
+tokens: 0
+logs: var/runs/20260928-233431/m3-02-display-css
+```
