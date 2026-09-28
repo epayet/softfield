@@ -282,3 +282,11 @@ The owner wants to see which commits the local agents made. Until now the runner
 - **Headless Claude** (escalations, reviews) commits carry `Agent: claude-headless`; **interactive Claude** commits carry `Co-Authored-By: Claude …`. Owner commits carry nothing.
 - **Listing:** `uv run runner commits --milestone N` lists the local-model commits since `mN-start` (sha, task, attempts, lines changed). Commits from before A4 are recognised by their body text; history isn't rewritten.
 - **Reports:** the session report shows each merged task's commit, and `docs/reviews/mN.md` includes the listing.
+
+### A5 (2026-09-28, owner-directed): the pairing screen has a language switch
+
+Before pairing, the browser's `Accept-Language` decides the language (A2). A French speaker using a tablet set to English would then get instructions they can't read.
+
+- The pairing screen at `/` shows **English | Français**, each named in its own language.
+- Choosing one sets Django's language cookie for a year and reloads the page. `LocaleMiddleware` prefers that cookie to `Accept-Language`, which stays the fallback.
+- After pairing, nothing changes: a display follows the language set when it was claimed, and a phone its person's.
