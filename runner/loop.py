@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from runner import prompts
+from runner import messages, prompts
 from runner.claude import (
     CHECK_TOOLS,
     EDIT_TOOLS,
@@ -191,7 +191,9 @@ def _prompt(task: Task, attempt: int, last: GateResult | None) -> str:
     return prompts.local_prompt(task, template.format(gate=last.name, output=last.output))
 
 
-def _finish_escalation(s: Session, task: Task, rec: TaskRecord, reason: str, logs: Path) -> None:
+def _finish_escalation(
+    s: Session, task: Task, rec: TaskRecord, reason: str, logs: Path, detail: str = ""
+) -> None:
     branch = f"task/{task.id}"
     if s.git.current_branch() == branch:
         (logs / "last.diff").write_text(s.git.diff(MAIN), encoding="utf-8")
@@ -207,7 +209,10 @@ def _finish_escalation(s: Session, task: Task, rec: TaskRecord, reason: str, log
             "logs": logs.relative_to(s.repo).as_posix(),
         },
     )
-    runner_commit(s, f"runner: escalate {task.id} ({reason})")
+    runner_commit(
+        s,
+        messages.escalation_message(task.id, reason, detail, logs.relative_to(s.repo).as_posix()),
+    )
     rec.note = reason
     s.log(f"{task.id}: escalated ({reason})")
 
@@ -231,7 +236,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     if problems:
         (logs / "preflight.txt").write_text("\n".join(problems), encoding="utf-8")
         rec.result = "preflight"
-        _finish_escalation(s, task, rec, "pre-flight failed", logs)
+        _finish_escalation(s, task, rec, "pre-flight failed", logs, "\n".join(problems))
         return rec
 
     branch = f"task/{task.id}"
@@ -267,7 +272,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
                 rec.blocked = category
                 rec.result = "blocked"
                 local_wip_commit(s, f"wip {task.id} attempt {attempt} (blocked)")
-                _finish_escalation(s, task, rec, f"BLOCKED: {category}", logs)
+                _finish_escalation(s, task, rec, f"BLOCKED: {category}", logs, blocked_text)
                 return rec
 
         local_wip_commit(s, f"wip {task.id} attempt {attempt}")
@@ -290,19 +295,24 @@ def run_task(s: Session, task: Task) -> TaskRecord:
 
     rec.result = "escalated"
     _finish_escalation(
-        s, task, rec, f"gates failed {rec.attempts}x (last: {last.name if last else '?'})", logs
+        s,
+        task,
+        rec,
+        f"gates failed {rec.attempts}x (last: {last.name if last else '?'})",
+        logs,
+        last.output if last else "",
     )
     return rec
 
 
 def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
     branch = f"task/{task.id}"
+    changes = s.git.numstat(MAIN)
     rec.commit = s.git.squash_merge(
         branch,
         MAIN,
         with_trailers(
-            f"{task.id}: {task.goal}\n\nImplemented by the local model ({s.cfg.lm_model}) via"
-            f" the runner in {rec.attempts} attempt(s).",
+            messages.merge_message(task, rec, s.cfg.lm_model, changes),
             agent=LOCAL_MODEL_AGENT,
             task=task.id,
             model=s.cfg.lm_model,
@@ -321,7 +331,7 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
             "gate_failures": rec.gate_failures or "[]",
         },
     )
-    runner_commit(s, f"runner: {task.id} done")
+    runner_commit(s, messages.done_message(task.id, rec))
     s.git.run("branch", "-D", branch)
     rec.result = "done"
     s.log(f"{task.id}: merged after {rec.attempts} attempt(s)")
@@ -406,7 +416,7 @@ def close_session(s: Session) -> SessionReport:
             allowed_tools=EDIT_TOOLS,
         )
         call_claude(s, job, milestone, "session")
-    runner_commit(s, f"runner: session report {path.stem}")
+    runner_commit(s, messages.session_message(s.report, path.relative_to(s.repo).as_posix()))
     s.log(f"Session report: {path.relative_to(s.repo)}")
     return s.report
 

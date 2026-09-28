@@ -102,6 +102,20 @@ class Git:
             total += (int(added) if added != "-" else 0) + (int(removed) if removed != "-" else 0)
         return total
 
+    def numstat(self, base: str) -> list[tuple[str, int | None, int | None]]:
+        """(path, added, removed) per file changed since ``base``; None counts for binaries."""
+        changes: list[tuple[str, int | None, int | None]] = []
+        for line in self.run("diff", "--numstat", f"{base}...HEAD").splitlines():
+            added, removed, path = line.split("\t", 2)
+            changes.append(
+                (
+                    path,
+                    None if added == "-" else int(added),
+                    None if removed == "-" else int(removed),
+                )
+            )
+        return changes
+
     def diff(self, base: str) -> str:
         return self.run("diff", f"{base}...HEAD")
 

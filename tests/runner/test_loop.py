@@ -101,6 +101,11 @@ def test_task_merges_on_first_attempt(repo, fake_model):
     )
     assert git(repo, "log", "-1", "--format=%an%n%B").startswith("Coucou runner\nrunner: session")
     assert f"`{merge[:9]}`" in next((repo / "docs" / "sessions").glob("*.md")).read_text()
+    body = git(repo, "log", "-1", "--format=%B", merge)
+    assert "Changed:\n  coucou/thing.py  +1 -1" in body
+    assert "Defined by: tests/unit/test_thing.py" in body
+    done = git(repo, "log", "--format=%s", "--grep=^runner: m1-01-thing done")
+    assert done.strip() == f"runner: m1-01-thing done, merged as {merge[:9]}"
 
 
 def test_retry_gets_gate_output_and_can_recover(repo, fake_model):
@@ -134,6 +139,8 @@ def test_protected_and_test_edits_are_rejected_then_escalated(repo, fake_model):
     assert report.tasks[0].gate_failures == ["allowed-files"] * 3
     escalated = (repo / "tasks" / "escalated" / "m1-01-thing.md").read_text()
     assert "gates failed 3x" in escalated
+    message = git(repo, "log", "-1", "--format=%B", "--grep=^runner: escalate")
+    assert "Last output:" in message and "tests/unit/test_thing.py" in message
     # The dependant is paused, not attempted.
     assert (repo / "tasks" / "ready" / "m1-02-next.md").exists()
     assert "Paused (dependency escalated): m1-02-next" in report.notes
