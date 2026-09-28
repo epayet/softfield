@@ -6,6 +6,7 @@
 coucou/models/devices.py
 coucou/admin/devices.py
 coucou/pairing.py
+coucou/deviceauth.py
 coucou/views/auth.py
 coucou/views/pairing.py
 coucou/sessions.py
