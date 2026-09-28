@@ -32,6 +32,14 @@ Practical guidance for whoever writes tasks (today Claude, but any frontier mode
 - **Where a data-writing command may run:** say so explicitly. The M1 review had to add a "never in prod" guard to `seed_demo`.
 - **Size:** about 10–60 changed lines. Grow it only if first-attempt pass rates stay high.
 
+## Lessons from M2
+
+- **The model can only produce what its tools allow.** For every file in `files:`, check that `opencode.json` lets the model create it. m2-01 listed `django.mo`, but `msgfmt` was denied: it cost one wasted attempt and an escalation (ADR 04).
+- **French:** ask for "all its accents" explicitly (the model dropped them once), and give one tone example ("Réessayez un peu plus tard", not "Veuillez réessayer plus tard"). Claude still reads every `msgstr`.
+- **Outcome-style specs** (what, not how) passed as reliably as dictation-style ones on small UI tasks: 2/2 against 1/1 at first attempt. Both work when Context pastes the skeleton.
+- **Never wrap a runner session in an outer `timeout`.** It killed M2's runner mid-task. OpenCode's own limit is enough.
+- **A test whose fixture someone fills in later must skip visibly,** never pass while empty (m2-F4).
+
 ## Before committing a spec
 
 - `uv run ruff format --check .` and `uv run runner run --dry-run`, which includes pre-flight. Before ADR 01, a mis-formatted code block in a spec failed ruff 3 times on a file the model couldn't touch.
@@ -39,5 +47,5 @@ Practical guidance for whoever writes tasks (today Claude, but any frontier mode
 
 ## Open questions
 
-- These specs were near-dictation. How does the pass rate change when a spec says *what* to build but not *how*? Try a few and compare.
-- The first French user-facing strings arrive in M2. How good is the model's French?
+- Outcome vs dictation: no visible difference in M2 (4 tasks). Keep sampling both.
+- The model's French: correct grammar and `vous` when asked; stiff and word-by-word without tone examples. Does a tone example in Context close the gap?
