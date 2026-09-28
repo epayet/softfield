@@ -41,3 +41,11 @@ msgstr "Le code est valable 10 minutes."
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: invalid
+attempts: 2
+logs: var/runs/20260928-145423/m2-01-pair-page-code
+```
