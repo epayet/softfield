@@ -1,5 +1,7 @@
 # Workflow: how Coucou gets built
 
+> Plain-language overview: [`how-it-works.md`](how-it-works.md).
+>
 > Reflects the brief §7 and [ADR 00](adr/00-initial.md) (Accepted). Changes to anything here need an Accepted ADR (see CLAUDE.md).
 
 ## Roles
