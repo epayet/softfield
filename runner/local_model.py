@@ -1,6 +1,9 @@
 """The local executor: LM Studio warm-up and headless OpenCode runs."""
 
+import contextlib
 import json
+import os
+import signal
 import subprocess
 import time
 import urllib.request
@@ -75,23 +78,39 @@ def loaded_context_length(base_url: str, model: str) -> int | None:
     return int(value) if value else None
 
 
+def run_killing_group(cmd: list[str], cwd: Path, timeout: int) -> tuple[str, str, int | None]:
+    """Run ``cmd`` in its own process group; on timeout kill the whole group.
+
+    OpenCode starts shell commands of its own (pytest, ruff…). Killing only OpenCode would
+    leave a hung child running after the attempt. Returns (stdout, stderr, exit code or None).
+    """
+    proc = subprocess.Popen(
+        cmd,
+        cwd=cwd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+        return stdout, stderr, proc.returncode
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        stdout, stderr = proc.communicate()
+        return stdout or "", stderr or "", None
+
+
 def run_opencode(
     repo: Path, model: str, title: str, prompt: str, timeout: int, log_path: Path
 ) -> OpencodeRun:
     cmd = ["opencode", "run", "--format", "json", "-m", model, "--title", title, prompt]
     started = time.monotonic()
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        proc = subprocess.run(
-            cmd, cwd=repo, capture_output=True, text=True, timeout=timeout, check=False
-        )
-        stdout, exit_code = proc.stdout, proc.returncode
-        log_path.write_text(stdout + "\n--- stderr ---\n" + proc.stderr, encoding="utf-8")
-    except subprocess.TimeoutExpired as exc:
-        raw = exc.stdout
-        stdout = raw.decode() if isinstance(raw, bytes) else (raw or "")
-        exit_code = None
-        log_path.write_text(stdout + "\n--- timed out ---\n", encoding="utf-8")
+    stdout, stderr, exit_code = run_killing_group(cmd, repo, timeout)
+    marker = "\n--- timed out ---\n" if exit_code is None else "\n--- stderr ---\n" + stderr
+    log_path.write_text(stdout + marker, encoding="utf-8")
     return OpencodeRun(
         exit_code=exit_code,
         duration_s=time.monotonic() - started,
