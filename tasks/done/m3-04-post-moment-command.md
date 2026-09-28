@@ -61,3 +61,12 @@ from coucou.services import SpaceInfo, post_content
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 179
+gate_failures: []
+tokens: 199885
+```
