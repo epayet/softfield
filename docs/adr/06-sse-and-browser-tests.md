@@ -66,3 +66,14 @@ Changes `docs/workflow.md` (the tests gate) and `docs/task-writing.md`. The gate
   - `docs/architecture.md`: the `live/` description, and M3 as the milestone for real-time
   - `docs/workflow.md`: the tests gate
   - `docs/task-writing.md`: JS tasks
+
+## Funnel test (2026-09-28): passed
+
+A throwaway SSE server went out through Tailscale Funnel's public relay. It sent only a counter and a timestamp.
+- **Timing:** 13 events 5 s apart, then one at 300 s and one at 600 s, with heartbeats every 20 s.
+- **Clients:** one ran on the desktop, forced through the relay's public address (`curl --resolve`, because the desktop's own DNS keeps the name inside the tailnet). The owner's phone on mobile data was the second.
+- **Result:** every event arrived, in 11–14 ms through the relay and under 300 ms on the phone. There was no buffering, and the stream stayed open through both idle periods. Item 1 stands: no fallback to WebSockets.
+- **Seen on the way:**
+  - Scanners probed the new Funnel address within minutes, through the certificate logs.
+  - Once, the relay stopped forwarding to the desktop, while the desktop still reported Funnel as on. `tailscale funnel reset` followed by a new `tailscale funnel` fixed it.
+  - Displays must survive this kind of outage: the offline cache and reconnection in M3 cover it. Note it for the M6 pilot.
