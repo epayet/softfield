@@ -3,6 +3,10 @@
 Interactive sessions and the runner's headless ``claude -p`` runs both save a transcript
 under ``~/.claude/projects/<repo path>/``, so one scan covers both. Rough by design: it
 only has to say how the work split between Claude and the local model.
+
+Tokens are weighted by their relative API price, the best public proxy for how much of a
+Pro allowance they use: a cache read counts 0.1, a cache write 1.25, output 5. Re-reading
+a long conversation at every step is usually most of the cost.
 """
 
 import json
@@ -12,16 +16,39 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-# A guess, to calibrate by having Claude do one local-model task itself: Claude caches the
-# conversation it re-sends each step, so a task costs it about half the local model's
-# (uncached) token count in new tokens.
-CLAUDE_NEW_PER_LOCAL_TOKEN = 0.5
+CACHE_READ_WEIGHT = 0.1
+CACHE_WRITE_WEIGHT = 1.25
+OUTPUT_WEIGHT = 5.0
+# How many Claude steps a small local-model task would take if Claude did it directly
+# (read the spec'd files, edit, run the tests, fix, commit). A guess to calibrate.
+STEPS_PER_TASK = 5
 
 
 @dataclass(frozen=True)
 class ClaudeUsage:
-    new: int = 0  # input, cache writes and output
-    cached: int = 0  # re-read from the prompt cache, about a tenth of the price
+    input: int = 0
+    cache_write: int = 0
+    cache_read: int = 0
+    output: int = 0
+    steps: int = 0  # API calls
+
+    @property
+    def weighted(self) -> float:
+        """Input-token equivalents, weighted by price."""
+        return (
+            self.input
+            + CACHE_WRITE_WEIGHT * self.cache_write
+            + CACHE_READ_WEIGHT * self.cache_read
+            + OUTPUT_WEIGHT * self.output
+        )
+
+    @property
+    def per_step(self) -> float:
+        return self.weighted / self.steps if self.steps else 0.0
+
+    @property
+    def rereading_share(self) -> float:
+        return CACHE_READ_WEIGHT * self.cache_read / self.weighted if self.weighted else 0.0
 
 
 def transcripts_dir(repo: Path) -> Path:
@@ -30,7 +57,7 @@ def transcripts_dir(repo: Path) -> Path:
 
 
 def claude_tokens(folder: Path, since: datetime, until: datetime | None = None) -> ClaudeUsage:
-    """Tokens Claude used in ``[since, until)``: new ones, and those re-read from its cache.
+    """Claude's usage in ``[since, until)``.
 
     Claude Code writes one line per content block and repeats the message's usage on each,
     so every message is counted once, by its id.
@@ -38,7 +65,13 @@ def claude_tokens(folder: Path, since: datetime, until: datetime | None = None) 
     if not folder.is_dir():
         return ClaudeUsage()
     seen: set[str] = set()
-    new = cached = 0
+    totals = {"input": 0, "cache_write": 0, "cache_read": 0, "output": 0}
+    fields = {
+        "input": "input_tokens",
+        "cache_write": "cache_creation_input_tokens",
+        "cache_read": "cache_read_input_tokens",
+        "output": "output_tokens",
+    }
     for path in sorted(folder.rglob("*.jsonl")):
         with path.open(encoding="utf-8", errors="replace") as fh:
             for line in fh:
@@ -60,40 +93,44 @@ def claude_tokens(folder: Path, since: datetime, until: datetime | None = None) 
                 if at < since or (until is not None and at >= until):
                     continue
                 seen.add(key)
-                new += sum(
-                    int(usage.get(name) or 0)
-                    for name in ("input_tokens", "cache_creation_input_tokens", "output_tokens")
-                )
-                cached += int(usage.get("cache_read_input_tokens") or 0)
-    return ClaudeUsage(new=new, cached=cached)
+                for name, field in fields.items():
+                    totals[name] += int(usage.get(field) or 0)
+    return ClaudeUsage(**totals, steps=len(seen))
 
 
-def short(tokens: int) -> str:
+def short(tokens: float) -> str:
     """``1_400_000`` → ``1.4M``, ``420_000`` → ``420k``."""
     if tokens >= 1_000_000:
         return f"{tokens / 1_000_000:.1f}M"
     if tokens >= 1_000:
         return f"{tokens / 1_000:.0f}k"
-    return str(tokens)
+    return str(round(tokens))
+
+
+def claude_line(claude: ClaudeUsage) -> str:
+    return (
+        f"Claude spent **≈{short(claude.weighted)} token-equivalents** over {claude.steps}"
+        f" steps (≈{short(claude.per_step)} a step; {claude.rereading_share:.0%} of it"
+        " re-reading the conversation)."
+    )
 
 
 def work_summary(label: str, tasks: list[str], local: int, claude: ClaudeUsage) -> str:
-    """One paragraph: what the local model built, what Claude spent, what Claude saved."""
+    """One paragraph: what the local model built, what Claude spent, what it saved."""
     if not tasks:
         return f"**Who did the work in {label}.** No local-model tasks yet."
     text = (
         f"**Who did the work in {label}.** The local model built {len(tasks)} task(s)"
-        f" ({', '.join(tasks)}) using **{short(local)} tokens**, on your own GPU."
-        f" Claude used **{short(claude.new)} new tokens** (plus {short(claude.cached)}"
-        " re-read from its cache, at about a tenth of the price) on everything else:"
-        " planning, writing the tests, its own protected work and the reviews."
+        f" ({', '.join(tasks)}) using {short(local)} tokens, free on your GPU. "
+        + claude_line(claude)
+        + " That includes preparing, reviewing and fixing the local model's work."
     )
-    saved = round(local * CLAUDE_NEW_PER_LOCAL_TOKEN)
-    if saved and claude.new:
+    if claude.steps:
+        direct = len(tasks) * STEPS_PER_TASK * claude.per_step
         text += (
-            f" Building those tasks itself would have cost Claude roughly"
-            f" **{short(saved)} more** new tokens, about **{saved / claude.new:.0%}** on top"
-            " of what it spent (a rough guess: half the local model's count, since Claude"
-            " caches what it re-reads)."
+            f" Doing those {len(tasks)} tasks directly would have cost Claude roughly"
+            f" **{short(direct)}** (about {STEPS_PER_TASK} steps each at today's step cost),"
+            f" **{direct / claude.weighted:.0%}** of what it spent. Delegating only saves"
+            " allowance when preparing a task costs Claude less than that."
         )
     return text

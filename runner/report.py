@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from runner.usage import ClaudeUsage, short
+from runner.usage import ClaudeUsage, claude_line, short
 
 
 @dataclass
@@ -117,14 +117,13 @@ def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
     lines.append(
         f"The local model processed **{short(local_in + local_out)} tokens**"
         f" ({local_in:,} in, {local_out:,} out) on {len(tasks)} task(s), on your own GPU."
-        " Claude would need roughly as many to do the same work itself."
+        ""
     )
     if claude is not None:
         lines += [
             "",
-            f"Claude used **{short(claude.new)} new tokens** during this session, plus"
-            f" {short(claude.cached)} re-read from its cache (interactive and headless,"
-            " from Claude Code's transcripts).",
+            claude_line(claude) + " (This session, interactive and headless, from Claude"
+            " Code's transcripts; weighted by price.)",
         ]
     if report.claude_runs:
         lines += [

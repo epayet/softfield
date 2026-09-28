@@ -42,9 +42,13 @@ def test_claude_tokens_counts_each_message_once_inside_the_window(tmp_path):
     (tmp_path / "sub" / "b.jsonl").write_text(
         _line("m2", "2026-09-28T13:00:00+00:00", input_tokens=5, output_tokens=5)
     )
-    assert claude_tokens(tmp_path, T0) == ClaudeUsage(new=20 + 10, cached=100)
+    assert claude_tokens(tmp_path, T0) == ClaudeUsage(
+        input=2 + 5, cache_write=10, cache_read=100, output=8 + 5, steps=2
+    )
     until = datetime(2026, 9, 28, 13, 0, tzinfo=UTC)
-    assert claude_tokens(tmp_path, T0, until) == ClaudeUsage(new=20, cached=100)
+    assert claude_tokens(tmp_path, T0, until) == ClaudeUsage(
+        input=2, cache_write=10, cache_read=100, output=8, steps=1
+    )
     assert claude_tokens(tmp_path / "missing", T0) == ClaudeUsage()
 
 
@@ -53,9 +57,10 @@ def test_short():
 
 
 def test_work_summary():
-    usage = ClaudeUsage(new=2_000_000, cached=70_000_000)
+    usage = ClaudeUsage(cache_write=200_000, cache_read=50_000_000, output=100_000, steps=200)
+    # 250k + 5.0M + 500k = 5.75M; 28.8k a step; 5 steps x 2 tasks = 288k = 5%
     text = work_summary("M3", ["display-page", "snapshot"], 1_200_000, usage)
-    assert "built 2 task(s) (display-page, snapshot) using **1.2M tokens**" in text
-    assert "Claude used **2.0M new tokens** (plus 70.0M re-read" in text
-    assert "roughly **600k more** new tokens, about **30%** on top" in text
+    assert "built 2 task(s) (display-page, snapshot) using 1.2M tokens" in text
+    assert "Claude spent **≈5.8M token-equivalents** over 200 steps (≈29k a step; 87%" in text
+    assert "roughly **288k**" in text and "**5%** of what it spent" in text
     assert "No local-model tasks yet" in work_summary("M4", [], 0, usage)

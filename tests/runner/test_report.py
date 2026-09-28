@@ -27,9 +27,11 @@ def _report() -> SessionReport:
 
 
 def test_local_and_claude_tokens_are_compared():
-    text = render(_report(), ClaudeUsage(new=420_000, cached=9_000_000))
+    usage = ClaudeUsage(input=0, cache_write=100_000, cache_read=9_000_000, output=40_000, steps=30)
+    text = render(_report(), usage)
     assert "processed **1.1M tokens** (1,000,000 in, 100,000 out) on 2 task(s)" in text
-    assert "Claude used **420k new tokens** during this session, plus 9.0M re-read" in text
+    # 125k writes + 900k reads + 200k output = 1.2M; reads are 73% of it
+    assert "Claude spent **≈1.2M token-equivalents** over 30 steps (≈41k a step; 73%" in text
     assert "| `m1-02-b` | escalated | 3 |" in text
     assert "| `m1-01-a` | done | 1 | 35 s | 5.0 min |" in text  # warm-up, then model time
     assert "## Headless Claude runs" in text
