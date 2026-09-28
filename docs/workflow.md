@@ -30,12 +30,12 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    4. existing test files unchanged (SHA-256 against main)
    5. no dependency changes (`pyproject.toml` deps, `uv.lock`, `vendor/`)
    6. diff ≤ `max_diff` added + removed lines
-   7. `layout`: unit test files match modules by name, one per module
+   7. `layout`: test files match modules by name, one per module (`tests/unit` ↔ `coucou/`, `tests/runner` ↔ `runner/`, `tests/browser` ↔ `coucou/static/coucou/js/`)
    8. `translations`: every user-facing string has a compiled French translation
    9. `ruff check` + `ruff format --check` (Python files only; Markdown is excluded, [ADR 01](adr/01-calibration-fixes.md))
    10. `mypy`
    11. the task's `tests:`
-   12. all unit + integration tests, skipping the `tests:` files of *other* tasks still in `ready/` or `escalated/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
+   12. all unit, integration, runner and browser tests ([ADR 06](adr/06-sse-and-browser-tests.md): ES modules in headless Chromium), skipping the `tests:` files of *other* tasks still in `ready/` or `escalated/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
 6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `Coucou local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit).
 7. **Fail:**
    - attempt 2: same branch; the prompt adds the exact gate output

@@ -14,6 +14,10 @@ coucou/sessions.py
 coucou/static/coucou/js/crypto/**
 coucou/static/coucou/js/auth.js
 coucou/static/coucou/js/pairing.js
+# Display plumbing: the outbox, the live stream and the entry point that wires them (ADR 06)
+coucou/static/coucou/js/outbox.js
+coucou/static/coucou/js/live.js
+coucou/static/coucou/js/display.js
 # Admin templates for devices (the claim flow)
 coucou/templates/admin/**
 

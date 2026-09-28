@@ -56,10 +56,19 @@ def dependency_changes(changed: Iterable[str]) -> list[str]:
     return sorted(f for f in changed if f in DEPENDENCY_FILES or f.startswith(DEPENDENCY_DIRS))
 
 
+# test folder -> (module folder, module suffix): tests/unit/test_x.py <-> coucou/x.py, and
+# tests/browser/test_x.py <-> coucou/static/coucou/js/x.js (ADR 06 item 2).
+LAYOUTS = {
+    "tests/unit": ("coucou", ".py"),
+    "tests/runner": ("runner", ".py"),
+    "tests/browser": ("coucou/static/coucou/js", ".js"),
+}
+
+
 def layout_problems(repo: Path) -> list[str]:
-    """One unit test file per module, named after it: tests/unit/test_x.py <-> coucou/x.py."""
+    """One test file per module, named after it (ADR 00 A1, ADR 06)."""
     problems = []
-    for tests_dir, package in (("tests/unit", "coucou"), ("tests/runner", "runner")):
+    for tests_dir, (package, suffix) in LAYOUTS.items():
         root = repo / tests_dir
         if not root.is_dir():
             continue
@@ -71,8 +80,8 @@ def layout_problems(repo: Path) -> list[str]:
                 problems.append(f"{rel}: unit tests live directly in {tests_dir}/")
             elif not path.name.startswith("test_"):
                 problems.append(f"{rel}: unit test files are named test_<module>.py")
-            elif not (repo / package / f"{path.name[5:]}").is_file():
-                problems.append(f"{rel}: no module {package}/{path.name[5:]} to match it")
+            elif not (repo / package / f"{path.stem[5:]}{suffix}").is_file():
+                problems.append(f"{rel}: no module {package}/{path.stem[5:]}{suffix} to match it")
     return problems
 
 
@@ -177,6 +186,7 @@ def gate_all_tests(ctx: GateContext) -> GateResult:
         "tests/unit",
         "tests/integration",
         "tests/runner",
+        "tests/browser",
         *(f"--ignore={path}" for path in skipped),
     )
 

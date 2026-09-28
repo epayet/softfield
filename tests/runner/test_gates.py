@@ -55,6 +55,21 @@ def test_layout(repo):
     assert "tests/unit/helpers.py: unit test files are named test_<module>.py" in problems
 
 
+def test_layout_matches_browser_tests_to_js_modules(repo):
+    js = repo / "coucou" / "static" / "coucou" / "js"
+    js.mkdir(parents=True)
+    (js / "outbox.js").write_text("")
+    browser = repo / "tests" / "browser"
+    browser.mkdir()
+    (browser / "conftest.py").write_text("")
+    (browser / "test_outbox.py").write_text("")
+    assert layout_problems(repo) == []
+    (browser / "test_render.py").write_text("")
+    assert layout_problems(repo) == [
+        "tests/browser/test_render.py: no module coucou/static/coucou/js/render.js to match it"
+    ]
+
+
 def test_parse_blocked():
     assert parse_blocked("CATEGORY: needs-info\nWhat is X?") == "needs-info"
     assert parse_blocked("category: Needs-File\n") == "needs-file"

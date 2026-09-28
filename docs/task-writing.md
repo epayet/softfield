@@ -32,6 +32,12 @@ Practical guidance for whoever writes tasks (today Claude, but any frontier mode
 - **Where a data-writing command may run:** say so explicitly. The M1 review had to add a "never in prod" guard to `seed_demo`.
 - **Size:** about 10–60 changed lines. Grow it only if first-attempt pass rates stay high.
 
+## JavaScript tasks (ADR 06)
+
+- **Tests:** browser tests live in `tests/browser/test_<module>.py`, one file per module in `coucou/static/coucou/js/`. Each test imports the module on a blank harness page (`harness` fixture) and stubs the network with `page.route`. Example: `tests/browser/test_outbox.py`.
+- **Which modules:** the local model gets UI modules only (rendering, transitions, screen state). Crypto, auth, pairing, the outbox and the service worker are protected.
+- **Strings:** every string stays in the Django template (`data-state` sections), never in the JS, so the French lives in `django.po` as usual.
+
 ## Lessons from M2
 
 - **The model can only produce what its tools allow.** For every file in `files:`, check that `opencode.json` lets the model create it. m2-01 listed `django.mo`, but `msgfmt` was denied: it cost one wasted attempt and an escalation (ADR 04).
