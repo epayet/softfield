@@ -42,6 +42,11 @@ coucou/media.py
 coucou/media_paths.py
 coucou/views/media.py
 
+# Device-facing APIs: events in, snapshot and live stream out (M3 C2–C4)
+coucou/views/events.py
+coucou/views/display.py
+coucou/views/stream.py
+
 # WebSocket authentication and routing
 coucou/live/**
 
