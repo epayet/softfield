@@ -51,7 +51,7 @@ coucou/views/stream.py
 coucou/live/**
 
 # Service worker scope/caching of authenticated data
-coucou/static/coucou/sw.js
+coucou/static/coucou/js/sw.js
 
 # Migrations (any may change the security model; Claude reviews them all)
 coucou/migrations/**
