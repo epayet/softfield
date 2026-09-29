@@ -26,3 +26,12 @@ Follow `coucou/static/coucou/css/pair.css` (a phone-first page) and its `<link>`
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2531
+gate_failures: []
+tokens: 3326518
+```
