@@ -32,3 +32,12 @@ Extend `coucou/static/coucou/js/compose.js` (from m4-01) and its `tests/browser/
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 922
+gate_failures: []
+tokens: 1117930
+```
