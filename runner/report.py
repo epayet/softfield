@@ -117,7 +117,6 @@ def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
     lines.append(
         f"The local model processed **{short(local_in + local_out)} tokens**"
         f" ({local_in:,} in, {local_out:,} out) on {len(tasks)} task(s), on your own GPU."
-        ""
     )
     if claude is not None:
         lines += [
