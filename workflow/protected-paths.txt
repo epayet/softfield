@@ -56,6 +56,7 @@ coucou/live/**
 
 # Service worker scope/caching of authenticated data
 coucou/static/coucou/js/sw.js
+coucou/static/coucou/js/me_sw.js
 
 # Migrations (any may change the security model; Claude reviews them all)
 coucou/migrations/**
@@ -99,6 +100,7 @@ tests/browser/test_display.py
 tests/browser/test_live.py
 tests/browser/test_outbox.py
 tests/browser/test_sw.py
+tests/browser/test_me_sw.py
 tests/e2e/**
 
 # The lead's instructions, and the juniors' notes it curates (ADR 07 items 6 and 14)
