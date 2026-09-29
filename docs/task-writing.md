@@ -46,6 +46,7 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 ## Before committing a spec
 
 - `uv run ruff format --check .` and `uv run runner run --dry-run`, which prints each ticket's pre-flight problems. Before ADR 01, a mis-formatted code block in a spec failed ruff 3 times on a file the model couldn't touch.
+- Pre-flight resolves every backticked path from the repo root, so a JS import specifier like "./outbox.js" goes in quotes, not backticks (m4-06 lost a run to it). Escalation requeues need this check too.
 - Don't edit the working tree while the runner runs. It does `git add -A`, so stray files join the task's diff.
 
 ## Lessons from M3
