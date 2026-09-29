@@ -1,6 +1,6 @@
 # ADR 08: WebKit in the end-to-end tests
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-09-29, option 1: WebKit installed; e2e runs in Chromium and WebKit)
 - **Date:** 2026-09-29
 - **Deciders:** project owner (accepts), Claude (drafts)
 
