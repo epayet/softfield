@@ -16,7 +16,7 @@ A plain module, no Preact and no strings (nothing to translate). Follow the shap
 - The longest side becomes `max` pixels (a smaller photo isn't enlarged); the ratio is kept.
 - **Orientation is kept**: decode with `createImageBitmap(file, {imageOrientation: "from-image"})`, so an EXIF-rotated phone photo comes out upright. Draw on a canvas, return `toDataURL("image/jpeg", 0.7)`.
 - A file that can't be decoded rejects (the caller decides what to show).
-- Tests build images in the page with a canvas (`toBlob`); for the rotation case use a JPEG fixture with an EXIF orientation tag, kept small, under `tests/browser/pages/`.
+- Tests build plain images in the page with a canvas (`toBlob`). For the rotation case, make the JPEG in the test with Pillow (already a dependency): a landscape image saved with EXIF orientation 6 (`exif = Image.Exif(); exif[0x0112] = 6`), handed to the page through `page.route` or as bytes. You can't write binary files, so don't add an image file.
 
 ### Done when
 - a 1000×500 image gives a data URL that decodes to 320×160; a 200×100 image stays 200×100
