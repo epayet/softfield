@@ -13,9 +13,9 @@ tests:
 Style `/me/` for a phone: the name screen, `Compose` and `Delivery`.
 
 ### Context
-Follow `coucou/static/coucou/css/pair.css` (a phone-first page) and its `<link>` in `coucou/templates/coucou/pair.html`; add the same kind of link to `me.css` in `coucou/templates/coucou/me.html`. The markup comes from `coucou/static/coucou/js/name_form.js`, `coucou/static/coucou/js/compose.js` and `coucou/static/coucou/js/delivery.js`: read them for the classes and ids.
+Follow `coucou/static/coucou/css/pair.css` (a phone-first page) and its `<link>` in `coucou/templates/coucou/pair.html`; add the same kind of link to `coucou/static/coucou/css/me.css` in `coucou/templates/coucou/me.html`. The markup comes from `coucou/static/coucou/js/name_form.js`, `coucou/static/coucou/js/compose.js` and `coucou/static/coucou/js/delivery.js`: read them for the classes and ids.
 - Mobile first, one column, a comfortable reading size, large tap targets (at least 44 px high) for every button and input, including the file buttons, the picker and Try again / Remove.
-- The photo preview and the delivery thumbnails never overflow the width; a warm, calm look consistent with `pair.css`.
+- The photo preview and the delivery thumbnails never overflow the width; a warm, calm look consistent with `coucou/static/coucou/css/pair.css`.
 - The `hidden` attribute must really hide (see `test_hidden_really_hides` in `tests/integration/test_display_css.py`).
 - Self-hosted only: no fonts or assets from elsewhere.
 
