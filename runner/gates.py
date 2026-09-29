@@ -23,7 +23,11 @@ _SKIP_RE = re.compile(
 
 # One line per gate, told to the local model on a retry: what to do, not only what failed
 # (ADR 07 item 6).
+NO_CHANGES = "no-changes"
+
 HINTS = {
+    NO_CHANGES: "Your previous attempt changed nothing: it ended before any edit. Make the"
+    " changes the task asks for, starting with the smallest one.",
     "protected-paths": "Undo your changes to the protected files listed below. If the goal"
     " can't be reached without them, write BLOCKED.md with `CATEGORY: needs-file`.",
     "no-new-skips": "Remove the skip/xfail you added. Fix the code, or the test if it's wrong.",

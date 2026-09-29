@@ -22,6 +22,7 @@ from runner.config import Config, read_protected
 from runner.gates import (
     BLOCKED_FILE,
     HINTS,
+    NO_CHANGES,
     GateContext,
     GateResult,
     is_test_file,
@@ -289,7 +290,12 @@ def run_task(s: Session, task: Task) -> TaskRecord:
 
         local_wip_commit(s, f"wip {task.id} attempt {attempt}")
         started = time.monotonic()
-        results = run_gates(GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout))
+        if s.git.changed_files(MAIN):
+            context = GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout)
+            results = run_gates(context)
+        else:
+            # An untouched tree passes every gate, and there'd be nothing to merge (m4-06).
+            results = [GateResult(NO_CHANGES, False, "The attempt changed no file.")]
         rec.gates_s += time.monotonic() - started
         (logs / f"gates-{attempt}.txt").write_text(
             "\n\n".join(f"## {r.name}: {'ok' if r.ok else 'FAIL'}\n{r.output}" for r in results),

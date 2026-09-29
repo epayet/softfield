@@ -243,3 +243,21 @@ def test_retry_prompt_ends_with_the_gate_output(repo: Path):
     assert "uv run ruff check --fix" in retry  # the gate's hint
     assert retry.rstrip().endswith("tasks/ready/m1-01-thing.md\n```")
     assert "CATEGORY: needs-file" in retry
+
+
+def test_an_attempt_that_changes_nothing_fails_instead_of_merging(repo, fake_model):
+    """m4-06: an attempt ended without an edit; the untouched tree passed every gate, and
+    squash-merging an empty branch crashed the runner."""
+    _add_task(repo, "m1-01-thing")
+
+    def nothing(repo, prompt):
+        pass
+
+    def fix(repo, prompt):
+        assert "changed nothing" in prompt
+        _implement(repo, prompt)
+
+    fake_model.extend([nothing, fix])
+    report = _run(repo, once=True)
+    task = report.tasks[0]
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["no-changes"])

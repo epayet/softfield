@@ -9,7 +9,7 @@ default_max_diff = 1000                 # a backstop against rewritten files, no
 
 [timeouts]  # seconds
 warmup = 300
-opencode = 1800
+opencode = 2700                         # M4: attempts took 15–30 min; 8 of m4-06's 9 hit 1800
 claude = 1800
 gate = 900
 
