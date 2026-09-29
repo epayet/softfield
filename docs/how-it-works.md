@@ -2,7 +2,7 @@
 
 A plain-language overview. The rules are in [`workflow.md`](workflow.md) and [`task-format.md`](task-format.md), and the craft of writing tasks is in [`task-writing.md`](task-writing.md).
 
-**The idea:** the frontier model does the thinking (design, tests, a working solution) and the local model does the typing and verification. For small tasks, the frontier's share is most of the thought but little of the tokens.
+**The idea** ([ADR 07](adr/07-spend-less-frontier.md)): the frontier model is the tech lead and the local models are junior engineers. The lead designs, decides how the pieces connect, writes short tickets and builds the security-critical parts. The juniors write the rest, tests included. Deterministic gates check every change, and the lead reviews once per milestone. Until M3 the lead also wrote a working solution for every task, which cost more than doing the task; that's gone.
 
 ## The queue
 
@@ -18,22 +18,22 @@ tasks/escalated/  the local model failed 3 times, or pre-flight failed; waiting 
 
 1. **Pick** the lowest id in `ready/` whose `depends_on` tasks are all in `done/`.
 2. **Branch** `task/<id>` from main.
-3. **Pre-flight.** Every file path in backticks in the spec must exist, and every quoted `class`/`def` must be found in those files. If not, the task escalates straight away without spending model time.
+3. **Pre-flight.** Every file path in backticks in the spec must exist (or be one the task creates), and every quoted `class`/`def` must be found in those files. If not, the task escalates straight away without spending model time.
 4. **Local model.** A one-token warm-up request makes LM Studio load Qwen with the owner's settings. Then OpenCode runs with a short prompt: the rules, the task, and the commands to finish with.
 5. **Gates**, stopping at the first failure:
-   - only the task's `files:` changed
-   - no protected paths touched
-   - existing tests untouched
+   - no protected paths touched (including the tests that guard security code)
+   - no test skipped or xfailed
    - no new dependencies
-   - diff within `max_diff`
+   - diff under a 1000-line backstop
    - test layout
    - translations
    - ruff
    - mypy
    - the task's own tests
    - the whole suite, minus other queued tasks' tests
+   - the tests the task added or changed fail against main's code, so they really test the change
 6. **Pass:** squash-merge into main and move the spec to `done/`. **Fail:**
-   - attempt 2 continues on the same branch, with the gate output at the end of the prompt;
+   - attempt 2 continues on the same branch, with a one-line hint and the gate output at the end of the prompt;
    - attempt 3 starts from a fresh branch;
    - after 3 failures, the spec moves to `escalated/`.
 7. **Escalation:** the headless frontier model, capped per milestone. It repairs or splits the spec, adds missing facts, does the task itself, or drafts an ADR for the owner. The runner commits its changes and moves the file.
@@ -43,27 +43,11 @@ After a milestone's tasks are done, `uv run runner review --milestone N` runs th
 
 Everything is plain git and files, so a bad run is easy to inspect (logs go in `var/runs/`) or undo.
 
-## Before a task reaches the queue: the skeleton
+## What goes in a ticket
 
-The frontier model commits these to main first:
+A goal, the files to read, the worked example to follow, and acceptance criteria as bullets, including the edges. No pasted code and no working solution: the junior reads the code and writes the tests itself. Security work is the exception: the lead writes those tests first, on main. Details: [`task-format.md`](task-format.md).
 
-- **Stubs:** the exact function or method with its final signature and docstring, and `raise NotImplementedError` as the body. The local model fills in a shape; it doesn't design one.
-- **Failing tests** that define done, one test file per task. They check behaviour, not implementation.
-- **A throwaway reference implementation.** The frontier writes the task itself, runs the tests, ruff and mypy, then reverts. This proves the tests can pass (it caught an impossible query-count limit in M1) and gives the real diff size.
-- **Spec checks:** `ruff format --check` and a runner dry-run, which includes pre-flight.
-
-## What goes in a spec
-
-The local model must never need to explore, and it drops instructions from long prompts. So specs are complete but short: Context of about 60 lines at most, 5 steps at most.
-
-- **Goal:** one sentence.
-- **Context:**
-  - the current code it will edit, pasted verbatim;
-  - facts it would otherwise look up, such as a `related_name`;
-  - the one constraint that matters, in **bold** and also enforced by a test (e.g. "never show key or pairing fields").
-- **Pattern to follow:** one existing file to copy the style from.
-- **Steps:** close to dictation. The exact imports, the exact expression to return, and the trap to avoid.
-- **Done when:** the same three lines every time.
+What the juniors learn stays in the repo, since they have no memory: a check where possible, else a worked example, else one line in [`docs/agents/junior.md`](agents/junior.md) (15 lines at most).
 
 ## Results so far
 

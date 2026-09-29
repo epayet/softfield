@@ -18,7 +18,7 @@
   },
   "model": "lmstudio/qwen/qwen3.6-35b-a3b",
   "small_model": "lmstudio/qwen/qwen3.6-35b-a3b",
-  "instructions": ["AGENTS.md"],
+  "instructions": ["AGENTS.md", "docs/agents/junior.md"],
   "autoupdate": false,
   "share": "disabled",
   "permission": {

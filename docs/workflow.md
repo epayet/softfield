@@ -2,16 +2,16 @@
 
 > Plain-language overview: [`how-it-works.md`](how-it-works.md).
 >
-> Reflects the brief §7 and [ADR 00](adr/00-initial.md) (Accepted). Changes to anything here need an Accepted ADR (see CLAUDE.md).
+> Reflects the brief §7, [ADR 00](adr/00-initial.md) and [ADR 07](adr/07-spend-less-frontier.md) (Accepted). Changes to anything here need an Accepted ADR (see [`docs/agents/lead.md`](agents/lead.md)).
 
 ## Roles
 
 | Who | Does |
 |---|---|
-| **Owner** | Accepts ADRs and workflow changes; signs off milestones on real devices. |
-| **Claude** (Claude Code, Pro login) | Architect, planner and task-writer; sole implementer of protected paths; escalations; reviews. |
-| **Runner** (`uv run runner`) | A deterministic Python script with **no AI in it**. It picks tasks, runs the local model and the gates, merges, retries and escalates, and calls Claude headlessly. |
-| **Local model** (OpenCode + Qwen via LM Studio) | Implements one small task at a time. |
+| **Owner** | Accepts ADRs and workflow changes, decides architecture and critical code questions, signs off milestones on real devices. |
+| **Lead** (a frontier model; today Claude Code, Pro login) | The tech lead: plans, decides the contracts between pieces, writes tickets, builds protected paths test-first, handles escalations, reviews. See [`docs/agents/lead.md`](agents/lead.md). |
+| **Runner** (`uv run runner`) | A deterministic Python script with **no AI in it**. It picks tasks, runs the local model and the gates, merges, retries and escalates, and calls the lead headlessly. |
+| **Juniors** (local models: OpenCode + Qwen via LM Studio) | Implement one ticket at a time, tests included. See [`docs/agents/junior.md`](agents/junior.md). |
 
 All coordination goes through files in the repo. Run logs go to `var/runs/<timestamp>-<task>/`, which is gitignored.
 
@@ -19,26 +19,28 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 
 1. Pick the next `tasks/ready/*.md` whose `depends_on` are all in `done/`.
 2. Create the branch `task/<id>` from `main`.
-3. **Pre-flight:** every file in the task's Context and `Pattern to follow` exists, and every quoted symbol is found (`def`/`class` grep). If not, escalate at once.
+3. **Pre-flight:** every backticked file in the task's Context and `Pattern to follow` exists or is listed in `files:`, and every quoted symbol is found (`def`/`class` grep). If not, escalate at once. `runner run --dry-run` prints the same problems before a session.
 4. **Local model:**
    - Warm up LM Studio with one sequential request, which JIT-loads it with the owner's settings. The session report notes the context LM Studio loaded; `opencode.json` doesn't set one (ADR 00 A3).
    - Run `opencode run --title <id> -f <task> "<fixed instruction>"`, with a wall-clock timeout. The instruction is short: the task, then the exact commands to finish with. On a retry, the gate output comes last, because the local model follows the end of a long prompt best ([ADR 01](adr/01-calibration-fixes.md)).
 5. **Gates, in order, stopping at the first failure:**
    1. `BLOCKED.md` present → see below
-   2. only `files:` changed (plus `docs/discoveries.md`)
-   3. no protected path touched (`workflow/protected-paths.txt`)
-   4. existing test files unchanged (SHA-256 against main)
-   5. no dependency changes (`pyproject.toml` deps, `uv.lock`, `vendor/`)
-   6. diff ≤ `max_diff` added + removed lines
-   7. `layout`: test files match modules by name, one per module (`tests/unit` ↔ `coucou/`, `tests/runner` ↔ `runner/`, `tests/browser` ↔ `coucou/static/coucou/js/`)
-   8. `translations`: every user-facing string has a compiled French translation
-   9. `ruff check` + `ruff format --check` (Python files only; Markdown is excluded, [ADR 01](adr/01-calibration-fixes.md))
-   10. `mypy`
-   11. the task's `tests:`
-   12. all unit, integration, runner and browser tests ([ADR 06](adr/06-sse-and-browser-tests.md): ES modules in headless Chromium), skipping the `tests:` files of *other* tasks still in `ready/` or `escalated/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
+   2. no protected path touched (`workflow/protected-paths.txt`, which includes the tests that guard protected code)
+   3. `no-new-skips`: no added `skip`/`xfail` in tests
+   4. no dependency changes (`pyproject.toml` deps, `uv.lock`, `vendor/`)
+   5. `max-diff`: under the 1000-line backstop against a rewritten file
+   6. `layout`: test files match modules by name, one per module (`tests/unit` ↔ `coucou/`, `tests/runner` ↔ `runner/`, `tests/browser` ↔ `coucou/static/coucou/js/`)
+   7. `translations`: every user-facing string has a compiled French translation
+   8. `ruff check` + `ruff format --check` (Python files only; Markdown is excluded, [ADR 01](adr/01-calibration-fixes.md))
+   9. `mypy`
+   10. the task's `tests:`
+   11. all unit, integration, runner and browser tests ([ADR 06](adr/06-sse-and-browser-tests.md): ES modules in headless Chromium), skipping the `tests:` files of *other* tasks still in `ready/` or `escalated/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
+   12. `tests-fail-on-main`: the test files the task added or changed fail against main's code (with every other changed file put back as it is on main), so they test the change ([ADR 07](adr/07-spend-less-frontier.md))
+
+   `files:` is a pointer, not a gate: the session report lists files changed outside `files:` and `tests:`, and every existing test the junior changed, for the review.
 6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `Coucou local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit).
 7. **Fail:**
-   - attempt 2: same branch; the prompt adds the exact gate output
+   - attempt 2: same branch; the prompt adds the gate's one-line hint (what to do) and its exact output
    - attempt 3: reset the branch; fresh prompt plus "previous attempt failed because…"
    - still failing: move the task to `escalated/` with logs and the last diff, pause its dependants, continue with independent tasks
 8. **`BLOCKED.md`** (categories in AGENTS.md):
@@ -50,20 +52,20 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 
 - **When:** at most once per escalated task per runner pass, within the milestone cap.
 - **What Claude gets:** the task, `BLOCKED.md` or the gate logs, and the last diff. Tools are limited to Read/Edit/Write on `tasks/`, `docs/` and the task's files, plus `uv run pytest`.
-- **Outcome:** a repaired or split spec back in `ready/`, an answered question (facts added to Context), Claude doing the task itself, or **stop for the owner** (a draft ADR).
+- **Outcome:** a repaired or split ticket back in `ready/`, an answered question (facts added to Context), the lead doing the task itself, or **stop for the owner** (a draft ADR, only for what `docs/agents/lead.md` reserves for the owner). The lesson becomes a check, a worked example or a note in `docs/agents/junior.md`.
 
 ## Milestone review loop
 
 **Trigger:** every task in the milestone is `done/` **and** `pytest -m e2e` passes on staging.
 
-1. **Review round:** headless Claude reviews `git diff <milestone-base>..main` and writes the findings to `var/runs/review-mN-rK.json`.
+1. **Review round:** the headless lead reviews `git diff <milestone-base>..main`, tests as closely as code (missing edges, every existing test a junior changed), and the French. It writes the findings to `var/runs/review-mN-rK.json`.
    - **Blocking:** bugs, security issues, AGENTS.md or ADR violations.
    - **Should-fix:** design drift, missing edge cases, weak tests.
    - **Nit** → `docs/backlog.md`. Nits never loop.
 2. **Routing each blocking or should-fix finding:**
    - small and clear → a fix task (`finding: mN-F3`)
    - protected, or quicker to fix than to specify → Claude fixes it directly
-   - needs a design decision → a draft ADR, and **stop**
+   - needs the owner (`docs/agents/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner in the backlog.
 3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code go to the backlog.
 
 **Stop rules** (the values are in `workflow/runner.toml`):
@@ -77,7 +79,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 | This round's findings ≥ the previous round's | stop |
 | ADR needed / unresolved security finding / cross-milestone surprise | stop immediately |
 
-**Report:** `docs/reviews/mN.md` covers what was built, the findings and their resolutions, the backlog items, the metrics (tasks, attempts per task, escalation rate, review rounds, headless runs), the stop reason and workflow observations. **Only the owner marks a milestone done.**
+**Report:** `docs/reviews/mN.md` starts with the owner's **sign-off sheet** (what changed, how to test it yourself, left for later, decisions waiting, how the work went; see `docs/agents/lead.md`), then covers what was built, the findings and their resolutions, the backlog items, the metrics (tasks, attempts per task, escalation rate, review rounds, headless runs), the stop reason and workflow observations. **Only the owner marks a milestone done.**
 
 ## Headless Claude invocation
 
