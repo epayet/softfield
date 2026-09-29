@@ -43,3 +43,12 @@ The existing rules in `coucou/static/coucou/css/display.css` (colours, `rem` siz
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: max-diff)
+attempts: 3
+tokens: 148464
+logs: var/runs/20260929-085233/m3-12-display-css-history
+```
