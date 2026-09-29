@@ -46,3 +46,12 @@ French tone, from strings already on Coucou's screens: short, plain and warm, ne
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 191
+gate_failures: []
+tokens: 200727
+```
