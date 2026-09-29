@@ -29,3 +29,12 @@ Read `docs/agents/preact.md`, `coucou/static/coucou/js/me.js`, `coucou/static/co
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`); lines are at most 100 characters, and `ruff format` won't split a long string for you
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 2469553
+logs: var/runs/20260929-142614/m4-06-me-wiring-run3
+```
