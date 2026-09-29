@@ -1,6 +1,6 @@
 # ADR 11: One UI setup everywhere: Preact + htm
 
-- **Status:** Proposed (the owner chose each item in conversation, 2026-09-29)
+- **Status:** Accepted (by the owner, 2026-09-29; each item as chosen in conversation)
 - **Date:** 2026-09-29
 - **Deciders:** project owner (accepts), Claude (drafts)
 

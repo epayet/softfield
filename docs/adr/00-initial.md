@@ -26,7 +26,7 @@ This ADR records the decisions already made in the brief (§1) and recommends th
 | Framework | **Django 5.2 LTS**; Django admin for all management in the MVP. |
 | Real-time | **Django Channels** over WebSockets, with the in-memory channel layer (see 2.2 for the process split). |
 | Database | **SQLite in WAL mode.** |
-| Frontend | Django templates + **Alpine.js** (sender); plain **ES modules** (display, outbox, cache, crypto). No Node build, no React. Service workers and a web app manifest for both apps. Every asset is self-hosted (vendored Alpine, system fonts only). |
+| Frontend | *(Amended by [ADR 11](11-preact-ui.md): Preact + htm for all UI, no Alpine.)* Django templates + **Alpine.js** (sender); plain **ES modules** (display, outbox, cache, crypto). No Node build, no React. Service workers and a web app manifest for both apps. Every asset is self-hosted (vendored Alpine, system fonts only). |
 | Hosting | The desktop plus **Tailscale Funnel** (`*.ts.net` HTTPS). systemd **user** services. When the desktop is off, the server is unreachable. |
 | i18n | **English and French from the start** (Amendment A2). The Django admin stays English. |
 | Domain | User, Vault, Membership, Space (multiple controllers), Display, MemberDevice, Event (append-only log = history). |
