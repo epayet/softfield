@@ -1,6 +1,6 @@
 # ADR 09: The display shows history, names and a language switch
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-09-29, in conversation; with the cog, the "New ›" hint and the timing as recorded)
 - **Date:** 2026-09-29
 - **Deciders:** project owner (accepts), Claude (drafts)
 
