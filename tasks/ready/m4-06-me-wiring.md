@@ -22,7 +22,7 @@ Read `docs/agents/preact.md`, `coucou/static/coucou/js/me.js`, `coucou/static/co
 - Never log note text or photo contents.
 - Test on the real `/me/` page only (`open_me("named=1")`); don't `mount` a separate `Compose`, it isn't wired to the outbox.
 - To see "waiting/sending", hold the answer: a sync `page.route` handler that appends `route` to a list and returns without fulfilling keeps the request open; later the test calls `held[0].fulfill(status=201, json={})`. The list shows the item until then.
-- `Compose` refuses a note over 280 characters before it reaches the outbox, so the `note_too_long` stub answers 400 to any note; the note's text doesn't matter. Its text in the list is `delivery.js`'s `CODES.note_too_long`.
+- `Compose` refuses a note over 280 characters before it reaches the outbox, so the `note_too_long` stub answers 400 to any note; the note's text doesn't matter. Its text in the list is `CODES.note_too_long` in `coucou/static/coucou/js/delivery.js`.
 - Count POSTs in the stub. For Remove: after the refusal, click Remove, wait for the list to be empty, then assert the count didn't grow. No `if … is_visible()` branches in tests: a test that skips a step when it's missing passes without testing.
 - In tests, wait on something that changes: `with page.expect_request("**/api/events"):` around the click, or a `wait_for` on the delivery list. `window.cspViolations` is set at load, so waiting on it returns at once.
 - Formatting: the gate runs `ruff format --check`, which also joins lines you split by hand when they fit in 100 characters. Two earlier attempts failed only on that. Run `uv run ruff format tests/browser/test_me.py` after your last edit.
@@ -35,12 +35,3 @@ Read `docs/agents/preact.md`, `coucou/static/coucou/js/me.js`, `coucou/static/co
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`); run `uv run ruff format` on the files you changed before you finish
-
-```yaml
-# --- runner ---
-result: escalated
-reason: pre-flight failed
-attempts: 0
-tokens: 0
-logs: var/runs/20260929-142614/m4-06-me-wiring-run4
-```
