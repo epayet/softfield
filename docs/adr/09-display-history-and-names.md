@@ -29,7 +29,7 @@ Amends M3's "nothing else to tap" and brings part of the roadmap's history into 
 - **Controls:** ‹ and › at the screen edges, and swiping on touch screens. › is hidden on the latest moment, and ‹ on the oldest.
 - **Back to the latest:** the screen returns to the latest moment after **2 minutes** without a touch, so a screen on the wall is never left on an old post. When a new moment arrives:
   - on the latest moment, or idle: it shows at once;
-  - while someone is browsing (touched in the last 2 minutes): a small "New ›" hint appears, and the screen jumps when tapped or when it goes idle. (Open: the owner may prefer an immediate jump.)
+  - while someone is browsing (touched in the last 2 minutes): a small "New ›" hint appears, and the screen jumps when tapped or when it goes idle (owner's choice, 2026-09-29).
 - **Labels:** the arrows are buttons with translated labels ("Previous moment" / "Moment précédent", "Next moment" / "Moment suivant"). They sit at the side edges, vertically centred, away from the reaction buttons.
 - **Reacting to an older moment:** tapping an emoji there reacts to *that* moment. `POST /api/events` already allows it (the target must be in the same space).
 - **API:** `GET /api/display/moments?before=<event id>&limit=10`, for displays only and scoped like the snapshot. It returns moments newest first, each with its reactions.
@@ -79,10 +79,9 @@ Amends ADR 00 A5 ("after pairing, nothing changes").
   - `display.css`: arrows, author line, summary line, the cog and its panel
   - the French
 
-## Open for the owner
+## Timing
 
-- The "New ›" hint while browsing (item 1), or an immediate jump to a new moment.
-- Timing: all four items before M3's sign-off (the owner's choice so far), or items 2–4 now and the history arrows (the largest) right after the M3 device check.
+All four items are built inside M3, before its sign-off (owner's choice). The owner's real-device check then covers them together with the rest of M3.
 
 ## Consequences
 
