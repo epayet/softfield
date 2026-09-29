@@ -41,6 +41,8 @@ coucou/serve.py
 
 # Uploads and media serving
 coucou/media.py
+coucou/services.py
+coucou/upload_limit.py
 coucou/media_paths.py
 coucou/views/media.py
 
@@ -79,6 +81,7 @@ tests/unit/test_deviceauth.py
 tests/unit/test_pairing.py
 tests/unit/test_media.py
 tests/unit/test_media_paths.py
+tests/unit/test_upload_limit.py
 tests/integration/test_admin_claim.py
 tests/integration/test_admin_separation.py
 tests/integration/test_device_sessions.py
