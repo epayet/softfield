@@ -31,3 +31,12 @@ Read `docs/agents/preact.md`, then follow the worked example `coucou/static/couc
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 987
+gate_failures: []
+tokens: 1344345
+```
