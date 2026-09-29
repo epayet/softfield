@@ -35,3 +35,12 @@ Read `docs/agents/preact.md`, `coucou/static/coucou/js/me.js`, `coucou/static/co
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`); run `uv run ruff format` on the files you changed before you finish
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 4224
+gate_failures: ['task-tests']
+tokens: 3906765
+```
