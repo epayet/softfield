@@ -17,7 +17,7 @@ When a task file and this file disagree, stop and write `BLOCKED.md`.
 6. Type-hint everything. Code must pass ruff (lint + format) and mypy.
 7. No third-party network calls, CDNs, fonts, analytics or trackers. Every asset is self-hosted.
 8. Never log note text or photo contents.
-9. **English and French:** wrap every user-facing string (`gettext`, `{% translate %}`, JS `gettext()`), and add its French translation to `coucou/locale/fr/LC_MESSAGES/` in the same task, with all its accents (é, è, à, ç…), then compile it: `msgfmt -o coucou/locale/fr/LC_MESSAGES/django.mo coucou/locale/fr/LC_MESSAGES/django.po`. API errors use stable codes, not sentences. Admin-only text stays plain English. Keep the tone light and warm in both languages.
+9. **English and French:** wrap every user-facing string (`gettext`, `{% translate %}`, JS `gettext()`), and add its French translation to `coucou/locale/fr/LC_MESSAGES/` in the same task, with all its accents (é, è, à, ç…), then compile it: `msgfmt -o coucou/locale/fr/LC_MESSAGES/django.mo coucou/locale/fr/LC_MESSAGES/django.po` (JS strings: the same with `djangojs.po` and `djangojs.mo`). API errors use stable codes, not sentences. Admin-only text stays plain English. Keep the tone light and warm in both languages.
 
 ## Tests
 10. **One test file per module:** `coucou/<name>.py` → `tests/unit/test_<name>.py`, `coucou/static/coucou/js/<name>.js` → `tests/browser/test_<name>.py`. Add to the existing file; never create a second one. Unit tests don't touch Django; integration tests use `tests/fakes/` or Django's test DB. See `docs/testing.md`.

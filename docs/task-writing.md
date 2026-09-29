@@ -32,7 +32,8 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 - **Tests:** browser tests live in `tests/browser/test_<module>.py`, one file per module in `coucou/static/coucou/js/`. Each test imports the module on a blank harness page (`harness` fixture) and stubs the network with `page.route`. Example: `tests/browser/test_outbox.py`.
 - **Which modules:** the local model gets UI modules (rendering, transitions, screen state). Crypto, auth, pairing, the outbox, the live stream, the service worker and `display.js` are protected.
 - **Layout:** UI tests call `layout_problems(page)` at `PHONE` and `DISPLAY` sizes (`tests/browser/conftest.py`).
-- **Strings:** every string stays in the Django template (`data-state` sections), never in the JS, so the French lives in `django.po` as usual.
+- **Strings:** Preact components (ADR 11) use `gettext()` in the JS, with the French in `djangojs.po`; list `djangojs.po` and `.mo` in `files:`. The display (plain modules until its port) keeps its text in the template.
+- **Components:** point at `docs/agents/preact.md` and the worked example `name_form.js`; the ticket gives the props and the callbacks (the milestone's decisions), never the markup.
 
 ## Lessons from M2
 

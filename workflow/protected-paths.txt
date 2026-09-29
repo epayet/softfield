@@ -18,6 +18,8 @@ coucou/static/coucou/js/pairing.js
 coucou/static/coucou/js/outbox.js
 coucou/static/coucou/js/live.js
 coucou/static/coucou/js/display.js
+# Vendored third-party code: pinned copies (ADR 11 item 1)
+coucou/static/coucou/vendor/**
 # Admin templates for devices (the claim flow)
 coucou/templates/admin/**
 
