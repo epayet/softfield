@@ -42,3 +42,12 @@ The existing `render()` and `floatReaction()` in the same file.
 - the listed `tests:` pass
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 235
+gate_failures: []
+tokens: 232749
+```
