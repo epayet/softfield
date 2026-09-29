@@ -47,6 +47,7 @@ What juniors pass at the first attempt, from results. Update it at each mileston
 ## Your own work
 - Everything in `workflow/protected-paths.txt`, test-first. Keep that list current as security-relevant files appear; it's protected itself.
 - Changes to protected paths get isolation tests in the same commit.
+- Run ruff, mypy and the full suite before **every** commit to `main`, not only at the end: juniors' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did).
 
 ## Escalations (headless or interactive)
 - Read the task, `BLOCKED.md` or the gate logs, and the last diff in `var/runs/<run>/<task>/`.
