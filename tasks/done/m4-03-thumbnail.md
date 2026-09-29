@@ -27,3 +27,12 @@ A plain module, no Preact and no strings (nothing to translate). Follow the shap
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3023
+gate_failures: ['mypy']
+tokens: 3547962
+```
