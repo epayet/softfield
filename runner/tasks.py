@@ -8,7 +8,9 @@ from typing import Any
 
 import yaml
 
-SECTIONS = ("Goal", "Context", "Pattern to follow", "Steps", "Done when")
+# A ticket is a goal, the context and acceptance criteria (ADR 07 item 2). "Pattern to
+# follow" and "Steps" are optional.
+SECTIONS = ("Goal", "Context", "Done when")
 _PATH_RE = re.compile(r"`([\w./-]+\.(?:py|js|html|css|md|toml|json|txt))`")
 _SYMBOL_RE = re.compile(r"\b(?:def|class)\s+([A-Za-z_]\w*)")
 
@@ -145,12 +147,15 @@ def pick_next(ready: Iterable[Task], done: set[str], paused: set[str]) -> Task |
 
 
 def preflight(task: Task, repo: Path) -> list[str]:
-    """Problems with the task's Context/Pattern references. Empty means OK."""
-    text = task.sections["Context"] + "\n" + task.sections["Pattern to follow"]
+    """Problems with the task's Context/Pattern references. Empty means OK.
+
+    The ``tests:`` files may not exist yet: juniors write their own (ADR 07 item 4).
+    """
+    text = task.sections["Context"] + "\n" + task.sections.get("Pattern to follow", "")
     problems = []
-    paths = set(_PATH_RE.findall(text)) | set(task.tests)
+    paths = set(_PATH_RE.findall(text))
     for rel in sorted(paths):
-        if not (repo / rel).exists():
+        if not (repo / rel).exists() and rel not in task.files:  # files: may be new files
             problems.append(f"referenced path does not exist: {rel}")
     symbols = set(_SYMBOL_RE.findall(task.sections["Context"]))
     if symbols:

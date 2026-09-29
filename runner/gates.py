@@ -1,5 +1,6 @@
 """The gates a task must pass before it is merged (docs/workflow.md)."""
 
+import re
 import subprocess
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -15,6 +16,32 @@ DEPENDENCY_DIRS = ("coucou/static/coucou/vendor/",)
 BLOCKED_FILE = "BLOCKED.md"
 BLOCKED_CATEGORIES = ("false-assumption", "needs-file", "needs-info", "unrelated-problem")
 _OUTPUT_LIMIT = 6000
+# Ways to silence a test instead of fixing the code (ADR 07 item 4).
+_SKIP_RE = re.compile(
+    r"pytest\.mark\.(skip|skipif|xfail)\b|pytest\.(skip|xfail|importorskip)\(|\.(skip|fixme)\("
+)
+
+# One line per gate, told to the local model on a retry: what to do, not only what failed
+# (ADR 07 item 6).
+HINTS = {
+    "protected-paths": "Undo your changes to the protected files listed below. If the goal"
+    " can't be reached without them, write BLOCKED.md with `CATEGORY: needs-file`.",
+    "no-new-skips": "Remove the skip/xfail you added. Fix the code, or the test if it's wrong.",
+    "no-new-dependencies": "Undo the dependency change and use what's already installed.",
+    "max-diff": "Your diff is far bigger than the goal needs: you probably rewrote a file."
+    " Make small, targeted edits instead.",
+    "layout": "Keep one test file per module, named test_<module>.py, directly in its folder.",
+    "translations": "Add the missing French to coucou/locale/fr/LC_MESSAGES/ and compile it"
+    " with msgfmt, as AGENTS.md shows.",
+    "ruff": "Run `uv run ruff format` and `uv run ruff check --fix` on your files, then fix"
+    " what's left.",
+    "mypy": "Fix the type errors below.",
+    "task-tests": "Make these tests pass. Change a test only if it's wrong about the goal.",
+    "all-tests": "Your change broke other tests. Fix the code; change a test only if the goal"
+    " changes that behaviour.",
+    "tests-fail-on-main": "Your tests also pass without your code change, so they don't test"
+    ' it. Make them check the behaviour in "Done when".',
+}
 
 
 @dataclass(frozen=True)
@@ -54,6 +81,26 @@ def touching_protected(changed: Iterable[str], protected: Iterable[str]) -> list
 
 def dependency_changes(changed: Iterable[str]) -> list[str]:
     return sorted(f for f in changed if f in DEPENDENCY_FILES or f.startswith(DEPENDENCY_DIRS))
+
+
+def is_test_file(path: str) -> bool:
+    """A pytest file the task gates run (e2e runs on staging, not here)."""
+    pure = PurePosixPath(path)
+    return (
+        path.startswith("tests/")
+        and not path.startswith("tests/e2e/")
+        and pure.name.startswith("test_")
+        and pure.suffix == ".py"
+    )
+
+
+def added_skips(diff: str) -> list[str]:
+    """Added lines of a unified diff that skip or xfail a test."""
+    return [
+        line[1:].strip()
+        for line in diff.splitlines()
+        if line.startswith("+") and not line.startswith("+++") and _SKIP_RE.search(line)
+    ]
 
 
 # test folder -> (module folder, module suffix): tests/unit/test_x.py <-> coucou/x.py, and
@@ -104,7 +151,8 @@ def _result(name: str, problems: list[str]) -> GateResult:
     return GateResult(name, not problems, "\n".join(problems))
 
 
-def _command(name: str, ctx: GateContext, *args: str) -> GateResult:
+def _exec(ctx: GateContext, *args: str) -> tuple[int | None, str]:
+    """Run a command in the repo: its exit code (None on timeout) and trimmed output."""
     try:
         proc = subprocess.run(
             list(args),
@@ -115,16 +163,16 @@ def _command(name: str, ctx: GateContext, *args: str) -> GateResult:
             check=False,
         )
     except subprocess.TimeoutExpired:
-        return GateResult(name, False, f"timed out after {ctx.timeout}s")
+        return None, f"timed out after {ctx.timeout}s"
     output = (proc.stdout + proc.stderr).strip()
     if len(output) > _OUTPUT_LIMIT:
         output = "…(truncated)…\n" + output[-_OUTPUT_LIMIT:]
-    return GateResult(name, proc.returncode == 0, output)
+    return proc.returncode, output
 
 
-def gate_allowed_files(ctx: GateContext) -> GateResult:
-    bad = outside_allowed(ctx.git.changed_files(ctx.base), ctx.task.files)
-    return _result("allowed-files", [f"changed but not in files: {f}" for f in bad])
+def _command(name: str, ctx: GateContext, *args: str) -> GateResult:
+    code, output = _exec(ctx, *args)
+    return GateResult(name, code == 0, output)
 
 
 def gate_protected(ctx: GateContext) -> GateResult:
@@ -132,10 +180,10 @@ def gate_protected(ctx: GateContext) -> GateResult:
     return _result("protected-paths", [f"protected path changed: {f}" for f in bad])
 
 
-def gate_tests_unchanged(ctx: GateContext) -> GateResult:
-    changed = ctx.git.changed_files(ctx.base)
-    bad = [f for f in changed if f.startswith("tests/") and ctx.git.exists_at(ctx.base, f)]
-    return _result("existing-tests-unchanged", [f"existing test file changed: {f}" for f in bad])
+def gate_no_new_skips(ctx: GateContext) -> GateResult:
+    """Juniors may change tests (ADR 07 item 4), but not silence them."""
+    added = added_skips(ctx.git.run("diff", "-U0", f"{ctx.base}...HEAD", "--", "tests/"))
+    return _result("no-new-skips", [f"skip added: {line}" for line in added])
 
 
 def gate_dependencies(ctx: GateContext) -> GateResult:
@@ -144,8 +192,9 @@ def gate_dependencies(ctx: GateContext) -> GateResult:
 
 
 def gate_diff_size(ctx: GateContext) -> GateResult:
+    """A backstop against a rewritten file, not a sizing tool (ADR 07 item 8)."""
     size = ctx.git.diff_size(ctx.base)
-    problems = [f"diff is {size} lines; max_diff is {ctx.task.max_diff}"]
+    problems = [f"diff is {size} lines, over the limit of {ctx.task.max_diff}"]
     return _result("max-diff", problems if size > ctx.task.max_diff else [])
 
 
@@ -191,10 +240,37 @@ def gate_all_tests(ctx: GateContext) -> GateResult:
     )
 
 
+def gate_tests_fail_on_main(ctx: GateContext) -> GateResult:
+    """The test files a task added or changed must fail against main's code (ADR 07 item 4).
+
+    Puts back main's version of every changed file outside tests/, runs the changed test
+    files, then resets the branch. Tests that pass without the task's code don't test it.
+    """
+    name = "tests-fail-on-main"
+    changed = ctx.git.changed_files(ctx.base)
+    tests = sorted(f for f in changed if is_test_file(f))
+    if not tests:
+        return GateResult(name, True, "no test files changed")
+    try:
+        for path in changed:
+            if path.startswith("tests/"):
+                continue
+            if ctx.git.exists_at(ctx.base, path):
+                ctx.git.run("checkout", ctx.base, "--", path)
+            else:
+                (ctx.repo / path).unlink(missing_ok=True)
+        code, output = _exec(ctx, "uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *tests)
+    finally:
+        ctx.git.run("reset", "-q", "--hard", "HEAD")
+    if code in (1, 2):  # tests failed, or couldn't import what the task adds
+        return GateResult(name, True, "fail without the change: " + ", ".join(tests))
+    why = "no tests collected" if code == 5 else "they pass without your code change"
+    return GateResult(name, False, f"{', '.join(tests)}: {why}\n{output}")
+
+
 GATES: tuple[Callable[[GateContext], GateResult], ...] = (
-    gate_allowed_files,
     gate_protected,
-    gate_tests_unchanged,
+    gate_no_new_skips,
     gate_dependencies,
     gate_diff_size,
     gate_layout,
@@ -203,6 +279,7 @@ GATES: tuple[Callable[[GateContext], GateResult], ...] = (
     gate_mypy,
     gate_task_tests,
     gate_all_tests,
+    gate_tests_fail_on_main,
 )
 
 

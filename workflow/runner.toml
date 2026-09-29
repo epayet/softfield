@@ -5,7 +5,7 @@
 max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch)
 headless_claude_runs_per_milestone = 10 # reviews + escalations + narratives
 review_rounds = 3
-default_max_diff = 150                  # added + removed lines
+default_max_diff = 1000                 # a backstop against rewritten files, not a sizing tool (ADR 07)
 
 [timeouts]  # seconds
 warmup = 300

@@ -53,9 +53,8 @@ def fake_model(monkeypatch):
         for g in gates.GATES
         if g.__name__
         in {
-            "gate_allowed_files",
             "gate_protected",
-            "gate_tests_unchanged",
+            "gate_no_new_skips",
             "gate_dependencies",
             "gate_diff_size",
             "gate_layout",
@@ -107,43 +106,82 @@ def test_task_merges_on_first_attempt(repo, fake_model):
     assert done.strip() == f"runner: m1-01-thing done, merged as {merge[:9]}"
 
 
-def test_retry_gets_gate_output_and_can_recover(repo, fake_model):
+def test_retry_gets_gate_output_and_a_hint_and_can_recover(repo, fake_model):
     _add_task(repo, "m1-01-thing")
 
     def stray(repo, prompt):
-        (repo / "coucou" / "other.py").write_text("X = 1\n")
+        (repo / "coucou" / "secret.py").write_text("X = 1\n")
 
     def fix(repo, prompt):
-        assert "allowed-files" in prompt and "coucou/other.py" in prompt
-        (repo / "coucou" / "other.py").unlink()
+        assert "protected-paths" in prompt and "coucou/secret.py" in prompt
+        assert "Undo your changes to the protected files" in prompt  # the gate's hint
+        (repo / "coucou" / "secret.py").unlink()
         _implement(repo, prompt)
 
     fake_model.extend([stray, fix])
     report = _run(repo, once=True)
     task = report.tasks[0]
-    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["allowed-files"])
-    assert not (repo / "coucou" / "other.py").exists()
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["protected-paths"])
+    assert not (repo / "coucou" / "secret.py").exists()
 
 
-def test_protected_and_test_edits_are_rejected_then_escalated(repo, fake_model):
+def test_skipped_tests_are_rejected_then_escalated(repo, fake_model):
     _add_task(repo, "m1-01-thing")
     _add_task(repo, "m1-02-next", "[m1-01-thing]")
 
     def cheat(repo, prompt):
-        (repo / "tests" / "unit" / "test_thing.py").write_text("# gutted\n")
+        path = repo / "tests" / "unit" / "test_thing.py"
+        path.write_text("import pytest\n\n\n@pytest.mark.skip\n" + path.read_text())
 
     fake_model.extend([cheat, cheat, cheat])
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["escalated"]
-    assert report.tasks[0].gate_failures == ["allowed-files"] * 3
+    assert report.tasks[0].gate_failures == ["no-new-skips"] * 3
     escalated = (repo / "tasks" / "escalated" / "m1-01-thing.md").read_text()
     assert "gates failed 3x" in escalated
     message = git(repo, "log", "-1", "--format=%B", "--grep=^runner: escalate")
-    assert "Last output:" in message and "tests/unit/test_thing.py" in message
+    assert "Last output:" in message and "@pytest.mark.skip" in message
     # The dependant is paused, not attempted.
     assert (repo / "tasks" / "ready" / "m1-02-next.md").exists()
     assert "Paused (dependency escalated): m1-02-next" in report.notes
-    assert "gutted" not in (repo / "tests" / "unit" / "test_thing.py").read_text()
+    assert "skip" not in (repo / "tests" / "unit" / "test_thing.py").read_text()
+
+
+def test_juniors_may_edit_tests_and_touch_other_files_and_the_report_says_so(repo, fake_model):
+    """ADR 07 items 4 and 9: `files:` is a pointer and existing tests may change; the
+    session report lists both for the milestone review."""
+    _add_task(repo, "m1-01-thing")
+
+    def wider(repo, prompt):
+        _implement(repo, prompt)
+        (repo / "coucou" / "helper.py").write_text("HELP = 1\n")
+        (repo / "tests" / "unit" / "test_thing.py").write_text(
+            "def test_thing():\n    assert True\n"
+        )
+
+    fake_model.append(wider)
+    report = _run(repo)
+    task = report.tasks[0]
+    assert task.result == "done"
+    assert task.outside_files == ["coucou/helper.py"]
+    assert task.changed_tests == ["tests/unit/test_thing.py"]
+    text = next((repo / "docs" / "sessions").glob("*.md")).read_text()
+    assert "edited existing tests (review these): tests/unit/test_thing.py" in text
+
+
+def test_dry_run_shows_preflight_problems(repo, capsys):
+    _add_task(repo, "m1-01-thing")
+    task = repo / "tasks" / "ready" / "m1-01-thing.md"
+    task.write_text(
+        task.read_text().replace(
+            "### Pattern to follow\n`coucou/thing.py`", "### Pattern to follow\n`render.js`"
+        )
+    )
+    git(repo, "commit", "-qam", "bare name")
+    assert loop.run_session(_config(repo), once=False, dry_run=True, escalate=False) is None
+    out = capsys.readouterr().out
+    assert "-> m1-01-thing: runnable" in out
+    assert "pre-flight: referenced path does not exist: render.js" in out
 
 
 def test_blocked_escalates_immediately(repo, fake_model):
@@ -202,5 +240,6 @@ def test_retry_prompt_ends_with_the_gate_output(repo: Path):
     assert "uv run mypy" in first
     retry = loop._prompt(task, 2, GateResult("ruff", False, "tasks/ready/m1-01-thing.md"))
     assert retry.index("### Goal") < retry.index("IMPORTANT")
+    assert "uv run ruff check --fix" in retry  # the gate's hint
     assert retry.rstrip().endswith("tasks/ready/m1-01-thing.md\n```")
     assert "CATEGORY: needs-file" in retry

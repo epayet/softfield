@@ -19,7 +19,16 @@ from runner.claude import (
     run_claude,
 )
 from runner.config import Config, read_protected
-from runner.gates import BLOCKED_FILE, GateContext, GateResult, parse_blocked, run_gates
+from runner.gates import (
+    BLOCKED_FILE,
+    HINTS,
+    GateContext,
+    GateResult,
+    is_test_file,
+    outside_allowed,
+    parse_blocked,
+    run_gates,
+)
 from runner.gitops import (
     LOCAL_MODEL_AGENT,
     LOCAL_MODEL_AUTHOR,
@@ -189,7 +198,8 @@ def _prompt(task: Task, attempt: int, last: GateResult | None) -> str:
     if last is None:
         return prompts.local_prompt(task)
     template = prompts.RETRY if attempt == 2 else prompts.FRESH
-    return prompts.local_prompt(task, template.format(gate=last.name, output=last.output))
+    extra = template.format(gate=last.name, hint=HINTS.get(last.name, ""), output=last.output)
+    return prompts.local_prompt(task, extra)
 
 
 def _finish_escalation(
@@ -310,6 +320,9 @@ def run_task(s: Session, task: Task) -> TaskRecord:
 def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
     branch = f"task/{task.id}"
     changes = s.git.numstat(MAIN)
+    changed = s.git.changed_files(MAIN)
+    rec.outside_files = outside_allowed(changed, (*task.files, *task.tests))
+    rec.changed_tests = [f for f in changed if is_test_file(f) and s.git.exists_at(MAIN, f)]
     rec.commit = s.git.squash_merge(
         branch,
         MAIN,
@@ -387,7 +400,7 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         paused = blocked_ids(ready, escalated)
         task = pick_next(ready, done, paused)
         if dry_run:
-            _print_plan(ready, done, paused, task)
+            _print_plan(ready, done, paused, task, cfg.repo)
             return None
         if task is None:
             if paused:
@@ -425,7 +438,10 @@ def close_session(s: Session) -> SessionReport:
     return s.report
 
 
-def _print_plan(ready: list[Task], done: set[str], paused: set[str], nxt: Task | None) -> None:
+def _print_plan(
+    ready: list[Task], done: set[str], paused: set[str], nxt: Task | None, repo: Path
+) -> None:
+    """What would run next, and each ready task's pre-flight problems (docs/task-writing.md)."""
     print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
     for task in sorted(ready, key=lambda t: (t.milestone, t.id)):
         waiting = [d for d in task.depends_on if d not in done]
@@ -436,6 +452,8 @@ def _print_plan(ready: list[Task], done: set[str], paused: set[str], nxt: Task |
         )
         marker = "->" if nxt and task.id == nxt.id else "  "
         print(f"{marker} {task.id}: {status}")
+        for problem in preflight(task, repo):
+            print(f"     pre-flight: {problem}")
     print(f"next: {nxt.id if nxt else 'nothing'}")
 
 

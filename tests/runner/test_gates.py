@@ -4,8 +4,11 @@ from runner import gates
 from runner.gates import (
     GateContext,
     GateResult,
+    added_skips,
     dependency_changes,
     gate_all_tests,
+    gate_tests_fail_on_main,
+    is_test_file,
     layout_problems,
     outside_allowed,
     parse_blocked,
@@ -13,7 +16,7 @@ from runner.gates import (
 )
 from runner.gitops import Git
 from runner.tasks import parse_task
-from tests.runner.conftest import write_task
+from tests.runner.conftest import git, write_task
 
 
 def test_outside_allowed_permits_discoveries():
@@ -97,3 +100,101 @@ def test_all_tests_skips_other_queued_tasks_tests(repo: Path, monkeypatch):
     assert gate_all_tests(ctx).ok
     assert "--ignore=tests/unit/test_other.py" in calls[0]
     assert "--ignore=tests/unit/test_thing.py" not in calls[0]
+
+
+def test_added_skips_finds_ways_to_silence_a_test():
+    diff = "\n".join(
+        [
+            "+++ b/tests/unit/test_thing.py",
+            "+@pytest.mark.skip(reason='later')",
+            "+    pytest.xfail('flaky')",
+            "+pytestmark = pytest.mark.skipif(True, reason='x')",
+            "-@pytest.mark.skip",  # removing a skip is fine
+            "+def test_skipping_rope():",
+            "+    assert skip_count == 0",
+        ]
+    )
+    assert added_skips(diff) == [
+        "@pytest.mark.skip(reason='later')",
+        "pytest.xfail('flaky')",
+        "pytestmark = pytest.mark.skipif(True, reason='x')",
+    ]
+
+
+def test_is_test_file():
+    assert is_test_file("tests/unit/test_thing.py")
+    assert is_test_file("tests/browser/test_render.py")
+    assert not is_test_file("tests/e2e/test_display.py")  # runs on staging
+    assert not is_test_file("tests/browser/conftest.py")
+    assert not is_test_file("coucou/test_utils.py")
+
+
+def _branch_with(repo: Path, files: dict[str, str | None]) -> GateContext:
+    """A task branch off main that writes (or deletes, for None) the given files."""
+    git(repo, "checkout", "-q", "-b", "task/x")
+    for rel, text in files.items():
+        if text is None:
+            (repo / rel).unlink()
+        else:
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "wip")
+    task = parse_task(write_task(repo / "var", "m1-01-thing"), 1000)
+    return GateContext(repo, Git(repo), task, "main", (), 60)
+
+
+def _fake_pytest(monkeypatch, code: int, seen: dict[str, str]):
+    def fake_exec(ctx: GateContext, *args: str) -> tuple[int | None, str]:
+        seen["args"] = " ".join(args)
+        seen["thing"] = (ctx.repo / "coucou" / "thing.py").read_text()
+        seen["new_exists"] = str((ctx.repo / "coucou" / "new.py").exists())
+        seen["test"] = (ctx.repo / "tests" / "unit" / "test_thing.py").read_text()
+        return code, "pytest output"
+
+    monkeypatch.setattr(gates, "_exec", fake_exec)
+
+
+def test_new_tests_run_against_mains_code_and_must_fail(repo: Path, monkeypatch):
+    ctx = _branch_with(
+        repo,
+        {
+            "coucou/thing.py": "def thing() -> int:\n    return 42\n",
+            "coucou/new.py": "X = 1\n",
+            "tests/unit/test_thing.py": "def test_thing():\n    assert thing() == 42\n",
+        },
+    )
+    seen: dict[str, str] = {}
+    _fake_pytest(monkeypatch, 1, seen)
+    result = gate_tests_fail_on_main(ctx)
+    assert result.ok, result.output
+    # While the tests ran: main's code, the branch's tests.
+    assert "raise NotImplementedError" in seen["thing"]
+    assert seen["new_exists"] == "False"
+    assert "thing() == 42" in seen["test"]
+    assert seen["args"].endswith("tests/unit/test_thing.py")
+    # Afterwards the branch is back as it was.
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+    assert (repo / "coucou" / "new.py").exists()
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_tests_that_pass_without_the_change_fail_the_gate(repo: Path, monkeypatch):
+    ctx = _branch_with(
+        repo,
+        {
+            "coucou/thing.py": "def thing() -> int:\n    return 42\n",
+            "tests/unit/test_thing.py": "def test_thing():\n    assert True\n",
+        },
+    )
+    _fake_pytest(monkeypatch, 0, {})
+    result = gate_tests_fail_on_main(ctx)
+    assert not result.ok
+    assert "pass without your code change" in result.output
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+
+
+def test_no_changed_tests_means_the_lead_wrote_them(repo: Path, monkeypatch):
+    ctx = _branch_with(repo, {"coucou/thing.py": "def thing() -> int:\n    return 42\n"})
+    _fake_pytest(monkeypatch, 0, {})
+    assert gate_tests_fail_on_main(ctx).ok

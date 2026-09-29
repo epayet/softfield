@@ -92,7 +92,8 @@ class Git:
         return True
 
     def changed_files(self, base: str) -> list[str]:
-        out = self.run("diff", "--name-only", f"{base}...HEAD")
+        """Every path changed since ``base``; a rename lists both its old and new path."""
+        out = self.run("diff", "--name-only", "--no-renames", f"{base}...HEAD")
         return [line for line in out.splitlines() if line]
 
     def diff_size(self, base: str) -> int:

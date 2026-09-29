@@ -69,3 +69,32 @@ CLAUDE.md
 docs/adr/**
 pyproject.toml
 uv.lock
+
+# Tests that guard the protected code above (ADR 07 item 4). Juniors may change other
+# tests, but not these: only the lead changes them, as with the code they guard.
+tests/unit/test_authz.py
+tests/unit/test_deviceauth.py
+tests/unit/test_pairing.py
+tests/unit/test_media.py
+tests/unit/test_media_paths.py
+tests/integration/test_admin_claim.py
+tests/integration/test_admin_separation.py
+tests/integration/test_device_sessions.py
+tests/integration/test_display_views.py
+tests/integration/test_event_repo_contract.py
+tests/integration/test_events_api.py
+tests/integration/test_me_api.py
+tests/integration/test_media_view.py
+tests/integration/test_migration_personal.py
+tests/integration/test_pairing_api.py
+tests/integration/test_revocation.py
+tests/integration/test_scoping_isolation.py
+tests/integration/test_stream.py
+tests/browser/test_display.py
+tests/browser/test_live.py
+tests/browser/test_outbox.py
+tests/browser/test_sw.py
+tests/e2e/**
+
+# The lead's instructions, and the juniors' notes it curates (ADR 07 items 6 and 14)
+docs/agents/**

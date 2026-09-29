@@ -47,3 +47,20 @@ def test_observations():
 
 def test_empty_session():
     assert observations(SessionReport(started=T0)) == ["No tasks ran."]
+
+
+def test_observations_point_the_review_at_widened_tasks_and_edited_tests():
+    report = SessionReport(started=T0)
+    report.tasks = [
+        TaskRecord(
+            "m4-01-a",
+            4,
+            "done",
+            attempts=1,
+            outside_files=["coucou/helper.py"],
+            changed_tests=["tests/unit/test_a.py"],
+        )
+    ]
+    obs = observations(report)
+    assert "`m4-01-a` changed files outside `files:`: coucou/helper.py." in obs
+    assert "`m4-01-a` edited existing tests (review these): tests/unit/test_a.py." in obs

@@ -33,9 +33,19 @@ def test_id_must_match_file_name(tmp_path):
 
 def test_missing_section_is_rejected(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
-    path.write_text(path.read_text().replace("### Steps", "### Stepz"))
-    with pytest.raises(TaskError, match="Steps"):
+    path.write_text(path.read_text().replace("### Done when", "### Done whenever"))
+    with pytest.raises(TaskError, match="Done when"):
         parse_task(path, 150)
+
+
+def test_a_ticket_needs_no_pattern_or_steps(tmp_path):
+    """ADR 07 item 2: a goal, the context and acceptance criteria are enough."""
+    path = write_task(tmp_path, "m1-01-thing")
+    text = path.read_text()
+    text = text.replace("### Pattern to follow\n`coucou/thing.py`\n\n", "")
+    path.write_text(text.replace("### Steps\n1. Implement `thing`.\n\n", ""))
+    task = parse_task(path, 150)
+    assert "Steps" not in task.sections and "Pattern to follow" not in task.sections
 
 
 def test_frontmatter_required(tmp_path):
@@ -74,8 +84,23 @@ def test_preflight(repo):
     assert preflight(task, repo) == []
     (repo / "coucou" / "thing.py").write_text("x = 1\n")
     assert preflight(task, repo) == ["symbol not found in the task's files: thing"]
+    (repo / "coucou" / "other.py").write_text("")
+    task.path.write_text(
+        task.path.read_text().replace("`coucou/thing.py`\n\n###", "`coucou/other.py`\n\n###")
+    )
+    task = parse_task(task.path, 150)
+    (repo / "coucou" / "other.py").unlink()
+    assert "referenced path does not exist: coucou/other.py" in preflight(task, repo)
+
+
+def test_preflight_allows_new_files_and_unwritten_tests(repo):
+    """Files listed in `files:` may be created by the task, and juniors write their own
+    tests, so neither has to exist yet (ADR 07 items 2 and 4)."""
+    task = parse_task(write_task(repo / "tasks" / "ready", "m1-01-thing"), 150)
     (repo / "coucou" / "thing.py").unlink()
-    assert "referenced path does not exist: coucou/thing.py" in preflight(task, repo)
+    (repo / "tests" / "unit" / "test_thing.py").unlink()
+    assert "referenced path does not exist: coucou/thing.py" not in preflight(task, repo)
+    assert not any("test_thing" in p for p in preflight(task, repo))
 
 
 def test_footer(tmp_path):

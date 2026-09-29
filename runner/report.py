@@ -24,6 +24,9 @@ class TaskRecord:
     note: str = ""
     logs: Path | None = None
     commit: str = ""  # the squash-merge sha on main, when the task merged
+    # For the milestone review to read first (ADR 07 items 4 and 9):
+    outside_files: list[str] = field(default_factory=list)  # changed, not in `files:`
+    changed_tests: list[str] = field(default_factory=list)  # existing test files it edited
 
 
 @dataclass
@@ -82,6 +85,13 @@ def observations(report: SessionReport) -> list[str]:
     blocked = [t for t in tasks if t.blocked]
     if blocked:
         obs.append("BLOCKED: " + ", ".join(f"{t.id} ({t.blocked})" for t in blocked) + ".")
+    for t in tasks:
+        if t.outside_files:
+            obs.append(f"`{t.id}` changed files outside `files:`: {', '.join(t.outside_files)}.")
+        if t.changed_tests:
+            obs.append(
+                f"`{t.id}` edited existing tests (review these): {', '.join(t.changed_tests)}."
+            )
     return obs
 
 
