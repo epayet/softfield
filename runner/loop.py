@@ -439,9 +439,14 @@ def _print_plan(ready: list[Task], done: set[str], paused: set[str], nxt: Task |
     print(f"next: {nxt.id if nxt else 'nothing'}")
 
 
+# ADR 00 and docs/testing.md: end-to-end runs in Chromium and WebKit.
+E2E_BROWSERS = ("chromium", "webkit")
+
+
 def run_e2e(repo: Path, timeout: int) -> GateResult:
+    browsers = [arg for name in E2E_BROWSERS for arg in ("--browser", name)]
     proc = subprocess.run(
-        ["uv", "run", "pytest", "-q", "-m", "e2e", "tests/e2e"],
+        ["uv", "run", "pytest", "-q", "-m", "e2e", *browsers, "tests/e2e"],
         cwd=repo,
         capture_output=True,
         text=True,
