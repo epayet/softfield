@@ -32,3 +32,12 @@ Read `docs/agents/preact.md` and follow `coucou/static/coucou/js/name_form.js` w
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 3030
+gate_failures: ['translations', 'translations']
+tokens: 2891753
+```
