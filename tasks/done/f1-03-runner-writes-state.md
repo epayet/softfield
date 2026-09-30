@@ -33,3 +33,10 @@ Read `docs/milestones/f1.md` (D2, D4, D8) and `runner/metrics.py`. Test-first.
 - a blocked ticket and a drafted ADR each leave an open owner item with a command; `signoff` and `accept` resolve theirs
 - the same session twice leaves the same rows
 - `uv run runner check-all --task f1-03-runner-writes-state` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
