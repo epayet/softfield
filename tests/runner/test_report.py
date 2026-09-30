@@ -3,11 +3,13 @@ from pathlib import Path
 
 import pytest
 
+from factory_dashboard.app import HOST, PORT
 from factory_dashboard.queries import connect
 from runner import cli, metrics
 from runner.config import read_protected
 from runner.gates import touching_protected
 from runner.report import (
+    DASHBOARD_URL,
     REPORT_END,
     REPORT_START,
     ClaudeRunRecord,
@@ -52,9 +54,17 @@ def test_local_and_claude_tokens_are_compared():
     assert "processed **1.1M tokens** (1,000,000 in, 100,000 out) on 2 task(s)" in text
     # 125k writes + 900k reads + 200k output = 1.2M; reads are 73% of it
     assert "Claude spent **≈1.2M token-equivalents** over 30 steps (≈41k a step; 73%" in text
-    assert "| `m1-02-b` | escalated | 3 |" in text
-    assert "| `m1-01-a` | done | 1 | 35 s | 5.0 min |" in text  # warm-up, then model time
-    assert "## Headless Claude runs" in text
+
+
+def test_a_session_report_is_a_summary_with_the_runs_dashboard_link():
+    text = render(_report())
+    assert "- **Tasks:** 2 attempted: 1 merged (`m1-01-a`), 1 not (`m1-02-b`: escalated)" in text
+    assert "- **Headless Claude runs:** 1" in text
+    # the run's folder is named after its start; its page has every task, job and gate
+    assert f"{DASHBOARD_URL}/runs/20260927-140000" in text
+    assert "`uv run runner dashboard`" in text
+    assert "| Task |" not in text and "## Headless Claude runs" not in text
+    assert f"http://{HOST}:{PORT}" == DASHBOARD_URL
 
 
 def test_observations():

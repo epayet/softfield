@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}{{ project }}{% endblock %} · software-factory</title>
+<link rel="stylesheet" href="/static/dashboard.css">
+<script src="/static/vendor/htmx.min.js" defer></script>
+<script src="/static/vendor/echarts.min.js" defer></script>
+<script src="/static/charts.js" defer></script>
+</head>
+<body>
+<header class="bar">
+  <div class="bar-top">
+    <span class="brand">software-factory <small>{{ request.url.netloc }}</small></span>
+    <form class="filters" method="get">
+      <label>Project
+        <select name="project" onchange="this.form.submit()">
+          {% for name in projects %}
+          <option value="{{ name }}"{% if name == project %} selected{% endif %}>{{ name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <noscript><button>Show</button></noscript>
+    </form>
+  </div>
+  <nav class="tabs" aria-label="Pages">
+    {% for path, label in [("/", "Overview"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
+    <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}>{{ label }}</a>
+    {% endfor %}
+  </nav>
+</header>
+<main>
+  <nav class="crumbs" aria-label="Breadcrumbs">
+    {# project › milestone › ticket › job (D8): a page adds its own after the project #}
+    <a href="/projects/{{ project | urlencode }}{{ q }}">{{ project }}</a>
+    {% block crumbs %}{% endblock %}
+  </nav>
+  {% block content %}{% endblock %}
+</main>
+</body>
+</html>

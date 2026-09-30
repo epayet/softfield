@@ -9,18 +9,23 @@ Milestone-wide: a review ($1.50) and a checkpoint on Sonnet ($0.30); four findin
 
 M4, earlier, has one ticket the local model merged (d2, 80 lines) and a review whose cost
 wasn't kept: 500k input tokens.
+
+``write_live`` adds what the Overview shows live, at ``NOW``; the ``client`` fixture serves both.
 """
 
 import sqlite3
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi.testclient import TestClient
 
 from runner import metrics
 
-PROJECT = "coucou"
+PROJECT, OTHER = "coucou", "other"
+NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 LOCAL = "local-qwen3.6-35b-a3b"
 OPUS, SONNET = "claude-opus", "claude-sonnet"
 # Each Claude job in f1: 10k input + 100k cache reads (0.1) + 2k output (5) = 30k equivalents.
@@ -146,6 +151,119 @@ def write_fixture(conn: sqlite3.Connection) -> None:
     )
     _job(conn, old_run, m4, old, "developer", LOCAL, 1, "passed", tokens_in=50_000, tokens_out=0)
     _job(conn, old_run, m4, None, "review", OPUS, 1, "passed", tokens_in=500_000)
+
+
+def _at(ago: timedelta) -> str:
+    return (NOW - ago).isoformat()
+
+
+def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
+    """On top of ``write_fixture``, at ``NOW``:
+    - a run whose heartbeat is ``heartbeat_age`` old, with a local attempt at ``f1-04-live``
+      running for 12 min (42k tokens in, 17 steps so far);
+    - two tickets queued in f1, an open owner item and a resolved one;
+    - the last verdicts: f1's run ended "3 merged, 0 not", and f1 is ready for sign-off;
+    - the Claude allowance: a refusal after f1's jobs (the 650k token-equivalents of every
+      Claude job in the 5 h before it), and 30k used an hour ago, in another project;
+    - another project with one queued ticket.
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
+    metrics.upsert_run(
+        conn,
+        project,
+        "20260930-100000",
+        ended="2026-09-30T12:00:00+02:00",
+        verdict="3 merged, 0 not",
+    )
+    run = metrics.upsert_run(
+        conn,
+        project,
+        "20261002-113500",
+        command="milestone f1",
+        started=_at(timedelta(minutes=25)),
+        heartbeat=_at(heartbeat_age),
+    )
+    live = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-04-live",
+        milestone_id=f1,
+        kind="developer",
+        state="running",
+        difficulty=5,
+    )
+    job = metrics.start_job(
+        conn,
+        run,
+        ticket_id=live,
+        milestone_id=f1,
+        role="developer",
+        agent=LOCAL,
+        attempt=2,
+        started=_at(timedelta(minutes=12)),
+    )
+    metrics.update_running_job(conn, job, tokens_in=42_000, steps=17)
+    for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
+        metrics.upsert_ticket(
+            conn, project, ticket, milestone_id=f1, kind="developer", state="ready", title=goal
+        )
+    metrics.upsert_owner_item(
+        conn,
+        project,
+        "adr",
+        "ADR 15",
+        text="Should reactions be editable once sent?",
+        command="uv run runner accept 15",
+        created=_at(timedelta(hours=1)),
+    )
+    done = metrics.upsert_owner_item(conn, project, "setup", "ollama", text="Sign in to Ollama.")
+    metrics.resolve_owner_item(conn, done, _at(timedelta(hours=2)))
+    metrics.add_usage_event(conn, OPUS, "2026-09-30T10:30:00+02:00", "refusal")
+
+    other = metrics.upsert_project(conn, OTHER)
+    m1 = metrics.upsert_milestone(conn, other, "m1", started=_at(timedelta(days=1)))
+    metrics.upsert_ticket(
+        conn, other, "m1-01-elsewhere", milestone_id=m1, kind="developer", state="ready"
+    )
+    other_run = metrics.upsert_run(conn, other, "20261002-100000", ended=_at(timedelta(hours=1)))
+    claude = metrics.start_job(
+        conn,
+        other_run,
+        ticket_id=None,
+        milestone_id=m1,
+        role="review",
+        agent=OPUS,
+        attempt=1,
+        started=_at(timedelta(hours=1)),
+    )
+    tokens: dict[str, Any] = CLAUDE_TOKENS
+    metrics.finish_job(conn, claude, ended=_at(timedelta(minutes=50)), outcome="passed", **tokens)
+
+
+@pytest.fixture
+def serve(db_path: Path) -> Callable[..., TestClient]:
+    """A client for the dashboard over the fixture, with ``write_live``'s rows unless
+    ``live=False``; the app's clock reads ``NOW``."""
+    from factory_dashboard.app import create_app, get_now
+
+    def make(*, live: bool = True, heartbeat_age: timedelta = timedelta(seconds=30)) -> TestClient:
+        if live:
+            conn = metrics.open_db(db_path)
+            try:
+                write_live(conn, heartbeat_age)
+            finally:
+                conn.close()
+        app = create_app(db_path, PROJECT)
+        app.dependency_overrides[get_now] = lambda: NOW
+        return TestClient(app, base_url="http://127.0.0.1:8765")
+
+    return make
+
+
+@pytest.fixture
+def client(serve: Callable[..., TestClient]) -> TestClient:
+    return serve()
 
 
 @pytest.fixture

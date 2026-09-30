@@ -1,0 +1,23 @@
+{# Running now (D3): swapped in by htmx every 5 s from /running, so it carries its own hx-get. #}
+<section id="running" class="panel" hx-get="/running{{ q }}" hx-trigger="every 5s" hx-swap="outerHTML">
+  <h2>Running now <span class="src">refreshes every 5 s</span></h2>
+  {% for job in running %}
+  <div class="running-card">
+    <div class="running-head">
+      <span class="pill running pulse">attempt {{ job.attempt }}</span>
+      {% if job.ticket %}<a class="mono" href="/tickets/{{ job.ticket }}{{ q }}">{{ job.ticket }}</a>{% endif %}
+      <span class="agent">{{ job.agent }}</span>
+      <span>{{ job.role }}</span>
+      <a href="/jobs/{{ job.job }}{{ q }}">job {{ job.job }} ›</a>
+    </div>
+    <dl class="kv">
+      <dt>Elapsed</dt><dd class="mono">{{ job.elapsed | ago }}</dd>
+      {% if job.difficulty %}<dt>Difficulty</dt><dd class="mono">{{ job.difficulty }}</dd>{% endif %}
+      <dt>Live</dt><dd class="mono">{% if job.tokens_in is not none %}{{ job.tokens_in | tokens }} tokens in · {{ job.steps or 0 }} steps{% else %}elapsed time only, until it finishes{% endif %}</dd>
+      <dt>Heartbeat</dt><dd class="mono">{{ job.heartbeat | ago }} ago</dd>
+    </dl>
+  </div>
+  {% else %}
+  <p class="sub">Nothing is running.</p>
+  {% endfor %}
+</section>

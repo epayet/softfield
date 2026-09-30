@@ -16,6 +16,9 @@ from factory_dashboard.queries import (
 )
 from runner.usage import ClaudeUsage, claude_line, short
 
+# Where `uv run runner dashboard` serves by default (factory_dashboard.app's HOST and PORT).
+DASHBOARD_URL = "http://127.0.0.1:8765"
+
 
 @dataclass
 class TaskRecord:
@@ -119,34 +122,35 @@ def observations(report: SessionReport) -> list[str]:
     return obs
 
 
+def _tasks_line(tasks: list[TaskRecord]) -> str:
+    done = [f"`{t.id}`" for t in tasks if t.result == "done"]
+    others = [f"`{t.id}`: {t.result}" for t in tasks if t.result != "done"]
+    line = f"{len(tasks)} attempted: {len(done)} merged"
+    line += f" ({', '.join(done)})" if done else ""
+    line += f", {len(others)} not ({', '.join(others)})" if others else ""
+    return line
+
+
+def run_url(report: SessionReport) -> str:
+    """The run's page on the dashboard. The runner names a run's folder after its start
+    (``runner.loop.open_session``)."""
+    return f"{DASHBOARD_URL}/runs/{report.started:%Y%m%d-%H%M%S}"
+
+
 def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
+    """A summary; every task, job and gate is on the run's dashboard page (f1-06)."""
     ended = report.ended or report.started
     tasks = report.tasks
-    done = [t for t in tasks if t.result == "done"]
     local_in = sum(t.tokens_in for t in tasks)
     local_out = sum(t.tokens_out for t in tasks)
     lines = [
         f"# Session {report.started:%Y-%m-%d %H:%M}",
         "",
         f"- **Duration:** {_minutes((ended - report.started).total_seconds())}",
-        f"- **Tasks:** {len(tasks)} attempted, {len(done)} merged, "
-        f"{sum(t.result != 'done' for t in tasks)} escalated or blocked",
+        f"- **Tasks:** {_tasks_line(tasks)}",
         f"- **Headless Claude runs:** {len(report.claude_runs)}",
-        "",
-        "## Tasks",
-        "",
-        "| Task | Result | Attempts | Warm-up | Model time | Gates time | Local tokens in / out"
-        " | Gate failures | Commit |",
-        "|---|---|---|---|---|---|---|---|---|",
+        f"- **Details:** every task, job and gate at {run_url(report)} (`uv run runner dashboard`)",
     ]
-    for t in tasks:
-        lines.append(
-            f"| `{t.id}` | {t.result} | {t.attempts} | {_minutes(t.warmup_s)} | "
-            f"{_minutes(t.model_s)} | "
-            f"{_minutes(t.gates_s)} | {t.tokens_in:,} / {t.tokens_out:,} | "
-            f"{', '.join(t.gate_failures) or '-'} | "
-            f"{f'`{t.commit[:9]}`' if t.commit else '-'} |"
-        )
     lines += ["", "## Local model vs Claude", ""]
     lines.append(
         f"The local model processed **{short(local_in + local_out)} tokens**"
@@ -158,19 +162,6 @@ def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
             claude_line(claude) + " (This session, interactive and headless, from Claude"
             " Code's transcripts; weighted by price.)",
         ]
-    if report.claude_runs:
-        lines += [
-            "",
-            "## Headless Claude runs",
-            "",
-            "| Kind | Subject | Time | Input | Output | Cache read | OK |",
-            "|---|---|---|---|---|---|---|",
-        ]
-        for r in report.claude_runs:
-            lines.append(
-                f"| {r.kind} | {r.subject} | {_minutes(r.duration_s)} | {r.tokens_in:,} | "
-                f"{r.tokens_out:,} | {r.cache_read:,} | {'yes' if r.ok else 'no'} |"
-            )
     lines += ["", "## Observations", ""]
     lines += [f"- {o}" for o in observations(report) + report.notes]
     lines += ["", "## Narrative", ""]

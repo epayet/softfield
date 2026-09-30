@@ -84,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     report_cmd.add_argument("number", help="4 for M4, or a key like f1")
     report_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
+    dashboard = sub.add_parser(
+        "dashboard", help="serve the factory dashboard at 127.0.0.1 until Ctrl-C (ADR 13)"
+    )
+    dashboard.add_argument("--port", type=int, default=8765)
+    dashboard.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     args = parser.parse_args(argv)
 
     repo = _repo()
@@ -170,6 +175,16 @@ def main(argv: list[str] | None = None) -> int:
             key = milestone_key(args.number)
             path = report.write_milestone_report(repo, args.db or cfg.metrics_db, key)
             print(f"{path.relative_to(repo)}: {key.upper()}'s numbers written.")
+        elif args.command == "dashboard":
+            db = args.db or cfg.metrics_db
+            if not db.is_file():
+                raise RunnerError(
+                    f"no metrics database at {db}; `uv run runner backfill` makes one"
+                )
+            from factory_dashboard import app  # FastAPI loads only for this command
+
+            print(f"The factory dashboard: http://{app.HOST}:{args.port}/ (Ctrl-C stops it)")
+            app.serve(db, repo.name, port=args.port)
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
