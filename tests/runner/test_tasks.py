@@ -129,3 +129,13 @@ def test_queued_tests_are_the_other_queued_tasks_tests(tmp_path: Path):
         "tests/unit/test_other.py",
         "tests/unit/test_stuck.py",
     }
+
+
+def test_a_ticket_says_who_works_it(tmp_path):
+    path = write_task(tmp_path, "m1-01-thing")
+    assert parse_task(path, 150).agent == "junior"
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n"))
+    assert parse_task(path, 150).agent == "lead"
+    path.write_text(path.read_text().replace("agent: lead", "agent: owner"))
+    with pytest.raises(TaskError, match="agent"):
+        parse_task(path, 150)

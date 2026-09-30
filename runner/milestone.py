@@ -135,8 +135,7 @@ def _write_metrics(s: Session, milestone: int, base: str, rounds: list[int], sto
                 f" (escalation rate {m.escalation_rate:.0%})",
                 f"- Attempts per task: {m.attempts or '-'} (average {avg:.1f})",
                 f"- Review rounds: {len(rounds)}; actionable findings per round: {rounds or '-'}",
-                f"- Headless Claude runs used: {s.state.runs_used(milestone)}"
-                f" of {s.cfg.headless_runs_per_milestone}",
+                f"- Headless Claude runs: {s.state.runs_used(milestone)}",
                 f"- Loop stopped because: {stop}",
                 "",
                 milestone_summary(s.repo, milestone, base),
@@ -181,10 +180,7 @@ def review_milestone(cfg: Config, milestone: int, base: str) -> str:
             allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
         )
         since = s.git.head()
-        result = call_claude(s, job, milestone, f"m{milestone}-review-r{round_no}")
-        if result is None:
-            stop = "headless Claude cap reached"
-            break
+        call_claude(s, job, milestone, f"m{milestone}-review-r{round_no}")
         try:
             round_ = parse_review(out)
         except ReviewFileError as exc:

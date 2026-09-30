@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from runner import messages, prompts
+from runner import checks, messages, prompts
 from runner.claude import (
     CHECK_TOOLS,
     EDIT_TOOLS,
@@ -57,6 +57,7 @@ from runner.tasks import (
     parse_task,
     pick_next,
     preflight,
+    stopped_ids,
     task_ids,
 )
 from runner.usage import claude_tokens, transcripts_dir
@@ -126,17 +127,12 @@ def open_session(cfg: Config) -> Session:
     )
 
 
-# --- headless Claude, with usage-limit pauses and the milestone cap -------------------
+# --- headless Claude, with usage-limit pauses ------------------------------------------
 
 
-def call_claude(s: Session, job: ClaudeJob, milestone: int, subject: str) -> ClaudeResult | None:
-    """Run a headless Claude job, or return None if the milestone's cap is used up."""
-    if s.state.runs_used(milestone) >= s.cfg.headless_runs_per_milestone:
-        s.report.notes.append(
-            f"Skipped a {job.kind} run for {subject}: headless cap"
-            f" ({s.cfg.headless_runs_per_milestone}) reached for milestone {milestone}."
-        )
-        return None
+def call_claude(s: Session, job: ClaudeJob, milestone: int, subject: str) -> ClaudeResult:
+    """Run a headless Claude job, waiting out usage limits. Each trigger bounds its own runs
+    (ADR 12 item 10); the count per milestone is kept for the metrics."""
     attempt = 0
     while True:
         try:
@@ -331,6 +327,10 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         _finish_escalation(s, task, rec, "pre-flight failed", logs, "\n".join(problems))
         return rec
 
+    if task.agent == "lead":
+        run_lead_task(s, task, rec)
+        return rec
+
     branch = f"task/{task.id}"
     s.git.fresh_branch(branch, MAIN)
     protected = tuple(read_protected(s.repo))
@@ -342,7 +342,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         if (
             attempt == s.cfg.max_attempts
             and attempt > 1
-            and s.state.directions.get(task.id, 0) < 1
+            and s.state.directions.get(task.id, 0) < s.cfg.directions_per_task
             and needs_direction(rec.gate_failures, timeouts)
         ):
             task, direction = give_direction(s, task, rec, logs)
@@ -456,30 +456,164 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
     s.log(f"{task.id}: merged after {rec.attempts} attempt(s)")
 
 
-# --- escalation handling ------------------------------------------------------------
+# --- lead tickets (ADR 12 item 9) --------------------------------------------------------
 
 
-def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
+def _check_all(s: Session, task_id: str | None, logs: Path, name: str) -> bool:
+    results = checks.check_all(s.repo, s.cfg.gate_timeout, task_id=task_id)
+    (logs / name).write_text(checks.render(results), encoding="utf-8")
+    return all(r.ok for r in results)
+
+
+def block(s: Session, task_path: Path, reason: str) -> None:
+    """Move a task to blocked/ with its reason; its dependants pause (ADR 12 item 10)."""
+    target = s.tasks_dir("blocked") / task_path.name
+    s.git.move(task_path, target)
+    append_footer(target, {"result": "blocked", "reason": reason})
+    runner_commit(s, f"runner: {task_path.stem} blocked: {reason}")
+    s.report.notes.append(f"Blocked {task_path.stem}: {reason}")
+    s.log(f"{task_path.stem}: blocked ({reason})")
+
+
+def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
+    """The lead's own ticket, as a headless job on its branch; merged only if check-all
+    passes. A lead ticket that fails is blocked: there's no one above the lead but the owner."""
+    logs = rec.logs or _logs_dir(s.run_dir, task.id)
+    branch = f"task/{task.id}"
+    s.git.fresh_branch(branch, MAIN)
+    rec.attempts = 1
     job = ClaudeJob(
-        kind="escalation",
-        prompt=prompts.ESCALATION.format(
-            id=task.id, reason=reason, logs=logs.relative_to(s.repo).as_posix()
+        kind="lead-ticket",
+        prompt=prompts.LEAD_TICKET.format(
+            id=task.id, task=task.path.relative_to(s.repo).as_posix()
         ),
         allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
     )
-    result = call_claude(s, job, task.milestone, task.id)
-    if result is None:
+    call_claude(s, job, task.milestone, task.id)
+    if not s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT)):
+        s.git.checkout(MAIN)
+        rec.result = "stopped"
+        block(s, task.path, "the lead ticket changed nothing")
         return
+    if not _check_all(s, task.id, logs, "check-all.txt"):
+        s.git.checkout(MAIN)
+        rec.result = "stopped"
+        block(s, task.path, f"check-all failed; the work is on {branch}")
+        return
+    rec.commit = s.git.squash_merge(
+        branch,
+        MAIN,
+        with_trailers(f"{task.id}: {task.goal}", agent=CLAUDE_HEADLESS_AGENT, task=task.id),
+    )
+    target = s.tasks_dir("done") / task.path.name
+    s.git.move(task.path, target)
+    append_footer(target, {"result": "done", "agent": "lead", "attempts": 1})
+    runner_commit(s, messages.done_message(task.id, rec))
+    s.git.run("branch", "-D", branch)
+    rec.result = "done"
+    s.log(f"{task.id}: merged (lead ticket)")
+
+
+# --- checkpoints (ADR 12 item 8) ------------------------------------------------------
+
+
+def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
+    """Count a junior merge; every ``checkpoint_every`` of them, run a checkpoint."""
+    if rec.result != "done" or task.agent != "junior":
+        return
+    s.state.unchecked.append(f"{task.id} {rec.commit}")
+    save_state(s.state, s.state_path)
+    if len(s.state.unchecked) >= s.cfg.checkpoint_every:
+        checkpoint(s, task.milestone)
+
+
+def checkpoint(s: Session, milestone: int) -> None:
+    merged = list(s.state.unchecked)
+    out = s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
+    job = ClaudeJob(
+        kind="checkpoint",
+        prompt=prompts.CHECKPOINT.format(
+            merges="\n".join(f"- {m.split()[0]}: `git show {m.split()[1]}`" for m in merged),
+            out=out.relative_to(s.repo).as_posix(),
+        ),
+        allowed_tools=(
+            *READ_TOOLS,
+            *GIT_READ_TOOLS,
+            "Write(tasks/ready/**)",
+            "Edit(tasks/ready/**)",
+            "Edit(docs/agents/junior.md)",
+            "Write(var/runs/**)",
+        ),
+        model=s.cfg.checkpoint_model,
+    )
+    call_claude(s, job, milestone, "checkpoint")
+    s.state.unchecked = []
+    save_state(s.state, s.state_path)
+    if out.is_file():
+        s.report.notes.append("Checkpoint: " + out.read_text(encoding="utf-8").strip())
+    s.git.commit_all(
+        with_trailers(
+            "checkpoint after " + ", ".join(m.split()[0] for m in merged) + " (by Claude)",
+            agent=CLAUDE_HEADLESS_AGENT,
+        )
+    )
+
+
+# --- escalation handling ------------------------------------------------------------
+
+
+def _only_docs_and_tasks(s: Session) -> bool:
+    changed = [line[3:] for line in s.git.run("status", "--porcelain").splitlines()]
+    return checks.hook_can_skip(changed) or not changed
+
+
+def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
+    escalated = s.tasks_dir("escalated") / task.path.name
+    used = s.state.escalations.get(task.id, 0)
+    if used >= s.cfg.escalations_per_task:
+        block(s, escalated, f"{used} escalations used; last: {reason}")
+        return
+    s.state.escalations[task.id] = used + 1
+    save_state(s.state, s.state_path)
+    rec_sessions = [p for p in sorted(logs.glob("thinking-*.md"))]
+    job = ClaudeJob(
+        kind="escalation",
+        prompt=prompts.ESCALATION.format(
+            id=task.id,
+            reason=reason,
+            logs=logs.relative_to(s.repo).as_posix(),
+            thinking=", ".join(p.relative_to(s.repo).as_posix() for p in rec_sessions)
+            or "not available",
+        ),
+        allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
+    )
+    call_claude(s, job, task.milestone, task.id)
     decision_path = logs / "decision.json"
     try:
-        outcome = json.loads(decision_path.read_text(encoding="utf-8")).get("outcome")
+        decision = json.loads(decision_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
-        outcome = None
-    escalated = s.tasks_dir("escalated") / task.path.name
+        decision = {}
+    outcome = decision.get("outcome")
+    # Its work reaches main only if every check passes (ADR 12 item 11).
+    if not _only_docs_and_tasks(s) and not _check_all(s, None, logs, "check-all.txt"):
+        branch = f"escalation/{task.id}"
+        s.git.run("checkout", "-q", "-B", branch)
+        s.git.commit_all(
+            with_trailers(f"escalation {task.id}: failed check-all", agent=CLAUDE_HEADLESS_AGENT)
+        )
+        s.git.checkout(MAIN)
+        block(s, escalated, f"the escalation's work failed check-all; it is on {branch}")
+        return
     if outcome == "requeue":
         s.git.run("rm", "-q", str(escalated.relative_to(s.repo)))
     elif outcome == "implemented":
         s.git.move(escalated, s.tasks_dir("done") / task.path.name)
+    elif outcome == "owner":
+        s.state.owner[task.id] = {
+            "adr": str(decision.get("adr", "")),
+            "question": str(decision.get("question", "")),
+        }
+        save_state(s.state, s.state_path)
     notes = logs / "escalation.md"
     if notes.is_file():
         s.report.notes.append(f"Escalation {task.id} ({outcome}): " + notes.read_text().strip())
@@ -513,8 +647,7 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
             break
         ready = load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
         done = task_ids(s.tasks_dir("done"))
-        escalated = task_ids(s.tasks_dir("escalated"))
-        paused = blocked_ids(ready, escalated)
+        paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
         task = pick_next(ready, done, paused)
         if dry_run:
             _print_plan(ready, done, paused, task, cfg.repo)
@@ -525,9 +658,11 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
             break
         rec = run_task(s, task)
         s.report.tasks.append(rec)
-        if rec.result != "done" and escalate:
-            reason = rec.note or rec.result
-            handle_escalation(s, task, rec.logs or s.run_dir / task.id, reason)
+        note_merge(s, task, rec)
+        if rec.result in ("escalated", "blocked", "preflight") and escalate:
+            logs = rec.logs or s.run_dir / task.id
+            _save_thinking(rec, logs, s.repo)
+            handle_escalation(s, task, logs, rec.note or rec.result)
         if once:
             break
     return close_session(s)

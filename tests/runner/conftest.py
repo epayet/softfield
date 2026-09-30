@@ -60,7 +60,7 @@ def repo(tmp_path: Path) -> Path:
     (tmp_path / "workflow" / "protected-paths.txt").write_text(
         "# comment\ncoucou/secret.py\nrunner/**\n"
     )
-    for folder in ("ready", "done", "escalated"):
+    for folder in ("ready", "done", "escalated", "blocked"):
         (tmp_path / "tasks" / folder).mkdir(parents=True)
         (tmp_path / "tasks" / folder / ".gitkeep").write_text("")
     (tmp_path / ".gitignore").write_text("var/\nBLOCKED.md\n")

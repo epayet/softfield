@@ -15,6 +15,11 @@ _PATH_RE = re.compile(r"`([\w./-]+\.(?:py|js|html|css|md|toml|json|txt))`")
 _SYMBOL_RE = re.compile(r"\b(?:def|class)\s+([A-Za-z_]\w*)")
 
 
+AGENTS = ("junior", "lead")  # who works a ticket (ADR 12 item 9)
+# Folders whose tasks pause their dependants: waiting for the lead, or for the owner.
+STOPPED = ("escalated", "blocked")
+
+
 class TaskError(ValueError):
     pass
 
@@ -30,6 +35,7 @@ class Task:
     finding: str | None
     sections: dict[str, str]
     path: Path
+    agent: str = "junior"
 
     @property
     def goal(self) -> str:
@@ -90,6 +96,9 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
     if not isinstance(max_diff, int) or max_diff <= 0:
         raise TaskError("'max_diff' must be a positive integer")
     finding = meta.get("finding")
+    agent = meta.get("agent", "junior")
+    if agent not in AGENTS:
+        raise TaskError(f"'agent' must be one of {', '.join(AGENTS)}")
     return Task(
         id=task_id,
         milestone=milestone,
@@ -100,6 +109,7 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
         finding=str(finding) if finding is not None else None,
         sections=sections,
         path=path,
+        agent=agent,
     )
 
 
@@ -113,7 +123,7 @@ def queued_tests(tasks_dir: Path, current: str) -> set[str]:
     Their skeleton tests fail until those tasks are done, so the all-tests gate skips them.
     """
     tests: set[str] = set()
-    for name in ("ready", "escalated"):
+    for name in ("ready", *STOPPED):
         for path in sorted((tasks_dir / name).glob("*.md")):
             if path.stem != current:
                 meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
@@ -123,6 +133,11 @@ def queued_tests(tasks_dir: Path, current: str) -> set[str]:
 
 def task_ids(directory: Path) -> set[str]:
     return {p.stem for p in directory.glob("*.md")}
+
+
+def stopped_ids(tasks_dir: Path) -> set[str]:
+    """Tasks waiting in escalated/ or blocked/: their dependants pause."""
+    return set().union(*(task_ids(tasks_dir / name) for name in STOPPED))
 
 
 def blocked_ids(ready: Iterable[Task], escalated: set[str]) -> set[str]:

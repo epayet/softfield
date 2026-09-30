@@ -8,10 +8,14 @@ from pathlib import Path
 @dataclass
 class State:
     paused_until: str | None = None
-    headless_runs: dict[str, int] = field(default_factory=dict)  # milestone -> runs
+    headless_runs: dict[str, int] = field(default_factory=dict)  # milestone -> runs (metrics)
     finding_seen: dict[str, int] = field(default_factory=dict)  # finding id -> rounds seen open
     review_counts: dict[str, list[int]] = field(default_factory=dict)  # milestone -> per round
     directions: dict[str, int] = field(default_factory=dict)  # task id -> directions given
+    escalations: dict[str, int] = field(default_factory=dict)  # task id -> escalations
+    unchecked: list[str] = field(default_factory=list)  # junior merges since the last checkpoint
+    # task id -> {"adr": path, "question": one line}: decisions a job left for the owner
+    owner: dict[str, dict[str, str]] = field(default_factory=dict)
 
     def runs_used(self, milestone: int) -> int:
         return self.headless_runs.get(str(milestone), 0)

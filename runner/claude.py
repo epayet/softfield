@@ -21,16 +21,22 @@ STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN
 # Tools per job kind: the least each job needs. The runner commits; Claude never runs git.
 READ_TOOLS = ("Read", "Glob", "Grep")
 EDIT_TOOLS = (*READ_TOOLS, "Edit", "Write")
-CHECK_TOOLS = ("Bash(uv run pytest:*)", "Bash(uv run ruff:*)", "Bash(uv run mypy:*)")
+CHECK_TOOLS = (
+    "Bash(uv run pytest:*)",
+    "Bash(uv run ruff:*)",
+    "Bash(uv run mypy:*)",
+    "Bash(uv run runner check-all:*)",  # never the owner's commands (signoff, accept)
+)
 GIT_READ_TOOLS = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
 
 
 @dataclass(frozen=True)
 class ClaudeJob:
-    kind: str  # "escalation" | "review" | "narrative"
+    kind: str  # "escalation" | "direction" | "checkpoint" | "lead-ticket" | "review" | …
     prompt: str
     allowed_tools: tuple[str, ...]
     permission_mode: str = "dontAsk"  # anything not in allowed_tools is denied, no prompts
+    model: str = ""  # empty: Claude Code's default
 
 
 @dataclass(frozen=True)
@@ -102,6 +108,7 @@ def run_claude(
         "json",
         "--permission-mode",
         job.permission_mode,
+        *(("--model", job.model) if job.model else ()),
         "--allowedTools",
         *job.allowed_tools,
     ]

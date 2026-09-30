@@ -2,8 +2,12 @@
 # timeouts are operational and can be tuned freely.
 
 [caps]
-max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch)
-headless_claude_runs_per_milestone = 10 # reviews + escalations + narratives
+max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch + direction)
+# Headless Claude is bounded per trigger, not per milestone (ADR 12 item 10). A task past its
+# limits goes to tasks/blocked/ and is named in the report.
+directions_per_task = 1                 # the lead's direction before the last attempt
+escalations_per_task = 2
+checkpoint_every = 2                    # junior merges between checkpoint reviews
 review_rounds = 3
 default_max_diff = 1000                 # a backstop against rewritten files, not a sizing tool (ADR 07)
 
@@ -19,6 +23,7 @@ model = "qwen/qwen3.6-35b-a3b"          # LM Studio key; its settings are used a
 opencode_model = "lmstudio/qwen/qwen3.6-35b-a3b"
 
 [claude]
+checkpoint_model = "sonnet"             # a diff-only checkpoint; compare what it catches at M5
 usage_limit_backoff_min = 900           # 15 min
 usage_limit_backoff_max = 18000         # 5 h
 

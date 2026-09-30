@@ -5,12 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from runner import gates, loop
+from runner import checks, gates, loop
 from runner.claude import ClaudeJob, ClaudeResult
 from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
 from runner.report import SessionReport
+from runner.state import load_state, save_state
 from runner.tasks import parse_task
 from tests.runner.conftest import git, write_task
 
@@ -19,7 +20,9 @@ def _config(repo: Path) -> Config:
     return Config(
         repo=repo,
         max_attempts=3,
-        headless_runs_per_milestone=10,
+        directions_per_task=1,
+        escalations_per_task=2,
+        checkpoint_every=2,
         review_rounds=3,
         default_max_diff=150,
         warmup_timeout=1,
@@ -32,6 +35,7 @@ def _config(repo: Path) -> Config:
         backoff_min=1,
         backoff_max=2,
         narrative=False,
+        checkpoint_model="sonnet",
     )
 
 
@@ -381,3 +385,148 @@ def test_mechanical_failures_get_no_direction():
     assert loop.needs_direction(["ruff", "mypy"], [True, False])  # a timeout
     assert loop.needs_direction(["no-changes", "no-changes"], [False, False])
     assert not loop.needs_direction(["no-changes", "ruff"], [False, False])
+
+
+def _passes(monkeypatch, ok: bool = True) -> list[str | None]:
+    """Fake check-all; returns the task ids it was run for."""
+    calls: list[str | None] = []
+
+    def check_all(repo, timeout, *, task_id=None, fix=False):
+        calls.append(task_id)
+        return [checks.Check("tests", ok, "" if ok else "1 failed")]
+
+    monkeypatch.setattr(checks, "check_all", check_all)
+    return calls
+
+
+def _lead_task(repo: Path, task_id: str) -> None:
+    path = write_task(repo / "tasks" / "ready", task_id)
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", f"add {task_id}")
+
+
+def _lead_implements(job, repo_):
+    assert job.kind == "lead-ticket" and "Bash(uv run runner check-all:*)" in job.allowed_tools
+    _implement(repo_, "")
+
+
+def test_a_lead_ticket_runs_headless_and_merges_when_check_all_passes(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    calls = _passes(monkeypatch)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"]
+    assert calls == ["m1-01-lead"]
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+    assert (repo / "tasks" / "done" / "m1-01-lead.md").exists()
+    assert "Agent: claude-headless" in git(repo, "log", "-1", "--format=%B", report.tasks[0].commit)
+
+
+def test_a_lead_ticket_that_fails_check_all_is_blocked_with_its_branch_kept(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m1-02-after", "[m1-01-lead]")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch, ok=False)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["stopped"]
+    assert "check-all failed" in (repo / "tasks" / "blocked" / "m1-01-lead.md").read_text()
+    assert "task/m1-01-lead" in git(repo, "branch")
+    assert "raise NotImplementedError" in (repo / "coucou" / "thing.py").read_text()
+    assert (repo / "tasks" / "ready" / "m1-02-after.md").exists()  # paused, not run
+
+
+def test_a_checkpoint_runs_after_every_two_junior_merges(repo, fake_model, fake_lead):
+    for n in (1, 2, 3):
+        _add_task(repo, f"m1-0{n}-thing")
+    script, jobs = fake_lead
+
+    def change(n: int):
+        def run(repo, prompt):
+            (repo / "coucou" / f"part{n}.py").write_text(f"PART = {n}\n")
+
+        return run
+
+    def review(job, repo_):
+        out = job.prompt.split("Write ", 1)[1].split(":", 1)[0]
+        (repo_ / out).parent.mkdir(parents=True, exist_ok=True)
+        (repo_ / out).write_text("Sound. Tightened m1-03.")
+
+    fake_model.extend([change(1), change(2), change(3)])
+    script.append(review)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"] * 3
+    assert [j.kind for j in jobs] == ["checkpoint"]
+    assert "m1-01-thing" in jobs[0].prompt and "m1-02-thing" in jobs[0].prompt
+    assert "m1-03-thing" not in jobs[0].prompt
+    assert jobs[0].model == "sonnet"
+    assert "Checkpoint: Sound. Tightened m1-03." in report.notes
+
+
+def _escalate_on_protected(repo, fake_model) -> None:
+    _add_task(repo, "m1-01-thing")
+    _add_task(repo, "m1-02-after", "[m1-01-thing]")
+    fake_model.extend([_stray, _stray, _stray])
+
+
+def test_escalations_past_the_limit_block_the_task_without_calling_claude(
+    repo, fake_model, fake_lead
+):
+    _escalate_on_protected(repo, fake_model)
+    script, jobs = fake_lead
+    script.append(lambda job, repo_: None)  # the direction
+    state = load_state(repo / "var" / "runs" / "state.json")
+    state.escalations["m1-01-thing"] = 2
+    save_state(state, repo / "var" / "runs" / "state.json")
+    report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert report is not None
+    assert [j.kind for j in jobs] == ["direction"]
+    blocked = (repo / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+    assert "2 escalations used" in blocked
+    assert any(n.startswith("Blocked m1-01-thing") for n in report.notes)
+
+
+def test_an_escalation_whose_work_fails_check_all_stays_off_main(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+
+    def breaks_code(job, repo_):
+        (repo_ / "coucou" / "thing.py").write_text("def thing() -> int:\n    return 'x'\n")
+        logs = repo_ / job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
+        (logs / "decision.json").write_text('{"outcome": "implemented"}')
+
+    script.extend([lambda job, repo_: None, breaks_code])
+    _passes(monkeypatch, ok=False)
+    report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert report is not None
+    assert "raise NotImplementedError" in (repo / "coucou" / "thing.py").read_text()
+    assert "return 'x'" in git(repo, "show", "escalation/m1-01-thing:coucou/thing.py")
+    assert "failed check-all" in (repo / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_decision_for_the_owner_is_recorded(repo, fake_model, fake_lead):
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+
+    def needs_owner(job, repo_):
+        logs = repo_ / job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
+        (logs / "decision.json").write_text(
+            '{"outcome": "owner", "adr": "docs/adr/14-x.md", "question": "Keep originals?"}'
+        )
+
+    script.extend([lambda job, repo_: None, needs_owner])
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    state = load_state(repo / "var" / "runs" / "state.json")
+    assert state.owner == {
+        "m1-01-thing": {"adr": "docs/adr/14-x.md", "question": "Keep originals?"}
+    }
+    assert (repo / "tasks" / "escalated" / "m1-01-thing.md").exists()

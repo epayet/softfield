@@ -9,7 +9,9 @@ from pathlib import Path
 class Config:
     repo: Path
     max_attempts: int
-    headless_runs_per_milestone: int
+    directions_per_task: int
+    escalations_per_task: int
+    checkpoint_every: int
     review_rounds: int
     default_max_diff: int
     warmup_timeout: int
@@ -22,6 +24,7 @@ class Config:
     backoff_min: int
     backoff_max: int
     narrative: bool
+    checkpoint_model: str = ""
 
     @property
     def runs_dir(self) -> Path:
@@ -35,7 +38,9 @@ def load_config(repo: Path) -> Config:
     return Config(
         repo=repo,
         max_attempts=caps["max_attempts"],
-        headless_runs_per_milestone=caps["headless_claude_runs_per_milestone"],
+        directions_per_task=caps["directions_per_task"],
+        escalations_per_task=caps["escalations_per_task"],
+        checkpoint_every=caps["checkpoint_every"],
         review_rounds=caps["review_rounds"],
         default_max_diff=caps["default_max_diff"],
         warmup_timeout=timeouts["warmup"],
@@ -48,6 +53,7 @@ def load_config(repo: Path) -> Config:
         backoff_min=data["claude"]["usage_limit_backoff_min"],
         backoff_max=data["claude"]["usage_limit_backoff_max"],
         narrative=report.get("narrative", False),
+        checkpoint_model=data["claude"].get("checkpoint_model", ""),
     )
 
 

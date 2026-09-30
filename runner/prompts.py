@@ -110,6 +110,7 @@ docs/agents/lead.md (Escalations).
 - Why it was escalated: {reason}
 - Run logs: {logs}/ (OpenCode output, gate output, last.diff). The local model's work is on
   branch task/{id}; you are on main.
+- The local model's thinking: {thinking}. Read it: it shows why, where the gate logs don't.
 
 Do exactly one of:
 1. requeue: repair or split the ticket and write the task file(s) to tasks/ready/
@@ -119,13 +120,44 @@ Do exactly one of:
 3. implemented: if the task is hard or protected, implement it yourself on main and make
    `uv run pytest -q tests/unit tests/integration tests/runner` pass.
 4. owner: only for what docs/agents/lead.md reserves for the owner: draft an ADR in
-   docs/adr/ (status Proposed).
+   docs/adr/ (status Proposed). The task and its dependants wait for the owner's decision.
 
-Then write {logs}/decision.json as {{"outcome": "requeue" | "implemented" | "owner"}}
+Code you change must pass `uv run runner check-all`; if it doesn't, none of it reaches main.
+Then write {logs}/decision.json as {{"outcome": "requeue" | "implemented" | "owner"}}, and
+for "owner" also {{"adr": "docs/adr/NN-slug.md", "question": "<one line for the owner>"}}
 and {logs}/escalation.md: 3-6 lines on what happened, what the local model got wrong, and
 the lesson. Turn the lesson into a check, an example or a line in docs/agents/junior.md
 (its budget is in lead.md), and say which. Read-only git (diff, log, show) is fine; don't
 commit and don't edit tasks/escalated/: the runner commits and moves files.
+"""
+
+LEAD_TICKET = """\
+You are the lead, doing your own ticket in the Coucou repo: {task}. Follow
+docs/agents/lead.md ("Your own work"): test-first, isolation tests for protected paths, and
+docs/security.md for anything security-related. You are on branch task/{id}.
+
+When it's done, `uv run runner check-all --fix --task {id}` must pass. Don't commit: the runner
+checks and merges your work. Read-only git (diff, log, show) is fine. If the ticket can't be
+done as written, change nothing and say why in your final message.
+"""
+
+CHECKPOINT = """\
+You are the lead, doing a checkpoint in the middle of a milestone (ADR 12 item 8). Juniors
+(a local model) just merged these tickets:
+{merges}
+
+Read those diffs, code and tests, as in docs/agents/lead.md (Review): does the screen show
+what the ticket asks, do the tests act as a person would and check content, not presence,
+is anything masked instead of fixed? Don't read the junior's thinking unless a finding needs
+explaining. Then do what helps the next tickets most, any of:
+- nothing, if it's sound
+- a fix ticket in tasks/ready/ (docs/task-format.md, `finding:` in the frontmatter), and add
+  its id to `depends_on` of the ready tickets that build on the problem
+- tighten upcoming tickets in tasks/ready/ with what you saw (facts, not solutions)
+- one line in docs/agents/junior.md (its budget is in lead.md)
+
+Write {out}: 2-5 lines on what you found and did. Change nothing else; don't run git beyond
+diff, log and show.
 """
 
 REVIEW = """\
