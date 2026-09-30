@@ -26,3 +26,23 @@ def test_milestone_exits_with_the_verdicts_code(in_repo, monkeypatch, capsys, co
 def test_an_owner_command_that_refuses_exits_1(in_repo, capsys):
     assert cli.main(["accept", "99"]) == 1
     assert "ADR 99 not found" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(("arg", "key"), [("4", "m4"), ("f1", "f1")])
+def test_milestone_takes_a_number_or_a_key(in_repo, monkeypatch, arg, key):
+    seen: list[tuple[str, str]] = []
+
+    def run(cfg, key, base):
+        seen.append((key, base))
+        return "clean"
+
+    monkeypatch.setattr(cli, "run_milestone", run)
+    monkeypatch.setattr(owner, "verdict", lambda repo, k, state, stop: (0, "V\n"))
+    monkeypatch.setattr(owner, "record_verdict", lambda repo, text: None)
+    assert cli.main(["milestone", arg]) == 0
+    assert seen == [(key, f"{key}-start")]
+
+
+def test_a_bad_milestone_name_is_an_error(in_repo, capsys):
+    assert cli.main(["milestone", "F 1"]) == 1
+    assert "milestone" in capsys.readouterr().err

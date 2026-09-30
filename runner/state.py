@@ -18,17 +18,24 @@ class State:
     # task id -> {"adr": path, "question": one line}: decisions a job left for the owner
     owner: dict[str, dict[str, str]] = field(default_factory=dict)
 
-    def runs_used(self, milestone: int) -> int:
-        return self.headless_runs.get(str(milestone), 0)
+    def runs_used(self, milestone: str) -> int:
+        return self.headless_runs.get(milestone, 0)
 
-    def count_run(self, milestone: int) -> None:
-        self.headless_runs[str(milestone)] = self.runs_used(milestone) + 1
+    def count_run(self, milestone: str) -> None:
+        self.headless_runs[milestone] = self.runs_used(milestone) + 1
+
+
+# Fields keyed by milestone: older state files used the bare number ("4" for m4).
+_BY_MILESTONE = ("headless_runs", "review_counts", "review_stop")
 
 
 def load_state(path: Path) -> State:
     if not path.is_file():
         return State()
     data = json.loads(path.read_text(encoding="utf-8"))
+    for name in _BY_MILESTONE:
+        if isinstance(data.get(name), dict):
+            data[name] = {(f"m{k}" if k.isdigit() else k): v for k, v in data[name].items()}
     return State(**{k: v for k, v in data.items() if k in State.__dataclass_fields__})
 
 

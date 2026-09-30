@@ -54,6 +54,7 @@ from runner.tasks import (
     append_footer,
     blocked_ids,
     load_dir,
+    milestone_order,
     parse_task,
     pick_next,
     preflight,
@@ -130,7 +131,7 @@ def open_session(cfg: Config) -> Session:
 # --- headless Claude, with usage-limit pauses ------------------------------------------
 
 
-def call_claude(s: Session, job: ClaudeJob, milestone: int, subject: str) -> ClaudeResult:
+def call_claude(s: Session, job: ClaudeJob, milestone: str, subject: str) -> ClaudeResult:
     """Run a headless Claude job, waiting out usage limits. Each trigger bounds its own runs
     (ADR 12 item 10); the count per milestone is kept for the metrics."""
     attempt = 0
@@ -527,7 +528,7 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
         checkpoint(s, task.milestone)
 
 
-def checkpoint(s: Session, milestone: int) -> None:
+def checkpoint(s: Session, milestone: str) -> None:
     merged = list(s.state.unchecked)
     out = s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
     job = ClaudeJob(
@@ -639,7 +640,7 @@ RESTART_NOTE = "Stopped: an escalation changed runner/. Restart the runner."
 
 
 def work_queue(
-    s: Session, *, milestone: int | None = None, escalate: bool = True, once: bool = False
+    s: Session, *, milestone: str | None = None, escalate: bool = True, once: bool = False
 ) -> bool:
     """Work through tasks/ready (one milestone's, if given): tasks, directions, checkpoints
     and escalations. Returns True if an escalation changed the runner, which needs a restart.
@@ -711,7 +712,7 @@ def _print_plan(
 ) -> None:
     """What would run next, and each ready task's pre-flight problems (docs/task-writing.md)."""
     print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
-    for task in sorted(ready, key=lambda t: (t.milestone, t.id)):
+    for task in sorted(ready, key=lambda t: (milestone_order(t.milestone), t.id)):
         waiting = [d for d in task.depends_on if d not in done]
         status = (
             "paused"

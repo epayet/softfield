@@ -11,7 +11,7 @@ def _report() -> SessionReport:
     report.tasks = [
         TaskRecord(
             "m1-01-a",
-            1,
+            "m1",
             "done",
             attempts=1,
             model_s=300,
@@ -20,7 +20,9 @@ def _report() -> SessionReport:
             steps=40,
             warmup_s=35,
         ),
-        TaskRecord("m1-02-b", 1, "escalated", attempts=3, gate_failures=["mypy", "mypy", "ruff"]),
+        TaskRecord(
+            "m1-02-b", "m1", "escalated", attempts=3, gate_failures=["mypy", "mypy", "ruff"]
+        ),
     ]
     report.claude_runs = [ClaudeRunRecord("escalation", "m1-02-b", 120, 5000, 800, 20000, True)]
     return report
@@ -54,7 +56,7 @@ def test_observations_point_the_review_at_widened_tasks_and_edited_tests():
     report.tasks = [
         TaskRecord(
             "m4-01-a",
-            4,
+            "m4",
             "done",
             attempts=1,
             outside_files=["coucou/helper.py"],

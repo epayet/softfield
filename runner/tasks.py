@@ -24,10 +24,44 @@ class TaskError(ValueError):
     pass
 
 
+# A milestone is Coucou's `mN` (a bare number N in frontmatter or on the command line) or a
+# named series like the factory's `f1` (the f1 plan): lowercase letters, then a number.
+_KEY_RE = re.compile(r"([a-z]+)([1-9]\d*)")
+
+
+def milestone_key(value: object) -> str:
+    """``4``, ``"4"`` and ``"m4"`` are ``"m4"``; ``"f1"`` is ``"f1"``."""
+    if isinstance(value, bool):
+        raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
+    text = str(value)
+    if text.isdigit() and int(text) > 0:
+        return f"m{int(text)}"
+    if isinstance(value, str) and _KEY_RE.fullmatch(text):
+        return text
+    raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
+
+
+def _key_parts(key: str) -> tuple[str, int]:
+    match = _KEY_RE.fullmatch(key)
+    if match is None:
+        raise TaskError(f"not a milestone key: {key!r}")
+    return match.group(1), int(match.group(2))
+
+
+def next_milestone_key(key: str) -> str:
+    prefix, number = _key_parts(key)
+    return f"{prefix}{number + 1}"
+
+
+def milestone_order(key: str) -> tuple[str, int]:
+    """Sorts m9 before m10."""
+    return _key_parts(key)
+
+
 @dataclass(frozen=True)
 class Task:
     id: str
-    milestone: int
+    milestone: str  # a key: m4, f1
     depends_on: tuple[str, ...]
     files: tuple[str, ...]
     tests: tuple[str, ...]
@@ -85,9 +119,7 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
     task_id = meta.get("id")
     if not isinstance(task_id, str) or task_id != path.stem:
         raise TaskError(f"'id' must match the file name ({path.stem})")
-    milestone = meta.get("milestone")
-    if not isinstance(milestone, int):
-        raise TaskError("'milestone' must be an integer")
+    milestone = milestone_key(meta.get("milestone"))
     sections = parse_sections(body)
     missing = [name for name in SECTIONS if not sections.get(name)]
     if missing:
@@ -158,7 +190,7 @@ def pick_next(ready: Iterable[Task], done: set[str], paused: set[str]) -> Task |
     candidates = [
         t for t in ready if t.id not in paused and all(dep in done for dep in t.depends_on)
     ]
-    return min(candidates, key=lambda t: (t.milestone, t.id), default=None)
+    return min(candidates, key=lambda t: (milestone_order(t.milestone), t.id), default=None)
 
 
 def preflight(task: Task, repo: Path) -> list[str]:

@@ -180,11 +180,11 @@ Grade each finding blocking / should-fix / nit and route it:
 Recurring findings (fix these yourself): {recurring}
 
 Write {out} as:
-{{"findings": [{{"id": "m{milestone}-F1", "severity": "...", "route": "...",
+{{"findings": [{{"id": "{milestone}-F1", "severity": "...", "route": "...",
   "summary": "...", "resolved": false, "security": false}}],
   "stop": null | "adr-needed" | "security-unresolved" | "unforeseen-cross-milestone"}}
 Keep ids stable across rounds; mark findings fixed since the last round "resolved": true.
-Also create or update docs/reviews/m{milestone}.md. It starts with the owner's sign-off
+Also create or update docs/reviews/{milestone}.md. It starts with the owner's sign-off
 sheet (lead.md, "Sign-off sheet"), then what was built, findings and resolutions, backlog
 and workflow observations; the runner appends metrics. Read-only git (diff, log, show) is
 fine; don't commit: the runner does.

@@ -19,6 +19,7 @@ from runner.milestone import (
     run_milestone,
 )
 from runner.state import load_state
+from runner.tasks import TaskError, milestone_key
 
 
 def _repo() -> Path:
@@ -43,21 +44,21 @@ def main(argv: list[str] | None = None) -> int:
     milestone = sub.add_parser(
         "milestone", help="run a whole milestone: tickets, review, then a verdict (ADR 12)"
     )
-    milestone.add_argument("number", type=int)
-    milestone.add_argument("--base", help="git ref the milestone started from (default mN-start)")
+    milestone.add_argument("number", help="4 for M4, or a key like f1")
+    milestone.add_argument("--base", help="git ref it started from (default <key>-start)")
     signoff = sub.add_parser("signoff", help="the owner: mark a milestone done and tag it")
-    signoff.add_argument("number", type=int)
+    signoff.add_argument("number", help="4 for M4, or a key like f1")
     signoff.add_argument("--force", action="store_true", help="even with tickets left")
     for name in ("accept", "reject"):
         decide = sub.add_parser(name, help=f"the owner: {name} an ADR")
         decide.add_argument("number", type=int)
     review = sub.add_parser("review", help="run the milestone review loop")
-    review.add_argument("--milestone", type=int, required=True)
+    review.add_argument("--milestone", required=True)
     review.add_argument("--base", help="git ref the milestone started from (default mN-start)")
     status = sub.add_parser("status", help="milestone metrics so far")
-    status.add_argument("--milestone", type=int, required=True)
+    status.add_argument("--milestone", required=True)
     commits = sub.add_parser("commits", help="list the commits the local model made")
-    commits.add_argument("--milestone", type=int, required=True)
+    commits.add_argument("--milestone", required=True)
     commits.add_argument("--base", help="git ref to list from (default mN-start)")
     check_all = sub.add_parser("check-all", help="every check; non-zero exit on any failure")
     check_all.add_argument("--fix", action="store_true", help="format and autofix first")
@@ -78,33 +79,38 @@ def main(argv: list[str] | None = None) -> int:
                 escalate=not getattr(args, "no_escalate", False),
             )
         elif args.command == "milestone":
-            stop = run_milestone(cfg, args.number, args.base or f"m{args.number}-start")
+            key = milestone_key(args.number)
+            stop = run_milestone(cfg, key, args.base or f"{key}-start")
             if stop == RESTART:
                 # An escalation changed the runner: carry on in a fresh process (ADR 12).
                 print("runner: the runner's code changed; restarting.", flush=True)
                 argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
                 os.execv(sys.executable, argv_again)  # noqa: S606 - our own interpreter and args
             state = load_state(cfg.runs_dir / "state.json")
-            code, text = owner.verdict(repo, args.number, state, stop)
+            code, text = owner.verdict(repo, key, state, stop)
             owner.record_verdict(repo, text)
             print("\n" + text, end="")
             return code
         elif args.command == "signoff":
-            owner.signoff(repo, args.number, _today(), force=args.force)
-            print(f"M{args.number} signed off and tagged m{args.number}-done.")
+            key = milestone_key(args.number)
+            owner.signoff(repo, key, _today(), force=args.force)
+            print(f"{key.upper()} signed off and tagged {key}-done.")
         elif args.command in ("accept", "reject"):
             decision = "Accepted" if args.command == "accept" else "Rejected"
             path = owner.decide_adr(repo, args.number, decision, _today())
             print(f"{path.relative_to(repo)}: {decision}.")
         elif args.command == "review":
-            stop = review_milestone(cfg, args.milestone, args.base or f"m{args.milestone}-start")
+            key = milestone_key(args.milestone)
+            stop = review_milestone(cfg, key, args.base or f"{key}-start")
             print(f"Review loop stopped: {stop}")
         elif args.command == "status":
-            m = milestone_metrics(repo, args.milestone)
+            m = milestone_metrics(repo, milestone_key(args.milestone))
             print(f"done {m.done}, escalated {m.escalated}, attempts {m.attempts}")
-            print(milestone_summary(repo, args.milestone))
+            print(milestone_summary(repo, milestone_key(args.milestone)))
         elif args.command == "commits":
-            found = Git(repo).local_model_commits(args.base or f"m{args.milestone}-start")
+            found = Git(repo).local_model_commits(
+                args.base or f"{milestone_key(args.milestone)}-start"
+            )
             for c in found:
                 print(f"{c.sha[:9]}  {c.task}  attempts {c.attempts}  {c.size} lines  ({c.author})")
             print(f"{len(found)} local-model commit(s)")
@@ -125,7 +131,7 @@ def main(argv: list[str] | None = None) -> int:
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
             return 1 if problems else 0
-    except (RunnerError, owner.OwnerError) as exc:
+    except (RunnerError, owner.OwnerError, TaskError) as exc:
         print(f"runner: {exc}", file=sys.stderr)
         return 1
     return 0

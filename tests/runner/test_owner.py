@@ -24,7 +24,7 @@ def _review(repo: Path) -> None:
 
 def test_a_clean_milestone_is_ready_for_sign_off(repo: Path):
     _review(repo)
-    code, text = owner.verdict(repo, 1, State(), "clean")
+    code, text = owner.verdict(repo, "m1", State(), "clean")
     assert code == 0
     assert text.startswith("✅ READY FOR SIGN-OFF")
     assert "1. Pair a phone.\n" in text and "Left for later" not in text
@@ -37,7 +37,7 @@ def test_a_decision_for_the_owner_says_what_and_what_next(repo: Path):
     blocked = write_task(repo / "tasks" / "blocked", "m1-04-thing")
     append_footer(blocked, {"result": "blocked", "reason": "2 escalations used"})
     state = State(owner={"m1-02-photos": {"adr": "docs/adr/14-photos.md", "question": "Keep?"}})
-    code, text = owner.verdict(repo, 1, state, "clean")
+    code, text = owner.verdict(repo, "m1", state, "clean")
     assert code == 2
     assert text.startswith("⚠ NEEDS YOU")
     assert "docs/adr/14-photos.md: Keep?" in text
@@ -47,7 +47,7 @@ def test_a_decision_for_the_owner_says_what_and_what_next(repo: Path):
 
 
 def test_a_review_that_stopped_for_the_owner_needs_you(repo: Path):
-    code, text = owner.verdict(repo, 1, State(), "adr-needed")
+    code, text = owner.verdict(repo, "m1", State(), "adr-needed")
     assert code == 2 and "review stopped: adr-needed" in text
 
 
@@ -64,7 +64,7 @@ def _milestone(repo: Path) -> None:
 
 def test_signoff_marks_the_milestone_done_and_tags_it(repo: Path):
     _milestone(repo)
-    owner.signoff(repo, 1, TODAY)
+    owner.signoff(repo, "m1", TODAY)
     milestone = (repo / "docs" / "milestones" / "m1.md").read_text()
     assert "> **Status: done.** Signed off by the owner on 2026-10-01." in milestone
     assert "in review" not in milestone
@@ -79,8 +79,8 @@ def test_signoff_refuses_while_work_is_left(repo: Path):
     _milestone(repo)
     write_task(repo / "tasks" / "escalated", "m1-02-photos")
     with pytest.raises(owner.OwnerError, match="m1-02-photos"):
-        owner.signoff(repo, 1, TODAY)
-    owner.signoff(repo, 1, TODAY, force=True)
+        owner.signoff(repo, "m1", TODAY)
+    owner.signoff(repo, "m1", TODAY, force=True)
     assert git(repo, "tag").split() == ["m1-done"]
 
 
@@ -97,3 +97,29 @@ def test_accept_and_reject_set_an_adrs_status(repo: Path):
     assert "- **Status:** Rejected (by the owner, 2026-10-01)\n" in adr.read_text()
     with pytest.raises(owner.OwnerError, match="ADR 15"):
         owner.decide_adr(repo, 15, "Accepted", TODAY)
+
+
+def test_a_factory_milestone_uses_its_key_everywhere(repo: Path):
+    """f1's tickets, docs, commands and tag are named f1, not m1 (the f1 plan)."""
+    write_task(repo / "tasks" / "escalated", "m1-02-photos")  # another milestone's: not f1's
+    blocked = write_task(repo / "tasks" / "blocked", "f1-02-report")
+    append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
+    code, text = owner.verdict(repo, "f1", State(), "clean")
+    assert code == 2 and "f1-02-report blocked" in text and "m1-02-photos" not in text
+    assert "uv run runner milestone f1" in text
+    blocked.unlink()
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f1.md").write_text(
+        "# Factory 1\n\n> **Status: in review** (2026-10-01).\n"
+    )
+    (repo / "docs" / "reviews").mkdir(parents=True)
+    (repo / "docs" / "reviews" / "f1.md").write_text("# F1\n\n- **Status:** review done.\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "docs")
+    code, text = owner.verdict(repo, "f1", State(), "clean")
+    assert code == 0 and "Review: docs/reviews/f1.md" in text
+    assert text.rstrip().endswith("uv run runner signoff f1")
+    owner.signoff(repo, "f1", TODAY, force=True)
+    assert "git tag `f1-start`" in (repo / "docs" / "milestones" / "f1.md").read_text()
+    assert git(repo, "tag").split() == ["f1-done"]
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F1 signed off by the owner"

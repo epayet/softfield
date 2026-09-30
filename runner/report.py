@@ -10,7 +10,7 @@ from runner.usage import ClaudeUsage, claude_line, short
 @dataclass
 class TaskRecord:
     id: str
-    milestone: int
+    milestone: str
     result: str = "running"  # done | escalated | blocked | preflight
     attempts: int = 0
     warmup_s: float = 0.0

@@ -26,15 +26,20 @@ class OwnerError(RuntimeError):
     pass
 
 
-def _ids(repo: Path, folder: str, milestone: int) -> list[str]:
-    return sorted(p.stem for p in (repo / "tasks" / folder).glob(f"m{milestone}-*.md"))
+def command_arg(milestone: str) -> str:
+    """What the owner types: ``4`` for m4 (as before), ``f1`` for f1."""
+    return milestone[1:] if milestone.startswith("m") and milestone[1:].isdigit() else milestone
+
+
+def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
+    return sorted(p.stem for p in (repo / "tasks" / folder).glob(f"{milestone}-*.md"))
 
 
 def _needs_owner(stop: str) -> bool:
     return stop in OWNER_STOPS or stop.startswith(("end-to-end", "review output unusable"))
 
 
-def verdict(repo: Path, milestone: int, state: State, review_stop: str) -> tuple[int, str]:
+def verdict(repo: Path, milestone: str, state: State, review_stop: str) -> tuple[int, str]:
     """The last thing ``runner milestone`` prints, and its exit code: 0 ready, 2 needs you."""
     ready = [t for t in load_dir(repo / "tasks" / "ready", 1000) if t.milestone == milestone]
     needs = []
@@ -54,15 +59,16 @@ def verdict(repo: Path, milestone: int, state: State, review_stop: str) -> tuple
         needs.append(f"  • review stopped: {review_stop}")
     if needs:
         lines = ["⚠ NEEDS YOU", *needs, ""]
-        lines.append(f"  Next: decide the above, then rerun  uv run runner milestone {milestone}")
+        rerun = f"uv run runner milestone {command_arg(milestone)}"
+        lines.append(f"  Next: decide the above, then rerun  {rerun}")
         return 2, "\n".join(lines) + "\n"
-    review = repo / "docs" / "reviews" / f"m{milestone}.md"
+    review = repo / "docs" / "reviews" / f"{milestone}.md"
     lines = ["✅ READY FOR SIGN-OFF", f"  Review: {review.relative_to(repo)} ({review_stop})"]
     match = _TEST_STEPS.search(review.read_text(encoding="utf-8")) if review.is_file() else None
     if match:
         lines.append("  Test on your devices:")
         lines += [f"    {line}" for line in match.group(1).strip().splitlines()]
-    lines += ["", f"  Then: uv run runner signoff {milestone}"]
+    lines += ["", f"  Then: uv run runner signoff {command_arg(milestone)}"]
     return 0, "\n".join(lines) + "\n"
 
 
@@ -86,29 +92,29 @@ def _replace_line(path: Path, pattern: re.Pattern[str], line: str) -> None:
     path.write_text(pattern.sub(line, text, count=1), encoding="utf-8")
 
 
-def signoff(repo: Path, milestone: int, today: date, force: bool = False) -> None:
-    """Mark milestone N done: its doc and review, the ``mN-done`` tag, one commit."""
+def signoff(repo: Path, milestone: str, today: date, force: bool = False) -> None:
+    """Mark a milestone done: its doc and review, the ``<key>-done`` tag, one commit."""
     left = [f"{t} ({f})" for f in _UNFINISHED for t in _ids(repo, f, milestone)]
     if left and not force:
         raise OwnerError(
             "work is left: " + ", ".join(left) + ". Finish it, or sign off with --force."
         )
-    doc = repo / "docs" / "milestones" / f"m{milestone}.md"
+    doc = repo / "docs" / "milestones" / f"{milestone}.md"
     _replace_line(
         doc,
         _STATUS_MILESTONE,
         f"> **Status: done.** Signed off by the owner on {today.isoformat()}."
-        f" Base: git tag `m{milestone}-start`."
-        f" Report: [`docs/reviews/m{milestone}.md`](../reviews/m{milestone}.md).",
+        f" Base: git tag `{milestone}-start`."
+        f" Report: [`docs/reviews/{milestone}.md`](../reviews/{milestone}.md).",
     )
-    review = repo / "docs" / "reviews" / f"m{milestone}.md"
+    review = repo / "docs" / "reviews" / f"{milestone}.md"
     if review.is_file():
         _replace_line(
             review, _STATUS_LINE, f"- **Status:** done, signed off by the owner on {today}."
         )
     git = Git(repo)
-    git.commit_all(f"M{milestone} signed off by the owner")
-    git.run("tag", f"m{milestone}-done")
+    git.commit_all(f"{milestone.upper()} signed off by the owner")
+    git.run("tag", f"{milestone}-done")
 
 
 def decide_adr(repo: Path, number: int, status: str, today: date) -> Path:

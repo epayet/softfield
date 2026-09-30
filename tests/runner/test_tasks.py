@@ -6,6 +6,8 @@ from runner.tasks import (
     TaskError,
     append_footer,
     blocked_ids,
+    milestone_key,
+    next_milestone_key,
     parse_sections,
     parse_task,
     pick_next,
@@ -139,3 +141,42 @@ def test_a_ticket_says_who_works_it(tmp_path):
     path.write_text(path.read_text().replace("agent: lead", "agent: owner"))
     with pytest.raises(TaskError, match="agent"):
         parse_task(path, 150)
+
+
+def test_a_milestone_is_a_number_or_a_named_key(tmp_path):
+    """A number N is Coucou's milestone mN; a key like f1 is a factory milestone."""
+    assert parse_task(write_task(tmp_path, "m1-01-thing"), 150).milestone == "m1"
+    path = write_task(tmp_path, "f1-01-metrics")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: f1\n"))
+    assert parse_task(path, 150).milestone == "f1"
+    path.write_text(path.read_text().replace("milestone: f1\n", "milestone: F 1\n"))
+    with pytest.raises(TaskError, match="milestone"):
+        parse_task(path, 150)
+
+
+@pytest.mark.parametrize(
+    ("given", "key"), [(4, "m4"), ("4", "m4"), ("m4", "m4"), ("f1", "f1"), ("f12", "f12")]
+)
+def test_milestone_key(given, key):
+    assert milestone_key(given) == key
+
+
+@pytest.mark.parametrize("given", ["", "f", "1f", "f-1", "F1", True, 0])
+def test_milestone_key_refuses_anything_else(given):
+    with pytest.raises(TaskError):
+        milestone_key(given)
+
+
+def test_next_milestone_key():
+    assert next_milestone_key("m4") == "m5" and next_milestone_key("f9") == "f10"
+
+
+def test_pick_next_orders_milestones_by_number(tmp_path):
+    for tid in ("m10-01-late", "m9-01-early"):
+        path = write_task(tmp_path, tid)
+        path.write_text(
+            path.read_text().replace("milestone: 1\n", f"milestone: {tid.split('-')[0][1:]}\n")
+        )
+    ready = [parse_task(p, 150) for p in sorted(tmp_path.glob("*.md"))]
+    first = pick_next(ready, done=set(), paused=set())
+    assert first is not None and first.id == "m9-01-early"

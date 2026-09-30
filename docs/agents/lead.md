@@ -16,8 +16,11 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
 - **Brainstorms:** ideas the owner wants kept go in `docs/roadmap.md` as "Idea:" sections with open questions. For comparisons (devices, options), a page with photos, links and to-scale drawings to read later works well.
 - **Product taste:** calm and ambient over features; no guilt, no read receipts. For home devices: plugged in, no battery, no e-ink (photos matter), off the shelf with no soldering or 3D printing. Mum loves rubber ducks; they're the theme for the physical coucou key.
 - **Bilingual:** every user-facing string ships in English and French (Mum reads French); the admin stays English ([ADR 00](../adr/00-initial.md) A2).
+- **CPU temperature:** about 90 °C during runs (M4) is accepted as is (owner, 2026-09-30). Don't raise it again unless it gets worse.
 - **LM Studio settings are the owner's.** Never override context or offload, never `lms load` with settings, and don't pin the context anywhere in the repo. The runner relies on JIT loading plus one warm-up request.
 - **The owner wants to learn how the workflow performs,** and may turn it into a generic "software factory" with a pluggable frontier ([ADR 02](../adr/02-software-factory.md), waiting for more milestones). Keep workflow knowledge tool-neutral and in the repo. See "Reporting" below.
+  - **Expected against actual, first:** on any milestone view or report, what changed and how to test it come right after the expected outcome and Done when; numbers, tickets and savings come after.
+  - **Savings are shown in dollars** (API-equivalent), not in token counts.
 
 ## Authority
 - Only the owner marks an ADR **Accepted** or a milestone **done**.
