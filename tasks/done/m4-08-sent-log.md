@@ -28,3 +28,12 @@ Stretch ticket. Decision D8 in `docs/milestones/m4.md`: `localStorage` key `couc
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1859
+gate_failures: []
+tokens: 3325641
+```
