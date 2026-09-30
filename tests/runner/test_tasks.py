@@ -3,9 +3,12 @@ from pathlib import Path
 import pytest
 
 from runner.tasks import (
+    STOPPED,
+    Task,
     TaskError,
     append_footer,
     blocked_ids,
+    load_dir,
     milestone_key,
     next_milestone_key,
     parse_sections,
@@ -223,3 +226,37 @@ def test_pick_next_orders_milestones_by_number(tmp_path):
     ready = [parse_task(p, 150) for p in sorted(tmp_path.glob("*.md"))]
     first = pick_next(ready, done=set(), paused=set())
     assert first is not None and first.id == "m9-01-early"
+
+
+def _created_before(task: Task, queued: dict[str, Task]) -> set[str]:
+    """The files the tickets ``task`` (transitively) depends on will create."""
+    created: set[str] = set()
+    seen: set[str] = set()
+    todo = list(task.depends_on)
+    while todo:
+        dep = queued.get(todo.pop())
+        if dep is None or dep.id in seen:
+            continue
+        seen.add(dep.id)
+        created.update(dep.files, dep.tests)
+        todo.extend(dep.depends_on)
+    return created
+
+
+def test_queued_tickets_name_only_what_exists_or_an_earlier_ticket_creates():
+    """The replans' check (f1-07, f1-19): a queued ticket's pre-flight has no problem but a
+    path that a ticket it depends on creates. ``runner run --dry-run`` needs a clean main."""
+    repo = Path(__file__).resolve().parents[2]
+    queued = {
+        task.id: task
+        for folder in ("ready", *STOPPED)
+        for task in load_dir(repo / "tasks" / folder, 150)
+    }
+    problems = []
+    for task in queued.values():
+        created = _created_before(task, queued)
+        for problem in preflight(task, repo):
+            path = problem.removeprefix("referenced path does not exist: ")
+            if path not in created:
+                problems.append(f"{task.id}: {problem}")
+    assert problems == []

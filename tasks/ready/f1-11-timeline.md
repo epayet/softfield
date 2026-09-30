@@ -1,7 +1,7 @@
 ---
 id: f1-11-timeline
 milestone: f1
-depends_on: [f1-07-replan-foundation]
+depends_on: [f1-33-runner-check-fixes]
 difficulty: 6
 files:
   - factory_dashboard/timeline.py
@@ -17,7 +17,8 @@ tests:
 `/timeline` draws runs and jobs over time, one lane per agent, coloured by outcome.
 
 ### Context
-Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`, with the fixture database in `tests/factory_dashboard/conftest.py` (extend it when your page needs more rows). The tables and columns are in `runner/metrics.py` (read it; it is the lead's file, so don't change it). Register your router in `factory_dashboard/app.py`. The Overview's strip shows the chart pattern (D5 in `docs/milestones/f1.md`): a `div` with `data-chart`, then a JSON block, drawn by one function in `factory_dashboard/static/charts.js`.
+Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`, with the fixture database in `tests/factory_dashboard/conftest.py` (extend it when your page needs more rows). The tables and columns are in `runner/metrics.py` (read it; it is the lead's file, so don't change it). Register your router in `factory_dashboard/app.py`. The Overview's strip shows the chart pattern (D5 in `docs/milestones/f1.md`): a `div` with `data-chart`, then a JSON block, drawn by one function in `factory_dashboard/static/charts.js`. `write_fixture`'s numbers are pinned by `tests/factory_dashboard/test_queries.py` and `tests/factory_dashboard/test_overview.py`: put the rows your page needs in a function of your own (as `write_live` is), not among f1's or m4's tickets and jobs.
+- Facts: the `run` filter is a run's `run_dir` (`20260930-152311`); "the latest milestone" is what `current_milestone` in `factory_dashboard/overview.py` returns. The runner writes Claude's refusals with the refused agent's id (`claude-opus`, `claude-sonnet`).
 - Add one chart kind, `timeline`: lanes are agents, bars are jobs from start to end (a running job ends now), coloured by outcome (passed, failed, timeout, refused, running). Refusals (`usage_events` of kind `refusal`) are marked on their agent's lane. Hovering a bar shows the ticket, role and minutes; clicking opens `/jobs/{n}`.
 - Filters: `milestone` (default: the latest) and `run`.
 - Below the chart, a plain table of the same jobs, for reading without the chart.

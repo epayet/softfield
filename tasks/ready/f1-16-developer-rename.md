@@ -17,6 +17,10 @@ files:
   - runner/loop.py
   - runner/report.py
   - opencode.json
+  - docs/how-it-works.md
+  - tests/browser/test_delivery.py
+  - tests/runner/test_config.py
+  - tests/runner/test_loop.py
 tests:
   - tests/runner/test_tasks.py
   - tests/runner/test_prompts.py
@@ -26,7 +30,8 @@ tests:
 "Junior" becomes "developer" everywhere it names a role (ADR 14 item 1), and `docs/agents/junior.md` becomes `docs/agents/developer.md`.
 
 ### Context
-Read `docs/adr/14-developers-and-agents.md` item 1. Find every use with `Grep` (`junior`, case-insensitive) outside `docs/sessions/`, `docs/reviews/` and `tasks/done/`, which are history and stay as written.
+Read `docs/adr/14-developers-and-agents.md` item 1. Find every use with `Grep` (`junior`, case-insensitive) outside `docs/sessions/`, `docs/reviews/` and `tasks/done/`, which are history and stay as written; so are `docs/adr/` and the docs of finished milestones (`docs/milestones/m*.md`, `docs/milestones/f1-mockup.html`).
+- Facts (f1-07): besides the files above, `docs/agents/junior.md` is named in `tests/runner/test_config.py` (the protected-tests list), `docs/how-it-works.md` and `tests/browser/test_delivery.py`; "junior" as a role also appears in comments in `runner/checks.py`, `runner/state.py`, `runner/local_model.py`, `runner/gates.py`, `runner/gitops.py`, `workflow/runner.toml` and `workflow/protected-paths.txt`. The loop's checkpoint counts merges of `task.agent == "junior"` tickets (`runner/loop.py`). The database already says `developer` (tickets' `kind`, jobs' `role`).
 - **Tickets:** `agent: developer` is the default; `agent: junior` is still accepted, as a synonym (`runner/tasks.py`). Records and the database say `developer`.
 - **The rename:** `git mv` isn't available to you; create `docs/agents/developer.md` with the same content and delete the old file. Update every reference: `opencode.json`'s instructions, the checkpoint's `Edit(docs/agents/junior.md)` rule in `runner/loop.py`, the prompts, lead.md's budget line, CLAUDE.md, and the tickets still in `tasks/ready/`.
 - Test names and fixtures that mean the role follow; test names that record history ("m4-06's junior") may stay.

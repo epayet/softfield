@@ -1,7 +1,7 @@
 ---
 id: f1-12-milestones-list
 milestone: f1
-depends_on: [f1-07-replan-foundation]
+depends_on: [f1-33-runner-check-fixes]
 difficulty: 4
 files:
   - factory_dashboard/milestones.py
@@ -16,7 +16,8 @@ tests:
 `/milestones` lists the milestones, newest first, with the trends across them.
 
 ### Context
-Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`, with the fixture database in `tests/factory_dashboard/conftest.py` (extend it when your page needs more rows). The tables and columns are in `runner/metrics.py` (read it; it is the lead's file, so don't change it). Register your router in `factory_dashboard/app.py`. The numbers come from `factory_dashboard/queries.py` (`runner report` uses the same ones); use its functions rather than new SQL where one exists.
+Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`, with the fixture database in `tests/factory_dashboard/conftest.py` (extend it when your page needs more rows). The tables and columns are in `runner/metrics.py` (read it; it is the lead's file, so don't change it). Register your router in `factory_dashboard/app.py`. The numbers come from `factory_dashboard/queries.py` (`runner report` uses the same ones); use its functions rather than new SQL where one exists. `write_fixture`'s numbers are pinned by `tests/factory_dashboard/test_queries.py` and `tests/factory_dashboard/test_overview.py`: put the rows your page needs in a function of your own (as `write_live` is), not among f1's or m4's tickets and jobs.
+- Facts: `milestones.status` is `in progress`, `review`, `done`, or empty for a milestone the runner has only seen in tickets. `queries.milestone_results` counts a milestone with no tickets as 0 of everything (its `pass_rate` is `None`), and `queries.trends` gives every milestone, oldest first.
 - A row per milestone: key (a link to `/milestones/{key}`, built by the next ticket), title, status, dates, tickets merged, first-attempt pass rate, escalations, review rounds, Claude dollars, net savings.
 - Trends below: first-attempt rate, escalations, Claude dollars per merged ticket and savings per milestone, as small charts (D5 in `docs/milestones/f1.md`, one chart kind per trend is fine, or one `trend` kind reused).
 

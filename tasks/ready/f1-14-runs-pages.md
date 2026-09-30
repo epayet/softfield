@@ -17,8 +17,9 @@ tests:
 `/runs` lists runs, newest first, and `/runs/{run_dir}` shows what one run did.
 
 ### Context
-Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`, with the fixture database in `tests/factory_dashboard/conftest.py` (extend it when your page needs more rows). The tables and columns are in `runner/metrics.py` (read it; it is the lead's file, so don't change it). Register your router in `factory_dashboard/app.py`. `factory_dashboard/tickets.py` shows a list and a page in one module.
-- **The list:** run dir, command, start, minutes, verdict, jobs, tickets merged. A run still going (no end, heartbeat under 2 minutes old) says "running"; one with no end and an older heartbeat says "stopped".
+Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`, with the fixture database in `tests/factory_dashboard/conftest.py` (extend it when your page needs more rows). The tables and columns are in `runner/metrics.py` (read it; it is the lead's file, so don't change it). Register your router in `factory_dashboard/app.py`. `factory_dashboard/tickets.py` shows a list and a page in one module. `write_fixture`'s numbers are pinned by `tests/factory_dashboard/test_queries.py` and `tests/factory_dashboard/test_overview.py`: put the rows your page needs in a function of your own (as `write_live` is), not among f1's or m4's tickets and jobs.
+- Facts: every session report in `docs/sessions/` already links to `/runs/<run_dir>` (`run_url` in `runner/report.py`), so the page must answer at that path. A session's `verdict` reads like "3 merged, 0 not". `tickets` has no run column: a run reaches its tickets through its jobs.
+- **The list:** run dir, command, start, minutes, verdict, jobs. A run still going (no end, heartbeat under 2 minutes old) says "running"; one with no end and an older heartbeat says "stopped".
 - **The page:** the same facts, then its jobs in order (links to `/jobs/{n}`) and the tickets it touched (links to `/tickets/{id}`).
 - An unknown run answers 404.
 
