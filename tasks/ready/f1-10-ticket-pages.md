@@ -1,7 +1,7 @@
 ---
 id: f1-10-ticket-pages
 milestone: f1
-depends_on: [f1-09-job-page]
+depends_on: [f1-09-job-page, f1-34-jobs-pages-fixes]
 difficulty: 4
 files:
   - factory_dashboard/tickets.py
