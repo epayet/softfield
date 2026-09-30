@@ -1,9 +1,12 @@
 import subprocess
 from datetime import UTC, datetime, timedelta
 
+import pytest
+
 from runner.claude import (
     STRIPPED_ENV,
     ClaudeJob,
+    UsageLimited,
     backoff_seconds,
     claude_env,
     run_claude,
@@ -89,3 +92,52 @@ def test_run_claude_appends_the_shell_note(tmp_path, monkeypatch):
     run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
     prompt = seen[0][seen[0].index("-p") + 1]
     assert prompt.startswith("Review.") and "`git log`" in prompt
+
+
+def _fake_claude(monkeypatch, stdout: str, returncode: int = 1) -> list[list[str]]:
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return seen
+
+
+def test_a_usage_limit_carries_the_session_to_resume(tmp_path, monkeypatch):
+    """f1: a lead ticket cut off mid-way resumes its session instead of starting over."""
+    out = '{"is_error": true, "result": "You\'ve hit your limit · resets 5pm", "session_id": "s1"}'
+    _fake_claude(monkeypatch, out)
+    job = ClaudeJob(kind="lead-ticket", prompt="Do it.", allowed_tools=("Read",))
+    with pytest.raises(UsageLimited) as limit:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert (limit.value.session_id, limit.value.certain) == ("s1", True)
+    assert limit.value.resets_at == NOW.replace(hour=17)
+
+
+def test_an_unrecognised_limit_is_still_a_pause(tmp_path, monkeypatch):
+    """A wording the parser doesn't know shouldn't block a ticket: pause and retry instead."""
+    _fake_claude(monkeypatch, '{"is_error": true, "result": "Weekly quota exhausted"}')
+    job = ClaudeJob(kind="lead-ticket", prompt="Do it.", allowed_tools=("Read",))
+    with pytest.raises(UsageLimited) as limit:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert (limit.value.resets_at, limit.value.certain, limit.value.session_id) == (
+        None,
+        False,
+        None,
+    )
+
+
+def test_an_ordinary_error_is_a_failed_result(tmp_path, monkeypatch):
+    _fake_claude(monkeypatch, '{"is_error": true, "result": "Tool failed"}')
+    job = ClaudeJob(kind="lead-ticket", prompt="Do it.", allowed_tools=("Read",))
+    assert not run_claude(job, tmp_path, 10, tmp_path / "log", NOW).ok
+
+
+def test_run_claude_can_resume_a_session(tmp_path, monkeypatch):
+    seen = _fake_claude(monkeypatch, '{"result": "done", "session_id": "s1"}', returncode=0)
+    job = ClaudeJob(kind="lead-ticket", prompt="Carry on.", allowed_tools=("Read",))
+    result = run_claude(job, tmp_path, 10, tmp_path / "log", NOW, resume="s1")
+    assert seen[0][seen[0].index("--resume") + 1] == "s1"
+    assert result.session_id == "s1"

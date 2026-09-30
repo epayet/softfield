@@ -48,18 +48,29 @@ class ClaudeResult:
     duration_s: float
     usage: dict[str, int] = field(default_factory=dict)
     num_turns: int = 0
+    session_id: str | None = None
 
 
 class UsageLimited(Exception):
-    def __init__(self, resets_at: datetime | None) -> None:
+    """A job stopped by a usage limit. ``session_id`` lets the caller resume it after the
+    reset; ``certain`` is False when the error only looks like a limit (a wording
+    ``usage_limit_reset`` doesn't know), so the caller retries a bounded number of times."""
+
+    def __init__(
+        self, resets_at: datetime | None, session_id: str | None = None, certain: bool = True
+    ) -> None:
         super().__init__(f"Claude usage limit reached; resets at {resets_at}")
         self.resets_at = resets_at
+        self.session_id = session_id
+        self.certain = certain
 
 
 def claude_env(environ: Mapping[str, str]) -> dict[str, str]:
     return {k: v for k, v in environ.items() if k not in STRIPPED_ENV}
 
 
+# Words that suggest a limit in an error the precise patterns below don't recognise.
+_MAYBE_LIMIT_RE = re.compile(r"\b(limit|quota|capacity)\b", re.IGNORECASE)
 _LIMIT_RE = re.compile(r"(usage limit|hit your limit|limit reached|rate limit)", re.IGNORECASE)
 _EPOCH_RE = re.compile(r"\|(\d{10})\b")
 _CLOCK_RE = re.compile(r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", re.IGNORECASE)
@@ -117,7 +128,12 @@ def shell_note(allowed_tools: tuple[str, ...]) -> str:
 
 
 def run_claude(
-    job: ClaudeJob, repo: Path, timeout: int, log_path: Path, now: datetime
+    job: ClaudeJob,
+    repo: Path,
+    timeout: int,
+    log_path: Path,
+    now: datetime,
+    resume: str | None = None,
 ) -> ClaudeResult:
     cmd = [
         "claude",
@@ -128,6 +144,7 @@ def run_claude(
         "--permission-mode",
         job.permission_mode,
         *(("--model", job.model) if job.model else ()),
+        *(("--resume", resume) if resume else ()),
         "--allowedTools",
         *job.allowed_tools,
     ]
@@ -155,14 +172,18 @@ def run_claude(
         data = {"is_error": True, "result": proc.stdout + proc.stderr}
     text = str(data.get("result", ""))
     is_error = bool(data.get("is_error")) or proc.returncode != 0
+    session_id = str(data["session_id"]) if data.get("session_id") else None
     if is_error:
         limited, resets_at = usage_limit_reset(text + proc.stderr, now)
         if limited:
-            raise UsageLimited(resets_at)
+            raise UsageLimited(resets_at, session_id)
+        if _MAYBE_LIMIT_RE.search(text + proc.stderr):
+            raise UsageLimited(None, session_id, certain=False)
     return ClaudeResult(
         ok=not is_error,
         text=text,
         duration_s=duration,
         usage=_usage(data),
         num_turns=int(data.get("num_turns") or 0),
+        session_id=session_id,
     )

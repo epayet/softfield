@@ -4,7 +4,7 @@ import hashlib
 import json
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -132,27 +132,55 @@ def open_session(cfg: Config) -> Session:
 # --- headless Claude, with usage-limit pauses ------------------------------------------
 
 
+UNSURE_LIMIT_RETRIES = 3  # an error that only looks like a limit: pause, but not forever
+RESUME_PROMPT = (
+    "You were stopped by a Claude usage limit, which has now reset. Carry on with the same"
+    " job from where you stopped; `git diff` shows the changes you had made."
+)
+PARTIAL_WORK_NOTE = (
+    "\n\nA previous run of this job was stopped part-way by a Claude usage limit. The files"
+    " it changed are still in the working tree: check `git diff` (and any new files) before"
+    " you start, and build on them or undo them."
+)
+
+
 def call_claude(s: Session, job: ClaudeJob, milestone: str, subject: str) -> ClaudeResult:
     """Run a headless Claude job, waiting out usage limits. Each trigger bounds its own runs
-    (ADR 12 item 10); the count per milestone is kept for the metrics."""
-    attempt = 0
+    (ADR 12 item 10); the count per milestone is kept for the metrics.
+
+    A job stopped mid-way by a limit resumes its session after the reset (f1: lead tickets
+    cost 0.5-1.5M, so a limit will land inside one); if the session can't be resumed, it
+    starts again, told that its partial work is in the tree."""
+    attempt = unsure = 0
+    resume: str | None = None
+    interrupted = False
     while True:
+        prompt = (
+            RESUME_PROMPT if resume else job.prompt + (PARTIAL_WORK_NOTE if interrupted else "")
+        )
+        log = s.run_dir / f"claude-{job.kind}-{subject}{f'-{attempt + 1}' if attempt else ''}.log"
         try:
             result = run_claude(
-                job,
-                s.repo,
-                s.cfg.claude_timeout,
-                s.run_dir / f"claude-{job.kind}-{subject}.log",
-                now(),
+                replace(job, prompt=prompt), s.repo, s.cfg.claude_timeout, log, now(), resume=resume
             )
-            break
         except UsageLimited as limit:
+            if not limit.certain:
+                unsure += 1
+                if unsure > UNSURE_LIMIT_RETRIES:
+                    s.report.notes.append(
+                        f"{job.kind} {subject}: failed {unsure} times with what looked like a"
+                        " usage limit; treated as a failure."
+                    )
+                    result = ClaudeResult(ok=False, text=str(limit), duration_s=0.0)
+                    break
             wait = (
                 max(60.0, (limit.resets_at - now()).total_seconds() + 60)
                 if limit.resets_at
                 else backoff_seconds(attempt, s.cfg.backoff_min, s.cfg.backoff_max)
             )
             attempt += 1
+            resume = limit.session_id or resume
+            interrupted = True
             s.state.paused_until = (
                 datetime.fromtimestamp(now().timestamp() + wait).astimezone().isoformat()
             )
@@ -160,6 +188,12 @@ def call_claude(s: Session, job: ClaudeJob, milestone: str, subject: str) -> Cla
             s.log(f"Claude usage limit reached; pausing {wait / 60:.0f} min, then resuming.")
             s.report.notes.append(f"Paused {wait / 60:.0f} min for a Claude usage limit.")
             time.sleep(wait)
+            continue
+        if resume and not result.ok and result.num_turns == 0:
+            resume = None  # the session couldn't be resumed: start again, told about the tree
+            attempt += 1
+            continue
+        break
     s.state.paused_until = None
     s.state.count_run(milestone)
     save_state(s.state, s.state_path)

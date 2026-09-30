@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from runner import checks, gates, loop
-from runner.claude import ClaudeJob, ClaudeResult
+from runner.claude import ClaudeJob, ClaudeResult, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
@@ -309,7 +309,7 @@ def fake_lead(monkeypatch):
     script: list[Callable[[ClaudeJob, Path], None]] = []
     jobs: list[ClaudeJob] = []
 
-    def run_claude(job, repo, timeout, log_path, now):
+    def run_claude(job, repo, timeout, log_path, now, resume=None):
         jobs.append(job)
         script.pop(0)(job, repo)
         return ClaudeResult(ok=True, text="", duration_s=1.0)
@@ -585,3 +585,54 @@ def test_a_decision_for_the_owner_is_recorded(repo, fake_model, fake_lead):
         "m1-01-thing": {"adr": "docs/adr/14-x.md", "question": "Keep originals?"}
     }
     assert (repo / "tasks" / "escalated" / "m1-01-thing.md").exists()
+
+
+def _limited_then(monkeypatch, *outcomes):
+    """Fake run_claude: each outcome is an exception to raise or a result to return."""
+    calls: list[tuple[str, str | None]] = []
+
+    def run_claude(job, repo, timeout, log_path, now, resume=None):
+        calls.append((job.prompt, resume))
+        outcome = outcomes[len(calls) - 1]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+    return calls
+
+
+def _job() -> ClaudeJob:
+    return ClaudeJob(kind="lead-ticket", prompt="Do the ticket.", allowed_tools=("Read",))
+
+
+def test_a_job_cut_off_by_a_usage_limit_resumes_its_session(repo, monkeypatch):
+    """f1: a lead ticket stopped mid-way by a limit carries on where it was, after the reset."""
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
+    calls = _limited_then(monkeypatch, UsageLimited(None, session_id="s1"), done)
+    s = loop.open_session(_config(repo))
+    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
+    assert calls[0] == ("Do the ticket.", None)
+    assert calls[1][1] == "s1" and "usage limit" in calls[1][0]
+    assert any("usage limit" in note for note in s.report.notes)
+
+
+def test_a_session_that_cant_resume_starts_afresh_told_about_its_partial_work(repo, monkeypatch):
+    lost = ClaudeResult(ok=False, text="No conversation found", duration_s=1.0, num_turns=0)
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    calls = _limited_then(monkeypatch, UsageLimited(None, session_id="s1"), lost, done)
+    s = loop.open_session(_config(repo))
+    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
+    prompt, resume = calls[2]
+    assert resume is None
+    assert prompt.startswith("Do the ticket.") and "git diff" in prompt
+
+
+def test_an_unrecognised_limit_is_retried_a_few_times_then_fails(repo, monkeypatch):
+    unsure = UsageLimited(None, certain=False)
+    calls = _limited_then(monkeypatch, unsure, unsure, unsure, unsure)
+    s = loop.open_session(_config(repo))
+    result = loop.call_claude(s, _job(), "m1", "m1-01-lead")
+    assert not result.ok
+    assert len(calls) == 1 + loop.UNSURE_LIMIT_RETRIES
