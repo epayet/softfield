@@ -38,3 +38,10 @@ Read `docs/milestones/f1.md` (D1, D3, D4, D5, D8, D9) and `docs/adr/13-factory-d
 - the chart's JSON block holds the fixture's numbers
 - the app refuses to write (the database is opened read-only)
 - `uv run runner check-all --task f1-06-dashboard-service` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
