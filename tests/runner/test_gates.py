@@ -76,6 +76,22 @@ def test_layout_matches_browser_tests_to_js_modules(repo):
     ]
 
 
+def test_layout_matches_dashboard_tests_to_its_modules(repo):
+    package = repo / "factory_dashboard"
+    package.mkdir()
+    (package / "queries.py").write_text("")
+    tests = repo / "tests" / "factory_dashboard"
+    tests.mkdir()
+    (tests / "conftest.py").write_text("")
+    (tests / "test_queries.py").write_text("")
+    assert layout_problems(repo) == []
+    (tests / "test_overview.py").write_text("")
+    assert layout_problems(repo) == [
+        "tests/factory_dashboard/test_overview.py: no module factory_dashboard/overview.py"
+        " to match it"
+    ]
+
+
 def test_parse_blocked():
     assert parse_blocked("CATEGORY: needs-info\nWhat is X?") == "needs-info"
     assert parse_blocked("category: Needs-File\n") == "needs-file"

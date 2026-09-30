@@ -208,6 +208,7 @@ LAYOUTS = {
     "tests/unit": ("coucou", ".py"),
     "tests/runner": ("runner", ".py"),
     "tests/browser": ("coucou/static/coucou/js", ".js"),
+    "tests/factory_dashboard": ("factory_dashboard", ".py"),
 }
 
 
@@ -322,7 +323,9 @@ def gate_ruff(ctx: GateContext) -> GateResult:
 
 
 def gate_mypy(ctx: GateContext) -> GateResult:
-    return _command("mypy", ctx, "uv", "run", "mypy", "coucou", "tests", "runner")
+    return _command(
+        "mypy", ctx, "uv", "run", "mypy", "coucou", "tests", "runner", "factory_dashboard"
+    )
 
 
 def gate_task_tests(ctx: GateContext) -> GateResult:
@@ -342,6 +345,7 @@ def gate_all_tests(ctx: GateContext) -> GateResult:
         "tests/integration",
         "tests/runner",
         "tests/browser",
+        "tests/factory_dashboard",
         *(f"--ignore={path}" for path in skipped),
     )
 

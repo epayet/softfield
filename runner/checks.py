@@ -13,7 +13,14 @@ from runner import i18n
 from runner.gates import layout_problems
 from runner.tasks import queued_tests
 
-TEST_DIRS = ("tests/unit", "tests/integration", "tests/runner", "tests/browser")
+TEST_DIRS = (
+    "tests/unit",
+    "tests/integration",
+    "tests/runner",
+    "tests/browser",
+    "tests/factory_dashboard",
+)
+MYPY_TARGETS = ("coucou", "tests", "runner", "factory_dashboard")
 # Commits that touch only these skip the hook: they can't break a check.
 HOOK_SKIPS = ("docs/", "tasks/")
 _OUTPUT_LIMIT = 4000
@@ -65,7 +72,7 @@ def check_all(
     return [
         _command(repo, "ruff check", ["uv", "run", "ruff", "check", "."], timeout),
         _command(repo, "ruff format", ["uv", "run", "ruff", "format", "--check", "."], timeout),
-        _command(repo, "mypy", ["uv", "run", "mypy", "coucou", "tests", "runner"], timeout),
+        _command(repo, "mypy", ["uv", "run", "mypy", *MYPY_TARGETS], timeout),
         Check("translations", not translations, "\n".join(translations)),
         Check("layout", not layout, "\n".join(layout)),
         _command(

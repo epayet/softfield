@@ -103,6 +103,8 @@ tests/browser/test_outbox.py
 tests/browser/test_sw.py
 tests/browser/test_me_sw.py
 tests/e2e/**
+# `runner report`'s numbers (f1 D1): the dashboard's queries may change, not what they count
+tests/runner/test_report.py
 
 # The lead's instructions, and the juniors' notes it curates (ADR 07 items 6 and 14)
 docs/agents/**

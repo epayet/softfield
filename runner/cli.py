@@ -7,7 +7,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from runner import backfill, checks, copilot, i18n, metrics, owner
+from runner import backfill, checks, copilot, i18n, metrics, owner, report
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
@@ -79,6 +79,11 @@ def main(argv: list[str] | None = None) -> int:
         "backfill", help="load past milestones into the metrics database from their logs"
     )
     backfill_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
+    report_cmd = sub.add_parser(
+        "report", help="write a milestone's numbers into docs/reviews/<key>.md"
+    )
+    report_cmd.add_argument("number", help="4 for M4, or a key like f1")
+    report_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     args = parser.parse_args(argv)
 
     repo = _repo()
@@ -161,11 +166,21 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 conn.close()
             print(backfill.render(summary), end="")
+        elif args.command == "report":
+            key = milestone_key(args.number)
+            path = report.write_milestone_report(repo, args.db or cfg.metrics_db, key)
+            print(f"{path.relative_to(repo)}: {key.upper()}'s numbers written.")
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
             return 1 if problems else 0
-    except (RunnerError, owner.OwnerError, TaskError, copilot.CopilotError) as exc:
+    except (
+        RunnerError,
+        owner.OwnerError,
+        TaskError,
+        copilot.CopilotError,
+        report.ReportError,
+    ) as exc:
         print(f"runner: {exc}", file=sys.stderr)
         return 1
     return 0

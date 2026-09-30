@@ -185,9 +185,11 @@ Write {out} as:
   "stop": null | "adr-needed" | "security-unresolved" | "unforeseen-cross-milestone"}}
 Keep ids stable across rounds; mark findings fixed since the last round "resolved": true.
 Also create or update docs/reviews/{milestone}.md. It starts with the owner's sign-off
-sheet (lead.md, "Sign-off sheet"), then what was built, findings and resolutions, backlog
-and workflow observations; the runner appends metrics. Read-only git (diff, log, show) is
-fine; don't commit: the runner does.
+sheet (lead.md, "Sign-off sheet"), ending with "6. What next": your product and factory
+suggestions. Then what was built, findings and resolutions, backlog and workflow
+observations. The numbers come from `uv run runner report {milestone}`, between the
+`<!-- runner report -->` markers: leave that block as it is and don't recount them.
+Read-only git (diff, log, show) is fine; don't commit: the runner does.
 """
 
 NARRATIVE = """\

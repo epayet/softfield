@@ -88,10 +88,12 @@ When the review loop stops, write this at the top of `docs/reviews/mN.md`, in pl
 3. **Left for later:** deferred items and the backlog.
 4. **Decisions waiting for you:** ADRs, with links.
 5. **How the work went:** one line per session (date, tasks merged or escalated, lead vs local tokens), the 3–5 lessons that mattered and what changed because of them, links to `docs/sessions/`.
+6. **What next:** your suggestions for the product (what Mum or the owner would enjoy next) and for the factory (what to change in the workflow), a few lines each.
 
-Then the rest of the report: what was built, findings, backlog, metrics, stop reason, workflow observations. In the chat, keep it to a link and 2–3 lines.
+Then the rest of the report: what was built, findings, backlog, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `uv run runner report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
 
 ## Reporting
+- The numbers come from the metrics database: `uv run runner report <key>` for a milestone review, the same queries as the dashboard (`factory_dashboard/queries.py`). The database isn't in git, so the review keeps a frozen snapshot.
 - The runner writes a session report to `docs/sessions/` after every run.
 - After any session you lead, add a short narrative: what went well, what didn't, what it cost against the local model's share, and what to improve. After an interactive session that exercised the pipeline, summarise it briefly in the chat too.
 

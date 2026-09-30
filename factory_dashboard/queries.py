@@ -1,0 +1,352 @@
+"""The numbers a milestone review needs (f1 D7, ADR 14 item 16), shared by ``runner report``
+and the dashboard's pages.
+
+Plain functions over a read-only connection that return data, never text. Dollars are
+API-equivalent: a Claude job's ``cost_usd``, or its token-equivalents at ≈$4 per 1M when the
+cost wasn't kept. Local jobs cost nothing. "The lead" is any ``claude-*`` agent (f1 D6).
+"""
+
+import sqlite3
+from collections import Counter, defaultdict
+from collections.abc import Iterable, Sequence
+from dataclasses import dataclass, field, replace
+from datetime import datetime
+from pathlib import Path
+
+from runner.tasks import milestone_order
+from runner.usage import CACHE_READ_WEIGHT, OUTPUT_WEIGHT
+
+DOLLARS_PER_TOKEN = 4 / 1_000_000  # per token-equivalent (D7)
+# D7's seed: the lead's M4 tickets L0–L3 took 3.5M token-equivalents for 1,979 lines.
+SEED_TOKENS_PER_LINE = 3_500_000 / 1979
+SEED_DOLLARS_PER_LINE = SEED_TOKENS_PER_LINE * DOLLARS_PER_TOKEN
+LEAD_PREFIX = "claude-"
+LOCAL_ROLES = ("developer", "last-attempt")  # a developer's attempts at a ticket
+UNKNOWN_AGENT = "backfill-unknown"  # D6
+SEVERITIES = ("blocking", "should-fix", "nit")
+
+
+def connect(path: Path) -> sqlite3.Connection:
+    """The metrics database, read-only; a missing file is an ``OperationalError``."""
+    conn = sqlite3.connect(f"{path.resolve().as_uri()}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+@dataclass(frozen=True)
+class Spend:
+    """What some jobs used; ``agent`` is set on a per-agent line."""
+
+    jobs: int = 0
+    tokens_in: int = 0
+    tokens_cached: int = 0
+    tokens_out: int = 0
+    dollars: float = 0.0
+    agent: str | None = None
+
+    @property
+    def tokens(self) -> int:
+        return self.tokens_in + self.tokens_cached + self.tokens_out
+
+    @property
+    def token_equivalents(self) -> float:
+        """Input-token equivalents, weighted by price (``runner.usage``)."""
+        return (
+            self.tokens_in
+            + CACHE_READ_WEIGHT * self.tokens_cached
+            + OUTPUT_WEIGHT * self.tokens_out
+        )
+
+
+@dataclass(frozen=True)
+class MilestoneResults:
+    key: str
+    title: str | None
+    tickets: int
+    merged: int
+    developer_tickets: int  # developer tickets with at least one attempt
+    first_attempt: int  # of those, merged after one attempt that passed
+    attempts: int
+    escalations: int
+    directions: int
+    checkpoints: int
+    review_rounds: int
+    findings: dict[str, int]  # by severity, most severe first
+    local: Spend
+    claude: Spend
+    agents: tuple[Spend, ...]
+
+    @property
+    def pass_rate(self) -> float | None:
+        return self.first_attempt / self.developer_tickets if self.developer_tickets else None
+
+
+@dataclass(frozen=True)
+class Savings:
+    """D7's savings from delegating, in dollars with token-equivalents underneath. ``agents``
+    splits them per developer agent; a per-agent line has ``agent`` set."""
+
+    tickets: int = 0
+    lines: int = 0  # merged by the developer itself
+    doing_itself: float = 0.0
+    supporting: float = 0.0
+    doing_itself_tokens: float = 0.0
+    supporting_tokens: float = 0.0
+    agent: str | None = None
+    agents: tuple["Savings", ...] = field(default=())
+
+    @property
+    def net(self) -> float:
+        return self.doing_itself - self.supporting
+
+
+@dataclass(frozen=True)
+class Trend:
+    results: MilestoneResults
+    savings: Savings
+
+
+# --- helpers -------------------------------------------------------------------------------
+
+
+def _is_lead(agent: str | None) -> bool:
+    return bool(agent) and str(agent).startswith(LEAD_PREFIX)
+
+
+def _equivalents(job: sqlite3.Row) -> float:
+    return (
+        (job["tokens_in"] or 0)
+        + CACHE_READ_WEIGHT * (job["tokens_cached"] or 0)
+        + OUTPUT_WEIGHT * (job["tokens_out"] or 0)
+    )
+
+
+def _dollars(job: sqlite3.Row) -> float:
+    if not _is_lead(job["agent"]):
+        return 0.0
+    if job["cost_usd"] is not None:
+        return float(job["cost_usd"])
+    return _equivalents(job) * DOLLARS_PER_TOKEN
+
+
+def _spend(jobs: Sequence[sqlite3.Row], agent: str | None = None) -> Spend:
+    return Spend(
+        jobs=len(jobs),
+        tokens_in=sum(j["tokens_in"] or 0 for j in jobs),
+        tokens_cached=sum(j["tokens_cached"] or 0 for j in jobs),
+        tokens_out=sum(j["tokens_out"] or 0 for j in jobs),
+        dollars=sum(_dollars(j) for j in jobs),
+        agent=agent,
+    )
+
+
+def _project_id(conn: sqlite3.Connection, project: str) -> int | None:
+    row = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
+    return int(row["id"]) if row else None
+
+
+def _milestones(conn: sqlite3.Connection, project: str) -> list[sqlite3.Row]:
+    """The project's milestones, oldest first (by when they started, then by key)."""
+    rows = conn.execute(
+        "SELECT m.* FROM milestones m JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
+        (project,),
+    ).fetchall()
+
+    def order(m: sqlite3.Row) -> tuple[int, float, tuple[str, int]]:
+        started = m["started"]
+        at = datetime.fromisoformat(started).timestamp() if started else 0.0
+        return (0 if started else 1, at, milestone_order(m["key"]))
+
+    return sorted(rows, key=order)
+
+
+def _milestone(conn: sqlite3.Connection, project: str, key: str) -> sqlite3.Row | None:
+    return next((m for m in _milestones(conn, project) if m["key"] == key), None)
+
+
+def _tickets(conn: sqlite3.Connection, milestone_id: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM tickets WHERE milestone_id = ? ORDER BY ticket", (milestone_id,)
+    ).fetchall()
+
+
+def _jobs(conn: sqlite3.Connection, milestone_id: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM jobs WHERE milestone_id = ? ORDER BY id", (milestone_id,)
+    ).fetchall()
+
+
+def _by_ticket(jobs: Iterable[sqlite3.Row]) -> dict[int, list[sqlite3.Row]]:
+    found: dict[int, list[sqlite3.Row]] = defaultdict(list)
+    for job in jobs:
+        if job["ticket_id"] is not None:
+            found[job["ticket_id"]].append(job)
+    return found
+
+
+# --- milestone results ---------------------------------------------------------------------
+
+
+def milestone_results(conn: sqlite3.Connection, project: str, key: str) -> MilestoneResults | None:
+    """A milestone's tickets, attempts, Claude jobs, findings and spend; None if unknown."""
+    m = _milestone(conn, project, key)
+    if m is None:
+        return None
+    tickets, jobs = _tickets(conn, m["id"]), _jobs(conn, m["id"])
+    attempts = _by_ticket(j for j in jobs if j["role"] in LOCAL_ROLES)
+    developer = [t for t in tickets if t["kind"] == "developer" and attempts.get(t["id"])]
+    first = [
+        t
+        for t in developer
+        if t["commit"]
+        and len(attempts[t["id"]]) == 1
+        and attempts[t["id"]][0]["outcome"] == "passed"
+    ]
+    roles = Counter(j["role"] for j in jobs)
+    rounds = m["review_rounds"]
+    if rounds is None:
+        rounds = len({j["attempt"] for j in jobs if j["role"] == "review"})
+    by_agent: dict[str, list[sqlite3.Row]] = defaultdict(list)
+    for job in jobs:
+        by_agent[job["agent"]].append(job)
+    return MilestoneResults(
+        key=key,
+        title=m["title"],
+        tickets=len(tickets),
+        merged=sum(1 for t in tickets if t["commit"]),
+        developer_tickets=len(developer),
+        first_attempt=len(first),
+        attempts=sum(len(a) for a in attempts.values()),
+        escalations=roles["escalation"],
+        directions=roles["direction"],
+        checkpoints=roles["checkpoint"],
+        review_rounds=int(rounds),
+        findings=_findings(conn, m["id"]),
+        local=_spend([j for j in jobs if not _is_lead(j["agent"])]),
+        claude=_spend([j for j in jobs if _is_lead(j["agent"])]),
+        agents=tuple(_spend(by_agent[a], agent=a) for a in sorted(by_agent)),
+    )
+
+
+def _findings(conn: sqlite3.Connection, milestone_id: int) -> dict[str, int]:
+    rows = conn.execute(
+        "SELECT ifnull(severity, 'unknown') AS severity, count(*) AS n FROM findings"
+        " WHERE milestone_id = ? GROUP BY 1",
+        (milestone_id,),
+    ).fetchall()
+    counts = {row["severity"]: int(row["n"]) for row in rows}
+    ordered = [s for s in SEVERITIES if s in counts] + sorted(set(counts) - set(SEVERITIES))
+    return {s: counts[s] for s in ordered}
+
+
+# --- savings (D7) --------------------------------------------------------------------------
+
+
+def _lead_rates(conn: sqlite3.Connection, project_id: int) -> dict[int, tuple[float, float]]:
+    """The lead's measured (dollars, token-equivalents) per line, by difficulty, from its
+    merged tickets whose Claude jobs were recorded."""
+    rows = conn.execute(
+        "SELECT id, difficulty, lines_changed FROM tickets WHERE project_id = ? AND kind = 'lead'"
+        ' AND "commit" IS NOT NULL AND lines_changed > 0 AND difficulty IS NOT NULL',
+        (project_id,),
+    ).fetchall()
+    totals: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
+    for ticket in rows:
+        jobs = conn.execute("SELECT * FROM jobs WHERE ticket_id = ?", (ticket["id"],)).fetchall()
+        claude = [j for j in jobs if _is_lead(j["agent"])]
+        if not claude:
+            continue
+        total = totals[ticket["difficulty"]]
+        total[0] += sum(_dollars(j) for j in claude)
+        total[1] += sum(_equivalents(j) for j in claude)
+        total[2] += ticket["lines_changed"]
+    return {d: (dollars / lines, tokens / lines) for d, (dollars, tokens, lines) in totals.items()}
+
+
+def _developer_of(ticket: sqlite3.Row, jobs: Sequence[sqlite3.Row]) -> str:
+    """Who a delegated ticket went to: who merged it, or who last tried it."""
+    if ticket["merged_by"] and not _is_lead(ticket["merged_by"]):
+        return str(ticket["merged_by"])
+    tried = [j["agent"] for j in jobs if j["role"] in LOCAL_ROLES]
+    return str(tried[-1]) if tried else UNKNOWN_AGENT
+
+
+def _add(parts: Sequence[Savings], agent: str | None = None) -> Savings:
+    return Savings(
+        tickets=sum(p.tickets for p in parts),
+        lines=sum(p.lines for p in parts),
+        doing_itself=sum(p.doing_itself for p in parts),
+        supporting=sum(p.supporting for p in parts),
+        doing_itself_tokens=sum(p.doing_itself_tokens for p in parts),
+        supporting_tokens=sum(p.supporting_tokens for p in parts),
+        agent=agent,
+    )
+
+
+def _combine(per_agent: Sequence[Savings]) -> Savings:
+    groups: dict[str, list[Savings]] = defaultdict(list)
+    for part in per_agent:
+        groups[part.agent or UNKNOWN_AGENT].append(part)
+    agents = tuple(_add(groups[name], agent=name) for name in sorted(groups))
+    return replace(_add(per_agent), agents=agents)
+
+
+def _milestone_savings(
+    conn: sqlite3.Connection, milestone_id: int, rates: dict[int, tuple[float, float]]
+) -> Savings:
+    """Per delegated ticket: what the lead would have spent on the lines its developer merged,
+    against the lead's jobs on it plus its share of the milestone-wide ones (reviews,
+    checkpoints)."""
+    jobs = _jobs(conn, milestone_id)
+    by_ticket = _by_ticket(jobs)
+    worked = [t for t in _tickets(conn, milestone_id) if t["commit"] or by_ticket.get(t["id"])]
+    if not worked:
+        return Savings()
+    wide = [j for j in jobs if j["ticket_id"] is None and _is_lead(j["agent"])]
+    share_dollars = sum(_dollars(j) for j in wide) / len(worked)
+    share_tokens = sum(_equivalents(j) for j in wide) / len(worked)
+    parts = []
+    for ticket in worked:
+        if ticket["kind"] != "developer":
+            continue
+        own = by_ticket.get(ticket["id"], [])
+        merged_itself = ticket["merged_by"] and not _is_lead(ticket["merged_by"])
+        lines = int(ticket["lines_changed"] or 0) if merged_itself else 0
+        per_line = rates.get(ticket["difficulty"], (SEED_DOLLARS_PER_LINE, SEED_TOKENS_PER_LINE))
+        lead_jobs = [j for j in own if _is_lead(j["agent"])]
+        parts.append(
+            Savings(
+                tickets=1,
+                lines=lines,
+                doing_itself=lines * per_line[0],
+                doing_itself_tokens=lines * per_line[1],
+                supporting=sum(_dollars(j) for j in lead_jobs) + share_dollars,
+                supporting_tokens=sum(_equivalents(j) for j in lead_jobs) + share_tokens,
+                agent=_developer_of(ticket, own),
+            )
+        )
+    return _combine(parts)
+
+
+def savings(conn: sqlite3.Connection, project: str, key: str | None = None) -> Savings:
+    """D7's savings for one milestone, or for all of them with no ``key``."""
+    project_id = _project_id(conn, project)
+    if project_id is None:
+        return Savings()
+    rates = _lead_rates(conn, project_id)
+    parts = [
+        _milestone_savings(conn, m["id"], rates)
+        for m in _milestones(conn, project)
+        if key is None or m["key"] == key
+    ]
+    return _combine([agent for part in parts for agent in part.agents])
+
+
+def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:
+    """Each milestone's results and savings, oldest first."""
+    found = []
+    for m in _milestones(conn, project):
+        results = milestone_results(conn, project, m["key"])
+        if results is not None:
+            found.append(Trend(results, savings(conn, project, m["key"])))
+    return found

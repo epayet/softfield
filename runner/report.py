@@ -1,9 +1,19 @@
-"""Session reports in docs/sessions/: what happened, what it cost, what to improve."""
+"""Session reports in docs/sessions/: what happened, what it cost, what to improve. And
+``runner report <key>``: a milestone review's numbers from the metrics database."""
 
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from factory_dashboard.queries import (
+    MilestoneResults,
+    Savings,
+    connect,
+    milestone_results,
+    savings,
+    trends,
+)
 from runner.usage import ClaudeUsage, claude_line, short
 
 
@@ -175,4 +185,137 @@ def write(repo: Path, report: SessionReport, claude: ClaudeUsage | None = None) 
     path = repo / "docs" / "sessions" / f"{report.started:%Y-%m-%d-%H%M}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render(report, claude), encoding="utf-8")
+    return path
+
+
+# --- `runner report <key>` (f1-05, ADR 14 item 16) -----------------------------------------
+
+REPORT_START, REPORT_END = "<!-- runner report -->", "<!-- /runner report -->"
+
+
+class ReportError(Exception):
+    pass
+
+
+def _usd(dollars: float) -> str:
+    return f"-${-dollars:,.2f}" if dollars < -0.005 else f"${abs(dollars):,.2f}"
+
+
+def _pass_rate(first: int, tried: int) -> str:
+    return f"{first}/{tried} ({first / tried:.0%})" if tried else "-"
+
+
+def _savings_row(label: str, s: Savings) -> str:
+    return (
+        f"| {label} | {s.tickets} | {s.lines:,} | {_usd(s.doing_itself)} | {_usd(s.supporting)}"
+        f" | **{_usd(s.net)}** |"
+    )
+
+
+def _results_lines(r: MilestoneResults) -> list[str]:
+    findings = ", ".join(f"{n} {severity}" for severity, n in r.findings.items()) or "none"
+    return [
+        f"| Result | {r.key.upper()} |",
+        "|---|---|",
+        f"| Tickets merged | {r.merged} of {r.tickets} |",
+        f"| First-attempt pass rate | {_pass_rate(r.first_attempt, r.developer_tickets)} |",
+        f"| Local attempts | {r.attempts} |",
+        f"| Escalations, directions, checkpoints | {r.escalations}, {r.directions},"
+        f" {r.checkpoints} |",
+        f"| Review rounds | {r.review_rounds} |",
+        f"| Findings | {findings} |",
+        f"| Local model | {short(r.local.tokens)} tokens ({r.local.tokens_in:,} in,"
+        f" {r.local.tokens_out:,} out) |",
+        f"| Claude | {_usd(r.claude.dollars)} ({short(r.claude.token_equivalents)}"
+        " token-equivalents) |",
+    ]
+
+
+def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
+    """The numbers section of ``docs/reviews/<key>.md``, between its markers."""
+    r = milestone_results(conn, project, key)
+    if r is None:
+        raise ReportError(f"no milestone {key} in the metrics database")
+    s = savings(conn, project, key)
+    lines = [
+        REPORT_START,
+        "## Numbers",
+        "",
+        f"_Written by `uv run runner report {key}` from the metrics database, which isn't in"
+        " git: a snapshot. Run it again to refresh; edit outside these markers._",
+        "",
+        *_results_lines(r),
+        "",
+        "### Savings from delegating",
+        "",
+        "What Claude would have spent writing the lines the developers merged, against what it"
+        " spent supporting them: tickets, directions, escalations, and a share of the reviews and"
+        " checkpoints (f1 D7). API-equivalent dollars.",
+        "",
+        "| Developer | Tickets | Lines | Doing it itself | Supporting | Net |",
+        "|---|---|---|---|---|---|",
+        _savings_row("**All**", s),
+        *(_savings_row(a.agent or "?", a) for a in s.agents),
+        "",
+        f"Tokens underneath: doing it itself ≈{short(s.doing_itself_tokens)} token-equivalents,"
+        f" supporting ≈{short(s.supporting_tokens)}.",
+        "",
+        "### By agent",
+        "",
+        "| Agent | Jobs | Tokens (Claude: token-equivalents) | Dollars |",
+        "|---|---|---|---|",
+    ]
+    for a in r.agents:
+        tokens = a.token_equivalents if (a.agent or "").startswith("claude-") else a.tokens
+        lines.append(f"| {a.agent} | {a.jobs} | {short(tokens)} | {_usd(a.dollars)} |")
+    lines += [
+        "",
+        "### Trends",
+        "",
+        "| Milestone | Merged | First-attempt | Attempts | Claude | Net savings |",
+        "|---|---|---|---|---|---|",
+    ]
+    points = trends(conn, project)
+    for p in points:
+        t = p.results
+        lines.append(
+            f"| {t.key} | {t.merged} | {_pass_rate(t.first_attempt, t.developer_tickets)}"
+            f" | {t.attempts} | {_usd(t.claude.dollars)} | {_usd(p.savings.net)} |"
+        )
+    every = [p.results for p in points]
+    first = sum(t.first_attempt for t in every)
+    tried = sum(t.developer_tickets for t in every)
+    lines.append(
+        f"| **All** | {sum(t.merged for t in every)} | {_pass_rate(first, tried)}"
+        f" | {sum(t.attempts for t in every)} | {_usd(sum(t.claude.dollars for t in every))}"
+        f" | {_usd(savings(conn, project).net)} |"
+    )
+    return "\n".join([*lines, REPORT_END]) + "\n"
+
+
+def with_report(text: str, block: str) -> str:
+    """``text`` with ``block`` in place of what's between the markers, or at the end."""
+    start = text.find(REPORT_START)
+    end = text.find(REPORT_END, start) if start >= 0 else -1
+    if end >= 0:
+        after = text[end + len(REPORT_END) :]
+        return text[:start] + block + after.removeprefix("\n")
+    if not text or text.endswith("\n\n"):
+        return text + block
+    return text + ("\n" if text.endswith("\n") else "\n\n") + block
+
+
+def write_milestone_report(repo: Path, db: Path, key: str) -> Path:
+    """Write ``runner report <key>`` into ``docs/reviews/<key>.md``; returns the file."""
+    if not db.is_file():
+        raise ReportError(f"no metrics database at {db}; `uv run runner backfill` makes one")
+    conn = connect(db)
+    try:
+        block = milestone_report(conn, repo.name, key)
+    finally:
+        conn.close()
+    path = repo / "docs" / "reviews" / f"{key}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    text = path.read_text(encoding="utf-8") if path.is_file() else ""
+    path.write_text(with_report(text, block), encoding="utf-8")
     return path
