@@ -4,6 +4,8 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+DEFAULT_METRICS_DB = "~/.local/share/software-factory/factory-metrics.sqlite"
+
 
 @dataclass(frozen=True)
 class Config:
@@ -24,6 +26,7 @@ class Config:
     backoff_min: int
     backoff_max: int
     narrative: bool
+    metrics_db: Path  # outside the repo, shared by every project (ADR 13 item 1)
     checkpoint_model: str = ""
 
     @property
@@ -53,6 +56,7 @@ def load_config(repo: Path) -> Config:
         backoff_min=data["claude"]["usage_limit_backoff_min"],
         backoff_max=data["claude"]["usage_limit_backoff_max"],
         narrative=report.get("narrative", False),
+        metrics_db=Path(data.get("metrics", {}).get("db", DEFAULT_METRICS_DB)).expanduser(),
         checkpoint_model=data["claude"].get("checkpoint_model", ""),
     )
 

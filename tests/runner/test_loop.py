@@ -35,6 +35,7 @@ def _config(repo: Path) -> Config:
         backoff_min=1,
         backoff_max=2,
         narrative=False,
+        metrics_db=repo / "var" / "factory-metrics.sqlite",  # never the real one
         checkpoint_model="sonnet",
     )
 

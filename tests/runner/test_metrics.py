@@ -1,0 +1,261 @@
+"""The factory's metrics database (f1 D2): schema, migrations and idempotent writes."""
+
+import json
+import sqlite3
+
+import pytest
+
+from runner import metrics
+
+TABLES = {
+    "projects",
+    "milestones",
+    "runs",
+    "tickets",
+    "jobs",
+    "findings",
+    "rating_changes",
+    "usage_events",
+    "owner_items",
+}
+T0 = "2026-09-30T15:23:11+02:00"
+T1 = "2026-09-30T15:40:00+02:00"
+
+
+@pytest.fixture
+def db(tmp_path):
+    conn = metrics.open_db(tmp_path / "factory-metrics.sqlite")
+    yield conn
+    conn.close()
+
+
+@pytest.fixture
+def ids(db):
+    project = metrics.upsert_project(db, "coucou", repo="/src/coucou")
+    milestone = metrics.upsert_milestone(db, project, "f1", title="The factory measures itself")
+    run = metrics.upsert_run(db, project, "20260930-152311", command="milestone f1", started=T0)
+    ticket = metrics.upsert_ticket(db, project, "f1-01-metrics-db", milestone_id=milestone)
+    return {"project": project, "milestone": milestone, "run": run, "ticket": ticket}
+
+
+def _tables(conn):
+    rows = conn.execute("SELECT name FROM sqlite_master WHERE type = 'table'").fetchall()
+    return {row[0] for row in rows}
+
+
+def _count(conn, table):
+    return conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0]  # noqa: S608
+
+
+def _job(db, ids, **overrides):
+    fields = {
+        "ticket_id": ids["ticket"],
+        "milestone_id": ids["milestone"],
+        "role": "developer",
+        "agent": "local-qwen3.6-35b-a3b",
+        "attempt": 1,
+        "started": T0,
+    }
+    return metrics.start_job(db, ids["run"], **(fields | overrides))
+
+
+def test_a_fresh_path_gets_every_table_and_version_1(tmp_path):
+    path = tmp_path / "nested" / "folder" / "factory-metrics.sqlite"
+    conn = metrics.open_db(path)
+    assert path.is_file()
+    assert _tables(conn) >= TABLES
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 1 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+    assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    conn.close()
+
+
+def test_opening_again_changes_nothing(tmp_path):
+    path = tmp_path / "factory-metrics.sqlite"
+    conn = metrics.open_db(path)
+    metrics.upsert_project(conn, "coucou")
+    schema = conn.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall()
+    conn.close()
+
+    again = metrics.open_db(path)
+    assert again.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall() == schema
+    assert again.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert _count(again, "projects") == 1
+    again.close()
+
+
+def test_foreign_keys_are_enforced(db):
+    with pytest.raises(sqlite3.IntegrityError):
+        metrics.upsert_run(db, 999, "20260930-152311", command="run", started=T0)
+
+
+def test_the_same_project_and_milestone_twice_is_one_row(db):
+    first = metrics.upsert_project(db, "coucou", repo="/old")
+    assert metrics.upsert_project(db, "coucou", repo="/new") == first
+    assert [tuple(r) for r in db.execute("SELECT repo FROM projects")] == [("/new",)]
+
+    m = metrics.upsert_milestone(db, first, "m4", title="Old", status="in progress")
+    signoff = {"changed": "a", "lessons": ["b"]}
+    again = metrics.upsert_milestone(db, first, "m4", status="done", signoff=signoff)
+    assert again == m
+    row = db.execute("SELECT title, status, signoff FROM milestones").fetchone()
+    assert (row["title"], row["status"]) == ("Old", "done")  # an omitted field is kept
+    assert json.loads(row["signoff"]) == signoff
+
+
+def test_the_same_run_twice_is_one_row_with_the_later_values(db, ids):
+    again = metrics.upsert_run(
+        db, ids["project"], "20260930-152311", command="milestone f1", ended=T1, verdict="ok"
+    )
+    assert again == ids["run"]
+    row = db.execute("SELECT started, ended, verdict FROM runs").fetchone()
+    assert tuple(row) == (T0, T1, "ok")
+
+    metrics.update_run_heartbeat(db, ids["run"], T1)
+    assert db.execute("SELECT heartbeat FROM runs").fetchone()[0] == T1
+
+
+def test_the_same_ticket_twice_is_one_row_with_the_later_values(db, ids):
+    again = metrics.upsert_ticket(
+        db,
+        ids["project"],
+        "f1-01-metrics-db",
+        title="The metrics database",
+        state="done",
+        files=["runner/metrics.py"],
+        depends_on=[],
+    )
+    assert again == ids["ticket"]
+    assert _count(db, "tickets") == 1
+    row = db.execute("SELECT milestone_id, title, state, files, depends_on FROM tickets").fetchone()
+    assert (row["milestone_id"], row["title"], row["state"]) == (
+        ids["milestone"],
+        "The metrics database",
+        "done",
+    )
+    assert json.loads(row["files"]) == ["runner/metrics.py"]
+    assert json.loads(row["depends_on"]) == []
+
+
+def test_a_ticket_keeps_difficulty_and_its_correction_apart(db, ids):
+    metrics.upsert_ticket(db, ids["project"], "f1-01-metrics-db", difficulty=6)
+    metrics.upsert_ticket(db, ids["project"], "f1-01-metrics-db", difficulty_corrected=8)
+    row = db.execute("SELECT difficulty, difficulty_corrected FROM tickets").fetchone()
+    assert tuple(row) == (6, 8)
+
+
+def test_starting_the_same_job_twice_is_one_row_with_the_later_values(db, ids):
+    job = _job(db, ids, agent="first")
+    assert _job(db, ids, agent="second", started=T1) == job
+    row = db.execute("SELECT agent, started, outcome FROM jobs").fetchone()
+    assert tuple(row) == ("second", T1, "running")
+
+    other_attempt = _job(db, ids, attempt=2)
+    other_role = _job(db, ids, role="direction")
+    assert len({job, other_attempt, other_role}) == 3
+
+
+def test_a_milestone_wide_job_twice_is_one_row(db, ids):
+    """No ticket: SQL's NULLs are all distinct, so the key must still match."""
+    job = _job(db, ids, ticket_id=None, role="checkpoint", agent="claude-sonnet")
+    assert _job(db, ids, ticket_id=None, role="checkpoint", agent="claude-sonnet") == job
+    assert _count(db, "jobs") == 1
+
+
+def test_finish_job_sets_the_end_the_outcome_and_the_rest(db, ids):
+    job = _job(db, ids)
+    gates = [{"name": "tests", "ok": True, "seconds": 12.5, "log": "var/runs/x/tests.log"}]
+    metrics.finish_job(
+        db,
+        job,
+        ended=T1,
+        outcome="passed",
+        tokens_in=1000,
+        tokens_cached=800,
+        tokens_out=200,
+        requests=3,
+        cost_usd=0.25,
+        steps=42,
+        peak_context=50_000,
+        context_limit=180_000,
+        edit_streak=4,
+        refused_commands=1,
+        gates=gates,
+        note="ran the tests early",
+        session_id="abc",
+        log_path="var/runs/x/opencode-1.log",
+    )
+    row = db.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone()
+    assert (row["ended"], row["outcome"], row["started"]) == (T1, "passed", T0)
+    assert (row["tokens_in"], row["tokens_cached"], row["tokens_out"]) == (1000, 800, 200)
+    assert (row["requests"], row["cost_usd"], row["steps"]) == (3, 0.25, 42)
+    assert (row["peak_context"], row["context_limit"], row["edit_streak"]) == (50_000, 180_000, 4)
+    assert (row["refused_commands"], row["note"], row["session_id"]) == (
+        1,
+        "ran the tests early",
+        "abc",
+    )
+    assert row["log_path"] == "var/runs/x/opencode-1.log"
+    assert json.loads(row["gates"]) == gates
+
+
+def test_update_running_job_changes_only_the_live_fields(db, ids):
+    job = _job(db, ids, routing_reason="first attempt")
+    before = dict(db.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone())
+    metrics.update_running_job(db, job, tokens_in=500, tokens_out=50, steps=7)
+    after = dict(db.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone())
+    changed = {key for key in after if after[key] != before[key]}
+    assert changed == {"tokens_in", "tokens_out", "steps"}
+    assert after["outcome"] == "running"
+
+
+def test_update_running_job_leaves_a_finished_job_alone(db, ids):
+    job = _job(db, ids)
+    metrics.finish_job(db, job, ended=T1, outcome="failed", tokens_in=900)
+    metrics.update_running_job(db, job, tokens_in=500)
+    assert tuple(db.execute("SELECT tokens_in, outcome FROM jobs").fetchone()) == (900, "failed")
+
+
+def test_the_same_finding_twice_is_one_row_with_the_later_values(db, ids):
+    job = _job(db, ids, ticket_id=None, role="review", agent="claude-opus")
+    first = metrics.add_finding(
+        db,
+        ids["milestone"],
+        "f1-F1",
+        job_id=job,
+        ticket_id=ids["ticket"],
+        severity="should-fix",
+        file="runner/metrics.py",
+        line=12,
+        summary="Old",
+    )
+    again = metrics.add_finding(db, ids["milestone"], "f1-F1", summary="New", verdict="confirmed")
+    assert again == first
+    row = db.execute("SELECT severity, line, summary, verdict FROM findings").fetchone()
+    assert tuple(row) == ("should-fix", 12, "New", "confirmed")
+
+
+def test_ratings_usage_and_owner_items_are_idempotent(db, ids):
+    for _ in range(2):
+        metrics.add_rating_change(
+            db, "local-qwen3.6-35b-a3b", "coding", 1500, 1516, at=T1, ticket_id=ids["ticket"]
+        )
+        metrics.add_usage_event(db, "claude-opus", T0, "refusal", resets_at=T1)
+        item = metrics.upsert_owner_item(
+            db, ids["project"], "adr", "docs/adr/15-x.md", text="Accept?", created=T0
+        )
+    assert [_count(db, t) for t in ("rating_changes", "usage_events", "owner_items")] == [1, 1, 1]
+
+    metrics.resolve_owner_item(db, item, T1)
+    assert db.execute("SELECT resolved FROM owner_items").fetchone()[0] == T1
+
+
+def test_writes_are_committed_at_once(tmp_path):
+    """A crash loses nothing (ADR 13 item 1): another connection sees each write."""
+    path = tmp_path / "factory-metrics.sqlite"
+    writer = metrics.open_db(path)
+    metrics.upsert_project(writer, "coucou")
+    reader = sqlite3.connect(path)
+    assert reader.execute("SELECT name FROM projects").fetchall() == [("coucou",)]
+    reader.close()
+    writer.close()

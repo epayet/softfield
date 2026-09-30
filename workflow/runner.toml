@@ -30,3 +30,6 @@ usage_limit_backoff_max = 18000         # 5 h
 [report]
 narrative = false  # a headless Claude narrative per session costs Pro usage; off by default
 
+[metrics]
+db = "~/.local/share/software-factory/factory-metrics.sqlite"  # every project's runs (ADR 13)
+
