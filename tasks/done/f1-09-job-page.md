@@ -31,3 +31,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - `/jobs/999999` is a 404
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1609
+gate_failures: []
+tokens: 2749033
+```
