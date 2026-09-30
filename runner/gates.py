@@ -3,8 +3,9 @@
 import ast
 import re
 import subprocess
+import time
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 from runner import i18n
@@ -57,6 +58,7 @@ class GateResult:
     name: str
     ok: bool
     output: str = ""
+    seconds: float = field(default=0.0, compare=False)  # set by run_gates, for the metrics
 
 
 @dataclass(frozen=True)
@@ -392,7 +394,8 @@ def run_gates(ctx: GateContext) -> list[GateResult]:
     """Run gates in order, stopping at the first failure."""
     results = []
     for gate in GATES:
-        result = gate(ctx)
+        started = time.monotonic()
+        result = replace(gate(ctx), seconds=time.monotonic() - started)
         results.append(result)
         if not result.ok:
             break

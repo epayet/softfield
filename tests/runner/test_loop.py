@@ -1,11 +1,15 @@
 """The whole task loop on a real temporary git repo, with the model and command gates faked."""
 
+import json
+import sqlite3
 from collections.abc import Callable
+from dataclasses import replace
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from runner import checks, gates, loop
+from runner import checks, gates, loop, metrics
 from runner.claude import ClaudeJob, ClaudeResult, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
@@ -45,7 +49,7 @@ def fake_model(monkeypatch):
     """Scripted 'model': each call runs the next function against the repo."""
     script: list[Callable[[Path, str], None]] = []
 
-    def run_opencode(repo, model, title, prompt, timeout, log_path):
+    def run_opencode(repo, model, title, prompt, timeout, log_path, **live):
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text(prompt)
         run = script.pop(0)(repo, prompt)
@@ -357,6 +361,12 @@ def test_the_lead_gives_direction_before_the_last_attempt(repo, fake_model, fake
     assert [j.kind for j in jobs] == ["direction"]
     assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
     assert "var/runs/" in jobs[0].prompt and "/thinking-1.md" in jobs[0].prompt
+    rows = _rows(repo, "jobs")
+    roles = ["developer", "developer", "direction", "last-attempt"]
+    assert [(j["role"], j["agent"]) for j in rows] == list(
+        zip(roles, ["local-m", "local-m", "claude-opus", "local-m"], strict=True)
+    )
+    assert [j["attempt"] for j in rows] == [1, 2, 1, 3]  # the attempt number within the task
 
 
 def test_direction_can_repair_the_ticket(repo, fake_model, fake_lead):
@@ -637,3 +647,175 @@ def test_an_unrecognised_limit_is_retried_a_few_times_then_fails(repo, monkeypat
     result = loop.call_claude(s, _job(), "m1", "m1-01-lead")
     assert not result.ok
     assert len(calls) == 1 + loop.UNSURE_LIMIT_RETRIES
+
+
+# --- the metrics database (f1 D2, D3) ---------------------------------------------------
+
+
+def _rows(repo: Path, table: str) -> list[dict[str, object]]:
+    conn = sqlite3.connect(_config(repo).metrics_db)
+    conn.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")]  # noqa: S608
+    finally:
+        conn.close()
+
+
+def _measured(change: Callable[[Path, str], None]) -> Callable[[Path, str], OpencodeRun]:
+    def attempt(repo: Path, prompt: str) -> OpencodeRun:
+        change(repo, prompt)
+        return OpencodeRun(
+            exit_code=0,
+            duration_s=1.0,
+            tokens=TokenTotals(1000, 50, 10, 2, peak=700),
+            facts=StreamFacts(session_id="ses_1", edit_streak=3, refused=1, edits=4),
+        )
+
+    return attempt
+
+
+def _undo_and_implement(repo: Path, prompt: str) -> None:
+    (repo / "coucou" / "secret.py").unlink()
+    _implement(repo, prompt)
+
+
+def test_a_session_writes_its_run_and_a_job_per_attempt(repo, fake_model, monkeypatch):
+    _add_task(repo, "m1-01-thing")
+    monkeypatch.setattr(loop, "loaded_context_length", lambda *a: 131072)
+    fake_model.extend([_measured(_stray), _measured(_undo_and_implement)])
+    _run(repo, once=True)
+    [run] = _rows(repo, "runs")
+    assert run["command"] == "run" and run["started"] and run["heartbeat"] and run["ended"]
+    assert run["verdict"] == "1 merged, 0 not"
+    [ticket] = _rows(repo, "tickets")
+    assert ticket["ticket"] == "m1-01-thing"
+    failed, passed = _rows(repo, "jobs")
+    for n, job in enumerate((failed, passed), start=1):
+        key = (job["run_id"], job["ticket_id"], job["role"], job["attempt"], job["agent"])
+        assert key == (run["id"], ticket["id"], "developer", n, "local-m")
+        assert (job["tokens_in"], job["tokens_out"], job["steps"]) == (1000, 60, 2)
+        assert (job["peak_context"], job["context_limit"]) == (700, 131072)
+        assert (job["edit_streak"], job["refused_commands"], job["session_id"]) == (3, 1, "ses_1")
+        assert str(job["log_path"]).endswith(f"m1-01-thing/opencode-{n}.jsonl")
+        assert job["started"] and job["ended"]
+    assert (failed["outcome"], passed["outcome"]) == ("failed", "passed")
+    failed_gates = json.loads(str(failed["gates"]))
+    assert failed_gates[-1]["name"] == "protected-paths" and failed_gates[-1]["ok"] is False
+    for gate in failed_gates:
+        assert isinstance(gate["seconds"], float) and gate["log"].endswith("gates-1.txt")
+    assert all(gate["ok"] for gate in json.loads(str(passed["gates"])))
+
+
+def test_a_timed_out_attempt_is_a_timeout(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+    fake_model.extend([_timed_out, _implement])
+    _run(repo, once=True)
+    assert [j["outcome"] for j in _rows(repo, "jobs")] == ["timeout", "passed"]
+
+
+def test_an_interrupted_attempt_stays_running_with_the_heartbeat_set(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+
+    def crash(repo_: Path, prompt: str) -> None:
+        raise RuntimeError("OpenCode died")
+
+    fake_model.append(crash)
+    with pytest.raises(RuntimeError, match="OpenCode died"):
+        _run(repo)
+    [job] = _rows(repo, "jobs")
+    [run] = _rows(repo, "runs")
+    assert (job["outcome"], job["ended"]) == ("running", None)
+    assert run["heartbeat"] and run["ended"] is None
+
+
+def test_a_live_update_changes_tokens_steps_and_heartbeat_only(repo, monkeypatch):
+    s = loop.open_session(_config(repo))
+    job = loop.record_start(s, "m1-01-thing", "m1", "developer", "local-m", log_path="x.jsonl")
+    [job_before], [run_before] = _rows(repo, "jobs"), _rows(repo, "runs")
+    monkeypatch.setattr(loop, "now", lambda: datetime(2030, 1, 1, tzinfo=UTC))
+    loop.live_update(s, job, TokenTotals(500, 20, 5, 3, peak=400))
+    [job_after], [run_after] = _rows(repo, "jobs"), _rows(repo, "runs")
+    assert {k for k in job_before if job_before[k] != job_after[k]} == {
+        "tokens_in",
+        "tokens_out",
+        "steps",
+    }
+    assert (job_after["tokens_in"], job_after["tokens_out"], job_after["steps"]) == (500, 25, 3)
+    assert {k for k in run_before if run_before[k] != run_after[k]} == {"heartbeat"}
+    assert run_after["heartbeat"] == "2030-01-01T00:00:00+00:00"
+
+
+def test_every_claude_job_writes_a_row_and_keeps_its_own_log(repo, monkeypatch):
+    logs: list[Path] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        log_path.write_text(job.kind)
+        logs.append(log_path)
+        usage = {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 100}
+        return ClaudeResult(ok=True, text="", duration_s=1.0, usage=usage, cost_usd=0.75)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    s = loop.open_session(_config(repo))
+    kinds: list[tuple[str, str | None]] = [
+        ("direction", "m1-01-thing"),
+        ("escalation", "m1-01-thing"),
+        ("escalation", "m1-01-thing"),
+        ("checkpoint", None),
+        ("lead-ticket", "m1-02-lead"),
+        ("review", None),
+        ("narrative", None),
+    ]
+    for kind, ticket in kinds:
+        job = ClaudeJob(kind, "Do it.", ("Read",), model="sonnet" if kind == "checkpoint" else "")
+        loop.call_claude(s, job, "m1", ticket or kind, ticket=ticket)
+    jobs = _rows(repo, "jobs")
+    assert [j["role"] for j in jobs] == [kind for kind, _ in kinds]
+    assert [j["agent"] for j in jobs] == ["claude-opus"] * 3 + ["claude-sonnet"] + [
+        "claude-opus"
+    ] * 3
+    for j in jobs:
+        assert (j["outcome"], j["cost_usd"]) == ("passed", 0.75)
+        assert (j["tokens_in"], j["tokens_out"], j["tokens_cached"]) == (10, 5, 100)
+        assert j["started"] and j["ended"]
+    escalations = [j for j in jobs if j["role"] == "escalation"]
+    assert [j["attempt"] for j in escalations] == [1, 2]
+    assert escalations[0]["log_path"] != escalations[1]["log_path"]
+    assert len(set(logs)) == len(logs)
+    assert [p.read_text() for p in logs] == [kind for kind, _ in kinds]
+
+
+def test_a_usage_limit_pause_is_a_refusal_event(repo, monkeypatch):
+    resets = loop.now() + timedelta(hours=1)
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), done)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    [event] = _rows(repo, "usage_events")
+    assert (event["agent"], event["kind"]) == ("claude-opus", "refusal")
+    assert event["resets_at"] == resets.isoformat()
+
+
+def test_a_database_that_cant_be_opened_does_not_stop_the_session(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+    (repo / "var").mkdir()
+    (repo / "var" / "a-file").write_text("")
+    cfg = replace(_config(repo), metrics_db=repo / "var" / "a-file" / "metrics.sqlite")
+    fake_model.append(_implement)
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None
+    assert [t.result for t in report.tasks] == ["done"]
+    assert len([n for n in report.notes if "metrics database" in n]) == 1
+
+
+def test_a_failing_write_is_noted_once_and_the_run_goes_on(repo, fake_model, monkeypatch):
+    _add_task(repo, "m1-01-thing")
+
+    def broken(*args: object, **kwargs: object) -> None:
+        raise sqlite3.OperationalError("disk I/O error")
+
+    monkeypatch.setattr(metrics, "finish_job", broken)
+    fake_model.extend([_stray, _undo_and_implement])
+    report = _run(repo, once=True)
+    assert [t.result for t in report.tasks] == ["done"]
+    notes = [n for n in report.notes if "metrics database" in n]
+    assert len(notes) == 1 and "disk I/O error" in notes[0]

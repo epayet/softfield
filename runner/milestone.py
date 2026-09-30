@@ -149,7 +149,7 @@ RESTART = "restart"
 def run_milestone(cfg: Config, milestone: str, base: str) -> str:
     """ADR 12 item 12: the queue, then the review loop with its fix tickets. Returns the
     review's stop reason, or RESTART when an escalation changed the runner."""
-    s = open_session(cfg)
+    s = open_session(cfg, f"milestone {milestone}")
     restart = work_queue(s, milestone=milestone)
     close_session(s)
     if restart:
@@ -159,7 +159,7 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
 
 def review_milestone(cfg: Config, milestone: str, base: str) -> str:
     """Run review rounds until a stop rule fires. Returns the stop reason."""
-    s = open_session(cfg)
+    s = open_session(cfg, f"review {milestone}")
     rounds = s.state.review_counts.setdefault(milestone, [])
     seen = s.state.finding_seen
     since = base

@@ -135,6 +135,15 @@ def test_an_ordinary_error_is_a_failed_result(tmp_path, monkeypatch):
     assert not run_claude(job, tmp_path, 10, tmp_path / "log", NOW).ok
 
 
+def test_run_claude_reads_the_jobs_cost(tmp_path, monkeypatch):
+    """f1 D7: savings are in dollars, from Claude Code's own `total_cost_usd`."""
+    _fake_claude(monkeypatch, '{"result": "ok", "total_cost_usd": 1.25}', returncode=0)
+    job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
+    assert run_claude(job, tmp_path, 10, tmp_path / "log", NOW).cost_usd == 1.25
+    _fake_claude(monkeypatch, '{"result": "ok"}', returncode=0)
+    assert run_claude(job, tmp_path, 10, tmp_path / "log", NOW).cost_usd is None
+
+
 def test_run_claude_can_resume_a_session(tmp_path, monkeypatch):
     seen = _fake_claude(monkeypatch, '{"result": "done", "session_id": "s1"}', returncode=0)
     job = ClaudeJob(kind="lead-ticket", prompt="Carry on.", allowed_tools=("Read",))

@@ -2,13 +2,17 @@
 
 import hashlib
 import json
+import sqlite3
 import subprocess
 import time
-from dataclasses import dataclass, replace
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 from datetime import datetime
+from functools import partial
 from pathlib import Path
+from typing import Concatenate
 
-from runner import checks, messages, prompts
+from runner import checks, messages, metrics, prompts
 from runner.claude import (
     CHECK_TOOLS,
     EDIT_TOOLS,
@@ -41,6 +45,8 @@ from runner.gitops import (
 )
 from runner.local_model import (
     OPENCODE_DB,
+    OpencodeRun,
+    TokenTotals,
     empty_cause,
     loaded_context_length,
     run_opencode,
@@ -97,6 +103,14 @@ class Session:
     report: SessionReport
     run_dir: Path
     context_checked: bool = False
+    context_limit: int | None = None  # the context LM Studio loaded, if it said
+    # The metrics database (f1 D2), best effort: None when it couldn't be opened.
+    db: sqlite3.Connection | None = None
+    project_id: int | None = None
+    run_id: int | None = None
+    db_failed: bool = False
+    # Jobs so far per (ticket, role group): the next job's `attempt` and its log's number.
+    job_numbers: dict[tuple[str | None, str], int] = field(default_factory=dict)
 
     @property
     def repo(self) -> Path:
@@ -113,20 +127,194 @@ class Session:
         print(f"[{now():%H:%M:%S}] {message}", flush=True)
 
 
-def open_session(cfg: Config) -> Session:
+def open_session(cfg: Config, command: str | None = "run") -> Session:
+    """A session on a clean main. With a ``command``, it is recorded as a run in the metrics
+    database; a dry run passes None and records nothing."""
     git = Git(cfg.repo)
     if git.current_branch() != MAIN or not git.is_clean():
         raise RunnerError("start the runner on a clean main branch")
     started = now()
     run_dir = cfg.runs_dir / f"{started:%Y%m%d-%H%M%S}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    return Session(
+    s = Session(
         cfg=cfg,
         git=git,
         state=load_state(cfg.runs_dir / "state.json"),
         report=SessionReport(started=started),
         run_dir=run_dir,
     )
+    if command is not None:
+        _start_run(s, command)
+    return s
+
+
+# --- the metrics database (f1 D2, D3): best effort ----------------------------------------
+
+
+def _metrics_failed(s: Session, exc: Exception) -> None:
+    if not s.db_failed:
+        s.db_failed = True
+        s.report.notes.append(
+            f"The metrics database failed ({type(exc).__name__}: {exc}); the run went on"
+            " without the rows it couldn't write. Later failures aren't listed."
+        )
+
+
+def _record[**P, T](
+    s: Session,
+    write: Callable[Concatenate[sqlite3.Connection, P], T],
+    *args: P.args,
+    **kwargs: P.kwargs,
+) -> T | None:
+    """One write to the metrics database. A write that fails is noted once in the session
+    report and never stops the run."""
+    if s.db is None:
+        return None
+    try:
+        return write(s.db, *args, **kwargs)
+    except Exception as exc:
+        _metrics_failed(s, exc)
+        return None
+
+
+def _rel(s: Session, path: Path) -> str:
+    return path.relative_to(s.repo).as_posix()
+
+
+def _start_run(s: Session, command: str) -> None:
+    try:
+        s.db = metrics.open_db(s.cfg.metrics_db)
+    except Exception as exc:
+        _metrics_failed(s, exc)
+        return
+    s.project_id = _record(s, metrics.upsert_project, s.repo.name, repo=str(s.repo))
+    if s.project_id is not None:
+        at = s.report.started.isoformat()
+        s.run_id = _record(
+            s,
+            metrics.upsert_run,
+            s.project_id,
+            s.run_dir.name,
+            command=command,
+            started=at,
+            heartbeat=at,
+        )
+
+
+def _finish_run(s: Session, verdict: str) -> None:
+    if s.run_id is not None and s.project_id is not None:
+        at = now().isoformat()
+        _record(
+            s,
+            metrics.upsert_run,
+            s.project_id,
+            s.run_dir.name,
+            ended=at,
+            heartbeat=at,
+            verdict=verdict,
+        )
+    if s.db is not None:
+        s.db.close()
+        s.db = None
+
+
+def next_number(s: Session, ticket: str | None, group: str) -> int:
+    """The next job number for a ticket (or the milestone, with None) in this session: the
+    `attempt` of its row, and the number that keeps its log apart from an earlier one's."""
+    number = s.job_numbers[(ticket, group)] = s.job_numbers.get((ticket, group), 0) + 1
+    return number
+
+
+def record_start(
+    s: Session,
+    ticket: str | None,
+    milestone: str,
+    role: str,
+    agent: str,
+    *,
+    attempt: int = 1,
+    log_path: str | None = None,
+    context_limit: int | None = None,
+) -> int | None:
+    """Write a job as running (f1 D3) and beat the run's heartbeat; returns the job's id."""
+    if s.run_id is None or s.project_id is None:
+        return None
+    at = now().isoformat()
+    milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
+    ticket_id = _record(s, metrics.upsert_ticket, s.project_id, ticket) if ticket else None
+    _record(s, metrics.update_run_heartbeat, s.run_id, at)
+    return _record(
+        s,
+        metrics.start_job,
+        s.run_id,
+        ticket_id=ticket_id,
+        milestone_id=milestone_id,
+        role=role,
+        agent=agent,
+        attempt=attempt,
+        started=at,
+        context_limit=context_limit,
+        log_path=log_path,
+    )
+
+
+def live_update(s: Session, job_id: int | None, tokens: TokenTotals) -> None:
+    """Every 30 s of an attempt: its tokens and steps so far, and the run's heartbeat."""
+    if job_id is None or s.run_id is None:
+        return
+    _record(
+        s,
+        metrics.update_running_job,
+        job_id,
+        tokens_in=tokens.input,
+        tokens_out=tokens.output + tokens.reasoning,
+        steps=tokens.steps,
+    )
+    _record(s, metrics.update_run_heartbeat, s.run_id, now().isoformat())
+
+
+def _finish_attempt(
+    s: Session,
+    job_id: int | None,
+    run: OpencodeRun,
+    outcome: str,
+    *,
+    gates: list[dict[str, object]] | None = None,
+    note: str | None = None,
+) -> None:
+    if job_id is None or s.run_id is None:
+        return
+    at = now().isoformat()
+    _record(
+        s,
+        metrics.finish_job,
+        job_id,
+        ended=at,
+        outcome=outcome,
+        tokens_in=run.tokens.input,
+        tokens_out=run.tokens.output + run.tokens.reasoning,
+        steps=run.tokens.steps,
+        peak_context=run.tokens.peak,
+        context_limit=s.context_limit,
+        edit_streak=run.facts.edit_streak,
+        refused_commands=run.facts.refused,
+        gates=gates,
+        note=note,
+        session_id=run.facts.session_id or None,
+    )
+    _record(s, metrics.update_run_heartbeat, s.run_id, at)
+
+
+def local_agent(cfg: Config) -> str:
+    """D6: `local-<model>`, the LM Studio key without its publisher."""
+    return "local-" + cfg.lm_model.rsplit("/", 1)[-1]
+
+
+def claude_agent(s: Session, job: ClaudeJob) -> str:
+    """D6: `claude-sonnet` for the checkpoint model's jobs, else the default `claude-opus`."""
+    if job.model and job.model == s.cfg.checkpoint_model:
+        return "claude-sonnet"
+    return "claude-opus"
 
 
 # --- headless Claude, with usage-limit pauses ------------------------------------------
@@ -144,21 +332,33 @@ PARTIAL_WORK_NOTE = (
 )
 
 
-def call_claude(s: Session, job: ClaudeJob, milestone: str, subject: str) -> ClaudeResult:
+def call_claude(
+    s: Session, job: ClaudeJob, milestone: str, subject: str, *, ticket: str | None = None
+) -> ClaudeResult:
     """Run a headless Claude job, waiting out usage limits. Each trigger bounds its own runs
     (ADR 12 item 10); the count per milestone is kept for the metrics.
 
     A job stopped mid-way by a limit resumes its session after the reset (f1: lead tickets
     cost 0.5-1.5M, so a limit will land inside one); if the session can't be resumed, it
-    starts again, told that its partial work is in the tree."""
+    starts again, told that its partial work is in the tree.
+
+    Each job is a row in the metrics database, with ``ticket`` (None for a milestone-wide
+    job), and has its own logs: a second escalation of a ticket doesn't overwrite the first's."""
     attempt = unsure = 0
     resume: str | None = None
     interrupted = False
+    number = next_number(s, ticket, job.kind)
+    agent = claude_agent(s, job)
+    base = f"claude-{job.kind}-{subject}" + (f"-{number}" if number > 1 else "")
+    log = s.run_dir / f"{base}.log"
+    job_id = record_start(
+        s, ticket, milestone, job.kind, agent, attempt=number, log_path=_rel(s, log)
+    )
     while True:
         prompt = (
             RESUME_PROMPT if resume else job.prompt + (PARTIAL_WORK_NOTE if interrupted else "")
         )
-        log = s.run_dir / f"claude-{job.kind}-{subject}{f'-{attempt + 1}' if attempt else ''}.log"
+        log = s.run_dir / f"{base}{f'-retry{attempt}' if attempt else ''}.log"
         try:
             result = run_claude(
                 replace(job, prompt=prompt), s.repo, s.cfg.claude_timeout, log, now(), resume=resume
@@ -173,6 +373,14 @@ def call_claude(s: Session, job: ClaudeJob, milestone: str, subject: str) -> Cla
                     )
                     result = ClaudeResult(ok=False, text=str(limit), duration_s=0.0)
                     break
+            _record(
+                s,
+                metrics.add_usage_event,
+                agent,
+                now().isoformat(),
+                "refusal",
+                resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
+            )
             wait = (
                 max(60.0, (limit.resets_at - now()).total_seconds() + 60)
                 if limit.resets_at
@@ -197,6 +405,20 @@ def call_claude(s: Session, job: ClaudeJob, milestone: str, subject: str) -> Cla
     s.state.paused_until = None
     s.state.count_run(milestone)
     save_state(s.state, s.state_path)
+    if job_id is not None:
+        _record(
+            s,
+            metrics.finish_job,
+            job_id,
+            ended=now().isoformat(),
+            outcome="passed" if result.ok else "failed",
+            tokens_in=result.usage.get("input_tokens", 0),
+            tokens_cached=result.usage.get("cache_read_input_tokens", 0),
+            tokens_out=result.usage.get("output_tokens", 0),
+            cost_usd=result.cost_usd,
+            session_id=result.session_id,
+            log_path=_rel(s, log),
+        )
     s.report.claude_runs.append(
         ClaudeRunRecord(
             kind=job.kind,
@@ -219,7 +441,7 @@ def _check_context(s: Session) -> None:
     if s.context_checked:
         return
     s.context_checked = True
-    loaded = loaded_context_length(s.cfg.lm_base_url, s.cfg.lm_model)
+    loaded = s.context_limit = loaded_context_length(s.cfg.lm_base_url, s.cfg.lm_model)
     if loaded:
         s.report.notes.append(f"LM Studio loaded the model with {loaded:,} tokens of context.")
 
@@ -296,7 +518,7 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
         ),
         allowed_tools=(*READ_TOOLS, *GIT_READ_TOOLS, "Edit(var/runs/**)"),
     )
-    call_claude(s, job, task.milestone, task.id)
+    call_claude(s, job, task.milestone, task.id, ticket=task.id)
     direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
     direction = (
         direction_file.read_text(encoding="utf-8").strip() if direction_file.is_file() else ""
@@ -386,13 +608,25 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             s.git.fresh_branch(branch, MAIN)
         rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
         _check_context(s)
+        log = logs / f"opencode-{attempt}.jsonl"
+        job_id = record_start(
+            s,
+            task.id,
+            task.milestone,
+            "last-attempt" if direction else "developer",
+            local_agent(s.cfg),
+            attempt=next_number(s, task.id, "local"),
+            log_path=_rel(s, log),
+            context_limit=s.context_limit,
+        )
         run = run_opencode(
             s.repo,
             s.cfg.opencode_model,
             f"{task.id} attempt {attempt}",
             _prompt(task, attempt, last, bool(timeouts and timeouts[-1]), direction),
             s.cfg.opencode_timeout,
-            logs / f"opencode-{attempt}.jsonl",
+            log,
+            on_progress=partial(live_update, s, job_id),
         )
         rec.model_s += run.duration_s
         rec.tokens_in += run.tokens.input
@@ -410,6 +644,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             if category == "unrelated-problem":
                 s.report.notes.append(f"{task.id} reported an unrelated problem (see logs).")
             else:
+                _finish_attempt(s, job_id, run, "failed", note=f"BLOCKED: {category}")
                 rec.blocked = category
                 rec.result = "blocked"
                 local_wip_commit(s, f"wip {task.id} attempt {attempt} (blocked)")
@@ -430,11 +665,27 @@ def run_task(s: Session, task: Task) -> TaskRecord:
                 )
             ]
         rec.gates_s += time.monotonic() - started
-        (logs / f"gates-{attempt}.txt").write_text(
+        gates_log = logs / f"gates-{attempt}.txt"
+        gates_log.write_text(
             "\n\n".join(f"## {r.name}: {'ok' if r.ok else 'FAIL'}\n{r.output}" for r in results),
             encoding="utf-8",
         )
         failed = next((r for r in results if not r.ok), None)
+        _finish_attempt(
+            s,
+            job_id,
+            run,
+            "passed" if failed is None else "timeout" if run.timed_out else "failed",
+            gates=[
+                {
+                    "name": r.name,
+                    "ok": r.ok,
+                    "seconds": round(r.seconds, 1),
+                    "log": _rel(s, gates_log),
+                }
+                for r in results
+            ],
+        )
         if failed is None:
             _merge(s, task, rec)
             return rec
@@ -530,7 +781,7 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
             *(f"Bash({command}:*)" for command in task.commands),
         ),
     )
-    call_claude(s, job, task.milestone, task.id)
+    call_claude(s, job, task.milestone, task.id, ticket=task.id)
     if not s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT)):
         s.git.checkout(MAIN)
         rec.result = "stopped"
@@ -627,7 +878,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         ),
         allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
     )
-    call_claude(s, job, task.milestone, task.id)
+    call_claude(s, job, task.milestone, task.id, ticket=task.id)
     decision_path = logs / "decision.json"
     try:
         decision = json.loads(decision_path.read_text(encoding="utf-8"))
@@ -721,7 +972,7 @@ def work_queue(
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
-    s = open_session(cfg)
+    s = open_session(cfg, None if dry_run else "run")
     if dry_run:
         ready = load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
         done = task_ids(s.tasks_dir("done"))
@@ -737,6 +988,7 @@ def close_session(s: Session) -> SessionReport:
 
     s.report.ended = now()
     if not s.report.tasks and not s.report.claude_runs:
+        _finish_run(s, "nothing to do")
         s.log("Nothing to do.")
         return s.report
     claude = claude_tokens(transcripts_dir(s.repo), s.report.started, s.report.ended)
@@ -749,6 +1001,8 @@ def close_session(s: Session) -> SessionReport:
             allowed_tools=EDIT_TOOLS,
         )
         call_claude(s, job, milestone, "session")
+    merged = sum(t.result == "done" for t in s.report.tasks)
+    _finish_run(s, f"{merged} merged, {len(s.report.tasks) - merged} not")
     runner_commit(s, messages.session_message(s.report, path.relative_to(s.repo).as_posix()))
     s.log(f"Session report: {path.relative_to(s.repo)}")
     return s.report

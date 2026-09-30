@@ -6,9 +6,10 @@ import os
 import signal
 import sqlite3
 import subprocess
+import tempfile
 import time
 import urllib.request
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -20,6 +21,7 @@ class TokenTotals:
     output: int = 0
     reasoning: int = 0
     steps: int = 0
+    peak: int = 0  # the largest context one step sent, cached input included
 
 
 @dataclass(frozen=True)
@@ -46,23 +48,19 @@ class OpencodeRun:
 
 def parse_events(lines: Iterable[str]) -> TokenTotals:
     """Sum token usage over OpenCode's ``--format json`` step_finish events."""
-    inp = out = reasoning = steps = 0
-    for line in lines:
-        line = line.strip()
-        if not line.startswith("{"):
-            continue
-        try:
-            event = json.loads(line)
-        except json.JSONDecodeError:
-            continue
+    inp = out = reasoning = steps = peak = 0
+    for event in _events(lines):
         if event.get("type") != "step_finish":
             continue
         tokens = (event.get("part") or {}).get("tokens") or {}
-        inp += int(tokens.get("input", 0))
+        cache = tokens.get("cache") or {}
+        step_in = int(tokens.get("input", 0))
+        inp += step_in
         out += int(tokens.get("output", 0))
         reasoning += int(tokens.get("reasoning", 0))
         steps += 1
-    return TokenTotals(input=inp, output=out, reasoning=reasoning, steps=steps)
+        peak = max(peak, step_in + int(cache.get("read", 0)) + int(cache.get("write", 0)))
+    return TokenTotals(input=inp, output=out, reasoning=reasoning, steps=steps, peak=peak)
 
 
 EDIT_TOOLS = ("edit", "write", "patch", "multiedit")
@@ -161,42 +159,80 @@ def loaded_context_length(base_url: str, model: str) -> int | None:
     return int(value) if value else None
 
 
-def run_killing_group(cmd: list[str], cwd: Path, timeout: int) -> tuple[str, str, int | None]:
-    """Run ``cmd`` in its own process group; on timeout kill the whole group.
+LIVE_EVERY = 30.0  # seconds between live updates while an attempt runs (f1 D3)
+
+
+def run_streaming(
+    cmd: list[str],
+    cwd: Path,
+    timeout: float,
+    out_path: Path,
+    on_tick: Callable[[], None] | None = None,
+    every: float = LIVE_EVERY,
+    clock: Callable[[], float] = time.monotonic,
+) -> tuple[str, int | None]:
+    """Run ``cmd`` in its own process group, its stdout written straight into ``out_path``
+    as it comes, calling ``on_tick`` every ``every`` seconds; on timeout kill the whole group.
 
     OpenCode starts shell commands of its own (pytest, ruff…). Killing only OpenCode would
-    leave a hung child running after the attempt. Returns (stdout, stderr, exit code or None).
+    leave a hung child running after the attempt. Returns (stderr, exit code or None).
     """
-    proc = subprocess.Popen(
-        cmd,
-        cwd=cwd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        start_new_session=True,
-    )
-    try:
-        stdout, stderr = proc.communicate(timeout=timeout)
-        return stdout, stderr, proc.returncode
-    except subprocess.TimeoutExpired:
-        with contextlib.suppress(ProcessLookupError):
-            os.killpg(proc.pid, signal.SIGKILL)
-        stdout, stderr = proc.communicate()
-        return stdout or "", stderr or "", None
+    with out_path.open("w", encoding="utf-8") as out, tempfile.TemporaryFile("w+") as err:
+        proc = subprocess.Popen(
+            cmd, cwd=cwd, stdout=out, stderr=err, text=True, start_new_session=True
+        )
+        deadline = clock() + timeout
+        next_tick = clock() + every
+        code: int | None = None
+        while True:
+            try:
+                code = proc.wait(timeout=max(0.05, min(next_tick, deadline) - clock()))
+                break
+            except subprocess.TimeoutExpired:
+                pass
+            if clock() >= deadline:
+                with contextlib.suppress(ProcessLookupError):
+                    os.killpg(proc.pid, signal.SIGKILL)
+                proc.wait()
+                break
+            if on_tick is not None and clock() >= next_tick:
+                on_tick()
+                next_tick = clock() + every
+        err.seek(0)
+        return err.read(), code
 
 
 def run_opencode(
-    repo: Path, model: str, title: str, prompt: str, timeout: int, log_path: Path
+    repo: Path,
+    model: str,
+    title: str,
+    prompt: str,
+    timeout: int,
+    log_path: Path,
+    on_progress: Callable[[TokenTotals], None] | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> OpencodeRun:
+    """One attempt. Its stream goes into ``log_path`` line by line; every ``LIVE_EVERY``
+    seconds ``on_progress`` gets the tokens so far (f1 D3)."""
     cmd = ["opencode", "run", "--format", "json", "-m", model, "--title", title, prompt]
     started = time.monotonic()
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    stdout, stderr, exit_code = run_killing_group(cmd, repo, timeout)
+
+    def read() -> list[str]:
+        return log_path.read_text(encoding="utf-8", errors="replace").splitlines()
+
+    def tick() -> None:
+        if on_progress is not None:
+            on_progress(parse_events(read()))
+
+    stderr, exit_code = run_streaming(cmd, repo, timeout, log_path, tick, clock=clock)
+    lines = read()
     marker = "\n--- timed out ---\n" if exit_code is None else "\n--- stderr ---\n" + stderr
-    log_path.write_text(stdout + marker, encoding="utf-8")
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write(marker)
     return OpencodeRun(
         exit_code=exit_code,
         duration_s=time.monotonic() - started,
-        tokens=parse_events(stdout.splitlines()),
-        facts=stream_facts(stdout.splitlines()),
+        tokens=parse_events(lines),
+        facts=stream_facts(lines),
     )

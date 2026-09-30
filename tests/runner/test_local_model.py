@@ -1,3 +1,4 @@
+import itertools
 import json
 import sqlite3
 
@@ -28,7 +29,15 @@ def test_parse_events_sums_steps_and_ignores_noise():
         '{"broken',
         _step(8000, 200),
     ]
-    assert parse_events(lines) == TokenTotals(input=14417, output=204, reasoning=12, steps=2)
+    assert parse_events(lines) == TokenTotals(
+        input=14417, output=204, reasoning=12, steps=2, peak=8000
+    )
+
+
+def test_the_peak_context_counts_cached_input():
+    cached = {"input": 100, "output": 5, "cache": {"read": 9000, "write": 400}}
+    step = json.dumps({"type": "step_finish", "part": {"tokens": cached}})
+    assert parse_events([_step(8000, 1), step]).peak == 9500
 
 
 def test_a_timeout_kills_the_whole_process_group(tmp_path):
@@ -36,12 +45,12 @@ def test_a_timeout_kills_the_whole_process_group(tmp_path):
     import os
     import time
 
-    from runner.local_model import run_killing_group
+    from runner.local_model import run_streaming
 
     pidfile = tmp_path / "child.pid"
     script = f"sleep 60 & echo $! > {pidfile}; wait"
     started = time.monotonic()
-    *_, code = run_killing_group(["sh", "-c", script], tmp_path, timeout=1)
+    _, code = run_streaming(["sh", "-c", script], tmp_path, 1, tmp_path / "out.log")
     assert code is None and time.monotonic() - started < 10
     child = int(pidfile.read_text())
     time.sleep(0.2)
@@ -53,14 +62,45 @@ def test_a_timeout_kills_the_whole_process_group(tmp_path):
     assert not alive, "the grandchild survived"
 
 
-def test_a_normal_run_returns_output_and_exit_code(tmp_path):
-    from runner.local_model import run_killing_group
+def test_a_normal_run_streams_its_output_to_the_log(tmp_path):
+    from runner.local_model import run_streaming
 
-    assert run_killing_group(["sh", "-c", "echo hi; exit 3"], tmp_path, timeout=5) == (
-        "hi\n",
-        "",
-        3,
+    out = tmp_path / "out.log"
+    cmd = ["sh", "-c", "echo hi; echo oops >&2; exit 3"]
+    assert run_streaming(cmd, tmp_path, 5, out) == ("oops\n", 3)
+    assert out.read_text() == "hi\n"
+
+
+def _fake_opencode(tmp_path, monkeypatch, body: str) -> None:
+    """An `opencode` on PATH that prints ``body``'s lines, a short pause between them."""
+    import os
+
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    script = bin_dir / "opencode"
+    lines = "".join(f"echo '{line}'\nsleep 0.2\n" for line in body.splitlines())
+    script.write_text("#!/bin/sh\n" + lines)
+    script.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+
+
+def test_opencode_reports_progress_as_it_runs(tmp_path, monkeypatch):
+    """f1 D3: the stream is read as it comes, and every interval the caller sees the tokens
+    so far. The clock is a parameter, so the test doesn't wait 30 s."""
+    from runner.local_model import run_opencode
+
+    _fake_opencode(tmp_path, monkeypatch, "\n".join([_step(100, 1), _step(200, 2), _tool("edit")]))
+    ticks = itertools.count(0, 40)  # every read of the clock is 40 s later
+    seen: list[TokenTotals] = []
+    log = tmp_path / "logs" / "opencode-1.jsonl"
+    run = run_opencode(
+        tmp_path, "m", "t", "p", 10**9, log, on_progress=seen.append, clock=lambda: next(ticks)
     )
+    assert seen and all(t.input <= 300 for t in seen)
+    assert seen[-1].steps >= 1
+    assert (run.tokens.input, run.tokens.steps, run.facts.edits) == (300, 2, 1)
+    assert log.read_text().startswith(_step(100, 1) + "\n")
+    assert run.exit_code == 0
 
 
 def _tool(tool: str, status: str = "completed") -> str:

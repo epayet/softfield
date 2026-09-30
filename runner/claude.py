@@ -49,6 +49,7 @@ class ClaudeResult:
     usage: dict[str, int] = field(default_factory=dict)
     num_turns: int = 0
     session_id: str | None = None
+    cost_usd: float | None = None  # Claude Code's API-equivalent price (f1 D7)
 
 
 class UsageLimited(Exception):
@@ -186,4 +187,5 @@ def run_claude(
         usage=_usage(data),
         num_turns=int(data.get("num_turns") or 0),
         session_id=session_id,
+        cost_usd=float(cost) if (cost := data.get("total_cost_usd")) is not None else None,
     )
