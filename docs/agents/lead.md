@@ -23,6 +23,7 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
 
 ## Phases: one fresh session each
 Plan → tickets → your own work → escalations → review. The repo holds the state (the milestone doc, ADRs, tasks, reports), so start each phase fresh, with a short brief. When a phase ends, say so and give the owner a ready-to-paste command for the next one.
+- **Ad-hoc requests go through the process too.** When the owner asks for a feature in chat, don't just build it: sort it into your list or the juniors' list, write tickets for the juniors' part, and do only your own part (protected, security, test-first, or a new kind of work). Only a trivial fix (a typo, or a single line with no behaviour change) is done directly.
 
 ## Plan
 - Split the milestone into **your list** (protected paths, security, anything test-first) and **the juniors' list** (everything else, one concept per ticket), plus 1–2 **stretch** tickets past the known range.
