@@ -7,11 +7,11 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from runner import checks, copilot, i18n, owner
+from runner import backfill, checks, copilot, i18n, metrics, owner
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
-from runner.loop import RunnerError, run_session
+from runner.loop import RunnerError, local_agent, run_session
 from runner.milestone import (
     RESTART,
     milestone_metrics,
@@ -75,6 +75,10 @@ def main(argv: list[str] | None = None) -> int:
     copilot_review.add_argument("--copilot-help", action="store_true", help="copilot --help")
     github_get = sub.add_parser("github-get", help="a GET on GitHub's API, e.g. /user")
     github_get.add_argument("path")
+    backfill_cmd = sub.add_parser(
+        "backfill", help="load past milestones into the metrics database from their logs"
+    )
+    backfill_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     args = parser.parse_args(argv)
 
     repo = _repo()
@@ -150,6 +154,13 @@ def main(argv: list[str] | None = None) -> int:
             proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
             print(proc.stdout + proc.stderr, end="")
             return proc.returncode
+        elif args.command == "backfill":
+            conn = metrics.open_db(args.db or cfg.metrics_db)
+            try:
+                summary = backfill.backfill(conn, repo, cfg.runs_dir, local_agent=local_agent(cfg))
+            finally:
+                conn.close()
+            print(backfill.render(summary), end="")
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")

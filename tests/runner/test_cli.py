@@ -50,6 +50,19 @@ def test_a_bad_milestone_name_is_an_error(in_repo, capsys):
     assert "milestone" in capsys.readouterr().err
 
 
+def test_backfill_writes_to_the_db_given(in_repo, tmp_path, capsys):
+    db = tmp_path / "elsewhere.sqlite"
+    assert cli.main(["backfill", "--db", str(db)]) == 0
+    assert db.is_file()
+    assert not (in_repo / "var" / "factory-metrics.sqlite").exists()
+    assert "Written" in capsys.readouterr().out
+
+
+def test_backfill_defaults_to_the_configured_db(in_repo):
+    assert cli.main(["backfill"]) == 0
+    assert (in_repo / "var" / "factory-metrics.sqlite").is_file()
+
+
 def _fake_subprocess(monkeypatch) -> list[list[str]]:
     import subprocess
 
