@@ -17,6 +17,9 @@ TEST_DIRS = ("tests/unit", "tests/integration", "tests/runner", "tests/browser")
 # Commits that touch only these skip the hook: they can't break a check.
 HOOK_SKIPS = ("docs/", "tasks/")
 _OUTPUT_LIMIT = 4000
+# Set by git for hooks; a test's git subprocess would inherit them and write into the
+# commit being made (it did once: `commit -a` failed on a test fixture's file).
+GIT_HOOK_ENV = ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY")
 
 
 @dataclass(frozen=True)

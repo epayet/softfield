@@ -3,4 +3,8 @@
 # translations, layout and the full suite. Commits that only touch docs/ or tasks/ skip it;
 # the runner's own commits use --no-verify, since they're gated their own way.
 # Installed with: git config core.hooksPath workflow/hooks
+#
+# Git runs hooks with GIT_INDEX_FILE and friends set. Clear them, or the runner tests' git
+# commands in their temporary repos write into this commit's index.
+unset GIT_INDEX_FILE GIT_DIR GIT_WORK_TREE GIT_PREFIX GIT_OBJECT_DIRECTORY
 exec uv run runner check-all --hook

@@ -111,6 +111,8 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "check-all":
             if args.hook and checks.hook_can_skip(Git(repo).staged_files()):
                 return 0
+            for name in checks.GIT_HOOK_ENV:  # never let tests' git reach this repo's index
+                os.environ.pop(name, None)
             results = checks.check_all(repo, cfg.gate_timeout, task_id=args.task, fix=args.fix)
             print(checks.render(results), end="")
             return 0 if all(r.ok for r in results) else 1

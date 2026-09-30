@@ -44,6 +44,20 @@ def git(repo: Path, *args: str) -> str:
     ).stdout
 
 
+@pytest.fixture(autouse=True)
+def _no_outer_git(monkeypatch):
+    """Run from a git hook, GIT_INDEX_FILE and friends point at the real repo; the temporary
+    repos here must never inherit them."""
+    for name in (
+        "GIT_INDEX_FILE",
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_PREFIX",
+        "GIT_OBJECT_DIRECTORY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A tiny git repo shaped like coucou, on main, with one commit."""
