@@ -12,9 +12,10 @@ It's just folders of Markdown task files, with no database or server:
 tasks/ready/      waiting to run
 tasks/done/       merged, with a result footer the runner appends
 tasks/escalated/  the local model failed 3 times, or pre-flight failed; waiting for the frontier
+tasks/blocked/    past its limits, or waiting for the owner; the verdict names it
 ```
 
-`uv run runner run` loops over it:
+The owner starts a whole milestone with `uv run runner milestone N` ([ADR 12](adr/12-junior-feedback-and-checkpoints.md)): it works through the queue, runs the review, and ends with a verdict, either ready for sign-off or exactly what needs the owner. Underneath, it loops over the queue:
 
 1. **Pick** the lowest id in `ready/` whose `depends_on` tasks are all in `done/`.
 2. **Branch** `task/<id>` from main.
@@ -34,12 +35,15 @@ tasks/escalated/  the local model failed 3 times, or pre-flight failed; waiting 
    - the tests the task added or changed fail against main's code, so they really test the change
 6. **Pass:** squash-merge into main and move the spec to `done/`. **Fail:**
    - attempt 2 continues on the same branch, with a one-line hint and the gate output at the end of the prompt;
-   - attempt 3 starts from a fresh branch;
+   - before attempt 3, unless the failures were mechanical, the lead reads the work and the junior's thinking and writes a short direction (no code);
+   - attempt 3 starts from a fresh branch, with that direction last;
    - after 3 failures, the spec moves to `escalated/`.
-7. **Escalation:** the headless frontier model, capped per milestone. It repairs or splits the spec, adds missing facts, does the task itself, or drafts an ADR for the owner. The runner commits its changes and moves the file.
+
+   Every two junior merges, a short **checkpoint** review looks at what just merged and steers the next tickets. The lead's own tickets (`agent: lead`) run in the same queue, done headlessly and merged only when every check passes.
+7. **Escalation:** the headless frontier model, at most twice per task. It repairs or splits the spec, adds missing facts, does the task itself, or drafts an ADR for the owner. Its code must pass every check, or it stays on a branch. The runner commits its changes and moves the file.
 8. **Session report:** written to `docs/sessions/` at the end.
 
-After a milestone's tasks are done, `uv run runner review --milestone N` runs the staging end-to-end tests and a headless review. Blocking and should-fix findings become fix tasks or direct fixes, and nits go to the backlog. The loop stops on the rules in `workflow.md`.
+After a milestone's tasks are done, the review loop (`uv run runner review --milestone N` on its own) runs the staging end-to-end tests and a headless review. Blocking and should-fix findings become fix tasks or direct fixes, and nits go to the backlog. The loop stops on the rules in `workflow.md`.
 
 Everything is plain git and files, so a bad run is easy to inspect (logs go in `var/runs/`) or undo.
 

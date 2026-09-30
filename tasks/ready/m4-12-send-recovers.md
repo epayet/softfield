@@ -26,5 +26,4 @@ Read `coucou/static/coucou/js/compose.js` (`handleSubmit`) and `tests/browser/te
 - the message "Couldn't read that photo. Choose it again." shows
 - choosing the photo again (with reading working) and pressing Send posts exactly one event
 - the listed `tests:` pass, and fail without the change
-- the full unit + integration suite passes
-- all gates pass (see `docs/workflow.md`); run `uv run ruff format tests/browser/test_compose.py` last
+- all gates pass (see `docs/workflow.md`)

@@ -1,6 +1,6 @@
 # Task format
 
-Tasks ("tickets") are Markdown files with YAML frontmatter in `tasks/ready/`. The lead writes them; the runner moves them to `done/` or `escalated/`. The file name is `<id>.md`. Why they look like this: [ADR 07](adr/07-spend-less-frontier.md).
+Tasks ("tickets") are Markdown files with YAML frontmatter in `tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner; see the verdict). The file name is `<id>.md`. Why they look like this: [ADR 07](adr/07-spend-less-frontier.md).
 
 ## Frontmatter
 
@@ -15,6 +15,7 @@ files:                              # where to work (a pointer, not a limit); ma
 tests:                              # the tests that define done; the junior writes or extends them
   - tests/integration/test_compose_page.py
 finding: m4-F2                      # optional: the review finding this fixes
+agent: lead                         # optional: `lead` for the lead's own tickets (default `junior`)
 ---
 ```
 
@@ -33,8 +34,9 @@ The runner's pre-flight checks that every backticked path exists (or is listed i
 ### Done when (required)
 Acceptance criteria as bullets: what a user or a caller sees, including the edges. The junior turns each into a test. Then the standing ones:
 - the listed `tests:` pass, and fail without the change
-- the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+The prompt already ends with `uv run runner check-all --fix --task <id>`, which runs every check; don't repeat finish commands in the ticket.
 
 ### Pattern to follow, Steps (optional)
 Only when a ticket really needs them: a pattern with no entry in `docs/agents/junior.md`, or a trap the junior would fall into.

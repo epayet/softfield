@@ -43,7 +43,7 @@ M4 was the first milestone run the ADR 07 way (tickets, not solutions; juniors w
    - **When:** before attempt 3 (`max_attempts = 3`), only if the failure isn't mechanical: a timeout, the task's tests, `layout`, `protected-paths`, the same gate failing twice, or an empty attempt twice. When ruff, format or i18n is the only failure, the gate output is enough.
    - **What it does:** a short headless job reads the gate logs, the last diff and the junior's thinking (OpenCode's `opencode.db`, `part` rows of type `reasoning`, read-only). It writes a direction of a few lines: what went wrong and the facts the junior is missing, **no code** (ADR 07). It replaces the canned hint. If the ticket itself is wrong, it repairs the ticket instead.
    - At most one per ticket.
-7. **Loops are logged, not stopped.** The runner counts steps that edit without running a command (from OpenCode's JSON stream) and puts the longest streak in the direction and checkpoint prompts. Stopping an attempt on it waits until M5 shows the problem recurring.
+7. **Loops are logged, not stopped.** The runner counts steps that edit without running a command (from OpenCode's JSON stream) and puts the longest streak in the direction prompt and the session report. Stopping an attempt on it waits until M5 shows the problem recurring.
 
 ### C. The runner, across tickets
 8. ⚑ **A checkpoint every 2 merges** (replaces this ADR's draft "checkpoint tickets" and "plan depth ≤ 3").

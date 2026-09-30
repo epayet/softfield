@@ -24,12 +24,16 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
 - Workflow rules, gates, caps, the task format and AGENTS.md change only with an Accepted ADR. Runner bug fixes that don't change behaviour are fine, and so are the notes in `docs/agents/junior.md` (within their budget).
 - Don't install system packages or services, or enable systemd units, without asking.
 
-## Phases: one fresh session each
-Plan → tickets → your own work → escalations → review. The repo holds the state (the milestone doc, ADRs, tasks, reports), so start each phase fresh, with a short brief. When a phase ends, say so and give the owner a ready-to-paste command for the next one.
+## Phases: plan, then one command
+Plan (with the owner) → `uv run runner milestone N` (unattended) → sign-off ([ADR 12](../adr/12-junior-feedback-and-checkpoints.md); [`docs/workflow.md`](../workflow.md) §Running a milestone). The repo holds the state (the milestone doc, ADRs, tasks, reports), so each interactive session starts fresh, with a short brief.
+- **The plan session ends with "go"** and the exact command for the owner: `uv run runner milestone N`. Never run or watch the runner from an interactive session: every turn re-reads the whole context (≈10M of M4's ≈18M).
+- **The owner prefers runs that need no oversight** over the cheapest session pattern: two touchpoints per milestone (plan, sign-off), plus a decision when the verdict says `⚠ NEEDS YOU`.
+- Between milestones, the owner may open a short session for an ADR or a deeper look; give them a ready-to-paste command when a phase ends.
 - **Ad-hoc requests go through the process too.** When the owner asks for a feature in chat, don't just build it: sort it into your list or the juniors' list, write tickets for the juniors' part, and do only your own part (protected, security, test-first, or a new kind of work). Only a trivial fix (a typo, or a single line with no behaviour change) is done directly.
 
 ## Plan
 - Split the milestone into **your list** (protected paths, security, anything test-first) and **the juniors' list** (everything else, one concept per ticket), plus 1–2 **stretch** tickets past the known range.
+- **Your list is tickets too** (`agent: lead`, [`docs/task-format.md`](../task-format.md)), in the same queue with the same `depends_on`: the runner does them headlessly, test-first, and merges them only if `check-all` passes. Write them precisely enough for a fresh session with no memory of the plan.
 - **Decide the joints, not the insides.** Ask: "If the junior chose differently, would another ticket, the security model or stored data break?" If yes, decide it now and write it in a short "Decisions" section of `docs/milestones/mN.md`: API shapes, data fields, module functions, which file owns what, which example to follow. If no, leave it to the junior. A long list means an architecture change, which goes to an ADR.
 - Check the decisions against `docs/architecture.md`, `docs/security.md` and the Accepted ADRs.
 - **Trim protection where it's too broad.** If a protected file mixes security with UI (like `display.js`), plan the split so the UI part can go to juniors.
@@ -56,10 +60,10 @@ What juniors pass at the first attempt, from results. Update it at each mileston
 ## Your own work
 - Everything in `workflow/protected-paths.txt`, test-first. Keep that list current as security-relevant files appear; it's protected itself.
 - Changes to protected paths get isolation tests in the same commit.
-- Run ruff, mypy and the full suite before **every** commit to `main`, not only at the end: juniors' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did).
+- Every commit goes through the pre-commit hook, `uv run runner check-all` (`git config core.hooksPath workflow/hooks`; docs- and tasks-only commits skip it). Juniors' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did). Never pipe a check through `| tail`: it hides the exit code.
 
 ## Escalations (headless or interactive)
-- Read the task, `BLOCKED.md` or the gate logs, and the last diff in `var/runs/<run>/<task>/`.
+- Read the task, `BLOCKED.md` or the gate logs, the last diff and **the junior's thinking** (`thinking-N.md`) in `var/runs/<run>/<task>/`. The thinking shows why an attempt failed where the gate logs don't (m4-06). At checkpoints and reviews, read the code; read the thinking only when a finding needs explaining.
 - Choose one: repair or split the ticket (add facts, not a solution), answer the question in its Context, or do it yourself (hard or protected). Return the task to `ready/` or `done/`.
 - Turn the lesson into a check, a worked example or a `junior.md` note, in that order of preference.
 - Only for what "The owner" reserves: draft an ADR and stop.
@@ -70,7 +74,7 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
 - Check the French in `coucou/locale/fr/` reads naturally and warmly.
 - Take screenshots of new screens when you have a browser; the layout check covers the rest.
 - A finding that recurs becomes a check where it can.
-- Respect the stop rules and the headless cap in `workflow/runner.toml`.
+- Respect the stop rules and the per-trigger limits in `workflow/runner.toml`.
 - Add the milestone's entry to [ADR 02](../adr/02-software-factory.md)'s learnings log, and update "Known range" above.
 
 ## Sign-off sheet
