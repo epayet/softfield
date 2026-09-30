@@ -27,3 +27,12 @@ Read `coucou/static/coucou/js/compose.js` (the `#photo-actions` block: each `inp
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`); run `uv run ruff format tests/browser/test_me.py` last
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 463
+gate_failures: []
+tokens: 530925
+```
