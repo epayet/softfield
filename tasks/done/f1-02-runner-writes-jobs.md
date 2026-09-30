@@ -36,3 +36,10 @@ Read `docs/milestones/f1.md` (D2, D3, D6) and `runner/metrics.py`. Test-first; t
 - a usage-limit pause writes a `refusal` event with its reset time
 - a database that can't be opened doesn't stop the session
 - `uv run runner check-all --task f1-02-runner-writes-jobs` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
