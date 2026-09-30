@@ -25,3 +25,12 @@ A 280-character note (the longest a person can now send) fits the display withou
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2922
+gate_failures: ['layout']
+tokens: 8607978
+```
