@@ -241,6 +241,19 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
     metrics.finish_job(conn, claude, ended=_at(timedelta(minutes=50)), outcome="passed", **tokens)
 
 
+def write_milestones(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: a milestone with no tickets yet (f2)."""
+    project = metrics.upsert_project(conn, PROJECT)
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f2",
+        title="The factory reviews itself",
+        status="in progress",
+        started=_at(timedelta(days=1)),
+    )
+
+
 def write_jobs(conn: sqlite3.Connection) -> None:
     """Jobs with gates, for the jobs page. Not in write_fixture so the overview tests stay
     pinned."""
@@ -516,3 +529,18 @@ def db(db_path: Path) -> Iterator[sqlite3.Connection]:
         yield conn
     finally:
         conn.close()
+
+
+@pytest.fixture
+def milestones_client(db_path: Path) -> TestClient:
+    """A client for the dashboard over the fixture with ``write_milestones``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_milestones(conn)
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")

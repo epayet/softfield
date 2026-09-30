@@ -49,6 +49,86 @@
       };
     },
 
+    // First-attempt pass rate per milestone: {labels: [...], rate: [...]}.
+    "milestone-rate"(data, c) {
+      return {
+        grid: { left: 48, right: 12, top: 16, bottom: 24 },
+        tooltip: { trigger: "axis", valueFormatter: (v) => v == null ? "–" : v + "%" },
+        xAxis: {
+          type: "category", data: data.labels,
+          axisLine: { lineStyle: { color: c.rule } }, axisLabel: { color: c.ink },
+        },
+        yAxis: {
+          type: "value", axisLabel: { color: c.muted, formatter: (v) => v + "%" },
+          splitLine: { lineStyle: { color: c.grid } },
+        },
+        series: [{
+          name: "Rate", type: "bar", data: data.rate, barMaxWidth: 36,
+          itemStyle: { color: c.series[2], borderRadius: [3, 3, 0, 0] },
+        }],
+      };
+    },
+
+    // Escalations per milestone: {labels: [...], count: [...]}.
+    "milestone-esc"(data, c) {
+      return {
+        grid: { left: 48, right: 12, top: 16, bottom: 24 },
+        tooltip: { trigger: "axis", valueFormatter: (v) => v },
+        xAxis: {
+          type: "category", data: data.labels,
+          axisLine: { lineStyle: { color: c.rule } }, axisLabel: { color: c.ink },
+        },
+        yAxis: {
+          type: "value", axisLabel: { color: c.muted },
+          splitLine: { lineStyle: { color: c.grid } },
+        },
+        series: [{
+          name: "Escalations", type: "bar", data: data.count, barMaxWidth: 36,
+          itemStyle: { color: c.series[1], borderRadius: [3, 3, 0, 0] },
+        }],
+      };
+    },
+
+    // Claude dollars per merged ticket: {labels: [...], dollars: [...]}.
+    "milestone-dollars"(data, c) {
+      return {
+        grid: { left: 48, right: 12, top: 16, bottom: 24 },
+        tooltip: { trigger: "axis", valueFormatter: (v) => v == null ? "–" : dollars(v) },
+        xAxis: {
+          type: "category", data: data.labels,
+          axisLine: { lineStyle: { color: c.rule } }, axisLabel: { color: c.ink },
+        },
+        yAxis: {
+          type: "value", axisLabel: { color: c.muted, formatter: (v) => `$${v}` },
+          splitLine: { lineStyle: { color: c.grid } },
+        },
+        series: [{
+          name: "$/ticket", type: "bar", data: data.dollars, barMaxWidth: 36,
+          itemStyle: { color: c.series[0], borderRadius: [3, 3, 0, 0] },
+        }],
+      };
+    },
+
+    // Net savings per milestone: {labels: [...], savings: [...]}.
+    "milestone-savings"(data, c) {
+      return {
+        grid: { left: 48, right: 12, top: 16, bottom: 24 },
+        tooltip: { trigger: "axis", valueFormatter: dollars },
+        xAxis: {
+          type: "category", data: data.labels,
+          axisLine: { lineStyle: { color: c.rule } }, axisLabel: { color: c.ink },
+        },
+        yAxis: {
+          type: "value", axisLabel: { color: c.muted, formatter: (v) => `$${v}` },
+          splitLine: { lineStyle: { color: c.grid } },
+        },
+        series: [{
+          name: "Savings", type: "bar", data: data.savings, barMaxWidth: 36,
+          itemStyle: { color: c.series[2], borderRadius: [3, 3, 0, 0] },
+        }],
+      };
+    },
+
     // Timeline: lanes per agent, bars per job, coloured by outcome.
     timeline(data, c) {
       const agents = data.lanes.map(l => l.agent);
