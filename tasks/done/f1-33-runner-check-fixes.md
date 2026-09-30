@@ -30,3 +30,10 @@ Found by f1-07 (Replan log in `docs/milestones/f1.md`). Test-first.
 - `uv run pytest tests/runner tests/factory_dashboard` passes on the branch
 - `--dry-run` on a branch with uncommitted changes prints the plan, and no run folder or database row appears
 - `uv run runner check-all --task f1-33-runner-check-fixes` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
