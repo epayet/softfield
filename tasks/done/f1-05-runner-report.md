@@ -38,3 +38,10 @@ Read `docs/milestones/f1.md` (D1, D2, D7, D8) and `docs/adr/14-developers-and-ag
 - `runner report f1` replaces only the text between the markers, and adds them at the end when missing
 - a test file in `tests/factory_dashboard/` with no matching module fails the layout gate
 - `uv run runner check-all --task f1-05-runner-report` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
