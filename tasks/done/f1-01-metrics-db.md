@@ -31,3 +31,10 @@ Read `docs/milestones/f1.md` (D1, D2, D6) and `docs/adr/13-factory-dashboard.md`
 - a ticket row keeps `difficulty` and `difficulty_corrected` apart
 - `load_config` reads `[metrics] db` and falls back to the default when it's missing
 - `uv run runner check-all --task f1-01-metrics-db` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
