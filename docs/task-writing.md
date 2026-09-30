@@ -25,6 +25,7 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 - **Done when:** acceptance criteria as bullets, including the edges ("a 280-character note", "just after midnight"). Whatever isn't written there, the junior won't test, and whatever isn't tested, it won't do.
 - **No stubs, no reference implementation.** A spec error now shows up as a failed attempt or a `BLOCKED.md`, and a short escalation fixes it.
 - **Security and protected work stay test-first:** the lead writes those tests on main, checks each fails for the right reason, and tests every security rule.
+- **`tests:` names a file the junior may write:** if the natural test file is protected (`tests/browser/test_display.py` guards `display.js`), name a new file beside it that imports its fixtures. m4-07 listed the protected one and burned three attempts.
 - **Where a data-writing command may run:** say so explicitly. The M1 review had to add a "never in prod" guard to `seed_demo`.
 
 ## JavaScript tasks (ADR 06)
