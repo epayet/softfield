@@ -1,8 +1,9 @@
 # ADR 13: A dashboard for the software factory
 
-- **Status:** Proposed (the owner's idea, to explore; first step only)
+- **Status:** Accepted (by the owner, 2026-09-30; reworked in conversation around ADR 14's agents)
 - **Date:** 2026-09-30
 - **Deciders:** project owner (accepts), Claude (drafts)
+- **Goes with:** [ADR 14](14-developers-and-agents.md) (developers, agents, ratings and routing, which this database records)
 
 ## Context
 
@@ -19,35 +20,82 @@ The owner wants to see how the factory performs over time ([ADR 02](02-software-
 
 Some of it is lost when a run crashes: M4's first run wrote no session report.
 
-## Decision (first step)
+ADR 14 adds more agents (cloud developers, Copilot), ratings, findings with verdicts, and allowances to track. The owner wants to see, live:
+- which agents did what
+- how efficient each was at its job
+- the allowance each service has used, and when it will run out
+- each ticket's and each job's details
 
-### 1. The runner writes a metrics database
-- **Where:** `var/metrics.sqlite` (gitignored, like `var/runs/`).
-- **When:** after each attempt, each escalation and each session. A row is written as soon as its facts are known, so a crash loses nothing.
-- **Tables:** `sessions`, `tasks`, `attempts` (and `steps` for per-step tokens), `gate_results`, `escalations`, `claude_usage`.
-- **Nothing sensitive:** note text and photo contents never appear in it, and neither does the junior's thinking. The thinking stays in `opencode.db`; the dashboard only links to it by session id.
+The factory is also heading out of this repo, to become a generic tool for several projects ([ADR 02](02-software-factory.md)). Nothing here should assume Coucou.
 
-### 2. `uv run runner dashboard` builds one static page
-- **Output:** `var/dashboard.html`, self-contained, no server, no CDN (AGENTS.md rule 7 applies to our tools too). Charts are inline SVG.
-- **Per milestone and as trends:**
-  - first-attempt pass rate
-  - attempts and gate failures by gate
-  - timeouts and loop stops
-  - peak context against the loaded size
-  - local tokens, and Claude spend per merged junior task
-  - escalations and why
-  - junior share of lines
-  - findings per review
-- **ADR 07's measures table** is filled in automatically for the next review.
+## Decisions (⚑ = deviates from this ADR's first draft)
+
+### 1. ⚑ One metrics database per user, for every project
+- **Where:** `~/.local/share/software-factory/factory-metrics.sqlite`, configurable in `runner.toml`. It's outside the repo: never in git, and shared by future projects.
+- **When:** a row is written as soon as its facts are known, so a crash loses nothing.
+- **The tables follow the hierarchy** `projects` → `milestones` → `tickets` → `jobs`, with `runs` alongside:
+  - A ticket can span runs (a rerun after a pause), so every job records both its run and its ticket.
+  - A **job** is one unit of work by one agent: an attempt, a direction, a checkpoint, a shadow review, an escalation, a lead ticket, a review round or a bench attempt.
+  - Jobs about several tickets (a checkpoint, a review round) hang off the milestone. Their findings name the ticket each one concerns.
+
+| Table | Holds |
+|---|---|
+| `projects` | name, repo path |
+| `milestones` | project, number, title, dates, verdict, review rounds, the final review's score, the owner's optional score |
+| `runs` | project, start and end, the command, the exit verdict |
+| `tickets` | milestone, id, title, difficulty (set, then corrected), final outcome, the agent that merged it, lines changed |
+| `jobs` | run, ticket (or milestone), role, agent, start and end, outcome; tokens (in, cached, out) or requests; steps, peak context, edit streak, refused commands; the routing reason; `gates` (JSON: each check with pass/fail, seconds, log path); `note` (a direction's or escalation's text on how the developer worked); the harness session id (a link only) |
+| `findings` | the reviewer job, the ticket it concerns, severity, file:line, summary and detail, the agent whose code it is, the final review's verdict (confirmed/rejected/missed), route |
+| `rating_changes` | agent, skill (coding/reviewing), before → after, the ticket and result that moved it |
+| `usage_events` | agent, time, kind (refusal, reset, API reading), value |
+
+- **Why these tables:**
+  - Gate results and notes are columns on `jobs`, since they're always read with their job.
+  - `findings` is its own table: a finding is raised by one job, often about another ticket, gets its verdict later, and counts in both ratings.
+  - Spend per agent is summed from `jobs`; `usage_events` holds only what jobs can't.
+- **Nothing sensitive:** no note text or photo contents, and no developer's thinking. The thinking stays in the harness's own store; a job links to it by session id.
 - **Backfill:** M1–M4 from the logs that still exist.
 
-### 3. Later, only if wanted
-- **Datasette** over the same file, for ad-hoc queries (one dev dependency).
-- **Grafana** with a SQLite data source, for live history. It's a service to install and run, so it needs the owner's OK (lead.md: no services without asking).
+### 2. ⚑ `uv run runner dashboard`: a small local service, not a static page
+- **Where it listens:** `127.0.0.1`, while the owner wants it running. A systemd unit is a later option, with the owner's OK.
+- **The stack:** server-rendered pages with FastAPI + Jinja2, **htmx** for the live parts, **Apache ECharts** for charts, and one stylesheet. The JS is vendored: no CDN, **no build step**.
+  - Every ticket, job and finding gets a real URL, which suits text-heavy browsing.
+  - The factory stays one language (Python), so it packages as one tool at extraction.
+- **⚑ New dependencies, approved by the owner:** `fastapi`, `uvicorn` and `jinja2` in a `factory` dependency group, plus the vendored `htmx.min.js` and `echarts.min.js` with their licences.
+- **A self-contained `factory_dashboard/` package.** It only reads the database and imports nothing from `coucou/`. It's not a protected path, since it has no gate or merge logic: the lead builds the service and the first page as the worked example, and developers build the others.
+- **Everything filters by project.**
 
-Both read the same `metrics.sqlite`, so step 1 isn't wasted whichever way it goes.
+### 3. The views
+1. **Overview:**
+   - what's running now (agent, role, ticket, difficulty, elapsed time, live tokens)
+   - the queue with each ticket's routed agent
+   - the last verdict
+   - one allowance bar per service: used, the reset, a **run-out forecast**, and "leftovers to spend". The forecast uses the service's API where one exists, and otherwise learns from past run-outs.
+2. **Timeline:** runs and jobs over time, one lane per agent, coloured by outcome, with refusals and fallbacks marked.
+3. **Jobs:** a filterable list (project, milestone, ticket, agent, role, outcome), and a page per job:
+   - prompt summary, gates, diff stats, findings, note
+   - tokens and time, routing reason, log links
+4. **Tickets:** a page per ticket with all its jobs in order, from the first attempt to the merge, plus every finding about its code.
+5. **Agents:**
+   - coding and reviewing ratings over time, against the difficulty of each ticket
+   - role eligibility from shadowing (ADR 14 item 12)
+   - efficiency: pass rate, attempts, time and tokens per merge, gates failed, escalation rate, rework, tokens per second
+   - who did what: agents × roles
+6. **Milestones:** each milestone's results, and trends across milestones:
+   - pass rate, escalations
+   - Claude spend per merged ticket, and Claude-equivalent work done by other agents
+   - findings per ticket, both scores
+   - ADR 07's measures
+7. **Bench:** each replayed ticket × agent (ADR 14 item 8).
+
+### 4. `runner report N` takes the review's numbers from the same queries
+It writes them into `docs/reviews/mN.md` as a frozen snapshot, per ADR 14 item 16.
+
+### 5. Later, only if wanted
+Grafana over the same database, for time-series trends. It's weak for text-heavy drill-down and it's a service to install, so it needs the owner's OK.
 
 ## Consequences
-- A little runner code (writing rows) and one command, with runner tests. No new runtime dependency.
-- The review's metrics section and ADR 07's table come from one query instead of an hour of log reading.
-- It stays tool-neutral: nothing in it depends on Claude or OpenCode beyond the parsers that read their logs, so another frontier or junior can be plugged in (ADR 02).
+- **Before M5:** the runner writes the database from every job, and the dashboard runs, so M5 is measured from its first job. The rest of ADR 14 can follow alongside M5.
+- **The review gets cheaper:** its numbers come from one query instead of an hour of log reading.
+- **Tool-neutral and project-neutral:** only the adapters' log parsers know about Claude, OpenCode or Copilot, so another frontier, developer or project plugs in (ADR 02).
+- **Build order:** a mockup of the pages, with M4's real numbers, before the first ticket.
