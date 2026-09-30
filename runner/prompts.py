@@ -50,6 +50,58 @@ What went wrong last time:
 """
 )
 
+# ADR 12 item 5: a retry after a timeout says so, before the gate output.
+TIMED_OUT = """
+Your previous attempt ran out of time. Keep what works and finish the smallest remaining piece
+first.
+"""
+
+# ADR 12 item 4: an attempt that changed nothing, by cause.
+EMPTY = {
+    "timeout": "It ran out of time before its first edit: start editing sooner, one small change"
+    " at a time.",
+    "refused": "Its commands were refused. Run commands exactly as the task writes them: no"
+    " pipes, redirections or extra flags.",
+    "stopped": "It stopped before editing anything. The task isn't done yet: make the changes"
+    " it asks for, starting with the smallest.",
+}
+
+# ADR 12 item 6: the lead's direction replaces the canned hint on the last attempt, and goes
+# last, where the local model follows best.
+DIRECTED = (
+    """
+WARNING: your previous attempts failed (last: the `{gate}` gate) and the branch has been reset.
+"""
+    + _NOT_YOURS
+    + """
+What went wrong last time:
+```
+{output}
+```
+
+The lead read your work and your thinking, and says:
+{direction}
+"""
+)
+
+DIRECTION = """\
+You are the lead. A junior (a local model) has failed task {id} twice; it gets one last
+attempt, on a fresh branch. Give it direction (ADR 12 item 6; docs/agents/lead.md,
+Escalations).
+
+- Task: {task}
+- Its work: branch task/{id} (`git diff main...task/{id}`) and {logs}/last.diff
+- Gate output per attempt: {logs}/gates-*.txt
+- Its thinking per attempt: {thinking}
+- Longest run of edits without running a command: {streak}; attempts that timed out: {timeouts}
+
+Write {logs}/direction.md: 3-8 lines addressed to the junior, saying what went wrong and the
+facts it is missing. No code: no snippets, no diffs, no reference implementation (ADR 07).
+If the ticket itself is wrong (a missing or false fact, a protected file, something its tools
+can't do), also write {logs}/ticket.md: the whole corrected ticket, frontmatter included.
+Write nothing else. Read-only git (diff, log, show) is fine.
+"""
+
 ESCALATION = """\
 You are the lead, handling an escalated task in the Coucou repo. Follow
 docs/agents/lead.md (Escalations).

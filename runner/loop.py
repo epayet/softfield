@@ -13,6 +13,7 @@ from runner.claude import (
     CHECK_TOOLS,
     EDIT_TOOLS,
     GIT_READ_TOOLS,
+    READ_TOOLS,
     ClaudeJob,
     ClaudeResult,
     UsageLimited,
@@ -39,8 +40,11 @@ from runner.gitops import (
     with_trailers,
 )
 from runner.local_model import (
+    OPENCODE_DB,
+    empty_cause,
     loaded_context_length,
     run_opencode,
+    session_reasoning,
     warmup,
 )
 from runner.report import ClaudeRunRecord, SessionReport, TaskRecord
@@ -50,6 +54,7 @@ from runner.tasks import (
     append_footer,
     blocked_ids,
     load_dir,
+    parse_task,
     pick_next,
     preflight,
     task_ids,
@@ -196,12 +201,85 @@ def _read_blocked(repo: Path) -> str | None:
     return text
 
 
-def _prompt(task: Task, attempt: int, last: GateResult | None) -> str:
+def _prompt(
+    task: Task,
+    attempt: int,
+    last: GateResult | None,
+    timed_out: bool = False,
+    direction: str = "",
+) -> str:
     if last is None:
         return prompts.local_prompt(task)
-    template = prompts.RETRY if attempt == 2 else prompts.FRESH
-    extra = template.format(gate=last.name, hint=HINTS.get(last.name, ""), output=last.output)
-    return prompts.local_prompt(task, extra)
+    if direction:
+        template, hint = prompts.DIRECTED, ""
+    else:
+        template = prompts.RETRY if attempt == 2 else prompts.FRESH
+        hint = HINTS.get(last.name, "")
+    extra = template.format(gate=last.name, hint=hint, output=last.output, direction=direction)
+    return prompts.local_prompt(task, (prompts.TIMED_OUT if timed_out else "") + extra)
+
+
+# Failures the gate output explains by itself; anything else earns the lead's direction.
+MECHANICAL = ("ruff", "translations", NO_CHANGES)
+
+
+def needs_direction(failures: list[str], timeouts: list[bool]) -> bool:
+    """Whether the last attempt gets the lead's direction (ADR 12 item 6)."""
+    if any(timeouts):
+        return True
+    if len(failures) >= 2 and failures[-1] == failures[-2]:
+        return True
+    return any(f not in MECHANICAL for f in failures)
+
+
+def _save_thinking(rec: TaskRecord, logs: Path, repo: Path) -> list[str]:
+    """Write the junior's thinking per attempt next to the logs; returns the files written."""
+    written = []
+    for attempt, session in enumerate(rec.sessions, start=1):
+        text = session_reasoning(OPENCODE_DB, session)
+        if text:
+            path = logs / f"thinking-{attempt}.md"
+            path.write_text(text + "\n", encoding="utf-8")
+            written.append(path.relative_to(repo).as_posix())
+    return written
+
+
+def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple[Task, str]:
+    """Before the last attempt, the lead reads the work and writes a short direction; it may
+    repair the ticket instead. Returns the (maybe repaired) task and the direction."""
+    s.state.directions[task.id] = s.state.directions.get(task.id, 0) + 1
+    save_state(s.state, s.state_path)
+    (logs / "last.diff").write_text(s.git.diff(MAIN), encoding="utf-8")
+    rel = logs.relative_to(s.repo).as_posix()
+    thinking = _save_thinking(rec, logs, s.repo)
+    job = ClaudeJob(
+        kind="direction",
+        prompt=prompts.DIRECTION.format(
+            id=task.id,
+            task=task.path.relative_to(s.repo).as_posix(),
+            logs=rel,
+            thinking=", ".join(thinking) or "not available",
+            streak=rec.edit_streak,
+            timeouts=rec.timeouts,
+        ),
+        allowed_tools=(*READ_TOOLS, *GIT_READ_TOOLS, "Write(var/runs/**)"),
+    )
+    call_claude(s, job, task.milestone, task.id)
+    direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
+    direction = (
+        direction_file.read_text(encoding="utf-8").strip() if direction_file.is_file() else ""
+    )
+    rec.directed = bool(direction)
+    if ticket_file.is_file():
+        s.git.checkout(MAIN)
+        task.path.write_text(ticket_file.read_text(encoding="utf-8"), encoding="utf-8")
+        s.git.commit_all(
+            with_trailers(
+                f"direction {task.id}: ticket repaired (by Claude)", agent=CLAUDE_HEADLESS_AGENT
+            )
+        )
+        task = parse_task(task.path, task.max_diff)
+    return task, direction
 
 
 def _finish_escalation(
@@ -257,8 +335,17 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     s.git.fresh_branch(branch, MAIN)
     protected = tuple(read_protected(s.repo))
     last: GateResult | None = None
+    timeouts: list[bool] = []
+    direction = ""
     for attempt in range(1, s.cfg.max_attempts + 1):
         rec.attempts = attempt
+        if (
+            attempt == s.cfg.max_attempts
+            and attempt > 1
+            and s.state.directions.get(task.id, 0) < 1
+            and needs_direction(rec.gate_failures, timeouts)
+        ):
+            task, direction = give_direction(s, task, rec, logs)
         if attempt >= 3:
             s.git.fresh_branch(branch, MAIN)
         rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
@@ -267,7 +354,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             s.repo,
             s.cfg.opencode_model,
             f"{task.id} attempt {attempt}",
-            _prompt(task, attempt, last),
+            _prompt(task, attempt, last, bool(timeouts and timeouts[-1]), direction),
             s.cfg.opencode_timeout,
             logs / f"opencode-{attempt}.jsonl",
         )
@@ -275,6 +362,10 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         rec.tokens_in += run.tokens.input
         rec.tokens_out += run.tokens.output + run.tokens.reasoning
         rec.steps += run.tokens.steps
+        rec.sessions.append(run.facts.session_id)
+        rec.edit_streak = max(rec.edit_streak, run.facts.edit_streak)
+        rec.timeouts += run.timed_out
+        timeouts.append(run.timed_out)
 
         blocked_text = _read_blocked(s.repo)
         if blocked_text is not None:
@@ -296,7 +387,12 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             results = run_gates(context)
         else:
             # An untouched tree passes every gate, and there'd be nothing to merge (m4-06).
-            results = [GateResult(NO_CHANGES, False, "The attempt changed no file.")]
+            cause = empty_cause(run.facts, run.timed_out)
+            results = [
+                GateResult(
+                    NO_CHANGES, False, "The attempt changed no file. " + prompts.EMPTY[cause]
+                )
+            ]
         rec.gates_s += time.monotonic() - started
         (logs / f"gates-{attempt}.txt").write_text(
             "\n\n".join(f"## {r.name}: {'ok' if r.ok else 'FAIL'}\n{r.output}" for r in results),

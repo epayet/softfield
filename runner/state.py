@@ -11,6 +11,7 @@ class State:
     headless_runs: dict[str, int] = field(default_factory=dict)  # milestone -> runs
     finding_seen: dict[str, int] = field(default_factory=dict)  # finding id -> rounds seen open
     review_counts: dict[str, list[int]] = field(default_factory=dict)  # milestone -> per round
+    directions: dict[str, int] = field(default_factory=dict)  # task id -> directions given
 
     def runs_used(self, milestone: int) -> int:
         return self.headless_runs.get(str(milestone), 0)

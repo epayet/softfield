@@ -1,6 +1,14 @@
 import json
+import sqlite3
 
-from runner.local_model import TokenTotals, parse_events
+from runner.local_model import (
+    StreamFacts,
+    TokenTotals,
+    empty_cause,
+    parse_events,
+    session_reasoning,
+    stream_facts,
+)
 
 
 def _step(inp: int, out: int, reasoning: int = 0) -> str:
@@ -53,3 +61,54 @@ def test_a_normal_run_returns_output_and_exit_code(tmp_path):
         "",
         3,
     )
+
+
+def _tool(tool: str, status: str = "completed") -> str:
+    return json.dumps(
+        {
+            "type": "tool_use",
+            "sessionID": "ses_1",
+            "part": {"tool": tool, "state": {"status": status}},
+        }
+    )
+
+
+def test_stream_facts_find_the_session_edit_streaks_and_refused_commands():
+    lines = [
+        _tool("read"),
+        _tool("edit"),
+        _tool("edit"),
+        _tool("bash"),
+        _tool("edit"),
+        _tool("write"),
+        _tool("edit"),
+        _tool("bash", "error"),
+        _tool("edit"),
+    ]
+    facts = stream_facts(lines)
+    assert facts == StreamFacts(session_id="ses_1", edit_streak=3, refused=1, edits=6)
+
+
+def test_an_empty_attempt_is_triaged_by_cause():
+    assert empty_cause(StreamFacts(), timed_out=True) == "timeout"
+    assert empty_cause(StreamFacts(refused=2), timed_out=False) == "refused"
+    assert empty_cause(StreamFacts(), timed_out=False) == "stopped"
+
+
+def test_the_juniors_thinking_is_read_from_opencodes_database(tmp_path):
+    db = tmp_path / "opencode.db"
+    con = sqlite3.connect(db)
+    con.execute("create table part (id text, session_id text, time_created int, data text)")
+    rows = [
+        ("p2", "ses_1", 2, {"type": "reasoning", "text": "Then the CSP blocks it."}),
+        ("p1", "ses_1", 1, {"type": "reasoning", "text": "First, read compose.js."}),
+        ("p3", "ses_1", 3, {"type": "text", "text": "not thinking"}),
+        ("p4", "ses_2", 1, {"type": "reasoning", "text": "another session"}),
+    ]
+    con.executemany(
+        "insert into part values (?, ?, ?, ?)", [(i, s, t, json.dumps(d)) for i, s, t, d in rows]
+    )
+    con.commit()
+    con.close()
+    assert session_reasoning(db, "ses_1") == "First, read compose.js.\n\nThen the CSP blocks it."
+    assert session_reasoning(tmp_path / "missing.db", "ses_1") == ""

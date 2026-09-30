@@ -6,9 +6,10 @@ from pathlib import Path
 import pytest
 
 from runner import gates, loop
+from runner.claude import ClaudeJob, ClaudeResult
 from runner.config import Config
 from runner.gates import GateResult
-from runner.local_model import OpencodeRun, TokenTotals
+from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
 from runner.report import SessionReport
 from runner.tasks import parse_task
 from tests.runner.conftest import git, write_task
@@ -42,7 +43,9 @@ def fake_model(monkeypatch):
     def run_opencode(repo, model, title, prompt, timeout, log_path):
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text(prompt)
-        script.pop(0)(repo, prompt)
+        run = script.pop(0)(repo, prompt)
+        if isinstance(run, OpencodeRun):
+            return run
         return OpencodeRun(exit_code=0, duration_s=1.0, tokens=TokenTotals(1000, 50, 10, 2))
 
     monkeypatch.setattr(loop, "run_opencode", run_opencode)
@@ -285,3 +288,96 @@ def test_an_attempt_that_changes_nothing_fails_instead_of_merging(repo, fake_mod
     report = _run(repo, once=True)
     task = report.tasks[0]
     assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["no-changes"])
+
+
+def _stray(repo: Path, prompt: str) -> None:
+    (repo / "coucou" / "secret.py").write_text("X = 1\n")
+
+
+def _timed_out(repo: Path, prompt: str) -> OpencodeRun:
+    return OpencodeRun(exit_code=None, duration_s=2700.0, tokens=TokenTotals(), facts=StreamFacts())
+
+
+@pytest.fixture
+def fake_lead(monkeypatch):
+    """Scripted headless Claude: each call runs the next function with the job and the repo."""
+    script: list[Callable[[ClaudeJob, Path], None]] = []
+    jobs: list[ClaudeJob] = []
+
+    def run_claude(job, repo, timeout, log_path, now):
+        jobs.append(job)
+        script.pop(0)(job, repo)
+        return ClaudeResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    return script, jobs
+
+
+def _logs_in(prompt: str) -> Path:
+    marker = "Write "
+    start = prompt.index(marker) + len(marker)
+    return Path(prompt[start:].split("/direction.md", 1)[0].strip("`"))
+
+
+def test_a_retry_after_a_timeout_says_so(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+
+    def fix(repo, prompt):
+        assert "ran out of time" in prompt
+        _implement(repo, prompt)
+
+    fake_model.extend([_timed_out, fix])
+    report = _run(repo, once=True)
+    assert report.tasks[0].result == "done"
+
+
+def test_the_lead_gives_direction_before_the_last_attempt(repo, fake_model, fake_lead, monkeypatch):
+    _add_task(repo, "m1-01-thing")
+    monkeypatch.setattr(loop, "session_reasoning", lambda db, session: "I think secret.py…")
+    script, jobs = fake_lead
+
+    def direct(job, repo_):
+        logs = repo_ / _logs_in(job.prompt)
+        assert (logs / "gates-2.txt").is_file() and (logs / "last.diff").is_file()
+        (logs / "direction.md").write_text("Leave coucou/secret.py alone: it is protected.")
+
+    def follow(repo, prompt):
+        assert prompt.rstrip().endswith("Leave coucou/secret.py alone: it is protected.")
+        _implement(repo, prompt)
+
+    fake_model.extend([_stray, _stray, follow])
+    script.append(direct)
+    report = _run(repo, once=True)
+    assert [j.kind for j in jobs] == ["direction"]
+    assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
+    assert "var/runs/" in jobs[0].prompt and "/thinking-1.md" in jobs[0].prompt
+
+
+def test_direction_can_repair_the_ticket(repo, fake_model, fake_lead):
+    _add_task(repo, "m1-01-thing")
+    script, _ = fake_lead
+    ticket = repo / "tasks" / "ready" / "m1-01-thing.md"
+
+    def repair(job, repo_):
+        logs = repo_ / _logs_in(job.prompt)
+        (logs / "direction.md").write_text("The ticket was wrong; it is fixed.")
+        (logs / "ticket.md").write_text(ticket.read_text().replace("Make the thing", "Fix it"))
+
+    def follow(repo, prompt):
+        assert "Fix it work." in prompt
+        _implement(repo, prompt)
+
+    fake_model.extend([_stray, _stray, follow])
+    script.append(repair)
+    _run(repo, once=True)
+    assert "Fix it work." in (repo / "tasks" / "done" / "m1-01-thing.md").read_text()
+    assert git(repo, "log", "--format=%s", "--grep=^direction m1-01-thing").strip()
+
+
+def test_mechanical_failures_get_no_direction():
+    assert not loop.needs_direction(["ruff", "translations"], [False, False])
+    assert loop.needs_direction(["ruff", "ruff"], [False, False])  # the same gate twice
+    assert loop.needs_direction(["ruff", "task-tests"], [False, False])
+    assert loop.needs_direction(["ruff", "mypy"], [True, False])  # a timeout
+    assert loop.needs_direction(["no-changes", "no-changes"], [False, False])
+    assert not loop.needs_direction(["no-changes", "ruff"], [False, False])

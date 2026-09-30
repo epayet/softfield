@@ -19,6 +19,10 @@ class TaskRecord:
     tokens_in: int = 0
     tokens_out: int = 0
     steps: int = 0
+    edit_streak: int = 0  # the longest run of edits without running a command (ADR 12 item 7)
+    timeouts: int = 0
+    sessions: list[str] = field(default_factory=list)  # OpenCode session per attempt
+    directed: bool = False
     gate_failures: list[str] = field(default_factory=list)
     blocked: str | None = None
     note: str = ""
@@ -82,6 +86,16 @@ def observations(report: SessionReport) -> list[str]:
             f"Model was cold for {len(cold)} task(s);"
             f" JIT load cost {_minutes(sum(t.warmup_s for t in cold))}."
         )
+    streaks = [t for t in tasks if t.edit_streak >= 8]
+    if streaks:
+        obs.append(
+            "Long runs of edits without running a command: "
+            + ", ".join(f"{t.id} ({t.edit_streak})" for t in streaks)
+            + "."
+        )
+    directed = [t.id for t in tasks if t.directed]
+    if directed:
+        obs.append("The lead gave direction before the last attempt: " + ", ".join(directed) + ".")
     blocked = [t for t in tasks if t.blocked]
     if blocked:
         obs.append("BLOCKED: " + ", ".join(f"{t.id} ({t.blocked})" for t in blocked) + ".")
