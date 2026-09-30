@@ -155,13 +155,14 @@ def test_a_milestone_is_a_number_or_a_named_key(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("given", "key"), [(4, "m4"), ("4", "m4"), ("m4", "m4"), ("f1", "f1"), ("f12", "f12")]
+    ("given", "key"),
+    [(4, "m4"), ("4", "m4"), ("m4", "m4"), ("f1", "f1"), ("f12", "f12"), ("f0", "f0"), (0, "m0")],
 )
 def test_milestone_key(given, key):
     assert milestone_key(given) == key
 
 
-@pytest.mark.parametrize("given", ["", "f", "1f", "f-1", "F1", True, 0])
+@pytest.mark.parametrize("given", ["", "f", "1f", "f-1", "F1", "f01", True, -1])
 def test_milestone_key_refuses_anything_else(given):
     with pytest.raises(TaskError):
         milestone_key(given)

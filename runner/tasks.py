@@ -26,7 +26,7 @@ class TaskError(ValueError):
 
 # A milestone is Coucou's `mN` (a bare number N in frontmatter or on the command line) or a
 # named series like the factory's `f1` (the f1 plan): lowercase letters, then a number.
-_KEY_RE = re.compile(r"([a-z]+)([1-9]\d*)")
+_KEY_RE = re.compile(r"([a-z]+)(0|[1-9]\d*)")
 
 
 def milestone_key(value: object) -> str:
@@ -34,8 +34,8 @@ def milestone_key(value: object) -> str:
     if isinstance(value, bool):
         raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
     text = str(value)
-    if text.isdigit() and int(text) > 0:
-        return f"m{int(text)}"
+    if text.isdigit() and (text == "0" or not text.startswith("0")):
+        return f"m{text}"
     if isinstance(value, str) and _KEY_RE.fullmatch(text):
         return text
     raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
