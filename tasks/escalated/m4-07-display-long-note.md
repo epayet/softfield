@@ -21,3 +21,12 @@ A 280-character note (the longest a person can now send) fits the display withou
 - the listed `tests:` pass, and fail without the change
 - the full unit + integration suite passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: needs-file
+attempts: 3
+tokens: 4377773
+logs: var/runs/20260929-222408/m4-07-display-long-note
+```
