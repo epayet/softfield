@@ -225,7 +225,7 @@ def test_session_stops_when_an_escalation_changes_the_runner(repo, fake_model, m
     _add_task(repo, "m1-01-thing")
     (repo / "coucou" / "thing.py").write_text("X = 1\n")  # pre-flight fails
     git(repo, "commit", "-qam", "break the skeleton")
-    calls = []
+    calls: list[str] = []
 
     def fix_runner_and_requeue(s, task, logs, reason):
         assert not calls, "the session ran the requeued task with stale runner code"
