@@ -136,6 +136,37 @@ def test_queued_tests_are_the_other_queued_tasks_tests(tmp_path: Path):
     }
 
 
+def test_queued_tests_skip_only_developer_tickets_and_never_the_tickets_own(tmp_path: Path):
+    """f1-33: lead tickets write their tests in their own job, so theirs are never skeletons,
+    and a file the current ticket lists runs even when a queued developer ticket lists it."""
+    tasks = tmp_path / "tasks"
+    current = write_task(tasks / "ready", "m1-01-current")
+    current.write_text(
+        current.read_text().replace(
+            "  - tests/unit/test_thing.py", "  - tests/unit/test_thing.py\n  - tests/unit/test_x.py"
+        )
+    )
+    lead = write_task(tasks / "ready", "m1-02-lead")
+    lead.write_text(
+        lead.read_text()
+        .replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
+        .replace("test_thing.py", "test_lead.py")
+    )
+    dev = write_task(tasks / "blocked", "m1-03-dev")
+    dev.write_text(
+        dev.read_text().replace(
+            "  - tests/unit/test_thing.py", "  - tests/unit/test_dev.py\n  - tests/unit/test_x.py"
+        )
+    )
+    assert queued_tests(tasks, "m1-01-current") == {"tests/unit/test_dev.py"}
+    # A lead's check-all (no current ticket) still runs every lead ticket's tests.
+    assert queued_tests(tasks, "") == {
+        "tests/unit/test_thing.py",
+        "tests/unit/test_dev.py",
+        "tests/unit/test_x.py",
+    }
+
+
 def test_a_ticket_says_who_works_it(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
     assert parse_task(path, 150).agent == "junior"

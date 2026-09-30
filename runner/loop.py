@@ -134,7 +134,7 @@ class Session:
 
 def open_session(cfg: Config, command: str | None = "run") -> Session:
     """A session on a clean main. With a ``command``, it is recorded as a run in the metrics
-    database; a dry run passes None and records nothing."""
+    database; None records nothing."""
     git = Git(cfg.repo)
     if git.current_branch() != MAIN or not git.is_clean():
         raise RunnerError("start the runner on a clean main branch")
@@ -1045,13 +1045,15 @@ def work_queue(
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
-    s = open_session(cfg, None if dry_run else "run")
     if dry_run:
-        ready = load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
-        done = task_ids(s.tasks_dir("done"))
-        paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
+        # Reads tasks/ only: any branch, any tree, and no run folder or row (f1-33).
+        tasks = cfg.repo / "tasks"
+        ready = load_dir(tasks / "ready", cfg.default_max_diff)
+        done = task_ids(tasks / "done")
+        paused = blocked_ids(ready, stopped_ids(tasks))
         _print_plan(ready, done, paused, pick_next(ready, done, paused), cfg.repo)
         return None
+    s = open_session(cfg)
     work_queue(s, escalate=escalate, once=once)
     return close_session(s)
 

@@ -110,7 +110,9 @@ def test_task_merges_on_first_attempt(repo, fake_model):
         repo, "log", "-1", "--format=%B", merge
     )
     assert git(repo, "log", "-1", "--format=%an%n%B").startswith("Coucou runner\nrunner: session")
-    assert f"`{merge[:9]}`" in next((repo / "docs" / "sessions").glob("*.md")).read_text()
+    # The session report is a summary (f1-06); the commits are on the run's dashboard page.
+    session = next((repo / "docs" / "sessions").glob("*.md")).read_text()
+    assert "`m1-01-thing`" in session and "/runs/" in session
     body = git(repo, "log", "-1", "--format=%B", merge)
     assert "Changed:\n  coucou/thing.py  +1 -1" in body
     assert "Defined by: tests/unit/test_thing.py" in body
@@ -194,6 +196,23 @@ def test_dry_run_shows_preflight_problems(repo, capsys):
     out = capsys.readouterr().out
     assert "-> m1-01-thing: runnable" in out
     assert "pre-flight: referenced path does not exist: render.js" in out
+
+
+def test_dry_run_works_on_a_dirty_branch_and_creates_nothing(repo, capsys):
+    """f1-33: the replans run `--dry-run` on their own branch, mid-edit."""
+    _add_task(repo, "m1-01-thing")
+    git(repo, "checkout", "-q", "-b", "task/m1-00-replan")
+    (repo / "tasks" / "ready" / "m1-01-thing.md").write_text(
+        (repo / "tasks" / "ready" / "m1-01-thing.md").read_text() + "\nEdited.\n"
+    )
+    write_task(repo / "tasks" / "ready", "m1-02-new", "[m1-01-thing]")  # untracked
+    cfg = _config(repo)
+    assert loop.run_session(cfg, once=False, dry_run=True, escalate=False) is None
+    out = capsys.readouterr().out
+    assert "-> m1-01-thing: runnable" in out
+    assert "m1-02-new: waiting on m1-01-thing" in out
+    assert not cfg.runs_dir.exists()
+    assert not cfg.metrics_db.exists()
 
 
 def test_blocked_escalates_immediately(repo, fake_model):

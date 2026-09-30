@@ -53,6 +53,24 @@ def test_other_queued_tasks_tests_are_skipped_but_not_the_tasks_own(repo: Path, 
     assert "--ignore=tests/unit/test_thing.py" not in calls[-1]
 
 
+def test_a_tasks_own_tests_run_even_when_another_queued_task_lists_them(repo: Path, monkeypatch):
+    """f1-33: f1's lead tickets listed existing files that other queued tickets also listed,
+    and no gate ran them."""
+    write_task(repo / "tasks" / "ready", "m1-01-mine")
+    write_task(repo / "tasks" / "ready", "m1-02-other")  # lists tests/unit/test_thing.py too
+    lead = write_task(repo / "tasks" / "ready", "m1-03-lead")
+    lead.write_text(
+        lead.read_text()
+        .replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
+        .replace("tests/unit/test_thing.py", "tests/unit/test_lead.py")
+    )
+    calls: list[list[str]] = []
+    monkeypatch.setattr(checks, "_exec", _fake_exec({}, calls))
+    monkeypatch.setattr(checks, "_i18n_problems", lambda repo, timeout: [])
+    checks.check_all(repo, 60, task_id="m1-01-mine")
+    assert not [arg for arg in calls[-1] if arg.startswith("--ignore=")]
+
+
 def test_report_ends_with_a_verdict():
     results = [checks.Check("ruff check", True), checks.Check("mypy", False, "bad type")]
     text = checks.render(results)

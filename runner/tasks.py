@@ -176,17 +176,23 @@ def load_dir(directory: Path, default_max_diff: int) -> list[Task]:
 
 
 def queued_tests(tasks_dir: Path, current: str) -> set[str]:
-    """Test files of the other tasks still in ``ready/`` or ``escalated/`` (ADR 01, item 1).
+    """Test files of the other developer tasks still in ``ready/``, ``escalated/`` or
+    ``blocked/`` (ADR 01, item 1), less the current task's own.
 
     Their skeleton tests fail until those tasks are done, so the all-tests gate skips them.
+    A lead ticket writes its tests in its own job, so they are never skeletons (f1-33).
     """
     tests: set[str] = set()
+    own: set[str] = set()
     for name in ("ready", *STOPPED):
         for path in sorted((tasks_dir / name).glob("*.md")):
-            if path.stem != current:
-                meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
-                tests.update(_str_tuple(meta, "tests", required=False))
-    return tests
+            meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+            listed = _str_tuple(meta, "tests", required=False)
+            if path.stem == current:
+                own.update(listed)
+            elif meta.get("agent", "junior") != "lead":
+                tests.update(listed)
+    return tests - own
 
 
 def task_ids(directory: Path) -> set[str]:
