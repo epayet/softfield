@@ -32,3 +32,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - `?milestone=m1` shows only m1's jobs
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 6060
+gate_failures: ['protected-paths', 'protected-paths']
+tokens: 10289928
+```
