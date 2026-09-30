@@ -19,6 +19,8 @@ from typing import Any
 STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
 
 # Tools per job kind: the least each job needs. The runner commits; Claude never runs git.
+# A path-scoped file rule is `Edit(<glob>)`, which covers the Write tool too; `Write(<glob>)`
+# grants nothing (probed with claude -p, 2026-09-30).
 READ_TOOLS = ("Read", "Glob", "Grep")
 EDIT_TOOLS = (*READ_TOOLS, "Edit", "Write")
 CHECK_TOOLS = (

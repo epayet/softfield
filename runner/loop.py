@@ -258,7 +258,7 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
             streak=rec.edit_streak,
             timeouts=rec.timeouts,
         ),
-        allowed_tools=(*READ_TOOLS, *GIT_READ_TOOLS, "Write(var/runs/**)"),
+        allowed_tools=(*READ_TOOLS, *GIT_READ_TOOLS, "Edit(var/runs/**)"),
     )
     call_claude(s, job, task.milestone, task.id)
     direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
@@ -539,10 +539,9 @@ def checkpoint(s: Session, milestone: int) -> None:
         allowed_tools=(
             *READ_TOOLS,
             *GIT_READ_TOOLS,
-            "Write(tasks/ready/**)",
             "Edit(tasks/ready/**)",
             "Edit(docs/agents/junior.md)",
-            "Write(var/runs/**)",
+            "Edit(var/runs/**)",
         ),
         model=s.cfg.checkpoint_model,
     )

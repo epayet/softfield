@@ -46,3 +46,14 @@ def test_backoff_grows_and_caps():
         14400,
         18000,
     ]
+
+
+def test_path_scoped_write_rules_use_edit(repo, monkeypatch):
+    """`Write(<glob>)` grants nothing to claude -p; `Edit(<glob>)` covers Write too."""
+    import inspect
+
+    from runner import loop
+
+    source = inspect.getsource(loop)
+    assert '"Write(' not in source
+    assert '"Edit(var/runs/**)"' in source
