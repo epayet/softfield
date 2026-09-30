@@ -8,12 +8,12 @@ Implement the task below in the Coucou repository. Start from the files under `f
 change other files only if the goal needs it. Write or update tests for what "Done when"
 asks, in the test files under `tests:`. Never edit protected paths
 (workflow/protected-paths.txt) and never run git. If you're stuck, write BLOCKED.md as
-AGENTS.md describes, then stop.
+AGENTS.md describes, then stop. Run commands exactly as written: pipes (`|`), redirections
+and unknown flags are refused, and a refused command returns nothing.
 
 {task}
 
-Finish by running `uv run pytest -q {tests}`, `uv run ruff format {files}`,
-`uv run ruff check {files}` and `uv run mypy coucou tests runner`, and fix what they report.
+Finish by running `uv run runner check-all --fix --task {id}` and fixing what it reports.
 {extra}"""
 
 # On a retry the gate output goes last: the local model follows the end of a long prompt best
@@ -117,8 +117,7 @@ prompts, gates). Edit only that section.
 
 def local_prompt(task: Task, extra: str = "") -> str:
     return LOCAL.format(
-        tests=" ".join(task.tests),
-        files=" ".join(f for f in task.files if f.endswith(".py")) or ".",
+        id=task.id,
         extra=extra,
         task=task.path.read_text(encoding="utf-8"),
     )

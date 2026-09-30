@@ -4,7 +4,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from runner import i18n
+from runner import checks, i18n
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
@@ -35,6 +35,10 @@ def main(argv: list[str] | None = None) -> int:
     commits = sub.add_parser("commits", help="list the commits the local model made")
     commits.add_argument("--milestone", type=int, required=True)
     commits.add_argument("--base", help="git ref to list from (default mN-start)")
+    check_all = sub.add_parser("check-all", help="every check; non-zero exit on any failure")
+    check_all.add_argument("--fix", action="store_true", help="format and autofix first")
+    check_all.add_argument("--task", help="the task being worked on (keeps its own tests in)")
+    check_all.add_argument("--hook", action="store_true", help="as the pre-commit hook")
     sub.add_parser("check-layout", help="check unit test file naming")
     sub.add_parser("check-i18n", help="check every user-facing string has a French translation")
     args = parser.parse_args(argv)
@@ -61,6 +65,12 @@ def main(argv: list[str] | None = None) -> int:
             for c in found:
                 print(f"{c.sha[:9]}  {c.task}  attempts {c.attempts}  {c.size} lines  ({c.author})")
             print(f"{len(found)} local-model commit(s)")
+        elif args.command == "check-all":
+            if args.hook and checks.hook_can_skip(Git(repo).staged_files()):
+                return 0
+            results = checks.check_all(repo, cfg.gate_timeout, task_id=args.task, fix=args.fix)
+            print(checks.render(results), end="")
+            return 0 if all(r.ok for r in results) else 1
         elif args.command == "check-i18n":
             problems = i18n.regenerated_problems(repo, cfg.gate_timeout)
             problems += i18n.compiled_out_of_date(repo)

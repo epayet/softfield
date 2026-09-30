@@ -69,3 +69,13 @@ def test_local_model_commits_are_attributed_and_listed(repo):
         ("m2-01-new", "1", 2),
     ]
     assert found[1].sha == sha and found[1].author == "Coucou local model"
+
+
+def test_the_runners_commits_skip_the_pre_commit_hook(repo):
+    hooks = repo / "hooks"
+    hooks.mkdir()
+    (hooks / "pre-commit").write_text("#!/bin/sh\nexit 1\n")
+    (hooks / "pre-commit").chmod(0o755)
+    run_git(repo, "config", "core.hooksPath", "hooks")
+    (repo / "coucou" / "thing.py").write_text("X = 1\n")
+    assert Git(repo).commit_all("runner: a commit the hook would refuse")

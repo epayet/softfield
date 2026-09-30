@@ -1,0 +1,6 @@
+#!/bin/sh
+# Every commit passes `runner check-all` first (ADR 12 item 15): ruff, format, mypy,
+# translations, layout and the full suite. Commits that only touch docs/ or tasks/ skip it;
+# the runner's own commits use --no-verify, since they're gated their own way.
+# Installed with: git config core.hooksPath workflow/hooks
+exec uv run runner check-all --hook

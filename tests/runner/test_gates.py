@@ -198,3 +198,57 @@ def test_no_changed_tests_means_the_lead_wrote_them(repo: Path, monkeypatch):
     ctx = _branch_with(repo, {"coucou/thing.py": "def thing() -> int:\n    return 42\n"})
     _fake_pytest(monkeypatch, 0, {})
     assert gate_tests_fail_on_main(ctx).ok
+
+
+def _diff(path: str, *added: str) -> str:
+    lines = [f"diff --git a/{path} b/{path}", f"--- a/{path}", f"+++ b/{path}", "@@ -1 +1 @@"]
+    return "\n".join([*lines, *(f"+{line}" for line in added)]) + "\n"
+
+
+def test_weak_test_patterns_flag_what_a_person_cant_do():
+    diff = _diff(
+        "tests/browser/test_compose.py",
+        "    if page.get_by_role('alert').is_visible():",
+        "    if page.locator('li').count() > 0:",
+        "    page.evaluate(\"() => el.dispatchEvent(new Event('submit'))\")",
+        "    page.evaluate(\"() => { el.value = 'x'; }\")",
+        "    time.sleep(1)",
+        "    page.wait_for_timeout(500)",
+        '    page.wait_for_function("window.sent.length === 1")',
+        "    page.wait_for_function(",
+        '        f"window.sent.length === {n}"',
+        "    )",
+    )
+    problems = gates.weak_test_patterns(diff)
+    assert len(problems) == 8
+    assert all(p.startswith("tests/browser/test_compose.py: ") for p in problems)
+    assert "wait_for_function" in problems[-1]
+
+
+def test_weak_test_patterns_let_good_waits_and_other_folders_through():
+    good = _diff(
+        "tests/browser/test_me.py",
+        '    page.wait_for_function("() => window.sent.length === 1")',
+        '    page.wait_for_function("t => document.title === t", arg="x")',
+        "    page.wait_for_function(",
+        '        "async () => (await navigator.serviceWorker.ready) !== null"',
+        "    )",
+        "    assert page.get_by_role('button').is_visible()",
+        "    count = len(items)",
+        "    page.wait_for_timeout(1000)  # pattern-ok: proves nothing arrives",
+    )
+    elsewhere = _diff("tests/integration/test_revocation.py", "    time.sleep(0.1)")
+    assert gates.weak_test_patterns(good + elsewhere) == []
+
+
+def test_empty_modules_are_flagged(tmp_path: Path):
+    (tmp_path / "coucou").mkdir()
+    (tmp_path / "coucou" / "real.py").write_text('"""Doc."""\n\nX = 1\n')
+    (tmp_path / "coucou" / "empty.py").write_text('"""Only a docstring."""\n# and a comment\n')
+    (tmp_path / "coucou" / "empty.js").write_text("// nothing\n/* at\n all */\n\n")
+    (tmp_path / "coucou" / "real.js").write_text("// a module\nexport const x = 1;\n")
+    added = ["coucou/real.py", "coucou/empty.py", "coucou/empty.js", "coucou/real.js"]
+    assert gates.empty_modules(tmp_path, added) == [
+        "coucou/empty.py: a new module with no code in it",
+        "coucou/empty.js: a new module with no code in it",
+    ]

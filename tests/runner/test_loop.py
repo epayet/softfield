@@ -261,7 +261,7 @@ def test_a_requeued_task_gets_its_own_log_folder(tmp_path):
 def test_retry_prompt_ends_with_the_gate_output(repo: Path):
     task = parse_task(write_task(repo / "tasks" / "ready", "m1-01-thing"), 150)
     first = loop._prompt(task, 1, None)
-    assert "uv run mypy" in first
+    assert "uv run runner check-all --fix --task m1-01-thing" in first
     retry = loop._prompt(task, 2, GateResult("ruff", False, "tasks/ready/m1-01-thing.md"))
     assert retry.index("### Goal") < retry.index("IMPORTANT")
     assert "uv run ruff check --fix" in retry  # the gate's hint

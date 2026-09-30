@@ -84,12 +84,19 @@ class Git:
         self.run("checkout", "-q", name)
 
     def commit_all(self, message: str, author: str | None = None) -> bool:
-        """Stage everything and commit. Returns False if there was nothing to commit."""
+        """Stage everything and commit. Returns False if there was nothing to commit.
+
+        The runner's commits skip the pre-commit hook (ADR 12 item 15): a wip commit holds a
+        junior's unchecked work, and everything else the runner commits is gated its own way.
+        """
         self.run("add", "-A")
         if self.run("diff", "--cached", "--name-only").strip() == "":
             return False
-        self.run("commit", "-q", "-m", message, *_author(author))
+        self.run("commit", "-q", "--no-verify", "-m", message, *_author(author))
         return True
+
+    def staged_files(self) -> list[str]:
+        return [line for line in self.run("diff", "--cached", "--name-only").splitlines() if line]
 
     def changed_files(self, base: str) -> list[str]:
         """Every path changed since ``base``; a rename lists both its old and new path."""
@@ -133,7 +140,7 @@ class Git:
         """Squash ``branch`` into ``into`` as one commit and return its sha."""
         self.checkout(into)
         self.run("merge", "-q", "--squash", branch)
-        self.run("commit", "-q", "-m", message, *_author(author))
+        self.run("commit", "-q", "--no-verify", "-m", message, *_author(author))
         return self.head()
 
     def local_model_commits(self, base: str) -> list["AgentCommit"]:

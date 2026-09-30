@@ -1,5 +1,6 @@
 """The gates a task must pass before it is merged (docs/workflow.md)."""
 
+import ast
 import re
 import subprocess
 from collections.abc import Callable, Iterable
@@ -45,6 +46,9 @@ HINTS = {
     " changes that behaviour.",
     "tests-fail-on-main": "Your tests also pass without your code change, so they don't test"
     ' it. Make them check the behaviour in "Done when".',
+    "test-patterns": "Test as a person would: click, fill, select_option, then wait with"
+    ' locator.wait_for() or wait_for_function("() => ..."). Never skip a step with `if`,'
+    " never set values or fire events from JavaScript, never sleep. Delete empty modules.",
 }
 
 
@@ -105,6 +109,95 @@ def added_skips(diff: str) -> list[str]:
         for line in diff.splitlines()
         if line.startswith("+") and not line.startswith("+++") and _SKIP_RE.search(line)
     ]
+
+
+# Weak test patterns (ADR 12 item 3), in the browser and end-to-end tests only. Each one let a
+# test pass without testing what a person does (m4-F1, F2, F7; m4-06's CSP trap).
+PATTERN_DIRS = ("tests/browser/", "tests/e2e/")
+PATTERN_OK = "# pattern-ok:"
+_WEAK_PATTERNS = (
+    (
+        re.compile(r"^\s*(if|elif)\b.*\.(is_visible|count)\("),
+        "a test that skips a step when something is missing passes without testing",
+    ),
+    (
+        re.compile(r"dispatchEvent\(|\.value\s*=(?!=)"),
+        "sets a value or fires an event from JavaScript: act as a person would",
+    ),
+    (re.compile(r"\btime\.sleep\(|\.wait_for_timeout\("), "sleeps instead of waiting for a result"),
+)
+_WAIT_FN = re.compile(r"\.wait_for_function\(\s*(.*)$")
+_STRING = re.compile(r"^\s*f?[\"']")
+# A predicate that is a function: "() => …", "async () => …", "x => …", "function …".
+_FUNCTION_STRING = re.compile(r"^\s*f?[\"']\s*(\(|async\b|\w+\s*=>|function\b)")
+_BARE_WAIT = (
+    "wait_for_function with a bare expression: the real pages' CSP blocks it once it"
+    ' polls. Pass a function: "() => ..."'
+)
+
+
+def _bare_wait(argument: str) -> bool:
+    return bool(_STRING.match(argument)) and not _FUNCTION_STRING.match(argument)
+
+
+def weak_test_patterns(diff: str) -> list[str]:
+    """Added lines of a unified diff, in the browser and e2e tests, that match a weak pattern."""
+    problems: list[str] = []
+    path = ""
+    waiting = False  # the previous added line opened wait_for_function( with no argument
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            path = line[6:] if line.startswith("+++ b/") else ""
+            waiting = False
+            continue
+        if not line.startswith("+") or not path.startswith(PATTERN_DIRS):
+            continue
+        code = line[1:]
+        if PATTERN_OK in code:
+            waiting = False
+            continue
+        if waiting and code.strip():
+            if _bare_wait(code):
+                problems.append(f"{path}: {_BARE_WAIT}: {code.strip()}")
+            waiting = False
+        for pattern, why in _WEAK_PATTERNS:
+            if pattern.search(code):
+                problems.append(f"{path}: {why}: {code.strip()}")
+        if match := _WAIT_FN.search(code):
+            argument = match.group(1)
+            if not argument.strip():
+                waiting = True
+            elif _bare_wait(argument):
+                problems.append(f"{path}: {_BARE_WAIT}: {code.strip()}")
+    return problems
+
+
+_JS_COMMENT = re.compile(r"//[^\n]*|/\*.*?\*/", re.DOTALL)
+
+
+def empty_modules(repo: Path, added: Iterable[str]) -> list[str]:
+    """New Python or JavaScript modules with no code, only comments or a docstring (m4-F7)."""
+    problems = []
+    for rel in added:
+        path = repo / rel
+        if not path.is_file() or path.name == "__init__.py":
+            continue
+        text = path.read_text(encoding="utf-8")
+        if rel.endswith(".py"):
+            try:
+                body = ast.parse(text).body
+            except SyntaxError:
+                continue
+            if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
+                body = body[1:]
+            empty = not body
+        elif rel.endswith(".js"):
+            empty = not _JS_COMMENT.sub("", text).strip()
+        else:
+            continue
+        if empty:
+            problems.append(f"{rel}: a new module with no code in it")
+    return problems
 
 
 # test folder -> (module folder, module suffix): tests/unit/test_x.py <-> coucou/x.py, and
@@ -206,6 +299,13 @@ def gate_layout(ctx: GateContext) -> GateResult:
     return _result("layout", layout_problems(ctx.repo))
 
 
+def gate_test_patterns(ctx: GateContext) -> GateResult:
+    diff = ctx.git.run("diff", "-U0", f"{ctx.base}...HEAD", "--", *PATTERN_DIRS)
+    added = ctx.git.run("diff", "--name-only", "--diff-filter=A", f"{ctx.base}...HEAD")
+    problems = weak_test_patterns(diff) + empty_modules(ctx.repo, added.split())
+    return _result("test-patterns", problems)
+
+
 def gate_translations(ctx: GateContext) -> GateResult:
     """Every user-facing string has a French translation, compiled (ADR 00, A2)."""
     problems = i18n.regenerated_problems(ctx.repo, ctx.timeout)
@@ -278,6 +378,7 @@ GATES: tuple[Callable[[GateContext], GateResult], ...] = (
     gate_dependencies,
     gate_diff_size,
     gate_layout,
+    gate_test_patterns,
     gate_translations,
     gate_ruff,
     gate_mypy,
