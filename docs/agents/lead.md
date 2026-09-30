@@ -41,7 +41,12 @@ Format: [`docs/task-format.md`](../task-format.md). Craft: [`docs/task-writing.m
 ## Known range
 What juniors pass at the first attempt, from results. Update it at each milestone review.
 - **M3:** one pattern to follow, up to ~120 changed lines, up to 4 files, a worked example: first-attempt pass (10/11). JS against browser tests and CSS both fine. French: fine with a tone example.
-- **Not yet tried:** juniors writing their own tests (from M4), tickets without pasted code, tasks over ~150 lines.
+- **M4:** no pasted code, self-written tests, Preact: first-attempt pass 5/9.
+  - Fine: one component or module per ticket with a worked example, 180–500 changed lines, 2–6 files.
+  - Failed until split: a wiring ticket with 4 dependencies, i18n and offline handling (m4-06).
+  - Their tests check presence rather than content, and drive the UI from JS rather than as a person would. Their French is correct but plain.
+  - Attempts take 15–45 min; peak context is 26–43%.
+- **Not yet tried:** checkpoint reviews (ADR 12), tickets that make the junior read more than ~12 files.
 - The real ceiling is the junior's context (about 180k tokens): a task that makes it read many large files runs out of room before it runs out of skill.
 
 ## Your own work

@@ -218,6 +218,25 @@ _(to fill in at the M2 review)_
 
 _(to fill in at the M3 review)_
 
+### M4 (2026-09-30): the first ADR 07 milestone ([review](../reviews/m4.md))
+
+- **Q1:**
+  - 7 headless escalations. Headless handling was worth it for m4-06's split and m4-07's requeue, since both unblocked dependants overnight.
+  - 3 of the 7 existed only because of lead or runner mistakes: a protected test path, a pre-flight bug, and a stale runner process.
+- **Q2:** the review ran interactively, at the owner's request. It found 1 blocking and 8 should-fix issues, all invisible to the gates, which an automated review would probably also have caught.
+- **Q3:**
+  - first-attempt pass 5/9, on specs with no pasted code, self-written tests and a new framework (Preact)
+  - diffs of 180–500 lines passed when the ticket was one concept
+  - m4-06 (4 dependencies, i18n, offline) failed until it was split, and the 30-minute timeout did most of the damage
+- **Q4:** the French is correct but plain. One M3 finding recurred (m3-F5).
+- **Q5:**
+  - ≈18M Claude token-equivalents for the milestone: ≈2M per junior task, against M3's ≈1.8M
+  - ≈10M of it was one lead session kept open during the runs
+  - no usage-limit pause
+- **Q6:** the generic runner changes were no-changes, pre-flight accepting unwritten tests, restarting after a runner change, and the timeout. Nothing Coucou-specific.
+- **Anything else:** reading the junior's thinking (OpenCode's `opencode.db`) explains failures the gate logs can't. Peak junior context went from ~7% (M1–M3) to 26–43%.
+- **Decisions affected:** ADR 07's keep-and-extend rule wasn't met, so tighten, per ADR 07: [ADR 12](12-junior-feedback-and-checkpoints.md). Dashboard: [ADR 13](13-factory-dashboard.md).
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

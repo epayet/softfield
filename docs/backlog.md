@@ -16,3 +16,7 @@ Nits from reviews and triaged discoveries that aren't scheduled yet. One bullet 
 - [m3-review nit, m3-F12] Only a device move bumps `auth_generation`. Removing a membership, or moving a space to another vault, in admin reaches open streams at the next 20 s heartbeat, not within 2 s (as documented in `docs/security.md`). Bump in those admin saves (and deletes) too if 2 s should hold for every scope change.
 - [ADR 07, future ADR] More than one junior at a time. LM Studio can queue parallel requests, but it's set to no parallel workers, and switching contexts may cost more than it saves. Measure before deciding.
 - [ADR 07 item 15, ADR 11 item 3] `display.js` is protected as a whole because it wires the outbox and the stream, so its UI (history arrows, "New ›", the cog) is lead-only work. The next display UI work (e.g. ADR 10's gallery) starts by porting the display to Preact and moving that UI into unprotected modules.
+- [m4-review nit] `compose.js`: unused `takePhotoRef` / `choosePhotoRef`, and a redundant branch in the initial space state.
+- [m4-review nit] `me.js`: `SentLog` belongs in its own module (one concept per module); the sent time uses the browser's locale, not the page's language.
+- [m4-review nit] `Delivery` with no items still renders an empty `<div class="delivery-list">`.
+- [m4-review nit, French] The note label "Écrivez une note à envoyer." is stiff; something like "Un petit mot ?" suits the tone. Check with the owner.
