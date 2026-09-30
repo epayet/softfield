@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Job {{ job.id }} · {{ project }}{% endblock %}
+{% block crumbs %}
+  {% if milestone_key %}<a href="/milestones/{{ milestone_key }}{{ q }}">{{ milestone_key | upper }}</a>{% endif %}
+  {% if ticket %}<a href="/tickets/{{ ticket }}{{ q }}">{{ ticket }}</a>{% endif %}
+  <span>Job {{ job.id }}</span>
+{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="what" class="panel">
+  <h2>What <span class="src">role, agent, attempt, outcome, routing</span></h2>
+  <dl class="kv">
+    <dt>Role</dt><dd>{{ job.role }}</dd>
+    <dt>Agent</dt><dd><span class="mono">{{ job.agent }}</span></dd>
+    <dt>Attempt</dt><dd class="num">{{ job.attempt }}</dd>
+    <dt>Outcome</dt><dd><span class="pill {% if job.outcome == 'passed' %}good{% elif job.outcome == 'failed' %}critical{% elif job.outcome == 'running' %}running{% endif %}">{{ job.outcome }}</span></dd>
+    {% if job.routing_reason %}<dt>Routing</dt><dd>{{ job.routing_reason }}</dd>{% endif %}
+  </dl>
+</section>
+
+<section id="time" class="panel">
+  <h2>Time and tokens <span class="src">start, duration, tokens, cost, steps</span></h2>
+  <dl class="kv">
+    <dt>Started</dt><dd class="time">{{ job.started }}</dd>
+    {% if job.ended %}<dt>Ended</dt><dd class="time">{{ job.ended }}</dd>{% endif %}
+    {% if job.minutes %}<dt>Duration</dt><dd class="num">{{ "%.1f" | format(job.minutes) }} min</dd>{% endif %}
+    {% if job.tokens_in is not none %}<dt>In</dt><dd class="num">{{ job.tokens_in | tokens }}</dd>{% endif %}
+    {% if job.tokens_cached is not none %}<dt>Cached</dt><dd class="num">{{ job.tokens_cached | tokens }}</dd>{% endif %}
+    {% if job.tokens_out is not none %}<dt>Out</dt><dd class="num">{{ job.tokens_out | tokens }}</dd>{% endif %}
+    {% if job.requests is not none %}<dt>Requests</dt><dd class="num">{{ job.requests }}</dd>{% endif %}
+    {% if job.cost_usd is not none %}<dt>Cost</dt><dd class="num">{{ job.cost_usd | usd }}</dd>{% endif %}
+    {% if job.steps is not none %}<dt>Steps</dt><dd class="num">{{ job.steps }}</dd>{% endif %}
+  </dl>
+  {% if job.peak_context is not none %}
+  <div style="margin-top:8px">
+    <span class="sub">Peak context</span>
+    {% if job.context_limit is not none %}
+    <div class="meter" style="margin-top:4px"><span style="width:{{ '%.0f' | format((job.peak_context / job.context_limit) * 100) }}%; --c: var(--serious)"></span></div>
+    <span class="sub">{{ job.peak_context | tokens }} of {{ job.context_limit | tokens }}</span>
+    {% else %}
+    <span class="sub">{{ job.peak_context | tokens }}</span>
+    {% endif %}
+  </div>
+  {% endif %}
+  {% if job.edit_streak is not none or job.refused_commands is not none %}
+  <dl class="kv" style="margin-top:8px">
+    {% if job.edit_streak is not none %}<dt>Streak</dt><dd class="num">{{ job.edit_streak }} edits in a row without running a test or check</dd>{% endif %}
+    {% if job.refused_commands is not none %}<dt>Refused</dt><dd class="num">{{ job.refused_commands }}</dd>{% endif %}
+  </dl>
+  {% endif %}
+</section>
+
+<section id="gates" class="panel">
+  <h2>Gates <span class="src">in order, pass or fail</span></h2>
+  {% if job.gates %}
+  <ol class="steps">
+    {% for gate in job.gates %}
+    <li>
+      <span class="when">{{ gate.name }}</span>
+      <span class="what">
+        <span class="pill {% if gate.ok %}good{% else %}critical{% endif %}">
+          {{ "pass" if gate.ok else "fail" }}
+        </span>
+        <span class="num">{{ "%.1f" | format(gate.seconds) }}s</span>
+        {% if gate.log %}<code>{{ gate.log }}</code>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p class="sub">No gates recorded.</p>
+  {% endif %}
+</section>
+
+{% if job.note %}
+<section id="note" class="panel">
+  <h2>Note <span class="src">from the job</span></h2>
+  <p>{{ job.note }}</p>
+</section>
+{% endif %}
+
+{% if job.findings %}
+<section id="findings" class="panel">
+  <h2>Findings <span class="src">raised by this job</span></h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Key</th><th>Severity</th><th>Summary</th></tr></thead>
+    <tbody>
+      {% for f in job.findings %}
+      <tr>
+        <td class="mono">{{ f.key }}</td>
+        <td><span class="sev {{ f.severity }}">{{ f.severity }}</span></td>
+        <td>{{ f.summary }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+<section id="session" class="panel">
+  <h2>Session <span class="src">ID and log paths</span></h2>
+  <dl class="kv">
+    {% if job.session_id %}<dt>Session</dt><dd class="mono">{{ job.session_id }}</dd>{% endif %}
+    {% if job.log_path %}<dt>Log</dt><dd><a class="mono" href="/static/logs/{{ job.log_path }}">{{ job.log_path }}</a></dd>{% endif %}
+  </dl>
+  {% if not job.session_id and not job.log_path %}<p class="sub">No session data.</p>{% endif %}
+</section>
+
+</div>
+{% endblock %}

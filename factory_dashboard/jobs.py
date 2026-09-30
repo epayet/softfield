@@ -29,6 +29,43 @@ class JobRow:
     failed_gate: str | None
 
 
+@dataclass(frozen=True)
+class FindingRow:
+    key: str
+    severity: str
+    summary: str
+
+
+@dataclass(frozen=True)
+class JobDetail:
+    id: int
+    started: str
+    ended: str | None
+    role: str
+    agent: str
+    attempt: int
+    outcome: str
+    routing_reason: str | None
+    minutes: float | None
+    tokens_in: int | None
+    tokens_cached: int | None
+    tokens_out: int | None
+    requests: int | None
+    cost_usd: float | None
+    steps: int | None
+    peak_context: int | None
+    context_limit: int | None
+    edit_streak: int | None
+    refused_commands: int | None
+    note: str | None
+    session_id: str | None
+    log_path: str | None
+    gates: list[dict[str, object]] | None
+    findings: list[FindingRow]
+    ticket: str | None
+    milestone_key: str | None
+
+
 def _parse_gates(gates_json: str | None) -> list[dict[str, object]] | None:
     if not gates_json:
         return None
@@ -43,6 +80,73 @@ def _failed_gate(gates_json: str | None) -> str | None:
                 name: object | None = gate.get("name")
                 return str(name) if name is not None else None
     return None
+
+
+def get_job_detail(conn: sqlite3.Connection, job_id: int) -> JobDetail | None:
+    """A single job by ``job_id``, with its gates, findings, and metadata."""
+    row = conn.execute(
+        "SELECT j.id, j.started, j.ended, j.role, j.agent, j.attempt, "
+        "j.outcome, j.routing_reason, j.tokens_in, j.tokens_cached, "
+        "j.tokens_out, j.requests, j.cost_usd, j.steps, "
+        "j.peak_context, j.context_limit, j.edit_streak, j.refused_commands, "
+        "j.gates, j.note, j.session_id, j.log_path, "
+        "t.ticket, m.key AS milestone_key "
+        "FROM jobs j "
+        "JOIN runs r ON r.id = j.run_id "
+        "JOIN projects p ON p.id = r.project_id "
+        "LEFT JOIN tickets t ON t.id = j.ticket_id "
+        "LEFT JOIN milestones m ON m.id = j.milestone_id "
+        "WHERE j.id = ?",
+        (job_id,),
+    ).fetchone()
+    if row is None:
+        return None
+
+    minutes: float | None = None
+    if row["started"] and row["ended"]:
+        start = datetime.fromisoformat(row["started"])
+        end = datetime.fromisoformat(row["ended"])
+        minutes = (end - start).total_seconds() / 60
+
+    gates = _parse_gates(row["gates"])
+
+    findings_rows = conn.execute(
+        "SELECT key, severity, summary FROM findings WHERE job_id = ? ORDER BY id",
+        (job_id,),
+    ).fetchall()
+    findings = [
+        FindingRow(key=f["key"], severity=f["severity"], summary=f["summary"] or "")
+        for f in findings_rows
+    ]
+
+    return JobDetail(
+        id=row["id"],
+        started=row["started"],
+        ended=row["ended"],
+        role=row["role"],
+        agent=row["agent"],
+        attempt=row["attempt"],
+        outcome=row["outcome"],
+        routing_reason=row["routing_reason"],
+        minutes=minutes,
+        tokens_in=row["tokens_in"],
+        tokens_cached=row["tokens_cached"],
+        tokens_out=row["tokens_out"],
+        requests=row["requests"],
+        cost_usd=row["cost_usd"],
+        steps=row["steps"],
+        peak_context=row["peak_context"],
+        context_limit=row["context_limit"],
+        edit_streak=row["edit_streak"],
+        refused_commands=row["refused_commands"],
+        note=row["note"],
+        session_id=row["session_id"],
+        log_path=row["log_path"],
+        gates=gates,
+        findings=findings,
+        ticket=row["ticket"],
+        milestone_key=row["milestone_key"],
+    )
 
 
 def list_jobs(
@@ -161,5 +265,24 @@ def jobs_page(
             "agent_filter": agent,
             "role_filter": role,
             "outcome_filter": outcome,
+        },
+    )
+
+
+@router.get("/jobs/{job_id}", response_class=HTMLResponse)
+def job_page(job_id: int, request: Request, conn: Db, project: Project) -> HTMLResponse:
+    detail = get_job_detail(conn, job_id)
+    if detail is None:
+        return HTMLResponse(status_code=404, content="Not found")
+    return render(
+        request,
+        conn,
+        project,
+        "job.html",
+        {
+            "active": "/jobs",
+            "job": detail,
+            "ticket": detail.ticket,
+            "milestone_key": detail.milestone_key,
         },
     )

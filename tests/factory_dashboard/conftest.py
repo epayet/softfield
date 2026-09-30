@@ -293,6 +293,9 @@ def write_jobs(conn: sqlite3.Connection) -> None:
         ended="2026-09-30T10:12:00+02:00",
         outcome="failed",
         cost_usd=1.0,
+        peak_context=166_000,
+        context_limit=184_000,
+        note="Escalation note",
         gates=[
             {"name": "lint", "ok": True, "seconds": 2.0, "log": "ok"},
             {"name": "tests", "ok": False, "seconds": 30.0, "log": "FAIL"},
@@ -333,6 +336,70 @@ def write_jobs(conn: sqlite3.Connection) -> None:
         tokens_out=0,
         gates=[{"name": "lint", "ok": True, "seconds": 1.0, "log": "ok"}],
     )
+
+    # A Claude escalation job with note
+    esc = metrics.upsert_ticket(conn, project, "f1-02-escalated", milestone_id=f1)
+    esc_job = metrics.start_job(
+        conn,
+        f1_run,
+        ticket_id=esc,
+        milestone_id=f1,
+        role="escalation",
+        agent=OPUS,
+        attempt=1,
+        started="2026-09-30T10:15:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        esc_job,
+        ended="2026-09-30T10:20:00+02:00",
+        outcome="passed",
+        cost_usd=1.0,
+        note="Escalation note",
+        tokens_in=10_000,
+        tokens_cached=100_000,
+        tokens_out=2_000,
+    )
+
+
+def write_review_job(conn: sqlite3.Connection) -> int:
+    """A review job with findings, for the job detail page tests."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    f1_run = metrics.upsert_run(conn, project, "20260930-110000")
+
+    review = metrics.start_job(
+        conn,
+        f1_run,
+        ticket_id=None,
+        milestone_id=f1,
+        role="review",
+        agent=OPUS,
+        attempt=1,
+        started="2026-09-30T11:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        review,
+        ended="2026-09-30T11:15:00+02:00",
+        outcome="passed",
+        cost_usd=1.50,
+        tokens_in=10_000,
+        tokens_cached=100_000,
+        tokens_out=2_000,
+    )
+    metrics.add_finding(
+        conn, f1, "RV-1", job_id=review, severity="blocking", summary="Missing input validation"
+    )
+    metrics.add_finding(
+        conn,
+        f1,
+        "RV-2",
+        job_id=review,
+        severity="should-fix",
+        summary="Edge case in error handling",
+    )
+    return review
 
 
 def write_more_jobs(conn: sqlite3.Connection, count: int) -> int:
