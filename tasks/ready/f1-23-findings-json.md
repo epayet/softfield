@@ -24,7 +24,7 @@ Checkpoints and reviews report findings as JSON, directions and escalations leav
 Read `docs/adr/14-developers-and-agents.md` items 13–14 and `runner/review.py`. Test-first.
 - **Checkpoint:** besides its note, it writes `checkpoint-<n>.json`: `{"findings": [{severity, file, line, summary, detail, route, ticket}]}`; the runner stores them as findings on the checkpoint job.
 - **Review:** the review JSON gains `file`, `line`, `detail` and `ticket` per finding; the last round adds `"checkpoint_verdicts": {"<finding key>": "confirmed" | "rejected" | "missed"}` and `"score": 1-10`, stored in `findings.verdict` and `milestones.review_score`. A missed finding is one the review found that a checkpoint should have caught.
-- **Process notes:** directions and escalations write `note.md` (2–4 lines: did the developer follow the ticket, run its checks, go round in circles), stored in `jobs.note`. Descriptive, never scored.
+- **Process notes:** directions and escalations write `{logs}/note.md` (2–4 lines: did the developer follow the ticket, run its checks, go round in circles), stored in `jobs.note`. Descriptive, never scored.
 - **`runner signoff <key> --score N`** (1–10, optional) stores `milestones.owner_score`.
 - Old review JSON without the new keys still parses.
 

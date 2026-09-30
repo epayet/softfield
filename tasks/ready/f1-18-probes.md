@@ -18,7 +18,8 @@ commands:
 files:
   - docs/adr/14-developers-and-agents.md
   - opencode.json
-  - tests/runner/fixtures/probes/
+  - tests/runner/fixtures/probes/opencode-ollama.jsonl
+  - tests/runner/fixtures/probes/copilot-review.txt
 tests:
   - tests/runner/test_local_model.py
 ---
