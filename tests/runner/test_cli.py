@@ -46,3 +46,38 @@ def test_milestone_takes_a_number_or_a_key(in_repo, monkeypatch, arg, key):
 def test_a_bad_milestone_name_is_an_error(in_repo, capsys):
     assert cli.main(["milestone", "F 1"]) == 1
     assert "milestone" in capsys.readouterr().err
+
+
+def _fake_subprocess(monkeypatch) -> list[list[str]]:
+    import subprocess
+
+    ran: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        ran.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout="answer\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return ran
+
+
+def test_copilot_review_runs_read_only(in_repo, monkeypatch, capsys):
+    ran = _fake_subprocess(monkeypatch)
+    assert cli.main(["copilot-review", "--model", "gpt-5-mini", "Review runner/loop.py"]) == 0
+    assert ran[0][:2] == ["copilot", "--prompt=Review runner/loop.py"]
+    assert "--deny-tool" in ran[0]
+    assert "answer" in capsys.readouterr().out
+
+
+def test_copilot_help_is_the_only_other_copilot_call(in_repo, monkeypatch):
+    ran = _fake_subprocess(monkeypatch)
+    assert cli.main(["copilot-review", "--copilot-help"]) == 0
+    assert ran == [["copilot", "--help"]]
+
+
+def test_github_get_refuses_a_write(in_repo, monkeypatch, capsys):
+    ran = _fake_subprocess(monkeypatch)
+    assert cli.main(["github-get", "/repos/x/y -X DELETE"]) == 1
+    assert ran == []
+    assert cli.main(["github-get", "/user"]) == 0
+    assert ran == [["gh", "api", "--method", "GET", "/user"]]

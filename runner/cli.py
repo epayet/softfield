@@ -2,11 +2,12 @@
 
 import argparse
 import os
+import subprocess
 import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from runner import checks, i18n, owner
+from runner import checks, copilot, i18n, owner
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
@@ -66,6 +67,14 @@ def main(argv: list[str] | None = None) -> int:
     check_all.add_argument("--hook", action="store_true", help="as the pre-commit hook")
     sub.add_parser("check-layout", help="check unit test file naming")
     sub.add_parser("check-i18n", help="check every user-facing string has a French translation")
+    copilot_review = sub.add_parser(
+        "copilot-review", help="one read-only Copilot prompt (f1's probes; capped per day)"
+    )
+    copilot_review.add_argument("prompt", nargs="?", default="")
+    copilot_review.add_argument("--model", help="a Copilot model name (default: Copilot's)")
+    copilot_review.add_argument("--copilot-help", action="store_true", help="copilot --help")
+    github_get = sub.add_parser("github-get", help="a GET on GitHub's API, e.g. /user")
+    github_get.add_argument("path")
     args = parser.parse_args(argv)
 
     repo = _repo()
@@ -127,11 +136,25 @@ def main(argv: list[str] | None = None) -> int:
             problems += i18n.compiled_out_of_date(repo)
             print("\n".join(problems) or "translations OK")
             return 1 if problems else 0
+        elif args.command == "copilot-review":
+            if args.copilot_help:
+                cmd = ["copilot", "--help"]
+                proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+                print(proc.stdout + proc.stderr, end="")
+                return proc.returncode
+            if not args.prompt:
+                raise copilot.CopilotError("a prompt is needed")
+            print(copilot.probe_review(repo, args.prompt, args.model, _today()))
+        elif args.command == "github-get":
+            cmd = copilot.github_get_command(args.path)
+            proc = subprocess.run(cmd, capture_output=True, text=True, check=False)
+            print(proc.stdout + proc.stderr, end="")
+            return proc.returncode
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
             return 1 if problems else 0
-    except (RunnerError, owner.OwnerError, TaskError) as exc:
+    except (RunnerError, owner.OwnerError, TaskError, copilot.CopilotError) as exc:
         print(f"runner: {exc}", file=sys.stderr)
         return 1
     return 0

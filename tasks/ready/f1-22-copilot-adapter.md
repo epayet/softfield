@@ -17,7 +17,7 @@ tests:
 
 ### Context
 Read `docs/adr/14-developers-and-agents.md` items 2–4 and 10, its probe results (flags, models, output), and `runner/agents.py`. Test-first, with the probe's fixture `tests/runner/fixtures/probes/copilot-review.txt`; tests fake the subprocess, never call Copilot.
-- The spec becomes `copilot -p` with the model and `--allow-tool`/`--deny-tool` from its read-only tools; **shell and write tools are always denied**, whatever the spec says.
+- Build on `runner/copilot.py` (it exists: `review_command` already denies shell, write, URLs and the GitHub MCP server, and binds the prompt to its flag). The spec becomes that command with the agent's model; **the denials stay, whatever the spec says**, and the tests in `tests/runner/test_copilot.py` keep passing.
 - The result counts requests (per the probe), parses a quota refusal and its reset, and reads the billing endpoint only if the probe found it answers.
 - Declare the Copilot agent (`copilot-<model>`) in `workflow/runner.toml`, in no role yet (f1-26 adds the shadow).
 
