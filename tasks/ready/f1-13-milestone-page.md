@@ -1,7 +1,7 @@
 ---
 id: f1-13-milestone-page
 milestone: f1
-depends_on: [f1-12-milestones-list]
+depends_on: [f1-12-milestones-list, f1-35-timeline-milestones-fixes]
 difficulty: 5
 files:
   - factory_dashboard/milestones.py
