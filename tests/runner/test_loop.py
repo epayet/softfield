@@ -219,6 +219,30 @@ def test_preflight_failure_escalates_without_calling_the_model(repo, fake_model)
     assert report.tasks[0].attempts == 0  # the model was never called
 
 
+def test_session_stops_when_an_escalation_changes_the_runner(repo, fake_model, monkeypatch):
+    """m4-07: an escalation fixed runner/tasks.py and requeued the task, but the running
+    session still had the old module loaded and failed the task again."""
+    _add_task(repo, "m1-01-thing")
+    (repo / "coucou" / "thing.py").write_text("X = 1\n")  # pre-flight fails
+    git(repo, "commit", "-qam", "break the skeleton")
+    calls = []
+
+    def fix_runner_and_requeue(s, task, logs, reason):
+        assert not calls, "the session ran the requeued task with stale runner code"
+        calls.append(task.id)
+        (repo / "runner").mkdir(exist_ok=True)
+        (repo / "runner" / "tasks.py").write_text("# fixed\n")
+        git(repo, "mv", "tasks/escalated/m1-01-thing.md", "tasks/ready/m1-01-thing.md")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-qm", "escalation: requeue")
+
+    monkeypatch.setattr(loop, "handle_escalation", fix_runner_and_requeue)
+    report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert report is not None
+    assert calls == ["m1-01-thing"]
+    assert "Stopped: an escalation changed runner/. Restart the runner." in report.notes
+
+
 def test_refuses_to_start_on_a_dirty_tree(repo, fake_model):
     (repo / "dirty.txt").write_text("x")
     with pytest.raises(loop.RunnerError, match="clean main"):

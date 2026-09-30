@@ -1,5 +1,6 @@
 """The per-task loop and the session around it (docs/workflow.md)."""
 
+import hashlib
 import json
 import subprocess
 import time
@@ -397,9 +398,23 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
 # --- the session ------------------------------------------------------------------
 
 
+def _runner_code(repo: Path) -> str:
+    """A fingerprint of the runner's source, to notice an escalation changing it."""
+    digest = hashlib.sha256()
+    for path in sorted((repo / "runner").rglob("*.py")):
+        digest.update(path.as_posix().encode() + b"\0" + path.read_bytes())
+    return digest.hexdigest()
+
+
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
     s = open_session(cfg)
+    code = _runner_code(cfg.repo)
     while True:
+        if _runner_code(cfg.repo) != code:
+            # m4-07: Python keeps the old modules, so a runner fix made by an escalation
+            # only takes effect in a new session. Stop rather than run requeued tasks stale.
+            s.report.notes.append("Stopped: an escalation changed runner/. Restart the runner.")
+            break
         ready = load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
         done = task_ids(s.tasks_dir("done"))
         escalated = task_ids(s.tasks_dir("escalated"))
