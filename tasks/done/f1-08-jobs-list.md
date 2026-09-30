@@ -31,3 +31,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - more than 200 jobs shows 200 and "N more"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1451
+gate_failures: []
+tokens: 2294338
+```
