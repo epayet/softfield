@@ -29,3 +29,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - each trend's JSON block holds one point per milestone, oldest first
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1335
+gate_failures: []
+tokens: 2352257
+```
