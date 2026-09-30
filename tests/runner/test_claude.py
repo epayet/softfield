@@ -1,6 +1,15 @@
+import subprocess
 from datetime import UTC, datetime, timedelta
 
-from runner.claude import STRIPPED_ENV, backoff_seconds, claude_env, usage_limit_reset
+from runner.claude import (
+    STRIPPED_ENV,
+    ClaudeJob,
+    backoff_seconds,
+    claude_env,
+    run_claude,
+    shell_note,
+    usage_limit_reset,
+)
 
 NOW = datetime(2026, 9, 27, 14, 0, tzinfo=UTC)
 
@@ -57,3 +66,26 @@ def test_path_scoped_write_rules_use_edit(repo, monkeypatch):
     source = inspect.getsource(loop)
     assert '"Write(' not in source
     assert '"Edit(var/runs/**)"' in source
+
+
+def test_a_job_with_bash_is_told_how_to_call_it():
+    """f0: headless jobs wrote `cd repo; …`, `git -C` and pipes; the prefix rules denied them
+    all, and the escalation concluded it couldn't run checks."""
+    note = shell_note(("Read", "Bash(uv run pytest:*)", "Bash(git diff:*)"))
+    assert "one command per Bash call" in note
+    assert "`uv run pytest`, `git diff`" in note
+    assert shell_note(("Read", "Edit")) == ""
+
+
+def test_run_claude_appends_the_shell_note(tmp_path, monkeypatch):
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, stdout='{"result": "ok"}', stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Bash(git log:*)",))
+    run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    prompt = seen[0][seen[0].index("-p") + 1]
+    assert prompt.startswith("Review.") and "`git log`" in prompt

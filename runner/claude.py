@@ -99,13 +99,30 @@ def _usage(data: dict[str, Any]) -> dict[str, int]:
     return {k: int(usage.get(k) or 0) for k in keys}
 
 
+_BASH_RULE_RE = re.compile(r"^Bash\((.+?):\*\)$")
+
+
+def shell_note(allowed_tools: tuple[str, ...]) -> str:
+    """How a job may call Bash: the rules match a command's prefix, so `cd …;`, `git -C`,
+    pipes and chains are denied (every Bash denial in the f0 rehearsal was one of those)."""
+    prefixes = [m.group(1) for t in allowed_tools if (m := _BASH_RULE_RE.match(t))]
+    if not prefixes:
+        return ""
+    allowed = ", ".join(f"`{p}`" for p in prefixes)
+    return (
+        "\n\nShell: you are already at the repo root. Run one command per Bash call, starting"
+        f" with one of {allowed}; no `cd`, `git -C`, pipes, `;` or `&&`, or it is denied."
+        " Use Read, Grep and Glob for everything else."
+    )
+
+
 def run_claude(
     job: ClaudeJob, repo: Path, timeout: int, log_path: Path, now: datetime
 ) -> ClaudeResult:
     cmd = [
         "claude",
         "-p",
-        job.prompt,
+        job.prompt + shell_note(job.allowed_tools),
         "--output-format",
         "json",
         "--permission-mode",
