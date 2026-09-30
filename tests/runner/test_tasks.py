@@ -148,13 +148,26 @@ def test_a_lead_ticket_may_name_extra_commands(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
     assert parse_task(path, 150).commands == ()
     lead = path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
-    path.write_text(lead.replace("agent: lead\n", "agent: lead\ncommands: [ollama list, gh api]\n"))
-    assert parse_task(path, 150).commands == ("ollama list", "gh api")
+    path.write_text(
+        lead.replace(
+            "agent: lead\n", "agent: lead\ncommands: [ollama list, uv run runner report]\n"
+        )
+    )
+    assert parse_task(path, 150).commands == ("ollama list", "uv run runner report")
 
 
 @pytest.mark.parametrize(
     "commands",
-    ["[git commit]", "[git]", "[uv run runner signoff]", "[uv run runner]", "['ls;rm']", "[1]"],
+    [
+        "[git commit]",
+        "[git]",
+        "[uv run runner signoff]",
+        "[uv run runner milestone f1]",
+        "[uv run runner]",
+        "[uv run]",
+        "['ls;rm']",
+        "[1]",
+    ],
 )
 def test_commands_never_reach_git_or_the_owners_commands(tmp_path, commands):
     path = write_task(tmp_path, "m1-01-thing")

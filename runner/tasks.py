@@ -115,8 +115,12 @@ def _str_tuple(meta: dict[str, Any], key: str, required: bool) -> tuple[str, ...
     return tuple(value)
 
 
-# A lead ticket's `commands:` may never commit, push or run the owner's commands.
-_REFUSED_COMMANDS = ("git", "uv run runner")
+# A lead ticket's `commands:` may never run git beyond the read-only tools it already has,
+# the owner's commands, or the loop itself; nor a prefix of any of them (`uv run`).
+_REFUSED_COMMANDS = tuple(
+    ["git"]
+    + [f"uv run runner {c}" for c in ("signoff", "accept", "reject", "milestone", "run", "review")]
+)
 _COMMAND_RE = re.compile(r"[\w@./:=+-]+( [\w@./:=+-]+)*")
 
 
@@ -125,7 +129,10 @@ def _commands(meta: dict[str, Any], agent: str) -> tuple[str, ...]:
     if commands and agent != "lead":
         raise TaskError("only a lead ticket may name 'commands'")
     for command in commands:
-        refused = any(command == r or command.startswith(r + " ") for r in _REFUSED_COMMANDS)
+        refused = any(
+            command == r or command.startswith(r + " ") or r.startswith(command + " ")
+            for r in _REFUSED_COMMANDS
+        )
         if refused or not _COMMAND_RE.fullmatch(command):
             raise TaskError(f"'commands' may not include {command!r}")
     return commands
