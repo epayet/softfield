@@ -28,3 +28,10 @@ Read `docs/milestones/f1.md` (D2, D6) and `docs/adr/13-factory-dashboard.md` (th
 - a missing or malformed file is listed as a gap, not an error
 - `uv run runner backfill --db <path>` writes to that path (the default comes from the config)
 - `uv run runner check-all --task f1-04-backfill` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
