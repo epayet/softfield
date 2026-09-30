@@ -236,6 +236,7 @@ _(to fill in at the M3 review)_
 - **Q6:** the generic runner changes were no-changes, pre-flight accepting unwritten tests, restarting after a runner change, and the timeout. Nothing Coucou-specific.
 - **Anything else:** reading the junior's thinking (OpenCode's `opencode.db`) explains failures the gate logs can't. Peak junior context went from ~7% (M1–M3) to 26–43%.
 - **Decisions affected:** ADR 07's keep-and-extend rule wasn't met, so tighten, per ADR 07: [ADR 12](12-junior-feedback-and-checkpoints.md). Dashboard: [ADR 13](13-factory-dashboard.md).
+- **Owner's direction at sign-off:** steer mid-milestone rather than limit the plan: a checkpoint every 2 merges, lead direction before a ticket's last attempt, limits per trigger instead of a milestone cap, and one command (`runner milestone N`) that runs everything unattended. The owner prefers runs that need no oversight over the cheapest possible session pattern ([ADR 12](12-junior-feedback-and-checkpoints.md), Accepted).
 
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 

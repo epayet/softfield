@@ -133,7 +133,7 @@ Per delegated task: M3 ≈10 lead steps; doing it directly ≈5; this ADR aims f
 **More than one junior at a time.** LM Studio can queue parallel requests, but it's set to no parallel workers, and switching contexts may cost more than it saves. This needs a future ADR (noted in `docs/backlog.md`).
 
 ## Consequences and measures
-- More escalations at first, because specs aren't pre-proven. The headless cap (10 per milestone) stays. More than about 3 escalations per milestone → tighten the tickets (examples, checks, lead-written tests), never go back to worked solutions.
+- More escalations at first, because specs aren't pre-proven. The headless cap (10 per milestone) stays *(replaced by limits per trigger, [ADR 12](12-junior-feedback-and-checkpoints.md) item 10)*. More than about 3 escalations per milestone → tighten the tickets (examples, checks, lead-written tests), never go back to worked solutions.
 - **Measured at the M4 review, against M3:**
 
 | Measure | M3 | Target for M4 |

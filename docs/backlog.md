@@ -20,4 +20,4 @@ Nits from reviews and triaged discoveries that aren't scheduled yet. One bullet 
 - [m4-review nit] `me.js`: `SentLog` belongs in its own module (one concept per module); the sent time uses the browser's locale, not the page's language.
 - [m4-review nit] `Delivery` with no items still renders an empty `<div class="delivery-list">`.
 - [m4-review nit, French] The note label "Écrivez une note à envoyer." is stiff; something like "Un petit mot ?" suits the tone. Check with the owner.
-- [m4-review nit, m4-11] `compose.js` `handleSubmit`: wrap the send in `try/finally` so `busy` clears if reading the photo fails (else Send stays disabled until a reload).
+- [ADR 12 item 3] `compose.js` still has the "empty" and "too long" alerts, which a person can't reach now that Send is disabled and the textarea has `maxlength`. Remove them (and their strings) next time the composer changes.

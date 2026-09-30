@@ -25,7 +25,7 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 - **Done when:** acceptance criteria as bullets, including the edges ("a 280-character note", "just after midnight"). Whatever isn't written there, the junior won't test, and whatever isn't tested, it won't do.
 - **No stubs, no reference implementation.** A spec error now shows up as a failed attempt or a `BLOCKED.md`, and a short escalation fixes it.
 - **Security and protected work stay test-first:** the lead writes those tests on main, checks each fails for the right reason, and tests every security rule.
-- **`tests:` names a file the junior may write:** if the natural test file is protected (`tests/browser/test_display.py` guards `display.js`), name a new file beside it that imports its fixtures. m4-07 listed the protected one and burned three attempts.
+- **`tests:` names a file the junior may write.** If the natural test file is protected (`tests/browser/test_display.py` guards `display.js`), the lead writes those tests on main first, and the junior's ticket points at them. Never ask for a new test file with no module of its own: the layout gate wants a matching module, and m4-07's junior invented an empty one to satisfy it (m4-F7). Listing the protected file burned three attempts.
 - **Where a data-writing command may run:** say so explicitly. The M1 review had to add a "never in prod" guard to `seed_demo`.
 
 ## JavaScript tasks (ADR 06)
@@ -55,6 +55,13 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 - **Estimated caps backfire.** m3-12's `max_diff` of 90 came from a one-line-per-rule CSS reference; the model writes one declaration per line and produced about 95. All 3 attempts went on trimming lines. Hence ADR 07's 1000-line backstop and no per-task caps.
 - **Tests pin behaviour, not layout.** A screenshot pass found 4 layout problems no test caught. Hence the layout check.
 - **Untested edges stay broken,** whoever writes the tests: m3-10's date bug was an edge missing from the lead's own skeleton tests.
+
+## Lessons from M4
+
+- **Nothing CSS can't do.** m4-07 asked plain CSS to tell long notes from short ones; it can't, so the junior shrank every note (m4-F6). If the rule needs data (a length, a count), say which module marks it (a class, an attribute).
+- **"Done when" says what the screen shows,** not only that something appears: "the item shows its note and thumbnail", not "an item appears". Juniors' tests check exactly what the ticket names (m4-F2).
+- **Ask for tests that act as a person would:** click, fill, `select_option`. A test that dispatches events or sets `.value` from JavaScript reaches states nobody can (m4-F1). The `test-patterns` gate flags it (ADR 12).
+- **Split wide fan-in.** A junior ticket depends on at most two other junior tickets. m4-06 wired four, plus i18n and offline, and failed until it was split. Past two, split it or make it a lead ticket (ADR 12).
 
 ## Open questions
 

@@ -53,6 +53,6 @@ Scripts only from our own files: no inline `<script>`, no `eval`, no CDN. Style 
 - The harness serves the real `/jsi18n/`, in English, so tests read English text.
 - Find things as a person would: `page.get_by_role("button", name="That's me")`, `page.get_by_label(…)`, `page.get_by_role("alert")`.
 - **`page.evaluate` needs a function to set things:** `page.evaluate("() => { window.answer = false; }")`. A bare `"window.answer = …"` returns the value, and if that's a Promise, Playwright waits for it forever.
-- Wait for results with `page.wait_for_function("window.saved.length === 1")` or `locator.wait_for()`, never `sleep`.
+- Wait for results with `locator.wait_for()` or `page.wait_for_function("() => window.saved.length === 1")`, never `sleep`. **Always pass `wait_for_function` a function (`"() => …"`)**: a bare expression is `eval`'d while it polls, and the real pages' CSP blocks that (`EvalError: … 'unsafe-eval'`). It hides on the harness page and fails on `/me/` (m4-06).
 - `localStorage` starts empty in every test. Reload with `mount` again to check that something is remembered.
 - End with `layout_problems(page) == []` at `PHONE`.
