@@ -241,6 +241,138 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
     metrics.finish_job(conn, claude, ended=_at(timedelta(minutes=50)), outcome="passed", **tokens)
 
 
+def write_jobs(conn: sqlite3.Connection) -> None:
+    """Jobs with gates, for the jobs page. Not in write_fixture so the overview tests stay
+    pinned."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    f1_run = metrics.upsert_run(conn, project, "20260930-100000")
+    m4 = metrics.upsert_milestone(conn, project, "m4")
+    m4_run = metrics.upsert_run(conn, project, "20260920-100000")
+
+    # A job that passed with gates (all ok)
+    t = metrics.upsert_ticket(conn, project, "f1-01-first", milestone_id=f1)
+    job = metrics.start_job(
+        conn,
+        f1_run,
+        ticket_id=t,
+        milestone_id=f1,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-09-30T10:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        job,
+        ended="2026-09-30T10:10:00+02:00",
+        outcome="passed",
+        tokens_in=200_000,
+        tokens_out=10_000,
+        gates=[
+            {"name": "lint", "ok": True, "seconds": 2.0, "log": "ok"},
+            {"name": "tests", "ok": True, "seconds": 30.0, "log": "ok"},
+        ],
+    )
+
+    # A job that failed at a gate
+    escalated = metrics.upsert_ticket(conn, project, "f1-02-escalated", milestone_id=f1)
+    job = metrics.start_job(
+        conn,
+        f1_run,
+        ticket_id=escalated,
+        milestone_id=f1,
+        role="direction",
+        agent=OPUS,
+        attempt=1,
+        started="2026-09-30T10:05:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        job,
+        ended="2026-09-30T10:12:00+02:00",
+        outcome="failed",
+        cost_usd=1.0,
+        gates=[
+            {"name": "lint", "ok": True, "seconds": 2.0, "log": "ok"},
+            {"name": "tests", "ok": False, "seconds": 30.0, "log": "FAIL"},
+        ],
+    )
+
+    # A running job (no gates)
+    live = metrics.upsert_ticket(conn, project, "f1-04-live", milestone_id=f1)
+    metrics.start_job(
+        conn,
+        f1_run,
+        ticket_id=live,
+        milestone_id=f1,
+        role="developer",
+        agent=LOCAL,
+        attempt=2,
+        started=_at(timedelta(minutes=12)),
+    )
+
+    # Old m4 job with gates
+    old = metrics.upsert_ticket(conn, project, "m4-01-old", milestone_id=m4)
+    job = metrics.start_job(
+        conn,
+        m4_run,
+        ticket_id=old,
+        milestone_id=m4,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-09-20T09:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        job,
+        ended="2026-09-20T09:05:00+02:00",
+        outcome="passed",
+        tokens_in=50_000,
+        tokens_out=0,
+        gates=[{"name": "lint", "ok": True, "seconds": 1.0, "log": "ok"}],
+    )
+
+
+def write_more_jobs(conn: sqlite3.Connection, count: int) -> int:
+    """Add ``count`` more finished jobs for the overflow test. Returns the last job id."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    run = metrics.upsert_run(conn, project, "20260930-100000")
+    last = 0
+    for i in range(count):
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            f"f1-overflow-{i:04d}",
+            milestone_id=f1,
+            kind="developer",
+            state="done",
+            difficulty=3,
+        )
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started="2026-09-30T11:00:00+02:00",
+        )
+        metrics.finish_job(
+            conn,
+            job,
+            ended="2026-09-30T11:01:00+02:00",
+            outcome="passed",
+            tokens_in=10_000,
+            tokens_out=1_000,
+        )
+        last = job
+    return last
+
+
 @pytest.fixture
 def serve(db_path: Path) -> Callable[..., TestClient]:
     """A client for the dashboard over the fixture, with ``write_live``'s rows unless
