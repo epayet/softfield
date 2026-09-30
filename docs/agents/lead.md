@@ -12,6 +12,8 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
 
   Decide everything else yourself and record it in the review report. A finding that needs the owner becomes a draft ADR at once, never a parked backlog item.
 - **Low ceremony.** Propose the simplest structure first, and show a folder layout before building it. Add a gate or tool only when it catches a real risk. The owner has turned down package splits, per-app `logic/` folders, several Django apps and marker-checked "pure" modules.
+- **Brainstorms:** challenge the owner's ideas rather than agreeing; the owner asked for that. Ideas the owner wants kept go in `docs/roadmap.md` as "Idea:" sections with open questions. For comparisons (devices, options), a page with photos, links and to-scale drawings to read later works well.
+- **Product taste:** calm and ambient over features; no guilt, no read receipts. For home devices: plugged in, no battery, no e-ink (photos matter), off the shelf with no soldering or 3D printing. Mum loves rubber ducks; they're the theme for the physical coucou key.
 - **Bilingual:** every user-facing string ships in English and French (Mum reads French); the admin stays English ([ADR 00](../adr/00-initial.md) A2).
 - **LM Studio settings are the owner's.** Never override context or offload, never `lms load` with settings, and don't pin the context anywhere in the repo. The runner relies on JIT loading plus one warm-up request.
 - **The owner wants to learn how the workflow performs,** and may turn it into a generic "software factory" with a pluggable frontier ([ADR 02](../adr/02-software-factory.md), waiting for more milestones). Keep workflow knowledge tool-neutral and in the repo. See "Reporting" below.
