@@ -28,3 +28,12 @@ Read `factory_dashboard/templates/jobs.html`, `factory_dashboard/jobs.py` and `t
 - the agent and role filter test asserts the exact set of job rows returned (and that the other rows are absent), using a fixture job that really has that agent and role
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 5128777
+logs: var/runs/20260930-194445/f1-34-jobs-pages-fixes
+```
