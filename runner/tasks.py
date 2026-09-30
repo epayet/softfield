@@ -121,6 +121,7 @@ _REFUSED_COMMANDS = tuple(
     ["git"]
     + [f"uv run runner {c}" for c in ("signoff", "accept", "reject", "milestone", "run", "review")]
 )
+_DRY_RUN = "uv run runner run --dry-run"  # read-only: a replan checks its tickets with it
 _COMMAND_RE = re.compile(r"[\w@./:=+-]+( [\w@./:=+-]+)*")
 
 
@@ -129,7 +130,7 @@ def _commands(meta: dict[str, Any], agent: str) -> tuple[str, ...]:
     if commands and agent != "lead":
         raise TaskError("only a lead ticket may name 'commands'")
     for command in commands:
-        refused = any(
+        refused = command != _DRY_RUN and any(
             command == r or command.startswith(r + " ") or r.startswith(command + " ")
             for r in _REFUSED_COMMANDS
         )

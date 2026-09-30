@@ -148,12 +148,13 @@ def test_a_lead_ticket_may_name_extra_commands(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
     assert parse_task(path, 150).commands == ()
     lead = path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
-    path.write_text(
-        lead.replace(
-            "agent: lead\n", "agent: lead\ncommands: [ollama list, uv run runner report]\n"
-        )
+    commands = "commands: [ollama list, uv run runner report, uv run runner run --dry-run]\n"
+    path.write_text(lead.replace("agent: lead\n", "agent: lead\n" + commands))
+    assert parse_task(path, 150).commands == (
+        "ollama list",
+        "uv run runner report",
+        "uv run runner run --dry-run",  # read-only: a replan checks its tickets with it
     )
-    assert parse_task(path, 150).commands == ("ollama list", "uv run runner report")
 
 
 @pytest.mark.parametrize(
