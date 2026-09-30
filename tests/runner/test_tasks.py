@@ -162,7 +162,7 @@ def test_milestone_key(given, key):
     assert milestone_key(given) == key
 
 
-@pytest.mark.parametrize("given", ["", "f", "1f", "f-1", "F1", "f01", True, -1])
+@pytest.mark.parametrize("given", ["", "f", "1f", "f-1", "F1", "f01", "04", "٣", True, -1])
 def test_milestone_key_refuses_anything_else(given):
     with pytest.raises(TaskError):
         milestone_key(given)

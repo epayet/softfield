@@ -247,7 +247,8 @@ def test_session_stops_when_an_escalation_changes_the_runner(repo, fake_model, m
     report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     assert report is not None
     assert calls == ["m1-01-thing"]
-    assert "Stopped: an escalation changed runner/. Restart the runner." in report.notes
+    assert loop.RESTART_NOTE in report.notes
+    assert "a lead ticket or an escalation" in loop.RESTART_NOTE
 
 
 def test_refuses_to_start_on_a_dirty_tree(repo, fake_model):
@@ -376,6 +377,26 @@ def test_direction_can_repair_the_ticket(repo, fake_model, fake_lead):
     _run(repo, once=True)
     assert "Fix it work." in (repo / "tasks" / "done" / "m1-01-thing.md").read_text()
     assert git(repo, "log", "--format=%s", "--grep=^direction m1-01-thing").strip()
+
+
+def test_a_repaired_ticket_without_max_diff_gets_the_default(repo, fake_model, fake_lead):
+    """f0: the direction dropped a too-low cap, but the re-parse kept it as the default."""
+    ticket = write_task(repo / "tasks" / "ready", "m1-01-thing")
+    capped = ticket.read_text()
+    ticket.write_text(capped.replace("milestone: 1\n", "milestone: 1\nmax_diff: 1\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "add m1-01-thing")
+    script, _ = fake_lead
+
+    def repair(job, repo_):
+        logs = repo_ / _logs_in(job.prompt)
+        (logs / "direction.md").write_text("The cap was too low; it is gone.")
+        (logs / "ticket.md").write_text(capped)
+
+    fake_model.extend([_implement, _implement, _implement])
+    script.append(repair)
+    report = _run(repo, once=True)
+    assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
 
 
 def test_mechanical_failures_get_no_direction():
@@ -511,6 +532,26 @@ def test_an_escalation_whose_work_fails_check_all_stays_off_main(
     assert "return 'x'" in git(repo, "show", "escalation/m1-01-thing:coucou/thing.py")
     assert "failed check-all" in (repo / "tasks" / "blocked" / "m1-01-thing.md").read_text()
     assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_requeued_ticket_keeps_its_escalated_footer(repo, fake_model, fake_lead):
+    """f0: the escalation rewrote the ticket, so its done/ file lost the 3 failed attempts
+    and their tokens, and the metrics said "escalated: 0"."""
+    _escalate_on_protected(repo, fake_model)
+    fake_model.extend([_implement, lambda repo_, _: (repo_ / "coucou" / "after.py").write_text("")])
+    script, _ = fake_lead
+    clean = (repo / "tasks" / "ready" / "m1-01-thing.md").read_text()
+
+    def requeue(job, repo_):
+        logs = repo_ / job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
+        (repo_ / "tasks" / "ready" / "m1-01-thing.md").write_text(clean)
+        (logs / "decision.json").write_text('{"outcome": "requeue"}')
+
+    script.extend([lambda job, repo_: None, requeue, lambda job, repo_: None])  # + checkpoint
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    done = (repo / "tasks" / "done" / "m1-01-thing.md").read_text()
+    assert done.count("# --- runner ---") == 2
+    assert done.index("result: escalated") < done.index("result: done")
 
 
 def test_a_decision_for_the_owner_is_recorded(repo, fake_model, fake_lead):

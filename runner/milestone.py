@@ -40,28 +40,34 @@ _TOKENS_RE = re.compile(r"^tokens: (\d+)\b", re.MULTILINE)
 @dataclass(frozen=True)
 class MilestoneMetrics:
     done: int
-    escalated: int
-    attempts: list[int]
+    escalated: int  # tasks escalated at least once, merged since or not
+    attempts: list[int]  # per task, over every run of it
     tasks: list[str] = field(default_factory=list)  # short names of the merged tasks
     local_tokens: int = 0
+    total: int = 0  # tasks in done/ and escalated/
 
     @property
     def escalation_rate(self) -> float:
-        total = self.done + self.escalated
-        return self.escalated / total if total else 0.0
+        return self.escalated / self.total if self.total else 0.0
+
+
+def all_footers(text: str) -> list[dict[str, str]]:
+    """Every runner footer of a task file, oldest first (a requeued task has several)."""
+    footers = []
+    for match in _FOOTER_RE.findall(text):
+        fields = {}
+        for line in match.splitlines():
+            key, sep, value = line.partition(":")
+            if sep:
+                fields[key.strip()] = value.strip()
+        footers.append(fields)
+    return footers
 
 
 def footer_fields(text: str) -> dict[str, str]:
     """The last runner footer of a task file as a dict."""
-    matches = _FOOTER_RE.findall(text)
-    if not matches:
-        return {}
-    fields = {}
-    for line in matches[-1].splitlines():
-        key, sep, value = line.partition(":")
-        if sep:
-            fields[key.strip()] = value.strip()
-    return fields
+    footers = all_footers(text)
+    return footers[-1] if footers else {}
 
 
 def footer_tokens(text: str) -> int:
@@ -70,22 +76,24 @@ def footer_tokens(text: str) -> int:
 
 
 def milestone_metrics(repo: Path, milestone: str) -> MilestoneMetrics:
-    done = escalated = tokens = 0
+    done = escalated = tokens = total = 0
     attempts: list[int] = []
     tasks: list[str] = []
     for folder in ("done", "escalated"):
         for path in sorted((repo / "tasks" / folder).glob(f"{milestone}-*.md")):
             text = path.read_text(encoding="utf-8")
-            fields = footer_fields(text)
+            footers = all_footers(text)
             tokens += footer_tokens(text)
-            if fields.get("attempts", "").isdigit():
-                attempts.append(int(fields["attempts"]))
+            counts = [int(f["attempts"]) for f in footers if f.get("attempts", "").isdigit()]
+            if counts:
+                attempts.append(sum(counts))
+            if folder == "escalated" or any(f.get("result") == "escalated" for f in footers):
+                escalated += 1
             if folder == "done":
                 done += 1
                 tasks.append(re.sub(r"^[a-z]+\d+-\d+-", "", path.stem))
-            else:
-                escalated += 1
-    return MilestoneMetrics(done, escalated, attempts, tasks, tokens)
+            total += 1
+    return MilestoneMetrics(done, escalated, attempts, tasks, tokens, total)
 
 
 def _commit_time(repo: Path, ref: str) -> datetime | None:
@@ -120,7 +128,7 @@ def _write_metrics(s: Session, milestone: str, base: str, rounds: list[int], sto
             [
                 f"# Milestone {milestone.upper()}: runner metrics",
                 "",
-                f"- Tasks merged: {m.done}; escalated: {m.escalated}"
+                f"- Tasks merged: {m.done}; escalated at least once: {m.escalated}"
                 f" (escalation rate {m.escalation_rate:.0%})",
                 f"- Attempts per task: {m.attempts or '-'} (average {avg:.1f})",
                 f"- Review rounds: {len(rounds)}; actionable findings per round: {rounds or '-'}",

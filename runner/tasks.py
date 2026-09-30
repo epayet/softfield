@@ -34,7 +34,7 @@ def milestone_key(value: object) -> str:
     if isinstance(value, bool):
         raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
     text = str(value)
-    if text.isdigit() and (text == "0" or not text.startswith("0")):
+    if text.isascii() and text.isdigit() and (text == "0" or not text.startswith("0")):
         return f"m{text}"
     if isinstance(value, str) and _KEY_RE.fullmatch(text):
         return text
@@ -223,3 +223,17 @@ def append_footer(path: Path, fields: dict[str, object]) -> None:
     lines.append("```")
     with path.open("a", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
+
+
+_FOOTER_BLOCK_RE = re.compile(r"\n```yaml\n# --- runner ---\n.*?```\n", re.DOTALL)
+
+
+def carry_footers(source: Path, target: Path) -> None:
+    """Copy source's runner footers onto target, a rewritten copy of the same ticket that has
+    none, so a requeued ticket keeps the attempts and tokens of its earlier runs."""
+    target_text = target.read_text(encoding="utf-8")
+    if "# --- runner ---" in target_text:
+        return
+    blocks = _FOOTER_BLOCK_RE.findall(source.read_text(encoding="utf-8"))
+    if blocks:
+        target.write_text(target_text.rstrip("\n") + "\n" + "".join(blocks), encoding="utf-8")

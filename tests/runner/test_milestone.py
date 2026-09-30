@@ -21,12 +21,17 @@ def test_milestone_metrics(repo):
     ]:
         path = write_task(repo / "tasks" / folder, tid)
         append_footer(path, {"attempts": attempts, "tokens": 1000 * attempts})
-    append_footer(repo / "tasks" / "done" / "m1-02-b.md", {"attempts": 1, "tokens": 500})
+    requeued = repo / "tasks" / "done" / "m1-02-b.md"
+    requeued.write_text(
+        requeued.read_text().replace("attempts: 2", "result: escalated\nattempts: 2")
+    )
+    append_footer(requeued, {"attempts": 1, "tokens": 500})
     metrics = milestone_metrics(repo, "m1")
-    assert (metrics.done, metrics.escalated, sorted(metrics.attempts)) == (2, 1, [1, 1, 3])
+    # f0: m1-02-b was escalated, requeued and merged: 3 attempts in all, and it counts as escalated
+    assert (metrics.done, metrics.escalated, sorted(metrics.attempts)) == (2, 2, [1, 3, 3])
     assert metrics.tasks == ["a", "b"]
     assert metrics.local_tokens == 1000 + 2000 + 500 + 3000  # every footer, requeues included
-    assert round(metrics.escalation_rate, 2) == 0.33
+    assert round(metrics.escalation_rate, 2) == 0.67
 
 
 def test_milestone_summary_without_a_start_tag(repo):

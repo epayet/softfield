@@ -53,6 +53,7 @@ from runner.tasks import (
     Task,
     append_footer,
     blocked_ids,
+    carry_footers,
     load_dir,
     milestone_order,
     parse_task,
@@ -275,7 +276,7 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
                 f"direction {task.id}: ticket repaired (by Claude)", agent=CLAUDE_HEADLESS_AGENT
             )
         )
-        task = parse_task(task.path, task.max_diff)
+        task = parse_task(task.path, s.cfg.default_max_diff)
     return task, direction
 
 
@@ -605,6 +606,9 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         block(s, escalated, f"the escalation's work failed check-all; it is on {branch}")
         return
     if outcome == "requeue":
+        requeued = s.tasks_dir("ready") / task.path.name
+        if requeued.is_file():
+            carry_footers(escalated, requeued)
         s.git.run("rm", "-q", str(escalated.relative_to(s.repo)))
     elif outcome == "implemented":
         s.git.move(escalated, s.tasks_dir("done") / task.path.name)
@@ -636,14 +640,18 @@ def _runner_code(repo: Path) -> str:
     return digest.hexdigest()
 
 
-RESTART_NOTE = "Stopped: an escalation changed runner/. Restart the runner."
+RESTART_NOTE = (
+    "Stopped: Claude changed runner/ (a lead ticket or an escalation), "
+    "so the runner needs a fresh process."
+)
 
 
 def work_queue(
     s: Session, *, milestone: str | None = None, escalate: bool = True, once: bool = False
 ) -> bool:
     """Work through tasks/ready (one milestone's, if given): tasks, directions, checkpoints
-    and escalations. Returns True if an escalation changed the runner, which needs a restart.
+    and escalations. Returns True if Claude (a lead ticket or an escalation) changed the
+    runner, which needs a restart.
     """
     code = _runner_code(s.repo)
     while True:
