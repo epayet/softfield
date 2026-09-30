@@ -33,6 +33,15 @@ dev = [
     "types-pyyaml>=6",
     "pytest-playwright>=0.5",
 ]
+factory = [
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+]
+
+[tool.uv]
+# The factory group (ADR 13: the dashboard) is part of every `uv sync` and `uv run`.
+default-groups = ["dev", "factory"]
 
 [build-system]
 requires = ["hatchling"]

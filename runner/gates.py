@@ -13,7 +13,7 @@ from runner.tasks import Task, queued_tests
 
 ALWAYS_ALLOWED = ("docs/discoveries.md",)
 DEPENDENCY_FILES = ("pyproject.toml", "uv.lock")
-DEPENDENCY_DIRS = ("coucou/static/coucou/vendor/",)
+DEPENDENCY_DIRS = ("coucou/static/coucou/vendor/", "factory_dashboard/static/vendor/")
 BLOCKED_FILE = "BLOCKED.md"
 BLOCKED_CATEGORIES = ("false-assumption", "needs-file", "needs-info", "unrelated-problem")
 _OUTPUT_LIMIT = 6000

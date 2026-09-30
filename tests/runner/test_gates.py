@@ -40,8 +40,11 @@ def test_protected_globs():
 
 
 def test_dependency_changes():
-    assert dependency_changes(["uv.lock", "coucou/static/coucou/vendor/alpine.js", "a.py"]) == [
+    vendored = "factory_dashboard/static/vendor/htmx.min.js"
+    changed = ["uv.lock", "coucou/static/coucou/vendor/alpine.js", vendored, "a.py"]
+    assert dependency_changes(changed) == [
         "coucou/static/coucou/vendor/alpine.js",
+        vendored,
         "uv.lock",
     ]
 

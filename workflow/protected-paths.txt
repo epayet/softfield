@@ -20,6 +20,7 @@ coucou/static/coucou/js/live.js
 coucou/static/coucou/js/display.js
 # Vendored third-party code: pinned copies (ADR 11 item 1)
 coucou/static/coucou/vendor/**
+factory_dashboard/static/vendor/**
 # Admin templates for devices (the claim flow)
 coucou/templates/admin/**
 

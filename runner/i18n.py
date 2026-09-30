@@ -13,7 +13,14 @@ from pathlib import Path
 LOCALE_DIR = Path("coucou/locale")
 TARGET_LANGUAGES = ("fr",)  # every language except the source language (English)
 DOMAINS = ("django", "djangojs")
-IGNORE = ("tests/*", "runner/*", "var/*", "docs/*", "coucou/static/coucou/vendor/*")
+IGNORE = (
+    "tests/*",
+    "runner/*",
+    "var/*",
+    "docs/*",
+    "coucou/static/coucou/vendor/*",
+    "factory_dashboard/*",  # the owner's English-only tool (ADR 13), vendored JS included
+)
 
 
 @dataclass(frozen=True)

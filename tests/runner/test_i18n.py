@@ -1,4 +1,4 @@
-from runner.i18n import catalogue_problems, parse_po
+from runner.i18n import IGNORE, catalogue_problems, parse_po
 
 PO = """\
 msgid ""
@@ -56,3 +56,9 @@ def test_catalogue_problems():
         "fr: fuzzy translation needs checking: 'Thinking of you'",
         "fr: missing French translation: '%(n)s moment'",
     ]
+
+
+def test_the_factory_dashboard_is_not_translated():
+    """f1: makemessages found gettext( calls inside the vendored echarts.min.js. The dashboard
+    is the owner's English-only tool (ADR 13), not Coucou."""
+    assert "factory_dashboard/*" in IGNORE
