@@ -489,7 +489,12 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
         prompt=prompts.LEAD_TICKET.format(
             id=task.id, task=task.path.relative_to(s.repo).as_posix()
         ),
-        allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
+        allowed_tools=(
+            *EDIT_TOOLS,
+            *CHECK_TOOLS,
+            *GIT_READ_TOOLS,
+            *(f"Bash({command}:*)" for command in task.commands),
+        ),
     )
     call_claude(s, job, task.milestone, task.id)
     if not s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT)):

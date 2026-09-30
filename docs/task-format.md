@@ -16,6 +16,8 @@ tests:                              # the tests that define done; the junior wri
   - tests/integration/test_compose_page.py
 finding: m4-F2                      # optional: the review finding this fixes
 agent: lead                         # optional: `lead` for the lead's own tickets (default `junior`)
+commands: [ollama list, gh api]     # optional, lead tickets only: extra Bash prefixes for its
+                                    # headless job (never git or `uv run runner`)
 ---
 ```
 

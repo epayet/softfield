@@ -70,6 +70,7 @@ class Task:
     sections: dict[str, str]
     path: Path
     agent: str = "junior"
+    commands: tuple[str, ...] = ()  # a lead ticket's extra Bash prefixes (f1's probes)
 
     @property
     def goal(self) -> str:
@@ -114,6 +115,22 @@ def _str_tuple(meta: dict[str, Any], key: str, required: bool) -> tuple[str, ...
     return tuple(value)
 
 
+# A lead ticket's `commands:` may never commit, push or run the owner's commands.
+_REFUSED_COMMANDS = ("git", "uv run runner")
+_COMMAND_RE = re.compile(r"[\w@./:=+-]+( [\w@./:=+-]+)*")
+
+
+def _commands(meta: dict[str, Any], agent: str) -> tuple[str, ...]:
+    commands = _str_tuple(meta, "commands", required=False)
+    if commands and agent != "lead":
+        raise TaskError("only a lead ticket may name 'commands'")
+    for command in commands:
+        refused = any(command == r or command.startswith(r + " ") for r in _REFUSED_COMMANDS)
+        if refused or not _COMMAND_RE.fullmatch(command):
+            raise TaskError(f"'commands' may not include {command!r}")
+    return commands
+
+
 def parse_task(path: Path, default_max_diff: int) -> Task:
     meta, body = split_frontmatter(path.read_text(encoding="utf-8"))
     task_id = meta.get("id")
@@ -142,6 +159,7 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
         sections=sections,
         path=path,
         agent=agent,
+        commands=_commands(meta, agent),
     )
 
 

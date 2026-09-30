@@ -143,6 +143,34 @@ def test_a_ticket_says_who_works_it(tmp_path):
         parse_task(path, 150)
 
 
+def test_a_lead_ticket_may_name_extra_commands(tmp_path):
+    """f1's probes run as a headless lead ticket with a narrow tool list (ADR 14)."""
+    path = write_task(tmp_path, "m1-01-thing")
+    assert parse_task(path, 150).commands == ()
+    lead = path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
+    path.write_text(lead.replace("agent: lead\n", "agent: lead\ncommands: [ollama list, gh api]\n"))
+    assert parse_task(path, 150).commands == ("ollama list", "gh api")
+
+
+@pytest.mark.parametrize(
+    "commands",
+    ["[git commit]", "[git]", "[uv run runner signoff]", "[uv run runner]", "['ls;rm']", "[1]"],
+)
+def test_commands_never_reach_git_or_the_owners_commands(tmp_path, commands):
+    path = write_task(tmp_path, "m1-01-thing")
+    lead = path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
+    path.write_text(lead.replace("agent: lead\n", f"agent: lead\ncommands: {commands}\n"))
+    with pytest.raises(TaskError, match="commands"):
+        parse_task(path, 150)
+
+
+def test_only_lead_tickets_name_commands(tmp_path):
+    path = write_task(tmp_path, "m1-01-thing")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\ncommands: [ls]\n"))
+    with pytest.raises(TaskError, match="commands"):
+        parse_task(path, 150)
+
+
 def test_a_milestone_is_a_number_or_a_named_key(tmp_path):
     """A number N is Coucou's milestone mN; a key like f1 is a factory milestone."""
     assert parse_task(write_task(tmp_path, "m1-01-thing"), 150).milestone == "m1"

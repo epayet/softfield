@@ -447,6 +447,20 @@ def test_a_lead_ticket_runs_headless_and_merges_when_check_all_passes(
     assert "Agent: claude-headless" in git(repo, "log", "-1", "--format=%B", report.tasks[0].commit)
 
 
+def test_a_lead_tickets_commands_join_its_tools(repo, fake_model, fake_lead, monkeypatch):
+    _lead_task(repo, "m1-01-lead")
+    ticket = repo / "tasks" / "ready" / "m1-01-lead.md"
+    ticket.write_text(
+        ticket.read_text().replace("agent: lead\n", "agent: lead\ncommands: [gh api]\n")
+    )
+    git(repo, "commit", "-qam", "probe")
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    _run(repo)
+    assert "Bash(gh api:*)" in jobs[0].allowed_tools
+
+
 def test_a_lead_ticket_that_fails_check_all_is_blocked_with_its_branch_kept(
     repo, fake_model, fake_lead, monkeypatch
 ):
