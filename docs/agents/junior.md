@@ -21,3 +21,4 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 7. A command that writes data refuses to run in production.
 8. Lines stop at 100 characters. Your finish line (`check-all --fix`) formats for you: it joins lines that fit, but won't split a long string (JS inside a Python test). Split only a string that's still too long.
 9. Check `workflow/protected-paths.txt` before your first edit. If the task needs a protected file changed, don't try: write `BLOCKED.md` with `CATEGORY: needs-file` straight away.
+10. Before writing an expected list from test data, follow the fixture chain down to its root (`db_path` seeds rows too). If the count the test sees differs from yours, recount from the fixtures; don't adjust the regex until it matches.

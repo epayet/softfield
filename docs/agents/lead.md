@@ -70,6 +70,7 @@ What juniors pass at the first attempt, from results. Update it at each mileston
 - Read the task, `BLOCKED.md` or the gate logs, the last diff and **the junior's thinking** (`thinking-N.md`) in `var/runs/<run>/<task>/`. The thinking shows why an attempt failed where the gate logs don't (m4-06). At checkpoints and reviews, read the code; read the thinking only when a finding needs explaining.
 - Choose one: repair or split the ticket (add facts, not a solution), answer the question in its Context, or do it yourself (hard or protected). Return the task to `ready/` or `done/`.
 - Turn the lesson into a check, a worked example or a `junior.md` note, in that order of preference.
+- Check every fact in a direction or a ticket's Context against the code before you write it: the junior trusts it over what it reads. In f1-34 a direction said one job matched a filter; the fixture chain had two, and the junior spent an attempt on a wrong expected list.
 - Only for what "The owner" reserves: draft an ADR and stop.
 
 ## Review
