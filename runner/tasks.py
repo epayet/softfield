@@ -155,7 +155,7 @@ def preflight(task: Task, repo: Path) -> list[str]:
     problems = []
     paths = set(_PATH_RE.findall(text))
     for rel in sorted(paths):
-        if not (repo / rel).exists() and rel not in task.files:  # files: may be new files
+        if not (repo / rel).exists() and rel not in (*task.files, *task.tests):  # may be new
             problems.append(f"referenced path does not exist: {rel}")
     symbols = set(_SYMBOL_RE.findall(task.sections["Context"]))
     if symbols:

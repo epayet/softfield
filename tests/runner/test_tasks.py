@@ -96,7 +96,14 @@ def test_preflight(repo):
 def test_preflight_allows_new_files_and_unwritten_tests(repo):
     """Files listed in `files:` may be created by the task, and juniors write their own
     tests, so neither has to exist yet (ADR 07 items 2 and 4)."""
-    task = parse_task(write_task(repo / "tasks" / "ready", "m1-01-thing"), 150)
+    path = write_task(repo / "tasks" / "ready", "m1-01-thing")
+    # m4-07: a Context naming its own (unwritten) test file failed pre-flight.
+    path.write_text(
+        path.read_text().replace(
+            "`coucou/thing.py` has", "Test it in `tests/unit/test_thing.py`. `coucou/thing.py` has"
+        )
+    )
+    task = parse_task(path, 150)
     (repo / "coucou" / "thing.py").unlink()
     (repo / "tests" / "unit" / "test_thing.py").unlink()
     assert "referenced path does not exist: coucou/thing.py" not in preflight(task, repo)
