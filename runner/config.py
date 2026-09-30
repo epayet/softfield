@@ -28,6 +28,7 @@ class Config:
     narrative: bool
     metrics_db: Path  # outside the repo, shared by every project (ADR 13 item 1)
     checkpoint_model: str = ""
+    project_description: str = ""  # the metrics database's project row (f1 D2)
 
     @property
     def runs_dir(self) -> Path:
@@ -58,6 +59,7 @@ def load_config(repo: Path) -> Config:
         narrative=report.get("narrative", False),
         metrics_db=Path(data.get("metrics", {}).get("db", DEFAULT_METRICS_DB)).expanduser(),
         checkpoint_model=data["claude"].get("checkpoint_model", ""),
+        project_description=data.get("project", {}).get("description", ""),
     )
 
 

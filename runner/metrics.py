@@ -488,10 +488,30 @@ def upsert_owner_item(
     command: str | None = None,
     created: str | None = None,
 ) -> int:
+    """An item the owner must act on (f1 D8). An open one keeps its ``created``; one that was
+    resolved opens again, created anew."""
     key: dict[str, Value] = {"project_id": project_id, "kind": kind, "subject": subject}
     values = _given(text=text, command=command, created=created)
-    return _upsert(conn, "owner_items", "project_id, kind, subject", key, values)
+    columns = [*key, *values]
+    sets = [f'"{c}" = excluded."{c}"' for c in values if c != "created"]
+    if "created" in values:
+        sets.append("created = iif(resolved IS NULL, created, excluded.created)")
+    sets.append("resolved = NULL")
+    row = conn.execute(
+        f"INSERT INTO owner_items ({', '.join(columns)}) "  # noqa: S608 - names are ours
+        f"VALUES ({', '.join('?' for _ in columns)}) "
+        f"ON CONFLICT (project_id, kind, subject) DO UPDATE SET {', '.join(sets)} RETURNING id",
+        [_sql_value(v) for v in [*key.values(), *values.values()]],
+    ).fetchone()
+    return int(row[0])
 
 
 def resolve_owner_item(conn: sqlite3.Connection, item_id: int, at: str) -> None:
     _update(conn, "owner_items", item_id, {"resolved": at})
+
+
+def open_owner_items(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.Row]:
+    return conn.execute(
+        "SELECT * FROM owner_items WHERE project_id = ? AND resolved IS NULL ORDER BY id",
+        (project_id,),
+    ).fetchall()

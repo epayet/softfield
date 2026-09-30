@@ -807,6 +807,105 @@ def test_a_database_that_cant_be_opened_does_not_stop_the_session(repo, fake_mod
     assert len([n for n in report.notes if "metrics database" in n]) == 1
 
 
+# --- the database's projects and tickets (f1 D4) -------------------------------------------
+
+
+def test_a_session_records_its_project_and_every_ticket_with_its_folder(repo, fake_model):
+    lead = write_task(repo / "tasks" / "ready", "m1-01-lead", "[m1-00-missing]")
+    lead.write_text(
+        lead.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\ndifficulty: 6\n")
+    )
+    write_task(repo / "tasks" / "done", "m1-00-old")
+    stuck = write_task(repo / "tasks" / "blocked", "f1-02-stuck")
+    stuck.write_text(stuck.read_text().replace("milestone: 1\n", "milestone: f1\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    cfg = replace(_config(repo), project_description="Photos for Mum.")
+    loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    [project] = _rows(repo, "projects")
+    assert (project["name"], project["repo"]) == (repo.name, str(repo))
+    assert project["description"] == "Photos for Mum."
+    tickets = {t["ticket"]: t for t in _rows(repo, "tickets")}
+    assert {k: t["state"] for k, t in tickets.items()} == {
+        "m1-00-old": "done",
+        "m1-01-lead": "ready",
+        "f1-02-stuck": "blocked",
+    }
+    lead_row = tickets["m1-01-lead"]
+    assert (lead_row["title"], lead_row["kind"], lead_row["difficulty"]) == (
+        "Make the thing work.",
+        "lead",
+        6,
+    )
+    assert lead_row["body"] == lead.read_text()
+    assert json.loads(str(lead_row["depends_on"])) == ["m1-00-missing"]
+    assert json.loads(str(lead_row["files"])) == ["coucou/thing.py"]
+    assert (
+        tickets["m1-00-old"]["kind"] == "developer" and tickets["m1-00-old"]["difficulty"] is None
+    )
+    milestones = {m["id"]: m["key"] for m in _rows(repo, "milestones")}
+    assert milestones[lead_row["milestone_id"]] == "m1"
+    assert milestones[tickets["f1-02-stuck"]["milestone_id"]] == "f1"
+
+
+def test_the_same_session_twice_leaves_the_same_ticket_rows(repo, fake_model):
+    _add_task(repo, "m1-01-thing", "[m1-00-missing]")
+    write_task(repo / "tasks" / "done", "m1-00-old")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    _run(repo)
+    first = (_rows(repo, "projects"), _rows(repo, "milestones"), _rows(repo, "tickets"))
+    _run(repo)
+    assert (_rows(repo, "projects"), _rows(repo, "milestones"), _rows(repo, "tickets")) == first
+
+
+def test_a_merge_records_who_merged_the_commit_and_the_lines(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    report = _run(repo)
+    [ticket] = _rows(repo, "tickets")
+    assert ticket["state"] == "done"
+    assert (ticket["merged_by"], ticket["commit"]) == ("local-m", report.tasks[0].commit)
+    assert ticket["lines_changed"] == 2  # thing.py +1 -1
+
+
+def test_a_ticket_is_running_while_its_attempt_runs(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+
+    def look(repo_: Path, prompt: str) -> None:
+        [ticket] = _rows(repo_, "tickets")
+        assert ticket["state"] == "running"
+        _implement(repo_, prompt)
+
+    fake_model.append(look)
+    _run(repo)
+    assert [t["state"] for t in _rows(repo, "tickets")] == ["done"]
+
+
+def test_a_merged_lead_ticket_is_merged_by_claude(repo, fake_model, fake_lead, monkeypatch):
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    report = _run(repo)
+    [ticket] = _rows(repo, "tickets")
+    assert (ticket["state"], ticket["merged_by"]) == ("done", "claude-opus")
+    assert (ticket["commit"], ticket["lines_changed"]) == (report.tasks[0].commit, 2)
+
+
+def test_escalated_and_blocked_tickets_get_their_state(repo, fake_model, fake_lead, monkeypatch):
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m2-01-thing")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch, ok=False)
+    fake_model.extend([_stray, _stray, _stray])
+    script.append(lambda job, repo_: None)  # the direction
+    _run(repo)
+    states = {t["ticket"]: t["state"] for t in _rows(repo, "tickets")}
+    assert states == {"m1-01-lead": "blocked", "m2-01-thing": "escalated"}
+
+
 def test_a_failing_write_is_noted_once_and_the_run_goes_on(repo, fake_model, monkeypatch):
     _add_task(repo, "m1-01-thing")
 

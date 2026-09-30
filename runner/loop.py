@@ -56,15 +56,19 @@ from runner.local_model import (
 from runner.report import ClaudeRunRecord, SessionReport, TaskRecord
 from runner.state import State, load_state, save_state
 from runner.tasks import (
+    STOPPED,
     Task,
     append_footer,
     blocked_ids,
     carry_footers,
     load_dir,
+    milestone_key,
     milestone_order,
+    parse_sections,
     parse_task,
     pick_next,
     preflight,
+    split_frontmatter,
     stopped_ids,
     task_ids,
 )
@@ -111,6 +115,7 @@ class Session:
     db_failed: bool = False
     # Jobs so far per (ticket, role group): the next job's `attempt` and its log's number.
     job_numbers: dict[tuple[str | None, str], int] = field(default_factory=dict)
+    last_job_id: int | None = None  # the last Claude job's row, for its findings
 
     @property
     def repo(self) -> Path:
@@ -187,7 +192,13 @@ def _start_run(s: Session, command: str) -> None:
     except Exception as exc:
         _metrics_failed(s, exc)
         return
-    s.project_id = _record(s, metrics.upsert_project, s.repo.name, repo=str(s.repo))
+    s.project_id = _record(
+        s,
+        metrics.upsert_project,
+        s.repo.name,
+        repo=str(s.repo),
+        description=s.cfg.project_description or None,
+    )
     if s.project_id is not None:
         at = s.report.started.isoformat()
         s.run_id = _record(
@@ -199,6 +210,57 @@ def _start_run(s: Session, command: str) -> None:
             started=at,
             heartbeat=at,
         )
+        sync_tickets(s)
+
+
+TICKET_FOLDERS = ("ready", "done", *STOPPED)
+
+
+def sync_tickets(s: Session) -> None:
+    """Every ticket in tasks/ with its folder's state (f1 D4): the queue the dashboard reads."""
+    for folder in TICKET_FOLDERS:
+        for path in sorted(s.tasks_dir(folder).glob("*.md")):
+            record_ticket(s, path)
+
+
+def record_ticket(
+    s: Session,
+    path: Path,
+    state: str | None = None,
+    *,
+    merged_by: str | None = None,
+    commit: str | None = None,
+) -> None:
+    """A ticket's row: its text and its state (its folder's, unless given). A merge adds who
+    merged it, the commit and its lines changed. A file that doesn't parse is left out."""
+    if s.project_id is None:
+        return
+    try:
+        text = path.read_text(encoding="utf-8")
+        meta, body = split_frontmatter(text)
+        milestone = milestone_key(meta.get("milestone"))
+    except Exception:
+        return
+    goal = parse_sections(body).get("Goal", "").strip()
+    difficulty = meta.get("difficulty")
+    depends_on, files = meta.get("depends_on") or [], meta.get("files") or []
+    _record(
+        s,
+        metrics.upsert_ticket,
+        s.project_id,
+        path.stem,
+        milestone_id=_record(s, metrics.upsert_milestone, s.project_id, milestone),
+        title=goal.splitlines()[0] if goal else None,
+        body=text,
+        kind="lead" if meta.get("agent") == "lead" else "developer",
+        depends_on=[str(d) for d in depends_on] if isinstance(depends_on, list) else None,
+        files=[str(f) for f in files] if isinstance(files, list) else None,
+        state=state or path.parent.name,
+        difficulty=difficulty if type(difficulty) is int else None,
+        merged_by=merged_by,
+        commit=commit,
+        lines_changed=s.git.commit_size(commit) if commit else None,
+    )
 
 
 def _finish_run(s: Session, verdict: str) -> None:
@@ -351,7 +413,7 @@ def call_claude(
     agent = claude_agent(s, job)
     base = f"claude-{job.kind}-{subject}" + (f"-{number}" if number > 1 else "")
     log = s.run_dir / f"{base}.log"
-    job_id = record_start(
+    job_id = s.last_job_id = record_start(
         s, ticket, milestone, job.kind, agent, attempt=number, log_path=_rel(s, log)
     )
     while True:
@@ -533,6 +595,7 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
             )
         )
         task = parse_task(task.path, s.cfg.default_max_diff)
+        record_ticket(s, task.path, "running")
     return task, direction
 
 
@@ -559,6 +622,7 @@ def _finish_escalation(
         s,
         messages.escalation_message(task.id, reason, detail, logs.relative_to(s.repo).as_posix()),
     )
+    record_ticket(s, target)
     rec.note = reason
     s.log(f"{task.id}: escalated ({reason})")
 
@@ -577,6 +641,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     rec = TaskRecord(id=task.id, milestone=task.milestone)
     logs = rec.logs = _logs_dir(s.run_dir, task.id)
     s.log(f"{task.id}: {task.goal}")
+    record_ticket(s, task.path, "running")
 
     problems = preflight(task, s.repo)
     if problems:
@@ -738,6 +803,7 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
         },
     )
     runner_commit(s, messages.done_message(task.id, rec))
+    record_ticket(s, target, merged_by=local_agent(s.cfg), commit=rec.commit)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
     s.log(f"{task.id}: merged after {rec.attempts} attempt(s)")
@@ -758,6 +824,7 @@ def block(s: Session, task_path: Path, reason: str) -> None:
     s.git.move(task_path, target)
     append_footer(target, {"result": "blocked", "reason": reason})
     runner_commit(s, f"runner: {task_path.stem} blocked: {reason}")
+    record_ticket(s, target)
     s.report.notes.append(f"Blocked {task_path.stem}: {reason}")
     s.log(f"{task_path.stem}: blocked ({reason})")
 
@@ -801,6 +868,7 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     s.git.move(task.path, target)
     append_footer(target, {"result": "done", "agent": "lead", "attempts": 1})
     runner_commit(s, messages.done_message(task.id, rec))
+    record_ticket(s, target, merged_by=claude_agent(s, job), commit=rec.commit)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
     s.log(f"{task.id}: merged (lead ticket)")
@@ -917,6 +985,11 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
             agent=CLAUDE_HEADLESS_AGENT,
         )
     )
+    done = s.tasks_dir("done") / task.path.name
+    if outcome == "implemented" and done.is_file():
+        record_ticket(s, done, merged_by=claude_agent(s, job), commit=s.git.head())
+    elif outcome == "requeue" and (s.tasks_dir("ready") / task.path.name).is_file():
+        record_ticket(s, s.tasks_dir("ready") / task.path.name)
 
 
 # --- the session ------------------------------------------------------------------

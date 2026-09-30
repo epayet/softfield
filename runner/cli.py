@@ -96,17 +96,17 @@ def main(argv: list[str] | None = None) -> int:
                 argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
                 os.execv(sys.executable, argv_again)  # noqa: S606 - our own interpreter and args
             state = load_state(cfg.runs_dir / "state.json")
-            code, text = owner.verdict(repo, key, state, stop)
+            code, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
             owner.record_verdict(repo, text)
             print("\n" + text, end="")
             return code
         elif args.command == "signoff":
             key = milestone_key(args.number)
-            owner.signoff(repo, key, _today(), force=args.force)
+            owner.signoff(repo, key, _today(), force=args.force, db=cfg.metrics_db)
             print(f"{key.upper()} signed off and tagged {key}-done.")
         elif args.command in ("accept", "reject"):
             decision = "Accepted" if args.command == "accept" else "Rejected"
-            path = owner.decide_adr(repo, args.number, decision, _today())
+            path = owner.decide_adr(repo, args.number, decision, _today(), db=cfg.metrics_db)
             print(f"{path.relative_to(repo)}: {decision}.")
         elif args.command == "review":
             key = milestone_key(args.milestone)

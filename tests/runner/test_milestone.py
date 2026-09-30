@@ -1,8 +1,22 @@
+import json
+import re
+import sqlite3
+
 import pytest
 
-from runner.milestone import footer_fields, milestone_metrics, milestone_summary
+from runner import loop, milestone
+from runner.claude import ClaudeResult
+from runner.gates import GateResult
+from runner.milestone import (
+    footer_fields,
+    milestone_doc,
+    milestone_metrics,
+    milestone_summary,
+    signoff_sections,
+)
 from runner.tasks import append_footer
-from tests.runner.conftest import write_task
+from tests.runner.conftest import git, write_task
+from tests.runner.test_loop import _config
 
 
 def test_footer_fields_reads_the_last_footer(tmp_path):
@@ -39,14 +53,146 @@ def test_milestone_summary_without_a_start_tag(repo):
 
 
 def test_a_milestone_stops_for_a_restart_before_the_review(repo, monkeypatch):
-    from runner import milestone
-    from tests.runner.test_loop import _config
-
     monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: True)
     monkeypatch.setattr(
         milestone, "review_milestone", lambda *a: pytest.fail("reviewed with stale code")
     )
     assert milestone.run_milestone(_config(repo), "m1", "HEAD") == milestone.RESTART
+
+
+MILESTONE_DOC = """\
+# Milestone 1: Photos for Mum
+
+> **Status: in progress** (2026-09-30). Base: git tag `m1-start`.
+
+## Outcome
+
+- Mum sees photos.
+
+## Decisions
+
+- D1: none.
+
+## Done when
+- A photo shows.
+- Tests pass.
+"""
+
+REVIEW_DOC = """\
+# Milestone 1: review report
+
+- **Status:** review done, waiting for sign-off.
+
+## Sign-off sheet
+
+### 1. What changed
+Mum sees photos.
+
+### 2. How to test it yourself
+1. Send a photo.
+
+### 3. Left for later
+- Albums.
+
+### 4. Decisions waiting for you
+None.
+
+### 5. How the work went
+- 2026-09-30: 2 merged.
+
+## What was built
+Lots.
+"""
+
+
+def _rows(repo, table):
+    conn = sqlite3.connect(_config(repo).metrics_db)
+    conn.row_factory = sqlite3.Row
+    try:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")]  # noqa: S608
+    finally:
+        conn.close()
+
+
+def _milestone_repo(repo):
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "m1.md").write_text(MILESTONE_DOC)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "plan")
+    git(repo, "tag", "m1-start")
+
+
+def test_the_milestone_doc_parts():
+    assert milestone_doc(MILESTONE_DOC) == {
+        "title": "Photos for Mum",
+        "outcome": "- Mum sees photos.",
+        "done_when": "- A photo shows.\n- Tests pass.",
+    }
+    assert milestone_doc("# Factory 1\n") == {"title": "Factory 1"}
+
+
+def test_the_sign_off_sections_leave_a_missing_heading_out():
+    assert signoff_sections(REVIEW_DOC) == {
+        "changed": "Mum sees photos.",
+        "how_to_test": "1. Send a photo.",
+        "later": "- Albums.",
+        "lessons": "- 2026-09-30: 2 merged.",
+    }
+    with_next = REVIEW_DOC.replace("### 3. Left", "### 6. What next\nAn album page.\n\n### 3. Left")
+    assert signoff_sections(with_next)["what_next"] == "An album page."
+    assert signoff_sections("# nothing\n") == {}
+
+
+def test_a_milestone_run_records_its_doc(repo, monkeypatch):
+    _milestone_repo(repo)
+    monkeypatch.setattr(milestone, "review_milestone", lambda *a: "clean")
+    assert milestone.run_milestone(_config(repo), "m1", "m1-start") == "clean"
+    [row] = _rows(repo, "milestones")
+    assert (row["key"], row["title"], row["status"]) == ("m1", "Photos for Mum", "in progress")
+    assert row["outcome"] == "- Mum sees photos."
+    assert row["done_when"] == "- A photo shows.\n- Tests pass."
+    assert row["started"]
+
+
+def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypatch):
+    _milestone_repo(repo)
+    rounds = [
+        [
+            {"id": "m1-F1", "severity": "should-fix", "route": "claude", "summary": "Leak"},
+            {"id": "m1-F2", "severity": "nit", "route": "backlog", "summary": "Name"},
+        ],
+        [
+            {
+                "id": "m1-F1",
+                "severity": "should-fix",
+                "route": "claude",
+                "summary": "Leak",
+                "resolved": True,
+            }
+        ],
+    ]
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        out = re.search(r"Write (\S+) as:", job.prompt)
+        assert out
+        (repo_ / out[1]).write_text(json.dumps({"findings": rounds.pop(0), "stop": None}))
+        (repo_ / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
+        (repo_ / "docs" / "reviews" / "m1.md").write_text(REVIEW_DOC)
+        return ClaudeResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
+    [row] = _rows(repo, "milestones")
+    assert row["review_rounds"] == 2 and row["status"] == "review"
+    assert json.loads(str(row["signoff"]))["how_to_test"] == "1. Send a photo."
+    reviews = [j["id"] for j in _rows(repo, "jobs") if j["role"] == "review"]
+    findings = {f["key"]: f for f in _rows(repo, "findings")}
+    assert set(findings) == {"m1-F1", "m1-F2"}
+    leak = findings["m1-F1"]
+    assert (leak["job_id"], leak["resolved"], leak["severity"]) == (reviews[1], 1, "should-fix")
+    assert (leak["route"], leak["summary"], leak["milestone_id"]) == ("claude", "Leak", row["id"])
+    assert (findings["m1-F2"]["job_id"], findings["m1-F2"]["resolved"]) == (reviews[0], 0)
 
 
 def test_a_factory_milestones_metrics_and_summary(repo):

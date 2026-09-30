@@ -250,6 +250,28 @@ def test_ratings_usage_and_owner_items_are_idempotent(db, ids):
     assert db.execute("SELECT resolved FROM owner_items").fetchone()[0] == T1
 
 
+def test_an_open_owner_item_keeps_its_created_and_a_resolved_one_reopens(db, ids):
+    item = metrics.upsert_owner_item(db, ids["project"], "blocked", "f1-02-x", created=T0)
+    metrics.upsert_owner_item(db, ids["project"], "blocked", "f1-02-x", text="Why", created=T1)
+    assert [dict(r) for r in metrics.open_owner_items(db, ids["project"])] == [
+        {
+            "id": item,
+            "project_id": ids["project"],
+            "kind": "blocked",
+            "subject": "f1-02-x",
+            "text": "Why",
+            "command": None,
+            "created": T0,
+            "resolved": None,
+        }
+    ]
+    metrics.resolve_owner_item(db, item, T1)
+    assert metrics.open_owner_items(db, ids["project"]) == []
+    metrics.upsert_owner_item(db, ids["project"], "blocked", "f1-02-x", created=T1)
+    [row] = metrics.open_owner_items(db, ids["project"])
+    assert (row["id"], row["created"], row["resolved"]) == (item, T1, None)
+
+
 def test_writes_are_committed_at_once(tmp_path):
     """A crash loses nothing (ADR 13 item 1): another connection sees each write."""
     path = tmp_path / "factory-metrics.sqlite"

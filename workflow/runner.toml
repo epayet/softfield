@@ -1,6 +1,9 @@
 # Runner configuration. Changing caps or rules needs an Accepted ADR (CLAUDE.md);
 # timeouts are operational and can be tuned freely.
 
+[project]
+description = "A small, private way to send a photo or a note to an always-on screen in someone's home."
+
 [caps]
 max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch + direction)
 # Headless Claude is bounded per trigger, not per milestone (ADR 12 item 10). A task past its

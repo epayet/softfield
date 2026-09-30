@@ -7,9 +7,11 @@ from runner import cli, owner
 
 @pytest.fixture
 def in_repo(repo, monkeypatch):
-    (repo / "workflow" / "runner.toml").write_text(
-        (cli._repo() / "workflow" / "runner.toml").read_text()
-    )
+    toml = (cli._repo() / "workflow" / "runner.toml").read_text()
+    real_db = '"~/.local/share/software-factory/factory-metrics.sqlite"'
+    assert real_db in toml
+    test_db = (repo / "var" / "factory-metrics.sqlite").as_posix()
+    (repo / "workflow" / "runner.toml").write_text(toml.replace(real_db, f'"{test_db}"'))
     monkeypatch.chdir(repo)
     return repo
 
@@ -17,7 +19,7 @@ def in_repo(repo, monkeypatch):
 @pytest.mark.parametrize(("code", "expected"), [(0, 0), (2, 2)])
 def test_milestone_exits_with_the_verdicts_code(in_repo, monkeypatch, capsys, code, expected):
     monkeypatch.setattr(cli, "run_milestone", lambda cfg, n, base: "clean")
-    monkeypatch.setattr(owner, "verdict", lambda repo, n, state, stop: (code, "VERDICT\n"))
+    monkeypatch.setattr(owner, "verdict", lambda repo, n, state, stop, db: (code, "VERDICT\n"))
     monkeypatch.setattr(owner, "record_verdict", lambda repo, text: None)
     assert cli.main(["milestone", "1"]) == expected
     assert capsys.readouterr().out.endswith("VERDICT\n")
@@ -37,7 +39,7 @@ def test_milestone_takes_a_number_or_a_key(in_repo, monkeypatch, arg, key):
         return "clean"
 
     monkeypatch.setattr(cli, "run_milestone", run)
-    monkeypatch.setattr(owner, "verdict", lambda repo, k, state, stop: (0, "V\n"))
+    monkeypatch.setattr(owner, "verdict", lambda repo, k, state, stop, db: (0, "V\n"))
     monkeypatch.setattr(owner, "record_verdict", lambda repo, text: None)
     assert cli.main(["milestone", arg]) == 0
     assert seen == [(key, f"{key}-start")]

@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-from runner import prompts
+from runner import metrics, prompts
 from runner.claude import CHECK_TOOLS, EDIT_TOOLS, GIT_READ_TOOLS, ClaudeJob
 from runner.config import Config
 from runner.gates import GateResult
@@ -15,7 +15,9 @@ from runner.loop import (
     MAIN,
     RunnerError,
     Session,
+    _record,
     call_claude,
+    claude_agent,
     close_session,
     open_session,
     run_e2e,
@@ -24,6 +26,7 @@ from runner.loop import (
 )
 from runner.review import (
     ReviewFileError,
+    ReviewRound,
     parse_review,
     recurring_for_claude,
     stop_reason,
@@ -143,6 +146,103 @@ def _write_metrics(s: Session, milestone: str, base: str, rounds: list[int], sto
     )
 
 
+# --- the milestone's row in the metrics database (f1 D2) ----------------------------------
+
+_TITLE_RE = re.compile(r"^# (?:Milestone \w+: )?(.+?)\s*$", re.MULTILINE)
+_SUBHEADING_RE = re.compile(r"^### (?:\d+\. )?(.+?)[ \t]*\n(.*?)(?=^#{1,3} |\Z)", re.M | re.S)
+# The sign-off sheet's sections (lead.md, "Sign-off sheet"; f1 D8) and their keys.
+SIGNOFF_SECTIONS = {
+    "What changed": "changed",
+    "How to test it yourself": "how_to_test",
+    "What next": "what_next",
+    "Left for later": "later",
+    "How the work went": "lessons",
+}
+
+
+def _section(text: str, name: str) -> str | None:
+    match = re.search(rf"^## {re.escape(name)}[ \t]*\n(.*?)(?=^## |\Z)", text, re.M | re.S)
+    return match.group(1).strip() if match else None
+
+
+def milestone_doc(text: str) -> dict[str, str]:
+    """A milestone doc's title, ``Outcome`` and ``Done when``; a part it lacks is left out."""
+    title = _TITLE_RE.search(text)
+    parts = {
+        "title": title.group(1) if title else None,
+        "outcome": _section(text, "Outcome"),
+        "done_when": _section(text, "Done when"),
+    }
+    return {key: value for key, value in parts.items() if value}
+
+
+def signoff_sections(text: str) -> dict[str, str]:
+    """The sign-off sheet of a review report by key; a heading missing leaves its key out."""
+    found = {}
+    for match in _SUBHEADING_RE.finditer(text):
+        key = SIGNOFF_SECTIONS.get(match.group(1))
+        if key and key not in found:
+            found[key] = match.group(2).strip()
+    return found
+
+
+def _record_milestone_doc(s: Session, milestone: str) -> None:
+    if s.project_id is None:
+        return
+    path = s.repo / "docs" / "milestones" / f"{milestone}.md"
+    doc = milestone_doc(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    started = _commit_time(s.repo, f"{milestone}-start")
+    _record(
+        s,
+        metrics.upsert_milestone,
+        s.project_id,
+        milestone,
+        title=doc.get("title"),
+        outcome=doc.get("outcome"),
+        done_when=doc.get("done_when"),
+        status="in progress",
+        started=started.isoformat() if started else None,
+    )
+
+
+def _record_findings(s: Session, milestone: str, round_: ReviewRound, agent: str) -> None:
+    """A review round's findings, on its review job, keyed by their ids."""
+    if s.project_id is None:
+        return
+    milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
+    if milestone_id is None:
+        return
+    for finding in round_.findings:
+        _record(
+            s,
+            metrics.add_finding,
+            milestone_id,
+            finding.id,
+            job_id=s.last_job_id,
+            severity=finding.severity,
+            route=finding.route,
+            summary=finding.summary,
+            resolved=finding.resolved,
+            agent=agent,
+        )
+
+
+def _record_review(s: Session, milestone: str, rounds: int) -> None:
+    if s.project_id is None:
+        return
+    review = s.repo / "docs" / "reviews" / f"{milestone}.md"
+    sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
+    _record(
+        s,
+        metrics.upsert_milestone,
+        s.project_id,
+        milestone,
+        status="review",
+        review_rounds=rounds,
+        signoff=sheet or None,
+    )
+
+
 RESTART = "restart"
 
 
@@ -150,6 +250,7 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
     """ADR 12 item 12: the queue, then the review loop with its fix tickets. Returns the
     review's stop reason, or RESTART when an escalation changed the runner."""
     s = open_session(cfg, f"milestone {milestone}")
+    _record_milestone_doc(s, milestone)
     restart = work_queue(s, milestone=milestone)
     close_session(s)
     if restart:
@@ -197,6 +298,7 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
         except ReviewFileError as exc:
             stop = f"review output unusable: {exc}"
             break
+        _record_findings(s, milestone, round_, claude_agent(s, job))
         s.git.commit_all(
             with_trailers(
                 f"review {milestone} round {round_no} (by Claude)", agent=CLAUDE_HEADLESS_AGENT
@@ -219,6 +321,7 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
     s.state.review_stop[milestone] = stop
     save_state(s.state, s.state_path)
     _write_metrics(s, milestone, base, rounds, stop)
+    _record_review(s, milestone, len(rounds))
     close_session(s)
     runner_commit(s, f"runner: {milestone} review metrics")
     if s.git.current_branch() != MAIN:
