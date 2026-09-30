@@ -1,3 +1,5 @@
+import pytest
+
 from runner.milestone import footer_fields, milestone_metrics, milestone_summary
 from runner.tasks import append_footer
 from tests.runner.conftest import write_task
@@ -29,3 +31,14 @@ def test_milestone_metrics(repo):
 
 def test_milestone_summary_without_a_start_tag(repo):
     assert "there's no `m7-start` yet" in milestone_summary(repo, 7)
+
+
+def test_a_milestone_stops_for_a_restart_before_the_review(repo, monkeypatch):
+    from runner import milestone
+    from tests.runner.test_loop import _config
+
+    monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: True)
+    monkeypatch.setattr(
+        milestone, "review_milestone", lambda *a: pytest.fail("reviewed with stale code")
+    )
+    assert milestone.run_milestone(_config(repo), 1, "HEAD") == milestone.RESTART

@@ -19,8 +19,8 @@ from runner.loop import (
     close_session,
     open_session,
     run_e2e,
-    run_task,
     runner_commit,
+    work_queue,
 )
 from runner.review import (
     ReviewFileError,
@@ -30,7 +30,6 @@ from runner.review import (
     update_seen,
 )
 from runner.state import save_state
-from runner.tasks import blocked_ids, load_dir, pick_next, task_ids
 from runner.usage import claude_tokens, transcripts_dir, work_summary
 
 _FOOTER_RE = re.compile(r"# --- runner ---\n(.*?)```", re.DOTALL)
@@ -110,18 +109,6 @@ def milestone_summary(repo: Path, milestone: int, base: str | None = None) -> st
     return work_summary(f"M{milestone}", m.tasks, m.local_tokens, claude)
 
 
-def _run_ready_tasks(s: Session, milestone: int) -> None:
-    while True:
-        ready = [t for t in load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)]
-        paused = blocked_ids(ready, task_ids(s.tasks_dir("escalated")))
-        task = pick_next(
-            [t for t in ready if t.milestone == milestone], task_ids(s.tasks_dir("done")), paused
-        )
-        if task is None:
-            return
-        s.report.tasks.append(run_task(s, task))
-
-
 def _write_metrics(s: Session, milestone: int, base: str, rounds: list[int], stop: str) -> None:
     m = milestone_metrics(s.repo, milestone)
     path = s.repo / "docs" / "reviews" / f"m{milestone}-metrics.md"
@@ -144,6 +131,20 @@ def _write_metrics(s: Session, milestone: int, base: str, rounds: list[int], sto
         ),
         encoding="utf-8",
     )
+
+
+RESTART = "restart"
+
+
+def run_milestone(cfg: Config, milestone: int, base: str) -> str:
+    """ADR 12 item 12: the queue, then the review loop with its fix tickets. Returns the
+    review's stop reason, or RESTART when an escalation changed the runner."""
+    s = open_session(cfg)
+    restart = work_queue(s, milestone=milestone)
+    close_session(s)
+    if restart:
+        return RESTART
+    return review_milestone(cfg, milestone, base)
 
 
 def review_milestone(cfg: Config, milestone: int, base: str) -> str:
@@ -197,10 +198,16 @@ def review_milestone(cfg: Config, milestone: int, base: str) -> str:
         rounds.append(count)
         save_state(s.state, s.state_path)
         reason = stop_reason(round_no, round_, previous, seen, cfg.review_rounds)
-        _run_ready_tasks(s, milestone)
+        if work_queue(s, milestone=milestone):
+            stop = RESTART
+            break
         if reason:
             stop = reason
             break
+    if stop == "not started":  # no rounds left: a rerun after the owner decided something
+        stop = s.state.review_stop.get(str(milestone), "review rounds used up")
+    s.state.review_stop[str(milestone)] = stop
+    save_state(s.state, s.state_path)
     _write_metrics(s, milestone, base, rounds, stop)
     close_session(s)
     runner_commit(s, f"runner: m{milestone} review metrics")

@@ -1,15 +1,24 @@
 """``uv run runner``: the deterministic build runner. No AI in here; see docs/workflow.md."""
 
 import argparse
+import os
 import sys
+from datetime import date, datetime
 from pathlib import Path
 
-from runner import checks, i18n
+from runner import checks, i18n, owner
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
 from runner.loop import RunnerError, run_session
-from runner.milestone import milestone_metrics, milestone_summary, review_milestone
+from runner.milestone import (
+    RESTART,
+    milestone_metrics,
+    milestone_summary,
+    review_milestone,
+    run_milestone,
+)
+from runner.state import load_state
 
 
 def _repo() -> Path:
@@ -20,6 +29,10 @@ def _repo() -> Path:
     raise SystemExit("run this inside the coucou repository")
 
 
+def _today() -> date:
+    return datetime.now().astimezone().date()
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="runner", description=__doc__)
     sub = parser.add_subparsers(dest="command")
@@ -27,6 +40,17 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--once", action="store_true", help="stop after one task")
     run.add_argument("--dry-run", action="store_true", help="show what would run next")
     run.add_argument("--no-escalate", action="store_true", help="don't call Claude on escalations")
+    milestone = sub.add_parser(
+        "milestone", help="run a whole milestone: tickets, review, then a verdict (ADR 12)"
+    )
+    milestone.add_argument("number", type=int)
+    milestone.add_argument("--base", help="git ref the milestone started from (default mN-start)")
+    signoff = sub.add_parser("signoff", help="the owner: mark a milestone done and tag it")
+    signoff.add_argument("number", type=int)
+    signoff.add_argument("--force", action="store_true", help="even with tickets left")
+    for name in ("accept", "reject"):
+        decide = sub.add_parser(name, help=f"the owner: {name} an ADR")
+        decide.add_argument("number", type=int)
     review = sub.add_parser("review", help="run the milestone review loop")
     review.add_argument("--milestone", type=int, required=True)
     review.add_argument("--base", help="git ref the milestone started from (default mN-start)")
@@ -53,6 +77,25 @@ def main(argv: list[str] | None = None) -> int:
                 dry_run=getattr(args, "dry_run", False),
                 escalate=not getattr(args, "no_escalate", False),
             )
+        elif args.command == "milestone":
+            stop = run_milestone(cfg, args.number, args.base or f"m{args.number}-start")
+            if stop == RESTART:
+                # An escalation changed the runner: carry on in a fresh process (ADR 12).
+                print("runner: the runner's code changed; restarting.", flush=True)
+                argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
+                os.execv(sys.executable, argv_again)  # noqa: S606 - our own interpreter and args
+            state = load_state(cfg.runs_dir / "state.json")
+            code, text = owner.verdict(repo, args.number, state, stop)
+            owner.record_verdict(repo, text)
+            print("\n" + text, end="")
+            return code
+        elif args.command == "signoff":
+            owner.signoff(repo, args.number, _today(), force=args.force)
+            print(f"M{args.number} signed off and tagged m{args.number}-done.")
+        elif args.command in ("accept", "reject"):
+            decision = "Accepted" if args.command == "accept" else "Rejected"
+            path = owner.decide_adr(repo, args.number, decision, _today())
+            print(f"{path.relative_to(repo)}: {decision}.")
         elif args.command == "review":
             stop = review_milestone(cfg, args.milestone, args.base or f"m{args.milestone}-start")
             print(f"Review loop stopped: {stop}")
@@ -80,9 +123,9 @@ def main(argv: list[str] | None = None) -> int:
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
             return 1 if problems else 0
-    except RunnerError as exc:
+    except (RunnerError, owner.OwnerError) as exc:
         print(f"runner: {exc}", file=sys.stderr)
-        return 2
+        return 1
     return 0
 
 

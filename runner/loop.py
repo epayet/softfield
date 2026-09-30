@@ -636,26 +636,32 @@ def _runner_code(repo: Path) -> str:
     return digest.hexdigest()
 
 
-def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
-    s = open_session(cfg)
-    code = _runner_code(cfg.repo)
+RESTART_NOTE = "Stopped: an escalation changed runner/. Restart the runner."
+
+
+def work_queue(
+    s: Session, *, milestone: int | None = None, escalate: bool = True, once: bool = False
+) -> bool:
+    """Work through tasks/ready (one milestone's, if given): tasks, directions, checkpoints
+    and escalations. Returns True if an escalation changed the runner, which needs a restart.
+    """
+    code = _runner_code(s.repo)
     while True:
-        if _runner_code(cfg.repo) != code:
+        if _runner_code(s.repo) != code:
             # m4-07: Python keeps the old modules, so a runner fix made by an escalation
-            # only takes effect in a new session. Stop rather than run requeued tasks stale.
-            s.report.notes.append("Stopped: an escalation changed runner/. Restart the runner.")
-            break
-        ready = load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
+            # only takes effect in a new process. Stop rather than run requeued tasks stale.
+            s.report.notes.append(RESTART_NOTE)
+            return True
+        ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
+        if milestone is not None:
+            ready = [t for t in ready if t.milestone == milestone]
         done = task_ids(s.tasks_dir("done"))
         paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
         task = pick_next(ready, done, paused)
-        if dry_run:
-            _print_plan(ready, done, paused, task, cfg.repo)
-            return None
         if task is None:
             if paused:
                 s.report.notes.append("Paused (dependency escalated): " + ", ".join(sorted(paused)))
-            break
+            return False
         rec = run_task(s, task)
         s.report.tasks.append(rec)
         note_merge(s, task, rec)
@@ -664,7 +670,18 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
             _save_thinking(rec, logs, s.repo)
             handle_escalation(s, task, logs, rec.note or rec.result)
         if once:
-            break
+            return False
+
+
+def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
+    s = open_session(cfg)
+    if dry_run:
+        ready = load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
+        done = task_ids(s.tasks_dir("done"))
+        paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
+        _print_plan(ready, done, paused, pick_next(ready, done, paused), cfg.repo)
+        return None
+    work_queue(s, escalate=escalate, once=once)
     return close_session(s)
 
 

@@ -11,6 +11,7 @@ class State:
     headless_runs: dict[str, int] = field(default_factory=dict)  # milestone -> runs (metrics)
     finding_seen: dict[str, int] = field(default_factory=dict)  # finding id -> rounds seen open
     review_counts: dict[str, list[int]] = field(default_factory=dict)  # milestone -> per round
+    review_stop: dict[str, str] = field(default_factory=dict)  # milestone -> why the loop stopped
     directions: dict[str, int] = field(default_factory=dict)  # task id -> directions given
     escalations: dict[str, int] = field(default_factory=dict)  # task id -> escalations
     unchecked: list[str] = field(default_factory=list)  # junior merges since the last checkpoint
