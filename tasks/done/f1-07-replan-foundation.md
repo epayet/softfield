@@ -26,3 +26,10 @@ A replan: midway reviews of the plan, tried for the first time in f1. Read `docs
 - every ticket in `tasks/ready/` names only files, functions and columns that exist or that an earlier ticket creates (`uv run runner run --dry-run` shows no other pre-flight problem)
 - `docs/milestones/f1.md` has a Replan log entry for this ticket
 - `uv run runner check-all --task f1-07-replan-foundation` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
