@@ -362,6 +362,37 @@ def write_jobs(conn: sqlite3.Connection) -> None:
     )
 
 
+def write_m1_jobs(conn: sqlite3.Connection) -> int:
+    """An m1 milestone in the coucou project with a job, for the timeline milestone filter test."""
+    project = metrics.upsert_project(conn, PROJECT)
+    m1 = metrics.upsert_milestone(
+        conn, project, "m1", title="Milestone one", started=_at(timedelta(days=10))
+    )
+    m1_run = metrics.upsert_run(conn, project, "20260922-100000")
+    ticket = metrics.upsert_ticket(
+        conn, project, "m1-01-test", milestone_id=m1, kind="developer", state="done"
+    )
+    job = metrics.start_job(
+        conn,
+        m1_run,
+        ticket_id=ticket,
+        milestone_id=m1,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-09-22T10:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        job,
+        ended="2026-09-22T10:05:00+02:00",
+        outcome="passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
+    return m1
+
+
 def write_review_job(conn: sqlite3.Connection) -> int:
     """A review job with findings, for the job detail page tests."""
     project = metrics.upsert_project(conn, PROJECT)

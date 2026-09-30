@@ -17,6 +17,16 @@
 
   const dollars = (value) => `$${value.toFixed(2)}`;
 
+  function outcomeColor(outcome) {
+    const colors = {
+      passed: '#2ecc71',
+      failed: '#e74c3c',
+      timeout: '#f39c12',
+      running: '#3498db',
+    };
+    return colors[outcome] || '#95a5a6';
+  }
+
   // One function per kind: (data, colours) -> ECharts option.
   const kinds = {
     // Claude's dollars per milestone, oldest first: {labels: [...], dollars: [...]}.
@@ -36,6 +46,78 @@
           name: "Claude", type: "bar", data: data.dollars, barMaxWidth: 36,
           itemStyle: { color: c.series[0], borderRadius: [3, 3, 0, 0] },
         }],
+      };
+    },
+
+    // Timeline: lanes per agent, bars per job, coloured by outcome.
+    timeline(data, c) {
+      const agents = data.lanes.map(l => l.agent);
+      const bars = [];
+      const markers = [];
+      for (const lane of data.lanes) {
+        for (const bar of lane.bars) {
+          bars.push({
+            value: [bar.start, bar.end, agents.indexOf(lane.agent)],
+            itemStyle: { color: outcomeColor(bar.outcome) },
+            ticket: bar.ticket,
+            role: bar.role,
+            minutes: bar.minutes,
+            job_id: bar.job_id,
+          });
+        }
+        for (const marker of lane.markers) {
+          markers.push({
+            value: [marker.at, agents.indexOf(lane.agent)],
+            agent: marker.agent,
+          });
+        }
+      }
+      return {
+        grid: { left: 60, right: 12, top: 16, bottom: 24 },
+        tooltip: {
+          trigger: 'item',
+          formatter: (p) => {
+            if (p.data && p.data.ticket) {
+              return (p.data.ticket || 'N/A') + ' (' + p.data.role + ') &middot; ' + p.data.minutes + ' min';
+            }
+            return '';
+          },
+        },
+        xAxis: { type: 'time' },
+        yAxis: { type: 'category', data: agents },
+        series: [
+          {
+            type: 'custom',
+            renderItem: (params, api) => {
+              const start = api.value(0);
+              const end = api.value(1);
+              const yPos = api.value(2);
+              const height = api.size([0, 1])[1] * 0.6;
+              const coord = api.coord([start, yPos]);
+              const width = api.size([end - start, 0])[0];
+              return {
+                type: 'rect',
+                shape: {
+                  x: coord[0],
+                  y: coord[1] - height / 2,
+                  width: Math.max(width, 4),
+                  height: height,
+                },
+                style: api.style(),
+              };
+            },
+            data: bars,
+          },
+          {
+            type: 'scatter',
+            data: markers.map(m => [m.value[0], m.value[1], m.agent]),
+            symbolSize: 10,
+            itemStyle: { color: '#ff6b6b' },
+            tooltip: {
+              formatter: (p) => (p.data[2] || '') + ': refusal',
+            },
+          },
+        ],
       };
     },
   };

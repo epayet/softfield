@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Timeline · {{ project }}{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="filters" class="panel">
+  <h2>Filters</h2>
+  <form method="get">
+    <label>Milestone:
+      <select name="milestone">
+        <option value="">All milestones</option>
+        {% for m in milestones %}
+        <option value="{{ m.key }}"{% if m.key == milestone_filter %} selected{% endif %}>{{ m.key | upper }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Run:
+      <select name="run">
+        <option value="">All runs</option>
+        {% for r in runs %}
+        <option value="{{ r.run_dir }}"{% if r.run_dir == run_filter %} selected{% endif %}>{{ r.run_dir }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit">Filter</button>
+  </form>
+</section>
+
+<section id="timeline" class="panel">
+  <h2>Timeline</h2>
+  <div class="chart" data-chart="timeline"></div>
+  <script type="application/json">{{ data | tojson }}</script>
+</section>
+
+<section id="jobs" class="panel">
+  <h2>Jobs</h2>
+  <table>
+    <thead>
+      <tr><th>Ticket</th><th>Agent</th><th>Role</th><th>Started</th><th>Ended</th><th>Outcome</th></tr>
+    </thead>
+    <tbody>
+      {% for lane in data.lanes %}
+      {% for bar in lane.bars %}
+      <tr>
+        <td>{% if bar.ticket %}<a href="/jobs/{{ bar.job_id }}">{{ bar.ticket }}</a>{% else %}&ndash;{% endif %}</td>
+        <td>{{ lane.agent }}</td>
+        <td>{{ bar.role }}</td>
+        <td>{{ bar.start }}</td>
+        <td>{{ bar.end }}</td>
+        <td>{{ bar.outcome }}</td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+</div>
+{% endblock %}
