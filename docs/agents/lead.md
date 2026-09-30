@@ -41,6 +41,7 @@ Plan (with the owner) → `uv run runner milestone N` (unattended) → sign-off 
 - Check the decisions against `docs/architecture.md`, `docs/security.md` and the Accepted ADRs.
 - **Trim protection where it's too broad.** If a protected file mixes security with UI (like `display.js`), plan the split so the UI part can go to juniors.
 - **A new kind of work** (a new language, layer or pattern): build the first one yourself and add it to the worked examples in `junior.md`.
+- **Replans (trial in f1, the owner's idea):** where a chain of lead tickets can change what later tickets rely on (a schema, a probe's facts), add a replan lead ticket at that joint. It checks the Decisions and the ready tickets against what was built, fixes them, and logs what it did in the milestone doc. f1's factory review decides whether they become standard.
 
 ## Tickets
 Format: [`docs/task-format.md`](../task-format.md). Craft: [`docs/task-writing.md`](../task-writing.md).
