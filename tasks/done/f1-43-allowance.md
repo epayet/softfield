@@ -35,3 +35,10 @@ Read `docs/adr/15-allowance-aware-routing.md` items 1, 2, 4 and 5 (Accepted). Te
 - table tests cover: under and over the pace line; the sweep allowing what spread refuses; a rolling cap; two windows where the tightest wins; local always passing; a refusal lowering capacity; passing the learned capacity in the sweep; the unknown-capacity cooldown; the reserve-only refusal
 - the 2026-10-01 probe (`tests/runner/fixtures/probes/claude-stream.jsonl`: week 79% used, resets Monday 17:00) refuses a developer job on Thursday and allows a review
 - `uv run runner check-all --task f1-43-allowance` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
