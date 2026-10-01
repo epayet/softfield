@@ -446,6 +446,134 @@ def write_review_job(conn: sqlite3.Connection) -> int:
     return review
 
 
+def write_tickets(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: tickets for the ticket pages.
+
+    - ``f1-10-ticket-a`` (developer, d3, done) in f1.
+    - ``f1-11-ticket-b`` (developer, d4, done) in f1 with depends_on=[f1-10-ticket-a],
+      escalated then merged, with 3 jobs (2 failed + 1 passed escalation).
+    - ``f1-12-escalated`` (lead, d5, escalated) in f1 for state filtering.
+    - ``m4-02-ticket-c`` (developer, d2, done) in m4 for cross-milestone ordering.
+    - Findings on m4 milestone for ticket-c.
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    m4 = metrics.upsert_milestone(conn, project, "m4")
+    run = metrics.upsert_run(conn, project, "20260930-100000")
+    old_run = metrics.upsert_run(conn, project, "20260920-100000")
+
+    ticket_a = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-10-ticket-a",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=3,
+        merged_by=LOCAL,
+        commit="e" * 40,
+        lines_changed=30,
+        body="Goal: A ticket.\n\nDone when: it passes.",
+        depends_on=[],
+        files=["a.py"],
+    )
+    _job(
+        conn, run, f1, ticket_a, "developer", LOCAL, 1, "passed", tokens_in=10_000, tokens_out=1_000
+    )
+
+    ticket_b = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-11-ticket-b",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        merged_by=OPUS,
+        commit="f" * 40,
+        lines_changed=50,
+        body="Goal: B ticket.\n\nDone when: it works.",
+        depends_on=["f1-10-ticket-a"],
+        files=["b.py", "c.py"],
+    )
+    _local(conn, run, f1, ticket_b, "developer", 1, ok=False)
+    _local(conn, run, f1, ticket_b, "developer", 2, ok=False)
+    _job(conn, run, f1, ticket_b, "escalation", OPUS, 3, "passed", cost_usd=2.0, **CLAUDE_TOKENS)
+
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-12-escalated",
+        milestone_id=f1,
+        kind="lead",
+        state="escalated",
+        difficulty=5,
+    )
+
+    ticket_c = metrics.upsert_ticket(
+        conn,
+        project,
+        "m4-02-ticket-c",
+        milestone_id=m4,
+        kind="developer",
+        state="done",
+        difficulty=2,
+        merged_by=LOCAL,
+        commit="g" * 40,
+        lines_changed=20,
+    )
+    _job(
+        conn,
+        old_run,
+        m4,
+        ticket_c,
+        "developer",
+        LOCAL,
+        1,
+        "passed",
+        tokens_in=5_000,
+        tokens_out=500,
+    )
+    metrics.add_finding(
+        conn, m4, "M4-F1", job_id=None, severity="blocking", summary="Blocking issue"
+    )
+    metrics.add_finding(conn, m4, "M4-F2", job_id=None, severity="nit", summary="Nitpick")
+
+    # Live queue tickets (from write_live) so the list has all 9 f1 tickets.
+    for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
+        metrics.upsert_ticket(
+            conn, project, ticket, milestone_id=f1, kind="developer", state="ready", title=goal
+        )
+    live = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-04-live",
+        milestone_id=f1,
+        kind="developer",
+        state="running",
+        difficulty=5,
+    )
+    live_run = metrics.upsert_run(
+        conn,
+        project,
+        "20261002-113500",
+        command="milestone f1",
+        started=_at(timedelta(minutes=25)),
+        heartbeat=_at(timedelta(seconds=30)),
+    )
+    job = metrics.start_job(
+        conn,
+        live_run,
+        ticket_id=live,
+        milestone_id=f1,
+        role="developer",
+        agent=LOCAL,
+        attempt=2,
+        started=_at(timedelta(minutes=12)),
+    )
+    metrics.update_running_job(conn, job, tokens_in=42_000, steps=17)
+
+
 def write_more_jobs(conn: sqlite3.Connection, count: int) -> int:
     """Add ``count`` more finished jobs for the overflow test. Returns the last job id."""
     project = metrics.upsert_project(conn, PROJECT)
@@ -541,6 +669,22 @@ def milestones_client(db_path: Path) -> TestClient:
         write_milestones(conn)
     finally:
         conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def tickets_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_tickets``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_tickets(conn)
+    finally:
+        conn.close()
+
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")

@@ -1,0 +1,251 @@
+"""The Tickets list and a single ticket's story (ADR 13 item 2, f1 D2).
+
+- ``/tickets``: newest first, filterable by ``milestone`` and ``state``.
+- ``/tickets/{ticket_id}``: goal, Done when, depends_on, result, every job, findings.
+"""
+
+import json
+import sqlite3
+from dataclasses import dataclass
+from typing import Annotated
+
+from fastapi import APIRouter, Query, Request
+from fastapi.responses import HTMLResponse
+
+from factory_dashboard.app import Db, Project, render
+
+router = APIRouter()
+
+
+@dataclass(frozen=True)
+class TicketRow:
+    id: int
+    ticket: str
+    milestone: str | None
+    kind: str | None
+    difficulty: int | None
+    state: str | None
+    attempts: int
+    merged_by: str | None
+    lines_changed: int | None
+
+
+@dataclass(frozen=True)
+class TicketDetail:
+    ticket: str
+    milestone: str | None
+    milestone_title: str | None
+    body: str | None
+    kind: str | None
+    depends_on: list[str]
+    files: list[str]
+    state: str | None
+    merged_by: str | None
+    commit: str | None
+    lines_changed: int | None
+
+
+@dataclass(frozen=True)
+class JobRow:
+    id: int
+    attempt: int
+    role: str
+    agent: str
+    outcome: str
+    started: str
+    ended: str | None
+
+
+@dataclass(frozen=True)
+class FindingRow:
+    key: str
+    severity: str
+    summary: str
+
+
+def list_tickets(
+    conn: sqlite3.Connection,
+    project: str,
+    *,
+    milestone: str | None = None,
+    state: str | None = None,
+) -> list[TicketRow]:
+    """All tickets for ``project``, newest first (by milestone.started DESC, id DESC)."""
+    conditions = ["p.name = ?"]
+    params: list[object] = [project]
+
+    if milestone:
+        conditions.append("m.key = ?")
+        params.append(milestone)
+    if state:
+        conditions.append("t.state = ?")
+        params.append(state)
+
+    where = " AND ".join(conditions)
+
+    query = (
+        f"SELECT t.id, t.ticket, m.key AS milestone, t.kind, t.difficulty, t.state, "  # noqa: S608
+        f"(SELECT COUNT(*) FROM jobs j WHERE j.ticket_id = t.id) AS attempts, "
+        f"t.merged_by, t.lines_changed "
+        f"FROM tickets t "
+        f"JOIN projects p ON p.id = t.project_id "
+        f"LEFT JOIN milestones m ON m.id = t.milestone_id "
+        f"WHERE {where} "
+        f"ORDER BY COALESCE(m.started, '') DESC, t.id DESC"
+    )
+    rows = conn.execute(query, params).fetchall()
+    return [
+        TicketRow(
+            id=row["id"],
+            ticket=row["ticket"],
+            milestone=row["milestone"],
+            kind=row["kind"],
+            difficulty=row["difficulty"],
+            state=row["state"],
+            attempts=row["attempts"],
+            merged_by=row["merged_by"],
+            lines_changed=row["lines_changed"],
+        )
+        for row in rows
+    ]
+
+
+def get_ticket(conn: sqlite3.Connection, project: str, ticket_id: str) -> TicketDetail | None:
+    """A single ticket by its text id (like ``f1-01-first``)."""
+    row = conn.execute(
+        "SELECT t.ticket, m.key AS milestone, m.title AS milestone_title, "
+        "t.body, t.kind, t.depends_on, t.files, t.state, "
+        't.merged_by, t."commit", t.lines_changed '
+        "FROM tickets t "
+        "JOIN projects p ON p.id = t.project_id "
+        "LEFT JOIN milestones m ON m.id = t.milestone_id "
+        "WHERE p.name = ? AND t.ticket = ?",
+        (project, ticket_id),
+    ).fetchone()
+    if row is None:
+        return None
+
+    depends_on: list[str] = []
+    if row["depends_on"]:
+        depends_on = json.loads(row["depends_on"])
+
+    files: list[str] = []
+    if row["files"]:
+        files = json.loads(row["files"])
+
+    return TicketDetail(
+        ticket=row["ticket"],
+        milestone=row["milestone"],
+        milestone_title=row["milestone_title"],
+        body=row["body"],
+        kind=row["kind"],
+        depends_on=depends_on,
+        files=files,
+        state=row["state"],
+        merged_by=row["merged_by"],
+        commit=row["commit"],
+        lines_changed=row["lines_changed"],
+    )
+
+
+def ticket_jobs(conn: sqlite3.Connection, ticket_id: int) -> list[JobRow]:
+    """All jobs for a ticket, ordered by attempt ascending."""
+    rows = conn.execute(
+        "SELECT j.id, j.attempt, j.role, j.agent, j.outcome, j.started, j.ended "
+        "FROM jobs j "
+        "WHERE j.ticket_id = ? "
+        "ORDER BY j.attempt ASC, j.id ASC",
+        (ticket_id,),
+    ).fetchall()
+    return [
+        JobRow(
+            id=row["id"],
+            attempt=row["attempt"],
+            role=row["role"],
+            agent=row["agent"],
+            outcome=row["outcome"],
+            started=row["started"],
+            ended=row["ended"],
+        )
+        for row in rows
+    ]
+
+
+def ticket_findings(conn: sqlite3.Connection, milestone_id: int) -> list[FindingRow]:
+    """Findings on a milestone (ticket_id is empty for f1)."""
+    rows = conn.execute(
+        "SELECT key, severity, summary FROM findings WHERE milestone_id = ? ORDER BY id",
+        (milestone_id,),
+    ).fetchall()
+    return [
+        FindingRow(
+            key=row["key"],
+            severity=row["severity"],
+            summary=row["summary"] or "",
+        )
+        for row in rows
+    ]
+
+
+@router.get("/tickets", response_class=HTMLResponse)
+def tickets_page(
+    request: Request,
+    conn: Db,
+    project: Project,
+    *,
+    milestone: Annotated[str | None, Query()] = None,
+    state: Annotated[str | None, Query()] = None,
+) -> HTMLResponse:
+    tickets = list_tickets(conn, project, milestone=milestone, state=state)
+    return render(
+        request,
+        conn,
+        project,
+        "tickets.html",
+        {
+            "active": "/tickets",
+            "tickets": tickets,
+            "milestone_filter": milestone,
+            "state_filter": state,
+        },
+    )
+
+
+@router.get("/tickets/{ticket_id}", response_class=HTMLResponse)
+def ticket_page(
+    ticket_id: str,
+    request: Request,
+    conn: Db,
+    project: Project,
+) -> HTMLResponse:
+    detail = get_ticket(conn, project, ticket_id)
+    if detail is None:
+        return HTMLResponse(status_code=404, content="Not found")
+
+    ticket_row = conn.execute(
+        "SELECT t.id, m.id AS milestone_id FROM tickets t "
+        "JOIN projects p ON p.id = t.project_id "
+        "LEFT JOIN milestones m ON m.id = t.milestone_id "
+        "WHERE p.name = ? AND t.ticket = ?",
+        (project, ticket_id),
+    ).fetchone()
+
+    jobs: list[JobRow] = []
+    findings: list[FindingRow] = []
+    if ticket_row:
+        jobs = ticket_jobs(conn, ticket_row["id"])
+        if ticket_row["milestone_id"]:
+            findings = ticket_findings(conn, ticket_row["milestone_id"])
+
+    return render(
+        request,
+        conn,
+        project,
+        "ticket.html",
+        {
+            "active": "/tickets",
+            "ticket": detail,
+            "jobs": jobs,
+            "findings": findings,
+        },
+    )

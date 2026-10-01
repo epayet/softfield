@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}Tickets · {{ project }}{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="tickets" class="panel">
+  <h2>Tickets <span class="src">newest first</span></h2>
+
+  <form class="filters" method="get">
+    <label>Milestone
+      <input type="text" name="milestone" value="{{ milestone_filter or '' }}">
+    </label>
+    <label>State
+      <input type="text" name="state" value="{{ state_filter or '' }}">
+    </label>
+    <button>Show</button>
+  </form>
+
+  {% if tickets %}
+  <div class="scroll"><table>
+    <thead><tr><th>ID</th><th>Milestone</th><th>Kind</th><th class="num">Diff</th><th>State</th><th class="num">Attempts</th><th>Merged by</th><th class="num">Lines</th></tr></thead>
+    <tbody>
+      {% for t in tickets %}
+      <tr>
+        <td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td>
+        <td>{% if t.milestone %}<a href="/tickets?milestone={{ t.milestone }}{{ q }}">{{ t.milestone }}</a>{% else %}–{% endif %}</td>
+        <td>{{ t.kind or "–" }}</td>
+        <td class="num">{{ t.difficulty or "–" }}</td>
+        <td>{{ t.state or "–" }}</td>
+        <td class="num">{{ t.attempts }}</td>
+        <td>{{ t.merged_by or "–" }}</td>
+        <td class="num">{{ t.lines_changed or "–" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="sub">No tickets match</p>
+  {% endif %}
+</section>
+
+</div>
+{% endblock %}

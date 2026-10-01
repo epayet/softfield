@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ ticket.ticket }} · {{ project }}{% endblock %}
+{% block crumbs %}
+  {% if ticket.milestone %}<a href="/tickets?milestone={{ ticket.milestone }}{{ q }}">{{ ticket.milestone | upper }}</a>{% endif %}
+  <span>{{ ticket.ticket }}</span>
+{% endblock %}
+{% block content %}
+<div class="page">
+
+{% if ticket.body %}
+<section id="goal" class="panel">
+  <h2>Goal &amp; Done when <span class="src">from the ticket body</span></h2>
+  <pre style="white-space:pre-wrap;margin:0">{{ ticket.body }}</pre>
+</section>
+{% endif %}
+
+{% if ticket.depends_on %}
+<section id="depends" class="panel">
+  <h2>Depends on <span class="src">other tickets</span></h2>
+  <ul class="steps">
+    {% for dep in ticket.depends_on %}
+    <li>
+      <span class="when">{{ dep }}</span>
+      <span class="what"><a href="/tickets/{{ dep }}{{ q }}">{{ dep }}</a></span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if ticket.files %}
+<section id="files" class="panel">
+  <h2>Files <span class="src">from the ticket</span></h2>
+  <ul class="steps">
+    {% for f in ticket.files %}
+    <li>
+      <span class="what"><code>{{ f }}</code></span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section id="result" class="panel">
+  <h2>Result <span class="src">state, merged by, commit, lines changed</span></h2>
+  <dl class="kv">
+    <dt>State</dt><dd><span class="pill {% if ticket.state == 'done' %}good{% elif ticket.state == 'escalated' %}serious{% elif ticket.state == 'running' %}running{% else %}{% endif %}">{{ ticket.state or "–" }}</span></dd>
+    {% if ticket.merged_by %}<dt>Merged by</dt><dd><span class="mono">{{ ticket.merged_by }}</span></dd>{% endif %}
+    {% if ticket.commit %}<dt>Commit</dt><dd><span class="mono">{{ ticket.commit[:12] }}…</span></dd>{% endif %}
+    {% if ticket.lines_changed is not none %}<dt>Lines changed</dt><dd class="num">{{ ticket.lines_changed }}</dd>{% endif %}
+  </dl>
+</section>
+
+{% if jobs %}
+<section id="jobs" class="panel">
+  <h2>Jobs <span class="src">every attempt in order</span></h2>
+  <ol class="steps">
+    {% for job in jobs %}
+    <li>
+      <span class="when">attempt {{ job.attempt }}</span>
+      <span class="what">
+        <span class="pill {% if job.outcome == 'passed' %}good{% elif job.outcome == 'failed' %}critical{% elif job.outcome == 'running' %}running{% endif %}">{{ job.outcome }}</span>
+        <span class="mono">{{ job.role }} · {{ job.agent }}</span>
+        <a href="/jobs/{{ job.id }}{{ q }}">/jobs/{{ job.id }}</a>
+      </span>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endif %}
+
+{% if findings %}
+<section id="findings" class="panel">
+  <h2>Findings <span class="src">on the milestone code</span></h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Key</th><th>Severity</th><th>Summary</th></tr></thead>
+    <tbody>
+      {% for f in findings %}
+      <tr>
+        <td class="mono">{{ f.key }}</td>
+        <td><span class="sev {{ f.severity }}">{{ f.severity }}</span></td>
+        <td>{{ f.summary }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+</div>
+{% endblock %}
