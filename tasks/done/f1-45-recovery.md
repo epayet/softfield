@@ -40,3 +40,10 @@ Read `docs/adr/15-allowance-aware-routing.md` item 11, `runner/state.py` (`State
 - an interrupted local attempt counts as a timed-out attempt on the next run
 - a dirty tree with no `in_flight` entry is still refused
 - `uv run runner check-all --task f1-45-recovery` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
