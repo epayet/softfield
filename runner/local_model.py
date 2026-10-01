@@ -1,8 +1,14 @@
-"""The local executor: LM Studio warm-up and headless OpenCode runs."""
+"""Headless OpenCode runs, the ``opencode`` harness's adapter, and LM Studio's warm-up.
+
+The agent's model picks the provider in opencode.json: ``lmstudio/…`` is the local model,
+``ollama/<tag>`` an Ollama Cloud model through the local daemon (f1-18's probe). Both stream
+the same events, so tokens and facts are read alike; only the local model is warmed up.
+"""
 
 import contextlib
 import json
 import os
+import re
 import signal
 import sqlite3
 import subprocess
@@ -11,8 +17,14 @@ import time
 import urllib.request
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+from runner.agents import Agent, JobResult, JobSpec, Refusal
+from runner.claude import usage_limit_reset
+
+LOCAL_PROVIDER = "lmstudio"
 
 
 @dataclass(frozen=True)
@@ -40,6 +52,8 @@ class OpencodeRun:
     duration_s: float
     tokens: TokenTotals
     facts: StreamFacts = StreamFacts()
+    stderr: str = ""
+    errors: str = ""  # the stream's error events, if any
 
     @property
     def timed_out(self) -> bool:
@@ -97,12 +111,18 @@ def stream_facts(lines: Iterable[str]) -> StreamFacts:
     return StreamFacts(session_id=session, edit_streak=longest, refused=refused, edits=edits)
 
 
-def empty_cause(facts: StreamFacts, timed_out: bool) -> str:
+def stream_errors(lines: Iterable[str]) -> str:
+    """The stream's error events, one per line (their shape for a cloud refusal is unknown)."""
+    errors = (event for event in _events(lines) if event.get("type") == "error")
+    return "\n".join(json.dumps(event.get("error") or event) for event in errors)
+
+
+def empty_cause(refused: int, timed_out: bool) -> str:
     """Why an attempt changed nothing: it ran out of time, its commands were refused, or it
     stopped early (it thinks it's done, or asked something nobody answers)."""
     if timed_out:
         return "timeout"
-    if facts.refused:
+    if refused:
         return "refused"
     return "stopped"
 
@@ -235,4 +255,84 @@ def run_opencode(
         duration_s=time.monotonic() - started,
         tokens=parse_events(lines),
         facts=stream_facts(lines),
+        stderr=stderr,
+        errors=stream_errors(lines),
     )
+
+
+def is_local(agent: Agent) -> bool:
+    """Whether the agent's model is LM Studio's (``lmstudio/…``) rather than a cloud one."""
+    return agent.model.split("/", 1)[0] == LOCAL_PROVIDER
+
+
+# Errors that pass: the daemon down or restarting, an overload, a server error.
+_TRANSIENT_RE = re.compile(
+    r"(ECONNREFUSED|ECONNRESET|connection (?:refused|reset)|socket hang up|overloaded"
+    r"|\b50[234]\b|service unavailable|bad gateway|gateway time-?out)",
+    re.IGNORECASE,
+)
+
+
+def classify(run: OpencodeRun, local: bool, now: datetime) -> tuple[Refusal | None, bool]:
+    """An errored run's class (ADR 15 item 12): (a refusal, or None; whether it's transient).
+
+    The local model never refuses: its errors are failures, and the gates judge its work as
+    before. No Ollama refusal has been seen (f1-18), so a cloud error that names a limit is
+    one, a passing one is transient, and any other is a possible limit with no reset, which
+    the allowance cools down (ADR 15 item 2) rather than counting as a failed attempt.
+    A timeout is a failure everywhere.
+    """
+    text = "\n".join(t for t in (run.errors, run.stderr.strip()) if t)
+    if local or run.timed_out or (run.exit_code == 0 and not run.errors):
+        return None, False
+    limited, resets_at = usage_limit_reset(text, now)
+    if limited:
+        return Refusal(None, resets_at), False
+    if _TRANSIENT_RE.search(text):
+        return None, True
+    return Refusal(None, None, certain=False), False
+
+
+class OpencodeAdapter:
+    """A `JobSpec` as an ``opencode run`` on the agent's model. Its permissions are
+    opencode.json's: edits anywhere in the repo and the check commands, the developer's.
+    ``on_progress`` gets the tokens so far every ``LIVE_EVERY`` seconds (f1 D3)."""
+
+    def run(
+        self,
+        agent: Agent,
+        spec: JobSpec,
+        repo: Path,
+        log_path: Path,
+        now: datetime,
+        on_progress: Callable[[TokenTotals], None] | None = None,
+    ) -> JobResult:
+        title = spec.title or spec.role
+        run = run_opencode(
+            repo, agent.model, title, spec.prompt, spec.timeout, log_path, on_progress=on_progress
+        )
+        refusal, transient = classify(run, is_local(agent), now)
+        tokens, facts = run.tokens, run.facts
+        failed = run.timed_out or run.exit_code != 0 or bool(run.errors)
+        return JobResult(
+            ok=not failed,
+            text=("timed out" if run.timed_out else run.errors or run.stderr.strip())[:500],
+            duration_s=run.duration_s,
+            usage={
+                "input_tokens": tokens.input,
+                "output_tokens": tokens.output,
+                "reasoning_tokens": tokens.reasoning,
+            },
+            refusal=refusal,
+            transient=transient,
+            num_turns=tokens.steps,
+            session_id=facts.session_id or None,
+            peak_context=tokens.peak,
+            edit_streak=facts.edit_streak,
+            refused_commands=facts.refused,
+            edits=facts.edits,
+            timed_out=run.timed_out,
+        )
+
+
+ADAPTER = OpencodeAdapter()

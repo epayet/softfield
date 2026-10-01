@@ -47,6 +47,7 @@ class JobSpec:
     edit: tuple[str, ...] = ()  # globs it may write, ANY for anywhere; none: read-only
     commands: tuple[str, ...] = ()  # command prefixes it may run
     resume: str | None = None  # a session to carry on, where the harness keeps them
+    title: str = ""  # the session's name, where the harness shows one
 
     @property
     def read_only(self) -> bool:
@@ -84,6 +85,12 @@ class JobResult:
     num_turns: int = 0
     session_id: str | None = None
     readings: tuple[Reading, ...] = ()  # every window reading, in order
+    # What a developer's attempt did, where the harness streams it (ADR 12 items 4, 6 and 7)
+    peak_context: int = 0  # the largest context one step sent
+    edit_streak: int = 0  # the longest run of edits without running a command
+    refused_commands: int = 0
+    edits: int = 0
+    timed_out: bool = False
 
     @property
     def error(self) -> str | None:
@@ -105,7 +112,7 @@ class UnknownHarness(KeyError):
 
 
 # A harness's adapter is its module's ``ADAPTER``, imported when first asked for.
-HARNESSES = {"claude": "runner.claude"}
+HARNESSES = {"claude": "runner.claude", "opencode": "runner.local_model"}
 
 
 def adapter_for(harness: str) -> Adapter:

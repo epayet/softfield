@@ -23,7 +23,6 @@ gate = 1
 [local_model]
 base_url = "http://x"
 model = "m"
-opencode_model = "lmstudio/m"
 [claude]
 reserve = 0.3
 usage_limit_backoff_min = 1

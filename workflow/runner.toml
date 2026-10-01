@@ -23,7 +23,6 @@ gate = 900
 [local_model]
 base_url = "http://127.0.0.1:1234"
 model = "qwen/qwen3.6-35b-a3b"          # LM Studio key; its settings are used as-is (JIT)
-opencode_model = "lmstudio/qwen/qwen3.6-35b-a3b"
 
 # Agents are a harness plus a model, with one rating from 1 to 10: the lead's estimate until
 # results move it (ADR 14 items 2–3, ADR 15 item 9). Ids follow D6 in docs/milestones/f1.md.
@@ -32,6 +31,39 @@ opencode_model = "lmstudio/qwen/qwen3.6-35b-a3b"
 harness = "opencode"
 model = "lmstudio/qwen/qwen3.6-35b-a3b"
 rating = 5
+
+# Ollama Cloud through the local daemon (opencode.json's `ollama` provider; f1-18's probe).
+# Ratings from ADR 14's size comparison with the local Qwen (5); none is 2 above it, so none
+# is a step-up (ADR 15 item 7). Their allowance is unknown: used until refused (ADR 15 item 2).
+[agents.ollama-gpt-oss-20b]
+harness = "opencode"
+model = "ollama/gpt-oss:20b-cloud"
+rating = 4                              # same class or smaller
+
+[agents.ollama-nemotron-3-nano-30b]
+harness = "opencode"
+model = "ollama/nemotron-3-nano:30b-cloud"
+rating = 4                              # ~3B active: same class or smaller
+
+[agents.ollama-gemma4-31b]
+harness = "opencode"
+model = "ollama/gemma4:31b-cloud"
+rating = 5                              # roughly level
+
+[agents.ollama-gpt-oss-120b]
+harness = "opencode"
+model = "ollama/gpt-oss:120b-cloud"
+rating = 6                              # a candidate for a stronger developer
+
+[agents.ollama-nemotron-3-super]
+harness = "opencode"
+model = "ollama/nemotron-3-super:cloud"
+rating = 6                              # 120B, 12B active: a candidate
+
+[agents.ollama-nemotron-3-ultra]
+harness = "opencode"
+model = "ollama/nemotron-3-ultra:cloud"
+rating = 6                              # 550B, but not expected to be Claude-level
 
 [agents.claude-sonnet]
 harness = "claude"

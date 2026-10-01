@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import checks, claude, gates, loop, metrics
+from runner import checks, claude, gates, local_model, loop, metrics
 from runner.agents import Agent, JobResult, JobSpec, Reading
 from runner.claude import ClaudeJob, TransientError, UsageLimited
 from runner.config import Config
@@ -39,7 +39,6 @@ def _config(repo: Path) -> Config:
         gate_timeout=60,
         lm_base_url="http://x",
         lm_model="m",
-        opencode_model="lmstudio/m",
         backoff_min=1,
         backoff_max=2,
         narrative=False,
@@ -65,12 +64,24 @@ ROLES = {
 }
 
 
+class Script(list[Callable[[Path, str], object]]):
+    """The scripted runs, in order, and the model each call asked for."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.models: list[str] = []
+
+
+REAL_RUN_OPENCODE = local_model.run_opencode
+
+
 @pytest.fixture
 def fake_model(monkeypatch):
     """Scripted 'model': each call runs the next function against the repo."""
-    script: list[Callable[[Path, str], None]] = []
+    script = Script()
 
     def run_opencode(repo, model, title, prompt, timeout, log_path, **live):
+        script.models.append(model)
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text(prompt)
         run = script.pop(0)(repo, prompt)
@@ -78,7 +89,7 @@ def fake_model(monkeypatch):
             return run
         return OpencodeRun(exit_code=0, duration_s=1.0, tokens=TokenTotals(1000, 50, 10, 2))
 
-    monkeypatch.setattr(loop, "run_opencode", run_opencode)
+    monkeypatch.setattr(local_model, "run_opencode", run_opencode)
     monkeypatch.setattr(loop, "warmup", lambda *a: 0.1)
     monkeypatch.setattr(loop, "loaded_context_length", lambda *a: None)
     file_gates = tuple(
@@ -1009,6 +1020,91 @@ def test_a_timed_out_attempt_is_a_timeout(repo, fake_model):
     fake_model.extend([_timed_out, _implement])
     _run(repo, once=True)
     assert [j["outcome"] for j in _rows(repo, "jobs")] == ["timeout", "passed"]
+
+
+# --- developers on Ollama Cloud (f1-21) -------------------------------------------------
+
+OLLAMA = Agent("ollama-gpt-oss-120b", "opencode", "ollama/gpt-oss:120b-cloud", 6)
+PROBE = Path(__file__).parent / "fixtures" / "probes" / "opencode-ollama.jsonl"
+
+
+def _run_as(repo: Path, *developers: str) -> SessionReport:
+    """A session whose developer role lists ``developers``, in order."""
+    cfg = _config(repo)
+    roles = {**cfg.roles, "developer": developers, "last-attempt": developers}
+    cfg = replace(cfg, agents={**cfg.agents, OLLAMA.id: OLLAMA}, roles=roles)
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None
+    return report
+
+
+def _no_lm_studio(monkeypatch) -> None:
+    def called(*args: object) -> float:
+        raise AssertionError("LM Studio was asked for a cloud agent")
+
+    monkeypatch.setattr(loop, "warmup", called)
+    monkeypatch.setattr(loop, "loaded_context_length", called)
+
+
+def test_a_developer_job_on_an_ollama_agent_runs_its_model_without_the_warmup(
+    repo, fake_model, monkeypatch
+):
+    _add_task(repo, "m1-01-thing")
+    commands: list[list[str]] = []
+
+    def run_streaming(cmd, cwd, timeout, out_path, on_tick=None, **kwargs):
+        commands.append(cmd)
+        _implement(cwd, "")
+        out_path.write_text(PROBE.read_text(encoding="utf-8"), encoding="utf-8")
+        return "", 0
+
+    monkeypatch.setattr(local_model, "run_opencode", REAL_RUN_OPENCODE)
+    monkeypatch.setattr(local_model, "run_streaming", run_streaming)
+    _no_lm_studio(monkeypatch)
+    [task] = _run_as(repo, OLLAMA.id).tasks
+    assert (task.result, task.attempts) == ("done", 1)
+    assert commands[0][:6] == ["opencode", "run", "--format", "json", "-m", OLLAMA.model]
+    assert (task.tokens_in, task.tokens_out, task.steps) == (7795, 92, 2)
+    [job] = _rows(repo, "jobs")
+    assert (job["agent"], job["tokens_in"], job["peak_context"]) == (OLLAMA.id, 7795, 7867)
+    assert job["context_limit"] is None  # LM Studio's context isn't the cloud model's
+
+
+def _unrecognised(repo: Path, prompt: str) -> OpencodeRun:
+    return OpencodeRun(
+        exit_code=1,
+        duration_s=1.0,
+        tokens=TokenTotals(300, 5, 0, 1),
+        stderr="Error: something nobody has seen before",
+    )
+
+
+def test_an_unrecognised_error_from_an_ollama_agent_is_a_refusal_not_an_attempt(repo, fake_model):
+    """ADR 14 item 10: the refusal is recorded, the attempt doesn't count, and it reruns on
+    the next agent the role lists (f1-25's router picks it from then on)."""
+    _add_task(repo, "m1-01-thing")
+    fake_model.extend([_unrecognised, _implement])
+    [task] = _run_as(repo, OLLAMA.id, "local-m").tasks
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 1, [])
+    assert fake_model.models == [OLLAMA.model, "lmstudio/m"]
+    refused, passed = _rows(repo, "jobs")
+    assert (refused["agent"], refused["outcome"], refused["note"]) == (
+        OLLAMA.id,
+        "failed",
+        "refused",
+    )
+    assert (passed["agent"], passed["outcome"]) == ("local-m", "passed")
+    [event] = _rows(repo, "usage_events")
+    assert (event["agent"], event["kind"], event["resets_at"]) == (OLLAMA.id, "refusal", None)
+
+
+def test_the_same_error_on_the_local_agent_is_a_failed_attempt(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+    fake_model.extend([_unrecognised, _implement])
+    [task] = _run_as(repo, "local-m").tasks
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["no-changes"])
+    assert fake_model.models == ["lmstudio/m", "lmstudio/m"]
+    assert _rows(repo, "usage_events") == []
 
 
 def test_an_interrupted_attempt_stays_running_with_the_heartbeat_set(repo, fake_model):

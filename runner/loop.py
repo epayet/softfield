@@ -46,14 +46,14 @@ from runner.gitops import (
     GitError,
     with_trailers,
 )
+from runner.local_model import ADAPTER as OPENCODE
 from runner.local_model import (
     LIVE_EVERY,
     OPENCODE_DB,
-    OpencodeRun,
     TokenTotals,
     empty_cause,
+    is_local,
     loaded_context_length,
-    run_opencode,
     session_reasoning,
     stream_facts,
     warmup,
@@ -566,6 +566,7 @@ def _total(tokens: TokenTotals) -> int:
 
 def attempt_progress(
     s: Session,
+    agent: str,
     job_id: int | None,
     what: str,
     log: Path,
@@ -578,29 +579,31 @@ def attempt_progress(
         return
     lines = log.read_text(encoding="utf-8", errors="replace").splitlines() if log.is_file() else []
     streak = stream_facts(lines).edit_streak
-    s.log(
-        console.local_progress(
-            local_agent(s.cfg), what, elapsed, _total(tokens), tokens.steps, streak
-        )
-    )
+    s.log(console.local_progress(agent, what, elapsed, _total(tokens), tokens.steps, streak))
 
 
-def _attempt_end(s: Session, what: str, run: OpencodeRun, outcome: str) -> None:
-    s.log(
-        console.local_end(
-            local_agent(s.cfg), what, outcome, run.duration_s, _total(run.tokens), run.tokens.steps
-        )
-    )
+def _tokens_in(run: JobResult) -> int:
+    return run.usage.get("input_tokens", 0)
+
+
+def _tokens_out(run: JobResult) -> int:
+    return run.usage.get("output_tokens", 0) + run.usage.get("reasoning_tokens", 0)
+
+
+def _attempt_end(s: Session, agent: str, what: str, run: JobResult, outcome: str) -> None:
+    total = _tokens_in(run) + _tokens_out(run)
+    s.log(console.local_end(agent, what, outcome, run.duration_s, total, run.num_turns))
 
 
 def _finish_attempt(
     s: Session,
     job_id: int | None,
-    run: OpencodeRun,
+    run: JobResult,
     outcome: str,
     *,
     gates: list[dict[str, object]] | None = None,
     note: str | None = None,
+    context_limit: int | None = None,
 ) -> None:
     _clear_in_flight(s)
     if job_id is None or s.run_id is None:
@@ -612,16 +615,16 @@ def _finish_attempt(
         job_id,
         ended=at,
         outcome=outcome,
-        tokens_in=run.tokens.input,
-        tokens_out=run.tokens.output + run.tokens.reasoning,
-        steps=run.tokens.steps,
-        peak_context=run.tokens.peak,
-        context_limit=s.context_limit,
-        edit_streak=run.facts.edit_streak,
-        refused_commands=run.facts.refused,
+        tokens_in=_tokens_in(run),
+        tokens_out=_tokens_out(run),
+        steps=run.num_turns,
+        peak_context=run.peak_context,
+        context_limit=context_limit,
+        edit_streak=run.edit_streak,
+        refused_commands=run.refused_commands,
         gates=gates,
         note=note,
-        session_id=run.facts.session_id or None,
+        session_id=run.session_id,
     )
     _record(s, metrics.update_run_heartbeat, s.run_id, at)
 
@@ -1196,6 +1199,104 @@ def _logs_dir(run_dir: Path, task_id: str) -> Path:
     return logs
 
 
+def _tally(rec: TaskRecord, run: JobResult) -> None:
+    rec.model_s += run.duration_s
+    rec.tokens_in += _tokens_in(run)
+    rec.tokens_out += _tokens_out(run)
+    rec.steps += run.num_turns
+    rec.sessions.append(run.session_id or "")
+    rec.edit_streak = max(rec.edit_streak, run.edit_streak)
+    rec.timeouts += run.timed_out
+
+
+def _record_refusal(s: Session, agent: str, run: JobResult) -> None:
+    """A cloud developer's refusal, for the allowance (ADR 15 item 2): its reset if it said."""
+    if (limit := run.refusal) is None:
+        return
+    _record(
+        s,
+        metrics.add_usage_event,
+        agent,
+        now().isoformat(),
+        "refusal",
+        window=limit.window,
+        resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
+    )
+    sure = "a limit" if limit.certain else "an error that may be a limit"
+    s.report.notes.append(f"{agent} refused a developer attempt ({sure}): {run.text[:200]}")
+
+
+def _develop(
+    s: Session,
+    task: Task,
+    rec: TaskRecord,
+    role: str,
+    attempt: int,
+    what: str,
+    prompt: str,
+    logs: Path,
+    branch: str,
+    *,
+    directed: bool,
+) -> tuple[str, JobResult, int | None, int | None]:
+    """One developer attempt, on the agents ``role`` lists in order. A refusal doesn't count
+    (ADR 14 item 10): it is recorded and the same attempt reruns on the next agent; the last
+    agent's result stands, a refusal included (f1-25's router replaces the list order). Only the
+    local model is warmed up. Returns the agent, its result, its job row and its context limit.
+    """
+    s.cfg.agent_for(role)  # a role with no agent is a config error
+    ids = s.cfg.roles[role]
+    for n, agent_id in enumerate(ids, start=1):
+        agent = s.cfg.agents[agent_id]
+        if agent.harness != "opencode":
+            raise RunnerError(f"{agent.id}: developer attempts run on OpenCode agents (f1-25)")
+        local = is_local(agent)
+        if local:
+            rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
+            _check_context(s)
+        context_limit = s.context_limit if local else None
+        log = logs / (f"opencode-{attempt}.jsonl" if n == 1 else f"opencode-{attempt}-{n}.jsonl")
+        s.log(console.start(agent.id, what + (" (directed)" if directed else "")))
+        job_id = record_start(
+            s,
+            task.id,
+            task.milestone,
+            role,
+            agent.id,
+            attempt=next_number(s, task.id, "local"),
+            log_path=_rel(s, log),
+            context_limit=context_limit,
+        )
+        _set_in_flight(
+            s,
+            kind="local",
+            ticket=task.id,
+            branch=branch,
+            agent=agent.id,
+            job_id=job_id,
+            attempt=attempt,
+        )
+        spec = JobSpec(
+            role,
+            prompt,
+            s.cfg.opencode_timeout,
+            edit=(ANY,),
+            commands=CHECK_COMMANDS,
+            title=f"{task.id} attempt {attempt}",
+        )
+        progress = partial(attempt_progress, s, agent.id, job_id, what, log, Ticker())
+        run = OPENCODE.run(agent, spec, s.repo, log, now(), on_progress=progress)
+        _tally(rec, run)
+        if run.refusal is None:
+            return agent.id, run, job_id, context_limit
+        _record_refusal(s, agent.id, run)
+        if n == len(ids):
+            return agent.id, run, job_id, context_limit
+        _attempt_end(s, agent.id, what, run, "refused, rerun on the next agent")
+        _finish_attempt(s, job_id, run, "failed", note="refused", context_limit=context_limit)
+    raise AssertionError("unreachable: the role names at least one agent")
+
+
 def run_task(s: Session, task: Task) -> TaskRecord:
     """One ticket. Its result is "parked" when it waits for Claude: a limit, or the reserve."""
     rec = TaskRecord(id=task.id, milestone=task.milestone)
@@ -1262,58 +1363,23 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             reset = "direction" if unusable else reset
         if reset or s.git.current_branch() != branch:  # a reset, or back from a repair on main
             reset = _start_attempt(s, branch, reset)
-        rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
-        _check_context(s)
-        log = logs / f"opencode-{attempt}.jsonl"
         what = f"attempt {attempt}/{s.cfg.max_attempts}"
         role = "last-attempt" if direction else "developer"
-        agent = s.cfg.agent_for(role).id
-        s.log(console.start(agent, what + (" (directed)" if direction else "")))
-        job_id = record_start(
-            s,
-            task.id,
-            task.milestone,
-            role,
-            agent,
-            attempt=next_number(s, task.id, "local"),
-            log_path=_rel(s, log),
-            context_limit=s.context_limit,
+        prompt = _prompt(
+            task,
+            last,
+            timed_out=bool(timeouts and timeouts[-1]),
+            direction=direction,
+            reset=reset,
+            earlier=earlier,
         )
-        _set_in_flight(
-            s,
-            kind="local",
-            ticket=task.id,
-            branch=branch,
-            agent=agent,
-            job_id=job_id,
-            attempt=attempt,
+        agent, run, job_id, context_limit = _develop(
+            s, task, rec, role, attempt, what, prompt, logs, branch, directed=bool(direction)
         )
-        run = run_opencode(
-            s.repo,
-            s.cfg.opencode_model,
-            f"{task.id} attempt {attempt}",
-            _prompt(
-                task,
-                last,
-                timed_out=bool(timeouts and timeouts[-1]),
-                direction=direction,
-                reset=reset,
-                earlier=earlier,
-            ),
-            s.cfg.opencode_timeout,
-            log,
-            on_progress=partial(attempt_progress, s, job_id, what, log, Ticker()),
-        )
-        rec.model_s += run.duration_s
-        rec.tokens_in += run.tokens.input
-        rec.tokens_out += run.tokens.output + run.tokens.reasoning
-        rec.steps += run.tokens.steps
-        rec.sessions.append(run.facts.session_id)
-        rec.edit_streak = max(rec.edit_streak, run.facts.edit_streak)
-        rec.timeouts += run.timed_out
         timeouts.append(run.timed_out)
 
-        end = partial(_attempt_end, s, what, run)
+        end = partial(_attempt_end, s, agent, what, run)
+        finish = partial(_finish_attempt, s, job_id, run, context_limit=context_limit)
         blocked_text = _read_blocked(s.repo)
         if blocked_text is not None:
             (logs / f"BLOCKED-{attempt}.md").write_text(blocked_text, encoding="utf-8")
@@ -1322,7 +1388,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
                 s.report.notes.append(f"{task.id} reported an unrelated problem (see logs).")
             else:
                 end(f"stopped, BLOCKED: {category}")
-                _finish_attempt(s, job_id, run, "failed", note=f"BLOCKED: {category}")
+                finish("failed", note=f"BLOCKED: {category}")
                 rec.blocked = category
                 rec.result = "blocked"
                 local_wip_commit(s, f"wip {task.id} attempt {attempt} (blocked)")
@@ -1338,7 +1404,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             results = run_gates(context)
         else:
             # An untouched tree passes every gate, and there'd be nothing to merge (m4-06).
-            cause = empty_cause(run.facts, run.timed_out)
+            cause = empty_cause(run.refused_commands, run.timed_out)
             results = [
                 GateResult(
                     NO_CHANGES, False, "The attempt changed no file. " + prompts.EMPTY[cause]
@@ -1351,10 +1417,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             encoding="utf-8",
         )
         failed = next((r for r in results if not r.ok), None)
-        _finish_attempt(
-            s,
-            job_id,
-            run,
+        finish(
             "passed" if failed is None else "timeout" if run.timed_out else "failed",
             gates=[
                 {

@@ -30,7 +30,6 @@ class Config:
     gate_timeout: int
     lm_base_url: str
     lm_model: str
-    opencode_model: str
     backoff_min: int
     backoff_max: int
     narrative: bool
@@ -94,7 +93,6 @@ def load_config(repo: Path) -> Config:
         gate_timeout=timeouts["gate"],
         lm_base_url=lm["base_url"],
         lm_model=lm["model"],
-        opencode_model=lm["opencode_model"],
         backoff_min=data["claude"]["usage_limit_backoff_min"],
         backoff_max=data["claude"]["usage_limit_backoff_max"],
         narrative=report.get("narrative", False),
