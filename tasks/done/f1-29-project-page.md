@@ -38,3 +38,12 @@ attempts: 2
 tokens: 2227371
 logs: var/runs/20260930-194445/f1-29-project-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 915
+gate_failures: []
+tokens: 1897863
+```
