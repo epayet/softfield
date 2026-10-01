@@ -36,3 +36,10 @@ Read `docs/adr/15-allowance-aware-routing.md` items 4, 5 and 10, `runner/allowan
 - with a reading of 0.79 of the week used on a Thursday, a lead ticket asks; "y" runs it, and no answer parks it and writes the owner item
 - after a yes, a second lead ticket in the same run doesn't ask; after the self-restart it still doesn't; a new process asks again
 - `uv run runner check-all --task f1-46-parking-and-reserve` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
