@@ -6,6 +6,7 @@ net savings. Trends below: first-attempt rate, escalations, Claude dollars per m
 ticket and savings per milestone, as small charts (D5).
 """
 
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
@@ -167,5 +168,120 @@ def milestones_list(request: Request, conn: Db, project: Project, now: Now) -> H
             "esc": _esc_chart(conn, project),
             "dollars": _dollars_chart(conn, project),
             "savings": _savings_chart(conn, project),
+        },
+    )
+
+
+def _to_html(text: str | None) -> str:
+    """Turn ``- item`` lines into ``<ul><li>`` and ``**x**`` into ``<strong>x</strong>``,
+    escaping the text first."""
+    if text is None:
+        return ""
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    lines = escaped.split("\n")
+    html_parts: list[str] = []
+    in_list = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- "):
+            if not in_list:
+                html_parts.append("<ul>")
+                in_list = True
+            item_text = stripped[2:]
+            item_text = re.sub(r"\*\*(.+?)\*\*", r"<strong>\1</strong>", item_text)
+            html_parts.append(f"<li>{item_text}</li>")
+        else:
+            if in_list:
+                html_parts.append("</ul>")
+                in_list = False
+            if stripped:
+                html_parts.append(f"<p>{stripped}</p>")
+    if in_list:
+        html_parts.append("</ul>")
+    return "".join(html_parts)
+
+
+@dataclass(frozen=True)
+class MilestoneDetail:
+    key: str
+    title: str | None
+    status: str | None
+    started: str | None
+    ended: str | None
+    outcome: str | None
+    done_when: str | None
+    signoff: dict[str, str] | None
+    results: queries.MilestoneResults | None
+    savings: queries.Savings | None
+    tickets: list[sqlite3.Row]
+    runs: list[sqlite3.Row]
+    findings: dict[str, int]
+
+
+def get_milestone_detail(
+    conn: sqlite3.Connection, project: str, key: str
+) -> MilestoneDetail | None:
+    m = queries._milestone(conn, project, key)
+    if m is None:
+        return None
+    results = queries.milestone_results(conn, project, key)
+    savings = queries.savings(conn, project, key)
+    tickets = queries._tickets(conn, m["id"])
+    # A milestone's runs are the runs of its jobs (runs has no milestone_id).
+    runs = conn.execute(
+        "SELECT DISTINCT r.run_dir FROM runs r"
+        " JOIN jobs j ON j.run_id = r.id"
+        " WHERE j.milestone_id = ? ORDER BY r.started DESC",
+        (m["id"],),
+    ).fetchall()
+    findings = queries._findings(conn, m["id"])
+    signoff: dict[str, str] | None = None
+    if m["signoff"]:
+        import json as _json
+
+        signoff = {k: v for k, v in _json.loads(m["signoff"]).items() if isinstance(v, str)}
+    return MilestoneDetail(
+        key=key,
+        title=m["title"],
+        status=m["status"],
+        started=m["started"],
+        ended=m["ended"],
+        outcome=m["outcome"],
+        done_when=m["done_when"],
+        signoff=signoff,
+        results=results,
+        savings=savings,
+        tickets=tickets,
+        runs=runs,
+        findings=findings,
+    )
+
+
+@router.get("/milestones/{key}", response_class=HTMLResponse)
+def milestone_detail(
+    key: str,
+    request: Request,
+    conn: Db,
+    project: Project,
+) -> HTMLResponse:
+    detail = get_milestone_detail(conn, project, key)
+    if detail is None:
+        return HTMLResponse(status_code=404, content="Not found")
+    signoff_html: dict[str, str] = {}
+    if detail.signoff:
+        for k in ("changed", "how_to_test", "what_next", "later", "lessons"):
+            if k in detail.signoff:
+                signoff_html[k] = _to_html(detail.signoff[k])
+    return render(
+        request,
+        conn,
+        project,
+        "milestone.html",
+        {
+            "active": "/milestones",
+            "milestone": detail,
+            "outcome_html": _to_html(detail.outcome),
+            "done_when_html": _to_html(detail.done_when),
+            "signoff_html": signoff_html,
         },
     )

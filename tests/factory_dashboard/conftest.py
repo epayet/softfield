@@ -245,6 +245,48 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
     metrics.finish_job(conn, claude, ended=_at(timedelta(minutes=50)), outcome="passed", **tokens)
 
 
+def write_milestone_detail(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: F1 with a sign-off (outcome, done_when,
+    signoff sections) for the milestone detail page tests."""
+    project = metrics.upsert_project(conn, PROJECT)
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f1",
+        status="done",
+        outcome="The factory now measures itself end-to-end.",
+        done_when=(
+            "All tickets in `tasks/done/`, `check-all` passes on `main`,\n"
+            "`backfill` run twice gives identical row counts."
+        ),
+        signoff={
+            "changed": "- A metrics database that every run writes.\n"
+            "- The local dashboard at `127.0.0.1`.",
+            "how_to_test": "- Run `uv run runner milestone f1`.\n"
+            "- Open `127.0.0.1` and check every page.",
+            "what_next": "- Close the factory review.\n- Replan the agents section.",
+            "later": "- Full diffs and before/after screenshots.\n- ADRs view on the dashboard.",
+            "lessons": "- Run the loop before the replan.",
+        },
+    )
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f10",
+        title="F10 milestone",
+        status="in progress",
+        started=_at(timedelta(days=2)),
+    )
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f2",
+        title="The factory reviews itself",
+        status="in progress",
+        started=_at(timedelta(days=1)),
+    )
+
+
 def write_milestones(conn: sqlite3.Connection) -> None:
     """On top of ``write_fixture``: a milestone with no tickets yet (f2),
     F1 with a status, and F10 (earlier than F2) for ordering tests."""
@@ -749,6 +791,22 @@ def tickets_client(db_path: Path) -> TestClient:
     conn = metrics.open_db(db_path)
     try:
         write_tickets(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def milestone_detail_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_milestone_detail``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_milestone_detail(conn)
     finally:
         conn.close()
 

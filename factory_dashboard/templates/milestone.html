@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}{{ milestone.key | upper }} · Milestone · {{ project }}{% endblock %}
+{% block crumbs %}
+<a href="/milestones{{ q }}">Milestones</a>
+<span aria-hidden="true">&rsaquo;</span>
+<span>{{ milestone.key | upper }}</span>
+{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="outcome">
+  <h2>Outcome and Done when</h2>
+  {% if milestone.outcome %}
+  <p>{{ milestone.outcome }}</p>
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+  {% if milestone.done_when %}
+  <h3>Done when</h3>
+  {{ milestone.done_when_html | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
+<section id="what-changed">
+  <h2>What changed</h2>
+  {% if "changed" in signoff_html %}
+  {{ signoff_html["changed"] | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
+<section id="how-to-test">
+  <h2>How to test</h2>
+  {% if "how_to_test" in signoff_html %}
+  {{ signoff_html["how_to_test"] | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
+<section id="what-next">
+  <h2>What next</h2>
+  {% if "what_next" in signoff_html %}
+  {{ signoff_html["what_next"] | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
+<section id="later">
+  <h2>Left for later</h2>
+  {% if "later" in signoff_html %}
+  {{ signoff_html["later"] | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
+<section id="lessons">
+  <h2>How the work went</h2>
+  {% if "lessons" in signoff_html %}
+  {{ signoff_html["lessons"] | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
+<section id="results">
+  <h2>Results</h2>
+  {% if milestone.results %}
+  <dl class="kv">
+    <dt>Tickets</dt><dd>{{ milestone.results.tickets }}</dd>
+    <dt>Merged</dt><dd>{{ milestone.results.merged }}</dd>
+    <dt>Pass rate</dt><dd>{{ "%.1f"|format(milestone.results.pass_rate * 100) + "%" if milestone.results.pass_rate is not none else "–" }}</dd>
+    <dt>Attempts</dt><dd>{{ milestone.results.attempts }}</dd>
+    <dt>Escalations</dt><dd>{{ milestone.results.escalations }}</dd>
+    <dt>Review rounds</dt><dd>{{ milestone.results.review_rounds }}</dd>
+    <dt>Review score</dt><dd>{{ milestone.results.claude.dollars | usd }}</dd>
+    <dt>Owner score</dt><dd>{{ "–" }}</dd>
+  </dl>
+  {% if milestone.results.findings %}
+  <h3>Findings by severity</h3>
+  <dl class="kv">
+    {% for sev, count in milestone.results.findings.items() %}
+    <dt>{{ sev }}</dt><dd>{{ count }}</dd>
+    {% endfor %}
+  </dl>
+  {% endif %}
+  {% else %}
+  <p class="sub">No results yet.</p>
+  {% endif %}
+</section>
+
+<section id="savings">
+  <h2>Savings</h2>
+  {% if milestone.savings and milestone.savings.tickets %}
+  <div class="stats money">
+    <div class="stat"><b>{{ milestone.savings.doing_itself | usd }}</b><span>what Claude would have spent writing the {{ "{:,}".format(milestone.savings.lines) }} lines itself (≈{{ milestone.savings.doing_itself_tokens | tokens }} token-equivalents)</span></div>
+    <div class="stat"><b>{{ milestone.savings.supporting | usd }}</b><span>what it spent supporting them (≈{{ milestone.savings.supporting_tokens | tokens }})</span></div>
+    <div class="stat"><b>{{ milestone.savings.net | usd }}</b><span>net, on {{ milestone.savings.tickets }} delegated ticket{{ "s" if milestone.savings.tickets != 1 }}</span></div>
+  </div>
+  {% else %}
+  <p class="sub">No savings data.</p>
+  {% endif %}
+</section>
+
+<section id="tickets">
+  <h2>Tickets</h2>
+  {% if milestone.tickets %}
+  <div class="scroll"><table>
+    <thead><tr><th>Ticket</th><th>Kind</th><th>State</th><th class="num">Difficulty</th></tr></thead>
+    <tbody>
+      {% for t in milestone.tickets %}
+      <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td>{{ t.kind or "–" }}</td><td>{{ t.state or "–" }}</td><td class="num">{{ t.difficulty or "–" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="sub">No tickets.</p>
+  {% endif %}
+</section>
+
+<section id="runs">
+  <h2>Runs</h2>
+  {% if milestone.runs %}
+  <ul>
+    {% for r in milestone.runs %}
+    <li><a href="/runs/{{ r.run_dir }}{{ q }}">{{ r.run_dir }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sub">No runs.</p>
+  {% endif %}
+</section>
+
+<section id="findings">
+  <h2>Findings</h2>
+  {% if milestone.findings %}
+  <dl class="kv">
+    {% for sev, count in milestone.findings.items() %}
+    <dt>{{ sev }}</dt><dd>{{ count }}</dd>
+    {% endfor %}
+  </dl>
+  {% else %}
+  <p class="sub">No findings.</p>
+  {% endif %}
+</section>
+
+</div>
+{% endblock %}

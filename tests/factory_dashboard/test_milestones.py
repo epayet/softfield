@@ -166,3 +166,69 @@ def test_milestone_f2_cells(milestones_client):
     cells = [re.sub(r"<[^>]+>", " ", c).strip() for c in cells]
     assert cells[0] == "F2"  # key cell
     assert "in progress" in cells[2]  # status must show in progress
+
+
+def test_milestone_detail_answers_200(milestone_detail_client):
+    resp = milestone_detail_client.get("/milestones/f1")
+    assert resp.status_code == 200
+
+
+def test_milestone_detail_sections_in_d8_order(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
+    expected = [
+        "outcome",
+        "what-changed",
+        "how-to-test",
+        "what-next",
+        "later",
+        "lessons",
+        "results",
+        "savings",
+        "tickets",
+        "runs",
+        "findings",
+    ]
+    # Check that all expected sections appear in order.
+    last_pos = -1
+    for eid in expected:
+        pos = ids.index(eid)
+        assert pos > last_pos, f"{eid} not after previous section"
+        last_pos = pos
+
+
+def test_milestone_detail_shows_savings_with_parts_and_net(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    savings = section(html, "savings")
+    # Should show doing_itself, supporting, and net
+    assert "what Claude would have spent" in savings
+    assert "what it spent supporting" in savings
+    assert "net" in savings
+
+
+def test_milestone_detail_unknown_key_is_404(milestone_detail_client):
+    resp = milestone_detail_client.get("/milestones/nonexistent")
+    assert resp.status_code == 404
+
+
+def test_milestone_detail_tickets_link_to_ticket_pages(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    assert 'href="/tickets/f1-01-first?project=' in html
+    assert 'href="/tickets/f1-02-escalated?project=' in html
+    assert 'href="/tickets/f1-03-lead?project=' in html
+
+
+def test_milestone_detail_runs_link_to_run_pages(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    assert 'href="/runs/20260930-100000?project=' in html
+
+
+def test_milestone_detail_without_signoff_shows_not_written_yet(milestone_detail_client):
+    """A milestone without a sign-off shows 'Not written yet' for those parts."""
+    resp = milestone_detail_client.get("/milestones/f10")
+    assert resp.status_code == 200
+    html = resp.text
+    # f10 has no signoff, so all signoff sections should show "Not written yet"
+    for section_name in ("what-changed", "how-to-test", "what-next", "later", "lessons"):
+        sec_text = section(html, section_name)
+        assert "Not written yet" in sec_text, f"{section_name} should show 'Not written yet'"
