@@ -2,7 +2,6 @@
 
 import ast
 import re
-import subprocess
 import time
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -10,6 +9,7 @@ from pathlib import Path, PurePosixPath
 
 from runner import i18n
 from runner.gitops import Git
+from runner.procs import run_bounded
 from runner.tasks import Task, queued_tests
 
 ALWAYS_ALLOWED = ("docs/discoveries.md",)
@@ -253,21 +253,13 @@ def _result(name: str, problems: list[str]) -> GateResult:
 
 def _exec(ctx: GateContext, *args: str) -> tuple[int | None, str]:
     """Run a command in the repo: its exit code (None on timeout) and trimmed output."""
-    try:
-        proc = subprocess.run(
-            list(args),
-            cwd=ctx.repo,
-            capture_output=True,
-            text=True,
-            timeout=ctx.timeout,
-            check=False,
-        )
-    except subprocess.TimeoutExpired:
+    code, out, err = run_bounded(list(args), ctx.repo, ctx.timeout)
+    if code is None:
         return None, f"timed out after {ctx.timeout}s"
-    output = (proc.stdout + proc.stderr).strip()
+    output = (out + err).strip()
     if len(output) > _OUTPUT_LIMIT:
         output = "…(truncated)…\n" + output[-_OUTPUT_LIMIT:]
-    return proc.returncode, output
+    return code, output
 
 
 def _command(name: str, ctx: GateContext, *args: str) -> GateResult:

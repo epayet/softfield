@@ -5,12 +5,12 @@ pass it before the runner commits their work. It runs everything and reports eve
 then exits non-zero, so nothing hides behind a pipe (M4: `mypy | tail`).
 """
 
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
 from runner import i18n
 from runner.gates import layout_problems
+from runner.procs import run_bounded
 from runner.tasks import queued_tests
 
 TEST_DIRS = (
@@ -37,16 +37,13 @@ class Check:
 
 
 def _exec(repo: Path, args: list[str], timeout: int) -> tuple[int | None, str]:
-    try:
-        proc = subprocess.run(
-            args, cwd=repo, capture_output=True, text=True, timeout=timeout, check=False
-        )
-    except subprocess.TimeoutExpired:
+    code, out, err = run_bounded(args, repo, timeout)
+    if code is None:
         return None, f"timed out after {timeout}s"
-    output = (proc.stdout + proc.stderr).strip()
+    output = (out + err).strip()
     if len(output) > _OUTPUT_LIMIT:
         output = "…(truncated)…\n" + output[-_OUTPUT_LIMIT:]
-    return proc.returncode, output
+    return code, output
 
 
 def _i18n_problems(repo: Path, timeout: int) -> list[str]:

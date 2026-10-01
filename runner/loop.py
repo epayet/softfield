@@ -3,7 +3,6 @@
 import hashlib
 import json
 import sqlite3
-import subprocess
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -54,6 +53,7 @@ from runner.local_model import (
     session_reasoning,
     warmup,
 )
+from runner.procs import run_bounded
 from runner.report import ClaudeRunRecord, SessionReport, TaskRecord
 from runner.state import State, load_state, save_state
 from runner.tasks import (
@@ -1132,12 +1132,9 @@ E2E_BROWSERS = ("chromium", "webkit")
 
 def run_e2e(repo: Path, timeout: int) -> GateResult:
     browsers = [arg for name in E2E_BROWSERS for arg in ("--browser", name)]
-    proc = subprocess.run(
-        ["uv", "run", "pytest", "-q", "-m", "e2e", *browsers, "tests/e2e"],
-        cwd=repo,
-        capture_output=True,
-        text=True,
-        timeout=timeout,
-        check=False,
+    code, out, err = run_bounded(
+        ["uv", "run", "pytest", "-q", "-m", "e2e", *browsers, "tests/e2e"], repo, timeout
     )
-    return GateResult("e2e", proc.returncode == 0, (proc.stdout + proc.stderr)[-4000:])
+    if code is None:
+        return GateResult("e2e", False, f"timed out after {timeout}s\n" + (out + err)[-4000:])
+    return GateResult("e2e", code == 0, (out + err)[-4000:])
