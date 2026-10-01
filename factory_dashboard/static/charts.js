@@ -130,6 +130,45 @@
       };
     },
 
+    // Ratings over time: {labels: [...], agents: [...], skills: [...], scores: [...]}.
+    rating(data, c) {
+      const agents = [...new Set(data.agents)];
+      const skills = [...new Set(data.skills)];
+      const series = [];
+      for (const skill of skills) {
+        const idx = skills.indexOf(skill);
+        series.push({
+          name: skill,
+          type: "line",
+          smooth: true,
+          data: data.scores.map((s, i) => data.skills[i] === skill ? s : null),
+          itemStyle: { color: c.series[idx % c.series.length] },
+        });
+      }
+      return {
+        grid: { left: 48, right: 12, top: 16, bottom: 24 },
+        tooltip: {
+          trigger: "axis",
+          formatter: (p) => {
+            if (p.length && p[0].data != null) {
+              return p[0].seriesName + ": " + p[0].data
+                + " (" + (p[0].data2 || "") + ")";
+            }
+            return "";
+          },
+        },
+        xAxis: {
+          type: "category", data: data.labels,
+          axisLine: { lineStyle: { color: c.rule } }, axisLabel: { color: c.ink },
+        },
+        yAxis: {
+          type: "value", axisLabel: { color: c.muted },
+          splitLine: { lineStyle: { color: c.grid } },
+        },
+        series: series,
+      };
+    },
+
     // Timeline: lanes per agent, bars per job, coloured by outcome.
     timeline(data, c) {
       const agents = data.lanes.map(l => l.agent);

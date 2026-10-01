@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Agents · {{ project }}{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="efficiency" class="panel">
+  <h2>Efficiency{% if milestone %}, {{ milestone | upper }}{% endif %}</h2>
+  <div class="scroll"><table>
+    <thead><tr>
+      <th>Agent</th><th class="num">Jobs</th><th class="num">Merged</th>
+      <th class="num">Attempts</th><th class="num">First %</th>
+      <th class="num">Att/merge</th><th class="num">Min/merge</th>
+      <th class="num">Tok/merge</th><th class="num">T/s</th>
+      <th class="num">Esc %</th><th>Failed gate</th><th class="num">$</th>
+    </tr></thead>
+    <tbody>
+    {% for e in efficiency %}
+    <tr>
+      <td class="mono">{{ e.agent }}</td>
+      <td class="num">{{ e.jobs }}</td>
+      <td class="num">{{ e.merged }}</td>
+      <td class="num">{{ e.attempt_tickets }}</td>
+      <td class="num">{{ e.first_attempt_pass | pct if e.first_attempt_pass is not none else "–" }}</td>
+      <td class="num">{{ e.attempts_per_merge if e.merged > 0 else "–" }}</td>
+      <td class="num">{{ e.minutes_per_merge if e.merged > 0 else "–" }}</td>
+      <td class="num">{{ e.tokens_per_merge if e.merged > 0 else "–" }}</td>
+      <td class="num">{{ e.tokens_per_second if e.merged > 0 else "–" }}</td>
+      <td class="num">{{ e.escalation_rate | pct if e.escalation_rate is not none else "–" }}</td>
+      <td>{{ e.most_failed_gate }}</td>
+      <td class="num">{{ e.dollars | usd }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section id="roles" class="panel">
+  <h2>Who did what</h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Agent</th>{% for r in roles %}<th class="num">{{ r }}</th>{% endfor %}</tr></thead>
+    <tbody>
+    {% for ag in agent_names %}
+    <tr>
+      <td class="mono">{{ ag }}</td>
+      {% for r in roles %}
+      <td class="num">{{ counts[ag][r] or "" }}</td>
+      {% endfor %}
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+
+<section id="ratings" class="panel">
+  <h2>Ratings over time</h2>
+  {% if ratings.labels %}
+  <div class="chart" data-chart="rating"></div>
+  <script type="application/json">{{ ratings | tojson }}</script>
+  {% else %}
+  <p class="sub">Ratings start after f1-24.</p>
+  {% endif %}
+</section>
+
+</div>
+{% endblock %}

@@ -32,6 +32,10 @@ def usd(dollars: float) -> str:
     return f"-${-dollars:,.2f}" if dollars < -0.005 else f"${abs(dollars):,.2f}"
 
 
+def pct(value: float) -> str:
+    return f"{round(value)}%"
+
+
 def ago(delta: timedelta) -> str:
     """``30 s``, ``3 min``, ``2 h``: how long, to a glance."""
     seconds = max(0, int(delta.total_seconds()))
@@ -42,12 +46,21 @@ def ago(delta: timedelta) -> str:
     return f"{seconds / 3600:.1f} h".replace(".0 h", " h")
 
 
-templates.env.filters.update(usd=usd, tokens=short, ago=ago)
+templates.env.filters.update(usd=usd, pct=pct, tokens=short, ago=ago)
 
 
 def create_app(db: Path, project: str) -> FastAPI:
     """The dashboard over the database at ``db``, showing ``project`` unless asked otherwise."""
-    from factory_dashboard import jobs, milestones, overview, projects, runs, tickets, timeline
+    from factory_dashboard import (
+        agents,
+        jobs,
+        milestones,
+        overview,
+        projects,
+        runs,
+        tickets,
+        timeline,
+    )
 
     app = FastAPI(title="software-factory", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.db, app.state.project = db, project
@@ -62,6 +75,7 @@ def create_app(db: Path, project: str) -> FastAPI:
     app.include_router(timeline.router)
     app.include_router(projects.router)
     app.include_router(runs.router)
+    app.include_router(agents.router)
     return app
 
 

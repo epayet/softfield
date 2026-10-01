@@ -818,11 +818,43 @@ def serve(db_path: Path) -> Callable[..., TestClient]:
                 write_live(conn, heartbeat_age)
             finally:
                 conn.close()
+
         app = create_app(db_path, PROJECT)
         app.dependency_overrides[get_now] = lambda: NOW
         return TestClient(app, base_url="http://127.0.0.1:8765")
 
     return make
+
+
+def write_ratings(conn: sqlite3.Connection) -> None:
+    """Two rating changes for the local agent, for the agents page chart test."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    ticket = metrics.upsert_ticket(
+        conn, project, "f1-01-first", milestone_id=f1, kind="developer", state="done"
+    )
+    metrics.add_rating_change(
+        conn, LOCAL, "coding", 4.0, 4.5, at="2026-09-30T11:00:00+02:00", ticket_id=ticket
+    )
+    metrics.add_rating_change(
+        conn, LOCAL, "reviewing", 3.5, 4.0, at="2026-09-30T12:00:00+02:00", ticket_id=ticket
+    )
+
+
+@pytest.fixture
+def rating_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus two rating changes."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_ratings(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
 def write_project(conn: sqlite3.Connection) -> None:
