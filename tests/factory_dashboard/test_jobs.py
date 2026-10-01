@@ -55,22 +55,30 @@ def client_with_jobs(db_path: Path):
 def test_no_filter_shows_all_jobs_newest_first(client_with_jobs):
     client, _, _ = client_with_jobs
     html = client.get("/jobs").text
-    jobs_section = section(html, "jobs")
-    # f1 jobs (started 2026-09-30) come before m4 jobs (started 2026-09-20)
-    f1_pos = jobs_section.index("2026-09-30")
-    m4_pos = jobs_section.index("2026-09-20")
-    assert f1_pos < m4_pos
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    tbody_rows = [r for r in rows if "<td" in r]
+    assert len(tbody_rows) == 12
+    expected_order = [12, 6, 4, 11, 9, 8, 7, 5, 3, 2, 1, 10]
+    for i, job_id in enumerate(expected_order):
+        row = tbody_rows[i]
+        link_match = re.search(r'href="/jobs/(\d+)"', row)
+        assert link_match, f"row {i} has no job link"
+        assert int(link_match.group(1)) == job_id
 
 
 def test_filter_by_agent_and_role_shows_only_matching(client_with_jobs):
     client, _, _ = client_with_jobs
     resp = client.get("/jobs?agent=claude-opus&role=escalation")
     html = resp.text
-    jobs_section = section(html, "jobs")
-    assert "escalation" in jobs_section
-    assert "claude-opus" in jobs_section
-    # Should not show developer or other roles
-    assert "developer" not in jobs_section or "claude-opus" in jobs_section
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    tbody_rows = [r for r in rows if "<td" in r]
+    assert len(tbody_rows) == 1
+    row = tbody_rows[0]
+    assert "escalation" in row
+    assert "claude-opus" in row
+    assert "/jobs/6" in row
+    for job_id in (1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12):
+        assert f"/jobs/{job_id}" not in row
 
 
 def test_unknown_filter_value_shows_no_jobs_and_keeps_form(client_with_jobs):
@@ -87,8 +95,20 @@ def test_unknown_filter_value_shows_no_jobs_and_keeps_form(client_with_jobs):
 def test_failed_attempt_shows_failed_gate_name(client_with_jobs):
     client, _, _ = client_with_jobs
     html = client.get("/jobs").text
-    jobs_section = section(html, "jobs")
-    assert "tests" in jobs_section  # the failed gate name
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    tbody_rows = [r for r in rows if "thead" not in r.lower()]
+    for row in tbody_rows:
+        link_match = re.search(r'href="/jobs/(\d+)"', row)
+        if link_match:
+            job_id = int(link_match.group(1))
+            if job_id == 4:
+                cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+                text = " ".join(re.sub(r"<[^>]+>", " ", c).strip() for c in cells)
+                assert "tests" in text
+            else:
+                cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)
+                text = " ".join(re.sub(r"<[^>]+>", " ", c).strip() for c in cells)
+                assert text.strip().endswith("–")
 
 
 def test_running_job_shows_running_outcome(client_with_jobs):
