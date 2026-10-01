@@ -16,6 +16,7 @@ from runner.tasks import (
     pick_next,
     preflight,
     queued_tests,
+    task_ids,
 )
 from tests.runner.conftest import write_task
 
@@ -335,8 +336,13 @@ def test_queued_tickets_name_only_what_exists_or_an_earlier_ticket_creates():
         for folder in ("ready", *STOPPED)
         for task in load_dir(repo / "tasks" / folder, 150)
     }
+    # An escalated ticket never runs as written: the lead rewrites or implements it, and its
+    # escalation's check-all runs while it still sits in escalated/ (f1-50).
+    escalated = task_ids(repo / "tasks" / "escalated")
     problems = []
     for task in queued.values():
+        if task.id in escalated:
+            continue
         created = _created_before(task, queued)
         for problem in preflight(task, repo):
             path = problem.removeprefix("referenced path does not exist: ")

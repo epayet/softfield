@@ -1045,13 +1045,20 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
     rec.directed = bool(direction)
     if ticket_file.is_file():
         s.git.checkout(MAIN)
+        original = task.path.read_text(encoding="utf-8")
         task.path.write_text(ticket_file.read_text(encoding="utf-8"), encoding="utf-8")
+        repaired = parse_task(task.path, s.cfg.default_max_diff)
+        # f1-50: a repair naming a missing path fails the developer's all-tests gate
+        if problems := preflight(repaired, s.repo):
+            task.path.write_text(original, encoding="utf-8")
+            s.log(f"direction {task.id}: repair dropped, pre-flight: {'; '.join(problems)}")
+            return task, direction
         s.git.commit_all(
             with_trailers(
                 f"direction {task.id}: ticket repaired (by Claude)", agent=CLAUDE_HEADLESS_AGENT
             )
         )
-        task = parse_task(task.path, s.cfg.default_max_diff)
+        task = repaired
         record_ticket(s, task.path, "running")
     return task, direction
 

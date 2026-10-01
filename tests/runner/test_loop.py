@@ -412,6 +412,31 @@ def test_direction_can_repair_the_ticket(repo, fake_model, fake_lead):
     assert git(repo, "log", "--format=%s", "--grep=^direction m1-01-thing").strip()
 
 
+def test_a_repair_that_fails_preflight_is_dropped(repo, fake_model, fake_lead):
+    """f1-50: the repair named a bare `ticket.html`; the developer edited the ticket to pass."""
+    _add_task(repo, "m1-01-thing")
+    script, _ = fake_lead
+    ticket = repo / "tasks" / "ready" / "m1-01-thing.md"
+    original = ticket.read_text()
+
+    def repair(job, repo_):
+        logs = repo_ / _logs_in(job.prompt)
+        (logs / "direction.md").write_text("Look at the template.")
+        (logs / "ticket.md").write_text(
+            original.replace("### Context\n", "### Context\n`a.html`\n")
+        )
+
+    def follow(repo, prompt):
+        assert "a.html" not in prompt and "Look at the template." in prompt
+        _implement(repo, prompt)
+
+    fake_model.extend([_stray, _stray, follow])
+    script.append(repair)
+    _run(repo, once=True)
+    assert "a.html" not in (repo / "tasks" / "done" / "m1-01-thing.md").read_text()
+    assert not git(repo, "log", "--format=%s", "--grep=^direction m1-01-thing").strip()
+
+
 def test_a_repaired_ticket_without_max_diff_gets_the_default(repo, fake_model, fake_lead):
     """f0: the direction dropped a too-low cap, but the re-parse kept it as the default."""
     ticket = write_task(repo / "tasks" / "ready", "m1-01-thing")

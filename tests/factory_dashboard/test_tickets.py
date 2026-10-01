@@ -195,28 +195,44 @@ def test_ticket_breadcrumbs(tickets_client):
     assert "f1-11-ticket-b" in crumbs
 
 
+def agent_row(raw: str, agent: str) -> dict[str, str]:
+    """The ``data-col`` cells of the ``<tr data-agent="agent">`` row in ``raw``."""
+    match = re.search(rf'<tr[^>]*\bdata-agent="{re.escape(agent)}"[^>]*>(.*?)</tr>', raw, re.S)
+    assert match, f"no row for {agent}"
+    cells = re.findall(r'<td[^>]*\bdata-col="([^"]+)"[^>]*>(.*?)</td>', match.group(1), re.S)
+    return {col: text.strip() for col, text in cells}
+
+
 def test_ticket_agent_work_shows_two_agents(tickets_client):
     html = tickets_client.get("/tickets/f1-11-ticket-b").text
-    section = section_raw(html, "agent-work")
-    assert "claude-opus" in section
-    assert "local-qwen3.6-35b-a3b" in section
-    assert "merged" in section
-    assert "1" in section
-    assert "2" in section
-    assert "10000" in section
-    assert "200000" in section
-    assert "2.00" in section
+    raw = section_raw(html, "agent-work")
+    assert agent_row(raw, "claude-opus") == {
+        "agent": "claude-opus",
+        "roles": "escalation",
+        "jobs": "1",
+        "minutes": "10",
+        "tokens-in": "10000",
+        "cost": "2.00",
+        "merged": "merged",
+    }
+    assert agent_row(raw, "local-qwen3.6-35b-a3b") == {
+        "agent": "local-qwen3.6-35b-a3b",
+        "roles": "developer ×2",
+        "jobs": "2",
+        "minutes": "20",
+        "tokens-in": "200000",
+        "cost": "–",
+        "merged": "",
+    }
 
 
 def test_ticket_agent_work_order_merger_first_then_minutes(
     tickets_client,
 ):
     html = tickets_client.get("/tickets/f1-11-ticket-b").text
-    section = section_raw(html, "agent-work")
-    merged_pos = section.find("merged")
-    claude_pos = section.find("claude-opus")
-    local_pos = section.find("local-qwen3.6-35b-a3b")
-    assert claude_pos < merged_pos < local_pos
+    raw = section_raw(html, "agent-work")
+    agents = re.findall(r'<tr[^>]*\bdata-agent="([^"]+)"', raw)
+    assert agents == ["claude-opus", "local-qwen3.6-35b-a3b"]
 
 
 def test_ticket_agent_work_absent_when_no_jobs(tickets_client):
