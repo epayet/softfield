@@ -39,3 +39,12 @@ attempts: 3
 tokens: 5128777
 logs: var/runs/20260930-194445/f1-34-jobs-pages-fixes
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: no-changes)
+attempts: 3
+tokens: 1903550
+logs: var/runs/20260930-194445/f1-34-jobs-pages-fixes-run2
+```
