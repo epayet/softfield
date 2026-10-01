@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from runner import checks, gates, loop, metrics
-from runner.claude import ClaudeJob, ClaudeResult, TransientError, UsageLimited
+from runner.claude import ClaudeJob, ClaudeResult, Reading, TransientError, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
@@ -881,6 +881,48 @@ def test_a_usage_limit_pause_is_a_refusal_event(repo, monkeypatch):
     [event] = _rows(repo, "usage_events")
     assert (event["agent"], event["kind"]) == ("claude-opus", "refusal")
     assert event["resets_at"] == resets.isoformat()
+
+
+def _readings(five_hour: float, seven_day: float) -> tuple[Reading, ...]:
+    resets = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
+    return (Reading("five_hour", five_hour, resets), Reading("seven_day", seven_day, resets))
+
+
+def test_a_jobs_readings_are_usage_events_and_the_same_readings_twice_change_nothing(
+    repo, monkeypatch
+):
+    """f1-44: Claude's allowance, as each job's stream reports it (ADR 15 item 3)."""
+    at = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+    monkeypatch.setattr(loop, "now", lambda: at)
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, readings=_readings(0.07, 0.79))
+    _limited_then(monkeypatch, done, done)
+    s = loop.open_session(_config(repo))
+    for _ in range(2):
+        loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    events = _rows(repo, "usage_events")
+    assert [(e["agent"], e["kind"], e["window"], e["value"]) for e in events] == [
+        ("claude-opus", "reading", "five_hour", 0.07),
+        ("claude-opus", "reading", "seven_day", 0.79),
+    ]
+    assert {e["at"] for e in events} == {at.isoformat()}
+    assert {e["resets_at"] for e in events} == {"2026-10-05T16:00:00+00:00"}
+
+
+def test_a_refusal_names_its_window_and_keeps_the_readings_before_it(repo, monkeypatch):
+    resets = loop.now() + timedelta(hours=1)
+    limit = UsageLimited(resets, "s1", window="five_hour", readings=_readings(1.0, 0.5))
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    _limited_then(monkeypatch, limit, done)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    events = {(e["kind"], e["window"]): e for e in _rows(repo, "usage_events")}
+    assert set(events) == {
+        ("refusal", "five_hour"),
+        ("reading", "five_hour"),
+        ("reading", "seven_day"),
+    }
+    assert events["refusal", "five_hour"]["resets_at"] == resets.isoformat()
+    assert events["reading", "five_hour"]["value"] == 1.0
 
 
 def test_a_database_that_cant_be_opened_does_not_stop_the_session(repo, fake_model):

@@ -1,11 +1,14 @@
+import json
 import subprocess
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 
 from runner.claude import (
     STRIPPED_ENV,
     ClaudeJob,
+    Reading,
     TransientError,
     UsageLimited,
     backoff_seconds,
@@ -86,7 +89,8 @@ def test_run_claude_appends_the_shell_note(tmp_path, monkeypatch):
 
     def fake_run(cmd, **kwargs):
         seen.append(cmd)
-        return subprocess.CompletedProcess(cmd, 0, stdout='{"result": "ok"}', stderr="")
+        out = '{"type": "result", "result": "ok"}'
+        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Bash(git log:*)",))
@@ -95,12 +99,22 @@ def test_run_claude_appends_the_shell_note(tmp_path, monkeypatch):
     assert prompt.startswith("Review.") and "`git log`" in prompt
 
 
+def _as_result_event(stdout: str) -> str:
+    """A JSON object as stream-json's last line, the `result` event; anything else as is."""
+    try:
+        data = json.loads(stdout)
+    except json.JSONDecodeError:
+        return stdout
+    return json.dumps(data | {"type": "result"}) if isinstance(data, dict) else stdout
+
+
 def _fake_claude(monkeypatch, stdout: str, returncode: int = 1) -> list[list[str]]:
     seen: list[list[str]] = []
 
     def fake_run(cmd, **kwargs):
         seen.append(cmd)
-        return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
+        out = _as_result_event(stdout)
+        return subprocess.CompletedProcess(cmd, returncode, stdout=out, stderr="")
 
     monkeypatch.setattr(subprocess, "run", fake_run)
     return seen
@@ -196,3 +210,108 @@ def test_a_dropped_connection_or_overload_is_transient(tmp_path, monkeypatch, st
     job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
     with pytest.raises(TransientError):
         run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+
+
+# --- Claude's allowance, read from the stream (ADR 15 item 3) ------------------------------
+
+PROBE = Path(__file__).parent / "fixtures" / "probes" / "claude-stream.jsonl"
+
+
+def _fake_stream(monkeypatch, stdout: str, returncode: int = 0) -> list[list[str]]:
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, **kwargs):
+        seen.append(cmd)
+        return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    return seen
+
+
+def _event(**info: object) -> str:
+    return json.dumps({"type": "rate_limit_event", "rate_limit_info": info})
+
+
+def test_the_probes_stream_gives_two_readings_and_the_same_result(tmp_path, monkeypatch):
+    stream = PROBE.read_text(encoding="utf-8")
+    seen = _fake_stream(monkeypatch, stream)
+    job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
+    result = run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    cmd = seen[0]
+    assert cmd[cmd.index("--output-format") + 1] == "stream-json" and "--verbose" in cmd
+    assert result.readings == (
+        Reading("five_hour", 0.07, datetime.fromtimestamp(1790883600, UTC)),
+        Reading("seven_day", 0.79, datetime.fromtimestamp(1791216000, UTC)),
+    )
+    assert (result.ok, result.text, result.num_turns) == (True, "ok", 1)
+    assert result.session_id == "0428228a-1618-4c41-b260-c06665913372"
+    assert result.cost_usd == pytest.approx(0.0180713)
+    assert result.usage == {
+        "input_tokens": 10,
+        "output_tokens": 48,
+        "cache_read_input_tokens": 12413,
+        "cache_creation_input_tokens": 8290,
+    }
+    assert (tmp_path / "log").read_text(encoding="utf-8").startswith(stream)
+
+
+def test_every_rate_limit_event_is_returned(tmp_path, monkeypatch):
+    windows = {"five_hour": {"utilization": 0.5, "resetsAt": 1790883600}}
+    later = {"five_hour": {"utilization": 0.6, "resetsAt": 1790883600}}
+    stream = "\n".join(
+        [
+            _event(status="allowed", unifiedWindows=windows),
+            '{"type": "assistant", "message": {}}',
+            _event(status="allowed", unifiedWindows=later),
+            '{"type": "result", "result": "ok", "is_error": false}',
+        ]
+    )
+    _fake_stream(monkeypatch, stream)
+    job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
+    readings = run_claude(job, tmp_path, 10, tmp_path / "log", NOW).readings
+    assert [(r.window, r.utilization) for r in readings] == [("five_hour", 0.5), ("five_hour", 0.6)]
+
+
+def test_a_429_in_a_stream_is_a_limit_with_its_session_and_window(tmp_path, monkeypatch):
+    windows = {"five_hour": {"utilization": 1.0, "resetsAt": 1790883600}}
+    stream = "\n".join(
+        [
+            _event(
+                status="rejected",
+                rateLimitType="five_hour",
+                resetsAt=1790883600,
+                unifiedWindows=windows,
+            ),
+            '{"type": "result", "is_error": true, "api_error_status": 429,'
+            ' "result": "Slow down", "session_id": "s1"}',
+        ]
+    )
+    _fake_stream(monkeypatch, stream, returncode=1)
+    job = ClaudeJob(kind="lead-ticket", prompt="Do it.", allowed_tools=("Read",))
+    with pytest.raises(UsageLimited) as limit:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert (limit.value.session_id, limit.value.certain) == ("s1", True)
+    assert limit.value.window == "five_hour"
+    assert limit.value.resets_at == datetime.fromtimestamp(1790883600, UTC)
+    assert [r.window for r in limit.value.readings] == ["five_hour"]
+
+
+def test_a_429_without_a_rejected_event_names_no_window(tmp_path, monkeypatch):
+    """The probe's warning names the week; that says nothing about which window refused."""
+    warning = PROBE.read_text(encoding="utf-8").splitlines()[0]
+    _fake_stream(monkeypatch, f"{warning}\n{_as_result_event(SESSION_LIMIT)}", returncode=1)
+    job = ClaudeJob(kind="lead-ticket", prompt="Do it.", allowed_tools=("Read",))
+    with pytest.raises(UsageLimited) as limit:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert limit.value.window is None
+    assert limit.value.resets_at == datetime(2026, 9, 27, 17, 50, tzinfo=UTC)
+
+
+@pytest.mark.parametrize("returncode", [0, 1])
+def test_a_stream_with_no_result_event_is_transient(tmp_path, monkeypatch, returncode):
+    _fake_stream(monkeypatch, PROBE.read_text(encoding="utf-8").splitlines()[0], returncode)
+    job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
+    with pytest.raises(TransientError) as blip:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert blip.value.session_id is None
+    assert [r.window for r in blip.value.readings] == ["five_hour", "seven_day"]

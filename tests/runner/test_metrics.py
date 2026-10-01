@@ -59,12 +59,12 @@ def _job(db, ids, **overrides):
     return metrics.start_job(db, ids["run"], **(fields | overrides))
 
 
-def test_a_fresh_path_gets_every_table_and_version_1(tmp_path):
+def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     path = tmp_path / "nested" / "folder" / "factory-metrics.sqlite"
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 1 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -79,9 +79,28 @@ def test_opening_again_changes_nothing(tmp_path):
 
     again = metrics.open_db(path)
     assert again.execute("SELECT sql FROM sqlite_master ORDER BY name").fetchall() == schema
-    assert again.execute("PRAGMA user_version").fetchone()[0] == 1
+    assert again.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
     assert _count(again, "projects") == 1
     again.close()
+
+
+def test_a_version_1_database_keeps_its_usage_events_and_gains_a_window(tmp_path):
+    """f1-44: the database already holds f1's refusals when the window column arrives."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    old.executescript(f"BEGIN;\n{metrics.MIGRATIONS[0]}\nPRAGMA user_version = 1;\nCOMMIT;")
+    old.execute(
+        "INSERT INTO usage_events (agent, at, kind, resets_at) VALUES (?, ?, ?, ?)",
+        ("claude-opus", T0, "refusal", T1),
+    )
+    old.close()
+
+    conn = metrics.open_db(path)
+    row = conn.execute("SELECT agent, at, kind, resets_at, window FROM usage_events").fetchone()
+    assert tuple(row) == ("claude-opus", T0, "refusal", T1, None)
+    metrics.add_usage_event(conn, "claude-opus", T0, "refusal", resets_at=T1)
+    assert _count(conn, "usage_events") == 1
+    conn.close()
 
 
 def test_foreign_keys_are_enforced(db):
@@ -248,6 +267,17 @@ def test_ratings_usage_and_owner_items_are_idempotent(db, ids):
 
     metrics.resolve_owner_item(db, item, T1)
     assert db.execute("SELECT resolved FROM owner_items").fetchone()[0] == T1
+
+
+def test_two_windows_read_at_once_are_two_rows_and_reading_again_changes_nothing(db):
+    """f1-44: one stream reads Claude's 5-hour and weekly windows at the same moment."""
+    for _ in range(2):
+        for window, value in (("five_hour", 0.07), ("seven_day", 0.79)):
+            metrics.add_usage_event(
+                db, "claude-opus", T0, "reading", window=window, value=value, resets_at=T1
+            )
+    rows = db.execute("SELECT window, value FROM usage_events ORDER BY id").fetchall()
+    assert [tuple(r) for r in rows] == [("five_hour", 0.07), ("seven_day", 0.79)]
 
 
 def test_an_open_owner_item_keeps_its_created_and_a_resolved_one_reopens(db, ids):

@@ -22,6 +22,7 @@ base_url = "http://x"
 model = "m"
 opencode_model = "lmstudio/m"
 [claude]
+reserve = 0.3
 usage_limit_backoff_min = 1
 usage_limit_backoff_max = 2
 """
@@ -45,6 +46,15 @@ def test_metrics_db_falls_back_to_the_default(tmp_path):
 
 def test_the_repos_toml_loads_with_an_absolute_metrics_db():
     assert load_config(REPO).metrics_db.is_absolute()
+
+
+def test_claudes_reserve_is_read_from_the_toml(tmp_path):
+    """ADR 15 item 4: 30% of Claude's week is kept for the lead's support roles."""
+    assert load_config(REPO).claude_reserve == 0.3
+    repo = _repo(tmp_path, "")
+    toml = repo / "workflow" / "runner.toml"
+    toml.write_text(toml.read_text().replace("reserve = 0.3", "reserve = 0.4"))
+    assert load_config(repo).claude_reserve == 0.4
 
 
 def test_security_tests_and_the_leads_docs_are_protected():

@@ -27,8 +27,9 @@ opencode_model = "lmstudio/qwen/qwen3.6-35b-a3b"
 
 [claude]
 checkpoint_model = "sonnet"             # a diff-only checkpoint; compare what it catches at M5
+reserve = 0.3                           # of the week, kept for the lead's support roles (ADR 15)
 usage_limit_backoff_min = 900           # 15 min
-usage_limit_backoff_max = 18000         # 5 h
+usage_limit_backoff_max = 18000         # 5 h, for a limit that only looks like one
 
 [report]
 narrative = false  # a headless Claude narrative per session costs Pro usage; off by default

@@ -43,6 +43,15 @@ class ClaudeJob:
 
 
 @dataclass(frozen=True)
+class Reading:
+    """One of Claude's allowance windows, from a stream's ``rate_limit_event`` (ADR 15 item 3)."""
+
+    window: str  # "five_hour" | "seven_day"
+    utilization: float  # the share used, 0–1
+    resets_at: datetime
+
+
+@dataclass(frozen=True)
 class ClaudeResult:
     ok: bool
     text: str
@@ -51,29 +60,42 @@ class ClaudeResult:
     num_turns: int = 0
     session_id: str | None = None
     cost_usd: float | None = None  # Claude Code's API-equivalent price (f1 D7)
+    readings: tuple[Reading, ...] = ()  # every window of every rate_limit_event, in order
 
 
 class UsageLimited(Exception):
     """A job stopped by a usage limit. ``session_id`` lets the caller resume it after the
     reset; ``certain`` is False when the error only looks like a limit (a wording
-    ``usage_limit_reset`` doesn't know), so the caller retries a bounded number of times."""
+    ``usage_limit_reset`` doesn't know), so the caller retries a bounded number of times.
+    ``window`` is the one a rejected ``rate_limit_event`` named, if any."""
 
     def __init__(
-        self, resets_at: datetime | None, session_id: str | None = None, certain: bool = True
+        self,
+        resets_at: datetime | None,
+        session_id: str | None = None,
+        certain: bool = True,
+        *,
+        window: str | None = None,
+        readings: tuple[Reading, ...] = (),
     ) -> None:
         super().__init__(f"Claude usage limit reached; resets at {resets_at}")
         self.resets_at = resets_at
         self.session_id = session_id
         self.certain = certain
+        self.window = window
+        self.readings = readings
 
 
 class TransientError(Exception):
     """A job cut off by something passing: a lost connection, an overload, a server error.
     The caller resumes ``session_id`` after a short wait instead of failing the job."""
 
-    def __init__(self, detail: str, session_id: str | None = None) -> None:
+    def __init__(
+        self, detail: str, session_id: str | None = None, readings: tuple[Reading, ...] = ()
+    ) -> None:
         super().__init__(detail)
         self.session_id = session_id
+        self.readings = readings
 
 
 def claude_env(environ: Mapping[str, str]) -> dict[str, str]:
@@ -121,16 +143,63 @@ def usage_limit_reset(text: str, now: datetime) -> tuple[bool, datetime | None]:
     return True, None
 
 
-def _transient(data: dict[str, Any], stdout: str) -> bool:
+@dataclass(frozen=True)
+class _Stream:
+    """What ``--output-format stream-json --verbose`` printed, as far as the runner cares."""
+
+    result: dict[str, Any] | None  # the last line's `result` event: today's JSON output
+    readings: tuple[Reading, ...]
+    rejected: dict[str, Any]  # the last rate_limit_info whose status is "rejected", else {}
+    other: str  # lines that aren't JSON events (an error printed before the stream)
+
+
+def _epoch(value: object, now: datetime) -> datetime | None:
+    if isinstance(value, int | float) and not isinstance(value, bool):
+        return datetime.fromtimestamp(value, tz=now.tzinfo)
+    return None
+
+
+def _readings(info: dict[str, Any], now: datetime) -> list[Reading]:
+    windows = info.get("unifiedWindows")
+    found = []
+    for name, window in (windows if isinstance(windows, dict) else {}).items():
+        if not isinstance(window, dict):
+            continue
+        used, resets_at = window.get("utilization"), _epoch(window.get("resetsAt"), now)
+        if isinstance(used, int | float) and resets_at is not None:
+            found.append(Reading(str(name), float(used), resets_at))
+    return found
+
+
+def _parse_stream(stdout: str, now: datetime) -> _Stream:
+    result: dict[str, Any] | None = None
+    readings: list[Reading] = []
+    rejected: dict[str, Any] = {}
+    other: list[str] = []
+    for line in stdout.splitlines():
+        if not line.strip():
+            continue
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            event = None
+        if not isinstance(event, dict):
+            other.append(line)
+        elif event.get("type") == "result":
+            result = event
+        elif event.get("type") == "rate_limit_event":
+            info = event.get("rate_limit_info")
+            if isinstance(info, dict):
+                readings += _readings(info, now)
+                if info.get("status") == "rejected":
+                    rejected = info
+    return _Stream(result, tuple(readings), rejected, "\n".join(other))
+
+
+def _transient(data: dict[str, Any], stream: _Stream) -> bool:
     """An API error other than a limit (overload, server error, lost connection), or no
-    result at all: Claude Code never got to answer."""
-    if data.get("terminal_reason") == "api_error":
-        return True
-    try:
-        json.loads(stdout)
-    except json.JSONDecodeError:
-        return True
-    return False
+    result event at all: Claude Code never got to answer."""
+    return data.get("terminal_reason") == "api_error" or stream.result is None
 
 
 def backoff_seconds(attempt: int, minimum: int, maximum: int) -> int:
@@ -178,7 +247,8 @@ def run_claude(
         "-p",
         job.prompt + shell_note(job.allowed_tools),
         "--output-format",
-        "json",
+        "stream-json",  # its rate_limit_events are Claude's allowance (ADR 15 item 3)
+        "--verbose",  # stream-json needs it with -p
         "--permission-mode",
         job.permission_mode,
         *(("--model", job.model) if job.model else ()),
@@ -204,22 +274,27 @@ def run_claude(
         return ClaudeResult(ok=False, text="timed out", duration_s=time.monotonic() - started)
     log_path.write_text(proc.stdout + "\n--- stderr ---\n" + proc.stderr, encoding="utf-8")
     duration = time.monotonic() - started
-    try:
-        data = json.loads(proc.stdout)
-    except json.JSONDecodeError:
-        data = {"is_error": True, "result": proc.stdout + proc.stderr}
+    stream = _parse_stream(proc.stdout, now)
+    data = stream.result or {"is_error": True, "result": stream.other + proc.stderr}
     text = str(data.get("result", ""))
     is_error = bool(data.get("is_error")) or proc.returncode != 0
     session_id = str(data["session_id"]) if data.get("session_id") else None
+    readings = stream.readings
     if is_error:
         limited, resets_at = usage_limit_reset(text + proc.stderr, now)
         # The status is structured, so it outlasts a change of wording; the text only says when.
         if limited or data.get("api_error_status") == 429:
-            raise UsageLimited(resets_at, session_id)
+            window = stream.rejected.get("rateLimitType")
+            raise UsageLimited(
+                resets_at or _epoch(stream.rejected.get("resetsAt"), now),
+                session_id,
+                window=str(window) if window else None,
+                readings=readings,
+            )
         if _MAYBE_LIMIT_RE.search(text + proc.stderr):
-            raise UsageLimited(None, session_id, certain=False)
-        if _transient(data, proc.stdout):
-            raise TransientError(text.strip()[:200], session_id)
+            raise UsageLimited(None, session_id, certain=False, readings=readings)
+        if _transient(data, stream):
+            raise TransientError(text.strip()[:200], session_id, readings)
     return ClaudeResult(
         ok=not is_error,
         text=text,
@@ -228,4 +303,5 @@ def run_claude(
         num_turns=int(data.get("num_turns") or 0),
         session_id=session_id,
         cost_usd=float(cost) if (cost := data.get("total_cost_usd")) is not None else None,
+        readings=readings,
     )

@@ -20,6 +20,7 @@ from runner.claude import (
     READ_TOOLS,
     ClaudeJob,
     ClaudeResult,
+    Reading,
     TransientError,
     UsageLimited,
     backoff_seconds,
@@ -533,6 +534,23 @@ PARTIAL_WORK_NOTE = (
 )
 
 
+def _record_readings(s: Session, agent: str, readings: tuple[Reading, ...]) -> None:
+    """Claude's windows as its stream reported them (f1-44); a later reading of a window at
+    the same moment replaces an earlier one, so writing them again changes nothing."""
+    at = now().isoformat()
+    for reading in readings:
+        _record(
+            s,
+            metrics.add_usage_event,
+            agent,
+            at,
+            "reading",
+            window=reading.window,
+            value=reading.utilization,
+            resets_at=reading.resets_at.isoformat(),
+        )
+
+
 def _note_summary(notes: tuple[Path, ...]) -> str:
     """What a job's notes say it did: decision.json's outcome, then a note's first line."""
     parts = []
@@ -608,6 +626,7 @@ def call_claude(
                 lambda elapsed: s.log(console.running(agent, what, elapsed)),
             )
         except TransientError as blip:
+            _record_readings(s, agent, blip.readings)
             if transient >= len(TRANSIENT_WAITS):
                 s.report.notes.append(
                     f"{job.kind} {subject}: failed {transient + 1} times on a passing error"
@@ -625,6 +644,7 @@ def call_claude(
             time.sleep(pause)
             continue
         except UsageLimited as limit:
+            _record_readings(s, agent, limit.readings)
             if not limit.certain:
                 unsure += 1
                 if unsure > UNSURE_LIMIT_RETRIES:
@@ -640,6 +660,7 @@ def call_claude(
                 agent,
                 now().isoformat(),
                 "refusal",
+                window=limit.window,
                 resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
             )
             # A known limit with no time: retry at the minimum, since a refused call costs
@@ -663,6 +684,7 @@ def call_claude(
             s.report.notes.append(f"Paused {wait / 60:.0f} min for a Claude usage limit.")
             time.sleep(wait)
             continue
+        _record_readings(s, agent, result.readings)
         if resume and not result.ok and result.num_turns == 0:
             resume = None  # the session couldn't be resumed: start again, told about the tree
             attempt += 1

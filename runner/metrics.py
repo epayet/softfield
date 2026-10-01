@@ -143,8 +143,28 @@ CREATE TABLE owner_items (
 );
 """
 
+# f1-44: Claude reads two windows at once, so a usage event is keyed by its window too
+# (NULL for an event of no particular window, kept apart from the named ones by ifnull).
+# SQLite can't drop a table's UNIQUE, so the table is rebuilt.
+_V2 = """
+ALTER TABLE usage_events RENAME TO usage_events_v1;
+CREATE TABLE usage_events (
+    id INTEGER PRIMARY KEY,
+    agent TEXT NOT NULL,
+    at TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    "window" TEXT,
+    value REAL,
+    resets_at TEXT
+);
+INSERT INTO usage_events (id, agent, at, kind, value, resets_at)
+    SELECT id, agent, at, kind, value, resets_at FROM usage_events_v1;
+DROP TABLE usage_events_v1;
+CREATE UNIQUE INDEX usage_events_key ON usage_events (agent, at, kind, ifnull("window", ''));
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1]
+MIGRATIONS: list[str] = [_V1, _V2]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -490,13 +510,14 @@ def add_usage_event(
     at: str,
     kind: str,
     *,
+    window: str | None = None,
     value: float | None = None,
     resets_at: str | None = None,
 ) -> int:
-    key: dict[str, Value] = {"agent": agent, "at": at, "kind": kind}
-    return _upsert(
-        conn, "usage_events", "agent, at, kind", key, _given(value=value, resets_at=resets_at)
-    )
+    """A refusal, a reset or a reading (f1-44: a window's share used, 0–1) of ``window``."""
+    key: dict[str, Value] = {"agent": agent, "at": at, "kind": kind, "window": window}
+    conflict = "agent, at, kind, ifnull(\"window\", '')"
+    return _upsert(conn, "usage_events", conflict, key, _given(value=value, resets_at=resets_at))
 
 
 def upsert_owner_item(
