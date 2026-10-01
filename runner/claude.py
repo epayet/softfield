@@ -15,6 +15,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
 
@@ -66,15 +67,38 @@ class UsageLimited(Exception):
         self.certain = certain
 
 
+class TransientError(Exception):
+    """A job cut off by something passing: a lost connection, an overload, a server error.
+    The caller resumes ``session_id`` after a short wait instead of failing the job."""
+
+    def __init__(self, detail: str, session_id: str | None = None) -> None:
+        super().__init__(detail)
+        self.session_id = session_id
+
+
 def claude_env(environ: Mapping[str, str]) -> dict[str, str]:
     return {k: v for k, v in environ.items() if k not in STRIPPED_ENV}
 
 
 # Words that suggest a limit in an error the precise patterns below don't recognise.
 _MAYBE_LIMIT_RE = re.compile(r"\b(limit|quota|capacity)\b", re.IGNORECASE)
-_LIMIT_RE = re.compile(r"(usage limit|hit your limit|limit reached|rate limit)", re.IGNORECASE)
+_LIMIT_RE = re.compile(
+    r"(usage limit|hit your (?:\w+ )?limit|(?:session|weekly) limit|limit reached|rate limit)",
+    re.IGNORECASE,
+)
 _EPOCH_RE = re.compile(r"\|(\d{10})\b")
 _CLOCK_RE = re.compile(r"resets?\s+(?:at\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", re.IGNORECASE)
+_ZONE_RE = re.compile(r"\(([A-Za-z_]+/[A-Za-z_/]+)\)")  # "resets 6:50pm (Europe/London)"
+
+
+def _zone(text: str, now: datetime) -> datetime:
+    """``now`` in the time zone the message names, if it names one we know."""
+    if match := _ZONE_RE.search(text):
+        try:
+            return now.astimezone(ZoneInfo(match.group(1)))
+        except (ZoneInfoNotFoundError, ValueError):
+            pass
+    return now
 
 
 def usage_limit_reset(text: str, now: datetime) -> tuple[bool, datetime | None]:
@@ -89,11 +113,24 @@ def usage_limit_reset(text: str, now: datetime) -> tuple[bool, datetime | None]:
             hour = hour % 12 + (12 if meridiem.lower() == "pm" else 0)
         if hour > 23 or minute > 59:
             return True, None
+        now = _zone(text, now)
         reset = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if reset <= now:
             reset += timedelta(days=1)
         return True, reset
     return True, None
+
+
+def _transient(data: dict[str, Any], stdout: str) -> bool:
+    """An API error other than a limit (overload, server error, lost connection), or no
+    result at all: Claude Code never got to answer."""
+    if data.get("terminal_reason") == "api_error":
+        return True
+    try:
+        json.loads(stdout)
+    except json.JSONDecodeError:
+        return True
+    return False
 
 
 def backoff_seconds(attempt: int, minimum: int, maximum: int) -> int:
@@ -176,10 +213,13 @@ def run_claude(
     session_id = str(data["session_id"]) if data.get("session_id") else None
     if is_error:
         limited, resets_at = usage_limit_reset(text + proc.stderr, now)
-        if limited:
+        # The status is structured, so it outlasts a change of wording; the text only says when.
+        if limited or data.get("api_error_status") == 429:
             raise UsageLimited(resets_at, session_id)
         if _MAYBE_LIMIT_RE.search(text + proc.stderr):
             raise UsageLimited(None, session_id, certain=False)
+        if _transient(data, proc.stdout):
+            raise TransientError(text.strip()[:200], session_id)
     return ClaudeResult(
         ok=not is_error,
         text=text,

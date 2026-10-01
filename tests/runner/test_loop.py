@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from runner import checks, gates, loop, metrics
-from runner.claude import ClaudeJob, ClaudeResult, UsageLimited
+from runner.claude import ClaudeJob, ClaudeResult, TransientError, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
@@ -671,6 +671,48 @@ def test_an_unrecognised_limit_is_retried_a_few_times_then_fails(repo, monkeypat
     result = loop.call_claude(s, _job(), "m1", "m1-01-lead")
     assert not result.ok
     assert len(calls) == 1 + loop.UNSURE_LIMIT_RETRIES
+
+
+def _sleeps(monkeypatch) -> list[float]:
+    slept: list[float] = []
+    monkeypatch.setattr("time.sleep", slept.append)
+    return slept
+
+
+def test_a_known_limit_without_a_time_retries_every_backoff_min_without_giving_up(
+    repo, monkeypatch
+):
+    """f1: the wait was exponential (15 min, 30, 60 … 5 h), overshooting a 5 h window by hours.
+    A refused call costs nothing, so retry at the minimum every time."""
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
+    limited = UsageLimited(None, session_id="s1")
+    calls = _limited_then(monkeypatch, limited, limited, limited, limited, limited, done)
+    slept = _sleeps(monkeypatch)
+    s = loop.open_session(_config(repo))
+    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
+    assert len(calls) == 6
+    assert slept == [s.cfg.backoff_min] * 5
+
+
+def test_a_dropped_connection_resumes_after_short_waits(repo, monkeypatch):
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
+    blip = TransientError("Connection error.", session_id="s1")
+    calls = _limited_then(monkeypatch, blip, blip, done)
+    slept = _sleeps(monkeypatch)
+    s = loop.open_session(_config(repo))
+    assert loop.call_claude(s, _job(), "m1", "m1-01-review") is done
+    assert [resume for _, resume in calls] == [None, "s1", "s1"]
+    assert slept == list(loop.TRANSIENT_WAITS[:2])
+
+
+def test_a_connection_that_stays_down_fails_the_job(repo, monkeypatch):
+    blip = TransientError("Connection error.")
+    calls = _limited_then(monkeypatch, *[blip] * (len(loop.TRANSIENT_WAITS) + 1))
+    _sleeps(monkeypatch)
+    s = loop.open_session(_config(repo))
+    assert not loop.call_claude(s, _job(), "m1", "m1-01-review").ok
+    assert len(calls) == len(loop.TRANSIENT_WAITS) + 1
+    assert any("Connection error." in note for note in s.report.notes)
 
 
 # --- the metrics database (f1 D2, D3) ---------------------------------------------------

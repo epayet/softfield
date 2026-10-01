@@ -20,6 +20,7 @@ from runner.claude import (
     READ_TOOLS,
     ClaudeJob,
     ClaudeResult,
+    TransientError,
     UsageLimited,
     backoff_seconds,
     run_claude,
@@ -383,6 +384,8 @@ def claude_agent(s: Session, job: ClaudeJob) -> str:
 
 
 UNSURE_LIMIT_RETRIES = 3  # an error that only looks like a limit: pause, but not forever
+# A lost connection, an overload, a server error: resume after these waits, then fail.
+TRANSIENT_WAITS = (60, 300, 900)
 RESUME_PROMPT = (
     "You were stopped by a Claude usage limit, which has now reset. Carry on with the same"
     " job from where you stopped; `git diff` shows the changes you had made."
@@ -406,7 +409,7 @@ def call_claude(
 
     Each job is a row in the metrics database, with ``ticket`` (None for a milestone-wide
     job), and has its own logs: a second escalation of a ticket doesn't overwrite the first's."""
-    attempt = unsure = 0
+    attempt = unsure = transient = 0
     resume: str | None = None
     interrupted = False
     number = next_number(s, ticket, job.kind)
@@ -425,6 +428,22 @@ def call_claude(
             result = run_claude(
                 replace(job, prompt=prompt), s.repo, s.cfg.claude_timeout, log, now(), resume=resume
             )
+        except TransientError as blip:
+            if transient >= len(TRANSIENT_WAITS):
+                s.report.notes.append(
+                    f"{job.kind} {subject}: failed {transient + 1} times on a passing error"
+                    f" ({blip}); treated as a failure."
+                )
+                result = ClaudeResult(ok=False, text=str(blip), duration_s=0.0)
+                break
+            pause = TRANSIENT_WAITS[transient]
+            transient += 1
+            attempt += 1
+            resume = blip.session_id or resume
+            interrupted = True
+            s.log(f"Claude job interrupted ({blip}); retrying in {pause // 60} min.")
+            time.sleep(pause)
+            continue
         except UsageLimited as limit:
             if not limit.certain:
                 unsure += 1
@@ -443,9 +462,13 @@ def call_claude(
                 "refusal",
                 resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
             )
+            # A known limit with no time: retry at the minimum, since a refused call costs
+            # nothing and the exponential backoff overshot a 5 h window by hours (f1).
             wait = (
                 max(60.0, (limit.resets_at - now()).total_seconds() + 60)
                 if limit.resets_at
+                else s.cfg.backoff_min
+                if limit.certain
                 else backoff_seconds(attempt, s.cfg.backoff_min, s.cfg.backoff_max)
             )
             attempt += 1

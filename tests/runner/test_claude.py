@@ -6,6 +6,7 @@ import pytest
 from runner.claude import (
     STRIPPED_ENV,
     ClaudeJob,
+    TransientError,
     UsageLimited,
     backoff_seconds,
     claude_env,
@@ -150,3 +151,48 @@ def test_run_claude_can_resume_a_session(tmp_path, monkeypatch):
     result = run_claude(job, tmp_path, 10, tmp_path / "log", NOW, resume="s1")
     assert seen[0][seen[0].index("--resume") + 1] == "s1"
     assert result.session_id == "s1"
+
+
+# f1 (2026-09-30): the real message, which the old pattern missed ("hit your session limit"),
+# so the runner guessed 15 min and would have failed the job after three guesses.
+SESSION_LIMIT = (
+    '{"is_error": true, "terminal_reason": "api_error", "api_error_status": 429,'
+    ' "result": "You\'ve hit your session limit · resets 6:50pm (Europe/London)",'
+    ' "session_id": "s1"}'
+)
+
+
+def test_the_session_limit_message_resets_at_its_time_in_its_zone(tmp_path, monkeypatch):
+    _fake_claude(monkeypatch, SESSION_LIMIT)
+    job = ClaudeJob(kind="lead-ticket", prompt="Do it.", allowed_tools=("Read",))
+    with pytest.raises(UsageLimited) as limit:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert limit.value.certain and limit.value.session_id == "s1"
+    assert limit.value.resets_at == datetime(2026, 9, 27, 17, 50, tzinfo=UTC)  # 18:50 BST
+
+
+def test_a_429_is_a_limit_whatever_it_says(tmp_path, monkeypatch):
+    """The status is structured; the wording may change again."""
+    out = '{"is_error": true, "api_error_status": 429, "result": "Slow down, friend"}'
+    _fake_claude(monkeypatch, out)
+    job = ClaudeJob(kind="lead-ticket", prompt="Do it.", allowed_tools=("Read",))
+    with pytest.raises(UsageLimited) as limit:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert (limit.value.certain, limit.value.resets_at) == (True, None)
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        '{"is_error": true, "terminal_reason": "api_error", "api_error_status": 529,'
+        ' "result": "Overloaded", "session_id": "s1"}',
+        '{"is_error": true, "terminal_reason": "api_error", "api_error_status": null,'
+        ' "result": "Connection error.", "session_id": "s1"}',
+        "Error: getaddrinfo ENOTFOUND api.anthropic.com",
+    ],
+)
+def test_a_dropped_connection_or_overload_is_transient(tmp_path, monkeypatch, stdout):
+    _fake_claude(monkeypatch, stdout)
+    job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
+    with pytest.raises(TransientError):
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
