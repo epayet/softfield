@@ -1,7 +1,7 @@
 ---
 id: f1-31-eligibility-view
 milestone: f1
-depends_on: [f1-26-checkpoint-shadow, f1-15-agents-page]
+depends_on: [f1-26-checkpoint-shadow, f1-15-agents-page, f1-40-runs-agents-fixes]
 difficulty: 4
 files:
   - factory_dashboard/agents.py
