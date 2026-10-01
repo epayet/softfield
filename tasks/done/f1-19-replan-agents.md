@@ -28,3 +28,10 @@ A replan (the second in f1; the first was f1-07). Read `docs/adr/15-allowance-aw
 - every ticket in `tasks/ready/` names only flags, tags, files and functions the probes and the code confirm (`uv run runner run --dry-run` shows no other pre-flight problem)
 - `docs/milestones/f1.md` has a Replan log entry for this ticket
 - `uv run runner check-all --task f1-19-replan-agents` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
