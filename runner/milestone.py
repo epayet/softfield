@@ -3,9 +3,10 @@
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
+from functools import partial
 from pathlib import Path
 
-from runner import metrics, prompts
+from runner import console, metrics, prompts
 from runner.claude import CHECK_TOOLS, EDIT_TOOLS, GIT_READ_TOOLS, ClaudeJob
 from runner.config import Config
 from runner.gates import GateResult
@@ -13,15 +14,18 @@ from runner.gitops import Git, GitError, with_trailers
 from runner.loop import (
     CLAUDE_HEADLESS_AGENT,
     MAIN,
+    RUNNER_AGENT,
     RunnerError,
     Session,
     _record,
     call_claude,
     claude_agent,
+    clock,
     close_session,
     open_session,
     run_e2e,
     runner_commit,
+    with_progress,
     work_queue,
 )
 from runner.review import (
@@ -243,6 +247,19 @@ def _record_review(s: Session, milestone: str, rounds: int) -> None:
     )
 
 
+def _e2e(s: Session) -> GateResult:
+    """The end-to-end run, with its start, progress and end on the console (f1-42)."""
+    s.log(console.start(RUNNER_AGENT, "e2e tests"))
+    started = clock()
+    result: GateResult = with_progress(
+        partial(run_e2e, s.repo, s.cfg.gate_timeout),
+        lambda elapsed: s.log(console.running(RUNNER_AGENT, "e2e tests", elapsed)),
+    )
+    outcome = "passed" if result.ok else "failed"
+    s.log(f"■ [{RUNNER_AGENT}] e2e tests {outcome} · {console.duration(clock() - started)}")
+    return result
+
+
 RESTART = "restart"
 PAUSED = "tickets paused behind a blocked or escalated one: "
 
@@ -276,7 +293,14 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
     since = base
     stop = "not started"
     for round_no in range(len(rounds) + 1, cfg.review_rounds + 1):
-        e2e: GateResult = run_e2e(cfg.repo, cfg.gate_timeout)
+        s.log("")
+        s.log(
+            console.ticket_header(
+                f"{milestone} review", f"round {round_no}/{cfg.review_rounds}", None
+            )
+        )
+        s.log("The whole milestone diff." if round_no == 1 else "The fixes since the last round.")
+        e2e = _e2e(s)
         if not e2e.ok:
             stop = "end-to-end tests fail on staging"
             (s.run_dir / "e2e.txt").write_text(e2e.output, encoding="utf-8")

@@ -38,3 +38,10 @@ The owner watched f1 from the terminal and asked for this (2026-10-01). Read `ru
 - a fake Claude job longer than 10 minutes (an injected clock) prints a progress line
 - a usage-limit pause prints the resume time
 - `uv run runner check-all --task f1-42-console-log` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```

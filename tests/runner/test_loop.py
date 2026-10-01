@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+import time
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
@@ -970,6 +971,93 @@ def test_escalated_and_blocked_tickets_get_their_state(repo, fake_model, fake_le
     _run(repo)
     states = {t["ticket"]: t["state"] for t in _rows(repo, "tickets")}
     assert states == {"m1-01-lead": "blocked", "m2-01-thing": "escalated"}
+
+
+# --- the console (f1-42) ------------------------------------------------------------------
+
+
+def test_the_console_shows_a_tickets_header_attempt_end_and_merger(repo, fake_model, capsys):
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    _run(repo)
+    out = capsys.readouterr().out
+    lines = out.splitlines()
+    header = next(i for i, line in enumerate(lines) if "── m1-01-thing · developer ──" in line)
+    assert header > 0 and lines[header - 1] == ""  # a blank line before the ticket
+    assert "Make the thing work." in out
+    assert "▶ [local-m] attempt 1/3\n" in out
+    assert "■ [local-m] attempt 1/3 passed · 0 min · 1.1k tokens · 2 steps" in out
+    assert "✔ [local-m] m1-01-thing merged · 1 attempt · 2 lines" in out
+
+
+def test_a_failed_gate_is_named(repo, fake_model, capsys):
+    _add_task(repo, "m1-01-thing")
+    fake_model.extend([_stray, _undo_and_implement])
+    _run(repo, once=True)
+    assert "■ [local-m] attempt 1/3 failed gate protected-paths" in capsys.readouterr().out
+
+
+def test_a_blocked_lead_ticket_warns_with_whats_waiting_before_anything_else_runs(
+    repo, fake_model, fake_lead, monkeypatch, capsys
+):
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m1-02-after", "[m1-01-lead]")
+    _add_task(repo, "m2-01-other")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch, ok=False)
+    fake_model.append(_implement)
+    _run(repo)
+    out = capsys.readouterr().out
+    warning = "⚠ [runner] m1-01-lead blocked: check-all failed; the work is on task/m1-01-lead"
+    assert warning in out
+    assert "1 ticket waits behind it" in out.split(warning, 1)[1].splitlines()[0]
+    assert out.index(warning) < out.index("── m2-01-other")
+
+
+def test_a_claude_job_past_10_minutes_prints_progress(repo, monkeypatch, capsys):
+    ticks = iter(range(0, 10**6, 400))  # every read of the clock is 400 s later
+    monkeypatch.setattr(loop, "clock", lambda: next(ticks))
+    monkeypatch.setattr(loop, "POLL_S", 0.01)
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        time.sleep(0.2)
+        return ClaudeResult(ok=True, text="Sorted it.\nDetails.", duration_s=1.0, cost_usd=1.5)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    out = capsys.readouterr().out
+    assert "▶ [claude-opus] lead-ticket\n" in out
+    assert "… [claude-opus] lead-ticket still running · " in out
+    assert "■ [claude-opus] lead-ticket done · " in out and "$1.50" in out
+    assert "↳ [claude-opus] Sorted it.\n" in out
+
+
+def test_a_claude_job_summary_comes_from_its_note(repo, monkeypatch, capsys):
+    note = repo / "var" / "escalation.md"
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        note.write_text("\nRequeued with the missing unit.\n")
+        return ClaudeResult(ok=True, text="Done, see the note.", duration_s=1.0)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", notes=(repo / "var" / "decision.json", note))
+    out = capsys.readouterr().out
+    assert "↳ [claude-opus] Requeued with the missing unit.\n" in out
+
+
+def test_a_usage_limit_pause_prints_the_resume_time(repo, monkeypatch, capsys):
+    fixed = datetime(2026, 10, 1, 18, 0).astimezone()
+    monkeypatch.setattr(loop, "now", lambda: fixed)
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    _limited_then(monkeypatch, UsageLimited(fixed + timedelta(hours=1)), done)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    out = capsys.readouterr().out
+    assert "⏸ [claude-opus] Claude usage limit · resumes 19:01 (in 1 h 01)" in out
+    assert "▶ [claude-opus] lead-ticket resumed" in out
 
 
 def test_a_failing_write_is_noted_once_and_the_run_goes_on(repo, fake_model, monkeypatch):

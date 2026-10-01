@@ -3,15 +3,16 @@
 import hashlib
 import json
 import sqlite3
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
-from typing import Concatenate
+from typing import Any, Concatenate
 
-from runner import checks, messages, metrics, prompts
+from runner import checks, console, messages, metrics, prompts
 from runner.claude import (
     CHECK_TOOLS,
     EDIT_TOOLS,
@@ -51,6 +52,7 @@ from runner.local_model import (
     loaded_context_length,
     run_opencode,
     session_reasoning,
+    stream_facts,
     warmup,
 )
 from runner.procs import run_bounded
@@ -88,6 +90,56 @@ def now() -> datetime:
     return datetime.now().astimezone()
 
 
+def clock() -> float:
+    """Seconds for the console's timings; a test swaps it to skip ten minutes."""
+    return time.monotonic()
+
+
+PROGRESS_EVERY = 600.0  # seconds between the console's progress lines (f1-42)
+POLL_S = 1.0  # how often a job in a thread is checked for a due progress line
+
+
+class Ticker:
+    """When the next progress line is due: every ``PROGRESS_EVERY`` seconds from its start."""
+
+    def __init__(self) -> None:
+        self.started = clock()
+        self.next_at = self.started + PROGRESS_EVERY
+
+    def due(self) -> float | None:
+        """The seconds elapsed if a progress line is due, else None."""
+        at = clock()
+        if at < self.next_at:
+            return None
+        while self.next_at <= at:
+            self.next_at += PROGRESS_EVERY
+        return at - self.started
+
+
+def with_progress[T](work: Callable[[], T], tick: Callable[[float], None]) -> T:
+    """Run ``work`` in a thread; while it runs, ``tick`` gets the seconds elapsed every
+    ``PROGRESS_EVERY`` seconds. Its result or exception comes back here."""
+    box: dict[str, Any] = {}
+
+    def target() -> None:
+        try:
+            box["value"] = work()
+        except BaseException as exc:
+            box["error"] = exc
+
+    ticker = Ticker()
+    thread = threading.Thread(target=target, daemon=True)
+    thread.start()
+    while thread.is_alive():
+        thread.join(POLL_S)
+        if thread.is_alive() and (elapsed := ticker.due()) is not None:
+            tick(elapsed)
+    if "error" in box:
+        raise box["error"]
+    value: T = box["value"]
+    return value
+
+
 def runner_commit(s: "Session", message: str) -> bool:
     """The runner's own bookkeeping (task moves, reports), attributed to it (ADR 00 A4)."""
     return s.git.commit_all(with_trailers(message, agent=RUNNER_AGENT), author=RUNNER_AUTHOR)
@@ -117,6 +169,7 @@ class Session:
     # Jobs so far per (ticket, role group): the next job's `attempt` and its log's number.
     job_numbers: dict[tuple[str | None, str], int] = field(default_factory=dict)
     last_job_id: int | None = None  # the last Claude job's row, for its findings
+    ticket_started: float = 0.0  # `clock()` when the current ticket started, for the console
 
     @property
     def repo(self) -> Path:
@@ -130,7 +183,8 @@ class Session:
         return self.repo / "tasks" / name
 
     def log(self, message: str) -> None:
-        print(f"[{now():%H:%M:%S}] {message}", flush=True)
+        """One console line (`runner.console`); an empty one is a blank line."""
+        print(f"[{now():%H:%M:%S}] {message}" if message else "", flush=True)
 
 
 def open_session(cfg: Config, command: str | None = "run") -> Session:
@@ -336,6 +390,39 @@ def live_update(s: Session, job_id: int | None, tokens: TokenTotals) -> None:
     _record(s, metrics.update_run_heartbeat, s.run_id, now().isoformat())
 
 
+def _total(tokens: TokenTotals) -> int:
+    return tokens.input + tokens.output + tokens.reasoning
+
+
+def attempt_progress(
+    s: Session,
+    job_id: int | None,
+    what: str,
+    log: Path,
+    ticker: Ticker,
+    tokens: TokenTotals,
+) -> None:
+    """``live_update``, plus a console line every ``PROGRESS_EVERY`` seconds."""
+    live_update(s, job_id, tokens)
+    if (elapsed := ticker.due()) is None:
+        return
+    lines = log.read_text(encoding="utf-8", errors="replace").splitlines() if log.is_file() else []
+    streak = stream_facts(lines).edit_streak
+    s.log(
+        console.local_progress(
+            local_agent(s.cfg), what, elapsed, _total(tokens), tokens.steps, streak
+        )
+    )
+
+
+def _attempt_end(s: Session, what: str, run: OpencodeRun, outcome: str) -> None:
+    s.log(
+        console.local_end(
+            local_agent(s.cfg), what, outcome, run.duration_s, _total(run.tokens), run.tokens.steps
+        )
+    )
+
+
 def _finish_attempt(
     s: Session,
     job_id: int | None,
@@ -397,8 +484,33 @@ PARTIAL_WORK_NOTE = (
 )
 
 
+def _note_summary(notes: tuple[Path, ...]) -> str:
+    """What a job's notes say it did: decision.json's outcome, then a note's first line."""
+    parts = []
+    for path in notes:
+        if not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if path.suffix == ".json":
+            try:
+                data = json.loads(text)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(data, dict) and data.get("outcome"):
+                parts.append(str(data["outcome"]))
+        elif line := console.first_line(text):
+            parts.append(line)
+    return " · ".join(parts)
+
+
 def call_claude(
-    s: Session, job: ClaudeJob, milestone: str, subject: str, *, ticket: str | None = None
+    s: Session,
+    job: ClaudeJob,
+    milestone: str,
+    subject: str,
+    *,
+    ticket: str | None = None,
+    notes: tuple[Path, ...] = (),
 ) -> ClaudeResult:
     """Run a headless Claude job, waiting out usage limits. Each trigger bounds its own runs
     (ADR 12 item 10); the count per milestone is kept for the metrics.
@@ -408,12 +520,19 @@ def call_claude(
     starts again, told that its partial work is in the tree.
 
     Each job is a row in the metrics database, with ``ticket`` (None for a milestone-wide
-    job), and has its own logs: a second escalation of a ticket doesn't overwrite the first's."""
+    job), and has its own logs: a second escalation of a ticket doesn't overwrite the first's.
+
+    On the console (f1-42): a start line, a progress line every ``PROGRESS_EVERY`` seconds,
+    each pause with its resume time, and an end line with what the job did, from ``notes``
+    (the files it writes) or else its answer's first line."""
     attempt = unsure = transient = 0
     resume: str | None = None
     interrupted = False
     number = next_number(s, ticket, job.kind)
     agent = claude_agent(s, job)
+    what = job.kind if ticket or subject == job.kind else f"{job.kind} {subject}"
+    started = clock()
+    s.log(console.start(agent, what))
     base = f"claude-{job.kind}-{subject}" + (f"-{number}" if number > 1 else "")
     log = s.run_dir / f"{base}.log"
     job_id = s.last_job_id = record_start(
@@ -424,9 +543,20 @@ def call_claude(
             RESUME_PROMPT if resume else job.prompt + (PARTIAL_WORK_NOTE if interrupted else "")
         )
         log = s.run_dir / f"{base}{f'-retry{attempt}' if attempt else ''}.log"
+        if attempt:
+            s.log(console.resumed(agent, what))
         try:
-            result = run_claude(
-                replace(job, prompt=prompt), s.repo, s.cfg.claude_timeout, log, now(), resume=resume
+            result = with_progress(
+                partial(
+                    run_claude,
+                    replace(job, prompt=prompt),
+                    s.repo,
+                    s.cfg.claude_timeout,
+                    log,
+                    now(),
+                    resume=resume,
+                ),
+                lambda elapsed: s.log(console.running(agent, what, elapsed)),
             )
         except TransientError as blip:
             if transient >= len(TRANSIENT_WAITS):
@@ -441,7 +571,8 @@ def call_claude(
             attempt += 1
             resume = blip.session_id or resume
             interrupted = True
-            s.log(f"Claude job interrupted ({blip}); retrying in {pause // 60} min.")
+            at = now()
+            s.log(console.paused(agent, f"interrupted ({blip})", at + timedelta(seconds=pause), at))
             time.sleep(pause)
             continue
         except UsageLimited as limit:
@@ -474,11 +605,12 @@ def call_claude(
             attempt += 1
             resume = limit.session_id or resume
             interrupted = True
-            s.state.paused_until = (
-                datetime.fromtimestamp(now().timestamp() + wait).astimezone().isoformat()
-            )
+            at = now()
+            resumes = at + timedelta(seconds=wait)
+            s.state.paused_until = resumes.isoformat()
             save_state(s.state, s.state_path)
-            s.log(f"Claude usage limit reached; pausing {wait / 60:.0f} min, then resuming.")
+            why = "Claude usage limit" if limit.certain else "what looks like a Claude usage limit"
+            s.log(console.paused(agent, why, resumes, at))
             s.report.notes.append(f"Paused {wait / 60:.0f} min for a Claude usage limit.")
             time.sleep(wait)
             continue
@@ -515,6 +647,9 @@ def call_claude(
             ok=result.ok,
         )
     )
+    s.log(console.claude_end(agent, what, result.ok, clock() - started, result.cost_usd))
+    if line := console.summary(agent, _note_summary(notes) or result.text):
+        s.log(line)
     return result
 
 
@@ -603,8 +738,8 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
         ),
         allowed_tools=(*READ_TOOLS, *GIT_READ_TOOLS, "Edit(var/runs/**)"),
     )
-    call_claude(s, job, task.milestone, task.id, ticket=task.id)
     direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
+    call_claude(s, job, task.milestone, task.id, ticket=task.id, notes=(direction_file,))
     direction = (
         direction_file.read_text(encoding="utf-8").strip() if direction_file.is_file() else ""
     )
@@ -647,7 +782,21 @@ def _finish_escalation(
     )
     record_ticket(s, target)
     rec.note = reason
-    s.log(f"{task.id}: escalated ({reason})")
+    where = f"logs in {logs.relative_to(s.repo).as_posix()}"
+    s.log(console.stopped(task.id, "escalated", reason, where, waiting_behind(s, task.id)))
+
+
+def waiting_behind(s: Session, task_id: str) -> int:
+    """How many ready tickets wait, directly or not, on a stopped one."""
+    return len(blocked_ids(load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff), {task_id}))
+
+
+def _difficulty(path: Path) -> int | None:
+    try:
+        value = split_frontmatter(path.read_text(encoding="utf-8"))[0].get("difficulty")
+    except Exception:
+        return None
+    return value if type(value) is int else None
 
 
 def _logs_dir(run_dir: Path, task_id: str) -> Path:
@@ -663,7 +812,10 @@ def _logs_dir(run_dir: Path, task_id: str) -> Path:
 def run_task(s: Session, task: Task) -> TaskRecord:
     rec = TaskRecord(id=task.id, milestone=task.milestone)
     logs = rec.logs = _logs_dir(s.run_dir, task.id)
-    s.log(f"{task.id}: {task.goal}")
+    s.ticket_started = clock()
+    s.log("")
+    s.log(console.ticket_header(task.id, task.agent, _difficulty(task.path)))
+    s.log(task.goal)
     record_ticket(s, task.path, "running")
 
     problems = preflight(task, s.repo)
@@ -697,12 +849,15 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
         _check_context(s)
         log = logs / f"opencode-{attempt}.jsonl"
+        what = f"attempt {attempt}/{s.cfg.max_attempts}"
+        agent = local_agent(s.cfg)
+        s.log(console.start(agent, what + (" (directed)" if direction else "")))
         job_id = record_start(
             s,
             task.id,
             task.milestone,
             "last-attempt" if direction else "developer",
-            local_agent(s.cfg),
+            agent,
             attempt=next_number(s, task.id, "local"),
             log_path=_rel(s, log),
             context_limit=s.context_limit,
@@ -714,7 +869,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             _prompt(task, attempt, last, bool(timeouts and timeouts[-1]), direction),
             s.cfg.opencode_timeout,
             log,
-            on_progress=partial(live_update, s, job_id),
+            on_progress=partial(attempt_progress, s, job_id, what, log, Ticker()),
         )
         rec.model_s += run.duration_s
         rec.tokens_in += run.tokens.input
@@ -725,6 +880,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         rec.timeouts += run.timed_out
         timeouts.append(run.timed_out)
 
+        end = partial(_attempt_end, s, what, run)
         blocked_text = _read_blocked(s.repo)
         if blocked_text is not None:
             (logs / f"BLOCKED-{attempt}.md").write_text(blocked_text, encoding="utf-8")
@@ -732,6 +888,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             if category == "unrelated-problem":
                 s.report.notes.append(f"{task.id} reported an unrelated problem (see logs).")
             else:
+                end(f"stopped, BLOCKED: {category}")
                 _finish_attempt(s, job_id, run, "failed", note=f"BLOCKED: {category}")
                 rec.blocked = category
                 rec.result = "blocked"
@@ -775,13 +932,14 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             ],
         )
         if failed is None:
+            end("passed")
             _merge(s, task, rec)
             return rec
+        end(("timed out, " if run.timed_out else "") + f"failed gate {failed.name}")
         if run.timed_out:
             s.report.notes.append(f"{task.id} attempt {attempt}: OpenCode timed out.")
         rec.gate_failures.append(failed.name)
         last = failed
-        s.log(f"{task.id}: attempt {attempt} failed gate {failed.name}")
 
     rec.result = "escalated"
     _finish_escalation(
@@ -829,7 +987,12 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
     record_ticket(s, target, merged_by=local_agent(s.cfg), commit=rec.commit)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
-    s.log(f"{task.id}: merged after {rec.attempts} attempt(s)")
+    _merged_line(s, local_agent(s.cfg), task.id, rec)
+
+
+def _merged_line(s: Session, agent: str, task_id: str, rec: TaskRecord) -> None:
+    lines = s.git.commit_size(rec.commit) if rec.commit else None
+    s.log(console.merged(agent, task_id, rec.attempts, lines, clock() - s.ticket_started))
 
 
 # --- lead tickets (ADR 12 item 9) --------------------------------------------------------
@@ -849,7 +1012,8 @@ def block(s: Session, task_path: Path, reason: str) -> None:
     runner_commit(s, f"runner: {task_path.stem} blocked: {reason}")
     record_ticket(s, target)
     s.report.notes.append(f"Blocked {task_path.stem}: {reason}")
-    s.log(f"{task_path.stem}: blocked ({reason})")
+    where = f"ticket in {target.relative_to(s.repo).as_posix()}"
+    s.log(console.stopped(task_path.stem, "blocked", reason, where, waiting_behind(s, target.stem)))
 
 
 def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
@@ -894,7 +1058,7 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     record_ticket(s, target, merged_by=claude_agent(s, job), commit=rec.commit)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
-    s.log(f"{task.id}: merged (lead ticket)")
+    _merged_line(s, claude_agent(s, job), task.id, rec)
 
 
 # --- checkpoints (ADR 12 item 8) ------------------------------------------------------
@@ -929,7 +1093,10 @@ def checkpoint(s: Session, milestone: str) -> None:
         ),
         model=s.cfg.checkpoint_model,
     )
-    call_claude(s, job, milestone, "checkpoint")
+    s.log("")
+    s.log(console.ticket_header(f"{milestone} checkpoint", "lead", None))
+    s.log("Review the last merges: " + ", ".join(m.split()[0] for m in merged))
+    call_claude(s, job, milestone, "checkpoint", notes=(out,))
     s.state.unchecked = []
     save_state(s.state, s.state_path)
     if out.is_file():
@@ -970,8 +1137,15 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         ),
         allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
     )
-    call_claude(s, job, task.milestone, task.id, ticket=task.id)
     decision_path = logs / "decision.json"
+    call_claude(
+        s,
+        job,
+        task.milestone,
+        task.id,
+        ticket=task.id,
+        notes=(decision_path, logs / "escalation.md"),
+    )
     try:
         decision = json.loads(decision_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -1088,7 +1262,7 @@ def close_session(s: Session) -> SessionReport:
     s.report.ended = now()
     if not s.report.tasks and not s.report.claude_runs:
         _finish_run(s, "nothing to do")
-        s.log("Nothing to do.")
+        s.log("[runner] Nothing to do.")
         return s.report
     claude = claude_tokens(transcripts_dir(s.repo), s.report.started, s.report.ended)
     path = report_mod.write(s.repo, s.report, claude)
@@ -1103,7 +1277,7 @@ def close_session(s: Session) -> SessionReport:
     merged = sum(t.result == "done" for t in s.report.tasks)
     _finish_run(s, f"{merged} merged, {len(s.report.tasks) - merged} not")
     runner_commit(s, messages.session_message(s.report, path.relative_to(s.repo).as_posix()))
-    s.log(f"Session report: {path.relative_to(s.repo)}")
+    s.log(f"[runner] Session report: {path.relative_to(s.repo)}")
     return s.report
 
 
