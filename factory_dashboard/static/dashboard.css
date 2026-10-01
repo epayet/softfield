@@ -114,3 +114,7 @@ tbody tr:hover { background: var(--accent-wash); }
 @media (max-width: 560px) { .steps li { grid-template-columns: 1fr; gap: 2px; } }
 @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2s ease-in-out infinite; } }
 @keyframes pulse { 50% { opacity: .45; } }
+
+/* "New version of the dashboard: refresh" (app.py's /version poller) */
+.new-version { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent);
+  border-radius: 4px; background: var(--accent-wash); color: var(--ink); }

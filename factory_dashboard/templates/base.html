@@ -31,6 +31,7 @@
   </nav>
 </header>
 <main>
+  {{ version_poll | safe }}
   <nav class="crumbs" aria-label="Breadcrumbs">
     {# project › milestone › ticket › job (D8): a page adds its own after the project #}
     <a href="/projects/{{ project | urlencode }}{{ q }}">{{ project }}</a>

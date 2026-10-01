@@ -1,12 +1,15 @@
 """The factory dashboard's service (ADR 13 item 2, f1 D1): a FastAPI app over the metrics
 database, served at 127.0.0.1 by ``uv run runner dashboard`` (or at ``--host``, a LAN address).
 
+- It restarts itself when its code changes, and each page polls ``/version`` to offer a refresh.
 - One read-only connection per request (``Db``): the dashboard never writes.
 - Every page takes ``?project=`` (``Project``) and keeps it in its links (``q`` in templates).
 - A page is a module with an ``APIRouter``, included in ``create_app``; it renders a template
   extending ``templates/base.html`` with ``render``. ``overview.py`` is the worked example.
 """
 
+import hashlib
+import os
 import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
@@ -78,11 +81,60 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.include_router(projects.router)
     app.include_router(runs.router)
     app.include_router(agents.router)
+
+    @app.get("/version", response_class=HTMLResponse)
+    def version(seen: str = "") -> str:
+        """The page's poller: itself again while ``seen`` is current, else a bar to refresh."""
+        if seen == code_version():
+            return VERSION_POLL.format(version=seen)
+        return NEW_VERSION
+
     return app
 
 
+# A page's poller (base.html): asks every 10 s whether the dashboard's code is still ``version``.
+VERSION_POLL = (
+    '<span hx-get="/version?seen={version}" hx-trigger="every 10s" hx-swap="outerHTML"></span>'
+)
+NEW_VERSION = (
+    '<p class="new-version" role="status">New version of the dashboard: <a href="">refresh</a></p>'
+)
+
+
+def code_version() -> str:
+    """A short hash of the dashboard's files and when they changed: a new one means a new
+    version (the server reloads its Python itself; templates and static files are read fresh)."""
+    digest = hashlib.sha256()
+    for path in sorted(HERE.rglob("*")):
+        if path.is_file() and "__pycache__" not in path.parts:
+            digest.update(f"{path.relative_to(HERE)}:{path.stat().st_mtime_ns}\n".encode())
+    return digest.hexdigest()[:12]
+
+
+def from_env() -> FastAPI:
+    """``create_app`` from what ``serve`` left in the environment: uvicorn's reloader imports
+    the app by name in a fresh process."""
+    env = os.environ
+    return create_app(
+        Path(env["FACTORY_DASHBOARD_DB"]),
+        env["FACTORY_DASHBOARD_PROJECT"],
+        env["FACTORY_DASHBOARD_HOST"] or HOST,
+    )
+
+
 def serve(db: Path, project: str, port: int = PORT, host: str = HOST) -> None:
-    uvicorn.run(create_app(db, project, host), host=host, port=port, log_level="warning")
+    os.environ.update(
+        FACTORY_DASHBOARD_DB=str(db), FACTORY_DASHBOARD_PROJECT=project, FACTORY_DASHBOARD_HOST=host
+    )
+    uvicorn.run(
+        f"{__name__}:from_env",
+        factory=True,
+        reload=True,
+        reload_dirs=[str(HERE), str(HERE.parent / "runner")],
+        host=host,
+        port=port,
+        log_level="warning",
+    )
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:
@@ -127,6 +179,7 @@ def render(
             "project": project,
             "projects": names if project in names else [*names, project],
             "q": "?" + urlencode({"project": project}),
+            "version_poll": VERSION_POLL.format(version=code_version()),
             **context,
         },
     )

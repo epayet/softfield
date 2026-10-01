@@ -3,8 +3,10 @@ import sqlite3
 
 import pytest
 import uvicorn
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from factory_dashboard import app as app_module
 from factory_dashboard.app import HOST, PORT, Db, create_app
 from factory_dashboard.queries import connect
 from runner import cli
@@ -79,7 +81,7 @@ def test_runner_dashboard_serves_on_a_lan_address_when_asked(db_path, monkeypatc
     assert cli.main(["dashboard", "--db", str(db_path), "--host", "192.168.178.34"]) == 0
     assert served["host"] == "192.168.178.34"
     assert "http://192.168.178.34:8765/" in capsys.readouterr().out
-    client = TestClient(served["app"])  # type: ignore[arg-type]
+    client = TestClient(create_app(db_path, PROJECT, "192.168.178.34"))
     assert client.get("/", headers={"Host": "192.168.178.34:8765"}).status_code == 200
     assert client.get("/", headers={"Host": "attacker.example"}).status_code == 400
 
@@ -88,3 +90,23 @@ def test_runner_dashboard_refuses_a_missing_database(tmp_path, monkeypatch, caps
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: pytest.fail("served"))
     assert cli.main(["dashboard", "--db", str(tmp_path / "none.sqlite")]) == 1
     assert "runner backfill" in capsys.readouterr().err
+
+
+def test_runner_dashboard_reloads_when_its_code_changes(db_path, monkeypatch):
+    served: dict[str, object] = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **options: served.update(options, app=app))
+    for name in ("DB", "PROJECT", "HOST"):  # serve sets these for the reloaded process
+        monkeypatch.setenv(f"FACTORY_DASHBOARD_{name}", "")
+    assert cli.main(["dashboard", "--db", str(db_path)]) == 0
+    assert served["app"] == "factory_dashboard.app:from_env"
+    assert served["factory"] is True and served["reload"] is True
+    assert isinstance(app_module.from_env(), FastAPI)
+
+
+def test_a_page_says_when_a_new_version_is_available(client, tmp_path, monkeypatch):
+    html = client.get("/").text
+    version = re.search(r"/version\?seen=(\w+)", html)
+    assert version is not None
+    assert "New version" not in client.get(f"/version?seen={version[1]}").text
+    monkeypatch.setattr(app_module, "code_version", lambda: "changed")
+    assert "New version" in client.get(f"/version?seen={version[1]}").text
