@@ -43,3 +43,12 @@ attempts: 2
 tokens: 6263211
 logs: var/runs/20260930-194445/f1-35-timeline-milestones-fixes
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 7717
+gate_failures: ['tests-fail-on-main', 'task-tests']
+tokens: 10995559
+```
