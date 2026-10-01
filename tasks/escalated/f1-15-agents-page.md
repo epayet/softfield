@@ -38,3 +38,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - an agent with no merges shows dashes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 10655080
+logs: var/runs/20261001-082453/f1-15-agents-page
+```
