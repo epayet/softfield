@@ -29,3 +29,12 @@ Read `factory_dashboard/tickets.py`, `factory_dashboard/templates/ticket.html`, 
 - tests: the whole list order is asserted (f1 before m4, highest id first inside f1); the result section is read cell by cell (state, merged by, commit, lines changed); jobs are read in order from the jobs section; `?milestone=` is tested; the breadcrumbs are tested; one fixture is used, not two
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1570
+gate_failures: []
+tokens: 1574955
+```
