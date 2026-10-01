@@ -49,3 +49,12 @@ attempts: 3
 tokens: 1903550
 logs: var/runs/20260930-194445/f1-34-jobs-pages-fixes-run2
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3112
+gate_failures: ['no-changes']
+tokens: 2745460
+```
