@@ -7,7 +7,7 @@
   <h2>Runs <span class="src">newest first</span></h2>
   {% if runs %}
   <div class="scroll"><table>
-    <thead><tr><th>Run</th><th>Command</th><th>Started</th><th>Min</th><th>Verdict</th><th>Jobs</th></tr></thead>
+    <thead><tr><th>Run</th><th>Command</th><th>Started</th><th>Min</th><th>Verdict</th><th>Jobs</th><th>Status</th></tr></thead>
     <tbody>
       {% for run in runs %}
       <tr>
@@ -17,6 +17,7 @@
         <td class="num">{{ "%.1f" | format(run.minutes) if run.minutes is not none else "–" }}</td>
         <td>{{ run.verdict or run.status or "–" }}</td>
         <td class="num">{{ run.job_count }}</td>
+        <td>{{ run.status or "–" }}</td>
       </tr>
       {% endfor %}
     </tbody>

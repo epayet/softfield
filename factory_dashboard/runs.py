@@ -19,9 +19,19 @@ router = APIRouter()
 LIVE = timedelta(minutes=2)  # an older heartbeat means the runner stopped
 
 
-def _age(at: str | None) -> timedelta | None:
+def _age(now: datetime, at: str | None) -> timedelta | None:
     """How long ago ``at`` was, or ``None`` if ``at`` is empty."""
-    return datetime.now().astimezone() - datetime.fromisoformat(at) if at else None
+    return now - datetime.fromisoformat(at) if at else None
+
+
+def compute_status(heartbeat: str | None, ended: str | None, now: datetime) -> str:
+    """Compute the run status from its heartbeat and end time, using the injected ``now``."""
+    if ended:
+        return "done"
+    heartbeat_age = _age(now, heartbeat)
+    if heartbeat_age is not None and heartbeat_age < LIVE:
+        return "running"
+    return "stopped"
 
 
 def list_runs(conn: sqlite3.Connection, project: str, *, now: datetime) -> list[dict[str, object]]:
@@ -44,13 +54,7 @@ def list_runs(conn: sqlite3.Connection, project: str, *, now: datetime) -> list[
             start = datetime.fromisoformat(row["started"])
             end = datetime.fromisoformat(row["ended"])
             minutes = (end - start).total_seconds() / 60
-        heartbeat_age = _age(row["heartbeat"])
-        if row["ended"]:
-            status = "done"
-        elif heartbeat_age is not None and heartbeat_age < LIVE:
-            status = "running"
-        else:
-            status = "stopped"
+        status = compute_status(row["heartbeat"], row["ended"], now)
         found.append(
             {
                 "id": row["id"],
@@ -74,7 +78,9 @@ class _JobRef:
     attempt: int
 
 
-def get_run(conn: sqlite3.Connection, project: str, run_dir: str) -> dict[str, object] | None:
+def get_run(
+    conn: sqlite3.Connection, project: str, run_dir: str, *, now: datetime
+) -> dict[str, object] | None:
     """A single run by its ``run_dir``, with jobs and tickets."""
     row = conn.execute(
         "SELECT r.id, r.run_dir, r.command, r.started, r.ended, r.heartbeat, r.verdict, "
@@ -120,13 +126,7 @@ def get_run(conn: sqlite3.Connection, project: str, run_dir: str) -> dict[str, o
         end = datetime.fromisoformat(row["ended"])
         minutes = (end - start).total_seconds() / 60
 
-    heartbeat_age = _age(row["heartbeat"])
-    if row["ended"]:
-        status = "done"
-    elif heartbeat_age is not None and heartbeat_age < LIVE:
-        status = "running"
-    else:
-        status = "stopped"
+    status = compute_status(row["heartbeat"], row["ended"], now)
 
     return {
         "id": row["id"],
@@ -159,8 +159,9 @@ def run_page(
     request: Request,
     conn: Db,
     project: Project,
+    now: Now,
 ) -> HTMLResponse:
-    run = get_run(conn, project, run_dir)
+    run = get_run(conn, project, run_dir, now=now)
     if run is None:
         return HTMLResponse(status_code=404, content="Not found")
     return render(request, conn, project, "run.html", {"active": "/runs", "run": run})

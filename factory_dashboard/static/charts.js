@@ -133,15 +133,14 @@
     // Ratings over time: {labels: [...], agents: [...], skills: [...], scores: [...]}.
     rating(data, c) {
       const agents = [...new Set(data.agents)];
-      const skills = [...new Set(data.skills)];
       const series = [];
-      for (const skill of skills) {
-        const idx = skills.indexOf(skill);
+      for (const agent of agents) {
+        const idx = agents.indexOf(agent);
         series.push({
-          name: skill,
+          name: agent,
           type: "line",
           smooth: true,
-          data: data.scores.map((s, i) => data.skills[i] === skill ? s : null),
+          data: data.scores.map((s, i) => data.agents[i] === agent ? s : null),
           itemStyle: { color: c.series[idx % c.series.length] },
         });
       }
@@ -151,8 +150,7 @@
           trigger: "axis",
           formatter: (p) => {
             if (p.length && p[0].data != null) {
-              return p[0].seriesName + ": " + p[0].data
-                + " (" + (p[0].data2 || "") + ")";
+              return p[0].seriesName + ": " + p[0].data;
             }
             return "";
           },

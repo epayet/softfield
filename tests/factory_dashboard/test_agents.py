@@ -16,6 +16,13 @@ def section(html: str, name: str) -> str:
     return " ".join(re.sub(r"<[^>]+>", " ", match.group(1)).split())
 
 
+def section_raw(html: str, name: str) -> str:
+    """The raw HTML of the page's ``<section id="name">``."""
+    match = re.search(rf'<section[^>]*\bid="{name}"[^>]*>(.*?)</section>', html, re.S)
+    assert match, f"no section {name}"
+    return match.group(1)
+
+
 def charts(html: str) -> dict[str, object]:
     """Each chart's kind and its JSON data block (f1 D5)."""
     found = re.findall(
@@ -31,17 +38,33 @@ def test_efficiency_numbers_for_fixture_local_agent(serve):
     html = serve(live=False).get("/agents").text
     eff = section(html, "efficiency")
     assert LOCAL in eff
-    assert "5" in eff  # jobs
-    assert "2" in eff  # merged
-    assert "3" in eff  # attempt tickets
-    assert "67%" in eff  # first attempt pass rate
-    assert "2.5" in eff  # attempts per merge
-    assert "25.0" in eff  # minutes per merge
-    assert "287500" in eff  # tokens per merge
-    assert "192" in eff  # tokens per second
-    assert "33%" in eff  # escalation rate
-    assert "$0" in eff  # dollars
-    assert "\u2013" in eff  # no failed gate
+    # Read the local agent's row cell by cell (raw HTML)
+    eff_raw = section_raw(html, "efficiency")
+    local_row_match = re.search(rf"<tr>.*?{re.escape(LOCAL)}.*?</tr>", eff_raw, re.S)
+    assert local_row_match, f"no row for {LOCAL}"
+    local_row = local_row_match.group(0)
+    # jobs=5
+    assert '<td class="num">5</td>' in local_row
+    # merged=2
+    assert '<td class="num">2</td>' in local_row
+    # attempt_tickets=3
+    assert '<td class="num">3</td>' in local_row
+    # first_attempt_pass=67%
+    assert "67%" in local_row
+    # attempts_per_merge=2.5
+    assert '<td class="num">2.5</td>' in local_row
+    # minutes_per_merge=25.0
+    assert '<td class="num">25.0</td>' in local_row
+    # tokens_per_merge=287500
+    assert '<td class="num">287500</td>' in local_row
+    # tokens_per_second=192
+    assert '<td class="num">192</td>' in local_row
+    # escalation_rate=33%
+    assert "33%" in local_row
+    # dollars=$0.00
+    assert "$0.00" in local_row
+    # most_failed_gate=–
+    assert "\u2013" in local_row
 
 
 def test_agents_roles_table_has_cell_per_pair(client):
@@ -80,5 +103,43 @@ def test_claude_sonnet_shows_dashes_for_per_merge(serve):
     html = serve(live=False).get("/agents").text
     eff = section(html, "efficiency")
     assert SONNET in eff
-    assert "1" in eff  # 1 job
-    assert "\u2013" in eff  # per-merge dashes (merged=0)
+    # Find the row containing SONNET (raw HTML)
+    eff_raw = section_raw(html, "efficiency")
+    sonnet_row_match = re.search(rf"<tr>.*?{re.escape(SONNET)}.*?</tr>", eff_raw, re.S)
+    assert sonnet_row_match, f"no row for {SONNET}"
+    sonnet_row = sonnet_row_match.group(0)
+    # jobs=1
+    assert '<td class="num">1</td>' in sonnet_row
+    # merged=0, so per-merge values are dashes
+    assert "\u2013" in sonnet_row
+
+
+def test_milestone_filter_filters_every_query(serve):
+    """``/agents?milestone=f1`` answers 200; m4-01-old drops from the local row."""
+    resp = serve(live=False).get("/agents?milestone=f1")
+    assert resp.status_code == 200
+    html = resp.text
+    eff = section(html, "efficiency")
+    assert LOCAL in eff
+    # Find the local agent's row (raw HTML)
+    eff_raw = section_raw(html, "efficiency")
+    local_row_match = re.search(rf"<tr>.*?{re.escape(LOCAL)}.*?</tr>", eff_raw, re.S)
+    assert local_row_match, f"no row for {LOCAL}"
+    local_row = local_row_match.group(0)
+    # m4-01-old job drops out: jobs=4 (was 5), merged=1 (was 2)
+    assert '<td class="num">4</td>' in local_row
+    assert '<td class="num">1</td>' in local_row
+
+
+def test_rating_chart_has_one_series_per_agent(rating_client):
+    """The rating chart has one series per agent, named by the agent."""
+    html = rating_client.get("/agents").text
+    c = charts(html)
+    assert "rating" in c
+    data = c["rating"]
+    # Both points present
+    assert len(data["scores"]) == 2  # type: ignore[index]
+    # One series per agent (the JS draws one series per unique agent)
+    unique_agents = len(set(data["agents"]))  # type: ignore[index]
+    assert unique_agents == 1
+    assert LOCAL in data["agents"]  # type: ignore[index]

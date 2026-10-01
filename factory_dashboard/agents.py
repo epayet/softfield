@@ -75,7 +75,8 @@ def efficiency(
     agents = conn.execute(
         "SELECT DISTINCT j.agent FROM jobs j"  # noqa: S608
         " JOIN runs r ON r.id = j.run_id"
-        " JOIN projects p ON p.id = r.project_id" + where_clause,
+        " JOIN projects p ON p.id = r.project_id"
+        " LEFT JOIN milestones m ON m.id = j.milestone_id" + where_clause,
         base_params,
     ).fetchall()
 
@@ -88,6 +89,7 @@ def efficiency(
             "SELECT j.*, t.merged_by FROM jobs j"  # noqa: S608
             " JOIN runs r ON r.id = j.run_id"
             " JOIN projects p ON p.id = r.project_id"
+            " LEFT JOIN milestones m ON m.id = j.milestone_id"
             " LEFT JOIN tickets t ON t.id = j.ticket_id" + " WHERE " + agent_cond,
             agent_params,
         ).fetchall()
@@ -175,22 +177,29 @@ def _secs(started: str | None, ended: str | None) -> int:
 def agents_roles(
     conn: sqlite3.Connection,
     project: str,
+    milestone: str | None = None,
 ) -> tuple[list[str], tuple[str, ...], dict[str, dict[str, int]]]:
+    base_cond = "p.name = ?"
+    base_params: list[str] = [project]
+    if milestone:
+        base_cond += " AND m.key = ?"
+        base_params.append(milestone)
+    where_clause = " WHERE " + base_cond
     agents = conn.execute(
-        "SELECT DISTINCT j.agent FROM jobs j"
+        "SELECT DISTINCT j.agent FROM jobs j"  # noqa: S608
         " JOIN runs r ON r.id = j.run_id"
         " JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ?",
-        (project,),
+        " LEFT JOIN milestones m ON m.id = j.milestone_id" + where_clause,
+        base_params,
     ).fetchall()
     agent_names = [a["agent"] for a in agents]
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
     for row in conn.execute(
-        "SELECT j.agent, j.role FROM jobs j"
+        "SELECT j.agent, j.role FROM jobs j"  # noqa: S608
         " JOIN runs r ON r.id = j.run_id"
         " JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ?",
-        (project,),
+        " LEFT JOIN milestones m ON m.id = j.milestone_id" + where_clause,
+        base_params,
     ).fetchall():
         counts[row["agent"]][row["role"]] += 1
     return agent_names, ROLES, dict(counts)
@@ -199,13 +208,22 @@ def agents_roles(
 def rating_data(
     conn: sqlite3.Connection,
     project: str,
+    milestone: str | None = None,
 ) -> dict[str, Sequence[str] | Sequence[float]]:
+    base_cond = "p.name = ?"
+    base_params: list[str] = [project]
+    if milestone:
+        base_cond += " AND m.key = ?"
+        base_params.append(milestone)
+    where_clause = " WHERE " + base_cond
     changes = conn.execute(
-        "SELECT agent, skill, at, after FROM rating_changes"
-        " JOIN tickets t ON t.id = rating_changes.ticket_id"
-        " JOIN projects p ON p.id = t.project_id"
-        " WHERE p.name = ? ORDER BY at",
-        (project,),
+        (
+            "SELECT agent, skill, at, after FROM rating_changes"  # noqa: S608
+            " JOIN tickets t ON t.id = rating_changes.ticket_id"
+            " JOIN projects p ON p.id = t.project_id"
+            " LEFT JOIN milestones m ON m.id = t.milestone_id" + where_clause + " ORDER BY at"
+        ),
+        base_params,
     ).fetchall()
     return {
         "labels": [c["at"] for c in changes],
@@ -223,8 +241,8 @@ def agents_page(
     milestone: str | None = None,
 ) -> HTMLResponse:
     eff = efficiency(conn, project, milestone)
-    agent_names, roles, counts = agents_roles(conn, project)
-    ratings = rating_data(conn, project)
+    agent_names, roles, counts = agents_roles(conn, project, milestone)
+    ratings = rating_data(conn, project, milestone)
     return render(
         request,
         conn,

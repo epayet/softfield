@@ -1,4 +1,4 @@
-"""Tests for the runs list and run detail pages (f1-14)."""
+"""Tests for the runs list and run detail pages (f1-14, f1-40)."""
 
 import re
 from datetime import timedelta
@@ -78,15 +78,21 @@ def test_runs_list_shows_newest_first_with_verdicts(runs_client):
     html = runs_client.get("/runs").text
     rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
     tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
-    # First row should be the running run (newest)
+    # First row: running run (newest)
     first_row = tbody_rows[0]
     assert "20261002-113500" in first_row
-    assert "running" in first_row
     assert "–" in first_row  # no minutes for running run
-    # Second row should be the completed run
+    assert "running" in first_row  # status column
+    # Second row: completed run
     second_row = tbody_rows[1]
     assert "20260930-100000" in second_row
     assert "3 merged, 0 not" in second_row
+    assert "done" in second_row  # status column
+    # Third row: stopped run
+    third_row = tbody_rows[2]
+    assert "20260920-100000" in third_row
+    assert "–" in third_row  # no minutes
+    assert "stopped" in third_row  # status column
 
 
 def test_run_page_shows_jobs_and_tickets(runs_client):
@@ -94,6 +100,7 @@ def test_run_page_shows_jobs_and_tickets(runs_client):
     info = section(html, "info")
     assert "milestone f1" in info
     assert "running" in info
+    assert "stopped" not in info
 
     jobs_raw = section_raw(html, "jobs")
     job_links = re.findall(r'href="/jobs/(\d+)', jobs_raw)
@@ -113,9 +120,29 @@ def test_unknown_run_is_404(runs_client):
 
 def test_a_run_with_fresh_heartbeat_shows_running(runs_client):
     html = runs_client.get("/runs/20261002-113500").text
-    assert "running" in html
+    info = section(html, "info")
+    assert "running" in info
+    assert "stopped" not in info
 
 
 def test_a_run_with_3_min_old_heartbeat_shows_stopped(stopped_client):
     html = stopped_client.get("/runs/20260920-stopped").text
-    assert "stopped" in html
+    info = section(html, "info")
+    assert "stopped" in info
+    assert "running" not in info
+
+
+def test_runs_list_checks_every_row(runs_client):
+    html = runs_client.get("/runs").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
+    assert len(tbody_rows) >= 3
+    # Check each row has run dir, minutes or dash, and verdict/status
+    for i, row in enumerate(tbody_rows):
+        assert "2026" in row, f"row {i} missing run dir"
+        has_minutes = re.search(r'<td class="num">[\d.]+</td>', row)
+        has_dash = "–" in row
+        assert has_minutes or has_dash, f"row {i} missing minutes or dash"
+        has_verdict = "merged" in row or "backfill" in row
+        has_status = "running" in row or "stopped" in row or "done" in row
+        assert has_verdict or has_status, f"row {i} missing verdict or status"
