@@ -287,6 +287,65 @@ def write_milestone_detail(conn: sqlite3.Connection) -> None:
     )
 
 
+def reset_milestone_scores(conn: sqlite3.Connection, milestone_id: int) -> None:
+    """Reset review_score and owner_score to NULL for a milestone."""
+    cur = conn.execute(
+        "UPDATE milestones SET review_score = NULL, owner_score = NULL WHERE id = ?",
+        (milestone_id,),
+    )
+    cur.close()
+    conn.commit()
+
+
+def write_milestone_with_scores(
+    conn: sqlite3.Connection,
+    milestone_id: int,
+    review_score: float,
+    owner_score: float,
+) -> None:
+    """Set review_score and owner_score on an existing milestone."""
+    conn.execute(
+        "UPDATE milestones SET review_score = ?, owner_score = ? WHERE id = ?",
+        (review_score, owner_score, milestone_id),
+    )
+    conn.commit()
+
+
+def write_milestone_detail_with_scores(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: F1 with sign-off and scores, F10 without scores."""
+    project = metrics.upsert_project(conn, PROJECT)
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f1",
+        status="done",
+        review_score=7,
+        owner_score=8.5,
+        outcome="The factory now measures itself end-to-end.",
+        done_when=(
+            "- All tickets in `tasks/done/`, `check-all` passes on `main`,\n"
+            "- `backfill` run twice gives identical row counts."
+        ),
+        signoff={
+            "changed": "- A metrics database that every run writes.\n"
+            "- The local dashboard at `127.0.0.1`.",
+            "how_to_test": "- Run `uv run runner milestone f1`.\n"
+            "- Open `127.0.0.1` and check every page.",
+            "what_next": "- Close the factory review.\n- Replan the agents section.",
+            "later": "- Full diffs and before/after screenshots.\n- ADRs view on the dashboard.",
+            "lessons": "- Run the loop before the replan.",
+        },
+    )
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f10",
+        title="F10 milestone",
+        status="in progress",
+        started=_at(timedelta(days=2)),
+    )
+
+
 def write_milestones(conn: sqlite3.Connection) -> None:
     """On top of ``write_fixture``: a milestone with no tickets yet (f2),
     F1 with a status, and F10 (earlier than F2) for ordering tests."""
@@ -770,6 +829,36 @@ def write_f1_run(conn: sqlite3.Connection) -> None:
     )
 
 
+def write_run_no_jobs_in_milestone(conn: sqlite3.Connection) -> None:
+    """A run with jobs in a different milestone (m1), for the timeline run filter test."""
+    project = metrics.upsert_project(conn, PROJECT)
+    m1 = metrics.upsert_milestone(
+        conn, project, "m1", title="Milestone one", started=_at(timedelta(days=10))
+    )
+    run = metrics.upsert_run(conn, project, "20260922-100000", command="milestone m1")
+    ticket = metrics.upsert_ticket(
+        conn, project, "m1-01-test", milestone_id=m1, kind="developer", state="done"
+    )
+    job = metrics.start_job(
+        conn,
+        run,
+        ticket_id=ticket,
+        milestone_id=m1,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-09-22T10:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        job,
+        ended="2026-09-22T10:05:00+02:00",
+        outcome="passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
+
+
 def write_more_jobs(conn: sqlite3.Connection, count: int) -> int:
     """Add ``count`` more finished jobs for the overflow test. Returns the last job id."""
     project = metrics.upsert_project(conn, PROJECT)
@@ -827,6 +916,40 @@ def serve(db_path: Path) -> Callable[..., TestClient]:
         return TestClient(app, base_url="http://127.0.0.1:8765")
 
     return make
+
+
+@pytest.fixture
+def milestone_detail_with_scores_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_milestone_detail_with_scores``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_milestone_detail_with_scores(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def timeline_run_no_jobs_client(db_path: Path) -> TestClient:
+    """Timeline client: fixture + write_live + write_f1_run + a run with jobs in m1."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_live(conn, timedelta(seconds=30))
+        write_f1_run(conn)
+        write_run_no_jobs_in_milestone(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
 def write_ratings(conn: sqlite3.Connection) -> None:

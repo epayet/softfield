@@ -142,6 +142,14 @@ def test_timeline_run_filter(client):
     assert total_bars == 2
 
 
+def test_timeline_run_filter_no_jobs_in_milestone(timeline_run_no_jobs_client):
+    """A run with no jobs in the default milestone shows 0 bars."""
+    html = timeline_run_no_jobs_client.get("/timeline?run=20260922-100000").text
+    data = charts(html)
+    total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
+    assert total_bars == 0
+
+
 @pytest.fixture
 def client(db_path: Path) -> TestClient:
     """Timeline client: fixture + write_live + write_f1_run (second run with F1 jobs)."""

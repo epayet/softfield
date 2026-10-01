@@ -128,3 +128,12 @@ def test_project_with_more_than_10_runs_shows_only_10(db_path):
 def test_unknown_project_is_404(project_client):
     resp = project_client.get("/projects/nonexistent")
     assert resp.status_code == 404
+
+
+def test_project_crumb(project_client):
+    """The project crumb area holds exactly one element for the project."""
+    html = project_client.get("/projects/coucou").text
+    crumbs = re.findall(r'<nav[^>]*class="crumbs"[^>]*>(.*?)</nav>', html, re.S)
+    assert len(crumbs) == 1
+    elements = re.findall(r"<(a|span)[^>]*>", crumbs[0])
+    assert len(elements) == 1

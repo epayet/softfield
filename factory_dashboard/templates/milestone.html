@@ -78,8 +78,8 @@
     <dt>Attempts</dt><dd>{{ milestone.results.attempts }}</dd>
     <dt>Escalations</dt><dd>{{ milestone.results.escalations }}</dd>
     <dt>Review rounds</dt><dd>{{ milestone.results.review_rounds }}</dd>
-    <dt>Review score</dt><dd>{{ "%.1f"|format(milestone.review_score * 10) + "/10" if milestone.review_score is not none else "–" }}</dd>
-    <dt>Owner score</dt><dd>{{ "%.1f"|format(milestone.owner_score * 10) + "/10" if milestone.owner_score is not none else "–" }}</dd>
+    <dt>Review score</dt><dd>{{ "%.1f"|format(milestone.review_score) + "/10" if milestone.review_score is not none else "–" }}</dd>
+    <dt>Owner score</dt><dd>{{ "%.1f"|format(milestone.owner_score) + "/10" if milestone.owner_score is not none else "–" }}</dd>
   </dl>
   {% if milestone.results.findings %}
   <h3>Findings by severity</h3>

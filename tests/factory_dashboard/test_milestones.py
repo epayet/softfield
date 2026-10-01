@@ -269,3 +269,25 @@ def test_milestone_detail_without_signoff_shows_not_written_yet(milestone_detail
     for section_name in ("what-changed", "how-to-test", "what-next", "later", "lessons"):
         sec_text = section(html, section_name)
         assert "Not written yet" in sec_text, f"{section_name} should show 'Not written yet'"
+
+
+def test_milestone_scores_detail(milestone_detail_with_scores_client):
+    """A milestone with both scores set shows them; one with none shows dashes."""
+    resp = milestone_detail_with_scores_client.get("/milestones/f1")
+    assert resp.status_code == 200
+    html = resp.text
+    results = section(html, "results")
+    assert "Review score" in results
+    assert "7.0/10" in results
+    assert "Owner score" in results
+    assert "8.5/10" in results
+    # Done when items are rendered as <li> inside the section
+    done_when = section(html, "outcome")
+    assert "All tickets in" in done_when
+    assert "<li>" in html
+    # F10 has no scores, so the dash is shown
+    resp10 = milestone_detail_with_scores_client.get("/milestones/f10")
+    assert resp10.status_code == 200
+    html10 = resp10.text
+    results10 = section(html10, "results")
+    assert "–" in results10
