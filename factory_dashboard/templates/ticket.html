@@ -51,6 +51,28 @@
   </dl>
 </section>
 
+{% if agent_work %}
+<section id="agent-work" class="panel">
+  <h2>Who did the work <span class="src">one row per agent</span></h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Agent</th><th>Roles</th><th>Jobs</th><th>Min</th><th>Tokens in</th><th>Cost</th><th></th></tr></thead>
+    <tbody>
+      {% for a in agent_work %}
+      <tr>
+        <td class="mono">{{ a.agent }}</td>
+        <td>{{ a.roles }}</td>
+        <td class="num">{{ a.job_count }}</td>
+        <td class="num">{{ a.minutes }}</td>
+        <td class="num">{{ a.tokens_in }}</td>
+        <td class="num">{{ a.cost_usd }}</td>
+        <td>{% if a.merged %}merged{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
 {% if jobs %}
 <section id="jobs" class="panel">
   <h2>Jobs <span class="src">every attempt in order</span></h2>

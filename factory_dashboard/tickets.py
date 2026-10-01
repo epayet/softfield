@@ -7,7 +7,7 @@
 import json
 import sqlite3
 from dataclasses import dataclass
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
@@ -54,6 +54,8 @@ class JobRow:
     outcome: str
     started: str
     ended: str | None
+    cost_usd: float | None
+    tokens_in: int | None
 
 
 @dataclass(frozen=True)
@@ -61,6 +63,17 @@ class FindingRow:
     key: str
     severity: str
     summary: str
+
+
+@dataclass(frozen=True)
+class TicketAgentWork:
+    agent: str
+    roles: str
+    job_count: int
+    minutes: int
+    tokens_in: int
+    cost_usd: str
+    merged: bool = False
 
 
 def list_tickets(
@@ -151,7 +164,8 @@ def get_ticket(conn: sqlite3.Connection, project: str, ticket_id: str) -> Ticket
 def ticket_jobs(conn: sqlite3.Connection, ticket_id: int) -> list[JobRow]:
     """All jobs for a ticket, ordered by attempt ascending."""
     rows = conn.execute(
-        "SELECT j.id, j.attempt, j.role, j.agent, j.outcome, j.started, j.ended "
+        "SELECT j.id, j.attempt, j.role, j.agent, j.outcome, "
+        "       j.started, j.ended, j.cost_usd, j.tokens_in "
         "FROM jobs j "
         "WHERE j.ticket_id = ? "
         "ORDER BY j.attempt ASC, j.id ASC",
@@ -166,9 +180,93 @@ def ticket_jobs(conn: sqlite3.Connection, ticket_id: int) -> list[JobRow]:
             outcome=row["outcome"],
             started=row["started"],
             ended=row["ended"],
+            cost_usd=row["cost_usd"],
+            tokens_in=row["tokens_in"],
         )
         for row in rows
     ]
+
+
+def ticket_agent_work(conn: sqlite3.Connection, ticket_id: int) -> list[TicketAgentWork]:
+    """Agent work summary for a ticket: roles, counts, minutes, tokens, cost."""
+    rows = conn.execute(
+        "SELECT j.agent, j.role, "
+        "       CAST((julianday(j.ended) - julianday(j.started)) * 24 * 60 AS INTEGER) "
+        "          AS minutes, "
+        "       j.cost_usd, j.tokens_in "
+        "FROM jobs j "
+        "WHERE j.ticket_id = ? "
+        "ORDER BY j.attempt ASC, j.id ASC",
+        (ticket_id,),
+    ).fetchall()
+
+    merged_by: str | None = conn.execute(
+        "SELECT merged_by FROM tickets WHERE id = ?", (ticket_id,)
+    ).fetchone()["merged_by"]
+
+    agent_data: dict[str, Any] = {}
+    for row in rows:
+        agent = row["agent"]
+        if agent not in agent_data:
+            agent_data[agent] = {
+                "roles": [],
+                "job_count": 0,
+                "minutes": 0,
+                "tokens_in": 0,
+                "cost_usd": 0.0,
+            }
+        ad = agent_data[agent]
+        ad["roles"].append(row["role"])
+        ad["job_count"] = ad["job_count"] + 1
+        ad["minutes"] = ad["minutes"] + (row["minutes"] or 0)
+        ad["tokens_in"] = ad["tokens_in"] + (row["tokens_in"] or 0)
+        ad["cost_usd"] = ad["cost_usd"] + (row["cost_usd"] or 0.0)
+
+    def fmt_roles(roles: list[str]) -> str:
+        counts: dict[str, int] = {}
+        for r in roles:
+            counts[r] = counts.get(r, 0) + 1
+        parts: list[str] = []
+        for r, c in counts.items():
+            if c > 1:
+                parts.append(f"{r} \u00d7{c}")
+            else:
+                parts.append(r)
+        return ", ".join(parts)
+
+    result: list[TicketAgentWork] = []
+    if merged_by and merged_by in agent_data:
+        ad = agent_data[merged_by]
+        cost = ad["cost_usd"]
+        result.append(
+            TicketAgentWork(
+                agent=merged_by,
+                roles=fmt_roles(ad["roles"]),
+                job_count=ad["job_count"],
+                minutes=ad["minutes"],
+                tokens_in=ad["tokens_in"],
+                cost_usd=f"{cost:.2f}" if cost > 0 else "\u2013",
+                merged=True,
+            )
+        )
+        del agent_data[merged_by]
+    for agent, ad in sorted(
+        agent_data.items(),
+        key=lambda x: x[1]["minutes"],
+        reverse=True,
+    ):
+        cost = ad["cost_usd"]
+        result.append(
+            TicketAgentWork(
+                agent=agent,
+                roles=fmt_roles(ad["roles"]),
+                job_count=ad["job_count"],
+                minutes=ad["minutes"],
+                tokens_in=ad["tokens_in"],
+                cost_usd=f"{cost:.2f}" if cost > 0 else "\u2013",
+            )
+        )
+    return result
 
 
 def ticket_findings(
@@ -259,6 +357,10 @@ def ticket_page(
                 ticket_id=ticket_row["id"],
             )
 
+    agent_work: list[TicketAgentWork] = []
+    if ticket_row:
+        agent_work = ticket_agent_work(conn, ticket_row["id"])
+
     return render(
         request,
         conn,
@@ -269,5 +371,6 @@ def ticket_page(
             "ticket": detail,
             "jobs": jobs,
             "findings": findings,
+            "agent_work": agent_work,
         },
     )
