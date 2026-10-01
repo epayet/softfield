@@ -27,3 +27,10 @@ Read `runner/loop.py` (`with_progress`, `_start_run`, `_finish_run`, `live_updat
 - after `_finish_run`, the thread has stopped: no beat lands after the run's `ended`
 - a metrics database that fails mid-run (the thread's write raises) leaves one note in the session report and the run goes on
 - a session opened with no command (`open_session(cfg, None)`) starts no thread
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
