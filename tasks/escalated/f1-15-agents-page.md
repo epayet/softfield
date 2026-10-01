@@ -62,3 +62,12 @@ attempts: 3
 tokens: 10655080
 logs: var/runs/20261001-082453/f1-15-agents-page
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: pre-flight failed
+attempts: 0
+tokens: 0
+logs: var/runs/20261001-082453/f1-15-agents-page-run2
+```
