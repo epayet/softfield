@@ -1,7 +1,7 @@
 ---
 id: f1-48-ticket-work-split
 milestone: f1
-depends_on: []
+depends_on: [f1-49-heartbeat]
 difficulty: 3
 files:
   - factory_dashboard/tickets.py

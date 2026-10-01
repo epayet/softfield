@@ -1,7 +1,7 @@
 ---
 id: f1-19-replan-agents
 milestone: f1
-depends_on: [f1-18-probes]
+depends_on: [f1-18-probes, f1-49-heartbeat]
 agent: lead
 difficulty: 5
 commands: [uv run runner run --dry-run, uv run runner report]

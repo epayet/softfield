@@ -1,7 +1,7 @@
 ---
 id: f1-43-allowance
 milestone: f1
-depends_on: [f1-17-difficulty]
+depends_on: [f1-17-difficulty, f1-49-heartbeat]
 agent: lead
 difficulty: 6
 files:
