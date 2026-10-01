@@ -31,3 +31,10 @@ Read `docs/adr/14-developers-and-agents.md` items 2–4 and 10, its probe result
 - the same job on a fake Ollama agent runs `opencode run` with that model and skips the warm-up; the probe's fixture gives its tokens
 - an unrecognised error from a fake Ollama agent gives a limit, not a failed attempt; the same error on the local agent is a failure
 - `uv run runner check-all --task f1-21-opencode-adapter` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
