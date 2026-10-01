@@ -669,9 +669,12 @@ def write_tickets(conn: sqlite3.Connection) -> None:
         tokens_out=500,
     )
     metrics.add_finding(
-        conn, m4, "M4-F1", job_id=None, severity="blocking", summary="Blocking issue"
+        conn, m4, "M4-F1", ticket_id=ticket_c, severity="blocking", summary="Blocking issue"
     )
-    metrics.add_finding(conn, m4, "M4-F2", job_id=None, severity="nit", summary="Nitpick")
+    metrics.add_finding(conn, m4, "M4-F2", ticket_id=ticket_c, severity="nit", summary="Nitpick")
+    metrics.add_finding(
+        conn, m4, "MILESTONE-WIDE", severity="should-fix", summary="milestone-wide finding"
+    )
 
     # Ticket-specific finding on ticket_b, for f1-36 testing
     if ticket_b:

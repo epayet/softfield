@@ -123,7 +123,7 @@ def test_ticket_detail_shows_all_jobs_in_order(tickets_client):
     assert len(job_links) == 3
 
 
-def test_ticket_detail_shows_findings_with_severity(tickets_client):
+def test_findings_with_ticket_id_shows_only_on_that_ticket(tickets_client):
     html = tickets_client.get("/tickets/m4-02-ticket-c").text
     findings = section(html, "findings")
     assert "M4-F1" in findings
@@ -139,11 +139,16 @@ def test_ticket_specific_finding_shows_only_on_that_ticket(tickets_client):
     assert "ticket specific" in findings_b
 
     html_a = tickets_client.get("/tickets/f1-10-ticket-a").text
-    if re.search(r'<section[^>]*\bid="findings"', html_a, re.S):
-        findings_a = section(html_a, "findings")
-        assert "TICKET-F1" not in findings_a
-    else:
-        assert "TICKET-F1" not in html_a
+    assert re.search(r'<section[^>]*\bid="findings"', html_a, re.S) is None
+
+
+def test_milestone_wide_finding_absent_from_ticket_pages(tickets_client):
+    html_a = tickets_client.get("/tickets/f1-10-ticket-a").text
+    html_b = tickets_client.get("/tickets/f1-11-ticket-b").text
+    html_c = tickets_client.get("/tickets/m4-02-ticket-c").text
+    assert "MILESTONE-WIDE" not in html_a
+    assert "MILESTONE-WIDE" not in html_b
+    assert "MILESTONE-WIDE" not in html_c
 
 
 def test_unknown_ticket_is_404(tickets_client):

@@ -180,13 +180,13 @@ def ticket_findings(
     """Findings on a milestone, optionally filtered to a specific ticket.
 
     Findings with ``ticket_id`` set show only on that ticket;
-    milestone-wide findings (``ticket_id IS NULL``) show on every ticket.
+    findings without one show on no ticket page.
     """
     conditions = ["milestone_id = ?"]
     params: list[object] = [milestone_id]
 
     if ticket_id is not None:
-        conditions.append("(findings.ticket_id = ? OR findings.ticket_id IS NULL)")
+        conditions.append("ticket_id = ?")
         params.append(ticket_id)
 
     where = " AND ".join(conditions)
