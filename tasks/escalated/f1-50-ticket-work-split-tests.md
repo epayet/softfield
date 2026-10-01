@@ -27,3 +27,12 @@ Read `factory_dashboard/tickets.py` (`ticket_agent_work`), `factory_dashboard/te
 - the order test asserts the list of `data-agent` values in row order equals merger first, then the others by minutes
 - the listed `tests:` pass, fail against main's template, and fail if the job count, roles or minutes of a row change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: protected-paths)
+attempts: 3
+tokens: 860403
+logs: var/runs/20261001-210648/f1-50-ticket-work-split-tests
+```
