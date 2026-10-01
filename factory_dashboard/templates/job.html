@@ -62,7 +62,7 @@
         <span class="pill {% if gate.ok %}good{% else %}critical{% endif %}">
           {{ "pass" if gate.ok else "fail" }}
         </span>
-        <span class="num">{{ "%.1f" | format(gate.seconds) }}s</span>
+        {% if gate.seconds is not none %}<span class="num">{{ "%.1f" | format(gate.seconds) }}s</span>{% endif %}
         {% if gate.log %}<code>{{ gate.log }}</code>{% endif %}
       </span>
     </li>
@@ -102,7 +102,7 @@
   <h2>Session <span class="src">ID and log paths</span></h2>
   <dl class="kv">
     {% if job.session_id %}<dt>Session</dt><dd class="mono">{{ job.session_id }}</dd>{% endif %}
-    {% if job.log_path %}<dt>Log</dt><dd><a class="mono" href="/static/logs/{{ job.log_path }}">{{ job.log_path }}</a></dd>{% endif %}
+    {% if job.log_path %}<dt>Log</dt><dd class="mono">{{ job.log_path }}</dd>{% endif %}
   </dl>
   {% if not job.session_id and not job.log_path %}<p class="sub">No session data.</p>{% endif %}
 </section>

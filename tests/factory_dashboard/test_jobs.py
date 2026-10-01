@@ -194,3 +194,77 @@ def test_unknown_job_id_returns_404(client_with_jobs):
     client, _, _ = client_with_jobs
     resp = client.get("/jobs/999999")
     assert resp.status_code == 404
+
+
+@pytest.fixture
+def client_with_backfilled_job(db_path: Path):
+    """A client over the fixture plus a job as ``runner backfill`` writes one: its gates'
+    seconds weren't kept (f1-F1). Returns (client, job_id)."""
+    from factory_dashboard.app import create_app, get_now
+    from runner import metrics
+
+    conn = open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20260801-100000",
+            command="backfill",
+            started="2026-08-01T10:00:00+02:00",
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=None,
+            role="developer",
+            agent="local-qwen3.6-35b-a3b",
+            attempt=1,
+            started="2026-08-01T10:00:00+02:00",
+            log_path="var/runs/20260801-100000/m4-01-old/opencode-1.jsonl",
+        )
+        log = "var/runs/20260801-100000/m4-01-old/gates-1.txt"
+        metrics.finish_job(
+            conn,
+            job_id,
+            ended="2026-08-01T10:20:00+02:00",
+            outcome="failed",
+            tokens_in=200_000,
+            tokens_out=12_000,
+            gates=[
+                {"name": "ruff", "ok": True, "seconds": None, "log": log},
+                {"name": "tests", "ok": False, "seconds": None, "log": log},
+            ],
+        )
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765"), job_id
+
+
+def test_backfilled_job_shows_its_gates_without_seconds(client_with_backfilled_job):
+    client, job_id = client_with_backfilled_job
+    resp = client.get(f"/jobs/{job_id}")
+    assert resp.status_code == 200
+    gates = section(resp.text, "gates")
+    assert "ruff pass" in gates
+    assert "tests fail" in gates
+    assert "None" not in gates
+
+
+def test_job_log_path_is_shown_not_linked(client_with_backfilled_job):
+    """The dashboard serves no logs, so the path is text, not a dead link."""
+    client, job_id = client_with_backfilled_job
+    html = client.get(f"/jobs/{job_id}").text
+    assert "var/runs/20260801-100000/m4-01-old/opencode-1.jsonl" in section(html, "session")
+    assert "/static/logs/" not in html
+
+
+def test_jobs_list_shows_tokens_in_thousands(client_with_backfilled_job):
+    client, job_id = client_with_backfilled_job
+    html = client.get("/jobs").text
+    row = next(r for r in re.findall(r"<tr>(.*?)</tr>", html, re.S) if f"/jobs/{job_id}" in r)
+    cells = [re.sub(r"<[^>]+>", "", c).strip() for c in re.findall(r"<td[^>]*>(.*?)</td>", row)]
+    assert cells[8:10] == ["200k", "12k"]
