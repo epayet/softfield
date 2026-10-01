@@ -29,3 +29,12 @@ Read `factory_dashboard/projects.py`, `factory_dashboard/templates/project.html`
 - tests: the title, the breadcrumb text and href, and the selected top-bar option are asserted; the milestone section is read in order with each key, title and status; the runs section is read in order (and with more than 10 runs, only the newest 10 show); the fixture has an in-progress milestone newer than a done one
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1062
+gate_failures: []
+tokens: 1154746
+```
