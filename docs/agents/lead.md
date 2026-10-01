@@ -69,7 +69,12 @@ What developers pass at the first attempt, from results. Update it at each miles
 
 ## Escalations (headless or interactive)
 - Read the task, `BLOCKED.md` or the gate logs, the last diff and **the developer's thinking** (`thinking-N.md`) in `var/runs/<run>/<task>/`. The thinking shows why an attempt failed where the gate logs don't (m4-06). At checkpoints and reviews, read the code; read the thinking only when a finding needs explaining.
-- Choose one: repair or split the ticket (add facts, not a solution), answer the question in its Context, or do it yourself (hard or protected). Return the task to `ready/` or `done/`.
+- Choose one ([ADR 15](../adr/15-allowance-aware-routing.md) items 7 and 8):
+  - **finish**, first when the gates fail on a small, clear gap: `git checkout task/<id>` (main is already merged in), finish there and make `check-all --task <id>` pass. The runner merges it crediting you both. Check out nothing else, and only for `finish`: a job that leaves main otherwise gets its ticket blocked.
+  - repair or split the ticket (add facts, not a solution), or answer the question in its Context. The requeue builds on the branch; add `"reset": true` to `decision.json` only when that work is unusable.
+  - do it yourself on main (hard or protected).
+
+  Return the task to `ready/` or `done/`. In a direction, a first line `reset: true` likewise starts the last attempt from main; without it, the attempt builds on the branch.
 - After writing a ticket, run `uv run pytest -q tests/runner/test_tasks.py`: only your ticket in `ready/` must be clean (the `escalated/` copy still fails until the runner removes it). A requeue of f1-15 wrote a bare `conftest.py`, its tasks-only commit skipped the hook, and the next run failed pre-flight, spending an escalation. Keep a requeue to docs and tasks: any code change makes the runner run `check-all` while the bad `escalated/` copy is still there, which fails and blocks the task.
 - Turn the lesson into a check, a worked example or a `developer.md` note, in that order of preference.
 - Check every fact in a direction or a ticket's Context against the code before you write it: the developer trusts it over what it reads. In f1-34 a direction said one job matched a filter; the fixture chain had two, and the developer spent an attempt on a wrong expected list. The requeue then claimed 16 jobs where the page had 12 (`runner.metrics` upserts on each table's key), and the developer spent three attempts trying to reconcile it. Check a count against something that ran (a test's output, an existing assertion such as "200 of 217"), not only against reading the fixtures.

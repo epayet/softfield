@@ -57,6 +57,24 @@ def merge_message(task: Task, rec: TaskRecord, model: str, changes: Sequence[Fil
     return "\n".join(lines)
 
 
+def finish_message(task: Task, model: str, changes: Sequence[FileChange]) -> str:
+    """The squash-merge of a developer's branch the lead finished after an escalation."""
+    lines = [
+        _subject(f"{task.id}: {task.goal}"),
+        "",
+        task.goal,
+        "",
+        f"Started by the local model ({model}) via the runner; finished by the lead on its"
+        " branch after an escalation (check-all green).",
+        "",
+        "Changed:",
+        *_changes(changes),
+        "",
+        f"Spec: tasks/done/{task.path.name}",
+    ]
+    return "\n".join(lines)
+
+
 def done_message(task_id: str, rec: TaskRecord) -> str:
     """Moving the task file to done/, right after its merge commit."""
     attempts = f"{rec.attempts} attempt{'s' if rec.attempts != 1 else ''}"

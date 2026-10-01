@@ -295,9 +295,9 @@ def test_a_requeued_task_gets_its_own_log_folder(tmp_path):
 
 def test_retry_prompt_ends_with_the_gate_output(repo: Path):
     task = parse_task(write_task(repo / "tasks" / "ready", "m1-01-thing"), 150)
-    first = loop._prompt(task, 1, None)
+    first = loop._prompt(task, None)
     assert "uv run runner check-all --fix --task m1-01-thing" in first
-    retry = loop._prompt(task, 2, GateResult("ruff", False, "tasks/ready/m1-01-thing.md"))
+    retry = loop._prompt(task, GateResult("ruff", False, "tasks/ready/m1-01-thing.md"))
     assert retry.index("### Goal") < retry.index("IMPORTANT")
     assert "uv run ruff check --fix" in retry  # the gate's hint
     assert retry.rstrip().endswith("tasks/ready/m1-01-thing.md\n```")
@@ -375,7 +375,7 @@ def test_the_lead_gives_direction_before_the_last_attempt(repo, fake_model, fake
 
     def follow(repo, prompt):
         assert prompt.rstrip().endswith("Leave coucou/secret.py alone: it is protected.")
-        _implement(repo, prompt)
+        _undo_and_implement(repo, prompt)  # attempt 2's work is still there (ADR 15 item 7)
 
     fake_model.extend([_stray, _stray, follow])
     script.append(direct)
@@ -403,7 +403,8 @@ def test_direction_can_repair_the_ticket(repo, fake_model, fake_lead):
 
     def follow(repo, prompt):
         assert "Fix it work." in prompt
-        _implement(repo, prompt)
+        assert "Fix it work." in (repo / "tasks" / "ready" / "m1-01-thing.md").read_text()
+        _undo_and_implement(repo, prompt)
 
     fake_model.extend([_stray, _stray, follow])
     script.append(repair)
@@ -428,7 +429,7 @@ def test_a_repair_that_fails_preflight_is_dropped(repo, fake_model, fake_lead):
 
     def follow(repo, prompt):
         assert "a.html" not in prompt and "Look at the template." in prompt
-        _implement(repo, prompt)
+        _undo_and_implement(repo, prompt)
 
     fake_model.extend([_stray, _stray, follow])
     script.append(repair)
@@ -573,6 +574,11 @@ def _escalate_on_protected(repo, fake_model) -> None:
     fake_model.extend([_stray, _stray, _stray])
 
 
+def _after(repo: Path, prompt: str) -> None:
+    """m1-02-after's work, once m1-01-thing is done."""
+    (repo / "coucou" / "after.py").write_text("")
+
+
 def test_escalations_past_the_limit_block_the_task_without_calling_claude(
     repo, fake_model, fake_lead
 ):
@@ -615,7 +621,7 @@ def test_a_requeued_ticket_keeps_its_escalated_footer(repo, fake_model, fake_lea
     """f0: the escalation rewrote the ticket, so its done/ file lost the 3 failed attempts
     and their tokens, and the metrics said "escalated: 0"."""
     _escalate_on_protected(repo, fake_model)
-    fake_model.extend([_implement, lambda repo_, _: (repo_ / "coucou" / "after.py").write_text("")])
+    fake_model.extend([_undo_and_implement, _after])  # the requeue continues the branch
     script, _ = fake_lead
     clean = (repo / "tasks" / "ready" / "m1-01-thing.md").read_text()
 
@@ -648,6 +654,186 @@ def test_a_decision_for_the_owner_is_recorded(repo, fake_model, fake_lead):
         "m1-01-thing": {"adr": "docs/adr/14-x.md", "question": "Keep originals?"}
     }
     assert (repo / "tasks" / "escalated" / "m1-01-thing.md").exists()
+
+
+# --- building on the work (ADR 15 items 7 and 8) -------------------------------------------
+
+
+def _progress(repo: Path, prompt: str) -> None:
+    _stray(repo, prompt)
+    (repo / "coucou" / "progress.py").write_text("STEP = 2\n")
+
+
+def _direction(text: str) -> Callable[[ClaudeJob, Path], None]:
+    def direct(job, repo_):
+        (repo_ / _logs_in(job.prompt) / "direction.md").write_text(text)
+
+    return direct
+
+
+def test_attempt_3_builds_on_attempt_2s_work(repo, fake_model, fake_lead):
+    """f1-34: every retry after attempt 2 began again from main, though attempt 3 was close."""
+    _add_task(repo, "m1-01-thing")
+    script, _ = fake_lead
+
+    def build_on(repo, prompt):
+        assert (repo / "coucou" / "progress.py").read_text() == "STEP = 2\n"
+        assert "has been reset" not in prompt and "still on this branch" in prompt
+        assert prompt.rstrip().endswith("Undo secret.py; keep progress.py.")
+        (repo / "coucou" / "secret.py").unlink()
+        _implement(repo, prompt)
+
+    fake_model.extend([_stray, _progress, build_on])
+    script.append(_direction("Undo secret.py; keep progress.py."))
+    report = _run(repo, once=True)
+    assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
+    assert (repo / "coucou" / "progress.py").is_file()
+
+
+def test_a_direction_that_says_reset_starts_attempt_3_from_main(repo, fake_model, fake_lead):
+    _add_task(repo, "m1-01-thing")
+    script, _ = fake_lead
+
+    def start_over(repo, prompt):
+        assert not (repo / "coucou" / "progress.py").exists()
+        assert not (repo / "coucou" / "secret.py").exists()
+        assert "The lead judged the work unusable" in prompt and "reset: true" not in prompt
+        assert prompt.rstrip().endswith("Start over from thing.py.")
+        _implement(repo, prompt)
+
+    fake_model.extend([_stray, _progress, start_over])
+    script.append(_direction("reset: true\nStart over from thing.py."))
+    report = _run(repo, once=True)
+    assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
+    assert not (repo / "coucou" / "progress.py").exists()
+
+
+def test_an_attempt_that_timed_out_before_its_first_edit_resets_the_branch(
+    repo, fake_model, fake_lead
+):
+    _add_task(repo, "m1-01-thing")
+    script, _ = fake_lead
+
+    def start_over(repo, prompt):
+        assert not (repo / "coucou" / "progress.py").exists()
+        assert "before its first edit, so the branch has been reset" in prompt
+        _implement(repo, prompt)
+
+    fake_model.extend([_progress, _timed_out, start_over])
+    script.append(_direction(""))  # a direction with nothing to say
+    report = _run(repo, once=True)
+    assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
+
+
+def _logs_of(job: ClaudeJob) -> str:
+    return job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
+
+
+def test_an_escalation_can_finish_the_work_on_the_branch(repo, fake_model, fake_lead, monkeypatch):
+    _escalate_on_protected(repo, fake_model)
+    fake_model.append(_after)
+    script, jobs = fake_lead
+
+    def finish(job, repo_):
+        assert "Bash(git checkout task/m1-01-thing:*)" in job.allowed_tools
+        assert job.prompt.index("finish") < job.prompt.index("requeue")
+        git(repo_, "checkout", "-q", "task/m1-01-thing")
+        # The branch has caught up with main: the escalated ticket is there.
+        assert (repo_ / "tasks" / "escalated" / "m1-01-thing.md").is_file()
+        (repo_ / "coucou" / "secret.py").unlink()
+        _implement(repo_, "")
+        (repo_ / _logs_of(job) / "decision.json").write_text('{"outcome": "finish"}')
+
+    script.extend([lambda job, repo_: None, finish])
+    calls = _passes(monkeypatch)
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert calls[0] == "m1-01-thing"  # check-all --task on the branch
+    assert git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+    assert not (repo / "coucou" / "secret.py").exists()
+    assert (repo / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert not (repo / "tasks" / "escalated" / "m1-01-thing.md").exists()
+    assert "task/m1-01-thing" not in git(repo, "branch")
+    merge = git(repo, "log", "--format=%H", "--grep=^m1-01-thing: ").split()[0]
+    body = git(repo, "log", "-1", "--format=%B", merge)
+    assert "Agent: claude-headless" in body and "Developer: local-model" in body
+    assert "Task: m1-01-thing" in body
+    rows = {t["ticket"]: t for t in _rows(repo, "tickets")}
+    assert (rows["m1-01-thing"]["state"], rows["m1-01-thing"]["merged_by"]) == (
+        "done",
+        "claude-opus",
+    )
+    assert rows["m1-01-thing"]["commit"] == merge
+    assert (repo / "tasks" / "done" / "m1-02-after.md").is_file()  # its dependant ran
+    assert [j.kind for j in jobs] == ["direction", "escalation"]
+
+
+def test_a_finish_that_fails_check_all_is_blocked_with_the_branch_kept(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+
+    def finish(job, repo_):
+        git(repo_, "checkout", "-q", "task/m1-01-thing")
+        _implement(repo_, "")
+        (repo_ / _logs_of(job) / "decision.json").write_text('{"outcome": "finish"}')
+
+    script.extend([lambda job, repo_: None, finish])
+    _passes(monkeypatch, ok=False)
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+    assert "raise NotImplementedError" in (repo / "coucou" / "thing.py").read_text()
+    assert "return 42" in git(repo, "show", "task/m1-01-thing:coucou/thing.py")
+    assert "task/m1-01-thing" in (repo / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+
+
+def _requeue(reset: bool) -> Callable[[ClaudeJob, Path], None]:
+    def requeue(job, repo_):
+        clean = (repo_ / "tasks" / "escalated" / "m1-01-thing.md").read_text()
+        ticket = clean.split("\n# --- runner ---", 1)[0].replace("Make the thing", "Requeued")
+        (repo_ / "tasks" / "ready" / "m1-01-thing.md").write_text(ticket + "\n")
+        decision = {"outcome": "requeue", **({"reset": True} if reset else {})}
+        (repo_ / _logs_of(job) / "decision.json").write_text(json.dumps(decision))
+
+    return requeue
+
+
+def test_a_requeued_ticket_continues_its_branch(repo, fake_model, fake_lead):
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+
+    def build_on(repo_, prompt):
+        assert (repo_ / "coucou" / "secret.py").is_file()  # the earlier run's work
+        assert "Requeued work." in prompt  # the requeued ticket, not the branch's old copy
+        assert "already holds an earlier run's work" in prompt and "coucou/secret.py" in prompt
+        (repo_ / "coucou" / "secret.py").unlink()
+        _implement(repo_, prompt)
+
+    fake_model.extend([build_on, _after])
+    script.extend([lambda job, repo_: None, _requeue(False), lambda job, repo_: None])
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert (repo / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+    assert not (repo / "coucou" / "secret.py").exists()
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_requeue_that_says_reset_starts_from_main(repo, fake_model, fake_lead):
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+
+    def fresh(repo_, prompt):
+        assert not (repo_ / "coucou" / "secret.py").exists()
+        assert "earlier run's work" not in prompt
+        _implement(repo_, prompt)
+
+    fake_model.extend([fresh, _after])
+    script.extend([lambda job, repo_: None, _requeue(True), lambda job, repo_: None])
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert (repo / "tasks" / "done" / "m1-01-thing.md").is_file()
 
 
 def _limited_then(monkeypatch, *outcomes):
@@ -1487,7 +1673,7 @@ def test_a_ticket_that_needs_a_direction_while_claude_is_limited_waits_parked(
 
     def follow(repo_: Path, prompt: str) -> None:
         assert prompt.rstrip().endswith("Leave coucou/secret.py alone: it is protected.")
-        _implement(repo_, prompt)
+        _undo_and_implement(repo_, prompt)
 
     monkeypatch.setattr(loop, "run_claude", run_claude)
     fake_model.extend([_stray, _stray, follow])

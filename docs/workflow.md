@@ -56,8 +56,9 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 7. **Fail:**
    - attempt 2: same branch; the prompt adds the gate's one-line hint (what to do) and its exact output. After a timeout it also says the attempt ran out of time; after an attempt that changed nothing, it says why (ran out of time, commands refused, or stopped early).
    - **the lead's direction** (ADR 12 item 6): before the last attempt, unless every failure was mechanical (`ruff`, `translations`, one empty attempt), a headless job reads the gate logs, the diff and the developer's thinking (copied read-only from OpenCode's `opencode.db` into the run logs) and writes a few lines of direction, no code. It may repair the ticket instead (committed on main). At most `directions_per_task` (1).
-   - attempt 3: reset the branch; fresh prompt plus "previous attempt failed because…" and the direction, last.
-   - still failing: move the task to `escalated/` with logs and the last diff, pause its dependants, continue with independent tasks
+   - attempt 3 ([ADR 15](adr/15-allowance-aware-routing.md) item 7): builds on the branch, with `main` merged in, plus the gate output and the direction, last. The branch resets to `main` only when the direction's `reset: true` line says the work is unusable (the developer doesn't see that line), or the previous attempt timed out before its first edit, or `main` no longer merges cleanly. The prompt says which: kept, or reset and why.
+   - still failing: move the task to `escalated/` with logs and the last diff, pause its dependants, continue with independent tasks. The branch is kept.
+   - **a requeued ticket continues its branch** (with `main` merged in), and its first prompt lists the files the earlier run changed, unless the escalation's `decision.json` says `"reset": true`, which deletes the branch.
    - the runner logs the longest run of edits without a command per task (in the report and the direction prompt); it doesn't stop on it yet.
 8. **`BLOCKED.md`** (categories in AGENTS.md):
    - `unrelated-problem`: append it to `docs/discoveries.md` and continue gating
@@ -67,9 +68,10 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 ## Escalation (headless Claude)
 
 - **When:** at most `escalations_per_task` (2) per task. Past that, the task goes to `tasks/blocked/` with its reason, its dependants pause, and the verdict names it.
-- **What Claude gets:** the task, `BLOCKED.md` or the gate logs, the last diff and the developer's thinking. Tools: Read/Edit/Write, `uv run pytest`/`ruff`/`mypy`/`runner check-all`, read-only git.
+- **What Claude gets:** the task, `BLOCKED.md` or the gate logs, the last diff and the developer's thinking; the runner first merges `main` into `task/<task>`. Tools: Read/Edit/Write, `uv run pytest`/`ruff`/`mypy`/`runner check-all`, read-only git, and `git checkout task/<task>` (that branch only).
 - **Its code must pass `check-all`** (ADR 12 item 11). If not, the work goes to the branch `escalation/<task>`, the task to `blocked/`, and nothing reaches main.
-- **Outcome:** a repaired or split ticket back in `ready/`, an answered question (facts added to Context), the lead doing the task itself, or **stop for the owner** (a draft ADR, only for what `docs/agents/lead.md` reserves for the owner; `decision.json` names the ADR and a one-line question, which the verdict shows). The lesson becomes a check, a worked example or a note in `docs/agents/developer.md`.
+- **`finish`** ([ADR 15](adr/15-allowance-aware-routing.md) item 8), first choice when the gates fail on a small, clear gap: the lead checks out `task/<task>` itself and finishes the work there. The runner commits it, runs `check-all --task <task>`, and squash-merges it as a developer pass: `Agent: claude-headless` with `Developer: local-model`, `Task:` and `Model:` trailers, and the ticket row's `merged_by` is the lead. The task moves to `done/`. If `check-all` fails, or the job left `main` without answering `finish` on that branch, the work stays on its branch and the task goes to `blocked/`.
+- **Outcome:** `finish`, a repaired or split ticket back in `ready/` (building on the branch unless `"reset": true`), an answered question (facts added to Context), the lead doing the task itself, or **stop for the owner** (a draft ADR, only for what `docs/agents/lead.md` reserves for the owner; `decision.json` names the ADR and a one-line question, which the verdict shows). The lesson becomes a check, a worked example or a note in `docs/agents/developer.md`.
 
 ## Milestone review loop
 
@@ -112,7 +114,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 |---|---|---|
 | Local model (merges and task-branch WIP) | `Coucou local model` | `Agent: local-model`, plus `Task:`, `Model:`, `Attempts:` on merges |
 | Runner bookkeeping | `Coucou runner` | `Agent: runner` |
-| Headless Claude (lead tickets, directions, checkpoints, escalations, reviews) | owner | `Agent: claude-headless` (plus `Task:` on a lead ticket's merge) |
+| Headless Claude (lead tickets, directions, checkpoints, escalations, reviews) | owner | `Agent: claude-headless` (plus `Task:` on a lead ticket's merge, and `Developer:`, `Task:`, `Model:` on a finished branch's merge) |
 | Interactive Claude | owner | `Co-Authored-By: Claude …` |
 | Owner (including `runner signoff`, `accept`, `reject`) | owner | none |
 

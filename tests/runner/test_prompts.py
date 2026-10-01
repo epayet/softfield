@@ -20,6 +20,16 @@ def test_the_finish_line_is_one_check_all_command(tmp_path: Path):
     assert "pipes (`|`), redirections\nand unknown flags are refused" in prompt
 
 
+def test_the_lead_may_reset_the_branch_and_an_escalation_may_finish_first():
+    """ADR 15 items 7 and 8: the next attempt builds on the branch unless the lead says reset."""
+    assert "reset: true" in prompts.DIRECTION
+    assert '"reset": true' in prompts.ESCALATION
+    options = prompts.ESCALATION.split("Do exactly one of:", 1)[1]
+    assert options.index("finish") < options.index("requeue") < options.index("implemented")
+    assert "git checkout task/{id}" in prompts.ESCALATION
+    assert "has been reset" not in prompts.RETRY
+
+
 def _prompt_texts() -> list[str]:
     texts: list[str] = []
     for value in vars(prompts).values():

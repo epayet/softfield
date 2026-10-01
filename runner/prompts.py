@@ -38,7 +38,7 @@ Gate output:
 
 FRESH = (
     """
-WARNING: a previous attempt failed the `{gate}` gate and the branch has been reset.
+WARNING: a previous attempt failed the `{gate}` gate. {branch}
 Don't repeat it. {hint}
 """
     + _NOT_YOURS
@@ -49,6 +49,21 @@ What went wrong last time:
 ```
 """
 )
+
+# ADR 15 item 7: the next attempt builds on the branch; it starts from main only when the work
+# is judged unusable, and the prompt says which happened.
+KEPT = "Your work so far is still on this branch: build on it."
+RESET = {
+    "direction": "The lead judged the work unusable, so the branch has been reset to main.",
+    "timeout": "It ran out of time before its first edit, so the branch has been reset to main.",
+    "conflict": "Its work clashed with newer changes on main, so the branch has been reset to"
+    " main.",
+}
+# A requeued ticket's first attempt, on the branch its earlier run left.
+EARLIER = """
+NOTE: this branch already holds an earlier run's work on this task, which the lead sent back
+with the ticket above. Check it and build on it. Files it changed: {files}
+"""
 
 # ADR 12 item 5: a retry after a timeout says so, before the gate output.
 TIMED_OUT = """
@@ -70,7 +85,7 @@ EMPTY = {
 # last, where the local model follows best.
 DIRECTED = (
     """
-WARNING: your previous attempts failed (last: the `{gate}` gate) and the branch has been reset.
+WARNING: your previous attempts failed (last: the `{gate}` gate). {branch}
 """
     + _NOT_YOURS
     + """
@@ -86,8 +101,8 @@ The lead read your work and your thinking, and says:
 
 DIRECTION = """\
 You are the lead. A developer (a local model) has failed task {id} twice; it gets one last
-attempt, on a fresh branch. Give it direction (ADR 12 item 6; docs/agents/lead.md,
-Escalations).
+attempt, which builds on its work on the branch. Give it direction (ADR 12 item 6; ADR 15
+item 7; docs/agents/lead.md, Escalations).
 
 - Task: {task}
 - Its work: branch task/{id} (`git diff main...task/{id}`) and {logs}/last.diff
@@ -97,6 +112,8 @@ Escalations).
 
 Write {logs}/direction.md: 3-8 lines addressed to the developer, saying what went wrong and the
 facts it is missing. No code: no snippets, no diffs, no reference implementation (ADR 07).
+If its work is unusable and the last attempt should start again from main, make the first line
+`reset: true` (the developer doesn't see that line).
 If the ticket itself is wrong (a missing or false fact, a protected file, something its tools
 can't do), also write {logs}/ticket.md: the whole corrected ticket, frontmatter included.
 Write nothing else. Read-only git (diff, log, show) is fine.
@@ -109,26 +126,32 @@ docs/agents/lead.md (Escalations).
 - Task: tasks/escalated/{id}.md
 - Why it was escalated: {reason}
 - Run logs: {logs}/ (OpenCode output, gate output, last.diff). The local model's work is on
-  branch task/{id}; you are on main.
+  branch task/{id}, with main merged in; you are on main.
 - The local model's thinking: {thinking}. Read it: it shows why, where the gate logs don't.
 
 Do exactly one of:
-1. requeue: repair or split the ticket and write the task file(s) to tasks/ready/
-   (docs/task-format.md). Add facts, not a solution.
-2. requeue: answer the model's question by adding the facts to the task's Context, and write
-   the task to tasks/ready/{id}.md.
-3. implemented: if the task is hard or protected, implement it yourself on main and make
+1. finish: when its gates fail on a small, clear gap, run `git checkout task/{id}`, finish the
+   work there and make `uv run runner check-all --task {id}` pass. The runner merges the
+   branch, crediting you both. Check out nothing else, and only for this outcome.
+2. requeue: repair or split the ticket and write the task file(s) to tasks/ready/
+   (docs/task-format.md). Add facts, not a solution. Its next run builds on the branch; if
+   the work there is unusable, add "reset": true to decision.json and it starts from main.
+3. requeue: answer the model's question by adding the facts to the task's Context, and write
+   the task to tasks/ready/{id}.md (as in 2, about the branch).
+4. implemented: if the task is hard or protected, implement it yourself on main and make
    `uv run pytest -q tests/unit tests/integration tests/runner` pass.
-4. owner: only for what docs/agents/lead.md reserves for the owner: draft an ADR in
+5. owner: only for what docs/agents/lead.md reserves for the owner: draft an ADR in
    docs/adr/ (status Proposed). The task and its dependants wait for the owner's decision.
 
 Code you change must pass `uv run runner check-all`; if it doesn't, none of it reaches main.
-Then write {logs}/decision.json as {{"outcome": "requeue" | "implemented" | "owner"}}, and
-for "owner" also {{"adr": "docs/adr/NN-slug.md", "question": "<one line for the owner>"}}
-and {logs}/escalation.md: 3-6 lines on what happened, what the local model got wrong, and
-the lesson. Turn the lesson into a check, an example or a line in docs/agents/developer.md
-(its budget is in lead.md), and say which. Read-only git (diff, log, show) is fine; don't
-commit and don't edit tasks/escalated/: the runner commits and moves files.
+Then write {logs}/decision.json as
+{{"outcome": "finish" | "requeue" | "implemented" | "owner"}}, for a requeue maybe with
+"reset": true, and for "owner" also {{"adr": "docs/adr/NN-slug.md", "question": "<one line
+for the owner>"}}, and {logs}/escalation.md: 3-6 lines on what happened, what the local
+model got wrong, and the lesson. Turn the lesson into a check, an example or a line in
+docs/agents/developer.md (its budget is in lead.md), and say which. Read-only git (diff, log,
+show) is fine; don't commit and don't edit tasks/escalated/: the runner commits and moves
+files.
 """
 
 LEAD_TICKET = """\

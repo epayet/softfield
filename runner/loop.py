@@ -45,6 +45,7 @@ from runner.gitops import (
     LOCAL_MODEL_AUTHOR,
     RUNNER_AUTHOR,
     Git,
+    GitError,
     with_trailers,
 )
 from runner.local_model import (
@@ -968,20 +969,75 @@ def _read_blocked(repo: Path) -> str | None:
 
 def _prompt(
     task: Task,
-    attempt: int,
     last: GateResult | None,
+    *,
     timed_out: bool = False,
     direction: str = "",
+    reset: str = "",
+    earlier: Collection[str] = (),
 ) -> str:
+    """The developer's prompt. A retry builds on the branch unless ``reset`` says why it was
+    reset (`prompts.RESET`); a requeued ticket's first attempt lists the ``earlier`` run's
+    files left on its branch."""
     if last is None:
-        return prompts.local_prompt(task)
+        extra = prompts.EARLIER.format(files=", ".join(earlier)) if earlier else ""
+        return prompts.local_prompt(task, extra)
+    branch = prompts.RESET[reset] if reset else prompts.KEPT
     if direction:
         template, hint = prompts.DIRECTED, ""
     else:
-        template = prompts.RETRY if attempt == 2 else prompts.FRESH
+        template = prompts.FRESH if reset else prompts.RETRY
         hint = HINTS.get(last.name, "")
-    extra = template.format(gate=last.name, hint=hint, output=last.output, direction=direction)
-    return prompts.local_prompt(task, (prompts.TIMED_OUT if timed_out else "") + extra)
+    extra = template.format(
+        gate=last.name, hint=hint, output=last.output, direction=direction, branch=branch
+    )
+    # After a reset there is nothing of the timed-out attempt left to keep
+    return prompts.local_prompt(
+        task, (prompts.TIMED_OUT if timed_out and not reset else "") + extra
+    )
+
+
+RESET_LINE = "reset: true"
+
+
+def split_reset(direction: str) -> tuple[str, bool]:
+    """A direction without its ``reset: true`` line, and whether it had one (ADR 15 item 7)."""
+    lines = direction.splitlines()
+    kept = [line for line in lines if line.strip().lower() != RESET_LINE]
+    return "\n".join(kept).strip(), len(kept) != len(lines)
+
+
+def _has_branch(git: Git, branch: str) -> bool:
+    return bool(git.run("branch", "--list", branch).strip())
+
+
+def _catch_up(s: Session, branch: str) -> bool:
+    """Check out ``branch`` with main merged in, so it holds the latest tickets and code (a
+    direction's repair, a requeue, other merges). False, back on main, if they clash."""
+    s.git.checkout(branch)
+    name, email = RUNNER_AUTHOR.removesuffix(">").split(" <")
+    message = with_trailers(f"runner: merge {MAIN} into {branch}", agent=RUNNER_AGENT)
+    try:
+        s.git.run(
+            *("-c", f"user.name={name}", "-c", f"user.email={email}"),
+            *("merge", "-q", "--no-verify", "--no-edit", "-m", message, MAIN),
+        )
+    except GitError:
+        s.git.run("merge", "--abort", check=False)
+        s.git.checkout(MAIN)
+        return False
+    return True
+
+
+def _start_attempt(s: Session, branch: str, reset: str) -> str:
+    """Put the ticket's branch in place for its next attempt: its work so far, caught up with
+    main, unless ``reset`` (why) asks for main itself. Returns why it was reset, if it was."""
+    if not reset and _has_branch(s.git, branch):
+        if _catch_up(s, branch):
+            return ""
+        reset = "conflict"
+    s.git.fresh_branch(branch, MAIN)
+    return reset
 
 
 # Failures the gate output explains by itself; anything else earns the lead's direction.
@@ -1191,13 +1247,14 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         timeouts = [bool(t) for t in directing["timeouts"]]
         rec.gate_failures = [str(g) for g in directing["gate_failures"]]
         rec.attempts, rec.timeouts = len(timeouts), sum(timeouts)
-    if rec.attempts:
-        s.git.checkout(branch)
-    else:
-        s.git.fresh_branch(branch, MAIN)
-    direction = ""
+    # A requeued ticket continues the branch its escalation kept (ADR 15 item 7).
+    resumed = not rec.attempts and _has_branch(s.git, branch)
+    _start_attempt(s, branch, "")
+    earlier = s.git.changed_files(MAIN) if resumed and s.git.current_branch() == branch else []
+    direction = pending = ""
     for attempt in range(rec.attempts + 1, s.cfg.max_attempts + 1):
         rec.attempts = attempt
+        reset, pending = pending, ""
         if (
             attempt == s.cfg.max_attempts
             and attempt > 1
@@ -1209,8 +1266,10 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             except Parked as parked:
                 _park_direction(s, task, rec, parked, branch, logs, timeouts, last)
                 return rec
-        if attempt >= 3:
-            s.git.fresh_branch(branch, MAIN)
+            direction, unusable = split_reset(direction)
+            reset = "direction" if unusable else reset
+        if reset or s.git.current_branch() != branch:  # a reset, or back from a repair on main
+            reset = _start_attempt(s, branch, reset)
         rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
         _check_context(s)
         log = logs / f"opencode-{attempt}.jsonl"
@@ -1240,7 +1299,14 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             s.repo,
             s.cfg.opencode_model,
             f"{task.id} attempt {attempt}",
-            _prompt(task, attempt, last, bool(timeouts and timeouts[-1]), direction),
+            _prompt(
+                task,
+                last,
+                timed_out=bool(timeouts and timeouts[-1]),
+                direction=direction,
+                reset=reset,
+                earlier=earlier,
+            ),
             s.cfg.opencode_timeout,
             log,
             on_progress=partial(attempt_progress, s, job_id, what, log, Ticker()),
@@ -1270,7 +1336,9 @@ def run_task(s: Session, task: Task) -> TaskRecord:
                 _finish_escalation(s, task, rec, f"BLOCKED: {category}", logs, blocked_text)
                 return rec
 
-        local_wip_commit(s, f"wip {task.id} attempt {attempt}")
+        edited = local_wip_commit(s, f"wip {task.id} attempt {attempt}")
+        if run.timed_out and not edited:  # its work so far is judged unusable (ADR 15 item 7)
+            pending = "timeout"
         started = time.monotonic()
         if s.git.changed_files(MAIN):
             context = GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout)
@@ -1510,6 +1578,10 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         return
     s.state.escalations[task.id] = used + 1
     save_state(s.state, s.state_path)
+    branch = f"task/{task.id}"
+    # The branch gets main (the escalated ticket, newer code), for a lead that finishes it.
+    if _has_branch(s.git, branch) and _catch_up(s, branch):
+        s.git.checkout(MAIN)
     rec_sessions = [p for p in sorted(logs.glob("thinking-*.md"))]
     job = ClaudeJob(
         kind="escalation",
@@ -1520,7 +1592,13 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
             thinking=", ".join(p.relative_to(s.repo).as_posix() for p in rec_sessions)
             or "not available",
         ),
-        allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
+        # `finish` checks out the ticket's branch itself: only that one (ADR 15 item 8)
+        allowed_tools=(
+            *EDIT_TOOLS,
+            *CHECK_TOOLS,
+            *GIT_READ_TOOLS,
+            f"Bash(git checkout {branch}:*)",
+        ),
     )
     decision_path = logs / "decision.json"
     call_claude(
@@ -1536,6 +1614,10 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     except (OSError, json.JSONDecodeError):
         decision = {}
     outcome = decision.get("outcome")
+    on = s.git.current_branch()
+    if outcome == "finish" or on != MAIN:
+        _finish_branch(s, task, logs, job, outcome, on)
+        return
     # Its work reaches main only if every check passes (ADR 12 item 11).
     if not _only_docs_and_tasks(s) and not _check_all(s, None, logs, "check-all.txt"):
         branch = f"escalation/{task.id}"
@@ -1551,6 +1633,9 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         if requeued.is_file():
             carry_footers(escalated, requeued)
         s.git.run("rm", "-q", str(escalated.relative_to(s.repo)))
+        # Its next run builds on the branch, unless the lead found the work unusable
+        if decision.get("reset") is True and _has_branch(s.git, branch):
+            s.git.run("branch", "-D", branch)
     elif outcome == "implemented":
         s.git.move(escalated, s.tasks_dir("done") / task.path.name)
     elif outcome == "owner":
@@ -1573,6 +1658,60 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         record_ticket(s, done, merged_by=claude_agent(s, job), commit=s.git.head())
     elif outcome == "requeue" and (s.tasks_dir("ready") / task.path.name).is_file():
         record_ticket(s, s.tasks_dir("ready") / task.path.name)
+
+
+def _finish_branch(
+    s: Session, task: Task, logs: Path, job: ClaudeJob, outcome: str | None, on: str
+) -> None:
+    """An escalation that finished the developer's work on ``task/<id>`` (ADR 15 item 8):
+    squash-merged as `_merge` does once `check-all --task` passes, crediting the lead (who
+    merged it) and the developer (a trailer). Anything else off main is kept and blocked."""
+    branch = f"task/{task.id}"
+    escalated = s.tasks_dir("escalated") / task.path.name
+    if on == MAIN:  # "finish" without checking the branch out: its edits stay off main
+        on = f"escalation/{task.id}"
+        s.git.run("checkout", "-q", "-B", on)
+    s.git.commit_all(
+        with_trailers(
+            f"escalation {task.id}: {outcome or 'no decision'} (by Claude)",
+            agent=CLAUDE_HEADLESS_AGENT,
+        )
+    )
+    why = ""
+    if outcome != "finish" or on != branch:
+        why = f"the escalation answered {outcome or 'nothing'} on {on}, not finish on {branch}"
+    elif not s.git.changed_files(MAIN):
+        why = f"the finished {branch} changes nothing"
+    elif not _check_all(s, task.id, logs, "check-all.txt"):
+        why = "the finished work failed check-all"
+    if why:
+        s.git.checkout(MAIN)
+        block(s, escalated, f"{why}; its work is on {on}")
+        return
+    changes = s.git.numstat(MAIN)
+    commit = s.git.squash_merge(
+        branch,
+        MAIN,
+        with_trailers(
+            messages.finish_message(task, s.cfg.lm_model, changes),
+            agent=CLAUDE_HEADLESS_AGENT,
+            developer=LOCAL_MODEL_AGENT,
+            task=task.id,
+            model=s.cfg.lm_model,
+        ),
+    )
+    target = s.tasks_dir("done") / task.path.name
+    s.git.move(escalated, target)
+    append_footer(target, {"result": "done", "finished_by": "lead"})
+    notes = logs / "escalation.md"
+    if notes.is_file():
+        s.report.notes.append(f"Escalation {task.id} (finish): " + notes.read_text().strip())
+    runner_commit(s, f"runner: {task.id} done, finished by the lead, merged as {commit[:9]}")
+    merger = claude_agent(s, job)
+    record_ticket(s, target, merged_by=merger, commit=commit)
+    s.git.run("branch", "-D", branch)
+    lines = s.git.commit_size(commit)
+    s.log(console.merged(merger, task.id, 1, lines, clock() - s.ticket_started))  # its one job
 
 
 # --- parking and the reserve (ADR 15 items 4, 5 and 10) --------------------------------
