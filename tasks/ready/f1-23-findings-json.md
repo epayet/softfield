@@ -1,7 +1,7 @@
 ---
 id: f1-23-findings-json
 milestone: f1
-depends_on: [f1-20-agents-config]
+depends_on: [f1-20-agents-config, f1-41-scores-and-project-crumb-fix]
 agent: lead
 difficulty: 6
 files:
