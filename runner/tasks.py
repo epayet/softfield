@@ -42,6 +42,11 @@ def milestone_key(value: object) -> str:
     raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
 
 
+def command_arg(milestone: str) -> str:
+    """What the owner types: ``4`` for m4 (as before), ``f1`` for f1."""
+    return milestone[1:] if milestone.startswith("m") and milestone[1:].isdigit() else milestone
+
+
 def _key_parts(key: str) -> tuple[str, int]:
     match = _KEY_RE.fullmatch(key)
     if match is None:

@@ -1,8 +1,11 @@
 """The owner's commands exit 0 when ready, 2 when something needs them, 1 on an error."""
 
+import os
+
 import pytest
 
-from runner import cli, owner
+from runner import cli, loop, owner
+from runner.milestone import RESTART
 
 
 @pytest.fixture
@@ -43,6 +46,60 @@ def test_milestone_takes_a_number_or_a_key(in_repo, monkeypatch, arg, key):
     monkeypatch.setattr(owner, "record_verdict", lambda repo, text: None)
     assert cli.main(["milestone", arg]) == 0
     assert seen == [(key, f"{key}-start")]
+
+
+class Restarted(Exception):
+    pass
+
+
+def test_a_yes_to_the_reserve_survives_the_self_restart_but_not_a_new_command(in_repo, monkeypatch):
+    """The owner, 2026-10-01: a yes lasts for the running command only, restarts included."""
+    seen: list[bool] = []
+    envs: list[dict[str, str]] = []
+
+    def run(cfg, key, base):
+        seen.append(loop.RESERVE.yes)
+        if len(seen) == 1:
+            loop.RESERVE.yes = True  # the owner answered y, then a lead ticket changed runner/
+            return RESTART
+        return "clean"
+
+    def execve(path, args, env):
+        envs.append(dict(env))
+        raise Restarted
+
+    monkeypatch.setattr(cli, "run_milestone", run)
+    monkeypatch.setattr(os, "execve", execve)
+    monkeypatch.setattr(owner, "verdict", lambda repo, k, state, stop, db: (0, "V\n"))
+    monkeypatch.setattr(owner, "record_verdict", lambda repo, text: None)
+    monkeypatch.delenv(loop.RESERVE_ENV, raising=False)
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
+    with pytest.raises(Restarted):
+        cli.main(["milestone", "1"])
+    # The restarted process: its modules fresh, the environment the restart gave it.
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
+    monkeypatch.setenv(loop.RESERVE_ENV, envs[0][loop.RESERVE_ENV])
+    assert cli.main(["milestone", "1"]) == 0
+    assert loop.RESERVE_ENV not in os.environ  # its children don't inherit the yes
+    # The owner's next command, after a Ctrl-C.
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
+    assert cli.main(["milestone", "1"]) == 0
+    assert seen == [False, True, False]
+
+
+def test_a_restart_without_a_yes_passes_none_on(in_repo, monkeypatch):
+    envs: list[dict[str, str]] = []
+
+    def execve(path, args, env):
+        envs.append(dict(env))
+        raise Restarted
+
+    monkeypatch.setattr(cli, "run_milestone", lambda cfg, key, base: RESTART)
+    monkeypatch.setattr(os, "execve", execve)
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
+    with pytest.raises(Restarted):
+        cli.main(["milestone", "1"])
+    assert loop.RESERVE_ENV not in envs[0]
 
 
 def test_a_bad_milestone_name_is_an_error(in_repo, capsys):

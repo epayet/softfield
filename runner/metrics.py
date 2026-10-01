@@ -543,6 +543,17 @@ def add_usage_event(
     return _upsert(conn, "usage_events", conflict, key, _given(value=value, resets_at=resets_at))
 
 
+def latest_readings(conn: sqlite3.Connection, agent_prefix: str) -> dict[str, sqlite3.Row]:
+    """Each window's latest reading by any agent named ``agent_prefix…``: Claude's windows are
+    the account's, whichever model's job read them (f1-44)."""
+    rows = conn.execute(
+        "SELECT * FROM usage_events WHERE kind = 'reading' AND agent LIKE ? AND \"window\""
+        " IS NOT NULL ORDER BY at, id",
+        (f"{agent_prefix}%",),
+    )
+    return {row["window"]: row for row in rows}
+
+
 def upsert_owner_item(
     conn: sqlite3.Connection,
     project_id: int,

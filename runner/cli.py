@@ -7,7 +7,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from runner import backfill, checks, copilot, i18n, metrics, owner, report
+from runner import backfill, checks, copilot, i18n, loop, metrics, owner, report
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
@@ -93,6 +93,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     dashboard.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     args = parser.parse_args(argv)
+    # A yes to Claude's reserve, handed on by this command's own restart (below); taken out
+    # so that nothing this process starts inherits it (ADR 15 item 5).
+    if os.environ.pop(loop.RESERVE_ENV, None) == "1":
+        loop.RESERVE.yes = True
 
     repo = _repo()
     cfg = load_config(repo)
@@ -111,7 +115,10 @@ def main(argv: list[str] | None = None) -> int:
                 # An escalation changed the runner: carry on in a fresh process (ADR 12).
                 print("runner: the runner's code changed; restarting.", flush=True)
                 argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
-                os.execv(sys.executable, argv_again)  # noqa: S606 - our own interpreter and args
+                env = dict(os.environ)
+                if loop.RESERVE.yes:  # the owner's yes lasts for the whole command
+                    env[loop.RESERVE_ENV] = "1"
+                os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
             state = load_state(cfg.runs_dir / "state.json")
             code, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
             owner.record_verdict(repo, text)

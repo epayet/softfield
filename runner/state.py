@@ -21,10 +21,14 @@ class State:
     # The job running now (ADR 15 item 11): kind ("local" or a Claude job's), ticket, branch,
     # agent, job_id, session_id, started. A Ctrl-C or a crash leaves it for the next run.
     in_flight: dict[str, Any] | None = None
-    # "kind:ticket or subject" -> {"session_id", "branch"}: a recovered Claude job, resumed on
-    # its next run ("" when no session id was known)
+    # "kind:ticket or subject" -> {"session_id", "branch", "cause"}: a recovered or parked
+    # Claude job, resumed on its next run ("" when no session id was known)
     interrupted: dict[str, dict[str, str]] = field(default_factory=dict)
     timed_out: dict[str, int] = field(default_factory=dict)  # task id -> attempts cut off
+    # task id -> {"kind", "branch", "session_id", "resets_at", …}: a ticket parked while Claude
+    # is limited (its job's kind, resumed first after the reset) or at its reserve ("reserve",
+    # with the owner's "text"; asked again by the next command). ADR 15 items 5 and 10.
+    parked: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def runs_used(self, milestone: str) -> int:
         return self.headless_runs.get(milestone, 0)

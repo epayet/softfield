@@ -1,5 +1,6 @@
 """The whole task loop on a real temporary git repo, with the model and command gates faked."""
 
+import io
 import json
 import sqlite3
 import threading
@@ -1360,3 +1361,242 @@ def test_an_interrupted_local_attempt_counts_as_timed_out(repo, fake_model, caps
     assert state.in_flight is None and state.timed_out == {}
     first = _rows(repo, "jobs")[0]
     assert (first["outcome"], first["note"]) == ("failed", "interrupted")
+
+
+# --- parking and the reserve (ADR 15 items 4, 5 and 10) ------------------------------------
+
+
+THURSDAY = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+
+
+@pytest.fixture
+def fake_clock(monkeypatch) -> list[datetime]:
+    """``loop.now`` reads the clock; a sleep moves it on, so a reset can pass in a test."""
+    clock = [THURSDAY]
+    slept: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        slept.append(seconds)
+        clock[0] += timedelta(seconds=seconds)
+
+    monkeypatch.setattr(loop, "now", lambda: clock[0])
+    monkeypatch.setattr("time.sleep", sleep)
+    return clock
+
+
+def _lead_writes(repo_: Path, name: str) -> None:
+    (repo_ / "coucou" / f"{name}.py").write_text(f"NAME = {name!r}\n")
+
+
+def test_a_limited_lead_ticket_parks_a_local_ticket_runs_and_it_resumes_after_the_reset(
+    repo, fake_model, fake_clock, monkeypatch, capsys
+):
+    """f1-03, 2026-09-30: a limit pause idled the GPU for 15 min (ADR 15 item 10)."""
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m1-02-thing")
+    _passes(monkeypatch)
+    resets = THURSDAY + timedelta(hours=1)
+    events: list[str] = []
+    resumed: list[tuple[str | None, str, str, str]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        if not events:
+            events.append("lead limited")
+            _lead_writes(repo_, "lead")
+            raise UsageLimited(resets, session_id="s1")
+        events.append("lead resumed")
+        branch = git(repo_, "rev-parse", "--abbrev-ref", "HEAD").strip()
+        last = git(repo_, "log", "-1", "--format=%s").strip()
+        resumed.append((resume, job.prompt, branch, last))
+        assert (repo_ / "coucou" / "lead.py").is_file()  # its work, kept on its branch
+        return ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+
+    def local(repo_: Path, prompt: str) -> None:
+        events.append("local ran")
+        assert loop.now() < resets  # while the lead ticket waits
+        _implement(repo_, prompt)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    fake_model.append(local)
+    report = _run(repo)
+    assert events == ["lead limited", "local ran", "lead resumed"]
+    [(resume, prompt, branch, last)] = resumed
+    assert resume == "s1" and "usage limit" in prompt
+    assert (branch, last) == ("task/m1-01-lead", "wip m1-01-lead (parked)")
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-02-thing", "done"),
+        ("m1-01-lead", "done"),
+    ]
+    assert fake_clock[0] > resets  # it slept until the reset, with nothing else to run
+    state = _state(repo)
+    assert state.parked == {} and state.interrupted == {} and state.in_flight is None
+    assert git(repo, "status", "--porcelain") == ""
+    first = _rows(repo, "jobs")[0]
+    assert (first["role"], first["outcome"], first["note"]) == ("lead-ticket", "failed", "parked")
+    out = capsys.readouterr().out
+    assert "⏸ [claude-opus] Claude usage limit, m1-01-lead parked · resumes 13:00" in out
+
+
+def test_a_ticket_that_needs_a_direction_while_claude_is_limited_waits_parked(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m1-02-thing")
+    _passes(monkeypatch)
+    resets = THURSDAY + timedelta(hours=1)
+    kinds: list[tuple[str, bool]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        kinds.append((job.kind, loop.now() > resets))
+        if job.kind == "lead-ticket" and len(kinds) == 1:
+            raise UsageLimited(resets, session_id="s1")
+        if job.kind == "direction":
+            assert resume is None and "usage limit" not in job.prompt  # it never started
+            logs = repo_ / _logs_in(job.prompt)
+            assert (logs / "gates-2.txt").is_file()
+            (logs / "direction.md").write_text("Leave coucou/secret.py alone: it is protected.")
+        else:
+            _lead_writes(repo_, "lead")
+        return ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+
+    def follow(repo_: Path, prompt: str) -> None:
+        assert prompt.rstrip().endswith("Leave coucou/secret.py alone: it is protected.")
+        _implement(repo_, prompt)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    fake_model.extend([_stray, _stray, follow])
+    report = _run(repo)
+    # The direction waited for the reset rather than letting attempt 3 go undirected.
+    assert kinds == [("lead-ticket", False), ("lead-ticket", True), ("direction", True)]
+    results = [(t.id, t.result, t.attempts) for t in report.tasks]
+    assert results == [("m1-01-lead", "done", 1), ("m1-02-thing", "done", 3)]
+    assert _state(repo).parked == {}
+    assert _state(repo).directions == {"m1-02-thing": 1}
+
+
+def _readings_at(repo: Path, week_used: float) -> None:
+    """Claude's latest readings, as f1-44 records them: the week resets on Monday."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    at = (THURSDAY - timedelta(hours=2)).isoformat()
+    monday = datetime(2026, 10, 5, 16, 0, tzinfo=UTC).isoformat()
+    soon = (THURSDAY + timedelta(hours=2)).isoformat()
+    for window, value, resets in (("five_hour", 0.07, soon), ("seven_day", week_used, monday)):
+        metrics.add_usage_event(
+            conn, "claude-sonnet", at, "reading", window=window, value=value, resets_at=resets
+        )
+    conn.close()
+
+
+@pytest.fixture
+def owner_answers(monkeypatch) -> tuple[list[str | None], list[float]]:
+    """The owner's answers at the console, in order; and the wait each question allowed."""
+    answers: list[str | None] = []
+    waits: list[float] = []
+
+    def read_answer(timeout: float) -> str | None:
+        waits.append(timeout)
+        return answers.pop(0)
+
+    monkeypatch.setattr(loop, "read_answer", read_answer)
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())  # a new command
+    return answers, waits
+
+
+QUESTION = (
+    "Claude is at its reserve (21% of the week left, resets Mon 5 Oct 16:00)."
+    " Use it for the rest of this run? [y/N]"
+)
+
+
+def test_a_lead_ticket_at_the_reserve_asks_and_a_yes_lasts_for_the_run(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch, capsys
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    _lead_task(repo, "m1-02-lead")
+    script, _ = fake_lead
+    script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
+    _passes(monkeypatch)
+    answers, waits = owner_answers
+    answers.append("y")
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done", "done"]
+    assert waits == [600]  # asked once, with 10 minutes to answer
+    assert QUESTION in capsys.readouterr().out
+    assert loop.RESERVE.yes
+
+
+def test_no_answer_at_the_reserve_parks_the_lead_ticket_for_the_owner(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m1-02-thing")
+    _, jobs = fake_lead
+    owner_answers[0].append(None)
+    fake_model.append(_implement)
+    report = _run(repo)
+    assert jobs == []  # the reserve wasn't touched
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-02-thing", "done")]
+    assert (repo / "tasks" / "ready" / "m1-01-lead.md").is_file()
+    assert _state(repo).parked["m1-01-lead"]["kind"] == "reserve"
+    [item] = _rows(repo, "owner_items")
+    assert (item["kind"], item["subject"]) == ("reserve", "m1-01-lead")
+    assert item["command"] == "uv run runner milestone 1" and item["resolved"] is None
+    assert "21% of the week left" in str(item["text"])
+    assert not loop.RESERVE.yes
+    assert fake_clock[0] == THURSDAY  # it didn't sleep till Monday for the owner
+
+
+def test_no_answer_holds_for_the_run_and_the_next_command_asks_again(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    _lead_task(repo, "m1-02-lead")
+    script, jobs = fake_lead
+    script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
+    _passes(monkeypatch)
+    answers, waits = owner_answers
+    answers.extend([None, "y"])
+    _run(repo)
+    assert jobs == [] and len(waits) == 1  # the second lead ticket wasn't asked about again
+    assert set(_state(repo).parked) == {"m1-01-lead", "m1-02-lead"}
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())  # a new process
+    report = _run(repo)  # as its owner item says: rerun the command
+    assert len(waits) == 2
+    assert [t.result for t in report.tasks] == ["done", "done"]
+    assert _state(repo).parked == {}
+
+
+@pytest.mark.parametrize("week_used", [0.1, 0.5])
+def test_a_lead_ticket_short_of_the_reserve_doesnt_ask(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch, week_used
+):
+    """0.5 on a Thursday is past the week's pace line, but not into the reserve."""
+    _readings_at(repo, week_used)
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"]
+    assert owner_answers[1] == []
+
+
+def test_support_roles_use_the_reserve_without_asking(
+    repo, fake_model, fake_lead, fake_clock, owner_answers
+):
+    _readings_at(repo, 0.95)
+    _escalate_on_protected(repo, fake_model)
+    script, jobs = fake_lead
+    script.append(lambda job, repo_: None)  # the direction
+    report = _run(repo)
+    assert [j.kind for j in jobs] == ["direction"]
+    assert report.tasks[0].result == "escalated"
+    assert owner_answers[1] == []
+
+
+def test_without_a_terminal_there_is_no_answer(monkeypatch):
+    monkeypatch.setattr("sys.stdin", io.StringIO("y\n"))  # piped, not typed by the owner
+    assert loop.read_answer(600) is None

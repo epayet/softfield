@@ -17,7 +17,7 @@ from runner import metrics
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.milestone import footer_fields
 from runner.state import State
-from runner.tasks import STOPPED, blocked_ids, load_dir
+from runner.tasks import STOPPED, blocked_ids, command_arg, load_dir
 
 # Review stops that need the owner, not another run (docs/workflow.md, review loop).
 OWNER_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone")
@@ -29,11 +29,6 @@ _TEST_STEPS = re.compile(r"^### \d+\. How to test it yourself\n(.*?)(?=^#|\Z)", 
 
 class OwnerError(RuntimeError):
     pass
-
-
-def command_arg(milestone: str) -> str:
-    """What the owner types: ``4`` for m4 (as before), ``f1`` for f1."""
-    return milestone[1:] if milestone.startswith("m") and milestone[1:].isdigit() else milestone
 
 
 def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
@@ -51,12 +46,28 @@ def _needs_owner(stop: str) -> bool:
 _ADR_NUMBER = re.compile(r"(?:^|/)(\d+)-[^/]*$")
 # The items a rerun of ``runner milestone`` can clear, by kind: whether the subject is a
 # ticket of the milestone (``m4-06-…``) or the milestone itself.
-_RERUN_KINDS = {"escalated": True, "blocked": True, "review-stop": False, "signoff": False}
+_RERUN_KINDS = {
+    "escalated": True,
+    "blocked": True,
+    "reserve": True,
+    "review-stop": False,
+    "signoff": False,
+}
+
+
+def _reserve_waits(state: State, milestone: str) -> list[tuple[str, str]]:
+    """The milestone's tickets parked at Claude's reserve with no answer (ADR 15 item 5), with
+    what the loop told the owner; a rerun asks again."""
+    return sorted(
+        (task_id, str(entry.get("text") or f"{task_id} waits for Claude's reserve"))
+        for task_id, entry in state.parked.items()
+        if entry.get("kind") == "reserve" and task_id.startswith(f"{milestone}-")
+    )
 
 
 @dataclass(frozen=True)
 class OwnerItem:
-    kind: str  # adr, escalated, blocked, review-stop, signoff
+    kind: str  # adr, escalated, blocked, reserve, review-stop, signoff
     subject: str  # the ADR's path, the ticket, or the milestone
     text: str
     command: str
@@ -80,6 +91,8 @@ def owner_items(repo: Path, milestone: str, state: State, review_stop: str) -> l
         path = repo / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         items.append(OwnerItem("blocked", task_id, f"{task_id} blocked: {reason}", rerun))
+    for task_id, text in _reserve_waits(state, milestone):
+        items.append(OwnerItem("reserve", task_id, text, rerun))
     if _needs_owner(review_stop):
         items.append(OwnerItem("review-stop", milestone, review_stop, rerun))
     return items
@@ -154,6 +167,7 @@ def verdict(
         path = repo / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         needs.append(f"  • {task_id} blocked: {reason}")
+    needs += [f"  • {text}" for _, text in _reserve_waits(state, milestone)]
     if _needs_owner(review_stop):
         needs.append(f"  • review stopped: {review_stop}")
     if needs:

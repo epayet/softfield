@@ -149,6 +149,29 @@ def test_the_verdicts_items_are_open_owner_items_with_a_command(repo: Path):
     assert [row["name"] for row in _projects(repo)] == [repo.name]
 
 
+RESERVE_TEXT = (
+    "m1-03-lead waits for Claude's reserve (21% of the week left, resets Mon 5 Oct 16:00):"
+    " rerun and answer y to use it"
+)
+
+
+def _reserve(text: str = RESERVE_TEXT) -> State:
+    """A lead ticket parked at the reserve with no answer (ADR 15 item 5)."""
+    entry = {"kind": "reserve", "resets_at": "2026-10-05T16:00:00+00:00", "text": text}
+    return State(parked={"m1-03-lead": entry, "m2-01-lead": {**entry, "text": "later"}})
+
+
+def test_a_ticket_waiting_for_the_reserve_needs_you_until_a_rerun_runs_it(repo: Path):
+    write_task(repo / "tasks" / "ready", "m1-03-lead")
+    code, text = owner.verdict(repo, "m1", _reserve(), "tickets paused: m1-03-lead", db=_db(repo))
+    assert code == 2 and f"  • {RESERVE_TEXT}" in text
+    assert "later" not in text  # another milestone's
+    item = _open(repo)[("reserve", "m1-03-lead")]
+    assert (item["text"], item["command"]) == (RESERVE_TEXT, "uv run runner milestone 1")
+    owner.verdict(repo, "m1", State(), "clean", db=_db(repo))
+    assert ("reserve", "m1-03-lead") not in _open(repo)
+
+
 def _projects(repo: Path) -> list[sqlite3.Row]:
     conn = sqlite3.connect(_db(repo))
     conn.row_factory = sqlite3.Row
