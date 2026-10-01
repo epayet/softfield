@@ -34,3 +34,10 @@ Read `docs/adr/14-developers-and-agents.md` items 2–4 and 11, its probe result
 - a Claude usage-limit message comes back as a refusal with its reset time
 - each job row carries the agent id its role resolved to
 - `uv run runner check-all --task f1-20-agents-config` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
