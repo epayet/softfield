@@ -32,3 +32,10 @@ Read `docs/adr/15-allowance-aware-routing.md` (Context's probe, items 3 and 4), 
 - a 429 in a stream still raises `UsageLimited` with its session, and a stream with no result event is transient
 - a job run through the loop writes its readings; writing the same readings twice changes nothing
 - `uv run runner check-all --task f1-44-claude-readings` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
