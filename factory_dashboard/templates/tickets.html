@@ -29,7 +29,7 @@
         <td>{{ t.state or "–" }}</td>
         <td class="num">{{ t.attempts }}</td>
         <td>{{ t.merged_by or "–" }}</td>
-        <td class="num">{{ t.lines_changed or "–" }}</td>
+        <td class="num">{{ t.lines_changed if t.lines_changed is not none else "–" }}</td>
       </tr>
       {% endfor %}
     </tbody>

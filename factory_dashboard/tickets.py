@@ -171,11 +171,29 @@ def ticket_jobs(conn: sqlite3.Connection, ticket_id: int) -> list[JobRow]:
     ]
 
 
-def ticket_findings(conn: sqlite3.Connection, milestone_id: int) -> list[FindingRow]:
-    """Findings on a milestone (ticket_id is empty for f1)."""
+def ticket_findings(
+    conn: sqlite3.Connection,
+    milestone_id: int,
+    *,
+    ticket_id: int | None = None,
+) -> list[FindingRow]:
+    """Findings on a milestone, optionally filtered to a specific ticket.
+
+    Findings with ``ticket_id`` set show only on that ticket;
+    milestone-wide findings (``ticket_id IS NULL``) show on every ticket.
+    """
+    conditions = ["milestone_id = ?"]
+    params: list[object] = [milestone_id]
+
+    if ticket_id is not None:
+        conditions.append("(findings.ticket_id = ? OR findings.ticket_id IS NULL)")
+        params.append(ticket_id)
+
+    where = " AND ".join(conditions)
+
     rows = conn.execute(
-        "SELECT key, severity, summary FROM findings WHERE milestone_id = ? ORDER BY id",
-        (milestone_id,),
+        f"SELECT key, severity, summary FROM findings WHERE {where} ORDER BY id",  # noqa: S608
+        tuple(params),
     ).fetchall()
     return [
         FindingRow(
@@ -235,7 +253,11 @@ def ticket_page(
     if ticket_row:
         jobs = ticket_jobs(conn, ticket_row["id"])
         if ticket_row["milestone_id"]:
-            findings = ticket_findings(conn, ticket_row["milestone_id"])
+            findings = ticket_findings(
+                conn,
+                ticket_row["milestone_id"],
+                ticket_id=ticket_row["id"],
+            )
 
     return render(
         request,

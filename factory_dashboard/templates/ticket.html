@@ -46,7 +46,7 @@
   <dl class="kv">
     <dt>State</dt><dd><span class="pill {% if ticket.state == 'done' %}good{% elif ticket.state == 'escalated' %}serious{% elif ticket.state == 'running' %}running{% else %}{% endif %}">{{ ticket.state or "–" }}</span></dd>
     {% if ticket.merged_by %}<dt>Merged by</dt><dd><span class="mono">{{ ticket.merged_by }}</span></dd>{% endif %}
-    {% if ticket.commit %}<dt>Commit</dt><dd><span class="mono">{{ ticket.commit[:12] }}…</span></dd>{% endif %}
+    {% if ticket.commit %}<dt>Commit</dt><dd><span class="mono">{{ ticket.commit }}</span></dd>{% endif %}
     {% if ticket.lines_changed is not none %}<dt>Lines changed</dt><dd class="num">{{ ticket.lines_changed }}</dd>{% endif %}
   </dl>
 </section>

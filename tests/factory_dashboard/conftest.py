@@ -600,6 +600,17 @@ def write_tickets(conn: sqlite3.Connection) -> None:
     )
     metrics.add_finding(conn, m4, "M4-F2", job_id=None, severity="nit", summary="Nitpick")
 
+    # Ticket-specific finding on ticket_b, for f1-36 testing
+    if ticket_b:
+        metrics.add_finding(
+            conn,
+            f1,
+            "TICKET-F1",
+            ticket_id=ticket_b,
+            severity="should-fix",
+            summary="ticket specific",
+        )
+
     # Live queue tickets (from write_live) so the list has all 9 f1 tickets.
     for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
         metrics.upsert_ticket(
