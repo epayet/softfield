@@ -32,3 +32,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - an unknown run is a 404
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1527
+gate_failures: []
+tokens: 2935386
+```
