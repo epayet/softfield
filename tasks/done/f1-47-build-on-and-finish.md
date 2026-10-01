@@ -36,3 +36,10 @@ Read `docs/adr/15-allowance-aware-routing.md` items 7 and 8, `docs/workflow.md` 
 - an escalation answering `finish` on a fake branch merges it, with both agents credited, and the ticket moves to `done/`
 - a requeued ticket's next run continues its branch
 - `uv run runner check-all --task f1-47-build-on-and-finish` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
