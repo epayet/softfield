@@ -14,6 +14,45 @@
           "reasoning": true
         }
       }
+    },
+    "ollama": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama Cloud (through the local daemon)",
+      "options": {
+        "baseURL": "http://127.0.0.1:11434/v1"
+      },
+      "models": {
+        "gpt-oss:20b-cloud": {
+          "name": "gpt-oss 20B (Ollama Cloud)",
+          "tool_call": true,
+          "reasoning": true
+        },
+        "gpt-oss:120b-cloud": {
+          "name": "gpt-oss 120B (Ollama Cloud)",
+          "tool_call": true,
+          "reasoning": true
+        },
+        "gemma4:31b-cloud": {
+          "name": "Gemma 4 31B (Ollama Cloud)",
+          "tool_call": true,
+          "reasoning": true
+        },
+        "nemotron-3-nano:30b-cloud": {
+          "name": "Nemotron 3 Nano 30B (Ollama Cloud)",
+          "tool_call": true,
+          "reasoning": true
+        },
+        "nemotron-3-super:cloud": {
+          "name": "Nemotron 3 Super (Ollama Cloud)",
+          "tool_call": true,
+          "reasoning": true
+        },
+        "nemotron-3-ultra:cloud": {
+          "name": "Nemotron 3 Ultra (Ollama Cloud)",
+          "tool_call": true,
+          "reasoning": true
+        }
+      }
     }
   },
   "model": "lmstudio/qwen/qwen3.6-35b-a3b",

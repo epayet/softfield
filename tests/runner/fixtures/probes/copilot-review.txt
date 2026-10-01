@@ -1,0 +1,6 @@
+- **`runner/copilot.py:51-55`** — If the counter file is unreadable or invalid JSON, the code resets usage to zero and overwrites it, allowing the daily cap to be bypassed.
+- **`runner/copilot.py:51-59`** — Counter updates are not atomic; concurrent reviews can all read the same count and exceed the daily cap.
+
+**`git log -1 --oneline`:** I could not run it. Error: `Permission to run this tool was denied due to the following rules: \`shell\``
+
+**Model:** Auto mode selects the model; I can’t provide the exact underlying model name.

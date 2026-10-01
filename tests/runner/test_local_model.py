@@ -1,6 +1,7 @@
 import itertools
 import json
 import sqlite3
+from pathlib import Path
 
 from runner.local_model import (
     StreamFacts,
@@ -38,6 +39,16 @@ def test_the_peak_context_counts_cached_input():
     cached = {"input": 100, "output": 5, "cache": {"read": 9000, "write": 400}}
     step = json.dumps({"type": "step_finish", "part": {"tokens": cached}})
     assert parse_events([_step(8000, 1), step]).peak == 9500
+
+
+def test_an_ollama_cloud_run_has_the_same_shape_as_lm_studios():
+    # f1-18's probe: `opencode run --format json -m ollama/gpt-oss:120b-cloud`
+    fixture = Path(__file__).parent / "fixtures" / "probes" / "opencode-ollama.jsonl"
+    lines = fixture.read_text(encoding="utf-8").splitlines()
+    assert parse_events(lines) == TokenTotals(
+        input=6536 + 1259, output=86 + 6, reasoning=0, steps=2, peak=1259 + 6608
+    )
+    assert stream_facts(lines).session_id == "ses_f07dc81a4ffe9DHBuzY59NV28i"
 
 
 def test_a_timeout_kills_the_whole_process_group(tmp_path):

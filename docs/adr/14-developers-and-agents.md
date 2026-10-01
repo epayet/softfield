@@ -148,3 +148,37 @@ The owner has two free allowances beyond Claude Pro and the local GPU, and wants
 - **Decided later, on evidence:**
   - cloud developers' place in `[roles]`, from their ratings
   - at the M5 review: whether Copilot takes `checkpoint`
+
+## Probe results (2026-10-01, f1-18)
+Facts only, by the lead, with the commands as run.
+
+### Ollama Cloud
+- **Login:** already signed in; `ollama run gpt-oss:20b-cloud "Say hi"` answered ("Hi! 👋", after a short thinking block). `ollama list` shows no cloud model: cloud tags need no pull, and `ollama ps` stays empty.
+- **Tags** (`ollama show <tag>`, all with completion, tools and thinking):
+
+  | tag | parameters | context | quantization |
+  |---|---|---|---|
+  | `gpt-oss:20b-cloud` | 20.9B | 131072 | MXFP4 |
+  | `gpt-oss:120b-cloud` | 116.8B | 131072 | MXFP4 |
+  | `gemma4:31b-cloud` | 32.7B (+ vision) | 262144 | BF16 |
+  | `nemotron-3-nano:30b-cloud` | 32B | 262144 | FP8 |
+  | `nemotron-3-super:cloud` | 120B | 262144 | NVFP4 |
+  | `nemotron-3-ultra:cloud` | 550B | 262144 | (not shown) |
+- **OpenCode:** `opencode.json` has an `ollama` provider (`@ai-sdk/openai-compatible`, `baseURL` `http://127.0.0.1:11434/v1`, i.e. the local daemon, which forwards `-cloud` tags with its login; no API key in the repo) listing the six tags. `opencode models ollama` lists them as `ollama/<tag>`; it also lists local `qwen3.5:*` tags from outside this repo's config.
+- **One run:** `opencode run --format json -m ollama/gpt-oss:120b-cloud --title probe-ollama "Read pyproject.toml and reply with the project's name only. Do not edit any file."` → one `read`, then "coucou"; 2 steps, ≈0.8 s from the first step's start to the last one's end. Saved as `tests/runner/fixtures/probes/opencode-ollama.jsonl`; its events have LM Studio's shape, so `parse_events` and `stream_facts` read it unchanged (input 7795, output 92, peak 7867, reasoning 0: gpt-oss's thinking isn't reported as reasoning tokens through this provider). OpenCode's `cost` is 0.
+- **Refusal (quota or limit):** not probed: none happened, and no command here shows one. Its shape is still unknown; the adapter must treat an unrecognised error from a cloud tag as a possible refusal until one is seen.
+- **Cost of the allowance:** not probed: neither `ollama` nor OpenCode reports it, and there's no usage API (Context). Only ollama.com's account page shows it.
+
+### Copilot CLI (through `runner/copilot.py`)
+- **Login:** logged in; `GET /copilot_internal/user` gives `access_type_sku: free_limited_copilot`, `cli_enabled: true`.
+- **Flags** (`uv run runner copilot-review --copilot-help`): those `review_command` uses all exist (`--prompt`, `--silent`, `--model`, `--deny-tool`, `--disable-builtin-mcps`, `--disallow-temp-dir`). Also useful for the adapter: `--output-format json` (JSONL), `--usage-output-file <file>` (final usage as JSON), `--max-ai-credits <n>`, `--no-custom-instructions` (else it loads AGENTS.md), `--no-ask-user`, `--available-tools`/`--excluded-tools`, `--reasoning-effort`, `--no-auto-update`. `--model auto` lets Copilot pick, and is the default.
+- **One review:** `uv run runner copilot-review "Read-only review of runner/copilot.py: … Then try to run the shell command 'git log -1 --oneline' … Finally state the exact model name …"` → two findings with file:line (the daily cap resets on an unreadable counter file; the count isn't atomic). Saved as `tests/runner/fixtures/probes/copilot-review.txt`. Reads worked with no `--allow-tool`.
+- **Deny rules held:** the shell command was refused: "Permission to run this tool was denied due to the following rules: `shell`".
+- **Models Free offers:** not found. With no `--model`, it said "Auto mode selects the model" and couldn't name it. `--model gpt-5-mini` and `--model no-such-model` both fail at once with `Error: Model "<name>" from --model flag is not available.` (exit 1), so a refused model name looks like a missing one. No models endpoint answered (`/copilot_internal/v2/models`: 404). The CLI's model picker, or a `--usage-output-file` run, is where to look next.
+- **Requests per prompt:** after the review, `quota_snapshots.chat` read `entitlement 200, quota_remaining 199.7, percent_remaining 99.8` with `token_based_billing: true`: Free is metered in fractional credits (200 a month here, not 50 requests), and the review used at most 0.3 of them (whether anything was used before this month's probe is unknown). The snapshot's timestamp didn't move after the next failed prompt, so it may lag. Two of today's three capped prompts were spent on the model names above.
+
+### Billing
+- **User:** `epayet` (`gh auth status`: github.com, token scopes `admin:public_key, gist, read:org, repo`).
+- `uv run runner github-get /users/epayet/settings/billing/usage` and `…/billing/premium_request/usage`: 404, with gh's note "This API operation needs the `user` scope". Whether they answer on Free is not probed: it needs the owner to run `gh auth refresh -h github.com -s user`.
+- **`uv run runner github-get /copilot_internal/user` answers on Free** with `quota_snapshots` (`chat`, `completions`: 2000, `premium_interactions`: 0) and `quota_reset_date: 2026-11-01`. It's undocumented and internal, but it is a usage reading for the Copilot adapter with today's scopes.
+- **Claude's usage endpoint:** not probed here (it would mean reading the OAuth token in a headless job).
