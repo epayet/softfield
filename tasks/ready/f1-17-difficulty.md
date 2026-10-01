@@ -1,7 +1,7 @@
 ---
 id: f1-17-difficulty
 milestone: f1
-depends_on: [f1-16-developer-rename]
+depends_on: [f1-16-developer-rename, f1-42-console-log]
 agent: lead
 difficulty: 4
 files:
