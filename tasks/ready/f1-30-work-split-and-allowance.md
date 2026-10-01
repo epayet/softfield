@@ -25,6 +25,7 @@ Read `docs/adr/15-allowance-aware-routing.md` item 13. Follow the worked example
   - shown as a stacked bar of lines by agent, plus a table
 - **Allowance before and after,** on the same page:
   - for each agent with readings, its `usage_events` of kind `reading` (f1-44: a `window` column, `value` from 0 to 1, `resets_at`) from the milestone's first job to its last, as a line per window on one timeline
+  - readings come from Claude (`five_hour`, `seven_day`, f1-44) and Copilot (`month`, f1-22); the Ollama agents have none (no usage API, f1-18's probe)
   - an agent with only refusals shows them as marks; one with none says "no data yet"
 - **Overview:** the same split for the current milestone, as one compact bar. It replaces Claude's allowance bar (`claude_allowance` in `factory_dashboard/overview.py`) with each window's latest reading and its reset.
 

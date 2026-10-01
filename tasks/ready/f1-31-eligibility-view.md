@@ -18,7 +18,7 @@ Stretch: the Agents page shows which roles each agent has earned by shadowing, a
 ### Context
 Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`, with the fixture database in `tests/factory_dashboard/conftest.py` (extend it when your page needs more rows). The tables and columns are in `runner/metrics.py` (read it; it is the lead's file, so don't change it). This ticket extends `factory_dashboard/agents.py`, already registered in `factory_dashboard/app.py`. `write_fixture`'s numbers are pinned by `tests/factory_dashboard/test_queries.py` and `tests/factory_dashboard/test_overview.py`: put the rows your page needs in a function of your own (as `write_live` is), not among f1's or m4's tickets and jobs.
 - The eligibility query is in `factory_dashboard/queries.py` (from f1-26); use it.
-- A panel, agents × shadowed roles: "eligible" or the reason it isn't yet (for example "reviewing 6 < 8"), and the number of shadow jobs behind it. The owner changes `[roles]` by hand at a milestone review; the page only says who qualifies.
+- A panel, agents × shadowed roles: "eligible" or the reason it isn't yet (for example "rating 6 < 8": each agent has one rating, `docs/adr/15-allowance-aware-routing.md` item 9), and the number of shadow jobs behind it. The owner changes `[roles]` by hand at a milestone review; the page only says who qualifies.
 
 **The dashboard is English-only: no gettext and no French.** Tests use `TestClient` and check the text the page shows, not only that it answers 200.
 
