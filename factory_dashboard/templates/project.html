@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}{{ project.name }} · Project · {{ project }}{% endblock %}
+{% block crumbs %}
+<span>{{ project.name }}</span>
+{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="about">
+  <h2>About</h2>
+  <dl class="kv">
+    <dt>Name</dt><dd><b>{{ project.name }}</b></dd>
+    {% if project.description %}
+    <dt>Description</dt><dd>{{ project.description }}</dd>
+    {% endif %}
+    {% if project.repo %}
+    <dt>Repo</dt><dd>{{ project.repo }}</dd>
+    {% endif %}
+  </dl>
+</section>
+
+<section id="milestones">
+  <h2>Milestones <span class="src">newest first</span></h2>
+  {% if milestones %}
+  <ul>
+    {% for m in milestones %}
+    <li><a href="/milestones/{{ m.key }}{{ q }}">{{ m.key | upper }}</a>: {{ m.status or "–" }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sub">No milestones yet.</p>
+  {% endif %}
+</section>
+
+<section id="runs">
+  <h2>Runs</h2>
+  {% if runs %}
+  <ul>
+    {% for r in runs %}
+    <li><a href="/runs/{{ r.run_dir }}{{ q }}">{{ r.run_dir }}</a></li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="sub">No runs yet.</p>
+  {% endif %}
+</section>
+
+</div>
+{% endblock %}

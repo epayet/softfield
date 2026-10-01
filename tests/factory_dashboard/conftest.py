@@ -741,6 +741,62 @@ def serve(db_path: Path) -> Callable[..., TestClient]:
     return make
 
 
+def write_project(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: a project with description and repo, milestones, and runs."""
+    metrics.upsert_project(
+        conn,
+        PROJECT,
+        repo="https://github.com/example/coucou",
+        description="A factory dashboard that measures itself.",
+    )
+    metrics.upsert_milestone(
+        conn,
+        metrics.upsert_project(conn, PROJECT),
+        "f1",
+        title="The factory measures itself",
+        status="done",
+        started=_at(timedelta(days=2)),
+    )
+    metrics.upsert_milestone(
+        conn,
+        metrics.upsert_project(conn, PROJECT),
+        "f2",
+        title="The factory reviews itself",
+        status="in progress",
+        started=_at(timedelta(days=1)),
+    )
+    metrics.upsert_run(
+        conn,
+        metrics.upsert_project(conn, PROJECT),
+        "20261001-100000",
+        command="milestone f1",
+        ended=_at(timedelta(hours=1)),
+    )
+    metrics.upsert_run(
+        conn,
+        metrics.upsert_project(conn, PROJECT),
+        "20260930-100000",
+        command="milestone f1",
+        ended=_at(timedelta(days=1)),
+    )
+
+
+@pytest.fixture
+def project_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_project``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_project(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
 @pytest.fixture
 def client(serve: Callable[..., TestClient]) -> TestClient:
     return serve()
