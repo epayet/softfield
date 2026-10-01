@@ -33,3 +33,12 @@ Read `factory_dashboard/milestones.py`, `factory_dashboard/timeline.py`, `factor
 - tests: the default page shows only the latest milestone's jobs; `?run=` shows only that run's; the running-job test fails if there is no running bar; the jobs table is read row by row (ticket, agent, outcome)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: invalid
+attempts: 2
+tokens: 6263211
+logs: var/runs/20260930-194445/f1-35-timeline-milestones-fixes
+```
