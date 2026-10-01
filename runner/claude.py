@@ -1,8 +1,8 @@
-"""Headless Claude (``claude -p``) on the owner's Pro login.
+"""Headless Claude (``claude -p``) on the owner's Pro login: the ``claude`` harness's adapter.
 
 The subprocess environment never carries API keys or base URLs, so a run can
-never fall back to API billing or to LM Studio. Usage limits pause the runner
-until the reset instead of retrying in a loop.
+never fall back to API billing or to LM Studio. A usage limit comes back as a
+refusal with its reset, and the loop waits or parks instead of retrying in a loop.
 """
 
 import json
@@ -11,26 +11,26 @@ import re
 import subprocess
 import time
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from runner.agents import ANY, Agent, JobResult, JobSpec, Reading, Refusal
+
 STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
 
-# Tools per job kind: the least each job needs. The runner commits; Claude never runs git.
-# A path-scoped file rule is `Edit(<glob>)`, which covers the Write tool too; `Write(<glob>)`
-# grants nothing (probed with claude -p, 2026-09-30).
+# Every job may read. A path-scoped file rule is `Edit(<glob>)`, which covers the Write tool
+# too; `Write(<glob>)` grants nothing (probed with claude -p, 2026-09-30).
 READ_TOOLS = ("Read", "Glob", "Grep")
-EDIT_TOOLS = (*READ_TOOLS, "Edit", "Write")
-CHECK_TOOLS = (
-    "Bash(uv run pytest:*)",
-    "Bash(uv run ruff:*)",
-    "Bash(uv run mypy:*)",
-    "Bash(uv run runner check-all:*)",  # never the owner's commands (signoff, accept)
-)
-GIT_READ_TOOLS = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
+EDIT_ANYWHERE = ("Edit", "Write")
+
+
+def allowed_tools(spec: JobSpec) -> tuple[str, ...]:
+    """A spec's tools as `--allowedTools`: reads, its edit globs, its command prefixes."""
+    edits = EDIT_ANYWHERE if ANY in spec.edit else tuple(f"Edit({glob})" for glob in spec.edit)
+    return (*READ_TOOLS, *edits, *(f"Bash({command}:*)" for command in spec.commands))
 
 
 @dataclass(frozen=True)
@@ -40,27 +40,6 @@ class ClaudeJob:
     allowed_tools: tuple[str, ...]
     permission_mode: str = "dontAsk"  # anything not in allowed_tools is denied, no prompts
     model: str = ""  # empty: Claude Code's default
-
-
-@dataclass(frozen=True)
-class Reading:
-    """One of Claude's allowance windows, from a stream's ``rate_limit_event`` (ADR 15 item 3)."""
-
-    window: str  # "five_hour" | "seven_day"
-    utilization: float  # the share used, 0–1
-    resets_at: datetime
-
-
-@dataclass(frozen=True)
-class ClaudeResult:
-    ok: bool
-    text: str
-    duration_s: float
-    usage: dict[str, int] = field(default_factory=dict)
-    num_turns: int = 0
-    session_id: str | None = None
-    cost_usd: float | None = None  # Claude Code's API-equivalent price (f1 D7)
-    readings: tuple[Reading, ...] = ()  # every window of every rate_limit_event, in order
 
 
 class UsageLimited(Exception):
@@ -241,7 +220,7 @@ def run_claude(
     log_path: Path,
     now: datetime,
     resume: str | None = None,
-) -> ClaudeResult:
+) -> JobResult:
     cmd = [
         "claude",
         "-p",
@@ -271,7 +250,7 @@ def run_claude(
         )
     except subprocess.TimeoutExpired:
         log_path.write_text("--- timed out ---\n", encoding="utf-8")
-        return ClaudeResult(ok=False, text="timed out", duration_s=time.monotonic() - started)
+        return JobResult(ok=False, text="timed out", duration_s=time.monotonic() - started)
     log_path.write_text(proc.stdout + "\n--- stderr ---\n" + proc.stderr, encoding="utf-8")
     duration = time.monotonic() - started
     stream = _parse_stream(proc.stdout, now)
@@ -295,7 +274,7 @@ def run_claude(
             raise UsageLimited(None, session_id, certain=False, readings=readings)
         if _transient(data, stream):
             raise TransientError(text.strip()[:200], session_id, readings)
-    return ClaudeResult(
+    return JobResult(
         ok=not is_error,
         text=text,
         duration_s=duration,
@@ -305,3 +284,36 @@ def run_claude(
         cost_usd=float(cost) if (cost := data.get("total_cost_usd")) is not None else None,
         readings=readings,
     )
+
+
+class ClaudeAdapter:
+    """A `JobSpec` as a `claude -p` job on the agent's model; a limit or a passing error
+    comes back as a result (ADR 15 item 12), with the session to resume."""
+
+    def run(
+        self, agent: Agent, spec: JobSpec, repo: Path, log_path: Path, now: datetime
+    ) -> JobResult:
+        job = ClaudeJob(spec.role, spec.prompt, allowed_tools(spec), model=agent.model)
+        try:
+            return run_claude(job, repo, spec.timeout, log_path, now, resume=spec.resume)
+        except UsageLimited as limit:
+            return JobResult(
+                ok=False,
+                text=str(limit),
+                duration_s=0.0,
+                refusal=Refusal(limit.window, limit.resets_at, limit.certain),
+                session_id=limit.session_id,
+                readings=limit.readings,
+            )
+        except TransientError as blip:
+            return JobResult(
+                ok=False,
+                text=str(blip),
+                duration_s=0.0,
+                transient=True,
+                session_id=blip.session_id,
+                readings=blip.readings,
+            )
+
+
+ADAPTER = ClaudeAdapter()

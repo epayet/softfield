@@ -1,0 +1,114 @@
+"""Agents, roles and the neutral job spec (ADR 14 items 2–4; ADR 15 items 2, 9 and 12).
+
+An agent is a harness plus a model, declared in workflow/runner.toml with its id
+(`<harness>-<model>`, D6) and one rating. A role names the agents that may do it. A job is
+a `JobSpec`; the adapter for its agent's harness translates the spec into that harness's
+tools, runs it, and returns a `JobResult` whose error is a limit, transient or a failure.
+The loop owns waiting, parking and retrying.
+"""
+
+import importlib
+from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
+from typing import Protocol, cast
+
+ANY = "**"  # an edit glob for the whole repo
+# Command prefixes a job may run; never the owner's commands (signoff, accept).
+CHECK_COMMANDS = ("uv run pytest", "uv run ruff", "uv run mypy", "uv run runner check-all")
+GIT_READ_COMMANDS = ("git diff", "git log", "git show")  # the runner commits, never a job
+
+# ADR 15 item 12's error classes
+LIMIT, TRANSIENT, FAILURE = "limit", "transient", "failure"
+
+
+@dataclass(frozen=True)
+class WindowSeed:
+    """A starting guess at one of an agent's allowance windows; learned after (ADR 15 item 2)."""
+
+    name: str  # "five_hour", "seven_day", "month", …
+    capacity: float | None = None  # None: unknown, used until refused
+
+
+@dataclass(frozen=True)
+class Agent:
+    id: str  # `<harness>-<model>` (D6)
+    harness: str  # "claude", "opencode", "copilot"
+    model: str  # as the harness names it
+    rating: int  # 1–10, the lead's estimate until results move it (ADR 15 item 9)
+    windows: tuple[WindowSeed, ...] = ()
+
+
+@dataclass(frozen=True)
+class JobSpec:
+    role: str  # an ADR 14 role: "direction", "checkpoint", "lead-ticket", …
+    prompt: str
+    timeout: int  # seconds
+    edit: tuple[str, ...] = ()  # globs it may write, ANY for anywhere; none: read-only
+    commands: tuple[str, ...] = ()  # command prefixes it may run
+    resume: str | None = None  # a session to carry on, where the harness keeps them
+
+    @property
+    def read_only(self) -> bool:
+        return not self.edit
+
+
+@dataclass(frozen=True)
+class Reading:
+    """One of an agent's allowance windows as its harness reported it (ADR 15 item 3)."""
+
+    window: str  # "five_hour" | "seven_day"
+    utilization: float  # the share used, 0–1
+    resets_at: datetime
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """A job stopped by a limit. ``certain`` is False when the error only looks like one."""
+
+    window: str | None
+    resets_at: datetime | None
+    certain: bool = True
+
+
+@dataclass(frozen=True)
+class JobResult:
+    ok: bool
+    text: str
+    duration_s: float
+    usage: dict[str, int] = field(default_factory=dict)  # tokens, by kind
+    requests: float = 0.0  # for a harness metered in requests
+    cost_usd: float | None = None  # the harness's API-equivalent price (f1 D7)
+    refusal: Refusal | None = None
+    transient: bool = False  # a lost connection, an overload, a server error
+    num_turns: int = 0
+    session_id: str | None = None
+    readings: tuple[Reading, ...] = ()  # every window reading, in order
+
+    @property
+    def error(self) -> str | None:
+        if self.ok:
+            return None
+        if self.refusal is not None:
+            return LIMIT
+        return TRANSIENT if self.transient else FAILURE
+
+
+class Adapter(Protocol):
+    def run(
+        self, agent: Agent, spec: JobSpec, repo: Path, log_path: Path, now: datetime
+    ) -> JobResult: ...
+
+
+class UnknownHarness(KeyError):
+    pass
+
+
+# A harness's adapter is its module's ``ADAPTER``, imported when first asked for.
+HARNESSES = {"claude": "runner.claude"}
+
+
+def adapter_for(harness: str) -> Adapter:
+    if harness not in HARNESSES:
+        raise UnknownHarness(f"no adapter for the harness {harness!r}")
+    return cast(Adapter, importlib.import_module(HARNESSES[harness]).ADAPTER)

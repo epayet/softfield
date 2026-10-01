@@ -4,8 +4,8 @@ import sqlite3
 
 import pytest
 
-from runner import loop, milestone
-from runner.claude import ClaudeResult
+from runner import claude, milestone
+from runner.agents import JobResult
 from runner.gates import GateResult
 from runner.milestone import (
     footer_fields,
@@ -191,9 +191,9 @@ def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypat
         (repo_ / out[1]).write_text(json.dumps({"findings": rounds.pop(0), "stop": None}))
         (repo_ / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
         (repo_ / "docs" / "reviews" / "m1.md").write_text(REVIEW_DOC)
-        return ClaudeResult(ok=True, text="", duration_s=1.0)
+        return JobResult(ok=True, text="", duration_s=1.0)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
     assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
     [row] = _rows(repo, "milestones")

@@ -5,12 +5,26 @@ from pathlib import Path
 
 import pytest
 
+from runner.agents import (
+    ANY,
+    CHECK_COMMANDS,
+    FAILURE,
+    GIT_READ_COMMANDS,
+    LIMIT,
+    TRANSIENT,
+    Agent,
+    JobResult,
+    JobSpec,
+    Reading,
+    Refusal,
+)
 from runner.claude import (
+    ADAPTER,
     STRIPPED_ENV,
     ClaudeJob,
-    Reading,
     TransientError,
     UsageLimited,
+    allowed_tools,
     backoff_seconds,
     claude_env,
     run_claude,
@@ -64,15 +78,134 @@ def test_backoff_grows_and_caps():
     ]
 
 
-def test_path_scoped_write_rules_use_edit(repo, monkeypatch):
+def test_path_scoped_write_rules_use_edit():
     """`Write(<glob>)` grants nothing to claude -p; `Edit(<glob>)` covers Write too."""
-    import inspect
+    tools = allowed_tools(JobSpec("direction", "Direct.", timeout=1, edit=("var/runs/**",)))
+    assert "Edit(var/runs/**)" in tools
+    assert not [t for t in tools if t.startswith("Write")]
 
-    from runner import loop
 
-    source = inspect.getsource(loop)
-    assert '"Write(' not in source
-    assert '"Edit(var/runs/**)"' in source
+# Today's jobs' --allowedTools, as they were written out before the neutral spec (f1-20).
+_READ = ("Read", "Glob", "Grep")
+_EDIT = (*_READ, "Edit", "Write")
+_CHECK = (
+    "Bash(uv run pytest:*)",
+    "Bash(uv run ruff:*)",
+    "Bash(uv run mypy:*)",
+    "Bash(uv run runner check-all:*)",
+)
+_GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
+
+
+@pytest.mark.parametrize(
+    ("spec", "today"),
+    [
+        (
+            JobSpec("direction", "", 1, edit=("var/runs/**",), commands=GIT_READ_COMMANDS),
+            (*_READ, *_GIT, "Edit(var/runs/**)"),
+        ),
+        (
+            JobSpec(
+                "lead-ticket",
+                "",
+                1,
+                edit=(ANY,),
+                commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, "gh api"),
+            ),
+            (*_EDIT, *_CHECK, *_GIT, "Bash(gh api:*)"),
+        ),
+        (
+            JobSpec(
+                "checkpoint",
+                "",
+                1,
+                edit=("tasks/ready/**", "docs/agents/developer.md", "var/runs/**"),
+                commands=(*GIT_READ_COMMANDS, "uv run pytest"),
+            ),
+            (
+                *_READ,
+                *_GIT,
+                "Bash(uv run pytest:*)",
+                "Edit(tasks/ready/**)",
+                "Edit(docs/agents/developer.md)",
+                "Edit(var/runs/**)",
+            ),
+        ),
+        (
+            JobSpec(
+                "escalation",
+                "",
+                1,
+                edit=(ANY,),
+                commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, "git checkout task/x"),
+            ),
+            (*_EDIT, *_CHECK, *_GIT, "Bash(git checkout task/x:*)"),
+        ),
+        (
+            JobSpec("review", "", 1, edit=(ANY,), commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS)),
+            (*_EDIT, *_CHECK, *_GIT),
+        ),
+        (JobSpec("narrative", "", 1, edit=(ANY,)), _EDIT),
+        (JobSpec("review", "", 1), _READ),
+    ],
+)
+def test_a_spec_becomes_the_same_allowed_tools_as_todays_jobs(spec, today):
+    tools = allowed_tools(spec)
+    assert sorted(tools) == sorted(today)
+    assert len(set(tools)) == len(tools)
+
+
+def _adapter_run(tmp_path, spec: JobSpec, model: str = "opus") -> JobResult:
+    agent = Agent("claude-opus", "claude", model, rating=9)
+    return ADAPTER.run(agent, spec, tmp_path, tmp_path / "log", NOW)
+
+
+def test_the_adapter_runs_the_agents_model_with_the_specs_tools(tmp_path, monkeypatch):
+    seen = _fake_claude(monkeypatch, '{"result": "ok", "session_id": "s1"}', returncode=0)
+    spec = JobSpec("review", "Review.", 10, commands=GIT_READ_COMMANDS, resume="s0")
+    result = _adapter_run(tmp_path, spec, model="sonnet")
+    cmd = seen[0]
+    assert cmd[cmd.index("--model") + 1] == "sonnet"
+    assert cmd[cmd.index("--resume") + 1] == "s0"
+    assert cmd[cmd.index("--allowedTools") + 1 :] == [*_READ, *_GIT]
+    assert "`git diff`, `git log`, `git show`" in cmd[cmd.index("-p") + 1]  # the shell note
+    assert (result.ok, result.error, result.session_id) == (True, None, "s1")
+
+
+def test_a_usage_limit_message_comes_back_as_a_refusal_with_its_reset(tmp_path, monkeypatch):
+    out = '{"is_error": true, "result": "You\'ve hit your limit · resets 5pm", "session_id": "s1"}'
+    _fake_claude(monkeypatch, out)
+    result = _adapter_run(tmp_path, JobSpec("lead-ticket", "Do it.", 10))
+    assert (result.ok, result.error, result.session_id) == (False, LIMIT, "s1")
+    assert result.refusal == Refusal(None, NOW.replace(hour=17))
+
+
+def test_a_refusal_keeps_its_window_and_readings(tmp_path, monkeypatch):
+    windows = {"five_hour": {"utilization": 1.0, "resetsAt": 1790883600}}
+    stream = "\n".join(
+        [
+            _event(status="rejected", rateLimitType="five_hour", unifiedWindows=windows),
+            '{"type": "result", "is_error": true, "api_error_status": 429, "result": "Slow"}',
+        ]
+    )
+    _fake_stream(monkeypatch, stream, returncode=1)
+    result = _adapter_run(tmp_path, JobSpec("lead-ticket", "Do it.", 10))
+    assert result.refusal == Refusal("five_hour", None)
+    assert [r.window for r in result.readings] == ["five_hour"]
+
+
+def test_an_unrecognised_limit_is_an_uncertain_refusal(tmp_path, monkeypatch):
+    _fake_claude(monkeypatch, '{"is_error": true, "result": "Weekly quota exhausted"}')
+    result = _adapter_run(tmp_path, JobSpec("lead-ticket", "Do it.", 10))
+    assert result.refusal == Refusal(None, None, certain=False)
+
+
+def test_a_dropped_connection_is_transient_and_an_ordinary_error_a_failure(tmp_path, monkeypatch):
+    _fake_claude(monkeypatch, "Error: getaddrinfo ENOTFOUND api.anthropic.com")
+    assert _adapter_run(tmp_path, JobSpec("review", "Review.", 10)).error == TRANSIENT
+    _fake_claude(monkeypatch, '{"is_error": true, "result": "Tool failed"}')
+    failed = _adapter_run(tmp_path, JobSpec("review", "Review.", 10))
+    assert (failed.error, failed.text) == (FAILURE, "Tool failed")
 
 
 def test_a_job_with_bash_is_told_how_to_call_it():

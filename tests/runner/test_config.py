@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from runner.config import load_config, read_protected
+import pytest
+
+from runner.agents import Agent, WindowSeed
+from runner.config import ConfigError, load_config, read_protected
 from runner.gates import touching_protected
 
 REPO = Path(__file__).resolve().parents[2]
@@ -55,6 +58,69 @@ def test_claudes_reserve_is_read_from_the_toml(tmp_path):
     toml = repo / "workflow" / "runner.toml"
     toml.write_text(toml.read_text().replace("reserve = 0.3", "reserve = 0.4"))
     assert load_config(repo).claude_reserve == 0.4
+
+
+def test_the_repos_toml_declares_f1s_agents_and_roles():
+    """ADR 14 item 3, D6: f1 keeps today's assignment; the checkpoint model is now a role."""
+    cfg = load_config(REPO)
+    local, opus, sonnet = "local-qwen3.6-35b-a3b", "claude-opus", "claude-sonnet"
+    assert cfg.agents[local] == Agent(local, "opencode", "lmstudio/qwen/qwen3.6-35b-a3b", 5)
+    assert (cfg.agents[opus].harness, cfg.agents[opus].model) == ("claude", "opus")
+    assert (cfg.agents[sonnet].harness, cfg.agents[sonnet].model) == ("claude", "sonnet")
+    assert all(1 <= agent.rating <= 10 for agent in cfg.agents.values())
+    assert dict(cfg.roles) == {
+        "developer": (local,),
+        "last-attempt": (local,),
+        "direction": (opus,),
+        "escalation": (opus,),
+        "lead-ticket": (opus,),
+        "review": (opus,),
+        "narrative": (opus,),
+        "checkpoint": (sonnet,),
+    }
+    assert cfg.agent_for("checkpoint").id == sonnet
+    assert not hasattr(cfg, "checkpoint_model")
+
+
+AGENTS_TOML = """
+[agents.claude-opus]
+harness = "claude"
+model = "opus"
+rating = 10
+
+[agents.copilot-auto]
+harness = "copilot"
+model = "auto"
+rating = 6
+windows = [{ name = "month", capacity = 200 }]
+"""
+
+
+def test_an_agents_windows_are_seeds(tmp_path):
+    """ADR 15 item 2: config values only seed a new agent's windows."""
+    cfg = load_config(_repo(tmp_path, AGENTS_TOML + '[roles]\nreview = ["claude-opus"]\n'))
+    assert cfg.agents["copilot-auto"].windows == (WindowSeed("month", 200.0),)
+    assert cfg.agents["claude-opus"].windows == ()
+
+
+def test_a_role_naming_an_undeclared_agent_is_a_config_error(tmp_path):
+    repo = _repo(tmp_path, AGENTS_TOML + '[roles]\nreview = ["claude-opus", "claude-haiku"]\n')
+    with pytest.raises(ConfigError, match=r"review.*claude-haiku"):
+        load_config(repo)
+
+
+@pytest.mark.parametrize("rating", ["0", "11", '"high"', "{ coding = 6 }"])
+def test_an_agent_has_one_rating_from_1_to_10(tmp_path, rating):
+    """ADR 15 item 9: one rating per agent, no longer coding and reviewing."""
+    toml = AGENTS_TOML.replace("rating = 10", f"rating = {rating}")
+    with pytest.raises(ConfigError, match="claude-opus"):
+        load_config(_repo(tmp_path, toml))
+
+
+def test_a_role_with_no_agent_is_a_config_error_when_asked_for(tmp_path):
+    cfg = load_config(_repo(tmp_path, AGENTS_TOML))
+    with pytest.raises(ConfigError, match="checkpoint"):
+        cfg.agent_for("checkpoint")
 
 
 def test_security_tests_and_the_leads_docs_are_protected():

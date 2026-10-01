@@ -12,8 +12,9 @@ from pathlib import Path
 
 import pytest
 
-from runner import checks, gates, loop, metrics
-from runner.claude import ClaudeJob, ClaudeResult, Reading, TransientError, UsageLimited
+from runner import checks, claude, gates, loop, metrics
+from runner.agents import Agent, JobResult, JobSpec, Reading
+from runner.claude import ClaudeJob, TransientError, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
@@ -43,8 +44,25 @@ def _config(repo: Path) -> Config:
         backoff_max=2,
         narrative=False,
         metrics_db=repo / "var" / "factory-metrics.sqlite",  # never the real one
-        checkpoint_model="sonnet",
+        agents={a.id: a for a in AGENTS},
+        roles=ROLES,
     )
+
+
+AGENTS = (
+    Agent("local-m", "opencode", "lmstudio/m", 5),
+    Agent("claude-opus", "claude", "opus", 9),
+    Agent("claude-sonnet", "claude", "sonnet", 7),
+)
+ROLES = {
+    "developer": ("local-m",),
+    "last-attempt": ("local-m",),
+    "checkpoint": ("claude-sonnet",),
+    **{
+        role: ("claude-opus",)
+        for role in ("direction", "escalation", "lead-ticket", "review", "narrative")
+    },
+}
 
 
 @pytest.fixture
@@ -339,9 +357,9 @@ def fake_lead(monkeypatch):
     def run_claude(job, repo, timeout, log_path, now, resume=None):
         jobs.append(job)
         script.pop(0)(job, repo)
-        return ClaudeResult(ok=True, text="", duration_s=1.0)
+        return JobResult(ok=True, text="", duration_s=1.0)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     return script, jobs
 
 
@@ -847,18 +865,18 @@ def _limited_then(monkeypatch, *outcomes):
             raise outcome
         return outcome
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     monkeypatch.setattr("time.sleep", lambda seconds: None)
     return calls
 
 
-def _job() -> ClaudeJob:
-    return ClaudeJob(kind="lead-ticket", prompt="Do the ticket.", allowed_tools=("Read",))
+def _job() -> JobSpec:
+    return JobSpec("lead-ticket", "Do the ticket.", timeout=1)
 
 
 def test_a_job_cut_off_by_a_usage_limit_resumes_its_session(repo, monkeypatch):
     """f1: a lead ticket stopped mid-way by a limit carries on where it was, after the reset."""
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
     calls = _limited_then(monkeypatch, UsageLimited(None, session_id="s1"), done)
     s = loop.open_session(_config(repo))
     assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
@@ -868,8 +886,8 @@ def test_a_job_cut_off_by_a_usage_limit_resumes_its_session(repo, monkeypatch):
 
 
 def test_a_session_that_cant_resume_starts_afresh_told_about_its_partial_work(repo, monkeypatch):
-    lost = ClaudeResult(ok=False, text="No conversation found", duration_s=1.0, num_turns=0)
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    lost = JobResult(ok=False, text="No conversation found", duration_s=1.0, num_turns=0)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     calls = _limited_then(monkeypatch, UsageLimited(None, session_id="s1"), lost, done)
     s = loop.open_session(_config(repo))
     assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
@@ -898,7 +916,7 @@ def test_a_known_limit_without_a_time_retries_every_backoff_min_without_giving_u
 ):
     """f1: the wait was exponential (15 min, 30, 60 … 5 h), overshooting a 5 h window by hours.
     A refused call costs nothing, so retry at the minimum every time."""
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
     limited = UsageLimited(None, session_id="s1")
     calls = _limited_then(monkeypatch, limited, limited, limited, limited, limited, done)
     slept = _sleeps(monkeypatch)
@@ -909,7 +927,7 @@ def test_a_known_limit_without_a_time_retries_every_backoff_min_without_giving_u
 
 
 def test_a_dropped_connection_resumes_after_short_waits(repo, monkeypatch):
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4, session_id="s1")
     blip = TransientError("Connection error.", session_id="s1")
     calls = _limited_then(monkeypatch, blip, blip, done)
     slept = _sleeps(monkeypatch)
@@ -1052,9 +1070,9 @@ def test_every_claude_job_writes_a_row_and_keeps_its_own_log(repo, monkeypatch):
         log_path.write_text(job.kind)
         logs.append(log_path)
         usage = {"input_tokens": 10, "output_tokens": 5, "cache_read_input_tokens": 100}
-        return ClaudeResult(ok=True, text="", duration_s=1.0, usage=usage, cost_usd=0.75)
+        return JobResult(ok=True, text="", duration_s=1.0, usage=usage, cost_usd=0.75)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     s = loop.open_session(_config(repo))
     kinds: list[tuple[str, str | None]] = [
         ("direction", "m1-01-thing"),
@@ -1066,8 +1084,7 @@ def test_every_claude_job_writes_a_row_and_keeps_its_own_log(repo, monkeypatch):
         ("narrative", None),
     ]
     for kind, ticket in kinds:
-        job = ClaudeJob(kind, "Do it.", ("Read",), model="sonnet" if kind == "checkpoint" else "")
-        loop.call_claude(s, job, "m1", ticket or kind, ticket=ticket)
+        loop.call_claude(s, JobSpec(kind, "Do it.", timeout=1), "m1", ticket or kind, ticket=ticket)
     jobs = _rows(repo, "jobs")
     assert [j["role"] for j in jobs] == [kind for kind, _ in kinds]
     assert [j["agent"] for j in jobs] == ["claude-opus"] * 3 + ["claude-sonnet"] + [
@@ -1084,9 +1101,38 @@ def test_every_claude_job_writes_a_row_and_keeps_its_own_log(repo, monkeypatch):
     assert [p.read_text() for p in logs] == [kind for kind, _ in kinds]
 
 
+def test_a_job_runs_and_records_the_agent_its_role_resolves_to(repo, monkeypatch):
+    """ADR 14 item 3: `[roles]` decides who does a job, and its row says who did."""
+    models: list[str] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        models.append(job.model)
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    roles = {**ROLES, "review": ("claude-sonnet",), "checkpoint": ("claude-opus",)}
+    s = loop.open_session(replace(_config(repo), roles=roles))
+    for role in ("review", "checkpoint"):
+        loop.call_claude(s, JobSpec(role, "Do it.", timeout=1), "m1", role)
+    assert [j["agent"] for j in _rows(repo, "jobs")] == ["claude-sonnet", "claude-opus"]
+    assert models == ["sonnet", "opus"]
+
+
+def test_a_developer_attempt_records_its_roles_agent(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+    cfg = _config(repo)
+    other = Agent("local-other", "opencode", "lmstudio/other", 5)
+    cfg = replace(
+        cfg, agents={**cfg.agents, other.id: other}, roles={**ROLES, "developer": (other.id,)}
+    )
+    fake_model.append(_implement)
+    loop.run_session(cfg, once=True, dry_run=False, escalate=False)
+    assert [(j["role"], j["agent"]) for j in _rows(repo, "jobs")] == [("developer", "local-other")]
+
+
 def test_a_usage_limit_pause_is_a_refusal_event(repo, monkeypatch):
     resets = loop.now() + timedelta(hours=1)
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), done)
     s = loop.open_session(_config(repo))
     loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
@@ -1106,7 +1152,7 @@ def test_a_jobs_readings_are_usage_events_and_the_same_readings_twice_change_not
     """f1-44: Claude's allowance, as each job's stream reports it (ADR 15 item 3)."""
     at = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
     monkeypatch.setattr(loop, "now", lambda: at)
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, readings=_readings(0.07, 0.79))
+    done = JobResult(ok=True, text="", duration_s=1.0, readings=_readings(0.07, 0.79))
     _limited_then(monkeypatch, done, done)
     s = loop.open_session(_config(repo))
     for _ in range(2):
@@ -1123,7 +1169,7 @@ def test_a_jobs_readings_are_usage_events_and_the_same_readings_twice_change_not
 def test_a_refusal_names_its_window_and_keeps_the_readings_before_it(repo, monkeypatch):
     resets = loop.now() + timedelta(hours=1)
     limit = UsageLimited(resets, "s1", window="five_hour", readings=_readings(1.0, 0.5))
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     _limited_then(monkeypatch, limit, done)
     s = loop.open_session(_config(repo))
     loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
@@ -1300,9 +1346,9 @@ def test_a_claude_job_past_10_minutes_prints_progress(repo, monkeypatch, capsys)
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         time.sleep(0.2)
-        return ClaudeResult(ok=True, text="Sorted it.\nDetails.", duration_s=1.0, cost_usd=1.5)
+        return JobResult(ok=True, text="Sorted it.\nDetails.", duration_s=1.0, cost_usd=1.5)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     s = loop.open_session(_config(repo))
     loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
     out = capsys.readouterr().out
@@ -1317,9 +1363,9 @@ def test_a_claude_job_summary_comes_from_its_note(repo, monkeypatch, capsys):
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         note.write_text("\nRequeued with the missing unit.\n")
-        return ClaudeResult(ok=True, text="Done, see the note.", duration_s=1.0)
+        return JobResult(ok=True, text="Done, see the note.", duration_s=1.0)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     s = loop.open_session(_config(repo))
     loop.call_claude(s, _job(), "m1", "m1-01-lead", notes=(repo / "var" / "decision.json", note))
     out = capsys.readouterr().out
@@ -1329,7 +1375,7 @@ def test_a_claude_job_summary_comes_from_its_note(repo, monkeypatch, capsys):
 def test_a_usage_limit_pause_prints_the_resume_time(repo, monkeypatch, capsys):
     fixed = datetime(2026, 10, 1, 18, 0).astimezone()
     monkeypatch.setattr(loop, "now", lambda: fixed)
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     _limited_then(monkeypatch, UsageLimited(fixed + timedelta(hours=1)), done)
     s = loop.open_session(_config(repo))
     loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
@@ -1362,9 +1408,9 @@ def test_the_heartbeat_advances_while_a_claude_job_blocks(repo, monkeypatch, fas
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         seen.update(_heartbeats(repo, 0.5, time.sleep))
-        return ClaudeResult(ok=True, text="", duration_s=1.0)
+        return JobResult(ok=True, text="", duration_s=1.0)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     s = loop.open_session(_config(repo))
     loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
     loop._finish_run(s, "done")
@@ -1372,7 +1418,7 @@ def test_the_heartbeat_advances_while_a_claude_job_blocks(repo, monkeypatch, fas
 
 
 def test_the_heartbeat_advances_during_a_usage_limit_pause(repo, monkeypatch, fast_beat):
-    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     _limited_then(monkeypatch, UsageLimited(None), done)
     real_sleep, seen = time.sleep, set()
 
@@ -1408,10 +1454,10 @@ def test_a_failing_heartbeat_is_noted_once_and_the_run_goes_on(repo, monkeypatch
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         time.sleep(0.3)
-        return ClaudeResult(ok=True, text="", duration_s=1.0)
+        return JobResult(ok=True, text="", duration_s=1.0)
 
     monkeypatch.setattr(metrics, "update_run_heartbeat", broken)
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     s = loop.open_session(_config(repo))
     assert loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead").ok
     loop._finish_run(s, "done")
@@ -1469,7 +1515,7 @@ def test_an_interrupted_lead_ticket_is_committed_to_its_branch_and_resumed(
         _implement(repo_, "")
         raise outcomes.pop(0)
 
-    monkeypatch.setattr(loop, "run_claude", write_then_blip)
+    monkeypatch.setattr(claude, "run_claude", write_then_blip)
     with pytest.raises(RuntimeError, match="Ctrl-C"):
         _run(repo)
     flight = _state(repo).in_flight
@@ -1491,9 +1537,9 @@ def test_an_interrupted_lead_ticket_is_committed_to_its_branch_and_resumed(
         last = git(repo_, "log", "-1", "--format=%s").strip()
         resumed.append((resume, job.prompt, branch, last))
         assert "return 42" in (repo_ / "coucou" / "thing.py").read_text()
-        return ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
 
-    monkeypatch.setattr(loop, "run_claude", carry_on)
+    monkeypatch.setattr(claude, "run_claude", carry_on)
     capsys.readouterr()
     report = _run(repo)
     [(resume, prompt, branch, last)] = resumed
@@ -1517,9 +1563,9 @@ def test_an_interrupted_job_on_main_is_kept_on_its_own_branch(repo, monkeypatch)
         (repo_ / "coucou" / "fix.py").write_text("FIXED = True\n")
         raise RuntimeError("crash")
 
-    monkeypatch.setattr(loop, "run_claude", write_then_crash)
+    monkeypatch.setattr(claude, "run_claude", write_then_crash)
     s = loop.open_session(_config(repo), None)
-    review = ClaudeJob(kind="review", prompt="Review it.", allowed_tools=("Read",))
+    review = JobSpec("review", "Review it.", timeout=1)
     with pytest.raises(RuntimeError, match="crash"):
         loop.call_claude(s, review, "m1", "m1-review-r1")
     assert _state(repo).in_flight is not None
@@ -1534,7 +1580,7 @@ def test_an_interrupted_job_on_main_is_kept_on_its_own_branch(repo, monkeypatch)
         "review:m1-review-r1": {"session_id": "", "branch": "interrupted/review-m1"}
     }
 
-    calls = _limited_then(monkeypatch, ClaudeResult(ok=True, text="", duration_s=1.0))
+    calls = _limited_then(monkeypatch, JobResult(ok=True, text="", duration_s=1.0))
     loop.call_claude(s, review, "m1", "m1-review-r1")
     [(prompt, resume)] = calls
     assert resume is None  # no session id was known: it starts again, told where its work is
@@ -1621,14 +1667,14 @@ def test_a_limited_lead_ticket_parks_a_local_ticket_runs_and_it_resumes_after_th
         last = git(repo_, "log", "-1", "--format=%s").strip()
         resumed.append((resume, job.prompt, branch, last))
         assert (repo_ / "coucou" / "lead.py").is_file()  # its work, kept on its branch
-        return ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
 
     def local(repo_: Path, prompt: str) -> None:
         events.append("local ran")
         assert loop.now() < resets  # while the lead ticket waits
         _implement(repo_, prompt)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     fake_model.append(local)
     report = _run(repo)
     assert events == ["lead limited", "local ran", "lead resumed"]
@@ -1669,13 +1715,13 @@ def test_a_ticket_that_needs_a_direction_while_claude_is_limited_waits_parked(
             (logs / "direction.md").write_text("Leave coucou/secret.py alone: it is protected.")
         else:
             _lead_writes(repo_, "lead")
-        return ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
 
     def follow(repo_: Path, prompt: str) -> None:
         assert prompt.rstrip().endswith("Leave coucou/secret.py alone: it is protected.")
         _undo_and_implement(repo_, prompt)
 
-    monkeypatch.setattr(loop, "run_claude", run_claude)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     fake_model.extend([_stray, _stray, follow])
     report = _run(repo)
     # The direction waited for the reset rather than letting attempt 3 go undirected.

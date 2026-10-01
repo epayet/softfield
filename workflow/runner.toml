@@ -25,8 +25,37 @@ base_url = "http://127.0.0.1:1234"
 model = "qwen/qwen3.6-35b-a3b"          # LM Studio key; its settings are used as-is (JIT)
 opencode_model = "lmstudio/qwen/qwen3.6-35b-a3b"
 
+# Agents are a harness plus a model, with one rating from 1 to 10: the lead's estimate until
+# results move it (ADR 14 items 2–3, ADR 15 item 9). Ids follow D6 in docs/milestones/f1.md.
+# `windows = [{ name = "month", capacity = 200 }]` seeds an agent's allowance (ADR 15 item 2).
+[agents."local-qwen3.6-35b-a3b"]       # quoted: a bare key would split at the dot
+harness = "opencode"
+model = "lmstudio/qwen/qwen3.6-35b-a3b"
+rating = 5
+
+[agents.claude-sonnet]
+harness = "claude"
+model = "sonnet"
+rating = 7
+
+[agents.claude-opus]
+harness = "claude"
+model = "opus"
+rating = 9
+
+# Who does each kind of job; the first agent listed does it until f1-25 routes among them.
+# `developer` may list claude-sonnet and claude-opus after local (ADR 15 item 6), from f1-25.
+[roles]
+developer = ["local-qwen3.6-35b-a3b"]
+last-attempt = ["local-qwen3.6-35b-a3b"]
+direction = ["claude-opus"]
+checkpoint = ["claude-sonnet"]         # a diff-only checkpoint; compare what it catches at M5
+escalation = ["claude-opus"]
+lead-ticket = ["claude-opus"]
+review = ["claude-opus"]
+narrative = ["claude-opus"]
+
 [claude]
-checkpoint_model = "sonnet"             # a diff-only checkpoint; compare what it catches at M5
 reserve = 0.3                           # of the week, kept for the lead's support roles (ADR 15)
 usage_limit_backoff_min = 900           # 15 min
 usage_limit_backoff_max = 18000         # 5 h, for a limit that only looks like one

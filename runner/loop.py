@@ -15,19 +15,17 @@ from pathlib import Path
 from typing import Any, Concatenate, NoReturn
 
 from runner import allowance, checks, console, messages, metrics, prompts
-from runner.claude import (
-    CHECK_TOOLS,
-    EDIT_TOOLS,
-    GIT_READ_TOOLS,
-    READ_TOOLS,
-    ClaudeJob,
-    ClaudeResult,
+from runner.agents import (
+    ANY,
+    CHECK_COMMANDS,
+    GIT_READ_COMMANDS,
+    TRANSIENT,
+    JobResult,
+    JobSpec,
     Reading,
-    TransientError,
-    UsageLimited,
-    backoff_seconds,
-    run_claude,
+    adapter_for,
 )
+from runner.claude import backoff_seconds
 from runner.config import Config, read_protected
 from runner.gates import (
     BLOCKED_FILE,
@@ -629,15 +627,8 @@ def _finish_attempt(
 
 
 def local_agent(cfg: Config) -> str:
-    """D6: `local-<model>`, the LM Studio key without its publisher."""
-    return "local-" + cfg.lm_model.rsplit("/", 1)[-1]
-
-
-def claude_agent(s: Session, job: ClaudeJob) -> str:
-    """D6: `claude-sonnet` for the checkpoint model's jobs, else the default `claude-opus`."""
-    if job.model and job.model == s.cfg.checkpoint_model:
-        return "claude-sonnet"
-    return "claude-opus"
+    """The developer role's agent: the local model in f1 (D6's `local-<model>`)."""
+    return cfg.agent_for("developer").id
 
 
 # --- headless Claude, with usage-limit pauses ------------------------------------------
@@ -674,7 +665,7 @@ class Parked(Exception):
 
 def _park(
     s: Session,
-    job: ClaudeJob,
+    job: JobSpec,
     name: str,
     milestone: str,
     agent: str,
@@ -691,8 +682,8 @@ def _park(
     if kept:
         s.git.commit_all(with_trailers(f"wip {name} (parked)", agent=CLAUDE_HEADLESS_AGENT))
     entry = {"session_id": session or "", "branch": kept}
-    s.state.interrupted[job_key(job.kind, name)] = {**entry, "cause": "limit"}
-    s.state.parked[name] = {"kind": job.kind, **entry, "resets_at": resets.isoformat()}
+    s.state.interrupted[job_key(job.role, name)] = {**entry, "cause": "limit"}
+    s.state.parked[name] = {"kind": job.role, **entry, "resets_at": resets.isoformat()}
     s.state.in_flight = None
     s.state.count_run(milestone)
     save_state(s.state, s.state_path)
@@ -702,7 +693,7 @@ def _park(
         )
     s.report.claude_runs.append(
         ClaudeRunRecord(
-            kind=job.kind,
+            kind=job.role,
             subject=name,
             duration_s=0.0,
             tokens_in=0,
@@ -712,7 +703,7 @@ def _park(
         )
     )
     s.log(console.paused(agent, f"Claude usage limit, {name} parked", resets, at))
-    s.report.notes.append(f"Parked {name} ({job.kind}) for a Claude usage limit.")
+    s.report.notes.append(f"Parked {name} ({job.role}) for a Claude usage limit.")
     raise Parked(resets)
 
 
@@ -754,16 +745,16 @@ def _note_summary(notes: tuple[Path, ...]) -> str:
 
 def call_claude(
     s: Session,
-    job: ClaudeJob,
+    job: JobSpec,
     milestone: str,
     subject: str,
     *,
     ticket: str | None = None,
     notes: tuple[Path, ...] = (),
     park: bool = False,
-) -> ClaudeResult:
-    """Run a headless Claude job, waiting out usage limits. Each trigger bounds its own runs
-    (ADR 12 item 10); the count per milestone is kept for the metrics.
+) -> JobResult:
+    """Run a lead job on the agent its role names, waiting out usage limits. Each trigger
+    bounds its own runs (ADR 12 item 10); the count per milestone is kept for the metrics.
 
     With ``park`` (a ticket's job), a certain limit parks it instead of waiting: ``Parked``
     is raised, and the queue goes on without Claude until the reset (ADR 15 item 10).
@@ -785,7 +776,7 @@ def call_claude(
     resume: str | None = None
     interrupted = False
     resume_prompt, partial_note = RESUME_PROMPT, PARTIAL_WORK_NOTE
-    if (earlier := s.state.interrupted.pop(job_key(job.kind, ticket or subject), None)) is not None:
+    if (earlier := s.state.interrupted.pop(job_key(job.role, ticket or subject), None)) is not None:
         kept = earlier["branch"]
         where = (
             ""
@@ -800,19 +791,20 @@ def call_claude(
             resume_prompt, partial_note = INTERRUPTED_PROMPT + where, INTERRUPTED_NOTE + where
         resume = earlier["session_id"] or None
         interrupted = True
-    number = next_number(s, ticket, job.kind)
-    agent = claude_agent(s, job)
-    what = job.kind if ticket or subject == job.kind else f"{job.kind} {subject}"
+    number = next_number(s, ticket, job.role)
+    runner = s.cfg.agent_for(job.role)
+    adapter, agent = adapter_for(runner.harness), runner.id
+    what = job.role if ticket or subject == job.role else f"{job.role} {subject}"
     started = clock()
     s.log(console.start(agent, what))
-    base = f"claude-{job.kind}-{subject}" + (f"-{number}" if number > 1 else "")
+    base = f"claude-{job.role}-{subject}" + (f"-{number}" if number > 1 else "")
     log = s.run_dir / f"{base}.log"
     job_id = s.last_job_id = record_start(
-        s, ticket, milestone, job.kind, agent, attempt=number, log_path=_rel(s, log)
+        s, ticket, milestone, job.role, agent, attempt=number, log_path=_rel(s, log)
     )
     _set_in_flight(
         s,
-        kind=job.kind,
+        kind=job.role,
         ticket=ticket,
         subject=subject,
         milestone=milestone,
@@ -827,48 +819,47 @@ def call_claude(
         log = s.run_dir / f"{base}{f'-retry{attempt}' if attempt else ''}.log"
         if attempt:
             s.log(console.resumed(agent, what))
-        try:
-            result = with_progress(
-                partial(
-                    run_claude,
-                    replace(job, prompt=prompt),
-                    s.repo,
-                    s.cfg.claude_timeout,
-                    log,
-                    now(),
-                    resume=resume,
-                ),
-                lambda elapsed: s.log(console.running(agent, what, elapsed)),
-            )
-        except TransientError as blip:
-            _record_readings(s, agent, blip.readings)
+        result = with_progress(
+            partial(
+                adapter.run,
+                runner,
+                replace(job, prompt=prompt, resume=resume),
+                s.repo,
+                log,
+                now(),
+            ),
+            lambda elapsed: s.log(console.running(agent, what, elapsed)),
+        )
+        _record_readings(s, agent, result.readings)
+        if result.error == TRANSIENT:
             if transient >= len(TRANSIENT_WAITS):
                 s.report.notes.append(
-                    f"{job.kind} {subject}: failed {transient + 1} times on a passing error"
-                    f" ({blip}); treated as a failure."
+                    f"{job.role} {subject}: failed {transient + 1} times on a passing error"
+                    f" ({result.text}); treated as a failure."
                 )
-                result = ClaudeResult(ok=False, text=str(blip), duration_s=0.0)
                 break
             pause = TRANSIENT_WAITS[transient]
             transient += 1
             attempt += 1
-            resume = blip.session_id or resume
+            resume = result.session_id or resume
             interrupted = True
             _in_flight_session(s, resume)
             at = now()
-            s.log(console.paused(agent, f"interrupted ({blip})", at + timedelta(seconds=pause), at))
+            s.log(
+                console.paused(
+                    agent, f"interrupted ({result.text})", at + timedelta(seconds=pause), at
+                )
+            )
             time.sleep(pause)
             continue
-        except UsageLimited as limit:
-            _record_readings(s, agent, limit.readings)
+        if (limit := result.refusal) is not None:  # a limit (ADR 15 item 12)
             if not limit.certain:
                 unsure += 1
                 if unsure > UNSURE_LIMIT_RETRIES:
                     s.report.notes.append(
-                        f"{job.kind} {subject}: failed {unsure} times with what looked like a"
+                        f"{job.role} {subject}: failed {unsure} times with what looked like a"
                         " usage limit; treated as a failure."
                     )
-                    result = ClaudeResult(ok=False, text=str(limit), duration_s=0.0)
                     break
             _record(
                 s,
@@ -880,7 +871,7 @@ def call_claude(
                 resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
             )
             if park and limit.certain:
-                session = limit.session_id or resume
+                session = result.session_id or resume
                 _park(s, job, ticket or subject, milestone, agent, job_id, session, limit.resets_at)
             # A known limit with no time: retry at the minimum, since a refused call costs
             # nothing and the exponential backoff overshot a 5 h window by hours (f1).
@@ -892,7 +883,7 @@ def call_claude(
                 else backoff_seconds(attempt, s.cfg.backoff_min, s.cfg.backoff_max)
             )
             attempt += 1
-            resume = limit.session_id or resume
+            resume = result.session_id or resume
             interrupted = True
             _in_flight_session(s, resume)
             at = now()
@@ -904,7 +895,6 @@ def call_claude(
             s.report.notes.append(f"Paused {wait / 60:.0f} min for a Claude usage limit.")
             time.sleep(wait)
             continue
-        _record_readings(s, agent, result.readings)
         if resume and not result.ok and result.num_turns == 0:
             resume = None  # the session couldn't be resumed: start again, told about the tree
             attempt += 1
@@ -930,7 +920,7 @@ def call_claude(
         )
     s.report.claude_runs.append(
         ClaudeRunRecord(
-            kind=job.kind,
+            kind=job.role,
             subject=subject,
             duration_s=result.duration_s,
             tokens_in=result.usage.get("input_tokens", 0),
@@ -1079,8 +1069,8 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
     _save_thinking(rec, logs, s.repo)
     # Every attempt's, including a parked ticket's earlier ones
     thinking = sorted(p.relative_to(s.repo).as_posix() for p in logs.glob("thinking-*.md"))
-    job = ClaudeJob(
-        kind="direction",
+    job = JobSpec(
+        role="direction",
         prompt=prompts.DIRECTION.format(
             id=task.id,
             task=task.path.relative_to(s.repo).as_posix(),
@@ -1089,7 +1079,9 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
             streak=rec.edit_streak,
             timeouts=rec.timeouts,
         ),
-        allowed_tools=(*READ_TOOLS, *GIT_READ_TOOLS, "Edit(var/runs/**)"),
+        timeout=s.cfg.claude_timeout,
+        edit=("var/runs/**",),
+        commands=GIT_READ_COMMANDS,
     )
     direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
     call_claude(s, job, task.milestone, task.id, ticket=task.id, notes=(direction_file,), park=True)
@@ -1274,13 +1266,14 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         _check_context(s)
         log = logs / f"opencode-{attempt}.jsonl"
         what = f"attempt {attempt}/{s.cfg.max_attempts}"
-        agent = local_agent(s.cfg)
+        role = "last-attempt" if direction else "developer"
+        agent = s.cfg.agent_for(role).id
         s.log(console.start(agent, what + (" (directed)" if direction else "")))
         job_id = record_start(
             s,
             task.id,
             task.milestone,
-            "last-attempt" if direction else "developer",
+            role,
             agent,
             attempt=next_number(s, task.id, "local"),
             log_path=_rel(s, log),
@@ -1469,17 +1462,14 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     else:
         s.git.fresh_branch(branch, MAIN)
     rec.attempts = 1
-    job = ClaudeJob(
-        kind="lead-ticket",
+    job = JobSpec(
+        role="lead-ticket",
         prompt=prompts.LEAD_TICKET.format(
             id=task.id, task=task.path.relative_to(s.repo).as_posix()
         ),
-        allowed_tools=(
-            *EDIT_TOOLS,
-            *CHECK_TOOLS,
-            *GIT_READ_TOOLS,
-            *(f"Bash({command}:*)" for command in task.commands),
-        ),
+        timeout=s.cfg.claude_timeout,
+        edit=(ANY,),
+        commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, *task.commands),
     )
     try:
         call_claude(s, job, task.milestone, task.id, ticket=task.id, park=True)
@@ -1507,10 +1497,11 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     s.git.move(task.path, target)
     append_footer(target, {"result": "done", "agent": "lead", "attempts": 1})
     runner_commit(s, messages.done_message(task.id, rec))
-    record_ticket(s, target, merged_by=claude_agent(s, job), commit=rec.commit)
+    lead = s.cfg.agent_for(job.role).id
+    record_ticket(s, target, merged_by=lead, commit=rec.commit)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
-    _merged_line(s, claude_agent(s, job), task.id, rec)
+    _merged_line(s, lead, task.id, rec)
 
 
 # --- checkpoints (ADR 12 item 8) ------------------------------------------------------
@@ -1530,21 +1521,16 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
 def checkpoint(s: Session, milestone: str) -> None:
     merged = list(s.state.unchecked)
     out = s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
-    job = ClaudeJob(
-        kind="checkpoint",
+    job = JobSpec(
+        role="checkpoint",
         prompt=prompts.CHECKPOINT.format(
             merges="\n".join(f"- {m.split()[0]}: `git show {m.split()[1]}`" for m in merged),
             out=out.relative_to(s.repo).as_posix(),
         ),
-        allowed_tools=(
-            *READ_TOOLS,
-            *GIT_READ_TOOLS,
-            "Bash(uv run pytest:*)",  # the tickets' pre-flight test; its commit skips the hook
-            "Edit(tasks/ready/**)",
-            "Edit(docs/agents/developer.md)",
-            "Edit(var/runs/**)",
-        ),
-        model=s.cfg.checkpoint_model,
+        timeout=s.cfg.claude_timeout,
+        edit=("tasks/ready/**", "docs/agents/developer.md", "var/runs/**"),
+        # pytest: the tickets' pre-flight test; its commit skips the hook
+        commands=(*GIT_READ_COMMANDS, "uv run pytest"),
     )
     s.log("")
     s.log(console.ticket_header(f"{milestone} checkpoint", "lead", None))
@@ -1583,8 +1569,8 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     if _has_branch(s.git, branch) and _catch_up(s, branch):
         s.git.checkout(MAIN)
     rec_sessions = [p for p in sorted(logs.glob("thinking-*.md"))]
-    job = ClaudeJob(
-        kind="escalation",
+    job = JobSpec(
+        role="escalation",
         prompt=prompts.ESCALATION.format(
             id=task.id,
             reason=reason,
@@ -1592,13 +1578,10 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
             thinking=", ".join(p.relative_to(s.repo).as_posix() for p in rec_sessions)
             or "not available",
         ),
+        timeout=s.cfg.claude_timeout,
+        edit=(ANY,),
         # `finish` checks out the ticket's branch itself: only that one (ADR 15 item 8)
-        allowed_tools=(
-            *EDIT_TOOLS,
-            *CHECK_TOOLS,
-            *GIT_READ_TOOLS,
-            f"Bash(git checkout {branch}:*)",
-        ),
+        commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, f"git checkout {branch}"),
     )
     decision_path = logs / "decision.json"
     call_claude(
@@ -1655,13 +1638,13 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     )
     done = s.tasks_dir("done") / task.path.name
     if outcome == "implemented" and done.is_file():
-        record_ticket(s, done, merged_by=claude_agent(s, job), commit=s.git.head())
+        record_ticket(s, done, merged_by=s.cfg.agent_for(job.role).id, commit=s.git.head())
     elif outcome == "requeue" and (s.tasks_dir("ready") / task.path.name).is_file():
         record_ticket(s, s.tasks_dir("ready") / task.path.name)
 
 
 def _finish_branch(
-    s: Session, task: Task, logs: Path, job: ClaudeJob, outcome: str | None, on: str
+    s: Session, task: Task, logs: Path, job: JobSpec, outcome: str | None, on: str
 ) -> None:
     """An escalation that finished the developer's work on ``task/<id>`` (ADR 15 item 8):
     squash-merged as `_merge` does once `check-all --task` passes, crediting the lead (who
@@ -1707,7 +1690,7 @@ def _finish_branch(
     if notes.is_file():
         s.report.notes.append(f"Escalation {task.id} (finish): " + notes.read_text().strip())
     runner_commit(s, f"runner: {task.id} done, finished by the lead, merged as {commit[:9]}")
-    merger = claude_agent(s, job)
+    merger = s.cfg.agent_for(job.role).id
     record_ticket(s, target, merged_by=merger, commit=commit)
     s.git.run("branch", "-D", branch)
     lines = s.git.commit_size(commit)
@@ -1971,10 +1954,11 @@ def close_session(s: Session) -> SessionReport:
     path = report_mod.write(s.repo, s.report, claude)
     if s.cfg.narrative and s.report.tasks:
         milestone = s.report.tasks[0].milestone
-        job = ClaudeJob(
-            kind="narrative",
+        job = JobSpec(
+            role="narrative",
             prompt=prompts.NARRATIVE.format(report=path.relative_to(s.repo).as_posix()),
-            allowed_tools=EDIT_TOOLS,
+            timeout=s.cfg.claude_timeout,
+            edit=(ANY,),
         )
         call_claude(s, job, milestone, "session")
     merged = sum(t.result == "done" for t in s.report.tasks)

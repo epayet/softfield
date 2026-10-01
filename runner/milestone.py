@@ -7,7 +7,7 @@ from functools import partial
 from pathlib import Path
 
 from runner import console, metrics, prompts
-from runner.claude import CHECK_TOOLS, EDIT_TOOLS, GIT_READ_TOOLS, ClaudeJob
+from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
 from runner.config import Config
 from runner.gates import GateResult
 from runner.gitops import Git, GitError, with_trailers
@@ -19,7 +19,6 @@ from runner.loop import (
     Session,
     _record,
     call_claude,
-    claude_agent,
     clock,
     close_session,
     open_session,
@@ -313,8 +312,8 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
             " earlier finding is resolved. New should-fix points about untouched code go to"
             " the backlog."
         )
-        job = ClaudeJob(
-            kind="review",
+        job = JobSpec(
+            role="review",
             prompt=prompts.REVIEW.format(
                 milestone=milestone,
                 round=round_no,
@@ -323,7 +322,9 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
                 recurring=", ".join(recurring_for_claude(seen)) or "none",
                 out=out.relative_to(cfg.repo).as_posix(),
             ),
-            allowed_tools=(*EDIT_TOOLS, *CHECK_TOOLS, *GIT_READ_TOOLS),
+            timeout=cfg.claude_timeout,
+            edit=(ANY,),
+            commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS),
         )
         since = s.git.head()
         call_claude(s, job, milestone, f"{milestone}-review-r{round_no}")
@@ -332,7 +333,7 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
         except ReviewFileError as exc:
             stop = f"review output unusable: {exc}"
             break
-        _record_findings(s, milestone, round_, claude_agent(s, job))
+        _record_findings(s, milestone, round_, cfg.agent_for(job.role).id)
         s.git.commit_all(
             with_trailers(
                 f"review {milestone} round {round_no} (by Claude)", agent=CLAUDE_HEADLESS_AGENT
