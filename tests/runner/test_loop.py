@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import replace
@@ -1081,6 +1082,96 @@ def test_a_usage_limit_pause_prints_the_resume_time(repo, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "⏸ [claude-opus] Claude usage limit · resumes 19:01 (in 1 h 01)" in out
     assert "▶ [claude-opus] lead-ticket resumed" in out
+
+
+# --- the heartbeat thread (f1-49) ---------------------------------------------------------
+
+
+def _heartbeats(repo: Path, seconds: float, sleep: Callable[[float], None]) -> set[object]:
+    """Every heartbeat the run's row shows over ``seconds``, read every 20 ms."""
+    seen: set[object] = set()
+    end = time.monotonic() + seconds
+    while time.monotonic() < end:
+        seen |= {r["heartbeat"] for r in _rows(repo, "runs")}
+        sleep(0.02)
+    return seen
+
+
+@pytest.fixture
+def fast_beat(monkeypatch):
+    monkeypatch.setattr(loop, "HEARTBEAT_EVERY", 0.05)
+
+
+def test_the_heartbeat_advances_while_a_claude_job_blocks(repo, monkeypatch, fast_beat):
+    # f1-18-probes: the Overview called a runner busy in check-all dead, and the owner stopped it
+    seen: set[object] = set()
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        seen.update(_heartbeats(repo, 0.5, time.sleep))
+        return ClaudeResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    loop._finish_run(s, "done")
+    assert len(seen) >= 3  # the job's start, then two beats at least
+
+
+def test_the_heartbeat_advances_during_a_usage_limit_pause(repo, monkeypatch, fast_beat):
+    done = ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    _limited_then(monkeypatch, UsageLimited(None), done)
+    real_sleep, seen = time.sleep, set()
+
+    def pause(seconds: float) -> None:
+        seen.update(_heartbeats(repo, 0.5, real_sleep))
+
+    monkeypatch.setattr("time.sleep", pause)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    loop._finish_run(s, "done")
+    assert len(seen) >= 3  # the job's start, then two beats at least
+
+
+def test_no_beat_lands_after_the_run_ends(repo, fast_beat):
+    s = loop.open_session(_config(repo))
+    thread = s.heartbeat
+    assert thread is not None and thread.is_alive()
+    time.sleep(0.2)
+    loop._finish_run(s, "done")
+    assert not thread.is_alive()
+    time.sleep(0.2)
+    [run] = _rows(repo, "runs")
+    assert run["ended"] and run["heartbeat"] == run["ended"]
+
+
+def test_a_failing_heartbeat_is_noted_once_and_the_run_goes_on(repo, monkeypatch, fast_beat):
+    beat = metrics.update_run_heartbeat
+
+    def broken(conn: sqlite3.Connection, run_id: int, at: str) -> None:
+        if threading.current_thread() is not threading.main_thread():
+            raise sqlite3.OperationalError("disk I/O error")
+        beat(conn, run_id, at)
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        time.sleep(0.3)
+        return ClaudeResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(metrics, "update_run_heartbeat", broken)
+    monkeypatch.setattr(loop, "run_claude", run_claude)
+    s = loop.open_session(_config(repo))
+    assert loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead").ok
+    loop._finish_run(s, "done")
+    notes = [n for n in s.report.notes if "metrics database" in n]
+    assert len(notes) == 1 and "disk I/O error" in notes[0]
+    [run] = _rows(repo, "runs")
+    assert run["verdict"] == "done"
+
+
+def test_a_session_with_no_command_starts_no_heartbeat(repo, fast_beat):
+    before = set(threading.enumerate())
+    s = loop.open_session(_config(repo), None)
+    assert s.heartbeat is None
+    assert set(threading.enumerate()) == before
 
 
 def test_a_failing_write_is_noted_once_and_the_run_goes_on(repo, fake_model, monkeypatch):

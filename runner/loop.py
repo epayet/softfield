@@ -45,6 +45,7 @@ from runner.gitops import (
     with_trailers,
 )
 from runner.local_model import (
+    LIVE_EVERY,
     OPENCODE_DB,
     OpencodeRun,
     TokenTotals,
@@ -167,6 +168,9 @@ class Session:
     project_id: int | None = None
     run_id: int | None = None
     db_failed: bool = False
+    # The thread that beats the run's heartbeat while the process lives (f1-49), and its stop.
+    heartbeat: threading.Thread | None = None
+    heartbeat_stop: threading.Event = field(default_factory=threading.Event)
     # Jobs so far per (ticket, role group): the next job's `attempt` and its log's number.
     job_numbers: dict[tuple[str | None, str], int] = field(default_factory=dict)
     last_job_id: int | None = None  # the last Claude job's row, for its findings
@@ -212,13 +216,19 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
 # --- the metrics database (f1 D2, D3): best effort ----------------------------------------
 
 
+HEARTBEAT_EVERY = LIVE_EVERY  # seconds between the heartbeat thread's beats (f1-49)
+_failed_lock = threading.Lock()  # the heartbeat thread and the run may fail at once
+
+
 def _metrics_failed(s: Session, exc: Exception) -> None:
-    if not s.db_failed:
+    with _failed_lock:
+        if s.db_failed:
+            return
         s.db_failed = True
-        s.report.notes.append(
-            f"The metrics database failed ({type(exc).__name__}: {exc}); the run went on"
-            " without the rows it couldn't write. Later failures aren't listed."
-        )
+    s.report.notes.append(
+        f"The metrics database failed ({type(exc).__name__}: {exc}); the run went on"
+        " without the rows it couldn't write. Later failures aren't listed."
+    )
 
 
 def _record[**P, T](
@@ -268,7 +278,40 @@ def _start_run(s: Session, command: str) -> None:
         )
         if s.run_id is not None:
             _record(s, metrics.close_abandoned, s.project_id, s.run_id)
+            _start_heartbeat(s, s.run_id)
         sync_tickets(s)
+
+
+def _start_heartbeat(s: Session, run_id: int) -> None:
+    """Beat the run's heartbeat every ``HEARTBEAT_EVERY`` seconds, whatever the run is doing
+    (f1-49): a Claude job, the gates, check-all or a pause write nothing until they end. The
+    thread has its own connection (sqlite3's can't cross threads) and is a daemon, so a crash
+    or a Ctrl-C leaves the heartbeat stale, as D3 wants."""
+
+    def beat() -> None:
+        try:
+            conn = metrics.open_db(s.cfg.metrics_db)
+        except Exception as exc:
+            _metrics_failed(s, exc)
+            return
+        try:
+            while not s.heartbeat_stop.wait(HEARTBEAT_EVERY):
+                try:
+                    metrics.update_run_heartbeat(conn, run_id, now().isoformat())
+                except Exception as exc:
+                    _metrics_failed(s, exc)
+        finally:
+            conn.close()
+
+    s.heartbeat = threading.Thread(target=beat, name="runner-heartbeat", daemon=True)
+    s.heartbeat.start()
+
+
+def _stop_heartbeat(s: Session) -> None:
+    if s.heartbeat is not None:
+        s.heartbeat_stop.set()
+        s.heartbeat.join()  # a beat in flight lands before the run's end, never after
+        s.heartbeat = None
 
 
 TICKET_FOLDERS = ("ready", "done", *STOPPED)
@@ -324,6 +367,7 @@ def record_ticket(
 
 
 def _finish_run(s: Session, verdict: str) -> None:
+    _stop_heartbeat(s)
     if s.run_id is not None and s.project_id is not None:
         at = now().isoformat()
         _record(
