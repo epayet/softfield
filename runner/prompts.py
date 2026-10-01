@@ -156,6 +156,10 @@ explaining. Then do what helps the next tickets most, any of:
 - tighten upcoming tickets in tasks/ready/ with what you saw (facts, not solutions)
 - one line in docs/agents/junior.md (its budget is in lead.md)
 
+If you wrote or changed a ticket, run `uv run pytest -q tests/runner/test_tasks.py` and fix
+what it reports: it checks the tickets' format and that every path they name exists
+(repo-relative, e.g. `tests/factory_dashboard/conftest.py`, not `conftest.py`).
+
 Write {out}: 2-5 lines on what you found and did. Change nothing else; don't run git beyond
 diff, log and show.
 """

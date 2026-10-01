@@ -48,7 +48,7 @@ Format: [`docs/task-format.md`](../task-format.md). Craft: [`docs/task-writing.m
 - A goal, the files to read (paths, not pastes), acceptance criteria as bullets. Paste only facts no file holds. No stubs, no reference implementation.
 - About 1–2 of your steps per ticket. Write all of a milestone's tickets in one pass.
 - A ticket that needs your part is queued only once that part is on main.
-- Run `uv run runner run --dry-run` before committing tickets: it shows what runs next and each ticket's pre-flight problems. Checkpoints too: in f1 a checkpoint queued f1-36 with bare names (`conftest.py`), `tests/runner/test_tasks.py` went red on main and f1-35 burnt two attempts on it. Write repo-relative paths in Context.
+- Run `uv run runner run --dry-run` before committing tickets: it shows what runs next and each ticket's pre-flight problems. Checkpoints too: in f1 a checkpoint queued f1-36 with bare names (`conftest.py`), `tests/runner/test_tasks.py` went red on main and f1-35 burnt two attempts on it; f1-37 did it again and cost f1-29 two attempts, so headless checkpoints now run `tests/runner/test_tasks.py` (their commits skip the hook). Write repo-relative paths in Context.
 
 ## Known range
 What juniors pass at the first attempt, from results. Update it at each milestone review.

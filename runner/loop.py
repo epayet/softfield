@@ -899,6 +899,7 @@ def checkpoint(s: Session, milestone: str) -> None:
         allowed_tools=(
             *READ_TOOLS,
             *GIT_READ_TOOLS,
+            "Bash(uv run pytest:*)",  # the tickets' pre-flight test; its commit skips the hook
             "Edit(tasks/ready/**)",
             "Edit(docs/agents/junior.md)",
             "Edit(var/runs/**)",

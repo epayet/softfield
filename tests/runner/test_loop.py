@@ -531,6 +531,10 @@ def test_a_checkpoint_runs_after_every_two_junior_merges(repo, fake_model, fake_
     assert "m1-01-thing" in jobs[0].prompt and "m1-02-thing" in jobs[0].prompt
     assert "m1-03-thing" not in jobs[0].prompt
     assert jobs[0].model == "sonnet"
+    # f1-36, f1-37: a checkpoint queued bare file names; its commit skips the hook, so it
+    # must be able to run the pre-flight test itself.
+    assert "Bash(uv run pytest:*)" in jobs[0].allowed_tools
+    assert "tests/runner/test_tasks.py" in jobs[0].prompt
     assert "Checkpoint: Sound. Tightened m1-03." in report.notes
 
 
