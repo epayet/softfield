@@ -1,7 +1,7 @@
 ---
 id: f1-14-runs-pages
 milestone: f1
-depends_on: [f1-10-ticket-pages]
+depends_on: [f1-10-ticket-pages, f1-36-ticket-pages-fixes]
 difficulty: 3
 files:
   - factory_dashboard/runs.py

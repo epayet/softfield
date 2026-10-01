@@ -1,7 +1,7 @@
 ---
 id: f1-15-agents-page
 milestone: f1
-depends_on: [f1-10-ticket-pages]
+depends_on: [f1-10-ticket-pages, f1-36-ticket-pages-fixes]
 difficulty: 6
 files:
   - factory_dashboard/agents.py
