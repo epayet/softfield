@@ -1,7 +1,7 @@
 ---
 id: f1-32-factory-review
 milestone: f1
-depends_on: [f1-27-bench, f1-28-bench-page, f1-29-project-page]
+depends_on: [f1-27-bench, f1-28-bench-page, f1-29-project-page, f1-38-project-page-fixes]
 agent: lead
 difficulty: 7
 commands: [uv run runner report, uv run runner backfill, uv run runner run --dry-run]
