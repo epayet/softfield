@@ -29,3 +29,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - an unknown project is a 404
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: needs-file
+attempts: 2
+tokens: 2227371
+logs: var/runs/20260930-194445/f1-29-project-page
+```
