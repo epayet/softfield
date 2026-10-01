@@ -29,3 +29,12 @@ Read `factory_dashboard/templates/milestone.html` (the Results list), `factory_d
 - tests: a milestone with both scores set shows `7.0/10` and `8.5/10` each in its own `<dt>`/`<dd>`, and one with none shows dashes; the Done when items are asserted as `<li>` inside the section; `test_timeline_run_filter` also asserts 0 bars for a run with no jobs in the default milestone; the project crumb test asserts the crumbs area holds exactly one element for the project
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1127
+gate_failures: []
+tokens: 1633078
+```
