@@ -900,7 +900,9 @@ def test_a_database_that_cant_be_opened_does_not_stop_the_session(repo, fake_mod
 def test_a_session_records_its_project_and_every_ticket_with_its_folder(repo, fake_model):
     lead = write_task(repo / "tasks" / "ready", "m1-01-lead", "[m1-00-missing]")
     lead.write_text(
-        lead.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\ndifficulty: 6\n")
+        lead.read_text()
+        .replace("milestone: 1\n", "milestone: 1\nagent: lead\ndifficulty: 6\n")
+        .replace("difficulty: 6\n", "difficulty: 6\ndifficulty_corrected: 7\n")
     )
     write_task(repo / "tasks" / "done", "m1-00-old")
     stuck = write_task(repo / "tasks" / "blocked", "f1-02-stuck")
@@ -924,6 +926,7 @@ def test_a_session_records_its_project_and_every_ticket_with_its_folder(repo, fa
         "lead",
         6,
     )
+    assert lead_row["difficulty_corrected"] == 7
     assert lead_row["body"] == lead.read_text()
     assert json.loads(str(lead_row["depends_on"])) == ["m1-00-missing"]
     assert json.loads(str(lead_row["files"])) == ["coucou/thing.py"]

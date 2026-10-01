@@ -1,6 +1,7 @@
 ---
 id: m2-04-language-choice
 milestone: 2
+difficulty: 2
 depends_on: []
 files:
   - coucou/languages.py

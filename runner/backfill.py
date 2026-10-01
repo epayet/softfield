@@ -25,7 +25,13 @@ from runner.loop import CLAUDE_HEADLESS_AGENT, TICKET_FOLDERS
 from runner.milestone import _commit_time, all_footers, milestone_doc, signoff_sections
 from runner.review import ReviewFileError, parse_review
 from runner.state import load_state
-from runner.tasks import milestone_key, milestone_order, parse_sections, split_frontmatter
+from runner.tasks import (
+    difficulty,
+    milestone_key,
+    milestone_order,
+    parse_sections,
+    split_frontmatter,
+)
 
 BACKFILL = "backfill"  # the command of a run backfilled: its real one isn't in the logs
 UNKNOWN = "backfill-unknown"  # D6: a role or agent the logs don't say
@@ -256,11 +262,12 @@ def _tickets(b: _Backfill) -> dict[str, tuple[int, int]]:
                 text = path.read_text(encoding="utf-8")
                 meta, body = split_frontmatter(text)
                 key = milestone_key(meta.get("milestone"))
+                estimate = difficulty(meta, "difficulty")
+                corrected = difficulty(meta, "difficulty_corrected")
             except Exception as exc:
                 b.gap(path, f"unreadable ticket ({exc})")
                 continue
             goal = parse_sections(body).get("Goal", "").strip()
-            difficulty = meta.get("difficulty")
             depends_on, files = meta.get("depends_on") or [], meta.get("files") or []
             b.tickets[path.stem] = metrics.upsert_ticket(
                 b.conn,
@@ -273,7 +280,8 @@ def _tickets(b: _Backfill) -> dict[str, tuple[int, int]]:
                 depends_on=[str(d) for d in depends_on] if isinstance(depends_on, list) else None,
                 files=[str(f) for f in files] if isinstance(files, list) else None,
                 state=folder,
-                difficulty=difficulty if type(difficulty) is int else None,
+                difficulty=estimate,
+                difficulty_corrected=corrected,
             )
             b.count(key, "tickets", path.stem)
             local = [f for f in all_footers(text) if f.get("agent") != "lead"]

@@ -1,6 +1,7 @@
 ---
 id: m2-01-pair-page-code
 milestone: 2
+difficulty: 4
 depends_on: []
 files:
   - coucou/templates/coucou/pair.html

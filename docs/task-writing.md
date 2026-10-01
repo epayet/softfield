@@ -28,6 +28,34 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 - **`tests:` names a file the developer may write.** If the natural test file is protected (`tests/browser/test_display.py` guards `display.js`), the lead writes those tests on main first, and the developer's ticket points at them. Never ask for a new test file with no module of its own: the layout gate wants a matching module, and m4-07's junior invented an empty one to satisfy it (m4-F7). Listing the protected file burned three attempts.
 - **Where a data-writing command may run:** say so explicitly. The M1 review had to add a "never in prod" guard to `seed_demo`.
 
+## Difficulty (ADR 14 item 5)
+
+Every ticket gets `difficulty:` from 1 to 10 when it's written. Ratings and routing play each ticket against it, so estimate the ticket as written, not the developer you expect. Start at 1 and add:
+
+| Factor | +0 | +1 | +2 |
+|---|---|---|---|
+| Concepts | one | two or three | four or more, interlocked |
+| Files to read (beyond those it changes) | 0–2 | 3–5 | 6 or more |
+| Files to change (a `.po` and its `.mo` count as one) | one | two or more | |
+| Dependencies on fresh code (another ticket's work) | none | one or two | three or more |
+| A new pattern (no worked example to follow) | | yes | |
+| UI (a screen, browser tests, the layout check) | | yes | |
+| i18n (new strings with their French) | | yes | |
+| Offline, storage or timing (events, races, held requests) | | yes | |
+
+Steps that dictate the code take a point or two off. Then round by judgement against these anchors from M1–M4:
+
+| d | Ticket | Why |
+|---|---|---|
+| 1 | m1-03-vault-list-counts | two counts on an admin list, dictated |
+| 3 | m3-03-build-snapshot | a pure function on top of `current_content` |
+| 5 | m3-10-render-names-nav | four DOM helpers and the date edges of `Intl` |
+| 7 | m4-08-sent-log | a new storage module wired into `/me/`, quota errors, i18n |
+| 9 | m4-06-me-wiring | four components wired through the outbox, i18n and offline; failed until split |
+| 10 | | only the lead should do this: security, protected paths, a design call |
+
+A sum of 9 or more on a developer ticket means split it, or make it a lead ticket (as m4-06 shows). At review, when the estimate was clearly off, the lead sets `difficulty_corrected:` beside it and leaves `difficulty:` as it was.
+
 ## JavaScript tasks (ADR 06)
 
 - **Tests:** browser tests live in `tests/browser/test_<module>.py`, one file per module in `coucou/static/coucou/js/`. Each test imports the module on a blank harness page (`harness` fixture) and stubs the network with `page.route`. Example: `tests/browser/test_outbox.py`.

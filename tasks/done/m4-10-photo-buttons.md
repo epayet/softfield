@@ -1,6 +1,7 @@
 ---
 id: m4-10-photo-buttons
 milestone: 4
+difficulty: 3
 depends_on: []
 files:
   - coucou/static/coucou/css/me.css

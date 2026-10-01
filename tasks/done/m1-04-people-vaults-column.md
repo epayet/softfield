@@ -1,6 +1,7 @@
 ---
 id: m1-04-people-vaults-column
 milestone: 1
+difficulty: 2
 depends_on: []
 files:
   - coucou/admin/accounts.py

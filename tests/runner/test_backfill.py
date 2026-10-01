@@ -249,6 +249,34 @@ def test_the_run_and_its_tickets_are_written(m4, tmp_path):
     assert tickets["m4-01-thing"]["title"] == "Goal of m4-01-thing."
 
 
+def test_a_tickets_difficulty_and_its_correction_are_stored(m4, tmp_path):
+    path = m4 / "tasks" / "done" / "m4-01-thing.md"
+    text = path.read_text(encoding="utf-8")
+    path.write_text(
+        text.replace("depends_on:", "difficulty: 6\ndifficulty_corrected: 8\ndepends_on:")
+    )
+    db = tmp_path / "metrics.sqlite"
+    _run(m4, db)
+    tickets = {t["ticket"]: t for t in _rows(db, "SELECT * FROM tickets")}
+    assert (
+        tickets["m4-01-thing"]["difficulty"],
+        tickets["m4-01-thing"]["difficulty_corrected"],
+    ) == (
+        6,
+        8,
+    )
+    assert tickets["m1-01-old"]["difficulty"] is None
+
+
+def test_a_ticket_with_a_bad_difficulty_is_a_gap(m4, tmp_path):
+    path = m4 / "tasks" / "done" / "m4-01-thing.md"
+    path.write_text(
+        path.read_text(encoding="utf-8").replace("depends_on:", "difficulty: 11\ndepends_on:")
+    )
+    summary = _run(m4, tmp_path / "metrics.sqlite")
+    assert any("m4-01-thing.md" in gap and "difficulty" in gap for gap in summary.gaps)
+
+
 def test_local_attempts_become_jobs_with_tokens_steps_peak_and_gates(m4, tmp_path):
     db = tmp_path / "metrics.sqlite"
     _run(m4, db)

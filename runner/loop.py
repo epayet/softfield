@@ -64,6 +64,7 @@ from runner.tasks import (
     append_footer,
     blocked_ids,
     carry_footers,
+    difficulty,
     load_dir,
     milestone_key,
     milestone_order,
@@ -296,10 +297,11 @@ def record_ticket(
         text = path.read_text(encoding="utf-8")
         meta, body = split_frontmatter(text)
         milestone = milestone_key(meta.get("milestone"))
+        estimate = difficulty(meta, "difficulty")
+        corrected = difficulty(meta, "difficulty_corrected")
     except Exception:
         return
     goal = parse_sections(body).get("Goal", "").strip()
-    difficulty = meta.get("difficulty")
     depends_on, files = meta.get("depends_on") or [], meta.get("files") or []
     _record(
         s,
@@ -313,7 +315,8 @@ def record_ticket(
         depends_on=[str(d) for d in depends_on] if isinstance(depends_on, list) else None,
         files=[str(f) for f in files] if isinstance(files, list) else None,
         state=state or path.parent.name,
-        difficulty=difficulty if type(difficulty) is int else None,
+        difficulty=estimate,
+        difficulty_corrected=corrected,
         merged_by=merged_by,
         commit=commit,
         lines_changed=s.git.commit_size(commit) if commit else None,
@@ -793,14 +796,6 @@ def waiting_behind(s: Session, task_id: str) -> int:
     return len(blocked_ids(load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff), {task_id}))
 
 
-def _difficulty(path: Path) -> int | None:
-    try:
-        value = split_frontmatter(path.read_text(encoding="utf-8"))[0].get("difficulty")
-    except Exception:
-        return None
-    return value if type(value) is int else None
-
-
 def _logs_dir(run_dir: Path, task_id: str) -> Path:
     """A fresh log folder, so a requeued task's second run doesn't overwrite the first."""
     logs, n = run_dir / task_id, 1
@@ -816,7 +811,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     logs = rec.logs = _logs_dir(s.run_dir, task.id)
     s.ticket_started = clock()
     s.log("")
-    s.log(console.ticket_header(task.id, task.agent, _difficulty(task.path)))
+    s.log(console.ticket_header(task.id, task.agent, task.difficulty))
     s.log(task.goal)
     record_ticket(s, task.path, "running")
 

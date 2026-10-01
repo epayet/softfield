@@ -1,6 +1,7 @@
 ---
 id: m4-09-me-offline
 milestone: 4
+difficulty: 5
 depends_on: [m4-06-me-wiring]
 files:
   - coucou/static/coucou/js/me.js

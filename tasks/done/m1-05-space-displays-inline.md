@@ -1,6 +1,7 @@
 ---
 id: m1-05-space-displays-inline
 milestone: 1
+difficulty: 2
 depends_on: []
 files:
   - coucou/admin/spaces.py

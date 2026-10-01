@@ -8,6 +8,7 @@ Tasks ("tickets") are Markdown files with YAML frontmatter in `tasks/ready/`. Th
 ---
 id: m4-03-compose-screen            # unique; m<milestone>-<nn>-<slug>
 milestone: 4
+difficulty: 5                       # 1 to 10, from the rubric in task-writing.md (ADR 14 item 5)
 depends_on: [m4-01-upload-api]      # task ids; [] if none
 files:                              # where to work (a pointer, not a limit); may be new files
   - coucou/templates/coucou/compose.html
@@ -19,6 +20,7 @@ agent: lead                         # optional: `lead` for the lead's own ticket
                                     # `developer`; old tickets' `junior` means the same)
 commands: [ollama list, gh api]     # optional, lead tickets only: extra Bash prefixes for its
                                     # headless job (never git, the owner's commands or the loop)
+difficulty_corrected: 7             # optional: set by the lead at review when `difficulty` was off
 ---
 ```
 

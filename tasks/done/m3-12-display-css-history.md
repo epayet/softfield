@@ -1,6 +1,7 @@
 ---
 id: m3-12-display-css-history
 milestone: 3
+difficulty: 4
 depends_on: []
 files:
   - coucou/static/coucou/css/display.css

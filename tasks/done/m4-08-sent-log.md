@@ -1,6 +1,7 @@
 ---
 id: m4-08-sent-log
 milestone: 4
+difficulty: 7
 depends_on: [m4-06-me-wiring]
 files:
   - coucou/static/coucou/js/me.js

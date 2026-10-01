@@ -1,6 +1,7 @@
 ---
 id: m3-02-display-css
 milestone: 3
+difficulty: 3
 depends_on: [m3-01-display-page]
 files:
   - coucou/static/coucou/css/display.css

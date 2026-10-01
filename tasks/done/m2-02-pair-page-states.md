@@ -1,6 +1,7 @@
 ---
 id: m2-02-pair-page-states
 milestone: 2
+difficulty: 3
 depends_on: [m2-01-pair-page-code]
 files:
   - coucou/templates/coucou/pair.html

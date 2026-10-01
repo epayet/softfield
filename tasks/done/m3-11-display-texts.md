@@ -1,6 +1,7 @@
 ---
 id: m3-11-display-texts
 milestone: 3
+difficulty: 2
 depends_on: []
 files:
   - coucou/templates/coucou/display.html

@@ -1,6 +1,7 @@
 ---
 id: m1-03-vault-list-counts
 milestone: 1
+difficulty: 1
 depends_on: []
 files:
   - coucou/admin/accounts.py

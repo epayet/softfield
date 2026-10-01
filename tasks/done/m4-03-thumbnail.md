@@ -1,6 +1,7 @@
 ---
 id: m4-03-thumbnail
 milestone: 4
+difficulty: 5
 depends_on: []
 files:
   - coucou/static/coucou/js/thumbnail.js

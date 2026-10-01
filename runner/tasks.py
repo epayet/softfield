@@ -72,6 +72,8 @@ class Task:
     path: Path
     agent: str = "developer"
     commands: tuple[str, ...] = ()  # a lead ticket's extra Bash prefixes (f1's probes)
+    difficulty: int | None = None  # 1 to 10, set at plan time (ADR 14 item 5)
+    difficulty_corrected: int | None = None  # set by the lead at review when it was off
 
     @property
     def goal(self) -> str:
@@ -140,6 +142,17 @@ def _commands(meta: dict[str, Any], agent: str) -> tuple[str, ...]:
     return commands
 
 
+def difficulty(meta: dict[str, Any], key: str) -> int | None:
+    """``difficulty`` or ``difficulty_corrected``: absent, or an integer from 1 to 10 (the
+    rubric is in docs/task-writing.md)."""
+    if key not in meta:
+        return None
+    value = meta[key]
+    if type(value) is not int or not 1 <= value <= 10:
+        raise TaskError(f"'{key}' must be an integer from 1 to 10, not {value!r}")
+    return value
+
+
 def parse_task(path: Path, default_max_diff: int) -> Task:
     meta, body = split_frontmatter(path.read_text(encoding="utf-8"))
     task_id = meta.get("id")
@@ -170,6 +183,8 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
         path=path,
         agent=agent,
         commands=_commands(meta, agent),
+        difficulty=difficulty(meta, "difficulty"),
+        difficulty_corrected=difficulty(meta, "difficulty_corrected"),
     )
 
 

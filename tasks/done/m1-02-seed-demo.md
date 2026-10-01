@@ -1,6 +1,7 @@
 ---
 id: m1-02-seed-demo
 milestone: 1
+difficulty: 3
 depends_on: []
 files:
   - coucou/management/commands/seed_demo.py

@@ -1,6 +1,7 @@
 ---
 id: m3-06-bad-origin-message
 milestone: 3
+difficulty: 1
 depends_on: []
 files:
   - coucou/templates/coucou/pair.html

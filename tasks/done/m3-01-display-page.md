@@ -1,6 +1,7 @@
 ---
 id: m3-01-display-page
 milestone: 3
+difficulty: 2
 depends_on: []
 files:
   - coucou/templates/coucou/display.html

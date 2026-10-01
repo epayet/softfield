@@ -1,6 +1,7 @@
 ---
 id: m4-05-me-css
 milestone: 4
+difficulty: 6
 depends_on: [m4-06-me-wiring]
 files:
   - coucou/static/coucou/css/me.css

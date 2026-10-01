@@ -1,6 +1,7 @@
 ---
 id: m3-05-me-name-form
 milestone: 3
+difficulty: 2
 depends_on: []
 files:
   - coucou/templates/coucou/paired.html

@@ -27,3 +27,10 @@ Read `docs/adr/14-developers-and-agents.md` item 5, and `docs/milestones/f1.md`'
 - `difficulty: 11`, `0` and `"hard"` are refused; a missing one is `None`
 - every `tasks/done/m*.md` has a difficulty, and the backfill stores it
 - `uv run runner check-all --task f1-17-difficulty` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```

@@ -1,6 +1,7 @@
 ---
 id: m3-03-build-snapshot
 milestone: 3
+difficulty: 3
 depends_on: []
 files:
   - coucou/snapshot.py

@@ -1,6 +1,7 @@
 ---
 id: m3-04-post-moment-command
 milestone: 3
+difficulty: 3
 depends_on: []
 files:
   - coucou/management/commands/post_moment.py

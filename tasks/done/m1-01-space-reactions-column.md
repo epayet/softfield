@@ -1,6 +1,7 @@
 ---
 id: m1-01-space-reactions-column
 milestone: 1
+difficulty: 2
 depends_on: []
 files:
   - coucou/reactions.py

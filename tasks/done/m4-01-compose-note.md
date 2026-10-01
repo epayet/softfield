@@ -1,6 +1,7 @@
 ---
 id: m4-01-compose-note
 milestone: 4
+difficulty: 6
 depends_on: []
 files:
   - coucou/static/coucou/js/compose.js

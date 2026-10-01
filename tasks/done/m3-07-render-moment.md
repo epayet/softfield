@@ -1,6 +1,7 @@
 ---
 id: m3-07-render-moment
 milestone: 3
+difficulty: 4
 depends_on: [m3-01-display-page]
 files:
   - coucou/static/coucou/js/render.js

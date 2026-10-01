@@ -1,6 +1,7 @@
 ---
 id: m2-05-french-wording
 milestone: 2
+difficulty: 1
 depends_on: []
 files:
   - coucou/locale/fr/LC_MESSAGES/django.po

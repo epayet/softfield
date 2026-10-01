@@ -1,6 +1,7 @@
 ---
 id: m3-10-render-names-nav
 milestone: 3
+difficulty: 5
 depends_on: []
 files:
   - coucou/static/coucou/js/render.js

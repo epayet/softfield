@@ -239,6 +239,38 @@ def test_only_lead_tickets_name_commands(tmp_path):
         parse_task(path, 150)
 
 
+def test_a_ticket_may_carry_its_difficulty_and_its_correction(tmp_path):
+    """ADR 14 item 5: 1 to 10, set at plan time; the lead may correct it at review."""
+    path = write_task(tmp_path, "m1-01-thing")
+    task = parse_task(path, 150)
+    assert (task.difficulty, task.difficulty_corrected) == (None, None)
+    path.write_text(
+        path.read_text().replace(
+            "milestone: 1\n", "milestone: 1\ndifficulty: 1\ndifficulty_corrected: 10\n"
+        )
+    )
+    task = parse_task(path, 150)
+    assert (task.difficulty, task.difficulty_corrected) == (1, 10)
+
+
+@pytest.mark.parametrize("key", ["difficulty", "difficulty_corrected"])
+@pytest.mark.parametrize("value", ["11", "0", '"hard"', "hard", "4.5", "true", "-3", "null"])
+def test_a_difficulty_is_an_integer_from_1_to_10(tmp_path, key, value):
+    path = write_task(tmp_path, "m1-01-thing")
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: 1\n{key}: {value}\n"))
+    with pytest.raises(TaskError, match=key):
+        parse_task(path, 150)
+
+
+def test_every_done_m1_to_m4_ticket_has_a_difficulty():
+    """f1-17 estimated M1–M4 from each ticket and its result, so ratings can be seeded."""
+    repo = Path(__file__).resolve().parents[2]
+    paths = sorted((repo / "tasks" / "done").glob("m*.md"))
+    assert paths
+    missing = [p.stem for p in paths if parse_task(p, 150).difficulty is None]
+    assert missing == []
+
+
 def test_a_milestone_is_a_number_or_a_named_key(tmp_path):
     """A number N is Coucou's milestone mN; a key like f1 is a factory milestone."""
     assert parse_task(write_task(tmp_path, "m1-01-thing"), 150).milestone == "m1"

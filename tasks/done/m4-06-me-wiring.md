@@ -1,6 +1,7 @@
 ---
 id: m4-06-me-wiring
 milestone: 4
+difficulty: 9
 depends_on: [m4-01-compose-note, m4-02-compose-photo, m4-03-thumbnail, m4-04-delivery-list]
 files:
   - coucou/static/coucou/js/me.js

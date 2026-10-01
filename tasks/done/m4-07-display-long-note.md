@@ -1,6 +1,7 @@
 ---
 id: m4-07-display-long-note
 milestone: 4
+difficulty: 5
 depends_on: []
 files:
   - coucou/static/coucou/css/display.css

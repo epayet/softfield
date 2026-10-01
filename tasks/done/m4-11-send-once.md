@@ -1,6 +1,7 @@
 ---
 id: m4-11-send-once
 milestone: 4
+difficulty: 4
 depends_on: []
 files:
   - coucou/static/coucou/js/compose.js
