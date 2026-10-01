@@ -881,6 +881,15 @@ def write_project(conn: sqlite3.Connection) -> None:
         status="in progress",
         started=_at(timedelta(days=1)),
     )
+    # In-progress milestone newer than the done one (for ordering tests).
+    metrics.upsert_milestone(
+        conn,
+        metrics.upsert_project(conn, PROJECT),
+        "f3",
+        title="The factory ships itself",
+        status="in progress",
+        started=_at(timedelta(hours=12)),
+    )
     metrics.upsert_run(
         conn,
         metrics.upsert_project(conn, PROJECT),
