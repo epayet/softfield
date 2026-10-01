@@ -71,3 +71,12 @@ attempts: 0
 tokens: 0
 logs: var/runs/20261001-082453/f1-15-agents-page-run2
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 4248
+gate_failures: ['no-changes']
+tokens: 8760968
+```
