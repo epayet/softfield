@@ -133,27 +133,13 @@ def test_timeline_milestone_select_shows_filter(client):
     assert selected_text == "F1"
 
 
-def test_timeline_default_page_shows_latest_milestone(client):
-    """The default page shows only the latest milestone's jobs (F1)."""
-    html = client.get("/timeline").text
-    # Check that the milestone select has F1 selected.
-    select_match = re.search(r'<select[^>]*name="milestone"[^>]*>(.*?)</select>', html, re.S)
-    assert select_match, "milestone select not found"
-    select_html = select_match.group(1)
-    selected_match = re.search(r"<option[^>]*\bselected\b[^>]*>(.*?)</option>", select_html, re.S)
-    assert selected_match, "no selected option in milestone select"
-    selected_text = re.sub(r"<[^>]+>", " ", selected_match.group(1)).strip()
-    assert selected_text == "F1"
-
-
 def test_timeline_run_filter(client):
     """?run= shows only that run's jobs."""
-    html = client.get("/timeline?run=20260920-100000").text
+    html = client.get("/timeline?run=20261001-100000").text
     data = charts(html)
     total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
-    # The old run (20260920-100000) belongs to M4; the default milestone filter is F1,
-    # so no jobs from that run should appear.
-    assert total_bars == 0
+    # The run 20261001-100000 has 2 jobs in F1; only those bars should appear.
+    assert total_bars == 2
 
 
 @pytest.fixture

@@ -256,8 +256,8 @@ def write_milestone_detail(conn: sqlite3.Connection) -> None:
         status="done",
         outcome="The factory now measures itself end-to-end.",
         done_when=(
-            "All tickets in `tasks/done/`, `check-all` passes on `main`,\n"
-            "`backfill` run twice gives identical row counts."
+            "- All tickets in `tasks/done/`, `check-all` passes on `main`,\n"
+            "- `backfill` run twice gives identical row counts."
         ),
         signoff={
             "changed": "- A metrics database that every run writes.\n"

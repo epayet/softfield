@@ -211,6 +211,8 @@ class MilestoneDetail:
     outcome: str | None
     done_when: str | None
     signoff: dict[str, str] | None
+    review_score: float | None
+    owner_score: float | None
     results: queries.MilestoneResults | None
     savings: queries.Savings | None
     tickets: list[sqlite3.Row]
@@ -249,6 +251,8 @@ def get_milestone_detail(
         outcome=m["outcome"],
         done_when=m["done_when"],
         signoff=signoff,
+        review_score=m["review_score"],
+        owner_score=m["owner_score"],
         results=results,
         savings=savings,
         tickets=tickets,

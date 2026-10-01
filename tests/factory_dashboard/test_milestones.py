@@ -204,6 +204,43 @@ def test_milestone_detail_shows_savings_with_parts_and_net(milestone_detail_clie
     assert "what Claude would have spent" in savings
     assert "what it spent supporting" in savings
     assert "net" in savings
+    # Dollar figures from fixture: doing_itself, supporting, net
+    assert "$1.50" in savings
+    assert "$4.20" in savings
+    assert "-$2.70" in savings
+
+
+def test_milestone_detail_shows_outcome_and_done_when(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    outcome = section(html, "outcome")
+    assert "The factory now measures itself end-to-end." in outcome
+    assert "All tickets in" in outcome
+
+
+def test_milestone_detail_shows_signoff_parts_by_text(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    for section_name, expected_text in (
+        ("what-changed", "A metrics database"),
+        ("how-to-test", "Run `uv run runner milestone f1`"),
+        ("what-next", "Close the factory review"),
+        ("later", "Full diffs"),
+        ("lessons", "Run the loop before the replan"),
+    ):
+        sec_text = section(html, section_name)
+        assert expected_text in sec_text, f"{section_name} missing expected text"
+
+
+def test_milestone_detail_tickets_section_lists_exactly_milestone_tickets(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    tickets_sec = section(html, "tickets")
+    # Should list exactly the 3 milestone tickets
+    assert "f1-01-first" in tickets_sec
+    assert "f1-02-escalated" in tickets_sec
+    assert "f1-03-lead" in tickets_sec
+    # Count ticket links
+    ticket_links = re.findall(r'href="/tickets/([^?]+)', html)
+    f1_tickets = [t for t in ticket_links if t.startswith("f1-")]
+    assert len(f1_tickets) == 3
 
 
 def test_milestone_detail_unknown_key_is_404(milestone_detail_client):

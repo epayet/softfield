@@ -11,13 +11,13 @@
 <section id="outcome">
   <h2>Outcome and Done when</h2>
   {% if milestone.outcome %}
-  <p>{{ milestone.outcome }}</p>
+  {{ outcome_html | safe }}
   {% else %}
   <p class="sub">Not written yet</p>
   {% endif %}
   {% if milestone.done_when %}
   <h3>Done when</h3>
-  {{ milestone.done_when_html | safe }}
+  {{ done_when_html | safe }}
   {% else %}
   <p class="sub">Not written yet</p>
   {% endif %}
@@ -78,8 +78,8 @@
     <dt>Attempts</dt><dd>{{ milestone.results.attempts }}</dd>
     <dt>Escalations</dt><dd>{{ milestone.results.escalations }}</dd>
     <dt>Review rounds</dt><dd>{{ milestone.results.review_rounds }}</dd>
-    <dt>Review score</dt><dd>{{ milestone.results.claude.dollars | usd }}</dd>
-    <dt>Owner score</dt><dd>{{ "–" }}</dd>
+    <dt>Review score</dt><dd>{{ "%.1f"|format(milestone.review_score * 10) + "/10" if milestone.review_score is not none else "–" }}</dd>
+    <dt>Owner score</dt><dd>{{ "%.1f"|format(milestone.owner_score * 10) + "/10" if milestone.owner_score is not none else "–" }}</dd>
   </dl>
   {% if milestone.results.findings %}
   <h3>Findings by severity</h3>
