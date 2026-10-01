@@ -33,7 +33,7 @@ from runner.review import (
     update_seen,
 )
 from runner.state import save_state
-from runner.tasks import next_milestone_key
+from runner.tasks import load_dir, next_milestone_key
 from runner.usage import claude_tokens, transcripts_dir, work_summary
 
 _FOOTER_RE = re.compile(r"# --- runner ---\n(.*?)```", re.DOTALL)
@@ -244,6 +244,7 @@ def _record_review(s: Session, milestone: str, rounds: int) -> None:
 
 
 RESTART = "restart"
+PAUSED = "tickets paused behind a blocked or escalated one: "
 
 
 def run_milestone(cfg: Config, milestone: str, base: str) -> str:
@@ -255,6 +256,15 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
     close_session(s)
     if restart:
         return RESTART
+    # Tickets still in ready/ after the queue ran are waiting on a stopped one: the milestone
+    # isn't built, so the verdict asks the owner instead of reviewing half of it (f1-16).
+    waiting = sorted(
+        t.id
+        for t in load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
+        if t.milestone == milestone
+    )
+    if waiting:
+        return PAUSED + ", ".join(waiting)
     return review_milestone(cfg, milestone, base)
 
 

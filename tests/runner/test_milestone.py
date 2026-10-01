@@ -60,6 +60,19 @@ def test_a_milestone_stops_for_a_restart_before_the_review(repo, monkeypatch):
     assert milestone.run_milestone(_config(repo), "m1", "HEAD") == milestone.RESTART
 
 
+def test_no_review_while_tickets_wait_behind_a_blocked_one(repo, monkeypatch):
+    """f1: f1-16 was blocked with 15 tickets behind it, and the runner went on to review the
+    half-built milestone, spending its one review loop (ADR 12 item 10)."""
+    write_task(repo / "tasks" / "blocked", "m1-01-a")
+    write_task(repo / "tasks" / "ready", "m1-02-b", deps="[m1-01-a]")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: False)
+    monkeypatch.setattr(milestone, "review_milestone", lambda *a: pytest.fail("reviewed early"))
+    stop = milestone.run_milestone(_config(repo), "m1", "HEAD")
+    assert stop == milestone.PAUSED + "m1-02-b"
+
+
 MILESTONE_DOC = """\
 # Milestone 1: Photos for Mum
 
@@ -201,3 +214,9 @@ def test_a_factory_milestones_metrics_and_summary(repo):
     assert milestone_metrics(repo, "f1").tasks == ["a"]
     assert "Who did the work in F1" in milestone_summary(repo, "f1")
     assert "there's no `f1-start` yet" in milestone_summary(repo, "f1")
+
+
+def test_a_paused_stop_always_needs_the_owner():
+    from runner.owner import _needs_owner
+
+    assert _needs_owner(milestone.PAUSED + "m1-02-b")

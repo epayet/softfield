@@ -41,7 +41,9 @@ def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
 
 
 def _needs_owner(stop: str) -> bool:
-    return stop in OWNER_STOPS or stop.startswith(("end-to-end", "review output unusable"))
+    return stop in OWNER_STOPS or stop.startswith(
+        ("end-to-end", "review output unusable", "tickets paused")
+    )
 
 
 # --- owner items in the metrics database (f1 D8): best effort ----------------------------
