@@ -436,6 +436,79 @@ def write_jobs(conn: sqlite3.Connection) -> None:
     )
 
 
+def write_runs(conn: sqlite3.Connection) -> None:
+    """Runs for the runs page tests: a running run, a completed run, and a stopped run."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+
+    # Running run (fresh heartbeat)
+    running_run = metrics.upsert_run(
+        conn,
+        project,
+        "20261002-113500",
+        command="milestone f1",
+        started=_at(timedelta(minutes=25)),
+        heartbeat=_at(timedelta(seconds=30)),
+    )
+    live = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-04-live",
+        milestone_id=f1,
+        kind="developer",
+        state="running",
+        difficulty=5,
+    )
+    metrics.start_job(
+        conn,
+        running_run,
+        ticket_id=live,
+        milestone_id=f1,
+        role="developer",
+        agent=LOCAL,
+        attempt=2,
+        started=_at(timedelta(minutes=12)),
+    )
+
+    # Completed run
+    completed_run = metrics.upsert_run(
+        conn,
+        project,
+        "20260930-100000",
+        command="milestone f1",
+        started="2026-09-30T10:00:00+02:00",
+        ended=_at(timedelta(hours=1)),
+        verdict="3 merged, 0 not",
+    )
+    for tid, role in [
+        ("f1-01-first", "developer"),
+        ("f1-02-escalated", "direction"),
+        ("f1-03-lead", "lead-ticket"),
+    ]:
+        t = metrics.upsert_ticket(
+            conn, project, tid, milestone_id=f1, kind="developer", state="done", difficulty=4
+        )
+        metrics.start_job(
+            conn,
+            completed_run,
+            ticket_id=t,
+            milestone_id=f1,
+            role=role,
+            agent=OPUS,
+            attempt=1,
+            started="2026-09-30T10:00:00+02:00",
+        )
+
+    # Stopped run (old heartbeat)
+    metrics.upsert_run(
+        conn,
+        project,
+        "20260920-100000",
+        command="backfill",
+        heartbeat=_at(timedelta(minutes=3)),
+    )
+
+
 def write_m1_jobs(conn: sqlite3.Connection) -> int:
     """An m1 milestone in the coucou project with a job, for the timeline milestone filter test."""
     project = metrics.upsert_project(conn, PROJECT)

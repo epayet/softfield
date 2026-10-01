@@ -47,7 +47,7 @@ templates.env.filters.update(usd=usd, tokens=short, ago=ago)
 
 def create_app(db: Path, project: str) -> FastAPI:
     """The dashboard over the database at ``db``, showing ``project`` unless asked otherwise."""
-    from factory_dashboard import jobs, milestones, overview, projects, tickets, timeline
+    from factory_dashboard import jobs, milestones, overview, projects, runs, tickets, timeline
 
     app = FastAPI(title="software-factory", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.db, app.state.project = db, project
@@ -61,6 +61,7 @@ def create_app(db: Path, project: str) -> FastAPI:
     app.include_router(jobs.router)
     app.include_router(timeline.router)
     app.include_router(projects.router)
+    app.include_router(runs.router)
     return app
 
 

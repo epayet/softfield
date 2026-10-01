@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.run_dir }} · {{ project }}{% endblock %}
+{% block crumbs %}
+<a href="/runs{{ q }}">Runs</a>
+<span>{{ run.run_dir }}</span>
+{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="info" class="panel">
+  <h2>Run {{ run.run_dir }} <span class="src">{{ run.status }}</span></h2>
+  <dl class="kv">
+    <dt>Command</dt><dd><code>{{ run.command or "–" }}</code></dd>
+    <dt>Started</dt><dd class="time">{{ run.started }}</dd>
+    {% if run.ended %}<dt>Ended</dt><dd class="time">{{ run.ended }}</dd>{% endif %}
+    {% if run.minutes %}<dt>Duration</dt><dd class="num">{{ "%.1f" | format(run.minutes) }} min</dd>{% endif %}
+    {% if run.verdict %}<dt>Verdict</dt><dd>{{ run.verdict }}</dd>{% endif %}
+    {% if run.status == "running" %}<dt>Status</dt><dd><span class="pill running">running</span></dd>{% endif %}
+    {% if run.status == "stopped" %}<dt>Status</dt><dd><span class="pill critical">stopped</span></dd>{% endif %}
+  </dl>
+</section>
+
+{% if run.jobs %}
+<section id="jobs" class="panel">
+  <h2>Jobs <span class="src">in order</span></h2>
+  <div class="scroll"><table>
+    <thead><tr><th>#</th><th>Role</th><th>Agent</th><th>Attempt</th></tr></thead>
+    <tbody>
+      {% for job in run.jobs %}
+      <tr>
+        <td class="id"><a href="/jobs/{{ job.id }}">{{ job.id }}</a></td>
+        <td>{{ job.role }}</td>
+        <td>{{ job.agent }}</td>
+        <td class="num">{{ job.attempt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+{% if run.tickets %}
+<section id="tickets" class="panel">
+  <h2>Tickets <span class="src">touched by this run</span></h2>
+  <div class="scroll"><table>
+    <thead><tr><th>Ticket</th><th>Title</th></tr></thead>
+    <tbody>
+      {% for ticket in run.tickets %}
+      <tr>
+        <td class="id"><a href="/tickets/{{ ticket.ticket }}{{ q }}">{{ ticket.ticket }}</a></td>
+        <td>{{ ticket.title or "–" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
+</div>
+{% endblock %}
