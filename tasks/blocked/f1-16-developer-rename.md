@@ -41,3 +41,9 @@ Read `docs/adr/14-developers-and-agents.md` item 1. Find every use with `Grep` (
 - no prompt the runner builds says "junior"
 - `docs/agents/junior.md` is gone and nothing outside history refers to it (a test greps the runner's source and `opencode.json`)
 - `uv run runner check-all --task f1-16-developer-rename` passes
+
+```yaml
+# --- runner ---
+result: blocked
+reason: check-all failed; the work is on task/f1-16-developer-rename
+```
