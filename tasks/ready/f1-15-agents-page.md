@@ -40,7 +40,7 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 
 That is 5 jobs, 3,000 seconds, 575,000 tokens (f1's 4 jobs are 500,000 in + 25,000 out, pinned by `test_milestone_results_split_local_and_claude_spend` in `tests/factory_dashboard/test_queries.py`), and none has gates or a cost. So local over all milestones is: 5 jobs, 2 merged, 3 attempt tickets, first pass 2/3 (67%), 2.5 attempts per merge, 25.0 minutes per merge, 287,500 tokens per merge, 192 tokens per second (575,000 ÷ 3,000 = 191.7), escalation 1/3 (33%), no failed gate (dash), $0. `claude-sonnet` (one checkpoint, no merges) is the no-merges row: per-merge numbers show dashes, not a division error.
 
-The empty-state test can use the plain `client` (no `rating_changes`). The chart test needs two rating changes of its own: add them in a new function in `conftest.py` (as `write_project` is, with a fixture like `project_client`). `write_fixture`'s numbers are pinned by other tests; don't change its rows, and define each new fixture name once.
+The empty-state test can use the plain `client` (no `rating_changes`). The chart test needs two rating changes of its own: add them in a new function in `tests/factory_dashboard/conftest.py` (as `write_project` is, with a fixture like `project_client`). `write_fixture`'s numbers are pinned by other tests; don't change its rows, and define each new fixture name once.
 
 **The dashboard is English-only: no gettext and no French.** Tests use `TestClient` and check the text the page shows, not only that it answers 200.
 
