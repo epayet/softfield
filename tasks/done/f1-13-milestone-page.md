@@ -31,3 +31,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - an unknown key is a 404
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 4122
+gate_failures: ['no-changes', 'no-changes']
+tokens: 2427631
+```
