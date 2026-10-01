@@ -88,6 +88,9 @@ def main(argv: list[str] | None = None) -> int:
         "dashboard", help="serve the factory dashboard at 127.0.0.1 until Ctrl-C (ADR 13)"
     )
     dashboard.add_argument("--port", type=int, default=8765)
+    dashboard.add_argument(
+        "--host", default="127.0.0.1", help="the address to listen on, e.g. this machine's LAN IP"
+    )
     dashboard.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     args = parser.parse_args(argv)
 
@@ -183,8 +186,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
             from factory_dashboard import app  # FastAPI loads only for this command
 
-            print(f"The factory dashboard: http://{app.HOST}:{args.port}/ (Ctrl-C stops it)")
-            app.serve(db, repo.name, port=args.port)
+            print(f"The factory dashboard: http://{args.host}:{args.port}/ (Ctrl-C stops it)")
+            app.serve(db, repo.name, port=args.port, host=args.host)
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")

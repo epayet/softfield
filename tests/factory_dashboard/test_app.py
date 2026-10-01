@@ -72,6 +72,18 @@ def test_runner_dashboard_serves_on_loopback_only(db_path, monkeypatch, capsys):
     assert (served["host"], served["port"]) == (HOST, PORT) == ("127.0.0.1", 8765)
 
 
+def test_runner_dashboard_serves_on_a_lan_address_when_asked(db_path, monkeypatch, capsys):
+    # the owner reads it from another machine (owner, 2026-10-01): that address, and no other name
+    served: dict[str, object] = {}
+    monkeypatch.setattr(uvicorn, "run", lambda app, **options: served.update(options, app=app))
+    assert cli.main(["dashboard", "--db", str(db_path), "--host", "192.168.178.34"]) == 0
+    assert served["host"] == "192.168.178.34"
+    assert "http://192.168.178.34:8765/" in capsys.readouterr().out
+    client = TestClient(served["app"])  # type: ignore[arg-type]
+    assert client.get("/", headers={"Host": "192.168.178.34:8765"}).status_code == 200
+    assert client.get("/", headers={"Host": "attacker.example"}).status_code == 400
+
+
 def test_runner_dashboard_refuses_a_missing_database(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: pytest.fail("served"))
     assert cli.main(["dashboard", "--db", str(tmp_path / "none.sqlite")]) == 1

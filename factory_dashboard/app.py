@@ -1,5 +1,5 @@
 """The factory dashboard's service (ADR 13 item 2, f1 D1): a FastAPI app over the metrics
-database, served at 127.0.0.1 by ``uv run runner dashboard``.
+database, served at 127.0.0.1 by ``uv run runner dashboard`` (or at ``--host``, a LAN address).
 
 - One read-only connection per request (``Db``): the dashboard never writes.
 - Every page takes ``?project=`` (``Project``) and keeps it in its links (``q`` in templates).
@@ -49,8 +49,9 @@ def ago(delta: timedelta) -> str:
 templates.env.filters.update(usd=usd, pct=pct, tokens=short, ago=ago)
 
 
-def create_app(db: Path, project: str) -> FastAPI:
-    """The dashboard over the database at ``db``, showing ``project`` unless asked otherwise."""
+def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
+    """The dashboard over the database at ``db``, showing ``project`` unless asked otherwise,
+    answering to loopback names and to ``host``, the address it listens on."""
     from factory_dashboard import (
         agents,
         jobs,
@@ -64,8 +65,9 @@ def create_app(db: Path, project: str) -> FastAPI:
 
     app = FastAPI(title="software-factory", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.db, app.state.project = db, project
-    # Only loopback names: a page elsewhere that rebinds its own name to 127.0.0.1 is refused.
-    hosts = [HOST, "localhost"]
+    # Only loopback names and the address it listens on: a page elsewhere that rebinds its own
+    # name to one of them is refused.
+    hosts = list(dict.fromkeys([HOST, "localhost", host]))
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=hosts)
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     app.include_router(overview.router)
@@ -79,8 +81,8 @@ def create_app(db: Path, project: str) -> FastAPI:
     return app
 
 
-def serve(db: Path, project: str, port: int = PORT) -> None:
-    uvicorn.run(create_app(db, project), host=HOST, port=port, log_level="warning")
+def serve(db: Path, project: str, port: int = PORT, host: str = HOST) -> None:
+    uvicorn.run(create_app(db, project, host), host=host, port=port, log_level="warning")
 
 
 def get_db(request: Request) -> Iterator[sqlite3.Connection]:

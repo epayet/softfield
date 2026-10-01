@@ -58,6 +58,7 @@ The factory is also heading out of this repo, to become a generic tool for sever
 
 ### 2. ⚑ `uv run runner dashboard`: a small local service, not a static page
 - **Where it listens:** `127.0.0.1`, while the owner wants it running. A systemd unit is a later option, with the owner's OK.
+  - ⚑ **Amended by the owner, 2026-10-01:** `--host <address>` serves it on the home network too (`uv run runner dashboard --host 192.168.178.34`). It's read-only with no login, so anyone on that network can read it; it answers only to loopback names and that address, so DNS rebinding is still refused.
 - **The stack:** server-rendered pages with FastAPI + Jinja2, **htmx** for the live parts, **Apache ECharts** for charts, and one stylesheet. The JS is vendored: no CDN, **no build step**.
   - Every ticket, job and finding gets a real URL, which suits text-heavy browsing.
   - The factory stays one language (Python), so it packages as one tool at extraction.
