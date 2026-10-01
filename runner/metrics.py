@@ -387,6 +387,27 @@ def finish_job(
     _update(conn, "jobs", job_id, values)
 
 
+def close_abandoned(conn: sqlite3.Connection, project_id: int, run_id: int) -> int:
+    """Mark ``interrupted`` every job an earlier run of the project left ``running`` (a Ctrl-C,
+    a crash), ended at that run's last heartbeat, and end those runs. Only one runner works a
+    repo at a time, so a new run means the old ones are gone. Returns how many jobs it closed."""
+    stale = conn.execute(
+        "SELECT j.id, r.id AS run, coalesce(r.heartbeat, j.started) AS at FROM jobs j"
+        " JOIN runs r ON r.id = j.run_id"
+        " WHERE r.project_id = ? AND r.id != ? AND j.outcome = 'running'",
+        (project_id, run_id),
+    ).fetchall()
+    for job, run, at in stale:
+        conn.execute("UPDATE jobs SET outcome = 'interrupted', ended = ? WHERE id = ?", (at, job))
+        conn.execute(
+            "UPDATE runs SET ended = coalesce(ended, ?), verdict = coalesce(verdict, ?)"
+            " WHERE id = ?",
+            (at, "interrupted", run),
+        )
+    conn.commit()
+    return len(stale)
+
+
 def update_running_job(
     conn: sqlite3.Connection,
     job_id: int,

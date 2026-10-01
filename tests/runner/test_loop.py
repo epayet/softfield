@@ -795,6 +795,26 @@ def test_an_interrupted_attempt_stays_running_with_the_heartbeat_set(repo, fake_
     assert run["heartbeat"] and run["ended"] is None
 
 
+def test_the_next_run_marks_an_interrupted_attempt_interrupted(repo, fake_model):
+    # else the dashboard says a dead runner needs you, forever (owner, 2026-10-01)
+    _add_task(repo, "m1-01-thing")
+
+    def crash(repo_: Path, prompt: str) -> None:
+        raise RuntimeError("OpenCode died")
+
+    fake_model.append(crash)
+    with pytest.raises(RuntimeError, match="OpenCode died"):
+        _run(repo)
+    git(repo, "checkout", "-q", "-f", "main")  # as the owner does before rerunning
+    with sqlite3.connect(_config(repo).metrics_db) as conn:  # an earlier second than the rerun's
+        conn.execute("UPDATE runs SET run_dir = '20000101-000000'")
+    fake_model.append(_implement)
+    _run(repo)
+    first, again = _rows(repo, "jobs")[:2]
+    assert first["outcome"] == "interrupted" and first["ended"]
+    assert again["outcome"] == "passed"
+
+
 def test_a_live_update_changes_tokens_steps_and_heartbeat_only(repo, monkeypatch):
     s = loop.open_session(_config(repo))
     job = loop.record_start(s, "m1-01-thing", "m1", "developer", "local-m", log_path="x.jsonl")

@@ -265,6 +265,8 @@ def _start_run(s: Session, command: str) -> None:
             started=at,
             heartbeat=at,
         )
+        if s.run_id is not None:
+            _record(s, metrics.close_abandoned, s.project_id, s.run_id)
         sync_tickets(s)
 
 

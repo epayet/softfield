@@ -281,3 +281,25 @@ def test_writes_are_committed_at_once(tmp_path):
     assert reader.execute("SELECT name FROM projects").fetchall() == [("coucou",)]
     reader.close()
     writer.close()
+
+
+def test_a_new_run_closes_what_a_stopped_run_left_running(db, ids):
+    stale = _job(db, ids)
+    metrics.update_run_heartbeat(db, ids["run"], T1)
+    run = metrics.upsert_run(db, ids["project"], "20260930-170000", started=T1, heartbeat=T1)
+    current = metrics.start_job(
+        db,
+        run,
+        ticket_id=ids["ticket"],
+        milestone_id=None,
+        role="lead",
+        agent="claude",
+        attempt=1,
+        started=T1,
+    )
+    assert metrics.close_abandoned(db, ids["project"], run) == 1
+    jobs = db.execute("SELECT id, outcome, ended FROM jobs ORDER BY id").fetchall()
+    assert [tuple(j) for j in jobs] == [(stale, "interrupted", T1), (current, "running", None)]
+    old = db.execute("SELECT ended, verdict FROM runs WHERE id = ?", (ids["run"],)).fetchone()
+    assert tuple(old) == (T1, "interrupted")
+    assert metrics.close_abandoned(db, ids["project"], run) == 0
