@@ -23,6 +23,7 @@
       failed: '#e74c3c',
       timeout: '#f39c12',
       running: '#3498db',
+      refused: '#9b59b6',
     };
     return colors[outcome] || '#95a5a6';
   }
@@ -212,6 +213,14 @@
       chart.setOption({ textStyle: { fontFamily: c.font }, ...option(JSON.parse(block.textContent), c) });
       el.dataset.drawn = "1";
       new ResizeObserver(() => chart.resize()).observe(el);
+      // Timeline bars: clicking a bar opens the job page.
+      if (el.dataset.chart === "timeline") {
+        chart.on("click", (params) => {
+          if (params.data && params.data.job_id != null) {
+            window.location.href = "/jobs/" + params.data.job_id;
+          }
+        });
+      }
     }
   }
 

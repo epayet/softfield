@@ -38,6 +38,19 @@ class MilestoneRow:
 
 def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]:
     """Every milestone's summary, newest first. Milestones with no tickets show dashes."""
+    # Lookup table for milestone status and dates.
+    milestone_meta = conn.execute(
+        "SELECT m.key, m.status, m.started, m.ended FROM milestones m"
+        " JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
+        (project,),
+    ).fetchall()
+    meta: dict[str, dict[str, str | None]] = {}
+    for row in milestone_meta:
+        meta[row["key"]] = {
+            "status": row["status"],
+            "started": row["started"],
+            "ended": row["ended"],
+        }
     # Milestones with data from trends (oldest first).
     with_data: list[MilestoneRow] = []
     for trend in queries.trends(conn, project):
@@ -46,13 +59,14 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
         # Skip milestones with no tickets (they show dashes, not zeros).
         if r.merged == 0:
             continue
+        info = meta.get(r.key, {})
         with_data.append(
             MilestoneRow(
                 key=r.key,
                 title=r.title,
-                status=None,
-                started=None,
-                ended=None,
+                status=info.get("status"),
+                started=info.get("started"),
+                ended=info.get("ended"),
                 tickets=r.tickets,
                 merged=r.merged,
                 pass_rate=r.pass_rate,

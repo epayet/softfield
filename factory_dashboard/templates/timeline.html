@@ -10,7 +10,7 @@
       <select name="milestone">
         <option value="">All milestones</option>
         {% for m in milestones %}
-        <option value="{{ m.key }}"{% if m.key == milestone_filter %} selected{% endif %}>{{ m.key | upper }}</option>
+        <option value="{{ m.key }}"{% if m.key == filter_milestone %} selected{% endif %}>{{ m.key | upper }}</option>
         {% endfor %}
       </select>
     </label>

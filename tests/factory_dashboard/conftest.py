@@ -29,7 +29,11 @@ NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 LOCAL = "local-qwen3.6-35b-a3b"
 OPUS, SONNET = "claude-opus", "claude-sonnet"
 # Each Claude job in f1: 10k input + 100k cache reads (0.1) + 2k output (5) = 30k equivalents.
-CLAUDE_TOKENS = {"tokens_in": 10_000, "tokens_cached": 100_000, "tokens_out": 2_000}
+CLAUDE_TOKENS: dict[str, int | float | None] = {
+    "tokens_in": 10_000,
+    "tokens_cached": 100_000,
+    "tokens_out": 2_000,
+}
 
 
 def _job(
@@ -242,8 +246,23 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
 
 
 def write_milestones(conn: sqlite3.Connection) -> None:
-    """On top of ``write_fixture``: a milestone with no tickets yet (f2)."""
+    """On top of ``write_fixture``: a milestone with no tickets yet (f2),
+    F1 with a status, and F10 (earlier than F2) for ordering tests."""
     project = metrics.upsert_project(conn, PROJECT)
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f1",
+        status="done",
+    )
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f10",
+        title="F10 milestone",
+        status="in progress",
+        started=_at(timedelta(days=2)),
+    )
     metrics.upsert_milestone(
         conn,
         project,
@@ -572,6 +591,54 @@ def write_tickets(conn: sqlite3.Connection) -> None:
         started=_at(timedelta(minutes=12)),
     )
     metrics.update_running_job(conn, job, tokens_in=42_000, steps=17)
+
+
+def write_f1_run(conn: sqlite3.Connection) -> None:
+    """A second run with F1 jobs, for the timeline run filter test."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    new_run = metrics.upsert_run(conn, project, "20261001-100000", command="milestone f1")
+    ticket = metrics.upsert_ticket(
+        conn, project, "f1-07-test", milestone_id=f1, kind="developer", state="done"
+    )
+    job1 = metrics.start_job(
+        conn,
+        new_run,
+        ticket_id=ticket,
+        milestone_id=f1,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-10-01T10:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        job1,
+        ended="2026-10-01T10:05:00+02:00",
+        outcome="failed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
+    job2 = metrics.start_job(
+        conn,
+        new_run,
+        ticket_id=ticket,
+        milestone_id=f1,
+        role="escalation",
+        agent=OPUS,
+        attempt=1,
+        started="2026-10-01T10:06:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        job2,
+        ended="2026-10-01T10:11:00+02:00",
+        outcome="passed",
+        cost_usd=1.0,
+        tokens_in=10_000,
+        tokens_cached=100_000,
+        tokens_out=2_000,
+    )
 
 
 def write_more_jobs(conn: sqlite3.Connection, count: int) -> int:

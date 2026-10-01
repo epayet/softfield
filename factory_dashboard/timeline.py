@@ -173,7 +173,7 @@ def timeline_page(
             "data": data,
             "milestones": milestones,
             "runs": runs,
-            "milestone_filter": milestone,
+            "filter_milestone": filter_milestone,
             "run_filter": run,
         },
     )
