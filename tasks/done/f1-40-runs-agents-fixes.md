@@ -33,3 +33,12 @@ Read `factory_dashboard/runs.py`, `factory_dashboard/agents.py`, `tests/factory_
 - the efficiency test reads the local agent's row cell by cell (jobs 5, merged 2, attempt tickets 3, 67%, 2.5, 25.0, 287500, 192, 33%, `$0.00`, dash) and the `claude-sonnet` test reads its own row (1 job, 0 merged, dashes); no bare `"5" in eff`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1624
+gate_failures: []
+tokens: 2823283
+```
