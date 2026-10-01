@@ -99,7 +99,7 @@ def test_preflight(repo):
 
 
 def test_preflight_allows_new_files_and_unwritten_tests(repo):
-    """Files listed in `files:` may be created by the task, and juniors write their own
+    """Files listed in `files:` may be created by the task, and developers write their own
     tests, so neither has to exist yet (ADR 07 items 2 and 4)."""
     path = write_task(repo / "tasks" / "ready", "m1-01-thing")
     # m4-07: a Context naming its own (unwritten) test file failed pre-flight.
@@ -169,12 +169,32 @@ def test_queued_tests_skip_only_developer_tickets_and_never_the_tickets_own(tmp_
 
 def test_a_ticket_says_who_works_it(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
-    assert parse_task(path, 150).agent == "junior"
+    assert parse_task(path, 150).agent == "developer"
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n"))
     assert parse_task(path, 150).agent == "lead"
     path.write_text(path.read_text().replace("agent: lead", "agent: owner"))
     with pytest.raises(TaskError, match="agent"):
         parse_task(path, 150)
+
+
+@pytest.mark.parametrize("line", ["", "agent: developer\n", "agent: junior\n"])
+def test_a_developer_ticket_parses_as_developer_and_junior_is_a_synonym(tmp_path, line):
+    """ADR 14 item 1: "junior" became "developer"; old tickets keep parsing."""
+    path = write_task(tmp_path, "m1-01-thing")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\n" + line))
+    assert parse_task(path, 150).agent == "developer"
+
+
+def test_an_old_junior_tickets_tests_are_skipped_like_a_developers(tmp_path):
+    tasks = tmp_path / "tasks"
+    write_task(tasks / "ready", "m1-01-current")
+    old = write_task(tasks / "ready", "m1-02-old")
+    old.write_text(
+        old.read_text()
+        .replace("milestone: 1\n", "milestone: 1\nagent: junior\n")
+        .replace("test_thing.py", "test_old.py")
+    )
+    assert queued_tests(tasks, "m1-01-current") == {"tests/unit/test_old.py"}
 
 
 def test_a_lead_ticket_may_name_extra_commands(tmp_path):

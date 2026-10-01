@@ -87,7 +87,7 @@ class Git:
         """Stage everything and commit. Returns False if there was nothing to commit.
 
         The runner's commits skip the pre-commit hook (ADR 12 item 15): a wip commit holds a
-        junior's unchecked work, and everything else the runner commits is gated its own way.
+        developer's unchecked work, and everything else the runner commits is gated its own way.
         """
         self.run("add", "-A")
         if self.run("diff", "--cached", "--name-only").strip() == "":

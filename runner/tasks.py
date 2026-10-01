@@ -15,7 +15,8 @@ _PATH_RE = re.compile(r"`([\w./-]+\.(?:py|js|html|css|md|toml|json|txt))`")
 _SYMBOL_RE = re.compile(r"\b(?:def|class)\s+([A-Za-z_]\w*)")
 
 
-AGENTS = ("junior", "lead")  # who works a ticket (ADR 12 item 9)
+AGENTS = ("developer", "lead")  # who works a ticket (ADR 12 item 9)
+_AGENT_SYNONYMS = {"junior": "developer"}  # old tickets' name for a developer (ADR 14 item 1)
 # Folders whose tasks pause their dependants: waiting for the lead, or for the owner.
 STOPPED = ("escalated", "blocked")
 
@@ -69,7 +70,7 @@ class Task:
     finding: str | None
     sections: dict[str, str]
     path: Path
-    agent: str = "junior"
+    agent: str = "developer"
     commands: tuple[str, ...] = ()  # a lead ticket's extra Bash prefixes (f1's probes)
 
     @property
@@ -153,7 +154,8 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
     if not isinstance(max_diff, int) or max_diff <= 0:
         raise TaskError("'max_diff' must be a positive integer")
     finding = meta.get("finding")
-    agent = meta.get("agent", "junior")
+    agent = meta.get("agent", "developer")
+    agent = _AGENT_SYNONYMS.get(agent, agent) if isinstance(agent, str) else agent
     if agent not in AGENTS:
         raise TaskError(f"'agent' must be one of {', '.join(AGENTS)}")
     return Task(
@@ -190,7 +192,7 @@ def queued_tests(tasks_dir: Path, current: str) -> set[str]:
             listed = _str_tuple(meta, "tests", required=False)
             if path.stem == current:
                 own.update(listed)
-            elif meta.get("agent", "junior") != "lead":
+            elif meta.get("agent") != "lead":
                 tests.update(listed)
     return tests - own
 
@@ -228,7 +230,7 @@ def pick_next(ready: Iterable[Task], done: set[str], paused: set[str]) -> Task |
 def preflight(task: Task, repo: Path) -> list[str]:
     """Problems with the task's Context/Pattern references. Empty means OK.
 
-    The ``tests:`` files may not exist yet: juniors write their own (ADR 07 item 4).
+    The ``tests:`` files may not exist yet: developers write their own (ADR 07 item 4).
     """
     text = task.sections["Context"] + "\n" + task.sections.get("Pattern to follow", "")
     problems = []

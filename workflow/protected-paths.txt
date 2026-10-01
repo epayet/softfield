@@ -76,7 +76,7 @@ docs/adr/**
 pyproject.toml
 uv.lock
 
-# Tests that guard the protected code above (ADR 07 item 4). Juniors may change other
+# Tests that guard the protected code above (ADR 07 item 4). Developers may change other
 # tests, but not these: only the lead changes them, as with the code they guard.
 tests/unit/test_authz.py
 tests/unit/test_deviceauth.py
@@ -106,5 +106,5 @@ tests/e2e/**
 # `runner report`'s numbers (f1 D1): the dashboard's queries may change, not what they count
 tests/runner/test_report.py
 
-# The lead's instructions, and the juniors' notes it curates (ADR 07 items 6 and 14)
+# The lead's instructions, and the developers' notes it curates (ADR 07 items 6 and 14)
 docs/agents/**

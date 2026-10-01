@@ -281,7 +281,7 @@ def gate_protected(ctx: GateContext) -> GateResult:
 
 
 def gate_no_new_skips(ctx: GateContext) -> GateResult:
-    """Juniors may change tests (ADR 07 item 4), but not silence them."""
+    """Developers may change tests (ADR 07 item 4), but not silence them."""
     added = added_skips(ctx.git.run("diff", "-U0", f"{ctx.base}...HEAD", "--", "tests/"))
     return _result("no-new-skips", [f"skip added: {line}" for line in added])
 

@@ -161,7 +161,7 @@ def test_skipped_tests_are_rejected_then_escalated(repo, fake_model):
     assert "skip" not in (repo / "tests" / "unit" / "test_thing.py").read_text()
 
 
-def test_juniors_may_edit_tests_and_touch_other_files_and_the_report_says_so(repo, fake_model):
+def test_developers_may_edit_tests_and_touch_other_files_and_the_report_says_so(repo, fake_model):
     """ADR 07 items 4 and 9: `files:` is a pointer and existing tests may change; the
     session report lists both for the milestone review."""
     _add_task(repo, "m1-01-thing")
@@ -507,7 +507,7 @@ def test_a_lead_ticket_that_fails_check_all_is_blocked_with_its_branch_kept(
     assert (repo / "tasks" / "ready" / "m1-02-after.md").exists()  # paused, not run
 
 
-def test_a_checkpoint_runs_after_every_two_junior_merges(repo, fake_model, fake_lead):
+def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fake_lead):
     for n in (1, 2, 3):
         _add_task(repo, f"m1-0{n}-thing")
     script, jobs = fake_lead
@@ -534,6 +534,7 @@ def test_a_checkpoint_runs_after_every_two_junior_merges(repo, fake_model, fake_
     # f1-36, f1-37: a checkpoint queued bare file names; its commit skips the hook, so it
     # must be able to run the pre-flight test itself.
     assert "Bash(uv run pytest:*)" in jobs[0].allowed_tools
+    assert "Edit(docs/agents/developer.md)" in jobs[0].allowed_tools  # ADR 14 item 1
     assert "tests/runner/test_tasks.py" in jobs[0].prompt
     assert "Checkpoint: Sound. Tightened m1-03." in report.notes
 

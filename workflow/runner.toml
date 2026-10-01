@@ -10,7 +10,7 @@ max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fre
 # limits goes to tasks/blocked/ and is named in the report.
 directions_per_task = 1                 # the lead's direction before the last attempt
 escalations_per_task = 2
-checkpoint_every = 2                    # junior merges between checkpoint reviews
+checkpoint_every = 2                    # developer merges between checkpoint reviews
 review_rounds = 3
 default_max_diff = 1000                 # a backstop against rewritten files, not a sizing tool (ADR 07)
 

@@ -549,7 +549,7 @@ def needs_direction(failures: list[str], timeouts: list[bool]) -> bool:
 
 
 def _save_thinking(rec: TaskRecord, logs: Path, repo: Path) -> list[str]:
-    """Write the junior's thinking per attempt next to the logs; returns the files written."""
+    """Write the developer's thinking per attempt next to the logs; returns the files written."""
     written = []
     for attempt, session in enumerate(rec.sessions, start=1):
         text = session_reasoning(OPENCODE_DB, session)
@@ -878,8 +878,8 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
 
 
 def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
-    """Count a junior merge; every ``checkpoint_every`` of them, run a checkpoint."""
-    if rec.result != "done" or task.agent != "junior":
+    """Count a developer merge; every ``checkpoint_every`` of them, run a checkpoint."""
+    if rec.result != "done" or task.agent != "developer":
         return
     s.state.unchecked.append(f"{task.id} {rec.commit}")
     save_state(s.state, s.state_path)
@@ -901,7 +901,7 @@ def checkpoint(s: Session, milestone: str) -> None:
             *GIT_READ_TOOLS,
             "Bash(uv run pytest:*)",  # the tickets' pre-flight test; its commit skips the hook
             "Edit(tasks/ready/**)",
-            "Edit(docs/agents/junior.md)",
+            "Edit(docs/agents/developer.md)",
             "Edit(var/runs/**)",
         ),
         model=s.cfg.checkpoint_model,

@@ -1,4 +1,4 @@
-# Notes for juniors
+# Notes for developers
 
 Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 

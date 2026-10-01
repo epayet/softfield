@@ -135,7 +135,7 @@ def test_an_empty_attempt_is_triaged_by_cause():
     assert empty_cause(StreamFacts(), timed_out=False) == "stopped"
 
 
-def test_the_juniors_thinking_is_read_from_opencodes_database(tmp_path):
+def test_the_developers_thinking_is_read_from_opencodes_database(tmp_path):
     db = tmp_path / "opencode.db"
     con = sqlite3.connect(db)
     con.execute("create table part (id text, session_id text, time_created int, data text)")

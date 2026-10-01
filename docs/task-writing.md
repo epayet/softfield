@@ -22,10 +22,10 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 
 - **Goal:** one sentence.
 - **Context:** the files to read (full paths) and the worked example to follow. Paste only facts no file holds: a decision from the milestone's Decisions section, an API the lead hasn't built yet. Put the one constraint that matters in **bold** (security, "admin-only: no gettext").
-- **Done when:** acceptance criteria as bullets, including the edges ("a 280-character note", "just after midnight"). Whatever isn't written there, the junior won't test, and whatever isn't tested, it won't do.
+- **Done when:** acceptance criteria as bullets, including the edges ("a 280-character note", "just after midnight"). Whatever isn't written there, the developer won't test, and whatever isn't tested, it won't do.
 - **No stubs, no reference implementation.** A spec error now shows up as a failed attempt or a `BLOCKED.md`, and a short escalation fixes it.
 - **Security and protected work stay test-first:** the lead writes those tests on main, checks each fails for the right reason, and tests every security rule.
-- **`tests:` names a file the junior may write.** If the natural test file is protected (`tests/browser/test_display.py` guards `display.js`), the lead writes those tests on main first, and the junior's ticket points at them. Never ask for a new test file with no module of its own: the layout gate wants a matching module, and m4-07's junior invented an empty one to satisfy it (m4-F7). Listing the protected file burned three attempts.
+- **`tests:` names a file the developer may write.** If the natural test file is protected (`tests/browser/test_display.py` guards `display.js`), the lead writes those tests on main first, and the developer's ticket points at them. Never ask for a new test file with no module of its own: the layout gate wants a matching module, and m4-07's junior invented an empty one to satisfy it (m4-F7). Listing the protected file burned three attempts.
 - **Where a data-writing command may run:** say so explicitly. The M1 review had to add a "never in prod" guard to `seed_demo`.
 
 ## JavaScript tasks (ADR 06)
@@ -42,7 +42,7 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 - **French:** ask for "all its accents" explicitly (the model dropped them once), and give one tone example ("Réessayez un peu plus tard", not "Veuillez réessayer plus tard"). Claude still reads every `msgstr`.
 - **Outcome-style specs** (what, not how) passed as reliably as dictation-style ones on small UI tasks: 2/2 against 1/1 at first attempt. ADR 07 builds on this.
 - **Never wrap a runner session in an outer `timeout`.** It killed M2's runner mid-task. OpenCode's own limit is enough.
-- **A test whose fixture someone fills in later must fail visibly,** never pass while empty (m2-F4). Juniors can't add skips (the `no-new-skips` gate).
+- **A test whose fixture someone fills in later must fail visibly,** never pass while empty (m2-F4). Developers can't add skips (the `no-new-skips` gate).
 
 ## Before committing a spec
 
@@ -58,10 +58,10 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 
 ## Lessons from M4
 
-- **Nothing CSS can't do.** m4-07 asked plain CSS to tell long notes from short ones; it can't, so the junior shrank every note (m4-F6). If the rule needs data (a length, a count), say which module marks it (a class, an attribute).
-- **"Done when" says what the screen shows,** not only that something appears: "the item shows its note and thumbnail", not "an item appears". Juniors' tests check exactly what the ticket names (m4-F2).
+- **Nothing CSS can't do.** m4-07 asked plain CSS to tell long notes from short ones; it can't, so the developer shrank every note (m4-F6). If the rule needs data (a length, a count), say which module marks it (a class, an attribute).
+- **"Done when" says what the screen shows,** not only that something appears: "the item shows its note and thumbnail", not "an item appears". Developers' tests check exactly what the ticket names (m4-F2).
 - **Ask for tests that act as a person would:** click, fill, `select_option`. A test that dispatches events or sets `.value` from JavaScript reaches states nobody can (m4-F1). The `test-patterns` gate flags it (ADR 12).
-- **Split wide fan-in.** A junior ticket depends on at most two other junior tickets. m4-06 wired four, plus i18n and offline, and failed until it was split. Past two, split it or make it a lead ticket (ADR 12).
+- **Split wide fan-in.** A developer ticket depends on at most two other developer tickets. m4-06 wired four, plus i18n and offline, and failed until it was split. Past two, split it or make it a lead ticket (ADR 12).
 
 ## Open questions
 

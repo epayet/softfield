@@ -1,6 +1,6 @@
 """``runner check-all``: every check in one command (ADR 12 items 1 and 15).
 
-Juniors end each attempt with it, the lead's pre-commit hook runs it, and headless jobs must
+Developers end each attempt with it, the lead's pre-commit hook runs it, and headless jobs must
 pass it before the runner commits their work. It runs everything and reports every failure,
 then exits non-zero, so nothing hides behind a pipe (M4: `mypy | tail`).
 """

@@ -48,7 +48,7 @@ def test_the_repos_toml_loads_with_an_absolute_metrics_db():
 
 
 def test_security_tests_and_the_leads_docs_are_protected():
-    """ADR 07 items 4 and 14: juniors may change tests, but not the ones guarding protected
+    """ADR 07 items 4 and 14: developers may change tests, but not the ones guarding protected
     code, and not the lead's instructions or their own notes."""
     guarded = [
         "tests/integration/test_scoping_isolation.py",
@@ -57,7 +57,7 @@ def test_security_tests_and_the_leads_docs_are_protected():
         "tests/browser/test_outbox.py",
         "tests/e2e/test_display.py",
         "docs/agents/lead.md",
-        "docs/agents/junior.md",
+        "docs/agents/developer.md",
         "AGENTS.md",
     ]
     assert touching_protected(guarded, read_protected(REPO)) == sorted(guarded)

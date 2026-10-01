@@ -100,7 +100,7 @@ def _claude_log(stdout: str, stderr: str = "") -> str:
 
 
 def _ticket(
-    repo: Path, folder: str, task_id: str, *, agent: str = "junior", footer: str = ""
+    repo: Path, folder: str, task_id: str, *, agent: str = "developer", footer: str = ""
 ) -> Path:
     milestone = task_id.split("-", 1)[0].removeprefix("m")
     path = repo / "tasks" / folder / f"{task_id}.md"

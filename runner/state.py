@@ -14,7 +14,7 @@ class State:
     review_stop: dict[str, str] = field(default_factory=dict)  # milestone -> why the loop stopped
     directions: dict[str, int] = field(default_factory=dict)  # task id -> directions given
     escalations: dict[str, int] = field(default_factory=dict)  # task id -> escalations
-    unchecked: list[str] = field(default_factory=list)  # junior merges since the last checkpoint
+    unchecked: list[str] = field(default_factory=list)  # developer merges since the last checkpoint
     # task id -> {"adr": path, "question": one line}: decisions a job left for the owner
     owner: dict[str, dict[str, str]] = field(default_factory=dict)
 

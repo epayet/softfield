@@ -12,10 +12,11 @@ depends_on: [m4-01-upload-api]      # task ids; [] if none
 files:                              # where to work (a pointer, not a limit); may be new files
   - coucou/templates/coucou/compose.html
   - coucou/static/coucou/css/compose.css
-tests:                              # the tests that define done; the junior writes or extends them
+tests:                              # the tests that define done; the developer writes or extends them
   - tests/integration/test_compose_page.py
 finding: m4-F2                      # optional: the review finding this fixes
-agent: lead                         # optional: `lead` for the lead's own tickets (default `junior`)
+agent: lead                         # optional: `lead` for the lead's own tickets (default
+                                    # `developer`; old tickets' `junior` means the same)
 commands: [ollama list, gh api]     # optional, lead tickets only: extra Bash prefixes for its
                                     # headless job (never git, the owner's commands or the loop)
 ---
@@ -34,18 +35,18 @@ The files to read, as full repo paths in backticks, and only the facts no file h
 The runner's pre-flight checks that every backticked path exists (or is listed in `files:`), and that every `def`/`class` named in Context is found.
 
 ### Done when (required)
-Acceptance criteria as bullets: what a user or a caller sees, including the edges. The junior turns each into a test. Then the standing ones:
+Acceptance criteria as bullets: what a user or a caller sees, including the edges. The developer turns each into a test. Then the standing ones:
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
 
 The prompt already ends with `uv run runner check-all --fix --task <id>`, which runs every check; don't repeat finish commands in the ticket.
 
 ### Pattern to follow, Steps (optional)
-Only when a ticket really needs them: a pattern with no entry in `docs/agents/junior.md`, or a trap the junior would fall into.
+Only when a ticket really needs them: a pattern with no entry in `docs/agents/developer.md`, or a trap the developer would fall into.
 
 ## Rules
 - **One concept per ticket,** touching as many files as it needs.
-- **Short:** Context ≤ ~30 lines. Juniors drop instructions from long prompts ([ADR 01](adr/01-calibration-fixes.md)); put the one crucial instruction last.
+- **Short:** Context ≤ ~30 lines. Developers drop instructions from long prompts ([ADR 01](adr/01-calibration-fixes.md)); put the one crucial instruction last.
 - Backtick full repo paths only, never a bare file name.
 - Protected paths never appear in `files:`: that work is the lead's.
 - A ticket that adds user-facing text lists `coucou/locale/fr/LC_MESSAGES/django.po` and `django.mo` (or `djangojs.*` for JS) in `files:`.

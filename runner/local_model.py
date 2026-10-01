@@ -64,7 +64,7 @@ def parse_events(lines: Iterable[str]) -> TokenTotals:
 
 
 EDIT_TOOLS = ("edit", "write", "patch", "multiedit")
-# OpenCode keeps each session's parts, the junior's reasoning included (read-only here).
+# OpenCode keeps each session's parts, the developer's reasoning included (read-only here).
 OPENCODE_DB = Path.home() / ".local" / "share" / "opencode" / "opencode.db"
 
 
@@ -108,7 +108,7 @@ def empty_cause(facts: StreamFacts, timed_out: bool) -> str:
 
 
 def session_reasoning(db: Path, session_id: str) -> str:
-    """The junior's thinking in one OpenCode session, oldest first; empty if unavailable."""
+    """The developer's thinking in one OpenCode session, oldest first; empty if unavailable."""
     if not session_id or not db.is_file():
         return ""
     try:

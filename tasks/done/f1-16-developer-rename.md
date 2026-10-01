@@ -47,3 +47,11 @@ Read `docs/adr/14-developers-and-agents.md` item 1. Find every use with `Grep` (
 result: blocked
 reason: check-all failed; the work is on task/f1-16-developer-rename
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: finished by the lead interactively: git rm docs/agents/junior.md (the headless job had no rm rule)
+```

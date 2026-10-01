@@ -2,7 +2,7 @@
 
 from runner.tasks import Task
 
-# The junior's prompt stays short: it drops instructions from long prompts (ADR 01).
+# The developer's prompt stays short: it drops instructions from long prompts (ADR 01).
 LOCAL = """\
 Implement the task below in the Coucou repository. Start from the files under `files:`;
 change other files only if the goal needs it. Write or update tests for what "Done when"
@@ -85,7 +85,7 @@ The lead read your work and your thinking, and says:
 )
 
 DIRECTION = """\
-You are the lead. A junior (a local model) has failed task {id} twice; it gets one last
+You are the lead. A developer (a local model) has failed task {id} twice; it gets one last
 attempt, on a fresh branch. Give it direction (ADR 12 item 6; docs/agents/lead.md,
 Escalations).
 
@@ -95,7 +95,7 @@ Escalations).
 - Its thinking per attempt: {thinking}
 - Longest run of edits without running a command: {streak}; attempts that timed out: {timeouts}
 
-Write {logs}/direction.md: 3-8 lines addressed to the junior, saying what went wrong and the
+Write {logs}/direction.md: 3-8 lines addressed to the developer, saying what went wrong and the
 facts it is missing. No code: no snippets, no diffs, no reference implementation (ADR 07).
 If the ticket itself is wrong (a missing or false fact, a protected file, something its tools
 can't do), also write {logs}/ticket.md: the whole corrected ticket, frontmatter included.
@@ -126,7 +126,7 @@ Code you change must pass `uv run runner check-all`; if it doesn't, none of it r
 Then write {logs}/decision.json as {{"outcome": "requeue" | "implemented" | "owner"}}, and
 for "owner" also {{"adr": "docs/adr/NN-slug.md", "question": "<one line for the owner>"}}
 and {logs}/escalation.md: 3-6 lines on what happened, what the local model got wrong, and
-the lesson. Turn the lesson into a check, an example or a line in docs/agents/junior.md
+the lesson. Turn the lesson into a check, an example or a line in docs/agents/developer.md
 (its budget is in lead.md), and say which. Read-only git (diff, log, show) is fine; don't
 commit and don't edit tasks/escalated/: the runner commits and moves files.
 """
@@ -142,19 +142,19 @@ done as written, change nothing and say why in your final message.
 """
 
 CHECKPOINT = """\
-You are the lead, doing a checkpoint in the middle of a milestone (ADR 12 item 8). Juniors
-(a local model) just merged these tickets:
+You are the lead, doing a checkpoint in the middle of a milestone (ADR 12 item 8).
+Developers (a local model) just merged these tickets:
 {merges}
 
 Read those diffs, code and tests, as in docs/agents/lead.md (Review): does the screen show
 what the ticket asks, do the tests act as a person would and check content, not presence,
-is anything masked instead of fixed? Don't read the junior's thinking unless a finding needs
+is anything masked instead of fixed? Don't read the developer's thinking unless a finding needs
 explaining. Then do what helps the next tickets most, any of:
 - nothing, if it's sound
 - a fix ticket in tasks/ready/ (docs/task-format.md, `finding:` in the frontmatter), and add
   its id to `depends_on` of the ready tickets that build on the problem
 - tighten upcoming tickets in tasks/ready/ with what you saw (facts, not solutions)
-- one line in docs/agents/junior.md (its budget is in lead.md)
+- one line in docs/agents/developer.md (its budget is in lead.md)
 
 If you wrote or changed a ticket, run `uv run pytest -q tests/runner/test_tasks.py` and fix
 what it reports: it checks the tickets' format and that every path they name exists
@@ -170,8 +170,8 @@ You are the lead, reviewing milestone {milestone} of Coucou. Follow docs/agents/
 
 Round {round} of at most {max_rounds}. {scope}
 
-Read the tests as closely as the code: missing edge cases, and every existing test a junior
-edited (the session reports in docs/sessions/ list them). Check the French.
+Read the tests as closely as the code: missing edge cases, and every existing test a
+developer edited (the session reports in docs/sessions/ list them). Check the French.
 
 Grade each finding blocking / should-fix / nit and route it:
 - local: write a ticket in tasks/ready/ (docs/task-format.md), `finding: <id>` in the

@@ -11,13 +11,13 @@
 | **Owner** | Accepts ADRs and workflow changes, decides architecture and critical code questions, signs off milestones on real devices. |
 | **Lead** (a frontier model; today Claude Code, Pro login) | The tech lead: plans, decides the contracts between pieces, writes tickets, builds protected paths test-first, handles escalations, reviews. See [`docs/agents/lead.md`](agents/lead.md). |
 | **Runner** (`uv run runner`) | A deterministic Python script with **no AI in it**. It picks tasks, runs the local model and the gates, merges, retries and escalates, and calls the lead headlessly for lead tickets, directions, checkpoints, escalations and reviews. |
-| **Juniors** (local models: OpenCode + Qwen via LM Studio) | Implement one ticket at a time, tests included. See [`docs/agents/junior.md`](agents/junior.md). |
+| **Developers** (local models: OpenCode + Qwen via LM Studio) | Implement one ticket at a time, tests included. See [`docs/agents/developer.md`](agents/developer.md). |
 
 All coordination goes through files in the repo. Run logs go to `var/runs/<timestamp>-<task>/`, which is gitignored.
 
 ## Running a milestone (ADR 12)
 
-1. **Plan** (the owner and the lead, interactive): the milestone doc and every ticket, the lead's (`agent: lead`) and the juniors', in one pass. `uv run runner run --dry-run` shows what runs next. The session ends with "go".
+1. **Plan** (the owner and the lead, interactive): the milestone doc and every ticket, the lead's (`agent: lead`) and the developers', in one pass. `uv run runner run --dry-run` shows what runs next. The session ends with "go".
 2. **`uv run runner milestone N`**, in a plain terminal, with no interactive Claude session open (one kept open re-reads its whole context on every turn: most of M4's cost). It runs the queue, then the review loop and its fix tickets, and ends with a verdict:
    - `✅ READY FOR SIGN-OFF` (exit 0): the device-test steps from the review, then `uv run runner signoff N`.
    - `⚠ NEEDS YOU` (exit 2): each ADR a job drafted for the owner, with its question and the tickets paused behind it; blocked tickets with their reason; a review that stopped for the owner. Decide, then rerun the same command: it picks up where it stopped.
@@ -51,11 +51,11 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    12. all unit, integration, runner and browser tests ([ADR 06](adr/06-sse-and-browser-tests.md): ES modules in headless Chromium), skipping the `tests:` files of *other* tasks still in `ready/`, `escalated/` or `blocked/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
    13. `tests-fail-on-main`: the test files the task added or changed fail against main's code (with every other changed file put back as it is on main), so they test the change ([ADR 07](adr/07-spend-less-frontier.md))
 
-   `files:` is a pointer, not a gate: the session report lists files changed outside `files:` and `tests:`, and every existing test the junior changed, for the review.
-6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `Coucou local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit). **Checkpoint** (ADR 12 item 8): after every `checkpoint_every` (2) junior merges, a headless review of those diffs (on `checkpoint_model`, Sonnet) may queue a fix ticket the next ones wait for, tighten upcoming tickets, or add a `junior.md` note; its tools can't touch code.
+   `files:` is a pointer, not a gate: the session report lists files changed outside `files:` and `tests:`, and every existing test the developer changed, for the review.
+6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `Coucou local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit). **Checkpoint** (ADR 12 item 8): after every `checkpoint_every` (2) developer merges, a headless review of those diffs (on `checkpoint_model`, Sonnet) may queue a fix ticket the next ones wait for, tighten upcoming tickets, or add a `developer.md` note; its tools can't touch code.
 7. **Fail:**
    - attempt 2: same branch; the prompt adds the gate's one-line hint (what to do) and its exact output. After a timeout it also says the attempt ran out of time; after an attempt that changed nothing, it says why (ran out of time, commands refused, or stopped early).
-   - **the lead's direction** (ADR 12 item 6): before the last attempt, unless every failure was mechanical (`ruff`, `translations`, one empty attempt), a headless job reads the gate logs, the diff and the junior's thinking (copied read-only from OpenCode's `opencode.db` into the run logs) and writes a few lines of direction, no code. It may repair the ticket instead (committed on main). At most `directions_per_task` (1).
+   - **the lead's direction** (ADR 12 item 6): before the last attempt, unless every failure was mechanical (`ruff`, `translations`, one empty attempt), a headless job reads the gate logs, the diff and the developer's thinking (copied read-only from OpenCode's `opencode.db` into the run logs) and writes a few lines of direction, no code. It may repair the ticket instead (committed on main). At most `directions_per_task` (1).
    - attempt 3: reset the branch; fresh prompt plus "previous attempt failed because…" and the direction, last.
    - still failing: move the task to `escalated/` with logs and the last diff, pause its dependants, continue with independent tasks
    - the runner logs the longest run of edits without a command per task (in the report and the direction prompt); it doesn't stop on it yet.
@@ -67,15 +67,15 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 ## Escalation (headless Claude)
 
 - **When:** at most `escalations_per_task` (2) per task. Past that, the task goes to `tasks/blocked/` with its reason, its dependants pause, and the verdict names it.
-- **What Claude gets:** the task, `BLOCKED.md` or the gate logs, the last diff and the junior's thinking. Tools: Read/Edit/Write, `uv run pytest`/`ruff`/`mypy`/`runner check-all`, read-only git.
+- **What Claude gets:** the task, `BLOCKED.md` or the gate logs, the last diff and the developer's thinking. Tools: Read/Edit/Write, `uv run pytest`/`ruff`/`mypy`/`runner check-all`, read-only git.
 - **Its code must pass `check-all`** (ADR 12 item 11). If not, the work goes to the branch `escalation/<task>`, the task to `blocked/`, and nothing reaches main.
-- **Outcome:** a repaired or split ticket back in `ready/`, an answered question (facts added to Context), the lead doing the task itself, or **stop for the owner** (a draft ADR, only for what `docs/agents/lead.md` reserves for the owner; `decision.json` names the ADR and a one-line question, which the verdict shows). The lesson becomes a check, a worked example or a note in `docs/agents/junior.md`.
+- **Outcome:** a repaired or split ticket back in `ready/`, an answered question (facts added to Context), the lead doing the task itself, or **stop for the owner** (a draft ADR, only for what `docs/agents/lead.md` reserves for the owner; `decision.json` names the ADR and a one-line question, which the verdict shows). The lesson becomes a check, a worked example or a note in `docs/agents/developer.md`.
 
 ## Milestone review loop
 
 **Trigger:** every task in the milestone is `done/` **and** `pytest -m e2e` passes on staging.
 
-1. **Review round:** the headless lead reviews `git diff <milestone-base>..main`, tests as closely as code (missing edges, every existing test a junior changed), and the French. It writes the findings to `var/runs/review-mN-rK.json`.
+1. **Review round:** the headless lead reviews `git diff <milestone-base>..main`, tests as closely as code (missing edges, every existing test a developer changed), and the French. It writes the findings to `var/runs/review-mN-rK.json`.
    - **Blocking:** bugs, security issues, AGENTS.md or ADR violations.
    - **Should-fix:** design drift, missing edge cases, weak tests.
    - **Nit** → `docs/backlog.md`. Nits never loop.
@@ -90,7 +90,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 | Rule | Default |
 |---|---|
 | Review rounds per milestone | 3 |
-| Headless Claude runs | no milestone cap: 1 direction and 2 escalations per task, a checkpoint every 2 junior merges (ADR 12 item 10) |
+| Headless Claude runs | no milestone cap: 1 direction and 2 escalations per task, a checkpoint every 2 developer merges (ADR 12 item 10) |
 | A finding recurs a 2nd time | Claude fixes it (not the local model) |
 | A finding recurs a 3rd time | stop |
 | This round's findings ≥ the previous round's | stop |
