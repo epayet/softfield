@@ -53,8 +53,8 @@
    - **Copilot:** our own request counts.
 4. **Claude's reserve: 30% of the weekly window,** kept for the lead's support roles: reviews, escalations, directions, checkpoints, and the owner's planning sessions. Lead tickets and developer work share the rest. So early in the week developer work is modest, and on a Sunday evening with the week unused Claude takes developer tickets.
 5. **Dipping into the reserve asks the owner.**
-   - **When it asks:** the runnable work is blocked only because Claude is down to its reserve. That means a lead ticket, or a developer ticket no other agent may take.
-   - **On the console:** the runner asks `Claude is at its reserve (N% left of the week, resets <time>). Use it for the rest of this run? [y/N]`, and waits 10 minutes for an answer.
+   - **When it asks:** the runnable work is blocked only because Claude is down to its reserve. That means a lead ticket, or a developer ticket no other agent may take. Work that doesn't need the lead runs first, so the question comes only when nothing else can run.
+   - **On the console:** the runner asks `Claude is at its reserve (N% left of the week, resets <time>). Use it for the rest of this run? [y/N]`, and waits for an answer until the week resets; then the reserve no longer applies and the ticket runs. (Amended by the owner, 2026-10-01: it waited 10 minutes and asked first, so a late yes was lost while f1-48 could have run.)
    - **A yes holds for the rest of the running command,** including the runner's own restarts after a runner change. It isn't stored: after a Ctrl-C and a rerun, if the allowance is still low, it asks again.
    - **No answer, or no:** the ticket is parked (item 10), other permitted work goes on, and the question becomes a **Needs you** item on the dashboard. Rerunning the command asks again.
    - **Later:** the dashboard may ask too (`docs/roadmap.md`).

@@ -1392,6 +1392,7 @@ def test_an_interrupted_local_attempt_counts_as_timed_out(repo, fake_model, caps
 
 
 THURSDAY = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
+MONDAY = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)  # the week's reset in `_readings_at`
 
 
 @pytest.fixture
@@ -1503,7 +1504,7 @@ def _readings_at(repo: Path, week_used: float) -> None:
     """Claude's latest readings, as f1-44 records them: the week resets on Monday."""
     conn = metrics.open_db(_config(repo).metrics_db)
     at = (THURSDAY - timedelta(hours=2)).isoformat()
-    monday = datetime(2026, 10, 5, 16, 0, tzinfo=UTC).isoformat()
+    monday = MONDAY.isoformat()
     soon = (THURSDAY + timedelta(hours=2)).isoformat()
     for window, value, resets in (("five_hour", 0.07, soon), ("seven_day", week_used, monday)):
         metrics.add_usage_event(
@@ -1546,9 +1547,56 @@ def test_a_lead_ticket_at_the_reserve_asks_and_a_yes_lasts_for_the_run(
     answers.append("y")
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done", "done"]
-    assert waits == [600]  # asked once, with 10 minutes to answer
+    # Asked once, and it waits for the owner until the week resets (the owner, 2026-10-01).
+    assert waits == [(MONDAY - THURSDAY).total_seconds() + 60]
     assert QUESTION in capsys.readouterr().out
     assert loop.RESERVE.yes
+
+
+def test_at_the_reserve_work_without_the_lead_runs_before_the_question(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+):
+    """2026-10-01: f1-47 asked first and the owner's late yes was lost while f1-48 could run."""
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m1-02-thing")
+    script, _ = fake_lead
+    script.append(lambda job, repo_: _lead_writes(repo_, "lead"))
+    _passes(monkeypatch)
+    answers, waits = owner_answers
+    answers.append("y")
+
+    def local(repo_: Path, prompt: str) -> None:
+        assert waits == []  # not asked yet
+        _implement(repo_, prompt)
+
+    fake_model.append(local)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-02-thing", "done"),
+        ("m1-01-lead", "done"),
+    ]
+    assert len(waits) == 1
+
+
+def test_a_question_left_unanswered_till_the_week_resets_runs_the_lead_ticket(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+
+    def read_answer(timeout: float) -> str | None:
+        fake_clock[0] += timedelta(seconds=timeout)  # nobody answered
+        return None
+
+    monkeypatch.setattr(loop, "read_answer", read_answer)
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"]
+    assert fake_clock[0] > MONDAY and _state(repo).parked == {}
 
 
 def test_no_answer_at_the_reserve_parks_the_lead_ticket_for_the_owner(

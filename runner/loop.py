@@ -1590,7 +1590,6 @@ class ReserveAnswer:
 
 RESERVE = ReserveAnswer()
 RESERVE_ENV = "COUCOU_RUNNER_RESERVE_YES"  # set only by cli's restart after a yes
-RESERVE_WAIT = 600.0  # seconds the question waits for the owner
 CLAUDE = "claude"
 # Where Claude's week stands now decides the question: a lead ticket's share of the week
 # isn't learned yet, so its expected cost is left at 0.
@@ -1659,8 +1658,10 @@ def _at_the_reserve(s: Session, at: datetime) -> tuple[str, datetime] | None:
 
 def at_reserve(s: Session, task: Task) -> bool:
     """Before a lead ticket: whether it waits for Claude's reserve (ADR 15 item 5). The owner
-    is asked once per command; with no yes, the ticket is parked and becomes an owner item.
-    Support roles never ask: they may always use the reserve."""
+    is asked once per command, and only when nothing else can run (`_next_task`), so the
+    question waits for an answer until the week resets (the owner, 2026-10-01). With no yes,
+    the ticket is parked and becomes an owner item. Support roles never ask: they may always
+    use the reserve."""
     at = now()
     found = None if RESERVE.yes else _at_the_reserve(s, at)
     if found is None:
@@ -1671,11 +1672,13 @@ def at_reserve(s: Session, task: Task) -> bool:
             f"? [{RUNNER_AGENT}] Claude is at its reserve ({where})."
             " Use it for the rest of this run? [y/N]"
         )
-        answer = read_answer(RESERVE_WAIT)
+        answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
         if answer is not None and answer.lower() in ("y", "yes"):
             RESERVE.yes = True
             s.log(f"✔ [{RUNNER_AGENT}] Claude's reserve is used for the rest of this run")
             return False
+        if answer is None and _at_the_reserve(s, now()) is None:
+            return False  # the week reset while it waited: no reserve to ask about
         RESERVE.no = True
     text = f"{task.id} waits for Claude's reserve ({where}): rerun and answer y to use it"
     s.state.parked[task.id] = {
@@ -1705,7 +1708,9 @@ def at_reserve(s: Session, task: Task) -> bool:
 
 def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) -> Task | None:
     """Parked tickets whose reset has passed go first; while Claude is limited, only work that
-    needs no Claude: developer tickets, which local takes."""
+    needs no Claude: developer tickets, which local takes. At Claude's reserve, developer
+    tickets go before lead ones, so the reserve question comes only when nothing else can run
+    (ADR 15 item 5)."""
     at = now()
     held = {t.id for t in ready if t.id in s.state.parked}
     due = [t for t in ready if t.id in held and _resets(s.state.parked[t.id]) <= at]
@@ -1713,7 +1718,13 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
         return task
     limited = bool(_limits_ahead(s, at))
     free = [t for t in ready if t.id not in held and not (limited and t.agent != "developer")]
-    return pick_next(free, done, paused)
+    task = pick_next(free, done, paused)
+    if task is None or task.agent != "lead" or RESERVE.yes or RESERVE.no:
+        return task
+    if _at_the_reserve(s, at) is None:
+        return task
+    developers = pick_next([t for t in free if t.agent != "lead"], done, paused)
+    return developers or task
 
 
 def _wait_for_reset(s: Session, ready: list[Task]) -> bool:
