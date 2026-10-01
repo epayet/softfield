@@ -25,3 +25,12 @@ Read `ticket_findings` in `factory_dashboard/tickets.py`, `tests/factory_dashboa
 - tests: the findings test writes its own findings with a `ticket_id` (the `M4-*` ones are given one, or replaced); the other-ticket case asserts the section is absent, with no `if`; a milestone-wide finding is asserted absent from a ticket page
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 678
+gate_failures: []
+tokens: 596516
+```
