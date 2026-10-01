@@ -208,7 +208,13 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     asked = [k for k, entry in state.parked.items() if entry.get("kind") == "reserve"]
     for key in asked:
         del state.parked[key]
-    if asked:
+    # A ticket parked for a limit is tried again at once: the owner may have reset the
+    # allowance before restarting (2026-10-01). Still limited, it parks on Claude's new reset.
+    at = now()
+    retried = [k for k, entry in state.parked.items() if _resets(entry) > at]
+    for key in retried:
+        state.parked[key]["resets_at"] = at.isoformat()
+    if asked or retried:
         save_state(state, state_path)
     # Without an in-flight job, a dirty tree isn't the runner's: leave it to the owner.
     if git.current_branch() != MAIN or not git.is_clean():

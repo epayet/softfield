@@ -2001,3 +2001,38 @@ def test_support_roles_use_the_reserve_without_asking(
 def test_without_a_terminal_there_is_no_answer(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("y\n"))  # piped, not typed by the owner
     assert loop.read_answer(600) is None
+
+
+def test_a_restart_tries_a_ticket_parked_for_a_limit_again_at_once(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """2026-10-01: the owner reset the allowance, pressed Ctrl-C and restarted, and the runner
+    still waited out the reset it had stored. A restart asks Claude again; still limited, the
+    ticket parks again on the reset Claude names."""
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    resets = THURSDAY + timedelta(hours=2)
+    calls: list[tuple[str | None, datetime]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        calls.append((resume, loop.now()))
+        if len(calls) == 1:
+            _lead_writes(repo_, "lead")
+            raise UsageLimited(resets, session_id="s1")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+
+    class CtrlC(Exception):
+        pass
+
+    def ctrl_c(seconds: float) -> None:
+        raise CtrlC
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr("time.sleep", ctrl_c)
+    with pytest.raises(CtrlC):
+        _run(repo)
+    assert _state(repo).parked["m1-01-lead"]["resets_at"] == resets.isoformat()
+    report = _run(repo)
+    assert calls == [(None, THURSDAY), ("s1", THURSDAY)]  # resumed without waiting
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
+    assert _state(repo).parked == {}
