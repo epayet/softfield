@@ -1,6 +1,6 @@
 # ADR 15: Spend the cloud allowances first, paced; local is the floor
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-10-01)
 - **Date:** 2026-10-01
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 14](14-developers-and-agents.md) items 3, 6 and 9; `docs/workflow.md`'s reset of the branch at attempt 3, which ADR 12 item 6's direction relies on
