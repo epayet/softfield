@@ -39,3 +39,10 @@ Read `docs/adr/14-developers-and-agents.md` (Context and "Probes before the code
 - ADR 14 has "Probe results" covering Ollama, Copilot and billing, each fact or "not probed: <why>"
 - a test in `tests/runner/test_local_model.py` reads the Ollama fixture with `parse_events` and gets non-zero tokens (skip nothing: without a fixture, say so in the ADR and test LM Studio's shape instead)
 - `uv run runner check-all --task f1-18-probes` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
