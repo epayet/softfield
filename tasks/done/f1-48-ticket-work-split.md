@@ -32,3 +32,12 @@ Read `factory_dashboard/tickets.py` (`get_ticket`, `ticket_jobs`), `factory_dash
 - a ticket with no jobs shows no section
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1369
+gate_failures: []
+tokens: 1976279
+```
