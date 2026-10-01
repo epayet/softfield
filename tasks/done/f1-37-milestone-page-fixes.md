@@ -30,3 +30,12 @@ Read `factory_dashboard/milestones.py`, `factory_dashboard/templates/milestone.h
 - tests: each sign-off part, the outcome and the Done when are asserted by their text, inside their own section; savings by their dollar figures; the tickets section lists exactly the milestone's tickets; the run filter is tested with a run that has jobs in the default milestone (only that run's bars appear) and one that has none; the duplicate timeline test is dropped or made different
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1421
+gate_failures: []
+tokens: 1565999
+```
