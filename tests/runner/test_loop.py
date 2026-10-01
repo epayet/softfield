@@ -812,7 +812,7 @@ def test_the_next_run_marks_an_interrupted_attempt_interrupted(repo, fake_model)
     fake_model.append(_implement)
     _run(repo)
     first, again = _rows(repo, "jobs")[:2]
-    assert first["outcome"] == "interrupted" and first["ended"]
+    assert (first["outcome"], first["note"]) == ("failed", "interrupted") and first["ended"]
     assert again["outcome"] == "passed"
 
 
@@ -1228,3 +1228,135 @@ def test_a_failing_write_is_noted_once_and_the_run_goes_on(repo, fake_model, mon
     assert [t.result for t in report.tasks] == ["done"]
     notes = [n for n in report.notes if "metrics database" in n]
     assert len(notes) == 1 and "disk I/O error" in notes[0]
+
+
+# --- recovery after an interruption (ADR 15 item 11) ---------------------------------------
+
+
+def _state(repo: Path):
+    return load_state(_config(repo).runs_dir / "state.json")
+
+
+def _earlier_run(repo: Path) -> None:
+    """Give the interrupted run an earlier folder than the rerun's, which may start the same
+    second (the rows are keyed by it)."""
+    with sqlite3.connect(_config(repo).metrics_db) as conn:
+        conn.execute("UPDATE runs SET run_dir = '20000101-000000'")
+
+
+def test_an_interrupted_lead_ticket_is_committed_to_its_branch_and_resumed(
+    repo, fake_model, monkeypatch, capsys
+):
+    """2026-10-01: a Ctrl-C left a dirty main and a `running` row, and the next run refused."""
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    monkeypatch.setattr("time.sleep", lambda seconds: None)
+    outcomes = [TransientError("Connection error.", session_id="s1"), RuntimeError("Ctrl-C")]
+
+    def write_then_blip(job, repo_, timeout, log_path, now, resume=None):
+        _implement(repo_, "")
+        raise outcomes.pop(0)
+
+    monkeypatch.setattr(loop, "run_claude", write_then_blip)
+    with pytest.raises(RuntimeError, match="Ctrl-C"):
+        _run(repo)
+    flight = _state(repo).in_flight
+    assert flight is not None
+    assert (flight["kind"], flight["ticket"], flight["branch"]) == (
+        "lead-ticket",
+        "m1-01-lead",
+        "task/m1-01-lead",
+    )
+    assert (flight["agent"], flight["session_id"]) == ("claude-opus", "s1")
+    assert isinstance(flight["job_id"], int) and flight["started"]
+    assert git(repo, "status", "--porcelain")  # the dirty tree the Ctrl-C left
+    _earlier_run(repo)
+
+    resumed: list[tuple[str | None, str, str, str]] = []
+
+    def carry_on(job, repo_, timeout, log_path, now, resume=None):
+        branch = git(repo_, "rev-parse", "--abbrev-ref", "HEAD").strip()
+        last = git(repo_, "log", "-1", "--format=%s").strip()
+        resumed.append((resume, job.prompt, branch, last))
+        assert "return 42" in (repo_ / "coucou" / "thing.py").read_text()
+        return ClaudeResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+
+    monkeypatch.setattr(loop, "run_claude", carry_on)
+    capsys.readouterr()
+    report = _run(repo)
+    [(resume, prompt, branch, last)] = resumed
+    assert resume == "s1" and "interrupted" in prompt
+    assert (branch, last) == ("task/m1-01-lead", "wip m1-01-lead (interrupted)")
+    assert [t.result for t in report.tasks] == ["done"]
+    assert git(repo, "rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+    state = _state(repo)
+    assert state.in_flight is None and state.interrupted == {}
+    out = capsys.readouterr().out
+    assert "[claude-opus] recovered the interrupted lead-ticket m1-01-lead" in out
+    first = _rows(repo, "jobs")[0]
+    assert (first["outcome"], first["note"]) == ("failed", "interrupted") and first["ended"]
+    old = _rows(repo, "runs")[0]
+    assert old["verdict"] == "interrupted" and old["ended"]
+
+
+def test_an_interrupted_job_on_main_is_kept_on_its_own_branch(repo, monkeypatch):
+    def write_then_crash(job, repo_, timeout, log_path, now, resume=None):
+        (repo_ / "coucou" / "fix.py").write_text("FIXED = True\n")
+        raise RuntimeError("crash")
+
+    monkeypatch.setattr(loop, "run_claude", write_then_crash)
+    s = loop.open_session(_config(repo), None)
+    review = ClaudeJob(kind="review", prompt="Review it.", allowed_tools=("Read",))
+    with pytest.raises(RuntimeError, match="crash"):
+        loop.call_claude(s, review, "m1", "m1-review-r1")
+    assert _state(repo).in_flight is not None
+
+    s = loop.open_session(_config(repo), None)
+    assert s.git.current_branch() == "main" and s.git.is_clean()
+    assert not (repo / "coucou" / "fix.py").exists()
+    kept = git(repo, "show", "--format=%s", "--name-only", "interrupted/review-m1")
+    assert "coucou/fix.py" in kept and "(interrupted)" in kept
+    assert s.state.in_flight is None
+    assert s.state.interrupted == {
+        "review:m1-review-r1": {"session_id": "", "branch": "interrupted/review-m1"}
+    }
+
+    calls = _limited_then(monkeypatch, ClaudeResult(ok=True, text="", duration_s=1.0))
+    loop.call_claude(s, review, "m1", "m1-review-r1")
+    [(prompt, resume)] = calls
+    assert resume is None  # no session id was known: it starts again, told where its work is
+    assert prompt.startswith("Review it.") and "interrupted/review-m1" in prompt
+    assert _state(repo).interrupted == {}
+
+
+def test_an_interrupted_local_attempt_counts_as_timed_out(repo, fake_model, capsys):
+    _add_task(repo, "m1-01-thing")
+
+    def edit_then_crash(repo_: Path, prompt: str) -> None:
+        (repo_ / "coucou" / "helper.py").write_text("HELP = 1\n")
+        raise RuntimeError("reboot")
+
+    fake_model.append(edit_then_crash)
+    with pytest.raises(RuntimeError, match="reboot"):
+        _run(repo)
+    flight = _state(repo).in_flight
+    assert flight is not None and (flight["kind"], flight["ticket"]) == ("local", "m1-01-thing")
+    assert (flight["branch"], flight["agent"]) == ("task/m1-01-thing", "local-m")
+    _earlier_run(repo)
+
+    def carry_on(repo_: Path, prompt: str) -> None:
+        assert "ran out of time" in prompt
+        assert (repo_ / "coucou" / "helper.py").is_file()  # its work, kept on the branch
+        _implement(repo_, prompt)
+
+    fake_model.append(carry_on)
+    capsys.readouterr()
+    report = _run(repo)
+    [task] = report.tasks
+    assert (task.result, task.attempts, task.timeouts) == ("done", 2, 1)
+    assert "[local-m] recovered the interrupted attempt 1 of m1-01-thing" in capsys.readouterr().out
+    state = _state(repo)
+    assert state.in_flight is None and state.timed_out == {}
+    first = _rows(repo, "jobs")[0]
+    assert (first["outcome"], first["note"]) == ("failed", "interrupted")

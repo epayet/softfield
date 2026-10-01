@@ -197,21 +197,130 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     """A session on a clean main. With a ``command``, it is recorded as a run in the metrics
     database; None records nothing."""
     git = Git(cfg.repo)
+    state_path = cfg.runs_dir / "state.json"
+    state = load_state(state_path)
+    cut_off = state.in_flight
+    recovered = _recover(git, state, state_path) if cut_off is not None else ""
+    # Without an in-flight job, a dirty tree isn't the runner's: leave it to the owner.
     if git.current_branch() != MAIN or not git.is_clean():
         raise RunnerError("start the runner on a clean main branch")
     started = now()
     run_dir = cfg.runs_dir / f"{started:%Y%m%d-%H%M%S}"
     run_dir.mkdir(parents=True, exist_ok=True)
     s = Session(
-        cfg=cfg,
-        git=git,
-        state=load_state(cfg.runs_dir / "state.json"),
-        report=SessionReport(started=started),
-        run_dir=run_dir,
+        cfg=cfg, git=git, state=state, report=SessionReport(started=started), run_dir=run_dir
     )
     if command is not None:
-        _start_run(s, command)
+        _start_run(s, command, cut_off.get("job_id") if cut_off else None)
+    if recovered:
+        s.log(recovered)
+        s.report.notes.append(recovered)
     return s
+
+
+# --- recovery after an interruption (ADR 15 item 11) ---------------------------------------
+
+
+INTERRUPTED_PROMPT = (
+    "Your earlier run of this job was interrupted (a Ctrl-C, a crash or a reboot). Carry on"
+    " with the same job from where you stopped."
+)
+INTERRUPTED_NOTE = (
+    "\n\nAn earlier run of this job was interrupted part-way (a Ctrl-C, a crash or a reboot)."
+)
+ON_THIS_BRANCH = (
+    " The changes it had made are committed on this branch: check `git show HEAD` before you"
+    " go on, and build on them or undo them."
+)
+ON_ANOTHER_BRANCH = (
+    " The changes it had made were kept on the branch `{branch}`, not here: `git diff"
+    " {main}...{branch}` shows them. Make again the ones you still want."
+)
+WIP_INTERRUPTED = "wip {name} (interrupted)"
+# A local attempt cut off before its gates ran: what the next attempt is told.
+INTERRUPTED_GATE = "interrupted"
+INTERRUPTED_OUTPUT = (
+    "The attempt was cut off (a Ctrl-C, a crash or a reboot) before its gates ran. Its changes"
+    " are committed on this branch."
+)
+
+
+def job_key(kind: str, name: str) -> str:
+    """What names a Claude job across runs: its kind and its ticket, else its subject."""
+    return f"{kind}:{name}"
+
+
+def _set_in_flight(s: Session, **entry: Any) -> None:
+    s.state.in_flight = {**entry, "started": now().isoformat()}
+    save_state(s.state, s.state_path)
+
+
+def _clear_in_flight(s: Session) -> None:
+    if s.state.in_flight is not None:
+        s.state.in_flight = None
+        save_state(s.state, s.state_path)
+
+
+def _in_flight_session(s: Session, session_id: str | None) -> None:
+    """The in-flight Claude job's session, once known: what its next run resumes."""
+    if s.state.in_flight is not None and session_id:
+        s.state.in_flight["session_id"] = session_id
+        save_state(s.state, s.state_path)
+
+
+def _free_branch(git: Git, name: str) -> str:
+    """``name``, or ``name-2``, ``name-3``…: an earlier interruption's branch is kept."""
+    taken = set(git.run("branch", "--list", "--format=%(refname:short)").split())
+    candidate, n = name, 1
+    while candidate in taken:
+        n += 1
+        candidate = f"{name}-{n}"
+    return candidate
+
+
+def _recover(git: Git, state: State, state_path: Path) -> str:
+    """Put away what an interrupted job left: its changes committed to its branch (or to
+    ``interrupted/…`` when it ran on main), main checked out clean. A Claude job keeps its
+    session id for its next run; a local attempt counts as timed out. Returns the console
+    line that says what was recovered."""
+    job = state.in_flight or {}
+    kind, ticket, branch = str(job["kind"]), job.get("ticket"), str(job["branch"])
+    agent = str(job.get("agent") or RUNNER_AGENT)
+    name = ticket or job.get("subject") or kind
+    target: str | None = branch
+    if branch == MAIN:
+        target = None
+        if not git.is_clean():
+            target = _free_branch(git, f"interrupted/{kind}-{ticket or job.get('milestone')}")
+            git.run("checkout", "-q", "-b", target)
+    elif git.current_branch() != branch:
+        git.checkout(branch)  # the tree's changes come along
+    if kind == "local":
+        what = f"attempt {job.get('attempt', '?')} of {ticket}"
+        message = f"wip {ticket} attempt {job.get('attempt', '?')} (interrupted)"
+        kept = git.commit_all(
+            with_trailers(message, agent=LOCAL_MODEL_AGENT), author=LOCAL_MODEL_AUTHOR
+        )
+        state.timed_out[str(ticket)] = state.timed_out.get(str(ticket), 0) + 1
+        after = "it counts as timed out"
+    else:
+        what = f"{kind} {name}"
+        message = WIP_INTERRUPTED.format(name=ticket or kind)
+        kept = git.commit_all(with_trailers(message, agent=CLAUDE_HEADLESS_AGENT))
+        session = str(job.get("session_id") or "")
+        where = target if kept and target else ""
+        state.interrupted[job_key(kind, str(name))] = {"session_id": session, "branch": where}
+        after = (
+            f"its session {session} resumes on its next run"
+            if session
+            else "it starts again on its next run"
+        )
+    if target is not None:
+        git.checkout(MAIN)
+    state.in_flight = None
+    save_state(state, state_path)
+    changes = f"its changes are on {target}" if kept else "it had changed nothing"
+    return f"↺ [{agent}] recovered the interrupted {what}: {changes}; {after}"
 
 
 # --- the metrics database (f1 D2, D3): best effort ----------------------------------------
@@ -253,7 +362,7 @@ def _rel(s: Session, path: Path) -> str:
     return path.relative_to(s.repo).as_posix()
 
 
-def _start_run(s: Session, command: str) -> None:
+def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None:
     try:
         s.db = metrics.open_db(s.cfg.metrics_db)
     except Exception as exc:
@@ -278,6 +387,8 @@ def _start_run(s: Session, command: str) -> None:
             heartbeat=at,
         )
         if s.run_id is not None:
+            if cut_off_job is not None:
+                _record(s, metrics.end_interrupted, cut_off_job)
             _record(s, metrics.close_abandoned, s.project_id, s.run_id)
             _start_heartbeat(s, s.run_id)
         sync_tickets(s)
@@ -482,6 +593,7 @@ def _finish_attempt(
     gates: list[dict[str, object]] | None = None,
     note: str | None = None,
 ) -> None:
+    _clear_in_flight(s)
     if job_id is None or s.run_id is None:
         return
     at = now().isoformat()
@@ -591,10 +703,26 @@ def call_claude(
 
     On the console (f1-42): a start line, a progress line every ``PROGRESS_EVERY`` seconds,
     each pause with its resume time, and an end line with what the job did, from ``notes``
-    (the files it writes) or else its answer's first line."""
+    (the files it writes) or else its answer's first line.
+
+    While it runs, it is the in-flight job in state.json (ADR 15 item 11); a run of it that was
+    interrupted resumes its session, told where its changes were kept."""
     attempt = unsure = transient = 0
     resume: str | None = None
     interrupted = False
+    resume_prompt, partial_note = RESUME_PROMPT, PARTIAL_WORK_NOTE
+    if (parked := s.state.interrupted.pop(job_key(job.kind, ticket or subject), None)) is not None:
+        kept = parked["branch"]
+        where = (
+            ""
+            if not kept
+            else ON_THIS_BRANCH
+            if kept == s.git.current_branch()
+            else ON_ANOTHER_BRANCH.format(branch=kept, main=MAIN)
+        )
+        resume_prompt, partial_note = INTERRUPTED_PROMPT + where, INTERRUPTED_NOTE + where
+        resume = parked["session_id"] or None
+        interrupted = True
     number = next_number(s, ticket, job.kind)
     agent = claude_agent(s, job)
     what = job.kind if ticket or subject == job.kind else f"{job.kind} {subject}"
@@ -605,10 +733,20 @@ def call_claude(
     job_id = s.last_job_id = record_start(
         s, ticket, milestone, job.kind, agent, attempt=number, log_path=_rel(s, log)
     )
+    _set_in_flight(
+        s,
+        kind=job.kind,
+        ticket=ticket,
+        subject=subject,
+        milestone=milestone,
+        branch=s.git.current_branch(),
+        agent=agent,
+        job_id=job_id,
+        session_id=resume,
+    )
     while True:
-        prompt = (
-            RESUME_PROMPT if resume else job.prompt + (PARTIAL_WORK_NOTE if interrupted else "")
-        )
+        prompt = resume_prompt if resume else job.prompt + (partial_note if interrupted else "")
+        resume_prompt = RESUME_PROMPT  # a later resume follows a pause for a limit
         log = s.run_dir / f"{base}{f'-retry{attempt}' if attempt else ''}.log"
         if attempt:
             s.log(console.resumed(agent, what))
@@ -639,6 +777,7 @@ def call_claude(
             attempt += 1
             resume = blip.session_id or resume
             interrupted = True
+            _in_flight_session(s, resume)
             at = now()
             s.log(console.paused(agent, f"interrupted ({blip})", at + timedelta(seconds=pause), at))
             time.sleep(pause)
@@ -675,6 +814,7 @@ def call_claude(
             attempt += 1
             resume = limit.session_id or resume
             interrupted = True
+            _in_flight_session(s, resume)
             at = now()
             resumes = at + timedelta(seconds=wait)
             s.state.paused_until = resumes.isoformat()
@@ -691,6 +831,7 @@ def call_claude(
             continue
         break
     s.state.paused_until = None
+    s.state.in_flight = None
     s.state.count_run(milestone)
     save_state(s.state, s.state_path)
     if job_id is not None:
@@ -893,12 +1034,19 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         return rec
 
     branch = f"task/{task.id}"
-    s.git.fresh_branch(branch, MAIN)
+    # Attempts an interruption cut off count as timed out; their work stays on the branch.
+    cut_off = s.state.timed_out.pop(task.id, 0)
+    if cut_off:
+        save_state(s.state, s.state_path)
+        s.git.checkout(branch)
+    else:
+        s.git.fresh_branch(branch, MAIN)
     protected = tuple(read_protected(s.repo))
-    last: GateResult | None = None
-    timeouts: list[bool] = []
+    last = GateResult(INTERRUPTED_GATE, False, INTERRUPTED_OUTPUT) if cut_off else None
+    timeouts = [True] * cut_off
+    rec.attempts = rec.timeouts = cut_off
     direction = ""
-    for attempt in range(1, s.cfg.max_attempts + 1):
+    for attempt in range(cut_off + 1, s.cfg.max_attempts + 1):
         rec.attempts = attempt
         if (
             attempt == s.cfg.max_attempts
@@ -924,6 +1072,15 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             attempt=next_number(s, task.id, "local"),
             log_path=_rel(s, log),
             context_limit=s.context_limit,
+        )
+        _set_in_flight(
+            s,
+            kind="local",
+            ticket=task.id,
+            branch=branch,
+            agent=agent,
+            job_id=job_id,
+            attempt=attempt,
         )
         run = run_opencode(
             s.repo,
@@ -1084,7 +1241,11 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     passes. A lead ticket that fails is blocked: there's no one above the lead but the owner."""
     logs = rec.logs or _logs_dir(s.run_dir, task.id)
     branch = f"task/{task.id}"
-    s.git.fresh_branch(branch, MAIN)
+    parked = s.state.interrupted.get(job_key("lead-ticket", task.id))
+    if parked and parked["branch"] == branch:
+        s.git.checkout(branch)  # an interrupted run's work, which its session resumes
+    else:
+        s.git.fresh_branch(branch, MAIN)
     rec.attempts = 1
     job = ClaudeJob(
         kind="lead-ticket",
@@ -1099,7 +1260,8 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
         ),
     )
     call_claude(s, job, task.milestone, task.id, ticket=task.id)
-    if not s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT)):
+    s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT))
+    if not s.git.changed_files(MAIN):  # an interrupted run's commit counts too
         s.git.checkout(MAIN)
         rec.result = "stopped"
         block(s, task.path, "the lead ticket changed nothing")

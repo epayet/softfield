@@ -428,6 +428,29 @@ def close_abandoned(conn: sqlite3.Connection, project_id: int, run_id: int) -> i
     return len(stale)
 
 
+def end_interrupted(conn: sqlite3.Connection, job_id: int) -> None:
+    """End a job the runner recovered after a Ctrl-C or a crash (ADR 15 item 11): ``failed``,
+    noted "interrupted", at its run's last heartbeat; and end that run as interrupted."""
+    row = conn.execute(
+        "SELECT j.run_id, coalesce(r.heartbeat, j.started) FROM jobs j"
+        " JOIN runs r ON r.id = j.run_id WHERE j.id = ?",
+        (job_id,),
+    ).fetchone()
+    if row is None:
+        return
+    run, at = row
+    conn.execute(
+        "UPDATE jobs SET outcome = 'failed', note = 'interrupted', ended = coalesce(ended, ?)"
+        " WHERE id = ?",
+        (at, job_id),
+    )
+    conn.execute(
+        "UPDATE runs SET ended = coalesce(ended, ?), verdict = 'interrupted' WHERE id = ?",
+        (at, run),
+    )
+    conn.commit()
+
+
 def update_running_job(
     conn: sqlite3.Connection,
     job_id: int,
