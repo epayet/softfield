@@ -7,7 +7,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from runner import backfill, checks, copilot, i18n, loop, metrics, owner, report
+from runner import backfill, bench, checks, copilot, i18n, loop, metrics, owner, report
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
@@ -82,6 +82,13 @@ def main(argv: list[str] | None = None) -> int:
         "backfill", help="load past milestones into the metrics database from their logs"
     )
     backfill_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
+    bench_cmd = sub.add_parser(
+        "bench", help="replay finished tickets for chosen agents, off main (ADR 14 item 8)"
+    )
+    bench_cmd.add_argument("tickets", nargs="+", help="finished tickets, e.g. m4-09-…")
+    bench_cmd.add_argument(
+        "--agents", nargs="+", required=True, help="agent ids from workflow/runner.toml"
+    )
     ratings_cmd = sub.add_parser("ratings", help="each agent's rating now (ADR 15 item 9)")
     ratings_cmd.add_argument(
         "--replay", action="store_true", help="first seed the local model's from M1–M4"
@@ -191,6 +198,13 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 conn.close()
             print(backfill.render(summary), end="")
+        elif args.command == "bench":
+            benched = bench.run_bench(cfg, args.tickets, args.agents)
+            for r in benched.results:
+                print(f"{r.ticket}  {r.agent:<28} {r.outcome} (attempt {r.attempts})")
+            if benched.stopped:
+                print(f"Stopped: {benched.stopped}")
+                return 1
         elif args.command == "ratings":
             conn = metrics.open_db(args.db or cfg.metrics_db)
             try:
