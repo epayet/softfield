@@ -30,3 +30,10 @@ Read `docs/adr/16-claude-window-and-named-milestones.md` item 10, `docs/adr/14-d
 - a review replay of a fixture checkpoint with two known findings scores an agent that reports one of them as 1 hit, 1 miss, and lists its extra finding unscored
 - the eligibility panel shows an agent eligible from review-bench results alone
 - `uv run runner check-all --task f2-11-review-bench` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
