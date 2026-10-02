@@ -1622,7 +1622,8 @@ def _develop(
 
 
 def run_task(s: Session, task: Task) -> TaskRecord:
-    """One ticket. Its result is "parked" when it waits for Claude: a limit, or the reserve."""
+    """One ticket. Its result is "parked" when it waits for Claude: a limit, the reserve, or
+    its turn behind the support work a yes to the 5-hour question freed."""
     rec = TaskRecord(id=task.id, milestone=task.milestone)
     held = s.state.parked.pop(task.id, None)
     if held is not None:
@@ -2958,11 +2959,22 @@ def _five_hour_granted(s: Session) -> None:
     save_state(s.state, s.state_path)
 
 
+def _support_goes_first(s: Session, task: Task) -> bool:
+    """After a yes: whether checkpoints or escalations it freed go before the ticket that
+    asked (f4-01). That ticket isn't parked or counted: it stays in ready/ for the next pick."""
+    if not any(e["kind"] in SUPPORT and e.get(RETRY) for e in s.state.parked.values()):
+        return False
+    record_ticket(s, task.path)  # back to its folder's state, no longer running
+    s.log(f"[{RUNNER_AGENT}] {task.id} waits its turn: the work parked for the window goes first")
+    return True
+
+
 def at_five_hour(s: Session, task: Task) -> bool:
     """Before a lead ticket: whether it waits for the owner's share of Claude's 5-hour window
     (ADR 16 items 1 and 3). The owner is asked once per command, only when nothing else can
     run (`_next_task`), with its own question and its own yes. With no yes, the ticket parks
-    until the window resets and then goes on by itself; meanwhile it is a Needs-you item."""
+    until the window resets and then goes on by itself; meanwhile it is a Needs-you item. A
+    yes that frees parked support work lets that go first (`_support_goes_first`)."""
     at = now()
     found = None if FIVE_HOUR.yes else _at_five_hour(s, at)
     if found is None:
@@ -2985,7 +2997,7 @@ def at_five_hour(s: Session, task: Task) -> bool:
             created=at.isoformat(),
         )
     if not FIVE_HOUR.no and _ask_five_hour(s, used, resets):
-        return False
+        return _support_goes_first(s, task)
     if _at_five_hour(s, now()) is None:  # the window reset while it waited
         _resolve_item(s, FIVE_HOUR_KIND, task.id)
         return False

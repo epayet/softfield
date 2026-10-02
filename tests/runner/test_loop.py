@@ -2958,6 +2958,45 @@ def test_a_yes_to_the_5_hour_question_lets_the_lead_ticket_go_at_once(
     assert item["kind"] == "five-hour" and item["resolved"] is not None
 
 
+def test_a_yes_to_the_5_hour_question_runs_the_parked_escalation_before_the_asking_ticket(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+):
+    """F2, 2 Oct 12:01: f2-06's escalation was parked at 78%; the owner said y on lead ticket
+    f2-03, which ran first, and the escalation waited for the next pass (f4-01)."""
+    _claude_at(repo, 0.80)
+    write_task(repo / "tasks" / "escalated", "m1-09-stuck")
+    logs = repo / "var" / "runs" / "earlier" / "m1-09-stuck"
+    logs.mkdir(parents=True)
+    _lead_task(repo, "m1-01-lead")  # commits the escalated ticket too
+    state_path = repo / "var" / "runs" / "state.json"
+    state = load_state(state_path)
+    state.parked["escalation:m1-09-stuck"] = {
+        "kind": "escalation",
+        "branch": "",
+        "session_id": "",
+        "resets_at": FIVE_RESETS.isoformat(),
+        loop.FIVE_HOUR_HELD: True,
+        "milestone": "1",
+        "logs": "var/runs/earlier/m1-09-stuck",
+        "reason": "gates failed",
+    }
+    save_state(state, state_path)
+    script, jobs = fake_lead
+    script.extend([lambda job, repo_: None, _lead_implements])
+    _passes(monkeypatch)
+    answers, waits = owner_answers
+    answers.append("y")
+    report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert report is not None
+    assert [j.kind for j in jobs] == ["escalation", "lead-ticket"]
+    assert len(waits) == 1 and fake_clock[0] == THURSDAY  # asked once, and nothing waited
+    # Waiting its turn cost the ticket nothing: one attempt, no park, no open Needs-you item.
+    assert [(t.id, t.result, t.attempts) for t in report.tasks] == [("m1-01-lead", "done", 1)]
+    after = _state(repo)
+    assert after.parked == {} and after.escalations == {"m1-09-stuck": 1}
+    assert all(item["resolved"] is not None for item in _rows(repo, "owner_items"))
+
+
 def test_a_yes_to_the_weeks_reserve_doesnt_lift_the_5_hour_reserve(
     repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch, capsys
 ):
