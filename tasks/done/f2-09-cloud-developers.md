@@ -28,3 +28,10 @@ Read `docs/adr/15-allowance-aware-routing.md` items 6 and 7 (Ollama "is one more
 - `[roles] developer` and the ratings match F2's evidence, and `tests/runner/test_config.py` passes
 - ADR 14, lead.md's Known range and F2's doc record the numbers
 - `uv run runner check-all --task f2-09-cloud-developers` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
