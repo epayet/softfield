@@ -216,6 +216,12 @@ def test_an_ollama_agent_runs_opencode_with_its_model_and_the_probe_gives_its_to
     assert (result.num_turns, result.peak_context) == (2, 7867)
     assert result.session_id == "ses_f07dc81a4ffe9DHBuzY59NV28i"
     assert result.cost_usd is None
+    assert result.model == "ollama/gpt-oss:120b-cloud"  # f2-04: the agent's model
+
+
+def test_a_local_job_records_its_agents_model(tmp_path, monkeypatch):
+    _fake_stream(monkeypatch, [_step(100, 1)], stderr="boom", code=1)
+    assert _run(LOCAL, tmp_path).model == LOCAL.model
 
 
 def test_the_stream_facts_come_back_in_the_result(tmp_path, monkeypatch):

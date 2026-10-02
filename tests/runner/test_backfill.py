@@ -433,6 +433,69 @@ def test_a_run_the_runner_recorded_itself_is_left_alone(m4, tmp_path):
     assert run["command"] == "milestone m4"
 
 
+# --- models (f2-04) ----------------------------------------------------------------------------
+
+INIT = json.dumps({"type": "system", "subtype": "init", "model": "claude-opus-5-5"})
+
+
+def test_a_backfilled_claude_job_gets_the_model_its_log_names(m4, tmp_path):
+    usage = {"modelUsage": {"claude-sonnet-4-5": {"costUSD": 0.6}}}
+    log = json.dumps(json.loads(CLAUDE_OK) | usage)
+    _write(m4 / "var" / "runs" / RUN / "claude-direction-m4-01-thing.log", _claude_log(log))
+    db = tmp_path / "metrics.sqlite"
+    _run(m4, db)
+    models = {j["role"]: j["model"] for j in _rows(db, "SELECT role, model FROM jobs")}
+    assert models == {
+        "direction": "claude-sonnet-4-5",
+        "review": None,  # its log names no model
+        "developer": None,  # OpenCode's logs don't name theirs (D6)
+        "last-attempt": None,
+    }
+
+
+def _recorded_job(conn, run_id: int, role: str, agent: str, log_path: str, **kw: Any) -> int:
+    return metrics.start_job(
+        conn,
+        run_id,
+        ticket_id=None,
+        milestone_id=None,
+        role=role,
+        agent=agent,
+        attempt=1,
+        started="2026-10-02T06:00:00+01:00",
+        log_path=log_path,
+        **kw,
+    )
+
+
+def test_a_recorded_claude_job_gets_its_model_from_its_log_once(repo, tmp_path):
+    """The runner's own jobs before f2-04: a stream log, read by its `log_path`."""
+    run = "20261002-055804"
+    stream = "\n".join([INIT, CLAUDE_OK])
+    _write(repo / "var" / "runs" / run / "claude-lead-ticket-f1-53.log", _claude_log(stream))
+    db = tmp_path / "metrics.sqlite"
+    conn = metrics.open_db(db)
+    project = metrics.upsert_project(conn, repo.name)
+    run_id = metrics.upsert_run(conn, project, run, command="milestone f1")
+    logs = f"var/runs/{run}"
+    lead_log = f"{logs}/claude-lead-ticket-f1-53.log"
+    _recorded_job(conn, run_id, "lead-ticket", "claude-opus", lead_log)
+    _recorded_job(conn, run_id, "review", "claude-opus", f"{logs}/claude-review-gone.log")
+    _recorded_job(conn, run_id, "checkpoint", "claude-sonnet", lead_log, model="kept")
+    conn.close()
+
+    _run(repo, db)
+    query = "SELECT role, model FROM jobs ORDER BY id"
+    first = _rows(db, query)
+    assert first == [
+        {"role": "lead-ticket", "model": "claude-opus-5-5"},
+        {"role": "review", "model": None},  # its log is gone
+        {"role": "checkpoint", "model": "kept"},  # a model already recorded stays
+    ]
+    _run(repo, db)
+    assert _rows(db, query) == first
+
+
 # --- gaps ------------------------------------------------------------------------------------
 
 

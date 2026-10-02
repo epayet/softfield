@@ -434,6 +434,41 @@ def test_the_probes_stream_gives_two_readings_and_the_same_result(tmp_path, monk
         "cache_creation_input_tokens": 8290,
     }
     assert (tmp_path / "log").read_text(encoding="utf-8").startswith(stream)
+    assert result.model == "claude-haiku-4-5-20251001"  # its only `modelUsage`
+
+
+def _message_from(model: str, parent: str | None = None) -> str:
+    message = {"id": f"msg-{model}", "model": model, "usage": {"output_tokens": 1}}
+    return json.dumps({"type": "assistant", "message": message, "parent_tool_use_id": parent})
+
+
+RESULT = json.dumps(
+    {
+        "type": "result",
+        "result": "ok",
+        "modelUsage": {"claude-haiku-4-5": {"costUSD": 0.01}, "claude-opus-5-5": {"costUSD": 2}},
+    }
+)
+
+
+def test_a_job_records_the_model_its_stream_names_not_the_alias(tmp_path, monkeypatch):
+    """f2-04: var/runs/20261002-055804's lead ticket ran `--model opus` on claude-opus-5-5."""
+    init = json.dumps({"type": "system", "subtype": "init", "model": "claude-opus-5-5"})
+    stream = "\n".join([init, _message_from("claude-haiku-4-5", parent="toolu_1"), RESULT])
+    _fake_stream(monkeypatch, stream)
+    result = _adapter_run(tmp_path, JobSpec("lead-ticket", "Do it.", 10), model="opus")
+    assert result.model == "claude-opus-5-5"
+
+
+def test_without_an_init_event_the_main_threads_model_counts_not_a_subagents():
+    stream = [_message_from("claude-haiku-4-5", parent="t1"), _message_from("claude-sonnet-5-5")]
+    assert claude.stream_model([*stream, RESULT]) == "claude-sonnet-5-5"
+
+
+def test_a_plain_json_result_names_its_costliest_model():
+    """f1's logs (`--output-format json`) hold one result, with `modelUsage` only."""
+    assert claude.stream_model([RESULT]) == "claude-opus-5-5"
+    assert claude.stream_model(['{"result": "ok"}', "not json", "[1]"]) is None
 
 
 def test_every_rate_limit_event_is_returned(tmp_path, monkeypatch):

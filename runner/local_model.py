@@ -288,6 +288,7 @@ class OpencodeAdapter:
             refused_commands=facts.refused,
             edits=facts.edits,
             timed_out=run.timed_out,
+            model=agent.model,  # OpenCode's stream doesn't name it; the agent's is exact
         )
 
 

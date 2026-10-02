@@ -189,6 +189,42 @@ def _parse_stream(stdout: str, now: datetime) -> _Stream:
     return _Stream(result, tuple(readings), rejected, "\n".join(other))
 
 
+def _costliest(usage: object) -> str | None:
+    if not isinstance(usage, dict) or not usage:
+        return None
+
+    def cost(name: str) -> float:
+        value = usage[name].get("costUSD") if isinstance(usage[name], dict) else None
+        return float(value) if isinstance(value, int | float) else 0.0
+
+    return str(max(usage, key=cost))
+
+
+def stream_model(lines: Iterable[str]) -> str | None:
+    """The model a job ran on, as its stream names it (f2-04): the `init` event's, else the
+    main thread's first message's (a subagent's carry a ``parent_tool_use_id``), else the
+    costliest in the result's ``modelUsage`` (all f1's `--output-format json` logs hold)."""
+    usage: object = None
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        message = event.get("message")
+        if event.get("type") == "system" and event.get("subtype") == "init":
+            found = event.get("model")
+        elif event.get("type") == "assistant" and isinstance(message, dict):
+            found = None if event.get("parent_tool_use_id") else message.get("model")
+        else:
+            usage = event.get("modelUsage", usage)
+            continue
+        if isinstance(found, str) and found:
+            return found
+    return _costliest(usage)
+
+
 def progress(lines: Iterable[str]) -> Progress:
     """The tokens and turns of the stream so far. A message's content blocks come as separate
     `assistant` events with the same id; each message counts once, with its latest usage."""
@@ -326,6 +362,7 @@ def run_claude(
         session_id=session_id,
         cost_usd=float(cost) if (cost := data.get("total_cost_usd")) is not None else None,
         readings=readings,
+        model=stream_model(stdout.splitlines()) or "",
     )
 
 

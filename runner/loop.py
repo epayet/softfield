@@ -721,6 +721,7 @@ def _finish_attempt(
         gates=gates,
         note=note,
         session_id=run.session_id,
+        model=run.model or None,
     )
     _record(s, metrics.update_run_heartbeat, s.run_id, at)
 
@@ -1200,6 +1201,7 @@ def call_claude(
             note=_process_note(process_note),
             session_id=result.session_id,
             log_path=_rel(s, log),
+            model=result.model or None,
         )
     s.report.claude_runs.append(
         ClaudeRunRecord(
@@ -2329,6 +2331,7 @@ def _read_only_review(
             steps=result.num_turns,
             note=note,
             session_id=result.session_id,
+            model=result.model or None,
         )
     s.log(console.claude_end(agent.id, job.role, result.ok, clock() - started, result.cost_usd))
     return result, findings, job_id

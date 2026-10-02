@@ -171,8 +171,14 @@ ALTER TABLE runs ADD COLUMN waiting_until TEXT;
 ALTER TABLE runs ADD COLUMN reserve INTEGER;
 """
 
+# f2-04 (ADR 16 item 5): the exact model a job ran on, as its harness reported it. Earlier
+# rows stay empty unless the backfill reads it from their log.
+_V4 = """
+ALTER TABLE jobs ADD COLUMN model TEXT;
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -394,6 +400,7 @@ def start_job(
     context_limit: int | None = None,
     session_id: str | None = None,
     log_path: str | None = None,
+    model: str | None = None,
 ) -> int:
     """Write a job as ``running`` (f1 D3). Starting it again restarts the same row."""
     key: dict[str, Value] = {
@@ -414,6 +421,7 @@ def start_job(
         context_limit=context_limit,
         session_id=session_id,
         log_path=log_path,
+        model=model,
     )
     conflict = "run_id, ifnull(ticket_id, 0), role, attempt"
     return _upsert(conn, "jobs", conflict, key, values)
@@ -439,6 +447,7 @@ def finish_job(
     note: str | None = None,
     session_id: str | None = None,
     log_path: str | None = None,
+    model: str | None = None,
 ) -> None:
     values = _given(
         ended=ended,
@@ -457,8 +466,14 @@ def finish_job(
         note=note,
         session_id=session_id,
         log_path=log_path,
+        model=model,
     )
     _update(conn, "jobs", job_id, values)
+
+
+def set_job_model(conn: sqlite3.Connection, job_id: int, model: str) -> None:
+    """A past job's model, read from its log by the backfill (f2-04)."""
+    _update(conn, "jobs", job_id, {"model": model})
 
 
 def close_abandoned(conn: sqlite3.Connection, project_id: int, run_id: int) -> int:

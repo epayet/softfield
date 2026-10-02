@@ -64,7 +64,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -117,12 +117,45 @@ def test_a_version_2_database_keeps_its_runs_and_gains_their_activity(tmp_path):
     old.close()
 
     conn = metrics.open_db(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
     row = conn.execute(
         "SELECT run_dir, started, heartbeat, activity, waiting_until, reserve FROM runs"
     ).fetchone()
     assert tuple(row) == ("r1", T0, T1, None, None, None)
     conn.close()
+
+
+def test_a_version_3_database_keeps_its_jobs_and_gains_an_empty_model(tmp_path):
+    """f2-04: the jobs already written stay; their model is empty until backfill reads it."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    steps = "\n".join(metrics.MIGRATIONS[:3])
+    old.executescript(f"BEGIN;\n{steps}\nPRAGMA user_version = 3;\nCOMMIT;")
+    old.execute("INSERT INTO projects (name) VALUES ('coucou')")
+    old.execute("INSERT INTO runs (project_id, run_dir) VALUES (1, 'r1')")
+    old.execute(
+        "INSERT INTO jobs (run_id, role, agent, attempt, log_path)"
+        " VALUES (1, 'review', 'claude-opus', 1, 'var/runs/r1/claude-review-f1.log')"
+    )
+    old.close()
+
+    conn = metrics.open_db(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    row = conn.execute("SELECT agent, log_path, model FROM jobs").fetchone()
+    assert tuple(row) == ("claude-opus", "var/runs/r1/claude-review-f1.log", None)
+    conn.close()
+
+
+def test_a_job_records_the_model_it_ran_on(db, ids):
+    """f2-04: started on the agent's model, finished on the one its harness reported."""
+    job = _job(db, ids, agent="claude-sonnet", model="sonnet")
+    assert db.execute("SELECT model FROM jobs").fetchone()[0] == "sonnet"
+    metrics.finish_job(db, job, ended=T1, outcome="passed", model="claude-sonnet-5-5")
+    assert db.execute("SELECT model FROM jobs").fetchone()[0] == "claude-sonnet-5-5"
+    metrics.finish_job(db, job, ended=T1, outcome="passed")  # None keeps it
+    assert db.execute("SELECT model FROM jobs").fetchone()[0] == "claude-sonnet-5-5"
+    metrics.set_job_model(db, job, "claude-sonnet-5-6")
+    assert db.execute("SELECT model FROM jobs").fetchone()[0] == "claude-sonnet-5-6"
 
 
 def test_a_run_says_what_it_does_and_until_when_it_waits(db, ids):

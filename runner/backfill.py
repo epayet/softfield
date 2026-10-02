@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from runner import metrics
+from runner.claude import stream_model
 from runner.gates import parse_blocked
 from runner.gitops import LOCAL_MODEL_AGENT, Git, GitError, parse_trailers
 from runner.local_model import parse_events, stream_facts
@@ -260,6 +261,7 @@ def backfill(conn: sqlite3.Connection, repo: Path, runs_dir: Path, *, local_agen
                 _run(b, entry)
             elif entry.name != "state.json":
                 b.gap(entry, "not a run folder; nothing recovered from it")
+    _models(b)
     _merges(b)
     _milestones(b)
     for ticket, (attempts, tokens) in sorted(footers.items()):
@@ -515,6 +517,24 @@ def _review_findings(b: _Backfill, run: Path, reviews: dict[tuple[str, int], int
                 agent=CLAUDE_OPUS,
             )
             b.count(key, "findings", finding_id)
+
+
+def _models(b: _Backfill) -> None:
+    """The model of every Claude job, backfilled or the runner's own, that has none yet and
+    whose log is still there (f2-04). OpenCode's logs don't name theirs."""
+    rows = b.conn.execute(
+        "SELECT j.id, j.log_path FROM jobs j JOIN runs r ON r.id = j.run_id"
+        " WHERE r.project_id = ? AND j.model IS NULL AND j.log_path IS NOT NULL"
+        " AND j.agent LIKE 'claude-%'",
+        (b.project_id,),
+    ).fetchall()
+    for job_id, log_path in rows:
+        path = b.repo / log_path
+        if not path.is_file():
+            continue
+        stdout = path.read_text(encoding="utf-8", errors="replace").split(_STDERR, 1)[0]
+        if model := stream_model(stdout.splitlines()):
+            metrics.set_job_model(b.conn, job_id, model)
 
 
 def _merges(b: _Backfill) -> None:

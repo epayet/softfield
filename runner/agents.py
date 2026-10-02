@@ -85,6 +85,7 @@ class JobResult:
     num_turns: int = 0
     session_id: str | None = None
     readings: tuple[Reading, ...] = ()  # every window reading, in order
+    model: str = ""  # the exact model it ran on, as its harness reported it (f2-04)
     # What a developer's attempt did, where the harness streams it (ADR 12 items 4, 6 and 7)
     peak_context: int = 0  # the largest context one step sent
     edit_streak: int = 0  # the longest run of edits without running a command

@@ -144,13 +144,18 @@ class CopilotAdapter:
         duration = time.monotonic() - started
         reading = quota_reading(repo)
         readings = (reading,) if reading else ()
+        model = agent.model  # `--silent` output never names the model (f2-04)
         if proc is None:
             log_path.write_text("--- timed out ---\n", encoding="utf-8")
-            return JobResult(False, "timed out", duration, timed_out=True, readings=readings)
+            return JobResult(
+                False, "timed out", duration, timed_out=True, readings=readings, model=model
+            )
         log_path.write_text(proc.stdout + "\n--- stderr ---\n" + proc.stderr, encoding="utf-8")
         if proc.returncode == 0:
             text = proc.stdout.strip()
-            return JobResult(True, text, duration, requests=1.0, num_turns=1, readings=readings)
+            return JobResult(
+                True, text, duration, requests=1.0, num_turns=1, readings=readings, model=model
+            )
         error = (proc.stderr.strip() or proc.stdout.strip())[:500]
         refusal, transient = classify(proc.stderr + proc.stdout, now)
         return JobResult(
@@ -160,6 +165,7 @@ class CopilotAdapter:
             refusal=refusal,
             transient=transient,
             readings=readings,
+            model=model,
         )
 
 
