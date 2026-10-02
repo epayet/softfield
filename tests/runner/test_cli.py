@@ -121,6 +121,24 @@ def test_a_restart_without_a_yes_passes_none_on(in_repo, monkeypatch):
     assert loop.RESERVE_ENV not in envs[0]
 
 
+def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):
+    """f2-03: a Ctrl-C left run 20261002-055804 alive and on the reserve."""
+    ended: list[str] = []
+    monkeypatch.setattr(loop, "end_open_runs", lambda: ended.append("ended"))
+
+    def ctrl_c(cfg, key, base):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(cli, "run_milestone", ctrl_c)
+    with pytest.raises(KeyboardInterrupt):
+        cli.main(["milestone", "1"])
+    assert ended == ["ended"]
+    monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: 1 / 0)
+    with pytest.raises(ZeroDivisionError):
+        cli.main(["run"])
+    assert ended == ["ended", "ended"]
+
+
 @pytest.mark.parametrize(("argv", "score"), [(["--score", "7"], 7), ([], None)])
 def test_signoff_passes_the_owners_score_on(in_repo, monkeypatch, argv, score):
     seen: list[object] = []

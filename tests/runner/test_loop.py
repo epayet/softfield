@@ -70,6 +70,7 @@ def _new_command(monkeypatch):
     """The owner's answers last for one command: each test is a new one."""
     monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
     monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
+    monkeypatch.setattr(loop, "OPEN_RUNS", [])  # and its runs, which its exit ends
 
 
 class Script(list[Callable[[Path, str], object]]):
@@ -308,9 +309,11 @@ def test_session_stops_when_an_escalation_changes_the_runner(repo, fake_model, m
         git(repo, "commit", "-qm", "escalation: requeue")
 
     monkeypatch.setattr(loop, "handle_escalation", fix_runner_and_requeue)
+    activities = _activities(monkeypatch)
     report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     assert report is not None
     assert calls == ["m1-01-thing"]
+    assert activities[-1] == "restarting after a runner change"  # until the run ends
     assert loop.RESTART_NOTE in report.notes
     assert "a lead ticket or an escalation" in loop.RESTART_NOTE
 
@@ -2363,6 +2366,19 @@ def _activity(repo: Path) -> tuple[object, object]:
     return run["activity"], run["waiting_until"]
 
 
+def _activities(monkeypatch) -> list[str | None]:
+    """Every activity the runner writes on its run, in order."""
+    written: list[str | None] = []
+    real = metrics.update_run_activity
+
+    def update(conn, run_id, activity, waiting_until=None):
+        written.append(activity)
+        real(conn, run_id, activity, waiting_until)
+
+    monkeypatch.setattr(metrics, "update_run_activity", update)
+    return written
+
+
 def test_a_pause_for_a_limit_or_a_passing_error_shows_on_the_run_until_it_ends(repo, monkeypatch):
     resets = loop.now() + timedelta(hours=1)
     done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
@@ -2371,11 +2387,73 @@ def test_a_pause_for_a_limit_or_a_passing_error_shows_on_the_run_until_it_ends(r
     seen: list[tuple[object, object]] = []
     monkeypatch.setattr("time.sleep", lambda seconds: seen.append(_activity(repo)))
     s = loop.open_session(_config(repo))
+    before = _activity(repo)
     loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    assert [activity for activity, _ in seen] == ["waiting for Claude"] * 2
+    assert before == ("picking the next ticket", None)
     until = [datetime.fromisoformat(str(at)) for _, at in seen]
     assert until[0] > resets and until[1] > loop.now()
-    assert _activity(repo) == (None, None)
+    assert [activity for activity, _ in seen] == [
+        f"waiting for Claude · m1-01-lead until {at:%H:%M}" for at in until
+    ]
+    assert _activity(repo) == before  # what the run did before the wait
+
+
+def test_the_run_says_what_it_does_between_two_tickets(repo, fake_model, monkeypatch):
+    """f2-03: between two tickets the page said a bare "Running"."""
+    _add_task(repo, "m1-01-thing")
+    _add_task(repo, "m1-02-other")
+    fake_model.extend([_implement, lambda repo_, prompt: _lead_writes(repo_, "other")])
+    activities = _activities(monkeypatch)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done", "done"]
+    assert None not in activities  # never empty while the run lives
+    assert activities[0] == "picking the next ticket"
+    assert activities.count("picking the next ticket") >= 3  # before, between and after
+    assert "m1-01-thing" in activities and "m1-02-other" in activities
+    [run] = _rows(repo, "runs")
+    assert run["ended"] is not None and (run["activity"], run["waiting_until"]) == (None, None)
+
+
+def test_the_run_says_when_it_asks_the_owner(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+):
+    _claude_at(repo, 0.80, week=0.79)
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    seen: list[object] = []
+
+    def read_answer(timeout: float) -> str | None:
+        seen.append(_activity(repo)[0])
+        return "y"
+
+    monkeypatch.setattr(loop, "read_answer", read_answer)
+    _run(repo)
+    assert seen == ["asking you about Claude's reserve", "asking you about Claude's 5-hour window"]
+
+
+def test_a_ctrl_c_leaves_no_run_alive_or_on_the_reserve(repo, fake_model, monkeypatch):
+    """f2-03: after a Ctrl-C, run 20261002-055804 kept ended NULL and reserve 1, so the page
+    said "on Claude's reserve" until the heartbeat went stale."""
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(yes=True))
+    _add_task(repo, "m1-01-thing")
+
+    def ctrl_c(repo_: Path, prompt: str) -> None:
+        raise KeyboardInterrupt
+
+    fake_model.append(ctrl_c)
+    with pytest.raises(KeyboardInterrupt):
+        _run(repo)
+    [run] = _rows(repo, "runs")
+    assert run["ended"] is None and run["reserve"] == 1  # the command hasn't exited yet
+    loop.end_open_runs()  # the command's exit
+    [run] = _rows(repo, "runs")
+    assert run["ended"] is not None and run["verdict"] == "interrupted"
+    assert (run["activity"], run["waiting_until"], run["reserve"]) == (None, None, 0)
+    assert [job["outcome"] for job in _rows(repo, "jobs")] == ["interrupted"]
+    loop.end_open_runs()  # a second exit finds nothing left to end
+    assert _rows(repo, "runs") == [run]
 
 
 def test_waiting_with_nothing_to_run_without_claude_shows_on_the_run(
@@ -2407,8 +2485,9 @@ def test_waiting_with_nothing_to_run_without_claude_shows_on_the_run(
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done"]
     [(activity, until)] = seen
-    assert activity == "waiting for Claude"
-    assert datetime.fromisoformat(str(until)) == resets + timedelta(seconds=60)
+    resumes = resets + timedelta(seconds=60)
+    assert datetime.fromisoformat(str(until)) == resumes
+    assert activity == f"waiting for Claude · m1-01-lead until {resumes:%H:%M}"  # the ticket
     assert _activity(repo) == (None, None)
 
 
@@ -2442,17 +2521,19 @@ def test_the_run_names_check_all_while_it_runs(repo, monkeypatch, tmp_path):
 
     monkeypatch.setattr(checks, "check_all", check_all)
     s = loop.open_session(_config(repo))
+    before = _activity(repo)
     assert loop._check_all(s, "m1-01-lead", tmp_path, "check-all.txt")
     assert loop._check_all(s, None, tmp_path, "check-all.txt")
     assert seen == ["check-all · m1-01-lead", "check-all on main"]
-    assert _activity(repo) == (None, None)
+    assert _activity(repo) == before == ("picking the next ticket", None)
 
 
-def test_a_job_starting_clears_the_runs_activity(repo):
+def test_a_job_starting_keeps_the_runs_activity_for_after_it(repo):
+    """The page shows the job while it runs; when it ends, the run still says what it does."""
     s = loop.open_session(_config(repo))
-    loop.set_activity(s, "warm-up")
+    loop.set_activity(s, "m1-01-thing")
     loop.record_start(s, "m1-01-thing", "m1", "developer", "local-m")
-    assert _activity(repo) == (None, None)
+    assert _activity(repo) == ("m1-01-thing", None)
 
 
 def test_a_claude_jobs_row_shows_its_tokens_and_steps_before_it_ends(repo, monkeypatch):
@@ -2492,9 +2573,11 @@ def test_a_yes_to_the_reserve_clears_its_item_at_once_and_marks_the_run(
     _lead_task(repo, "m1-01-lead")
     script, _ = fake_lead
     items: list[dict[str, object]] = []
+    reserves: list[object] = []
 
     def lead(job: ClaudeJob, repo_: Path) -> None:
         items.extend(_rows(repo, "owner_items"))
+        reserves.extend(run["reserve"] for run in _rows(repo, "runs"))
         _lead_implements(job, repo_)
 
     script.append(lead)
@@ -2508,7 +2591,8 @@ def test_a_yes_to_the_reserve_clears_its_item_at_once_and_marks_the_run(
     _run(repo)
     [item] = items
     assert (item["kind"], item["subject"]) == ("reserve", "m1-01-lead") and item["resolved"]
-    assert [run["reserve"] for run in _rows(repo, "runs")] == [None, 1]
+    assert reserves == [0, 1]  # the first run ended; the rerun is on the reserve
+    assert [run["reserve"] for run in _rows(repo, "runs")] == [0, 0]  # and ended in turn
 
 
 def test_a_restart_after_a_yes_marks_its_run_on_the_reserve(repo, monkeypatch):

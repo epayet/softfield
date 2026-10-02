@@ -193,6 +193,9 @@ class Session:
     job_numbers: dict[tuple[str | None, str], int] = field(default_factory=dict)
     last_job_id: int | None = None  # the last Claude job's row, for its findings
     ticket_started: float = 0.0  # `clock()` when the current ticket started, for the console
+    # What the run says it does outside a job, and until when it waits (`set_activity`).
+    activity: str | None = None
+    waiting_until: datetime | None = None
 
     @property
     def repo(self) -> Path:
@@ -419,6 +422,8 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
             heartbeat=at,
         )
         if s.run_id is not None:
+            OPEN_RUNS.append(s)
+            set_activity(s, PICKING)
             if cut_off_job is not None:
                 _record(s, metrics.end_interrupted, cut_off_job)
             _record(s, metrics.close_abandoned, s.project_id, s.run_id)
@@ -474,9 +479,13 @@ def sync_tickets(s: Session) -> None:
         _record(s, metrics.remove_missing_tickets, s.project_id, ready)
 
 
+PICKING = "picking the next ticket"
+
+
 def set_activity(s: Session, activity: str | None, waiting_until: datetime | None = None) -> None:
     """What the run does outside a job, and until when it waits (f1 D3, amended); None
     clears both. Best effort, like every write."""
+    s.activity, s.waiting_until = activity, waiting_until
     if s.run_id is None:
         return
     until = waiting_until.isoformat() if waiting_until else None
@@ -484,26 +493,27 @@ def set_activity(s: Session, activity: str | None, waiting_until: datetime | Non
 
 
 @contextmanager
-def doing(s: Session, activity: str) -> Iterator[None]:
-    """The run's activity while the block runs: the gates, check-all, the warm-up."""
-    set_activity(s, activity)
+def doing(s: Session, activity: str, waiting_until: datetime | None = None) -> Iterator[None]:
+    """The run's activity while the block runs (the gates, check-all, a question, a ticket),
+    then back to what it did before, so that it never goes blank while the run lives
+    (f2-03)."""
+    before = s.activity, s.waiting_until
+    set_activity(s, activity, waiting_until)
     try:
         yield
     finally:
-        set_activity(s, None)
+        set_activity(s, *before)
 
 
 WAITING_FOR_CLAUDE = "waiting for Claude"
 
 
-def wait_for_claude(s: Session, seconds: float, resumes: datetime) -> None:
+def wait_for_claude(s: Session, seconds: float, resumes: datetime, what: str | None) -> None:
     """Sleep through a pause for Claude (a limit, a passing error, nothing to run without
-    it), the run saying so until it ends."""
-    set_activity(s, WAITING_FOR_CLAUDE, resumes)
-    try:
+    it), the run saying so, and for what, until it ends."""
+    waiting = f"{WAITING_FOR_CLAUDE} · {what}" if what else WAITING_FOR_CLAUDE
+    with doing(s, f"{waiting} until {resumes:%H:%M}", resumes):
         time.sleep(seconds)
-    finally:
-        set_activity(s, None)
 
 
 def record_ticket(
@@ -550,20 +560,24 @@ def record_ticket(
 
 def _finish_run(s: Session, verdict: str) -> None:
     _stop_heartbeat(s)
-    if s.run_id is not None and s.project_id is not None:
-        at = now().isoformat()
-        _record(
-            s,
-            metrics.upsert_run,
-            s.project_id,
-            s.run_dir.name,
-            ended=at,
-            heartbeat=at,
-            verdict=verdict,
-        )
+    OPEN_RUNS[:] = [other for other in OPEN_RUNS if other is not s]
+    if s.run_id is not None:
+        _record(s, metrics.end_run, s.run_id, now().isoformat(), verdict)
     if s.db is not None:
         s.db.close()
         s.db = None
+
+
+# The sessions whose run hasn't ended: `end_open_runs` ends them when the command exits.
+OPEN_RUNS: list[Session] = []
+
+
+def end_open_runs() -> None:
+    """End every run this process left open: a Ctrl-C or a crash stopped it before
+    `close_session` (f2-03). The command calls it on any exit; a run ended already isn't
+    here."""
+    for s in list(OPEN_RUNS):
+        _finish_run(s, "interrupted")
 
 
 def next_number(s: Session, ticket: str | None, group: str) -> int:
@@ -586,11 +600,10 @@ def record_start(
     routing_reason: str | None = None,
 ) -> int | None:
     """Write a job as running (f1 D3), with why its agent was chosen, and beat the run's
-    heartbeat; the job is what the run does now, so its activity clears. Returns the job's
-    id."""
+    heartbeat. The page shows the job while it runs; the run's activity stays, for when it
+    ends (f2-03). Returns the job's id."""
     if s.run_id is None or s.project_id is None:
         return None
-    set_activity(s, None)
     at = now().isoformat()
     milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
     ticket_id = _record(s, metrics.upsert_ticket, s.project_id, ticket) if ticket else None
@@ -1117,7 +1130,7 @@ def call_claude(
             at = now()
             resumes = at + timedelta(seconds=pause)
             s.log(console.paused(agent, f"interrupted ({result.text})", resumes, at))
-            wait_for_claude(s, pause, resumes)
+            wait_for_claude(s, pause, resumes, ticket or subject)
             continue
         if (limit := result.refusal) is not None:  # a limit (ADR 15 item 12)
             if not limit.certain:
@@ -1161,7 +1174,7 @@ def call_claude(
             why = "Claude usage limit" if limit.certain else "what looks like a Claude usage limit"
             s.log(console.paused(agent, why, resumes, at))
             s.report.notes.append(f"Paused {wait / 60:.0f} min for a Claude usage limit.")
-            wait_for_claude(s, wait, resumes)
+            wait_for_claude(s, wait, resumes, ticket or subject)
             continue
         if resume and not result.ok and result.num_turns == 0:
             resume = None  # the session couldn't be resumed: start again, told about the tree
@@ -2656,14 +2669,27 @@ def _limits_ahead(
     """The resets still ahead of the jobs parked for a limit (of ``tickets``, if given): while
     there is one, Claude is limited and only local work runs. Without ``five_hour``, the jobs
     held only by the owner's share of the 5-hour window are left out: a yes may yet free them."""
+    return [resets for resets, _ in _parked_ahead(s, at, tickets, five_hour=five_hour)]
+
+
+def _parked_ahead(
+    s: Session, at: datetime, tickets: Collection[str] | None = None, *, five_hour: bool = True
+) -> list[tuple[datetime, str]]:
+    """`_limits_ahead`'s resets, each with the parked key it is for."""
     return [
-        _resets(entry)
-        for ticket, entry in s.state.parked.items()
+        (_resets(entry), key)
+        for key, entry in s.state.parked.items()
         if entry["kind"] != "reserve"
         and (five_hour or not entry.get(FIVE_HOUR_HELD))
-        and (tickets is None or ticket in tickets)
+        and (tickets is None or key in tickets)
         and not _due(entry, at)
     ]
+
+
+def _parked_name(key: str) -> str:
+    """A parked key in words: ``escalation:f1-21`` is "escalation of f1-21"."""
+    kind, _, name = key.partition(":")
+    return f"{kind} of {name}" if name else kind
 
 
 def _read_windows(s: Session, prefix: str, at: datetime) -> list[allowance.Window]:
@@ -2784,7 +2810,7 @@ def wait_for_room(s: Session, what: str) -> None:
         wait = max(60.0, (hold.until - at).total_seconds() + 60)
         resumes = at + timedelta(seconds=wait)
         s.log(console.paused(RUNNER_AGENT, f"{what} waits for Claude ({hold.reason})", resumes, at))
-        wait_for_claude(s, wait, resumes)
+        wait_for_claude(s, wait, resumes, what)
 
 
 def _at_the_reserve(s: Session, at: datetime) -> tuple[str, datetime] | None:
@@ -2838,7 +2864,8 @@ def at_reserve(s: Session, task: Task) -> bool:
             f"? [{RUNNER_AGENT}] Claude is at its reserve ({where})."
             " Use it for the rest of this run? [y/N]"
         )
-        answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
+        with doing(s, "asking you about Claude's reserve"):
+            answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
         if answer is not None and answer.lower() in ("y", "yes"):
             RESERVE.yes = True
             s.log(f"✔ [{RUNNER_AGENT}] Claude's reserve is used for the rest of this run")
@@ -2893,7 +2920,8 @@ def _ask_five_hour(s: Session, used: str, resets: datetime) -> bool:
         f"? [{RUNNER_AGENT}] Claude's 5-hour window is at {used} (resets {resets:%H:%M}),"
         " kept for you. Use it for this run? [y/N]"
     )
-    answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
+    with doing(s, "asking you about Claude's 5-hour window"):
+        answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
     if answer is not None and answer.lower() in ("y", "yes"):
         FIVE_HOUR.yes = True
         s.log(f"✔ [{RUNNER_AGENT}] Claude's 5-hour window is used for the rest of this run")
@@ -2992,10 +3020,11 @@ def _wait_for_reset(s: Session, ready: list[Task]) -> bool:
     the owner, not the week."""
     at = now()
     support = {k for k, entry in s.state.parked.items() if entry["kind"] in SUPPORT}
-    ahead = _limits_ahead(s, at, {t.id for t in ready} | support)
+    ahead = _parked_ahead(s, at, {t.id for t in ready} | support)
     if not ahead:
         return False
-    wait = max(60.0, (min(ahead) - at).total_seconds() + 60)
+    first, key = min(ahead)  # the parked ticket that resumes first is what the wait is for
+    wait = max(60.0, (first - at).total_seconds() + 60)
     resumes = at + timedelta(seconds=wait)
     s.state.paused_until = resumes.isoformat()
     save_state(s.state, s.state_path)
@@ -3003,7 +3032,7 @@ def _wait_for_reset(s: Session, ready: list[Task]) -> bool:
     s.report.notes.append(
         f"Paused {wait / 60:.0f} min for a Claude usage limit, with nothing to run."
     )
-    wait_for_claude(s, wait, resumes)
+    wait_for_claude(s, wait, resumes, _parked_name(key))
     s.state.paused_until = None
     save_state(s.state, s.state_path)
     return True
@@ -3043,7 +3072,9 @@ def work_queue(
             # m4-07: Python keeps the old modules, so a runner fix made by an escalation
             # only takes effect in a new process. Stop rather than run requeued tasks stale.
             s.report.notes.append(RESTART_NOTE)
+            set_activity(s, "restarting after a runner change")
             return True
+        set_activity(s, PICKING)
         if _resume_support(s, escalate=escalate):
             continue
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
@@ -3058,14 +3089,16 @@ def work_queue(
             if paused:
                 s.report.notes.append("Paused (dependency escalated): " + ", ".join(sorted(paused)))
             return False
-        rec = run_task(s, task)
+        with doing(s, task.id):
+            rec = run_task(s, task)
         if rec.result != "parked":  # a parked ticket is reported when it runs
             s.report.tasks.append(rec)
         note_merge(s, task, rec)
         if rec.result in ("escalated", "blocked", "preflight") and escalate:
             logs = rec.logs or s.run_dir / task.id
             _save_thinking(rec, logs, s.repo)
-            handle_escalation(s, task, logs, rec.note or rec.result)
+            with doing(s, f"escalation of {task.id}"):
+                handle_escalation(s, task, logs, rec.note or rec.result)
         if once:
             return False
 

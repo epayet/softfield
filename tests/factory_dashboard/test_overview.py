@@ -97,13 +97,34 @@ def test_a_live_run_between_jobs_shows_its_activity(serve_between):
     assert "Nothing is running" not in running
 
 
-def test_a_waiting_run_shows_until_when(serve_between):
+def test_a_waiting_run_names_its_ticket_and_until_when(serve_between):
+    """f2-03: "waiting for Claude" between jobs named no ticket."""
     html = (
-        serve_between(activity="waiting for Claude", waiting_until="2026-10-02T01:40:00+00:00")
+        serve_between(
+            activity="waiting for Claude · f2-06-overview-allowances until 01:40",
+            waiting_until="2026-10-02T01:40:00+00:00",
+        )
         .get("/live")
         .text
     )
-    assert "Waiting for Claude's limit to reset, until 01:40" in section(html, "running")
+    running = section(html, "running")
+    assert "Running: waiting for Claude · f2-06-overview-allowances until 01:40" in running
+
+
+def test_a_run_ended_by_a_ctrl_c_is_not_running(serve_between, db_path):
+    """f2-03: after a Ctrl-C the page said "on Claude's reserve" until the heartbeat went stale."""
+    from runner import metrics
+
+    client = serve_between(activity="picking the next ticket", reserve=True)
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-115000'").fetchone()[0]
+        metrics.end_run(conn, run, NOW.isoformat(), "interrupted")
+    finally:
+        conn.close()
+    running = section(client.get("/live").text, "running")
+    assert "Nothing is running" in running
+    assert "on Claude's reserve" not in running
 
 
 def test_a_run_on_the_reserve_has_the_pill(serve_between):

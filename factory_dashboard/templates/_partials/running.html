@@ -27,10 +27,10 @@
   <div class="running-card">
     <div class="running-head">
       {% if run.reserve %}<span class="pill warn">on Claude's reserve</span>{% endif %}
-      {% if run.waiting_clock %}
-      <span>Waiting for Claude's limit to reset, until {{ run.waiting_clock }}</span>
-      {% elif run.activity %}
+      {% if run.activity %}
       <span>Running: {{ run.activity }}</span>
+      {% elif run.waiting_clock %}
+      <span>Waiting for Claude's limit to reset, until {{ run.waiting_clock }}</span>
       {% else %}
       <span>Running</span>
       {% endif %}

@@ -145,6 +145,20 @@ def test_a_run_on_the_reserve_says_so(db, ids):
     assert db.execute("SELECT reserve FROM runs").fetchone()[0] == 1
 
 
+def test_an_ended_run_leaves_nothing_looking_alive(db, ids):
+    """f2-03: after a Ctrl-C, run 20261002-055804 kept ended NULL and reserve 1."""
+    metrics.update_run_activity(db, ids["run"], "waiting for Claude · f1-21 until 15:40", T1)
+    metrics.set_run_reserve(db, ids["run"])
+    job = _job(db, ids)
+    metrics.end_run(db, ids["run"], T1, "interrupted")
+    row = db.execute(
+        "SELECT ended, heartbeat, verdict, activity, waiting_until, reserve FROM runs"
+    ).fetchone()
+    assert tuple(row) == (T1, T1, "interrupted", None, None, 0)
+    outcome, ended = db.execute("SELECT outcome, ended FROM jobs WHERE id = ?", (job,)).fetchone()
+    assert (outcome, ended) == ("interrupted", T1)
+
+
 def test_ready_tickets_no_longer_in_tasks_are_removed(db, ids):
     project = ids["project"]
     metrics.upsert_ticket(db, project, "f1-01-metrics-db", state="ready")

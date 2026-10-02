@@ -252,6 +252,10 @@ def main(argv: list[str] | None = None) -> int:
     ) as exc:
         print(f"runner: {exc}", file=sys.stderr)
         return 1
+    finally:
+        # A Ctrl-C or a crash leaves no run looking alive or on the reserve (f2-03). A
+        # self-restart ended its run before `execve`, and the new run keeps the yes.
+        loop.end_open_runs()
     return 0
 
 

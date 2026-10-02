@@ -314,6 +314,22 @@ def set_run_reserve(conn: sqlite3.Connection, run_id: int) -> None:
     _update(conn, "runs", run_id, {"reserve": 1})
 
 
+def end_run(conn: sqlite3.Connection, run_id: int, at: str, verdict: str) -> None:
+    """End a run, however its command exits (f2-03): nothing it did still looks alive, its
+    activity and wait are cleared, it is no longer on the reserve, and a job it left
+    ``running`` (a Ctrl-C) is ``interrupted``."""
+    conn.execute(
+        "UPDATE jobs SET outcome = 'interrupted', ended = ?"
+        " WHERE run_id = ? AND outcome = 'running'",
+        (at, run_id),
+    )
+    conn.execute(
+        "UPDATE runs SET ended = ?, heartbeat = ?, verdict = ?, activity = NULL,"
+        " waiting_until = NULL, reserve = 0 WHERE id = ?",
+        (at, at, verdict, run_id),
+    )
+
+
 def upsert_ticket(
     conn: sqlite3.Connection,
     project_id: int,
