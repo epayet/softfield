@@ -246,6 +246,49 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
     metrics.finish_job(conn, claude, ended=_at(timedelta(minutes=50)), outcome="passed", **tokens)
 
 
+def write_between_jobs(
+    conn: sqlite3.Connection,
+    *,
+    activity: str | None = None,
+    waiting_until: str | None = None,
+    reserve: bool = False,
+) -> int:
+    """On top of ``write_fixture``, at ``NOW``: a live run with no running job, no queue and
+    no owner item, doing ``activity``, optionally waiting until a time, optionally on Claude's
+    reserve. Returns the run's id."""
+    project = metrics.upsert_project(conn, PROJECT)
+    run = metrics.upsert_run(
+        conn,
+        project,
+        "20261002-115000",
+        command="check-all",
+        started=_at(timedelta(minutes=10)),
+        heartbeat=_at(timedelta(seconds=10)),
+    )
+    metrics.update_run_activity(conn, run, activity, waiting_until)
+    if reserve:
+        metrics.set_run_reserve(conn, run)
+    return run
+
+
+@pytest.fixture
+def serve_between(db_path: Path) -> Callable[..., TestClient]:
+    """A client over the fixture plus ``write_between_jobs``'s rows (its keyword arguments)."""
+    from factory_dashboard.app import create_app, get_now
+
+    def make(**kwargs: Any) -> TestClient:
+        conn = metrics.open_db(db_path)
+        try:
+            write_between_jobs(conn, **kwargs)
+        finally:
+            conn.close()
+        app = create_app(db_path, PROJECT)
+        app.dependency_overrides[get_now] = lambda: NOW
+        return TestClient(app, base_url="http://127.0.0.1:8765")
+
+    return make
+
+
 def write_milestone_detail(conn: sqlite3.Connection) -> None:
     """On top of ``write_fixture``: F1 with a sign-off (outcome, done_when,
     signoff sections) for the milestone detail page tests."""

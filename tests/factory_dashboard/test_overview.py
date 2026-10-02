@@ -63,15 +63,70 @@ def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
     assert "2 tickets waiting and the runner is idle" in needs
 
 
-def test_the_running_now_partial_answers_on_its_own_for_htmx(client):
-    response = client.get("/running?project=coucou")
+def test_the_live_partial_answers_on_its_own_for_htmx(client):
+    response = client.get("/live?project=coucou")
     assert response.status_code == 200
     html = response.text
-    assert "<html" not in html and "f1-04-live" in section(html, "running")
+    assert "<html" not in html
+    assert "Should reactions be editable" in section(html, "needs-you")
+    assert "f1-04-live" in section(html, "running")
     # it asks to be fetched again every 5 s, keeping the project
-    assert 'hx-get="/running?project=coucou"' in html
+    assert 'hx-get="/live?project=coucou"' in html
     assert 'hx-trigger="every 5s"' in html
-    assert 'hx-get="/running?project=coucou"' in client.get("/").text
+    assert 'hx-get="/live?project=coucou"' in client.get("/").text
+    assert client.get("/running").status_code == 404
+
+
+def test_the_queue_item_goes_from_live_once_a_run_is_live(serve):
+    stopped = serve(heartbeat_age=timedelta(minutes=3)).get("/live").text
+    assert "runner is idle" in section(stopped, "needs-you")
+    running = serve().get("/live").text
+    assert "runner is idle" not in section(running, "needs-you")
+
+
+def test_needs_you_is_absent_when_nothing_needs_the_owner(serve_between):
+    client = serve_between(activity="check-all on main")
+    for html in (client.get("/").text, client.get("/live").text):
+        assert "Needs you" not in html and "Nothing needs you" not in html
+        assert 'id="needs-you"' not in html
+
+
+def test_a_live_run_between_jobs_shows_its_activity(serve_between):
+    running = section(serve_between(activity="check-all on main").get("/live").text, "running")
+    assert "Running: check-all on main" in running
+    assert "Nothing is running" not in running
+
+
+def test_a_waiting_run_shows_until_when(serve_between):
+    html = (
+        serve_between(activity="waiting for Claude", waiting_until="2026-10-02T01:40:00+00:00")
+        .get("/live")
+        .text
+    )
+    assert "Waiting for Claude's limit to reset, until 01:40" in section(html, "running")
+
+
+def test_a_run_on_the_reserve_has_the_pill(serve_between):
+    html = serve_between(activity="gates · f1-21", reserve=True).get("/live").text
+    assert "on Claude's reserve" in section(html, "running")
+
+
+def test_a_running_job_shows_waiting_reserve_and_claude_tokens(client, db_path):
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        metrics.update_run_activity(conn, run, "waiting for Claude", "2026-10-02T01:40:00+00:00")
+        metrics.set_run_reserve(conn, run)
+    finally:
+        conn.close()
+    running = section(client.get("/live").text, "running")
+    assert "f1-04-live" in running
+    assert "Waiting for Claude's limit to reset, until 01:40" in running
+    assert "on Claude's reserve" in running
+    assert "42k tokens in" not in running  # the waiting line replaces the Live line
+    assert "elapsed time only" not in running
 
 
 def test_the_queue_has_its_tickets_and_the_command_that_drains_it(client):

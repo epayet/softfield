@@ -3,45 +3,24 @@
 {% block content %}
 <div class="page">
 
-<section id="needs-you" class="panel{% if needs %} needs{% endif %}">
-  <h2>Needs you <span class="src">each item goes when it's done</span></h2>
-  {% if needs %}
-  <ul class="steps">
-    {% for need in needs %}
-    <li>
-      <span class="when"><span class="pill warn">{{ need.kind }}</span></span>
-      <span class="what">
-        <span>{{ need.text }}{% if need.ticket %} (<a class="mono" href="/tickets/{{ need.ticket }}{{ q }}">{{ need.ticket }}</a>){% endif %}</span>
-        {% if need.command %}<code>{{ need.command }}</code>{% endif %}
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
+{% include "_partials/live.html" %}
+
+<section id="queue" class="panel">
+  <h2>Queue</h2>
+  {% if queue %}
+  <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting. Drain it with <code>{{ drain }}</code></p>
+  <div class="scroll"><table>
+    <thead><tr><th>Ticket</th><th>Goal</th><th class="num">Difficulty</th></tr></thead>
+    <tbody>
+      {% for t in queue %}
+      <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td class="goal">{{ t.title or "" }}</td><td class="num">{{ t.difficulty or "–" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
   {% else %}
-  <p class="sub">Nothing needs you.</p>
+  <p class="sub">The queue is empty.</p>
   {% endif %}
 </section>
-
-<div class="row">
-  {% include "_partials/running.html" %}
-
-  <section id="queue" class="panel">
-    <h2>Queue</h2>
-    {% if queue %}
-    <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting. Drain it with <code>{{ drain }}</code></p>
-    <div class="scroll"><table>
-      <thead><tr><th>Ticket</th><th>Goal</th><th class="num">Difficulty</th></tr></thead>
-      <tbody>
-        {% for t in queue %}
-        <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td class="goal">{{ t.title or "" }}</td><td class="num">{{ t.difficulty or "–" }}</td></tr>
-        {% endfor %}
-      </tbody>
-    </table></div>
-    {% else %}
-    <p class="sub">The queue is empty.</p>
-    {% endif %}
-  </section>
-</div>
 
 <div class="row">
   <section id="verdict" class="panel">

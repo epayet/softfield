@@ -1,10 +1,11 @@
-{# Running now (D3): swapped in by htmx every 5 s from /running, so it carries its own hx-get. #}
-<section id="running" class="panel" hx-get="/running{{ q }}" hx-trigger="every 5s" hx-swap="outerHTML">
+{# Running now (D3): drawn inside the /live partial, which refreshes it every 5 s. #}
+<section id="running" class="panel">
   <h2>Running now <span class="src">refreshes every 5 s</span></h2>
   {% for job in running %}
   <div class="running-card">
     <div class="running-head">
       <span class="pill running pulse">attempt {{ job.attempt }}</span>
+      {% if job.reserve %}<span class="pill warn">on Claude's reserve</span>{% endif %}
       {% if job.ticket %}<a class="mono" href="/tickets/{{ job.ticket }}{{ q }}">{{ job.ticket }}</a>{% endif %}
       <span class="agent">{{ job.agent }}</span>
       <span>{{ job.role }}</span>
@@ -13,11 +14,30 @@
     <dl class="kv">
       <dt>Elapsed</dt><dd class="mono">{{ job.elapsed | ago }}</dd>
       {% if job.difficulty %}<dt>Difficulty</dt><dd class="mono">{{ job.difficulty }}</dd>{% endif %}
-      <dt>Live</dt><dd class="mono">{% if job.tokens_in is not none %}{{ job.tokens_in | tokens }} tokens in · {{ job.steps or 0 }} steps{% else %}elapsed time only, until it finishes{% endif %}</dd>
+      {% if job.waiting_clock %}
+      <dt>Waiting</dt><dd class="mono">Waiting for Claude's limit to reset, until {{ job.waiting_clock }}</dd>
+      {% else %}
+      <dt>Live</dt><dd class="mono">{% if job.tokens_in is not none %}{{ job.tokens_in | tokens }} tokens in · {{ job.steps or 0 }} steps{% else %}no tokens reported yet{% endif %}</dd>
+      {% endif %}
       <dt>Heartbeat</dt><dd class="mono">{{ job.heartbeat | ago }} ago</dd>
     </dl>
   </div>
   {% else %}
+  {% for run in runs %}
+  <div class="running-card">
+    <div class="running-head">
+      {% if run.reserve %}<span class="pill warn">on Claude's reserve</span>{% endif %}
+      {% if run.waiting_clock %}
+      <span>Waiting for Claude's limit to reset, until {{ run.waiting_clock }}</span>
+      {% elif run.activity %}
+      <span>Running: {{ run.activity }}</span>
+      {% else %}
+      <span>Running</span>
+      {% endif %}
+    </div>
+  </div>
+  {% else %}
   <p class="sub">Nothing is running.</p>
+  {% endfor %}
   {% endfor %}
 </section>

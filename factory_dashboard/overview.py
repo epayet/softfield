@@ -2,7 +2,7 @@
 ``APIRouter``, its own SQL in plain functions that return data, a template extending
 ``base.html``, and a chart's data for ``static/charts.js`` (D5).
 
-Top to bottom: Needs you, Running now (an htmx partial at ``/running``), the queue, the last
+Top to bottom: Needs you and Running now (one htmx partial at ``/live``), the queue, the last
 verdict, the Claude allowance, savings for the current milestone and the Claude spend chart.
 """
 
@@ -48,17 +48,57 @@ class Running:
     heartbeat: timedelta | None  # how long ago the run last beat
     tokens_in: int | None
     steps: int | None
+    waiting_until: str | None = None  # ISO time while the run pauses for a limit
+    reserve: bool = False  # the owner said yes to Claude's reserve for this command
 
     @property
     def live(self) -> bool:
         return self.heartbeat is not None and self.heartbeat < LIVE
+
+    @property
+    def waiting_clock(self) -> str | None:
+        return _clock(self.waiting_until)
+
+
+def _clock(at: str | None) -> str | None:
+    return datetime.fromisoformat(at).strftime("%H:%M") if at else None
+
+
+@dataclass(frozen=True)
+class LiveRun:
+    """A live run, for what it does between jobs (f1 D3, amended)."""
+
+    run_dir: str
+    activity: str | None
+    waiting_until: str | None
+    reserve: bool
+
+    @property
+    def waiting_clock(self) -> str | None:
+        return _clock(self.waiting_until)
+
+
+def live_runs(conn: sqlite3.Connection, project: str, now: datetime) -> list[LiveRun]:
+    """Runs that haven't ended and beat less than ``LIVE`` ago, oldest first."""
+    rows = conn.execute(
+        "SELECT r.run_dir, r.heartbeat, r.activity, r.waiting_until, r.reserve FROM runs r"
+        " JOIN projects p ON p.id = r.project_id"
+        " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL ORDER BY r.id",
+        (project,),
+    ).fetchall()
+    return [
+        LiveRun(r["run_dir"], r["activity"], r["waiting_until"], bool(r["reserve"]))
+        for r in rows
+        if (_age(now, r["heartbeat"]) or LIVE) < LIVE
+    ]
 
 
 def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Running]:
     """Every job still ``running``, oldest first, live or not."""
     rows = conn.execute(
         "SELECT j.id, j.role, j.agent, j.attempt, j.started, j.tokens_in, j.steps,"
-        " t.ticket, t.difficulty, m.key AS milestone, r.run_dir, r.heartbeat"
+        " t.ticket, t.difficulty, m.key AS milestone, r.run_dir, r.heartbeat,"
+        " r.waiting_until, r.reserve"
         " FROM jobs j JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
         " LEFT JOIN tickets t ON t.id = j.ticket_id"
         " LEFT JOIN milestones m ON m.id = j.milestone_id"
@@ -79,6 +119,8 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
             heartbeat=_age(now, row["heartbeat"]),
             tokens_in=row["tokens_in"],
             steps=row["steps"],
+            waiting_until=row["waiting_until"],
+            reserve=bool(row["reserve"]),
         )
         for row in rows
     ]
@@ -86,12 +128,7 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
 
 def runner_live(conn: sqlite3.Connection, project: str, now: datetime) -> bool:
     """A run that hasn't ended and beat less than ``LIVE`` ago."""
-    rows = conn.execute(
-        "SELECT r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL",
-        (project,),
-    ).fetchall()
-    return any((_age(now, row["heartbeat"]) or LIVE) < LIVE for row in rows)
+    return bool(live_runs(conn, project, now))
 
 
 # --- the queue (D4) -----------------------------------------------------------------------
@@ -264,9 +301,18 @@ def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] |
 # --- the routes ---------------------------------------------------------------------------
 
 
+def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, object]:
+    """What the ``/live`` partial draws: Needs you, then Running now."""
+    jobs = running_jobs(conn, project, now)
+    return {
+        "needs": needs_you(conn, project, now, jobs, queue(conn, project)),
+        "running": [job for job in jobs if job.live],
+        "runs": live_runs(conn, project, now),
+    }
+
+
 @router.get("/", response_class=HTMLResponse)
 def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
-    jobs = running_jobs(conn, project, now)
     waiting = queue(conn, project)
     milestone = current_milestone(conn, project)
     return render(
@@ -276,8 +322,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
         "overview.html",
         {
             "active": "/",
-            "needs": needs_you(conn, project, now, jobs, waiting),
-            "running": [job for job in jobs if job.live],
+            **_live_context(conn, project, now),
             "queue": waiting,
             "drain": _drain(waiting[0].milestone or "") if waiting else None,
             "verdict": last_verdict(conn, project),
@@ -289,8 +334,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
     )
 
 
-@router.get("/running", response_class=HTMLResponse)
-def running_now(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
-    """Running now on its own, for htmx to swap in every 5 s."""
-    running = [job for job in running_jobs(conn, project, now) if job.live]
-    return render(request, conn, project, "_partials/running.html", {"running": running})
+@router.get("/live", response_class=HTMLResponse)
+def live(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
+    """Needs you and Running now together, for htmx to swap in every 5 s."""
+    return render(request, conn, project, "_partials/live.html", _live_context(conn, project, now))
