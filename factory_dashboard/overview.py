@@ -15,12 +15,16 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, ago, render
+from runner import metrics
 from runner.tasks import milestone_order
 
 router = APIRouter()
 
 LIVE = timedelta(minutes=2)  # D3: an older heartbeat means the runner stopped
-WINDOW = timedelta(hours=5)  # Claude Pro's usage window
+# [claude] in workflow/runner.toml: reserve for the lead starts at 70% of the week.
+WEEK_MARK = 0.70
+# [claude] in workflow/runner.toml: reserve for you starts at 75% of the 5-hour window.
+FIVE_HOUR_MARK = 0.75
 
 
 def _age(now: datetime, at: str | None) -> timedelta | None:
@@ -246,47 +250,140 @@ def last_verdict(conn: sqlite3.Connection, project: str) -> Verdict:
 
 
 @dataclass(frozen=True)
-class Allowance:
-    used: float  # token-equivalents in the window
-    limit: float | None  # what the window held at the last refusal, if any
-    jobs: int
+class WindowAllowance:
+    """One window's allowance for one agent group."""
 
-    @property
-    def share(self) -> float | None:
-        return min(1.0, self.used / self.limit) if self.limit else None
-
-
-def _claude_equivalents(conn: sqlite3.Connection, since: datetime, until: datetime) -> list[float]:
-    rows = conn.execute(
-        "SELECT started, tokens_in, tokens_cached, tokens_out FROM jobs"
-        " WHERE agent LIKE ? AND started IS NOT NULL",
-        (queries.LEAD_PREFIX + "%",),
-    ).fetchall()
-    return [
-        queries.Spend(
-            tokens_in=r["tokens_in"] or 0,
-            tokens_cached=r["tokens_cached"] or 0,
-            tokens_out=r["tokens_out"] or 0,
-        ).token_equivalents
-        for r in rows
-        if since <= datetime.fromisoformat(r["started"]) <= until
-    ]
+    label: str  # e.g. "Claude", "Copilot"
+    window: str  # e.g. "five_hour", "seven_day", "month"
+    display: str  # e.g. "5-hour window", "week", "month"
+    value: float | None  # 0..1 from reading, or None
+    resets_at: str | None  # ISO time
+    percent: str | None  # e.g. "80%"
+    mark: float | None  # threshold mark (0..1) or None
+    mark_label: str | None  # explanation of the mark
+    reset_label: str | None  # e.g. "resets at 17:00" or "resets on Oct 9"
+    status: str | None  # e.g. "reset since, no new reading" or "no data yet"
 
 
-def claude_allowance(conn: sqlite3.Connection, now: datetime) -> Allowance:
-    """Claude's use in the last ``WINDOW``, across every project (the allowance is the
-    account's), against what the window held when Claude last refused."""
-    used = _claude_equivalents(conn, now - WINDOW, now)
-    refusal = conn.execute(
-        "SELECT at FROM usage_events WHERE kind = 'refusal' AND agent LIKE ?"
-        " ORDER BY at DESC LIMIT 1",
-        (queries.LEAD_PREFIX + "%",),
-    ).fetchone()
-    limit = None
-    if refusal:
-        at = datetime.fromisoformat(refusal["at"])
-        limit = sum(_claude_equivalents(conn, at - WINDOW, at)) or None
-    return Allowance(used=sum(used), limit=limit, jobs=len(used))
+def _format_reset(at_str: str, now: datetime) -> tuple[str, str | None]:
+    """Return (percent_display, reset_label) for a reading's ``resets_at``."""
+    resets = datetime.fromisoformat(at_str)
+    if resets <= now:
+        return ("reset since, no new reading", None)
+    if resets.date() == now.date():
+        clock = resets.strftime("%H:%M")
+        return (f"resets at {clock}", clock)
+    day = resets.strftime("%b %-d")
+    clock = resets.strftime("%H:%M")
+    return (f"resets on {day} {clock}", clock)
+
+
+def _has_reading(row: sqlite3.Row | None) -> bool:
+    return row is not None and row["value"] is not None
+
+
+def _agent_allowances(
+    conn: sqlite3.Connection,
+    agent_prefix: str,
+    agent_label: str,
+    windows: list[tuple[str, str, float | None, str | None]],
+    now: datetime,
+) -> list[WindowAllowance]:
+    """Build allowance rows for one agent group (Claude or Copilot).
+
+    ``windows`` is a list of (window_key, display_label, mark_or_None, mark_label_or_None).
+    """
+    readings = metrics.latest_readings(conn, agent_prefix)
+    rows: list[WindowAllowance] = []
+    for wkey, wdisplay, mark, mlabel in windows:
+        row = readings.get(wkey)
+        if not _has_reading(row):
+            # Check if there's any reading at all for this window key
+            any_reading = any(r["window"] == wkey for r in readings.values())
+            if not any_reading:
+                rows.append(
+                    WindowAllowance(
+                        label=agent_label,
+                        window=wkey,
+                        display=wdisplay,
+                        value=None,
+                        resets_at=None,
+                        percent=None,
+                        mark=mark,
+                        mark_label=mlabel,
+                        reset_label=None,
+                        status="no data yet",
+                    )
+                )
+                continue
+            # There is a reading but its reset has passed
+            rows.append(
+                WindowAllowance(
+                    label=agent_label,
+                    window=wkey,
+                    display=wdisplay,
+                    value=None,
+                    resets_at=None,
+                    percent=None,
+                    mark=mark,
+                    mark_label=mlabel,
+                    reset_label=None,
+                    status="reset since, no new reading",
+                )
+            )
+            continue
+        # row has a value at this point
+        if row is None:
+            continue
+        value = row["value"]
+        pct = f"{int(value * 100)}%"
+        resets_at = row["resets_at"]
+        pct_display, reset_clock = _format_reset(resets_at, now)
+        if pct_display == "reset since, no new reading":
+            status = "reset since, no new reading"
+            reset_label = None
+        else:
+            status = None
+            reset_label = f"resets at {reset_clock}" if reset_clock else None
+        rows.append(
+            WindowAllowance(
+                label=agent_label,
+                window=wkey,
+                display=wdisplay,
+                value=value,
+                resets_at=resets_at,
+                percent=pct,
+                mark=mark,
+                mark_label=mlabel,
+                reset_label=reset_label,
+                status=status,
+            )
+        )
+    return rows
+
+
+def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllowance]:
+    """Every agent group's allowance, one row per window."""
+    claude = _agent_allowances(
+        conn,
+        queries.LEAD_PREFIX,
+        "Claude",
+        [
+            ("five_hour", "5-hour window", FIVE_HOUR_MARK, "kept for you from here"),
+            ("seven_day", "week", WEEK_MARK, "reserve kept for the lead from here"),
+        ],
+        now,
+    )
+    copilot = _agent_allowances(
+        conn,
+        "copilot-",
+        "Copilot",
+        [
+            ("month", "month", None, None),
+        ],
+        now,
+    )
+    return claude + copilot
 
 
 def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] | list[float]]:
@@ -326,7 +423,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "queue": waiting,
             "drain": _drain(waiting[0].milestone or "") if waiting else None,
             "verdict": last_verdict(conn, project),
-            "allowance": claude_allowance(conn, now),
+            "allowance": agent_allowances(conn, now),
             "milestone": milestone,
             "savings": queries.savings(conn, project, milestone["key"]) if milestone else None,
             "spend": spend_chart(conn, project),

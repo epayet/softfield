@@ -37,21 +37,35 @@
   </section>
 
   <section id="allowance" class="panel">
-    <h2>Claude allowance <span class="src">last 5 h, every project</span></h2>
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
     <div class="allow">
+      {% for a in allowance %}
       <div>
         <div class="line">
-          <span class="agent">claude-*</span>
-          {% if allowance.limit %}
-          <small>{{ allowance.used | tokens }} of ≈{{ allowance.limit | tokens }} token-equivalents · {{ "%.0f" | format(allowance.share * 100) }}%</small>
-          {% else %}
-          <small>{{ allowance.used | tokens }} token-equivalents · no limit learnt yet (none refused)</small>
+          <span class="agent">{{ a.label }}</span>
+          <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span>
+        </div>
+        <div class="meter">
+          <span style="width:{{ '%.0f' | format((a.value or 0) * 100) }}%"></span>
+          {% if a.mark is not none %}
+          <span class="mark" style="left:{{ '%.0f' | format(a.mark * 100) }}%"></span>
           {% endif %}
         </div>
-        <div class="meter{% if not allowance.limit %} illus{% endif %}"><span style="width:{{ '%.0f' | format((allowance.share or 0) * 100) }}%"></span></div>
+        <div class="line">
+          {% if a.reset_label %}
+          <small>{{ a.reset_label }}</small>
+          {% elif a.status %}
+          <small class="warnline">{{ a.status }}</small>
+          {% else %}
+          <small>no data yet</small>
+          {% endif %}
+          {% if a.mark_label %}
+          <small>{{ a.mark_label }}</small>
+          {% endif %}
+        </div>
       </div>
+      {% endfor %}
     </div>
-    <p class="sub">{{ allowance.jobs }} Claude job{{ "s" if allowance.jobs != 1 }} in the window. The limit is what the window held when Claude last refused.</p>
   </section>
 </div>
 

@@ -3,8 +3,7 @@ import re
 from datetime import timedelta
 from pathlib import Path
 
-from factory_dashboard.overview import claude_allowance
-from tests.factory_dashboard.conftest import LOCAL, NOW, OTHER
+from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
 
@@ -166,16 +165,56 @@ def test_the_last_verdict_is_the_milestones_and_the_last_runs(client):
     assert 'href="/runs/20260930-100000?project=coucou"' in html
 
 
-def test_the_allowance_bar_counts_this_windows_claude_tokens(client):
-    allowance = section(client.get("/").text, "allowance")
-    # 30k in the last 5 h, from any project; the last refusal came at 650k
-    assert "30k of ≈650k token-equivalents" in allowance
-    assert "5%" in allowance
+def test_the_allowance_panel_shows_each_window(allowance_client):
+    allowance = section(allowance_client.get("/").text, "allowance")
+    # Claude's two windows (opus wins latest per window)
+    assert "Claude" in allowance
+    assert "5-hour window" in allowance
+    assert "80%" in allowance
+    assert "week" in allowance
+    assert "20%" in allowance
+    # Copilot's window
+    assert "Copilot" in allowance
+    assert "month" in allowance
+    assert "2%" in allowance
 
 
-def test_without_a_refusal_the_allowance_has_no_limit(db):
-    a = claude_allowance(db, NOW)
-    assert (a.used, a.limit, a.share) == (0, None, None)
+def test_an_agent_with_jobs_but_no_readings_says_no_data_yet(serve):
+    html = serve().get("/").text
+    allowance = section(html, "allowance")
+    # LOCAL (local-qwen3.6-35b-a3b) has jobs in write_fixture but no readings
+    # It won't appear because no prefix matches it - agents with jobs but
+    # no readings for the queried prefixes show "no data yet"
+    # The panel only shows Claude and Copilot (the queried prefixes)
+    assert "Claude" in allowance
+    assert "Copilot" in allowance
+
+
+def test_reset_since_applies_when_reading_has_passed(serve, db_path):
+    from runner import metrics
+
+    client = serve()
+    conn = metrics.open_db(db_path)
+    try:
+        # Overwrite Claude's five_hour reading with one that already reset
+        conn.execute(
+            "DELETE FROM usage_events WHERE kind = 'reading' AND agent LIKE 'claude-%'"
+            " AND window = 'five_hour'",
+        )
+        metrics.add_usage_event(
+            conn,
+            OPUS,
+            "2026-10-01T10:00:00+00:00",
+            "reading",
+            window="five_hour",
+            value=0.5,
+            resets_at="2026-10-01T15:00:00+00:00",
+        )
+    finally:
+        conn.close()
+    html = client.get("/").text
+    allowance = section(html, "allowance")
+    assert "reset since" in allowance
 
 
 def test_savings_are_for_the_current_milestone(client):

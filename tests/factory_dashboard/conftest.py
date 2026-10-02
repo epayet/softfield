@@ -1267,3 +1267,45 @@ def milestone_detail_client(db_path: Path) -> TestClient:
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def write_allowance(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: readings for Claude and Copilot, at ``NOW``.
+
+    Claude: ``five_hour`` at 0.8 (resets in 5 h), ``seven_day`` at 0.2 (resets in 7 d).
+    Copilot: ``month`` at 0.02 (resets in 30 d).
+    """
+    write_fixture(conn)
+    # Write sonnet first, then opus so opus's values win (latest per window).
+    for agent, window, value, offset in (
+        (SONNET, "five_hour", 0.85, timedelta(hours=5)),
+        (SONNET, "seven_day", 0.22, timedelta(days=7)),
+        ("copilot-auto", "month", 0.02, timedelta(days=30)),
+        (OPUS, "five_hour", 0.8, timedelta(hours=5)),
+        (OPUS, "seven_day", 0.2, timedelta(days=7)),
+    ):
+        metrics.add_usage_event(
+            conn,
+            agent,
+            NOW.isoformat(),
+            "reading",
+            window=window,
+            value=value,
+            resets_at=(NOW + offset).isoformat(),
+        )
+
+
+@pytest.fixture
+def allowance_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_allowance``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_allowance(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
