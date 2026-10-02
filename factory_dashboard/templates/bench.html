@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Bench · {{ project }}{% endblock %}
+{% block content %}
+<div class="page">
+
+<section id="bench" class="panel">
+  <h2>Bench <span class="src">finished tickets replayed by chosen agents</span></h2>
+  {% if grid.tickets %}
+  <div class="scroll"><table>
+    <thead><tr><th>Ticket</th><th class="num">Difficulty</th>{% for agent in grid.agents %}<th>{{ agent }}</th>{% endfor %}</tr></thead>
+    <tbody>
+      {% for ticket, difficulty in grid.tickets %}
+      <tr>
+        <td class="id"><a href="/tickets/{{ ticket }}{{ q }}">{{ ticket }}</a></td>
+        <td class="num">{{ difficulty or "–" }}</td>
+        {% for agent in grid.agents %}
+        {% set cell = grid.cells.get((ticket, agent)) %}
+        <td>{% if cell %}<a href="/jobs/{{ cell.job }}{{ q }}"><span class="pill{% if not cell.passed %} warn{% endif %}">{{ cell.result }}</span></a>
+          <small>{{ "%.1f" | format(cell.minutes) }} min · {{ cell.tokens | tokens }} tokens</small>{% endif %}</td>
+        {% endfor %}
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="sub">Nothing benched yet. Replay finished tickets for chosen agents with <code>{{ command }}</code></p>
+  {% endif %}
+</section>
+
+</div>
+{% endblock %}

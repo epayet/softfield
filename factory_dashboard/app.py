@@ -57,6 +57,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     answering to loopback names and to ``host``, the address it listens on."""
     from factory_dashboard import (
         agents,
+        bench,
         jobs,
         milestones,
         overview,
@@ -81,6 +82,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.include_router(projects.router)
     app.include_router(runs.router)
     app.include_router(agents.router)
+    app.include_router(bench.router)
 
     @app.get("/version", response_class=HTMLResponse)
     def version(seen: str = "") -> str:

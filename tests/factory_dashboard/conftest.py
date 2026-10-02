@@ -27,6 +27,7 @@ from runner import metrics
 PROJECT, OTHER = "coucou", "other"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
 LOCAL = "local-qwen3.6-35b-a3b"
+OTHER_LOCAL = "local-other"
 OPUS, SONNET = "claude-opus", "claude-sonnet"
 # Each Claude job in f1: 10k input + 100k cache reads (0.1) + 2k output (5) = 30k equivalents.
 CLAUDE_TOKENS: dict[str, int | float | None] = {
@@ -895,6 +896,62 @@ def write_more_jobs(conn: sqlite3.Connection, count: int) -> int:
         )
         last = job
     return last
+
+
+def write_bench(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``, bench jobs on ``f1-01-first`` (d4) and ``f1-02-escalated``
+    (d5), by ``LOCAL`` and ``OTHER_LOCAL``:
+    - f1-01 by LOCAL: failed, then passed (attempt 2), 20 min, 300k tokens;
+    - f1-01 by OTHER_LOCAL: refused;
+    - f1-02 by LOCAL: failed, then would escalate;
+    - f1-02 by OTHER_LOCAL: not benched (an empty cell)."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    run = metrics.upsert_run(conn, project, "bench-20261001-100000", command="bench")
+    first = metrics.upsert_ticket(conn, project, "f1-01-first", milestone_id=f1)
+    escalated = metrics.upsert_ticket(conn, project, "f1-02-escalated", milestone_id=f1)
+    for ticket, agent, n, outcome, note in (
+        (first, LOCAL, 1, "failed", None),
+        (first, LOCAL, 2, "passed", None),
+        (first, OTHER_LOCAL, 3, "refused", "it resets Fri 3 Oct 10:00"),
+        (escalated, LOCAL, 4, "failed", None),
+        (escalated, LOCAL, 5, "failed", "would escalate"),
+    ):
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="bench",
+            agent=agent,
+            attempt=n,
+            started="2026-10-01T10:00:00+02:00",
+        )
+        metrics.finish_job(
+            conn,
+            job,
+            ended="2026-10-01T10:10:00+02:00",
+            outcome=outcome,
+            note=note,
+            tokens_in=100_000,
+            tokens_out=50_000,
+        )
+
+
+@pytest.fixture
+def bench_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_bench``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_bench(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
 @pytest.fixture
