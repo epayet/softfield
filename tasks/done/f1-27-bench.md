@@ -27,3 +27,10 @@ Read `docs/adr/14-developers-and-agents.md` item 8. Test-first, with a fake adap
 - a failing agent ends with "would escalate", without calling Claude
 - a refusal stops the bench with its reset
 - `uv run runner check-all --task f1-27-bench` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
