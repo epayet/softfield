@@ -35,3 +35,12 @@ Read `docs/milestones/f1.md` D3 and D8 (each "Amended 2026-10-02"). Follow the w
 - a live run between jobs shows its activity; one waiting shows "until HH:MM"; one with `reserve` shows the pill
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 411
+gate_failures: []
+tokens: 10747
+```
