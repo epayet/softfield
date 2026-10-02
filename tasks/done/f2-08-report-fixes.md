@@ -29,3 +29,10 @@ Read `docs/reviews/factory-f1.md` findings 5, 7 and 8, and `factory_dashboard/qu
 - removed tickets are out of "Tickets merged N of M"
 - after backfill, M4's status is "in review" and M0's "done"
 - `uv run runner check-all --task f2-08-report-fixes` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
