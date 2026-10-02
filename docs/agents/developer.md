@@ -25,3 +25,4 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 11. If `all-tests` fails in a test about another ticket or a file outside your `files:` (f1-35: `test_tasks.py` naming f1-36), main was red before you. Don't try to fix it: finish your own work and write `BLOCKED.md` with `CATEGORY: needs-file` and the failing test's name.
 12. When a number in your ticket disagrees with your count, write the rows out as a table (duration in seconds, each token column) and add them once; never change fixture rows or invent new ones to make a number fit.
 13. A ticket that replaces a behaviour replaces its tests: rewrite the tests in your `tests:` that pin the old one, and never leave an assertion that can't fail.
+14. `check-all` and the full test suite take several minutes: give their shell call a timeout of 900000 ms. "(no output)" after a shell timeout means the call was killed, not that the checks hang; never write `BLOCKED.md` for it.
