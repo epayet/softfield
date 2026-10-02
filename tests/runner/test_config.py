@@ -77,7 +77,7 @@ def test_the_repos_toml_declares_f1s_agents_and_roles():
         "review": (opus,),
         "narrative": (opus,),
         "checkpoint": (sonnet, opus),
-        "checkpoint-shadow": ("copilot-auto",),
+        "checkpoint-shadow": (),  # off: the bench replaces shadowing (ADR 16 item 10)
     }
     assert cfg.agents["copilot-auto"].harness == "copilot"
     assert cfg.agent_for("checkpoint").id == sonnet

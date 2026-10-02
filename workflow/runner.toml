@@ -93,8 +93,8 @@ developer = ["local-qwen3.6-35b-a3b", "claude-sonnet"]
 last-attempt = ["local-qwen3.6-35b-a3b"]
 direction = ["claude-opus"]
 checkpoint = ["claude-sonnet", "claude-opus"]  # Opus when Sonnet wrote the code
-# Reviews each checkpoint's merges too, read-only; recorded, never acted on (ADR 14 item 12)
-checkpoint-shadow = ["copilot-auto"]
+# Off: agents earn roles from the bench, not by shadowing (ADR 16 item 10)
+checkpoint-shadow = []
 escalation = ["claude-opus"]
 lead-ticket = ["claude-opus"]
 review = ["claude-opus"]
