@@ -22,6 +22,15 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - A reading whose reset has passed shows "reset since, no new reading". Agents seen in `jobs` with no reading (the Ollama ones) say "no data yet".
 - Every bar says what it means in words (lead.md: no unexplained marks).
 
+Facts from the first run (escalated, restarted from main):
+- `runner.metrics.latest_readings(conn, agent_prefix)` (`runner/metrics.py`) already returns each window's latest reading, keyed by window, for every agent whose name starts with `agent_prefix`; `queries.LEAD_PREFIX` is `"claude-"`.
+- The `overview` route receives `now: Now`; tests pin it to `NOW` through `get_now`. Compare `resets_at` with that `now`, never `datetime.now()`.
+- `_clock` in `overview.py` formats a time as `%H:%M`; a week's or a month's reset also needs its date.
+- Only the allowance part of `overview.py` changes: `Allowance`, `_claude_equivalents`, `claude_allowance` and `WINDOW` are used nowhere else. `_age`, `_drain` and the route's other context keys stay as they are.
+- `test_overview.py` imports `claude_allowance` (line 6), and `test_the_allowance_bar_counts_this_windows_claude_tokens` and `test_without_a_refusal_the_allowance_has_no_limit` pin the old panel. That file is in your `tests:`: replace those two tests with tests of the new panel.
+- For a client over your rows, copy `milestone_detail_with_scores_client` in `conftest.py`.
+- The first run's edits duplicated the route's `render(...)` block and the file stopped parsing. Replace a whole function in one Edit, and run `uv run ruff check factory_dashboard` after each edit.
+
 **The dashboard is English-only and never writes the database.** Tests check the panel's text, not only that the page answers 200.
 
 ### Done when
