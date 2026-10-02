@@ -82,6 +82,11 @@ def main(argv: list[str] | None = None) -> int:
         "backfill", help="load past milestones into the metrics database from their logs"
     )
     backfill_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
+    ratings_cmd = sub.add_parser("ratings", help="each agent's rating now (ADR 15 item 9)")
+    ratings_cmd.add_argument(
+        "--replay", action="store_true", help="first seed the local model's from M1–M4"
+    )
+    ratings_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     report_cmd = sub.add_parser(
         "report", help="write a milestone's numbers into docs/reviews/<key>.md"
     )
@@ -186,6 +191,20 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 conn.close()
             print(backfill.render(summary), end="")
+        elif args.command == "ratings":
+            conn = metrics.open_db(args.db or cfg.metrics_db)
+            try:
+                if args.replay:
+                    project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+                    agent = local_agent(cfg)
+                    start = cfg.agents[agent].rating
+                    changes = loop.replay_ratings(conn, project, agent, start)
+                    print(f"{agent}: {len(changes)} tickets replayed from {start}.")
+                current, _ = loop.standing(conn, loop.starting_ratings(cfg))
+            finally:
+                conn.close()
+            for agent, rating in sorted(current.items(), key=lambda item: -item[1]):
+                print(f"{agent:<28} {rating:.2f}")
         elif args.command == "report":
             key = milestone_key(args.number)
             path = report.write_milestone_report(repo, args.db or cfg.metrics_db, key)

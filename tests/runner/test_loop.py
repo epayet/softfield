@@ -1457,6 +1457,22 @@ def test_a_merge_records_who_merged_the_commit_and_the_lines(repo, fake_model):
     assert ticket["lines_changed"] == 2  # thing.py +1 -1
 
 
+def test_a_merge_rates_its_developer(repo, fake_model):
+    path = write_task(repo / "tasks" / "ready", "m1-01-thing")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\ndifficulty: 5\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "add m1-01-thing")
+    fake_model.append(_implement)
+    _run(repo)
+    [change] = _rows(repo, "rating_changes")
+    assert (change["agent"], change["skill"], change["result"]) == (
+        "local-m",
+        "coding",
+        "merged at the first attempt",
+    )
+    assert (change["before"], change["after"]) == (5.0, 6.0)  # provisional K = 2, at par
+
+
 def test_a_ticket_is_running_while_its_attempt_runs(repo, fake_model):
     _add_task(repo, "m1-01-thing")
 

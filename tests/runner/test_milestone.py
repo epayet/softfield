@@ -208,12 +208,18 @@ def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypat
     assert (findings["m1-F2"]["job_id"], findings["m1-F2"]["resolved"]) == (reviews[0], 0)
 
 
-def _checkpoint_finding(repo, key: str) -> None:
-    """A finding an earlier checkpoint recorded on its job."""
+def _checkpoint_finding(repo, key: str, ticket: str | None = None) -> None:
+    """A finding an earlier checkpoint recorded on its job, about ``ticket`` (merged by the
+    local model, difficulty 5) if given."""
     conn = metrics.open_db(_config(repo).metrics_db)
     try:
         project = metrics.upsert_project(conn, repo.name)
         milestone_id = metrics.upsert_milestone(conn, project, "m1")
+        ticket_id = None
+        if ticket:
+            ticket_id = metrics.upsert_ticket(
+                conn, project, ticket, milestone_id=milestone_id, difficulty=5, merged_by="local-m"
+            )
         run = metrics.upsert_run(conn, project, "earlier")
         job = metrics.start_job(
             conn,
@@ -226,10 +232,45 @@ def _checkpoint_finding(repo, key: str) -> None:
             started="2026-10-01T10:00:00+00:00",
         )
         metrics.add_finding(
-            conn, milestone_id, key, job_id=job, severity="nit", summary="Odd name", file="a.py"
+            conn,
+            milestone_id,
+            key,
+            job_id=job,
+            ticket_id=ticket_id,
+            severity="nit",
+            summary="Odd name",
+            file="a.py",
+            agent="claude-sonnet",
         )
     finally:
         conn.close()
+
+
+def test_the_final_verdicts_move_the_reviewer_and_the_author_once(repo, monkeypatch):
+    """f1-24 (ADR 15 item 9): the verdicts as the review loop stops, each rated once."""
+    _milestone_repo(repo)
+    (repo / "docs" / "reviews").mkdir()
+    _checkpoint_finding(repo, "m1-C1-1", ticket="m1-01-thing")
+    rounds = [
+        {"findings": [], "checkpoint_verdicts": {"m1-C1-1": "confirmed"}, "score": 8},
+        {"findings": [], "checkpoint_verdicts": {"m1-C1-1": "rejected"}, "score": 4},
+    ]
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        out = re.search(r"Write (\S+) as:", job.prompt)
+        assert out
+        (repo_ / out[1]).write_text(json.dumps(rounds.pop(0) if rounds else {"findings": []}))
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    milestone.review_milestone(_config(repo), "m1", "m1-start")
+    milestone.review_milestone(_config(repo), "m1", "m1-start")  # a rerun rates nothing again
+    changes = [(c["agent"], c["skill"], c["result"]) for c in _rows(repo, "rating_changes")]
+    assert changes == [
+        ("claude-sonnet", "reviewing", "confirmed m1-C1-1"),
+        ("local-m", "coding", "finding m1-C1-1"),
+    ]
 
 
 def test_the_last_rounds_verdicts_and_score_land_on_the_findings_and_milestone(repo, monkeypatch):

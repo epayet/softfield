@@ -22,10 +22,13 @@ from runner.loop import (
     call_claude,
     clock,
     close_session,
+    now,
     open_session,
+    rate_verdicts,
     record_findings,
     run_e2e,
     runner_commit,
+    starting_ratings,
     with_progress,
     work_queue,
 )
@@ -256,6 +259,16 @@ def _record_judging(s: Session, milestone: str, round_: ReviewRound) -> None:
             _record(s, metrics.add_finding, milestone_id, key, verdict=verdict)
 
 
+def _rate_verdicts(s: Session, milestone: str) -> None:
+    """The final review's verdicts, as they stand when its loop stops, move the reviewers'
+    and authors' ratings (ADR 15 item 9); a missed finding is the checkpoint's."""
+    if s.project_id is None:
+        return
+    checkpoint = next(iter(s.cfg.roles.get("checkpoint", ())), None)
+    start = starting_ratings(s.cfg)
+    _record(s, rate_verdicts, s.project_id, milestone, start, checkpoint, now())
+
+
 def _record_review(s: Session, milestone: str, rounds: int) -> None:
     if s.project_id is None:
         return
@@ -383,6 +396,8 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
         stop = s.state.review_stop.get(milestone, "review rounds used up")
     s.state.review_stop[milestone] = stop
     save_state(s.state, s.state_path)
+    if stop != RESTART:  # a restarted review goes on judging
+        _rate_verdicts(s, milestone)
     _write_metrics(s, milestone, base, rounds, stop)
     _record_review(s, milestone, len(rounds))
     close_session(s)

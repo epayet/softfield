@@ -7,14 +7,14 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import partial
 from pathlib import Path
 from typing import Any, Concatenate, NoReturn
 
-from runner import allowance, checks, console, messages, metrics, prompts
+from runner import allowance, checks, console, messages, metrics, prompts, ratings
 from runner.agents import (
     ANY,
     CHECK_COMMANDS,
@@ -1517,6 +1517,7 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
     )
     runner_commit(s, messages.done_message(task.id, rec))
     record_ticket(s, target, merged_by=local_agent(s.cfg), commit=rec.commit)
+    rate_finished(s, task.id)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
     _merged_line(s, local_agent(s.cfg), task.id, rec)
@@ -1543,6 +1544,7 @@ def block(s: Session, task_path: Path, reason: str) -> None:
     append_footer(target, {"result": "blocked", "reason": reason})
     runner_commit(s, f"runner: {task_path.stem} blocked: {reason}")
     record_ticket(s, target)
+    rate_finished(s, task_path.stem)
     s.report.notes.append(f"Blocked {task_path.stem}: {reason}")
     where = f"ticket in {target.relative_to(s.repo).as_posix()}"
     s.log(console.stopped(task_path.stem, "blocked", reason, where, waiting_behind(s, target.stem)))
@@ -1596,6 +1598,7 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     runner_commit(s, messages.done_message(task.id, rec))
     lead = s.cfg.agent_for(job.role).id
     record_ticket(s, target, merged_by=lead, commit=rec.commit)
+    rate_finished(s, task.id)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
     _merged_line(s, lead, task.id, rec)
@@ -1650,6 +1653,182 @@ def record_findings(
             resolved=finding.resolved,
             agent=agent,
         )
+
+
+# --- ratings (ADR 14 items 6–7, ADR 15 item 9; runner/ratings.py) ---------------------------
+
+# Jobs that attempt a ticket; a refused or parked one isn't an attempt (ADR 14 item 10).
+_ATTEMPT_ROLES = ("developer", "last-attempt", "lead-ticket")
+REPLAYED = ("m1", "m2", "m3", "m4")  # the local model's history before ratings (ADR 14 item 7)
+
+
+def starting_ratings(cfg: Config) -> dict[str, float]:
+    """Each agent's estimate in `[agents.*] rating`, where its rating starts."""
+    return {agent.id: float(agent.rating) for agent in cfg.agents.values()}
+
+
+def standing(
+    conn: sqlite3.Connection, start: Mapping[str, float]
+) -> tuple[dict[str, float], dict[str, set[str]]]:
+    """Each agent's rating now (its latest change, else its start) and the tickets it was
+    rated on. Only agents with a start are rated."""
+    current, played = dict(start), dict[str, set[str]]()
+    rows = conn.execute(
+        "SELECT r.agent, r.after, t.ticket FROM rating_changes r"
+        " LEFT JOIN tickets t ON t.id = r.ticket_id ORDER BY r.at, r.id"
+    )
+    for row in rows:
+        if row["agent"] in current:
+            current[row["agent"]] = float(row["after"])
+        if row["ticket"]:
+            played.setdefault(row["agent"], set()).add(row["ticket"])
+    return current, played
+
+
+def _attempts(
+    conn: sqlite3.Connection, ticket_id: int, merged_by: str | None
+) -> list[ratings.Attempt]:
+    """A ticket's attempts in order. A merged ticket's last attempt merged if it passed;
+    otherwise the merger (an escalation that finished or implemented it) is one more."""
+    marks = ", ".join("?" for _ in _ATTEMPT_ROLES)
+    rows = conn.execute(
+        f"SELECT agent, outcome FROM jobs WHERE ticket_id = ? AND role IN ({marks})"  # noqa: S608
+        " AND outcome NOT IN ('running', 'interrupted', 'refused')"
+        " AND ifnull(note, '') NOT IN ('refused', 'parked') ORDER BY started, id",
+        (ticket_id, *_ATTEMPT_ROLES),
+    ).fetchall()
+    attempts = [ratings.Attempt(row["agent"]) for row in rows]
+    if merged_by is None:
+        return attempts
+    if rows and rows[-1]["outcome"] == "passed":
+        attempts[-1] = ratings.Attempt(rows[-1]["agent"], merged=True)
+    else:
+        attempts.append(ratings.Attempt(merged_by, merged=True))
+    return attempts
+
+
+def _write_changes(
+    conn: sqlite3.Connection, changes: list[ratings.Change], ids: Mapping[str, int], at: datetime
+) -> None:
+    for change, moment in zip(changes, ratings.moments(at, len(changes)), strict=True):
+        metrics.add_rating_change(
+            conn,
+            change.agent,
+            change.skill,
+            change.before,
+            change.after,
+            at=moment,
+            ticket_id=ids[change.ticket],
+            result=change.label,
+        )
+
+
+def rate_ticket(
+    conn: sqlite3.Connection,
+    project_id: int,
+    ticket: str,
+    start: Mapping[str, float],
+    at: datetime,
+) -> None:
+    """A merged or blocked ticket's coding games, once. A ticket with no difficulty isn't
+    rated: there's nothing to play against."""
+    row = conn.execute(
+        "SELECT id, coalesce(difficulty_corrected, difficulty) AS difficulty, merged_by"
+        " FROM tickets WHERE project_id = ? AND ticket = ?",
+        (project_id, ticket),
+    ).fetchone()
+    if row is None or row["difficulty"] is None:
+        return
+    labels = ", ".join("?" for _ in ratings.TICKET_LABELS)
+    rated = conn.execute(
+        f"SELECT 1 FROM rating_changes WHERE ticket_id = ? AND result IN ({labels})",  # noqa: S608
+        (row["id"], *ratings.TICKET_LABELS),
+    ).fetchone()
+    if rated:
+        return
+    attempts = _attempts(conn, row["id"], row["merged_by"])
+    games = ratings.ticket_games(ticket, row["difficulty"], attempts)
+    current, played = standing(conn, start)
+    _write_changes(conn, ratings.rate(current, played, games), {ticket: row["id"]}, at)
+
+
+def rate_verdicts(
+    conn: sqlite3.Connection,
+    project_id: int,
+    milestone: str,
+    start: Mapping[str, float],
+    checkpoint: str | None,
+    at: datetime,
+) -> None:
+    """The final review's verdicts on the milestone's findings, each once: a game for the
+    reviewer (``checkpoint`` for a missed one) and a quarter off the author of the code."""
+    rows = conn.execute(
+        "SELECT f.key, f.verdict, f.agent, t.id AS ticket_id, t.ticket, t.merged_by,"
+        " coalesce(t.difficulty_corrected, t.difficulty) AS difficulty FROM findings f"
+        " JOIN milestones m ON m.id = f.milestone_id JOIN tickets t ON t.id = f.ticket_id"
+        " WHERE m.project_id = ? AND m.key = ? AND f.verdict IS NOT NULL ORDER BY f.id",
+        (project_id, milestone),
+    ).fetchall()
+    ids = {row["ticket"]: row["ticket_id"] for row in rows}
+    marks = ", ".join("?" for _ in ids)
+    done = {
+        result.split(" ", 1)[1]
+        for (result,) in conn.execute(
+            f"SELECT result FROM rating_changes WHERE ticket_id IN ({marks})"  # noqa: S608
+            " AND result LIKE '% %'",
+            list(ids.values()),
+        )
+    }
+    judged = [
+        ratings.Judged(
+            row["key"],
+            row["ticket"],
+            row["difficulty"],
+            row["verdict"],
+            checkpoint if row["verdict"] == "missed" else row["agent"],
+            row["merged_by"],
+        )
+        for row in rows
+        if row["key"] not in done
+    ]
+    current, played = standing(conn, start)
+    _write_changes(conn, ratings.rate(current, played, ratings.judged_games(judged)), ids, at)
+
+
+def replay_ratings(
+    conn: sqlite3.Connection, project_id: int, agent: str, start: float
+) -> list[ratings.Change]:
+    """Seed ``agent``'s rating from its M1–M4 tickets, from ``start`` in merge order (a
+    ticket's last job), each change at its ticket's merge: a second replay rewrites the same
+    rows."""
+    rows = conn.execute(
+        "SELECT t.id, t.ticket, t.merged_by, coalesce(t.difficulty_corrected, t.difficulty)"
+        " AS difficulty, max(coalesce(j.ended, j.started)) AS merged_at FROM tickets t"
+        " JOIN milestones m ON m.id = t.milestone_id JOIN jobs j ON j.ticket_id = t.id"
+        " WHERE t.project_id = ? AND m.key IN (SELECT value FROM json_each(?))"
+        " AND coalesce(t.difficulty_corrected, t.difficulty) IS NOT NULL"
+        " GROUP BY t.id HAVING sum(j.agent = ?) > 0 ORDER BY merged_at, t.id",
+        (project_id, json.dumps(REPLAYED), agent),
+    ).fetchall()
+    games, times, ids = [], {}, {}
+    last: datetime | None = None
+    for row in rows:
+        merged = datetime.fromisoformat(row["merged_at"])
+        last = merged if last is None or merged > last else last + timedelta(microseconds=1)
+        times[row["ticket"]], ids[row["ticket"]] = last, row["id"]
+        attempts = _attempts(conn, row["id"], row["merged_by"])
+        ticket = ratings.ticket_games(row["ticket"], row["difficulty"], attempts)
+        games += [game for game in ticket if game.agent == agent]
+    changes = ratings.rate({agent: start}, {}, games)
+    for change in changes:
+        _write_changes(conn, [change], ids, times[change.ticket])
+    return changes
+
+
+def rate_finished(s: Session, ticket: str) -> None:
+    """Rate a ticket that was merged or blocked (best effort, like every metrics write)."""
+    if s.project_id is not None:
+        _record(s, rate_ticket, s.project_id, ticket, starting_ratings(s.cfg), now())
 
 
 def checkpoint(s: Session, milestone: str) -> None:
@@ -1785,6 +1964,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     done = s.tasks_dir("done") / task.path.name
     if outcome == "implemented" and done.is_file():
         record_ticket(s, done, merged_by=s.cfg.agent_for(job.role).id, commit=s.git.head())
+        rate_finished(s, task.id)
     elif outcome == "requeue" and (s.tasks_dir("ready") / task.path.name).is_file():
         record_ticket(s, s.tasks_dir("ready") / task.path.name)
 
@@ -1838,6 +2018,7 @@ def _finish_branch(
     runner_commit(s, f"runner: {task.id} done, finished by the lead, merged as {commit[:9]}")
     merger = s.cfg.agent_for(job.role).id
     record_ticket(s, target, merged_by=merger, commit=commit)
+    rate_finished(s, task.id)
     s.git.run("branch", "-D", branch)
     lines = s.git.commit_size(commit)
     s.log(console.merged(merger, task.id, 1, lines, clock() - s.ticket_started))  # its one job

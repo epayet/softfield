@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from runner import cli, loop, owner
+from runner import cli, loop, metrics, owner
 from runner.milestone import RESTART
 
 
@@ -133,6 +133,44 @@ def test_backfill_writes_to_the_db_given(in_repo, tmp_path, capsys):
 def test_backfill_defaults_to_the_configured_db(in_repo):
     assert cli.main(["backfill"]) == 0
     assert (in_repo / "var" / "factory-metrics.sqlite").is_file()
+
+
+def test_ratings_replay_twice_gives_the_same_ratings(in_repo, capsys):
+    db = in_repo / "var" / "factory-metrics.sqlite"
+    conn = metrics.open_db(db)
+    project = metrics.upsert_project(conn, in_repo.name)
+    run = metrics.upsert_run(conn, project, "run-1")
+    for n, (outcome, merged_by) in enumerate([("passed", "x"), ("failed", "claude-opus")]):
+        ticket = f"m{n + 1}-01-thing"
+        ticket_id = metrics.upsert_ticket(
+            conn,
+            project,
+            ticket,
+            milestone_id=metrics.upsert_milestone(conn, project, f"m{n + 1}"),
+            difficulty=4,
+            merged_by=merged_by,
+        )
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket_id,
+            milestone_id=None,
+            role="developer",
+            agent="local-qwen3.6-35b-a3b",
+            attempt=1,
+            started=f"2026-0{n + 1}-01T10:00:00+00:00",
+        )
+        metrics.finish_job(conn, job, ended=f"2026-0{n + 1}-01T11:00:00+00:00", outcome=outcome)
+    conn.close()
+
+    assert cli.main(["ratings", "--replay"]) == 0
+    first = capsys.readouterr().out
+    assert cli.main(["ratings", "--replay"]) == 0
+    assert capsys.readouterr().out == first
+    assert "local-qwen3.6-35b-a3b: 2 tickets replayed from 5." in first
+    conn = metrics.open_db(db)
+    assert conn.execute("SELECT count(*) FROM rating_changes").fetchone()[0] == 2
+    conn.close()
 
 
 def _fake_subprocess(monkeypatch) -> list[list[str]]:
