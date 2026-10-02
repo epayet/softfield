@@ -36,6 +36,11 @@
    - Every other should-fix becomes a developer ticket, queued at once, with the finding's id.
    - The review stays the place that reads and judges; it stops being the place that writes.
 
+6. **⚑ Every ticket leaves main shippable** (owner, 2026-10-02; amends `docs/task-writing.md`). Milestones may be reprioritised and interleaved, so main can sit between two tickets of a feature for days.
+   - A ticket either completes a usable slice, or adds code nobody can reach yet (no link, no route in the menu, no button). It never leaves something visible and half-working.
+   - The lead plans for this, and each ticket's Done when says what a person sees after it, or "nothing visible yet".
+   - No feature-flag system until a real case needs one.
+
 **No ADR needed, bug fixes queued beside these:**
 - After a yes to Claude's 5-hour window, parked work goes before the ticket that asked.
 - A fresh Claude reading when a session starts.
@@ -49,5 +54,6 @@
 - More Ollama use: its allowance is unmeasured (no API), so refusals are the only signal until a manual reading exists (ADR 18).
 
 ## Open questions
+- **Does Sonnet come back at all?** Decide after F4's results (owner, 2026-10-02): as the step-up (f4-13), or off for good.
 - Is 30% right for Sonnet's step-up? Revisit after a weekend's metrics.
 - Should a review fix that blocks sign-off wait for its developer ticket, or be fixed at once? Default: wait, unless the owner signs off with it open.
