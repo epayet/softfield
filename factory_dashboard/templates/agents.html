@@ -58,23 +58,23 @@
 
 <section id="eligibility" class="panel">
   <h2>Eligibility</h2>
-  {% if shadows %}
+  {% if eligible %}
   <div class="scroll"><table>
-    <thead><tr><th>Agent</th><th>Role</th><th>Status</th><th class="num">Shadow jobs</th></tr></thead>
+    <thead><tr><th>Agent</th><th>Role</th><th>Status</th><th class="num">Review replays</th></tr></thead>
     <tbody>
-    {% for s in shadows %}
+    {% for e in eligible %}
     <tr>
-      <td class="mono">{{ s.agent }}</td>
-      <td>{{ s.role }}</td>
-      <td>{{ "eligible" if s.eligible else s.reason }}</td>
-      <td class="num">{{ s.jobs }}</td>
+      <td class="mono">{{ e.agent }}</td>
+      <td>{{ e.role }}</td>
+      <td>{{ "eligible" if e.eligible else e.reason }}</td>
+      <td class="num">{{ e.replays }}</td>
     </tr>
     {% endfor %}
     </tbody>
   </table></div>
-  <p class="sub">The owner changes [roles] at a milestone review; this only says who qualifies.</p>
+  <p class="sub">From replays of past checkpoints. The owner changes [roles] at a milestone review; this only says who qualifies.</p>
   {% else %}
-  <p class="sub">No agent has shadowed a role yet.</p>
+  <p class="sub">No agent has replayed a checkpoint yet: <code>uv run runner bench --review &lt;milestone…&gt; --agents &lt;id…&gt;</code></p>
   {% endif %}
 </section>
 

@@ -8,6 +8,7 @@ lead's when its role is one of ``LEAD_ROLES``, so Sonnet doing a developer's tic
 developer (factory-f1 finding 5).
 """
 
+import re
 import sqlite3
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Sequence
@@ -365,17 +366,63 @@ def savings(conn: sqlite3.Connection, project: str, key: str | None = None) -> S
     return _combine([agent for part in parts for agent in part.agents])
 
 
-# --- eligibility (ADR 14 item 12, ADR 15 item 9) -------------------------------------------
+# --- eligibility (ADR 14 item 12, ADR 15 item 9, ADR 16 item 10) ---------------------------
 
-SHADOW_SUFFIX = "-shadow"  # a shadow of the role `checkpoint` runs as `checkpoint-shadow`
-# The starting bars per role: the rating, and the milestones shadowed.
+# The starting bars per role: the rating, and the milestones whose checkpoints it replayed.
 BARS = {"checkpoint": (8.0, 2)}
+REVIEW_BENCH = "bench"  # a review replay is a `bench` job with no ticket (`runner bench --review`)
+_REVIEW_NOTE_RE = re.compile(
+    r"(\d+) found, (\d+) missed \((\d+) blocking\), (\d+) new to judge", re.ASCII
+)
+
+
+def review_note(found: int, missed: int, blocking: int, new: int) -> str:
+    """A review replay's score, as its job's note: the known findings it found and missed
+    (``blocking`` of them blocking), and the ``new`` ones nobody knew, left for the lead."""
+    return f"{found} found, {missed} missed ({blocking} blocking), {new} new to judge"
+
+
+def parse_review_note(note: str | None) -> tuple[int, int, int, int] | None:
+    """``review_note``'s numbers back, or None for any other note."""
+    found = _REVIEW_NOTE_RE.fullmatch(note or "")
+    if found is None:
+        return None
+    return int(found[1]), int(found[2]), int(found[3]), int(found[4])
+
+
+@dataclass(frozen=True)
+class Replay:
+    """One scored review replay: a checkpoint of ``milestone_id`` replayed by ``agent``."""
+
+    agent: str
+    milestone_id: int
+    found: int
+    missed: int
+    blocking: int  # missed blocking findings
+    new: int
+
+
+def review_replays(conn: sqlite3.Connection, project: str) -> list[Replay]:
+    """The project's scored review replays, oldest first; a refused or failed one has no
+    score and isn't one."""
+    rows = conn.execute(
+        "SELECT j.agent, j.milestone_id, j.note FROM jobs j JOIN runs r ON r.id = j.run_id"
+        " JOIN projects p ON p.id = r.project_id WHERE p.name = ? AND j.role = ?"
+        " AND j.ticket_id IS NULL AND j.outcome = 'passed' AND j.milestone_id IS NOT NULL"
+        " ORDER BY j.id",
+        (project, REVIEW_BENCH),
+    ).fetchall()
+    return [
+        Replay(row["agent"], row["milestone_id"], *score)
+        for row in rows
+        if (score := parse_review_note(row["note"])) is not None
+    ]
 
 
 @dataclass(frozen=True)
 class Eligibility:
-    """Whether an agent that shadowed ``role`` meets its starting bars; ``reason`` says what
-    it lacks, or what it met."""
+    """Whether an agent that replayed ``role``'s jobs meets its starting bars; ``reason``
+    says what it lacks, or what it met."""
 
     agent: str
     role: str
@@ -392,29 +439,19 @@ def _rating(conn: sqlite3.Connection, agent: str) -> float | None:
     return None if row is None else float(row["after"])
 
 
-def _eligible(conn: sqlite3.Connection, project_id: int, agent: str, role: str) -> Eligibility:
-    """The checkpoint's bars: a rating ≥ 8, shadowed over 2+ milestones, no missed blocking
-    finding there, and a rating ≥ the difficulty of the tickets it reviewed: every developer
-    ticket merged in a milestone it shadowed."""
+def _eligible(conn: sqlite3.Connection, agent: str, replays: Sequence[Replay]) -> Eligibility:
+    """The checkpoint's bars, from its review replays (ADR 16 item 10): a rating ≥ 8, replays
+    of 2+ milestones' checkpoints, no blocking finding missed in any, and a rating ≥ the
+    difficulty of the tickets it reviewed: every developer ticket merged in those milestones."""
+    role = "checkpoint"
     need, milestones = BARS[role]
-    shadowed = [
-        row["milestone_id"]
-        for row in conn.execute(
-            "SELECT DISTINCT j.milestone_id FROM jobs j JOIN milestones m ON m.id = j.milestone_id"
-            " WHERE m.project_id = ? AND j.agent = ? AND j.role = ? AND j.outcome = 'passed'",
-            (project_id, agent, role + SHADOW_SUFFIX),
-        )
-    ]
-    marks = ", ".join("?" for _ in shadowed)
-    missed = conn.execute(
-        f"SELECT count(*) FROM findings WHERE milestone_id IN ({marks})"  # noqa: S608
-        " AND verdict = 'missed' AND severity = 'blocking'",
-        shadowed,
-    ).fetchone()[0]
+    replayed = sorted({r.milestone_id for r in replays})
+    missed = sum(r.blocking for r in replays)
+    marks = ", ".join("?" for _ in replayed)
     hardest = conn.execute(
         f"SELECT max(coalesce(difficulty_corrected, difficulty)) FROM tickets WHERE milestone_id"  # noqa: S608
         f" IN ({marks}) AND kind = 'developer' AND \"commit\" IS NOT NULL",
-        shadowed,
+        replayed,
     ).fetchone()[0]
     rating = _rating(conn, agent)
     lacks = []
@@ -422,10 +459,10 @@ def _eligible(conn: sqlite3.Connection, project_id: int, agent: str, role: str) 
         lacks.append("no rating yet")
     elif rating < need:
         lacks.append(f"rated {rating:g}, needs {need:g}")
-    if len(shadowed) < milestones:
+    if len(replayed) < milestones:
         lacks.append(
-            f"shadowed {len(shadowed)} milestone{'' if len(shadowed) == 1 else 's'},"
-            f" needs {milestones}"
+            f"replayed checkpoints of {len(replayed)} milestone"
+            f"{'' if len(replayed) == 1 else 's'}, needs {milestones}"
         )
     if missed:
         lacks.append(f"{missed} missed blocking finding{'' if missed == 1 else 's'}")
@@ -434,29 +471,20 @@ def _eligible(conn: sqlite3.Connection, project_id: int, agent: str, role: str) 
     if lacks:
         return Eligibility(agent, role, False, "; ".join(lacks))
     met = (
-        f"rated {rating:g} over {len(shadowed)} milestones, no missed blocking finding, tickets"
-        f" up to difficulty {hardest if hardest is not None else '?'}"
+        f"rated {rating:g} over replays of {len(replayed)} milestones, no missed blocking"
+        f" finding, tickets up to difficulty {hardest if hardest is not None else '?'}"
     )
     return Eligibility(agent, role, True, met)
 
 
 def eligibility(conn: sqlite3.Connection, project: str) -> list[Eligibility]:
-    """Per agent that shadowed a role in the project, whether it meets that role's starting
-    bars (ADR 14 item 12); the owner changes `[roles]` at a milestone review."""
-    project_id = _project_id(conn, project)
-    if project_id is None:
-        return []
-    pairs = conn.execute(
-        "SELECT DISTINCT j.agent, j.role FROM jobs j JOIN runs r ON r.id = j.run_id"
-        " WHERE r.project_id = ? AND j.role LIKE ? ORDER BY j.agent, j.role",
-        (project_id, "%" + SHADOW_SUFFIX),
-    ).fetchall()
-    found = []
-    for row in pairs:
-        role = row["role"].removesuffix(SHADOW_SUFFIX)
-        if role in BARS:
-            found.append(_eligible(conn, project_id, row["agent"], role))
-    return found
+    """Per agent that replayed checkpoints in the project (`runner bench --review`), whether
+    it meets the checkpoint's starting bars (ADR 14 item 12, read through ADR 16 item 10); the
+    owner changes `[roles]` at a milestone review."""
+    by_agent: dict[str, list[Replay]] = defaultdict(list)
+    for replay in review_replays(conn, project):
+        by_agent[replay.agent].append(replay)
+    return [_eligible(conn, agent, by_agent[agent]) for agent in sorted(by_agent)]
 
 
 def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:

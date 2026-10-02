@@ -85,9 +85,16 @@ def main(argv: list[str] | None = None) -> int:
     bench_cmd = sub.add_parser(
         "bench", help="replay finished tickets for chosen agents, off main (ADR 14 item 8)"
     )
-    bench_cmd.add_argument("tickets", nargs="+", help="finished tickets, e.g. m4-09-…")
+    bench_cmd.add_argument(
+        "tickets", nargs="+", help="finished tickets, e.g. m4-09-…; with --review, milestones"
+    )
     bench_cmd.add_argument(
         "--agents", nargs="+", required=True, help="agent ids from workflow/runner.toml"
+    )
+    bench_cmd.add_argument(
+        "--review",
+        action="store_true",
+        help="replay the milestones' checkpoints and score the findings (ADR 16 item 10)",
     )
     ratings_cmd = sub.add_parser("ratings", help="each agent's rating now (ADR 15 item 9)")
     ratings_cmd.add_argument(
@@ -204,6 +211,20 @@ def main(argv: list[str] | None = None) -> int:
             finally:
                 conn.close()
             print(backfill.render(summary), end="")
+        elif args.command == "bench" and args.review:
+            keys = [milestone_arg(repo, m) for m in args.tickets]
+            replayed = bench.run_review_bench(cfg, keys, args.agents)
+            for replay in replayed.reviews:
+                print(
+                    f"{replay.milestone} checkpoint {replay.checkpoint}  {replay.agent:<28}"
+                    f" {replay.outcome}: {replay.note}"
+                )
+                for f in replay.score.unscored if replay.score else ():
+                    where = f"{f.file}:{f.line}" if f.line else f.file or "?"
+                    print(f"    new, for you to judge: [{f.severity}] {where} {f.summary}")
+            if replayed.stopped:
+                print(f"Stopped: {replayed.stopped}")
+                return 1
         elif args.command == "bench":
             benched = bench.run_bench(cfg, args.tickets, args.agents)
             for r in benched.results:

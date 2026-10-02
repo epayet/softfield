@@ -1,38 +1,27 @@
-"""The Agents page's eligibility panel (f1-31): who earned a role by shadowing, and why not."""
+"""The Agents page's eligibility panel (f1-31, f2-11): who earned a role from its review
+replays (`runner bench --review`, ADR 16 item 10), and why not."""
 
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass
 
-from factory_dashboard.queries import SHADOW_SUFFIX, eligibility
+from factory_dashboard.queries import eligibility, review_replays
 
 
 @dataclass(frozen=True)
-class ShadowRow:
+class EligibilityRow:
     agent: str
     role: str
     eligible: bool
     reason: str
-    jobs: int
+    replays: int
 
 
-def shadow_rows(conn: sqlite3.Connection, project: str) -> list[ShadowRow]:
-    """Each agent that shadowed a role: whether it qualifies, why not, and its shadow jobs."""
-    counts = {
-        (row["agent"], row["role"]): row["n"]
-        for row in conn.execute(
-            "SELECT j.agent, j.role, count(*) AS n FROM jobs j JOIN runs r ON r.id = j.run_id"
-            " JOIN projects p ON p.id = r.project_id WHERE p.name = ? AND j.role LIKE ?"
-            " GROUP BY j.agent, j.role",
-            (project, "%" + SHADOW_SUFFIX),
-        )
-    }
+def eligibility_rows(conn: sqlite3.Connection, project: str) -> list[EligibilityRow]:
+    """Each agent that replayed checkpoints: whether it qualifies, why not, and its scored
+    replays."""
+    counts = Counter(r.agent for r in review_replays(conn, project))
     return [
-        ShadowRow(
-            e.agent,
-            e.role,
-            e.eligible,
-            e.reason,
-            counts.get((e.agent, e.role + SHADOW_SUFFIX), 0),
-        )
+        EligibilityRow(e.agent, e.role, e.eligible, e.reason, counts[e.agent])
         for e in eligibility(conn, project)
     ]

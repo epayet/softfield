@@ -7,6 +7,8 @@ from factory_dashboard.queries import (
     connect,
     eligibility,
     milestone_results,
+    parse_review_note,
+    review_note,
     savings,
     trends,
 )
@@ -149,72 +151,84 @@ def test_trends_run_oldest_first(db):
     assert points[1].savings.net == pytest.approx(-2.70)
 
 
-SHADOW, OTHER_SHADOW = "copilot-auto", "copilot-gpt"
+REVIEWER, OTHER_REVIEWER, SHADOW = "copilot-auto", "copilot-gpt", "copilot-shadow"
 
 
-def _shadows(db_path) -> sqlite3.Connection:
-    """Two shadows of the checkpoint (ADR 14 item 12) on top of the fixture: copilot-auto
-    shadowed f1 only (its m4 shadow was refused); copilot-gpt shadowed f1 and m4. Both are
-    rated 8.5 by their latest change, whatever its skill."""
+def _replays(db_path, missed_blocking: int = 0) -> sqlite3.Connection:
+    """Review replays of the checkpoint (`runner bench --review`, ADR 16 item 10) on top of
+    the fixture: copilot-auto replayed f1 only (its m4 replay was refused); copilot-gpt
+    replayed f1 and m4, missing ``missed_blocking`` blocking findings in m4. A shadow job
+    alone no longer counts. Both reviewers are rated 8.5 by their latest change, whatever its
+    skill."""
     writer = metrics.open_db(db_path)
     project = metrics.upsert_project(writer, PROJECT)
-    run = metrics.upsert_run(writer, project, "20260930-100000")
-    shadows = (
-        (SHADOW, "f1", "passed"),
-        (SHADOW, "m4", "refused"),
-        (OTHER_SHADOW, "f1", "passed"),
-        (OTHER_SHADOW, "m4", "passed"),
+    run = metrics.upsert_run(writer, project, "bench-20261001-100000", command="bench")
+    replays = (
+        (REVIEWER, "f1", "passed", "bench", 0),
+        (REVIEWER, "m4", "refused", "bench", 0),
+        (OTHER_REVIEWER, "f1", "passed", "bench", 0),
+        (OTHER_REVIEWER, "m4", "passed", "bench", missed_blocking),
+        (SHADOW, "f1", "passed", "checkpoint-shadow", 0),
+        (SHADOW, "m4", "passed", "checkpoint-shadow", 0),
     )
-    for attempt, (agent, milestone, outcome) in enumerate(shadows, start=1):
+    for attempt, (agent, milestone, outcome, role, blocking) in enumerate(replays, start=1):
         job = metrics.start_job(
             writer,
             run,
             ticket_id=None,
             milestone_id=metrics.upsert_milestone(writer, project, milestone),
-            role="checkpoint-shadow",
+            role=role,
             agent=agent,
             attempt=attempt,  # one run: the jobs' key needs them apart
-            started="2026-09-30T10:30:00+02:00",
+            started="2026-10-01T10:30:00+02:00",
         )
-        metrics.finish_job(writer, job, ended="2026-09-30T10:31:00+02:00", outcome=outcome)
-    for agent in (SHADOW, OTHER_SHADOW):
+        note = review_note(2, 1 + blocking, blocking, 0) if outcome == "passed" else "quota"
+        metrics.finish_job(
+            writer, job, ended="2026-10-01T10:31:00+02:00", outcome=outcome, note=note
+        )
+    for agent in (REVIEWER, OTHER_REVIEWER, SHADOW):
         metrics.add_rating_change(writer, agent, "reviewing", 6, 9, at="2026-09-30T11:00:00+02:00")
         metrics.add_rating_change(writer, agent, "coding", 6, 8.5, at="2026-09-30T12:00:00+02:00")
     writer.commit()
     return writer
 
 
+def test_a_review_note_reads_back():
+    assert parse_review_note(review_note(1, 2, 1, 3)) == (1, 2, 1, 3)
+    assert parse_review_note("would escalate") is None
+    assert parse_review_note(None) is None
+
+
 def test_eligibility_says_no_with_its_reason_for_one_milestone(db, db_path):
-    _shadows(db_path).close()
+    _replays(db_path).close()
     found = {(e.agent, e.role): e for e in eligibility(db, PROJECT)}
-    assert set(found) == {(SHADOW, "checkpoint"), (OTHER_SHADOW, "checkpoint")}
-    one = found[SHADOW, "checkpoint"]
+    assert set(found) == {(REVIEWER, "checkpoint"), (OTHER_REVIEWER, "checkpoint")}
+    one = found[REVIEWER, "checkpoint"]
     assert not one.eligible
-    assert one.reason == "shadowed 1 milestone, needs 2"
+    assert one.reason == "replayed checkpoints of 1 milestone, needs 2"
 
 
 def test_eligibility_says_yes_for_an_agent_meeting_every_bar(db, db_path):
-    _shadows(db_path).close()
-    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_SHADOW)
+    _replays(db_path).close()
+    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_REVIEWER)
     assert both.eligible
     # f1's tickets go up to d5, m4's is d2: rated 8.5 covers them
     assert both.reason == (
-        "rated 8.5 over 2 milestones, no missed blocking finding, tickets up to difficulty 5"
+        "rated 8.5 over replays of 2 milestones, no missed blocking finding, tickets up to"
+        " difficulty 5"
     )
 
 
 def test_eligibility_names_every_bar_it_misses(db, db_path):
-    writer = _shadows(db_path)
+    writer = _replays(db_path, missed_blocking=1)
     project = metrics.upsert_project(writer, PROJECT)
-    m4 = metrics.upsert_milestone(writer, project, "m4")
-    metrics.add_finding(writer, m4, "m4-F9", severity="blocking", verdict="missed")
     metrics.add_rating_change(
-        writer, OTHER_SHADOW, "coding", 8.5, 4, at="2026-09-30T13:00:00+02:00"
+        writer, OTHER_REVIEWER, "coding", 8.5, 4, at="2026-09-30T13:00:00+02:00"
     )
     metrics.upsert_ticket(writer, project, "f1-01-first", difficulty_corrected=9)
     writer.commit()
     writer.close()
-    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_SHADOW)
+    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_REVIEWER)
     assert not both.eligible
     assert both.reason == (
         "rated 4, needs 8; 1 missed blocking finding; rated 4, below difficulty 9 of a ticket"
@@ -223,11 +237,11 @@ def test_eligibility_names_every_bar_it_misses(db, db_path):
 
 
 def test_eligibility_without_a_rating_says_so(db, db_path):
-    writer = _shadows(db_path)
-    writer.execute("DELETE FROM rating_changes WHERE agent = ?", (OTHER_SHADOW,))
+    writer = _replays(db_path)
+    writer.execute("DELETE FROM rating_changes WHERE agent = ?", (OTHER_REVIEWER,))
     writer.commit()
     writer.close()
-    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_SHADOW)
+    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_REVIEWER)
     assert (both.eligible, both.reason) == (False, "no rating yet")
 
 

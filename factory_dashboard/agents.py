@@ -11,7 +11,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Project, render
-from factory_dashboard.eligibility import shadow_rows
+from factory_dashboard.eligibility import eligibility_rows
 from factory_dashboard.queries import dollars
 
 router = APIRouter()
@@ -255,7 +255,7 @@ def agents_page(
             "roles": roles,
             "counts": counts,
             "ratings": ratings,
-            "shadows": shadow_rows(conn, project),
+            "eligible": eligibility_rows(conn, project),
             "milestone": milestone,
         },
     )

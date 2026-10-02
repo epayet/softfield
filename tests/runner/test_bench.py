@@ -9,10 +9,12 @@ from pathlib import Path
 
 import pytest
 
-from runner import bench, gates, loop
+from factory_dashboard import queries
+from runner import bench, gates, loop, metrics
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.config import Config
 from runner.gitops import with_trailers
+from runner.review import Finding
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
 
@@ -279,6 +281,206 @@ def test_a_refusal_stops_the_bench_and_says_who_and_when_it_resets(repo, copies,
     assert fake_agents["fake-b"] == [_implement]  # never ran
     assert [(j["agent"], j["outcome"]) for j in _jobs(repo)] == [("fake-a", "refused")]
     assert _snapshot(repo) == before
+
+
+def test_a_review_finding_matches_by_file_and_nearby_line_or_by_summary():
+    known = bench.Known("k", "nit", "coucou/thing.py", 10, "Magic number")
+    found = [
+        Finding("1", "nit", "backlog", "other words", file="coucou/thing.py", line=14),
+        Finding("2", "nit", "backlog", "other words", file="coucou/thing.py", line=30),
+        Finding("3", "nit", "backlog", "  magic   NUMBER ", file="coucou/else.py", line=1),
+        Finding("4", "nit", "backlog", "other words", file="coucou/thing.py"),
+        Finding("5", "nit", "backlog", "other words", file="coucou/else.py", line=10),
+    ]
+    assert [bench.matches(known, f) for f in found] == [True, False, True, True, False]
+
+
+# --- review replays (ADR 16 item 10) --------------------------------------------------------
+
+ANSWER = """Here is what I found.
+```json
+{"findings": [
+  {"severity": "should-fix", "file": "coucou/thing.py", "line": 3, "summary": "a constant",
+   "detail": "42 is unexplained", "route": "backlog", "ticket": "m1-01-thing"},
+  {"severity": "nit", "file": "coucou/new.py", "line": null, "summary": "nobody saw this",
+   "detail": "", "route": "backlog", "ticket": "m1-01-thing"}
+]}
+```"""
+
+
+def _metrics(repo: Path) -> sqlite3.Connection:
+    return metrics.open_db(repo / "var" / "factory-metrics.sqlite")
+
+
+def _checkpointed(repo: Path) -> int:
+    """`_history`'s merge, reviewed by a checkpoint with two known findings: a should-fix in
+    coucou/thing.py and a blocking one in the test. Returns the checkpoint's job."""
+    _history(repo)
+    conn = _metrics(repo)
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        m1 = metrics.upsert_milestone(conn, project, "m1")
+        run = metrics.upsert_run(conn, project, "20260930-100000", command="run")
+        ticket = metrics.upsert_ticket(
+            conn, project, TICKET, milestone_id=m1, kind="developer", commit="abc", difficulty=3
+        )
+        for role, ticket_id, agent, started in (
+            ("developer", ticket, "fake-a", "2026-09-30T10:00:00+02:00"),
+            ("checkpoint", None, "claude-opus", "2026-09-30T11:00:00+02:00"),
+        ):
+            job = metrics.start_job(
+                conn,
+                run,
+                ticket_id=ticket_id,
+                milestone_id=m1,
+                role=role,
+                agent=agent,
+                attempt=1,
+                started=started,
+            )
+            metrics.finish_job(conn, job, ended=started, outcome="passed")
+        checkpoint = job
+        for n, severity, file, line, summary in (
+            (1, "should-fix", "coucou/thing.py", 2, "thing returns a magic number"),
+            (2, "blocking", "tests/unit/test_thing.py", 2, "the test checks nothing"),
+        ):
+            metrics.add_finding(
+                conn,
+                m1,
+                f"m1-C{checkpoint}-{n}",
+                job_id=checkpoint,
+                ticket_id=ticket,
+                severity=severity,
+                file=file,
+                line=line,
+                summary=summary,
+                agent="claude-opus",
+            )
+    finally:
+        conn.close()
+    return checkpoint
+
+
+def _answer(text: str) -> Act:
+    def act(work: Path, spec: JobSpec) -> JobResult:
+        assert spec.read_only
+        assert TICKET in spec.prompt and "coucou/thing.py" in spec.prompt
+        # the copy as the checkpoint saw it: the merge, with the ticket in done/
+        assert "return 42" in (work / "coucou" / "thing.py").read_text()
+        assert (work / "tasks" / "done" / f"{TICKET}.md").is_file()
+        (work / "coucou" / "thing.py").write_text("edited\n")  # only ever the copy
+        return JobResult(ok=True, text=text, duration_s=1.0, num_turns=2)
+
+    return act
+
+
+def test_a_review_replay_scores_a_hit_a_miss_and_lists_the_new_finding(repo, copies, fake_agents):
+    checkpoint = _checkpointed(repo)
+    before = _snapshot(repo)
+    fake_agents["fake-a"].append(_answer(ANSWER))
+    report = bench.run_review_bench(_config(repo, copies), ["m1"], ["fake-a"])
+    assert report.stopped is None
+    [result] = report.reviews
+    assert (result.checkpoint, result.agent, result.outcome) == (checkpoint, "fake-a", "passed")
+    score = result.score
+    assert score is not None
+    assert score.hits == (f"m1-C{checkpoint}-1",)
+    assert score.misses == (f"m1-C{checkpoint}-2",)
+    assert score.missed_blocking == 1
+    assert [f.summary for f in score.unscored] == ["nobody saw this"]
+    [job] = [j for j in _jobs(repo) if j["command"] == "bench"]
+    assert (job["role"], job["agent"], job["ticket"], job["outcome"]) == (
+        "bench",
+        "fake-a",
+        None,
+        "passed",
+    )
+    assert queries.parse_review_note(job["note"]) == (1, 1, 1, 1)
+    # the new finding is listed for the lead, never recorded as a finding
+    conn = _metrics(repo)
+    try:
+        assert conn.execute("SELECT count(*) FROM findings").fetchone()[0] == 2
+    finally:
+        conn.close()
+    [listed] = (repo / "var" / "bench").glob(f"*/checkpoint-{checkpoint}-fake-a/new-findings.json")
+    assert "nobody saw this" in listed.read_text()
+    assert _snapshot(repo) == before
+    assert not list(copies.iterdir())
+
+
+def test_later_findings_on_the_tickets_are_known_but_rejected_ones_are_not(
+    repo, copies, fake_agents
+):
+    checkpoint = _checkpointed(repo)
+    conn = _metrics(repo)
+    try:
+        project = metrics.upsert_project(conn, repo.name)
+        m1 = metrics.upsert_milestone(conn, project, "m1")
+        ticket = metrics.upsert_ticket(conn, project, TICKET)
+        run = metrics.upsert_run(conn, project, "review-20261001-100000", command="review")
+        review = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=m1,
+            role="review",
+            agent="claude-opus",
+            attempt=1,
+            started="2026-10-01T10:00:00+02:00",
+        )
+        metrics.finish_job(conn, review, ended="2026-10-01T10:30:00+02:00", outcome="passed")
+        metrics.add_finding(
+            conn,
+            m1,
+            "F1",
+            job_id=review,
+            ticket_id=ticket,
+            severity="blocking",
+            summary="nobody saw this",
+        )
+        # the review judged the checkpoint's first finding wrong
+        metrics.add_finding(conn, m1, f"m1-C{checkpoint}-1", verdict="rejected")
+    finally:
+        conn.close()
+    fake_agents["fake-a"].append(_answer(ANSWER))
+    [result] = bench.run_review_bench(_config(repo, copies), ["m1"], ["fake-a"]).reviews
+    assert result.score is not None
+    assert result.score.hits == ("F1",)
+    assert result.score.misses == (f"m1-C{checkpoint}-2",)
+    assert [f.summary for f in result.score.unscored] == ["a constant"]
+
+
+def test_a_review_bench_skips_the_agents_own_checkpoints(repo, copies, fake_agents):
+    _checkpointed(repo)
+    with pytest.raises(loop.RunnerError, match="no checkpoint of m1"):
+        bench.run_review_bench(_config(repo, copies), ["m1"], ["claude-opus"])
+
+
+def test_a_refused_review_replay_stops_the_bench(repo, copies, fake_agents):
+    _checkpointed(repo)
+
+    def refuse(work: Path, spec: JobSpec) -> JobResult:
+        return JobResult(ok=False, text="quota", duration_s=0.5, refusal=Refusal("month", RESETS))
+
+    fake_agents["fake-a"].append(refuse)
+    fake_agents["fake-b"].append(_answer(ANSWER))
+    report = bench.run_review_bench(_config(repo, copies), ["m1"], ["fake-a", "fake-b"])
+    assert report.stopped is not None and "fake-a" in report.stopped
+    assert [(r.agent, r.outcome, r.score) for r in report.reviews] == [("fake-a", "refused", None)]
+    assert fake_agents["fake-b"]  # never ran
+    [job] = [j for j in _jobs(repo) if j["command"] == "bench"]
+    assert (job["outcome"], queries.parse_review_note(job["note"])) == ("refused", None)
+
+
+def test_an_unusable_answer_fails_its_replay_and_the_bench_goes_on(repo, copies, fake_agents):
+    _checkpointed(repo)
+    fake_agents["fake-a"].append(_answer("no JSON here"))
+    fake_agents["fake-b"].append(_answer(ANSWER))
+    report = bench.run_review_bench(_config(repo, copies), ["m1"], ["fake-a", "fake-b"])
+    assert [(r.agent, r.outcome) for r in report.reviews] == [
+        ("fake-a", "failed"),
+        ("fake-b", "passed"),
+    ]
 
 
 def test_unknown_tickets_and_agents_fail_before_anything_runs(repo, copies, fake_agents):
