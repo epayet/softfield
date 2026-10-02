@@ -90,7 +90,7 @@ def test_the_repos_toml_declares_f1s_agents_and_roles():
     assert (cfg.agents[sonnet].harness, cfg.agents[sonnet].model) == ("claude", "sonnet")
     assert all(1 <= agent.rating <= 10 for agent in cfg.agents.values())
     assert dict(cfg.roles) == {
-        "developer": (local, "ollama-gpt-oss-120b", "ollama-nemotron-3-super", sonnet),
+        "developer": (local, "ollama-gpt-oss-120b", sonnet),  # f2-09: from their F2 jobs
         "last-attempt": (local,),
         "direction": (opus,),
         "escalation": (opus,),
@@ -104,6 +104,15 @@ def test_the_repos_toml_declares_f1s_agents_and_roles():
     assert cfg.agents["copilot-auto"].harness == "copilot"
     assert cfg.agent_for("checkpoint").id == sonnet
     assert not hasattr(cfg, "checkpoint_model")
+
+
+def test_the_cloud_developers_ratings_follow_their_f2_results():
+    """f2-09: gpt-oss-120b merged f2-13 at its first attempt and lost f2-06, so it stays a
+    developer at its results' rating (5.1); nemotron-3-super blocked twice on f2-07 (4.3)."""
+    cfg = load_config(REPO)
+    assert cfg.agents["ollama-gpt-oss-120b"].rating == 5
+    assert cfg.agents["ollama-nemotron-3-super"].rating == 4
+    assert "ollama-nemotron-3-super" not in cfg.roles["developer"]
 
 
 AGENTS_TOML = """

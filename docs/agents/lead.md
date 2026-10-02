@@ -66,7 +66,8 @@ What developers pass at the first attempt, from results. Update it at each miles
 - **F1 (local Qwen):** 12/19 first-attempt on dashboard pages and fixes (difficulty 2–6); attempts average 28 min. Its 4 hardest failures (f1-15, 34, 35, 50) took two thirds of the Claude support.
 - **F1 (Sonnet as developer):** 3/3 first-attempt at difficulty 3–5, ≈$0.40 and 5–7 min a ticket; but it draws on the lead's 5-hour window.
 - **Checkpoints:** Sonnet, ≈$0.24 for two merges, found real bugs; a different model (Copilot's shadow) found one the checkpoint missed.
-- **Not yet tried:** Ollama Cloud developers (F2 benches them), tickets that make the developer read more than ~12 files.
+- **F2 (Ollama, real tickets; ADR 14's F2 entry):** gpt-oss-120b 1/2 first-attempt at difficulty 3–4. It passed a 56-line fix in 9 min, and failed f2-06 five times on ruff within minutes. nemotron-3-super 0/1: it blocked twice on a difficulty-3 ticket (17–20 min each). No refusals, so the allowance a ticket costs is still unmeasured.
+- **Not yet tried:** the Ollama models on a clean bench (after F2), tickets that make the developer read more than ~12 files.
 - The real ceiling is the local developer's context (about 180k tokens): a task that makes it read many large files runs out of room before it runs out of skill.
 
 ## Your own work

@@ -182,3 +182,19 @@ Facts only, by the lead, with the commands as run.
 - `uv run runner github-get /users/epayet/settings/billing/usage` and `…/billing/premium_request/usage`: 404, with gh's note "This API operation needs the `user` scope". Whether they answer on Free is not probed: it needs the owner to run `gh auth refresh -h github.com -s user`.
 - **`uv run runner github-get /copilot_internal/user` answers on Free** with `quota_snapshots` (`chat`, `completions`: 2000, `premium_interactions`: 0) and `quota_reset_date: 2026-11-01`. It's undocumented and internal, but it is a usage reading for the Copilot adapter with today's scopes.
 - **Claude's usage endpoint:** not probed here (it would mean reading the OAuth token in a headless job).
+
+## F2's cloud developers (2026-10-02, f2-09)
+From the metrics database (read-only): every F2 job with role `developer` or `last-attempt` on an `ollama-*` agent. Both were developers from 2026-10-02 (ADR 15 item 7, the owner), before any valid bench. The 2026-10-02 bench on f1-36 (gpt-oss-120b failed 3×; nemotron-3-super interrupted) doesn't count: it edited the main checkout (f2-12).
+
+| Agent | Ticket (difficulty) | Attempts | Minutes | Result |
+|---|---|---|---|---|
+| `ollama-gpt-oss-120b` | f2-06 (4) | 5, over two runs | 0.4, 1.0, 2.3; 1.5, 1.0 | lost: no change, then ruff 4×; local merged it on the last attempt (29 min) |
+| `ollama-gpt-oss-120b` | f2-13 (3) | 1 | 9.4 | merged at the first attempt, 56 lines |
+| `ollama-nemotron-3-super` | f2-07 (3) | 2, one per run | 19.8, 16.9 | lost: BLOCKED needs-info (OpenCode's 120 s shell timeout read as a stuck `check-all`), then needs-file (it wiped `conftest.py` with Write); the lead finished it |
+
+- **First-attempt passes:** gpt-oss-120b 1 of 2 tickets; nemotron-3-super 0 of 1. The local Qwen in F1: 12 of 19, 28 min an attempt ([F1 review](../reviews/factory-f1.md)).
+- **Speed:** gpt-oss-120b's passing attempt took 9.4 min, a third of local's 28, and its failures ended in 0.4–2.3 min, so a lost ticket cost minutes, not GPU hours. nemotron-3-super's took 17–20 min and burnt 44 refused commands in its second.
+- **Refusals and resets:** none. No Ollama `usage_events` were recorded, so what a ticket costs of Ollama's allowance is still only the owner's reading on ollama.com (the bench used 7% on one ticket, `docs/milestones/f2.md`).
+- **Tokens as recorded:** gpt-oss-120b 33–57k input an attempt, about its peak context: its cached prompt isn't reported through this provider, so the real input is higher. nemotron-3-super 0.7M and 1.1M.
+- **Ratings from results** (ADR 15 item 9, `rating_changes`): gpt-oss-120b 6 → 4.5 (f2-06) → 5.1 (f2-13); nemotron-3-super 6 → 4.3 (f2-07). The config's estimates become 5 and 4.
+- **Roles:** gpt-oss-120b stays a developer (it passed a ticket, and cloud first still sends it difficulty ≤ 5 before local). nemotron-3-super leaves `[roles] developer`: it failed its only ticket, twice; it comes back through the bench.

@@ -33,8 +33,8 @@ model = "lmstudio/qwen/qwen3.6-35b-a3b"
 rating = 5
 
 # Ollama Cloud through the local daemon (opencode.json's `ollama` provider; f1-18's probe).
-# Ratings from ADR 14's size comparison with the local Qwen (5); none is 2 above it, so none
-# is a step-up (ADR 15 item 7). Their allowance is unknown: used until refused (ADR 15 item 2).
+# Ratings from ADR 14's size comparison with the local Qwen (5), or from F2's results where
+# they have some (ADR 14's probe section); none is 2 above it, so none is a step-up (ADR 15 item 7). Their allowance is unknown: used until refused (ADR 15 item 2).
 [agents.ollama-gpt-oss-20b]
 harness = "opencode"
 model = "ollama/gpt-oss:20b-cloud"
@@ -53,12 +53,15 @@ rating = 5                              # roughly level
 [agents.ollama-gpt-oss-120b]
 harness = "opencode"
 model = "ollama/gpt-oss:120b-cloud"
-rating = 6                              # a candidate for a stronger developer
+rating = 5                              # F2: f2-13 first time, f2-06 lost; 5.1 from results (f2-09)
 
+# F2 (f2-09): off `[roles] developer`. Both its runs on f2-07 (difficulty 3) blocked, after
+# 20 and 17 min (a shell timeout taken for a stuck check; then it wiped conftest.py with Write),
+# and the lead finished it. Not refused: it failed. Back only through the bench.
 [agents.ollama-nemotron-3-super]
 harness = "opencode"
 model = "ollama/nemotron-3-super:cloud"
-rating = 6                              # 120B, 12B active: a candidate
+rating = 4                              # 4.3 from results, from a 6 estimate
 
 [agents.ollama-nemotron-3-ultra]
 harness = "opencode"
@@ -89,7 +92,7 @@ windows = [{ name = "month", capacity = 200 }]  # credits, fractional (f1-18)
 # step up after a failure. A checkpoint goes to the first listed that isn't an author's model
 # (item 9). The checkpoint's shadow runs on every agent it lists; every other role takes its first.
 [roles]
-developer = ["local-qwen3.6-35b-a3b", "ollama-gpt-oss-120b", "ollama-nemotron-3-super", "claude-sonnet"]  # Ollama on before the bench (ADR 15 item 7; owner, 2026-10-02)
+developer = ["local-qwen3.6-35b-a3b", "ollama-gpt-oss-120b", "claude-sonnet"]  # Ollama's from its F2 jobs (f2-09)
 last-attempt = ["local-qwen3.6-35b-a3b"]
 direction = ["claude-opus"]
 checkpoint = ["claude-sonnet", "claude-opus"]  # Opus when Sonnet wrote the code
