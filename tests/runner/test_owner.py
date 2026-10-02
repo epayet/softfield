@@ -172,6 +172,27 @@ def test_a_ticket_waiting_for_the_reserve_needs_you_until_a_rerun_runs_it(repo: 
     assert ("reserve", "m1-03-lead") not in _open(repo)
 
 
+def test_a_rerun_resolves_the_milestones_rerun_items_at_once(repo: Path):
+    """f1-51: the owner reran as asked; the items went only at the next verdict, and runs
+    restarted before reaching one (2026-10-01)."""
+    state = _needs_you(repo)
+    state.parked = _reserve().parked
+    write_task(repo / "tasks" / "escalated", "m2-01-later")
+    owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
+    owner.verdict(repo, "m2", State(), "clean", db=_db(repo))
+    assert ("reserve", "m1-03-lead") in _open(repo)
+
+    owner.rerun_started(repo, "m1", db=_db(repo))
+    assert set(_open(repo)) == {
+        ("adr", "docs/adr/14-photos.md"),  # an ADR is the owner's to accept, not a rerun's
+        ("escalated", "m2-01-later"),  # another milestone's
+    }
+    assert _items(repo)[("review-stop", "m1")]["resolved"]
+
+    owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))  # what still applies reopens
+    assert ("blocked", "m1-04-thing") in _open(repo)
+
+
 def _projects(repo: Path) -> list[sqlite3.Row]:
     conn = sqlite3.connect(_db(repo))
     conn.row_factory = sqlite3.Row

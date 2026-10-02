@@ -48,6 +48,25 @@ def test_milestone_takes_a_number_or_a_key(in_repo, monkeypatch, arg, key):
     assert seen == [(key, f"{key}-start")]
 
 
+def test_milestone_resolves_its_rerun_items_before_it_runs(in_repo, monkeypatch):
+    seen: list[tuple[str, str, object]] = []
+
+    def run(cfg, key, base):
+        seen.append(("run", key, None))
+        return "clean"
+
+    def rerun_started(repo, key, db):
+        seen.append(("rerun", key, db))
+
+    monkeypatch.setattr(cli, "run_milestone", run)
+    monkeypatch.setattr(owner, "rerun_started", rerun_started)
+    monkeypatch.setattr(owner, "verdict", lambda repo, k, state, stop, db: (0, "V\n"))
+    monkeypatch.setattr(owner, "record_verdict", lambda repo, text: None)
+    assert cli.main(["milestone", "f1"]) == 0
+    db = in_repo / "var" / "factory-metrics.sqlite"
+    assert seen == [("rerun", "f1", db), ("run", "f1", None)]
+
+
 class Restarted(Exception):
     pass
 

@@ -10,14 +10,15 @@ import os
 import re
 import subprocess
 import time
-from collections.abc import Mapping
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from runner.agents import ANY, Agent, JobResult, JobSpec, Reading, Refusal
+from runner.procs import run_streaming
 
 STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
 
@@ -34,12 +35,25 @@ def allowed_tools(spec: JobSpec) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True)
+class Progress:
+    """A running job's tokens and turns so far, from its stream (f1 D3, amended)."""
+
+    tokens_in: int
+    tokens_cached: int
+    tokens_out: int
+    turns: int
+
+
+@dataclass(frozen=True)
 class ClaudeJob:
     kind: str  # "escalation" | "direction" | "checkpoint" | "lead-ticket" | "review" | …
     prompt: str
     allowed_tools: tuple[str, ...]
     permission_mode: str = "dontAsk"  # anything not in allowed_tools is denied, no prompts
     model: str = ""  # empty: Claude Code's default
+    # Gets the job's progress every LIVE_EVERY seconds while it runs; called from the thread
+    # that runs the job.
+    on_progress: Callable[[Progress], None] | None = field(default=None, compare=False)
 
 
 class UsageLimited(Exception):
@@ -175,6 +189,31 @@ def _parse_stream(stdout: str, now: datetime) -> _Stream:
     return _Stream(result, tuple(readings), rejected, "\n".join(other))
 
 
+def progress(lines: Iterable[str]) -> Progress:
+    """The tokens and turns of the stream so far. A message's content blocks come as separate
+    `assistant` events with the same id; each message counts once, with its latest usage."""
+    usages: dict[str, dict[str, Any]] = {}
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "assistant":
+            continue
+        message = event.get("message")
+        if not isinstance(message, dict):
+            continue
+        usage = message.get("usage")
+        usages[str(message.get("id") or len(usages))] = usage if isinstance(usage, dict) else {}
+    total = {
+        key: sum(int(u.get(key) or 0) for u in usages.values())
+        for key in ("input_tokens", "cache_read_input_tokens", "output_tokens")
+    }
+    return Progress(
+        total["input_tokens"], total["cache_read_input_tokens"], total["output_tokens"], len(usages)
+    )
+
+
 def _transient(data: dict[str, Any], stream: _Stream) -> bool:
     """An API error other than a limit (overload, server error, lost connection), or no
     result event at all: Claude Code never got to answer."""
@@ -237,30 +276,34 @@ def run_claude(
     ]
     started = time.monotonic()
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        proc = subprocess.run(
-            cmd,
-            cwd=repo,
-            env=claude_env(os.environ),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            check=False,
-            stdin=subprocess.DEVNULL,
-        )
-    except subprocess.TimeoutExpired:
-        log_path.write_text("--- timed out ---\n", encoding="utf-8")
+
+    def read() -> str:
+        return log_path.read_text(encoding="utf-8", errors="replace")
+
+    def tick() -> None:
+        if job.on_progress is not None:
+            job.on_progress(progress(read().splitlines()))
+
+    # Read as it comes, like OpenCode's (f1 D3): the stream goes into the log line by line.
+    stderr, returncode = run_streaming(
+        cmd, repo, timeout, log_path, tick, env=claude_env(os.environ), stdin=subprocess.DEVNULL
+    )
+    stdout = read()
+    if returncode is None:
+        with log_path.open("a", encoding="utf-8") as log:
+            log.write("\n--- timed out ---\n")
         return JobResult(ok=False, text="timed out", duration_s=time.monotonic() - started)
-    log_path.write_text(proc.stdout + "\n--- stderr ---\n" + proc.stderr, encoding="utf-8")
+    with log_path.open("a", encoding="utf-8") as log:
+        log.write("\n--- stderr ---\n" + stderr)
     duration = time.monotonic() - started
-    stream = _parse_stream(proc.stdout, now)
-    data = stream.result or {"is_error": True, "result": stream.other + proc.stderr}
+    stream = _parse_stream(stdout, now)
+    data = stream.result or {"is_error": True, "result": stream.other + stderr}
     text = str(data.get("result", ""))
-    is_error = bool(data.get("is_error")) or proc.returncode != 0
+    is_error = bool(data.get("is_error")) or returncode != 0
     session_id = str(data["session_id"]) if data.get("session_id") else None
     readings = stream.readings
     if is_error:
-        limited, resets_at = usage_limit_reset(text + proc.stderr, now)
+        limited, resets_at = usage_limit_reset(text + stderr, now)
         # The status is structured, so it outlasts a change of wording; the text only says when.
         if limited or data.get("api_error_status") == 429:
             window = stream.rejected.get("rateLimitType")
@@ -270,7 +313,7 @@ def run_claude(
                 window=str(window) if window else None,
                 readings=readings,
             )
-        if _MAYBE_LIMIT_RE.search(text + proc.stderr):
+        if _MAYBE_LIMIT_RE.search(text + stderr):
             raise UsageLimited(None, session_id, certain=False, readings=readings)
         if _transient(data, stream):
             raise TransientError(text.strip()[:200], session_id, readings)
@@ -288,12 +331,21 @@ def run_claude(
 
 class ClaudeAdapter:
     """A `JobSpec` as a `claude -p` job on the agent's model; a limit or a passing error
-    comes back as a result (ADR 15 item 12), with the session to resume."""
+    comes back as a result (ADR 15 item 12), with the session to resume. ``on_progress`` gets
+    the tokens and turns so far every ``LIVE_EVERY`` seconds (f1 D3, amended)."""
 
     def run(
-        self, agent: Agent, spec: JobSpec, repo: Path, log_path: Path, now: datetime
+        self,
+        agent: Agent,
+        spec: JobSpec,
+        repo: Path,
+        log_path: Path,
+        now: datetime,
+        on_progress: Callable[[Progress], None] | None = None,
     ) -> JobResult:
-        job = ClaudeJob(spec.role, spec.prompt, allowed_tools(spec), model=agent.model)
+        job = ClaudeJob(
+            spec.role, spec.prompt, allowed_tools(spec), model=agent.model, on_progress=on_progress
+        )
         try:
             return run_claude(job, repo, spec.timeout, log_path, now, resume=spec.resume)
         except UsageLimited as limit:

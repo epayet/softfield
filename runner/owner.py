@@ -120,6 +120,17 @@ def _write(repo: Path, db: Path | None, write: Callable[[sqlite3.Connection, int
         )
 
 
+def _cleared_by_rerun(milestone: str) -> Callable[[str, str], bool]:
+    """Whether an item is one of ``milestone``'s that a rerun of it clears."""
+
+    def wanted(kind: str, subject: str) -> bool:
+        if kind not in _RERUN_KINDS:
+            return False
+        return subject.startswith(f"{milestone}-") if _RERUN_KINDS[kind] else subject == milestone
+
+    return wanted
+
+
 def _record_items(
     milestone: str, said: str, items: list[OwnerItem], conn: sqlite3.Connection, project: int
 ) -> None:
@@ -131,13 +142,12 @@ def _record_items(
             conn, project, item.kind, item.subject, text=item.text, command=item.command, created=at
         )
     current = {(item.kind, item.subject) for item in items}
-    for row in metrics.open_owner_items(conn, project):
-        kind, subject = row["kind"], row["subject"]
-        if kind not in _RERUN_KINDS or (kind, subject) in current:
-            continue
-        ours = subject.startswith(f"{milestone}-") if _RERUN_KINDS[kind] else subject == milestone
-        if ours:
-            metrics.resolve_owner_item(conn, row["id"], at)
+    cleared = _cleared_by_rerun(milestone)
+    _resolve(
+        conn,
+        project,
+        lambda kind, subject: (kind, subject) not in current and cleared(kind, subject),
+    )
 
 
 def _resolve(conn: sqlite3.Connection, project: int, wanted: Callable[[str, str], bool]) -> None:
@@ -145,6 +155,12 @@ def _resolve(conn: sqlite3.Connection, project: int, wanted: Callable[[str, str]
     for row in metrics.open_owner_items(conn, project):
         if wanted(row["kind"], row["subject"]):
             metrics.resolve_owner_item(conn, row["id"], at)
+
+
+def rerun_started(repo: Path, milestone: str, db: Path | None = None) -> None:
+    """``runner milestone <key>`` is starting: the milestone's items a rerun answers are
+    resolved now, not at its verdict (f1 D8, amended); the verdict reopens what still applies."""
+    _write(repo, db, lambda conn, project: _resolve(conn, project, _cleared_by_rerun(milestone)))
 
 
 def verdict(

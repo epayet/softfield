@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from runner import claude
 from runner.agents import (
     ANY,
     CHECK_COMMANDS,
@@ -22,6 +23,7 @@ from runner.claude import (
     ADAPTER,
     STRIPPED_ENV,
     ClaudeJob,
+    Progress,
     TransientError,
     UsageLimited,
     allowed_tools,
@@ -218,18 +220,70 @@ def test_a_job_with_bash_is_told_how_to_call_it():
 
 
 def test_run_claude_appends_the_shell_note(tmp_path, monkeypatch):
-    seen: list[list[str]] = []
-
-    def fake_run(cmd, **kwargs):
-        seen.append(cmd)
-        out = '{"type": "result", "result": "ok"}'
-        return subprocess.CompletedProcess(cmd, 0, stdout=out, stderr="")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    seen = _fake_stream(monkeypatch, '{"type": "result", "result": "ok"}')
     job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Bash(git log:*)",))
     run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
     prompt = seen[0][seen[0].index("-p") + 1]
     assert prompt.startswith("Review.") and "`git log`" in prompt
+
+
+def test_claude_runs_without_api_credentials_or_a_terminal(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-never")
+    calls: list[dict[str, object]] = []
+
+    def fake(cmd, cwd, timeout, out_path, on_tick=None, **kwargs):
+        calls.append(kwargs)
+        out_path.write_text('{"type": "result", "result": "ok"}', encoding="utf-8")
+        return "", 0
+
+    monkeypatch.setattr(claude, "run_streaming", fake)
+    run_claude(ClaudeJob("review", "Review.", ("Read",)), tmp_path, 10, tmp_path / "log", NOW)
+    env = calls[0]["env"]
+    assert isinstance(env, dict) and "ANTHROPIC_API_KEY" not in env
+    assert calls[0]["stdin"] == subprocess.DEVNULL
+
+
+def _assistant(message: str, inp: int, cached: int, out: int) -> str:
+    usage = {"input_tokens": inp, "cache_read_input_tokens": cached, "output_tokens": out}
+    return json.dumps({"type": "assistant", "message": {"id": message, "usage": usage}})
+
+
+def test_a_running_job_hands_on_its_tokens_and_turns_so_far(tmp_path, monkeypatch):
+    """f1-51: Claude jobs showed elapsed time only. A message's content blocks come as
+    separate events with the same id; it counts once, with its latest usage."""
+    chunks = [
+        [_assistant("m1", 2, 100, 5), _assistant("m1", 2, 100, 7)],
+        [_assistant("m2", 3, 200, 11)],
+        ['{"type": "result", "result": "ok", "num_turns": 2}'],
+    ]
+
+    def fake(cmd, cwd, timeout, out_path, on_tick=None, **kwargs):
+        with out_path.open("w", encoding="utf-8") as out:
+            for chunk in chunks:
+                out.write("".join(f"{line}\n" for line in chunk))
+                out.flush()
+                if on_tick is not None and chunk is not chunks[-1]:
+                    on_tick()
+        return "", 0
+
+    monkeypatch.setattr(claude, "run_streaming", fake)
+    seen: list[Progress] = []
+    job = ClaudeJob("lead-ticket", "Do it.", ("Read",), on_progress=seen.append)
+    result = run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert seen == [Progress(2, 100, 7, 1), Progress(5, 300, 18, 2)]
+    assert (result.ok, result.num_turns) == (True, 2)
+
+
+def test_a_job_that_times_out_keeps_its_stream_in_the_log(tmp_path, monkeypatch):
+    def fake(cmd, cwd, timeout, out_path, on_tick=None, **kwargs):
+        out_path.write_text(_assistant("m1", 1, 0, 1) + "\n", encoding="utf-8")
+        return "", None
+
+    monkeypatch.setattr(claude, "run_streaming", fake)
+    result = run_claude(ClaudeJob("review", "R.", ("Read",)), tmp_path, 10, tmp_path / "log", NOW)
+    assert (result.ok, result.text) == (False, "timed out")
+    log = (tmp_path / "log").read_text(encoding="utf-8")
+    assert log.startswith('{"type": "assistant"') and log.endswith("--- timed out ---\n")
 
 
 def _as_result_event(stdout: str) -> str:
@@ -242,15 +296,7 @@ def _as_result_event(stdout: str) -> str:
 
 
 def _fake_claude(monkeypatch, stdout: str, returncode: int = 1) -> list[list[str]]:
-    seen: list[list[str]] = []
-
-    def fake_run(cmd, **kwargs):
-        seen.append(cmd)
-        out = _as_result_event(stdout)
-        return subprocess.CompletedProcess(cmd, returncode, stdout=out, stderr="")
-
-    monkeypatch.setattr(subprocess, "run", fake_run)
-    return seen
+    return _fake_stream(monkeypatch, _as_result_event(stdout), returncode)
 
 
 def test_a_usage_limit_carries_the_session_to_resume(tmp_path, monkeypatch):
@@ -351,13 +397,15 @@ PROBE = Path(__file__).parent / "fixtures" / "probes" / "claude-stream.jsonl"
 
 
 def _fake_stream(monkeypatch, stdout: str, returncode: int = 0) -> list[list[str]]:
+    """`claude -p` faked: its stream is ``stdout``, written to the log as it would come."""
     seen: list[list[str]] = []
 
-    def fake_run(cmd, **kwargs):
+    def fake(cmd, cwd, timeout, out_path, on_tick=None, **kwargs):
         seen.append(cmd)
-        return subprocess.CompletedProcess(cmd, returncode, stdout=stdout, stderr="")
+        out_path.write_text(stdout, encoding="utf-8")
+        return "", returncode
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(claude, "run_streaming", fake)
     return seen
 
 

@@ -64,7 +64,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -101,6 +101,66 @@ def test_a_version_1_database_keeps_its_usage_events_and_gains_a_window(tmp_path
     metrics.add_usage_event(conn, "claude-opus", T0, "refusal", resets_at=T1)
     assert _count(conn, "usage_events") == 1
     conn.close()
+
+
+def test_a_version_2_database_keeps_its_runs_and_gains_their_activity(tmp_path):
+    """f1-51: the runs already written stay; the new columns start empty."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    steps = "\n".join(metrics.MIGRATIONS[:2])
+    old.executescript(f"BEGIN;\n{steps}\nPRAGMA user_version = 2;\nCOMMIT;")
+    old.execute("INSERT INTO projects (name) VALUES ('coucou')")
+    old.execute(
+        "INSERT INTO runs (project_id, run_dir, started, heartbeat) VALUES (1, 'r1', ?, ?)",
+        (T0, T1),
+    )
+    old.close()
+
+    conn = metrics.open_db(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    row = conn.execute(
+        "SELECT run_dir, started, heartbeat, activity, waiting_until, reserve FROM runs"
+    ).fetchone()
+    assert tuple(row) == ("r1", T0, T1, None, None, None)
+    conn.close()
+
+
+def test_a_run_says_what_it_does_and_until_when_it_waits(db, ids):
+    metrics.update_run_activity(db, ids["run"], "waiting for Claude", waiting_until=T1)
+    row = db.execute("SELECT activity, waiting_until FROM runs").fetchone()
+    assert tuple(row) == ("waiting for Claude", T1)
+
+    metrics.update_run_activity(db, ids["run"], "gates · f1-21")
+    row = db.execute("SELECT activity, waiting_until FROM runs").fetchone()
+    assert tuple(row) == ("gates · f1-21", None)  # the wait ended with it
+
+    metrics.update_run_activity(db, ids["run"], None)
+    row = db.execute("SELECT activity, waiting_until FROM runs").fetchone()
+    assert tuple(row) == (None, None)
+
+
+def test_a_run_on_the_reserve_says_so(db, ids):
+    assert db.execute("SELECT reserve FROM runs").fetchone()[0] is None
+    metrics.set_run_reserve(db, ids["run"])
+    assert db.execute("SELECT reserve FROM runs").fetchone()[0] == 1
+
+
+def test_ready_tickets_no_longer_in_tasks_are_removed(db, ids):
+    project = ids["project"]
+    metrics.upsert_ticket(db, project, "f1-01-metrics-db", state="ready")
+    metrics.upsert_ticket(db, project, "f1-30-allowance-forecast", state="ready")
+    metrics.upsert_ticket(db, project, "m4-06-me-wiring", state="done")
+    other = metrics.upsert_project(db, "elsewhere")
+    metrics.upsert_ticket(db, other, "x1-01-other", state="ready")
+
+    assert metrics.remove_missing_tickets(db, project, {"f1-01-metrics-db"}) == 1
+    states = dict(db.execute("SELECT ticket, state FROM tickets").fetchall())
+    assert states == {
+        "f1-01-metrics-db": "ready",
+        "f1-30-allowance-forecast": "removed",
+        "m4-06-me-wiring": "done",  # only the queue's rows: history stays
+        "x1-01-other": "ready",  # another project's queue isn't ours
+    }
 
 
 def test_foreign_keys_are_enforced(db):

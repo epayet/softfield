@@ -125,6 +125,7 @@ def main(argv: list[str] | None = None) -> int:
             )
         elif args.command == "milestone":
             key = milestone_key(args.number)
+            owner.rerun_started(repo, key, db=cfg.metrics_db)
             stop = run_milestone(cfg, key, args.base or f"{key}-start")
             if stop == RESTART:
                 # An escalation changed the runner: carry on in a fresh process (ADR 12).

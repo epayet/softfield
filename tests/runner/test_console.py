@@ -35,8 +35,8 @@ def test_a_claude_end_line_has_outcome_minutes_and_dollars():
 
 def test_a_summary_is_the_first_real_line_cut_to_about_100_characters():
     assert console.summary("claude-opus", "\n# Requeued\nmore") == "  ↳ [claude-opus] Requeued"
-    long = console.summary("claude-opus", "x" * 300)
-    assert long is not None and long.endswith("…") and len(long) < 130
+    # f1-51: the owner read cut lines; the whole first line prints.
+    assert console.summary("claude-opus", "x" * 300 + "\nmore") == "  ↳ [claude-opus] " + "x" * 300
     assert console.summary("claude-opus", " \n") is None
 
 

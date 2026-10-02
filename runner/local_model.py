@@ -5,14 +5,9 @@ The agent's model picks the provider in opencode.json: ``lmstudio/…`` is the l
 the same events, so tokens and facts are read alike; only the local model is warmed up.
 """
 
-import contextlib
 import json
-import os
 import re
-import signal
 import sqlite3
-import subprocess
-import tempfile
 import time
 import urllib.request
 from collections.abc import Callable, Iterable
@@ -23,6 +18,10 @@ from typing import Any
 
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.claude import usage_limit_reset
+
+# Shared with Claude's adapter since f1-51; loop and the tests still find them here.
+from runner.procs import LIVE_EVERY as LIVE_EVERY
+from runner.procs import run_streaming as run_streaming
 
 LOCAL_PROVIDER = "lmstudio"
 
@@ -177,49 +176,6 @@ def loaded_context_length(base_url: str, model: str) -> int | None:
         return None
     value = data.get("loaded_context_length")
     return int(value) if value else None
-
-
-LIVE_EVERY = 30.0  # seconds between live updates while an attempt runs (f1 D3)
-
-
-def run_streaming(
-    cmd: list[str],
-    cwd: Path,
-    timeout: float,
-    out_path: Path,
-    on_tick: Callable[[], None] | None = None,
-    every: float = LIVE_EVERY,
-    clock: Callable[[], float] = time.monotonic,
-) -> tuple[str, int | None]:
-    """Run ``cmd`` in its own process group, its stdout written straight into ``out_path``
-    as it comes, calling ``on_tick`` every ``every`` seconds; on timeout kill the whole group.
-
-    OpenCode starts shell commands of its own (pytest, ruff…). Killing only OpenCode would
-    leave a hung child running after the attempt. Returns (stderr, exit code or None).
-    """
-    with out_path.open("w", encoding="utf-8") as out, tempfile.TemporaryFile("w+") as err:
-        proc = subprocess.Popen(
-            cmd, cwd=cwd, stdout=out, stderr=err, text=True, start_new_session=True
-        )
-        deadline = clock() + timeout
-        next_tick = clock() + every
-        code: int | None = None
-        while True:
-            try:
-                code = proc.wait(timeout=max(0.05, min(next_tick, deadline) - clock()))
-                break
-            except subprocess.TimeoutExpired:
-                pass
-            if clock() >= deadline:
-                with contextlib.suppress(ProcessLookupError):
-                    os.killpg(proc.pid, signal.SIGKILL)
-                proc.wait()
-                break
-            if on_tick is not None and clock() >= next_tick:
-                on_tick()
-                next_tick = clock() + every
-        err.seek(0)
-        return err.read(), code
 
 
 def run_opencode(

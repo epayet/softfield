@@ -15,7 +15,7 @@ import pytest
 
 from runner import checks, claude, gates, local_model, loop, metrics
 from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
-from runner.claude import ClaudeJob, TransientError, UsageLimited
+from runner.claude import ClaudeJob, Progress, TransientError, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
@@ -2305,6 +2305,220 @@ def test_a_restart_tries_a_ticket_parked_for_a_limit_again_at_once(
     assert calls == [(None, THURSDAY), ("s1", THURSDAY)]  # resumed without waiting
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
     assert _state(repo).parked == {}
+
+
+def test_a_parked_ticket_keeps_claudes_reset_until_it_runs_again(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """f1-51: f1-22's stored reset said 23:00 while Claude's refusal said 01:40: a start that
+    never reached the ticket had written its own time over it."""
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    resets = THURSDAY + timedelta(hours=2)
+    calls: list[str | None] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        calls.append(resume)
+        if len(calls) == 1:
+            _lead_writes(repo_, "lead")
+            raise UsageLimited(resets, session_id="s1")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+
+    class CtrlC(Exception):
+        pass
+
+    def ctrl_c(seconds: float) -> None:
+        raise CtrlC
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr("time.sleep", ctrl_c)
+    with pytest.raises(CtrlC):
+        _run(repo)
+    fake_clock[0] += timedelta(minutes=30)
+    (repo / "stray.txt").write_text("the owner's")
+    with pytest.raises(loop.RunnerError):  # a start that stops before any ticket
+        loop.open_session(_config(repo))
+    (repo / "stray.txt").unlink()
+    s = loop.open_session(_config(repo))  # and one that is stopped before it gets there
+    loop._finish_run(s, "interrupted")
+    assert _state(repo).parked["m1-01-lead"]["resets_at"] == resets.isoformat()
+    report = _run(repo)
+    assert calls == [None, "s1"]  # still tried again at once
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
+
+
+# --- what the run is doing (f1-51, f1 D3 amended) -------------------------------------------
+
+
+def _activity(repo: Path) -> tuple[object, object]:
+    run = _rows(repo, "runs")[-1]
+    return run["activity"], run["waiting_until"]
+
+
+def test_a_pause_for_a_limit_or_a_passing_error_shows_on_the_run_until_it_ends(repo, monkeypatch):
+    resets = loop.now() + timedelta(hours=1)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    blip = TransientError("Connection error.", session_id="s1")
+    _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), blip, done)
+    seen: list[tuple[object, object]] = []
+    monkeypatch.setattr("time.sleep", lambda seconds: seen.append(_activity(repo)))
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    assert [activity for activity, _ in seen] == ["waiting for Claude"] * 2
+    until = [datetime.fromisoformat(str(at)) for _, at in seen]
+    assert until[0] > resets and until[1] > loop.now()
+    assert _activity(repo) == (None, None)
+
+
+def test_waiting_with_nothing_to_run_without_claude_shows_on_the_run(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    resets = THURSDAY + timedelta(hours=2)
+    outcomes: list[Exception | JobResult] = [
+        UsageLimited(resets, session_id="s1"),
+        JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1"),
+    ]
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        _lead_writes(repo_, "lead")
+        outcome = outcomes.pop(0)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+
+    seen: list[tuple[object, object]] = []
+
+    def sleep(seconds: float) -> None:
+        seen.append(_activity(repo))
+        fake_clock[0] += timedelta(seconds=seconds)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr("time.sleep", sleep)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"]
+    [(activity, until)] = seen
+    assert activity == "waiting for Claude"
+    assert datetime.fromisoformat(str(until)) == resets + timedelta(seconds=60)
+    assert _activity(repo) == (None, None)
+
+
+def test_the_run_names_the_warm_up_and_the_gates_while_they_run(repo, fake_model, monkeypatch):
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    seen: list[object] = []
+    real_gates = gates.run_gates
+
+    def warmup(*args: object) -> float:
+        seen.append(_activity(repo)[0])
+        return 0.1
+
+    def run_gates(context: gates.GateContext) -> list[GateResult]:
+        seen.append(_activity(repo)[0])
+        return real_gates(context)
+
+    monkeypatch.setattr(loop, "warmup", warmup)
+    monkeypatch.setattr(loop, "run_gates", run_gates)
+    _run(repo)
+    assert seen == ["warm-up", "gates · m1-01-thing"]
+    assert _activity(repo) == (None, None)
+
+
+def test_the_run_names_check_all_while_it_runs(repo, monkeypatch, tmp_path):
+    seen: list[object] = []
+
+    def check_all(repo_, timeout, *, task_id=None, fix=False):
+        seen.append(_activity(repo)[0])
+        return [checks.Check("tests", True, "")]
+
+    monkeypatch.setattr(checks, "check_all", check_all)
+    s = loop.open_session(_config(repo))
+    assert loop._check_all(s, "m1-01-lead", tmp_path, "check-all.txt")
+    assert loop._check_all(s, None, tmp_path, "check-all.txt")
+    assert seen == ["check-all · m1-01-lead", "check-all on main"]
+    assert _activity(repo) == (None, None)
+
+
+def test_a_job_starting_clears_the_runs_activity(repo):
+    s = loop.open_session(_config(repo))
+    loop.set_activity(s, "warm-up")
+    loop.record_start(s, "m1-01-thing", "m1", "developer", "local-m")
+    assert _activity(repo) == (None, None)
+
+
+def test_a_claude_jobs_row_shows_its_tokens_and_steps_before_it_ends(repo, monkeypatch):
+    """f1-51: Claude jobs showed elapsed time only (f1 D3, amended)."""
+    monkeypatch.setattr(loop, "POLL_S", 0.01)
+    seen: list[dict[str, object]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        assert job.on_progress is not None
+        job.on_progress(Progress(tokens_in=10, tokens_cached=100, tokens_out=5, turns=2))
+        deadline = time.monotonic() + 5
+        while not (row := _rows(repo, "jobs")[0])["steps"] and time.monotonic() < deadline:
+            time.sleep(0.01)
+        seen.append(row)
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    [live] = seen
+    assert live["outcome"] == "running"
+    assert (live["tokens_in"], live["tokens_cached"], live["tokens_out"], live["steps"]) == (
+        10,
+        100,
+        5,
+        2,
+    )
+    [job] = _rows(repo, "jobs")
+    assert (job["outcome"], job["steps"]) == ("passed", 3)
+
+
+def test_a_yes_to_the_reserve_clears_its_item_at_once_and_marks_the_run(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+):
+    """2026-10-01: Needs-you kept "waits for Claude's reserve … answer y" after the owner's y."""
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    items: list[dict[str, object]] = []
+
+    def lead(job: ClaudeJob, repo_: Path) -> None:
+        items.extend(_rows(repo, "owner_items"))
+        _lead_implements(job, repo_)
+
+    script.append(lead)
+    _passes(monkeypatch)
+    answers, _ = owner_answers
+    answers.extend([None, "y"])
+    _run(repo)  # no answer: parked, an owner item
+    assert _rows(repo, "owner_items")[0]["resolved"] is None
+    _earlier_run(repo)
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())  # the owner reruns
+    _run(repo)
+    [item] = items
+    assert (item["kind"], item["subject"]) == ("reserve", "m1-01-lead") and item["resolved"]
+    assert [run["reserve"] for run in _rows(repo, "runs")] == [None, 1]
+
+
+def test_a_restart_after_a_yes_marks_its_run_on_the_reserve(repo, monkeypatch):
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(yes=True))
+    loop.open_session(_config(repo))
+    assert [run["reserve"] for run in _rows(repo, "runs")] == [1]
+
+
+def test_a_ticket_deleted_from_tasks_leaves_the_queue(repo):
+    """f1-30-allowance-forecast, deleted by ADR 15, kept a `ready` row."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name)
+    metrics.upsert_ticket(conn, project, "m1-09-gone", state="ready")
+    conn.close()
+    _add_task(repo, "m1-01-thing")
+    loop.open_session(_config(repo))
+    states = {row["ticket"]: row["state"] for row in _rows(repo, "tickets")}
+    assert states == {"m1-09-gone": "removed", "m1-01-thing": "ready"}
 
 
 # --- routing (f1-25, runner/router.py; ADR 15 items 6, 7 and 9) ----------------------------

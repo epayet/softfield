@@ -5,8 +5,6 @@ that merges at the first attempt takes about six lines. `Session.log` adds the t
 
 from datetime import datetime
 
-SUMMARY_CHARS = 100
-
 
 def duration(seconds: float) -> str:
     total = round(seconds / 60)
@@ -46,17 +44,18 @@ def claude_end(agent: str, what: str, ok: bool, seconds: float, cost: float | No
     return f"■ [{agent}] {what} {'done' if ok else 'failed'} · " + " · ".join(parts)
 
 
-def first_line(text: str, limit: int = SUMMARY_CHARS) -> str:
-    """The first line with words in it, without its heading marks, cut to ``limit``."""
+def first_line(text: str) -> str:
+    """The first line with words in it, without its heading marks."""
     for line in text.splitlines():
         line = line.strip().lstrip("#").strip()
         if line:
-            return line if len(line) <= limit else line[: limit - 1].rstrip() + "…"
+            return line
     return ""
 
 
 def summary(agent: str, text: str) -> str | None:
-    """What a Claude job did, under its end line; None when there's nothing to say."""
+    """What a Claude job did, under its end line, whole (the owner read cut ones, f1-51);
+    None when there's nothing to say."""
     line = first_line(text)
     return f"  ↳ [{agent}] {line}" if line else None
 

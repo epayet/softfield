@@ -9,7 +9,8 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Collection, Iterable, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import partial
@@ -28,7 +29,7 @@ from runner.agents import (
     Reading,
     adapter_for,
 )
-from runner.claude import backoff_seconds
+from runner.claude import Progress, backoff_seconds
 from runner.config import Config, read_protected
 from runner.gates import (
     BLOCKED_FILE,
@@ -125,9 +126,14 @@ class Ticker:
         return at - self.started
 
 
-def with_progress[T](work: Callable[[], T], tick: Callable[[float], None]) -> T:
+def with_progress[T](
+    work: Callable[[], T],
+    tick: Callable[[float], None],
+    poll: Callable[[], None] | None = None,
+) -> T:
     """Run ``work`` in a thread; while it runs, ``tick`` gets the seconds elapsed every
-    ``PROGRESS_EVERY`` seconds. Its result or exception comes back here."""
+    ``PROGRESS_EVERY`` seconds, and ``poll`` is called every ``POLL_S`` seconds, here (the
+    metrics connection can't cross threads). Its result or exception comes back here."""
     box: dict[str, Any] = {}
 
     def target() -> None:
@@ -141,6 +147,8 @@ def with_progress[T](work: Callable[[], T], tick: Callable[[float], None]) -> T:
     thread.start()
     while thread.is_alive():
         thread.join(POLL_S)
+        if poll is not None:
+            poll()
         if thread.is_alive() and (elapsed := ticker.due()) is not None:
             tick(elapsed)
     if "error" in box:
@@ -214,10 +222,12 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
         del state.parked[key]
     # A ticket parked for a limit is tried again at once: the owner may have reset the
     # allowance before restarting (2026-10-01). Still limited, it parks on Claude's new reset.
+    # Its stored reset stays Claude's: a start that never reached the ticket had written its
+    # own time over it (f1-22's said 23:00 for Claude's 01:40, f1-51).
     at = now()
-    retried = [k for k, entry in state.parked.items() if _resets(entry) > at]
+    retried = [k for k, entry in state.parked.items() if not _due(entry, at)]
     for key in retried:
-        state.parked[key]["resets_at"] = at.isoformat()
+        state.parked[key][RETRY] = True
     if asked or retried:
         save_state(state, state_path)
     # Without an in-flight job, a dirty tree isn't the runner's: leave it to the owner.
@@ -409,6 +419,8 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
             if cut_off_job is not None:
                 _record(s, metrics.end_interrupted, cut_off_job)
             _record(s, metrics.close_abandoned, s.project_id, s.run_id)
+            if RESERVE.yes:  # handed on by this command's restart after the owner's yes
+                _record(s, metrics.set_run_reserve, s.run_id)
             _start_heartbeat(s, s.run_id)
         sync_tickets(s)
 
@@ -449,10 +461,46 @@ TICKET_FOLDERS = ("ready", "done", *STOPPED)
 
 
 def sync_tickets(s: Session) -> None:
-    """Every ticket in tasks/ with its folder's state (f1 D4): the queue the dashboard reads."""
+    """Every ticket in tasks/ with its folder's state (f1 D4): the queue the dashboard reads.
+    A ``ready`` row whose file is gone (deleted, like f1-30 by ADR 15) leaves it."""
     for folder in TICKET_FOLDERS:
         for path in sorted(s.tasks_dir(folder).glob("*.md")):
             record_ticket(s, path)
+    if s.project_id is not None:
+        ready = {path.stem for path in s.tasks_dir("ready").glob("*.md")}
+        _record(s, metrics.remove_missing_tickets, s.project_id, ready)
+
+
+def set_activity(s: Session, activity: str | None, waiting_until: datetime | None = None) -> None:
+    """What the run does outside a job, and until when it waits (f1 D3, amended); None
+    clears both. Best effort, like every write."""
+    if s.run_id is None:
+        return
+    until = waiting_until.isoformat() if waiting_until else None
+    _record(s, metrics.update_run_activity, s.run_id, activity, until)
+
+
+@contextmanager
+def doing(s: Session, activity: str) -> Iterator[None]:
+    """The run's activity while the block runs: the gates, check-all, the warm-up."""
+    set_activity(s, activity)
+    try:
+        yield
+    finally:
+        set_activity(s, None)
+
+
+WAITING_FOR_CLAUDE = "waiting for Claude"
+
+
+def wait_for_claude(s: Session, seconds: float, resumes: datetime) -> None:
+    """Sleep through a pause for Claude (a limit, a passing error, nothing to run without
+    it), the run saying so until it ends."""
+    set_activity(s, WAITING_FOR_CLAUDE, resumes)
+    try:
+        time.sleep(seconds)
+    finally:
+        set_activity(s, None)
 
 
 def record_ticket(
@@ -535,9 +583,11 @@ def record_start(
     routing_reason: str | None = None,
 ) -> int | None:
     """Write a job as running (f1 D3), with why its agent was chosen, and beat the run's
-    heartbeat; returns the job's id."""
+    heartbeat; the job is what the run does now, so its activity clears. Returns the job's
+    id."""
     if s.run_id is None or s.project_id is None:
         return None
+    set_activity(s, None)
     at = now().isoformat()
     milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
     ticket_id = _record(s, metrics.upsert_ticket, s.project_id, ticket) if ticket else None
@@ -569,6 +619,22 @@ def live_update(s: Session, job_id: int | None, tokens: TokenTotals) -> None:
         tokens_in=tokens.input,
         tokens_out=tokens.output + tokens.reasoning,
         steps=tokens.steps,
+    )
+    _record(s, metrics.update_run_heartbeat, s.run_id, now().isoformat())
+
+
+def claude_live_update(s: Session, job_id: int | None, progress: Progress) -> None:
+    """``live_update`` for a Claude job: its tokens and turns so far (f1 D3, amended)."""
+    if job_id is None or s.run_id is None:
+        return
+    _record(
+        s,
+        metrics.update_running_job,
+        job_id,
+        tokens_in=progress.tokens_in,
+        tokens_cached=progress.tokens_cached,
+        tokens_out=progress.tokens_out,
+        steps=progress.turns,
     )
     _record(s, metrics.update_run_heartbeat, s.run_id, now().isoformat())
 
@@ -957,22 +1023,26 @@ def call_claude(
         job_id=job_id,
         session_id=resume,
     )
+    # Claude's progress comes from the job's thread; its row is written from this one.
+    latest: dict[str, Progress] = {}
+
+    def write_progress() -> None:
+        if (progress := latest.pop("progress", None)) is not None:
+            claude_live_update(s, job_id, progress)
+
     while True:
         prompt = resume_prompt if resume else job.prompt + (partial_note if interrupted else "")
         resume_prompt = RESUME_PROMPT  # a later resume follows a pause for a limit
         log = s.run_dir / f"{base}{f'-retry{attempt}' if attempt else ''}.log"
         if attempt:
             s.log(console.resumed(agent, what))
+        run = partial(
+            adapter.run, runner, replace(job, prompt=prompt, resume=resume), s.repo, log, now()
+        )
+        if runner.harness == CLAUDE:
+            run = partial(run, on_progress=partial(latest.__setitem__, "progress"))
         result = with_progress(
-            partial(
-                adapter.run,
-                runner,
-                replace(job, prompt=prompt, resume=resume),
-                s.repo,
-                log,
-                now(),
-            ),
-            lambda elapsed: s.log(console.running(agent, what, elapsed)),
+            run, lambda elapsed: s.log(console.running(agent, what, elapsed)), write_progress
         )
         _record_readings(s, agent, result.readings)
         if result.error == TRANSIENT:
@@ -989,12 +1059,9 @@ def call_claude(
             interrupted = True
             _in_flight_session(s, resume)
             at = now()
-            s.log(
-                console.paused(
-                    agent, f"interrupted ({result.text})", at + timedelta(seconds=pause), at
-                )
-            )
-            time.sleep(pause)
+            resumes = at + timedelta(seconds=pause)
+            s.log(console.paused(agent, f"interrupted ({result.text})", resumes, at))
+            wait_for_claude(s, pause, resumes)
             continue
         if (limit := result.refusal) is not None:  # a limit (ADR 15 item 12)
             if not limit.certain:
@@ -1037,7 +1104,7 @@ def call_claude(
             why = "Claude usage limit" if limit.certain else "what looks like a Claude usage limit"
             s.log(console.paused(agent, why, resumes, at))
             s.report.notes.append(f"Paused {wait / 60:.0f} min for a Claude usage limit.")
-            time.sleep(wait)
+            wait_for_claude(s, wait, resumes)
             continue
         if resume and not result.ok and result.num_turns == 0:
             resume = None  # the session couldn't be resumed: start again, told about the tree
@@ -1059,6 +1126,7 @@ def call_claude(
             tokens_cached=result.usage.get("cache_read_input_tokens", 0),
             tokens_out=result.usage.get("output_tokens", 0),
             cost_usd=result.cost_usd,
+            steps=result.num_turns,
             note=_process_note(process_note),
             session_id=result.session_id,
             log_path=_rel(s, log),
@@ -1408,7 +1476,8 @@ def _develop(
         agent, reason = route_developer(s, task, role, attempt, failed=failed, refused=refused)
         local = is_local(agent)
         if local:
-            rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
+            with doing(s, "warm-up"):
+                rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
             _check_context(s)
         context_limit = s.context_limit if local else None
         name = f"{agent.harness}-{attempt}" + (f"-{n}" if n > 1 else "")
@@ -1588,7 +1657,8 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         started = time.monotonic()
         if s.git.changed_files(MAIN):
             context = GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout)
-            results = run_gates(context)
+            with doing(s, f"gates · {task.id}"):
+                results = run_gates(context)
         else:
             # An untouched tree passes every gate, and there'd be nothing to merge (m4-06).
             cause = empty_cause(run.refused_commands, run.timed_out)
@@ -1693,7 +1763,8 @@ def _merged_line(s: Session, agent: str, task_id: str, rec: TaskRecord) -> None:
 
 
 def _check_all(s: Session, task_id: str | None, logs: Path, name: str) -> bool:
-    results = checks.check_all(s.repo, s.cfg.gate_timeout, task_id=task_id)
+    with doing(s, f"check-all · {task_id}" if task_id else "check-all on main"):
+        results = checks.check_all(s.repo, s.cfg.gate_timeout, task_id=task_id)
     (logs / name).write_text(checks.render(results), encoding="utf-8")
     return all(r.ok for r in results)
 
@@ -2315,6 +2386,7 @@ class ReserveAnswer:
 
 RESERVE = ReserveAnswer()
 RESERVE_ENV = "COUCOU_RUNNER_RESERVE_YES"  # set only by cli's restart after a yes
+RETRY = "retry"  # a parked entry's flag: a restart tries it again before its reset
 CLAUDE = "claude"
 # Where Claude's week stands now decides the question: a lead ticket's share of the week
 # isn't learned yet, so its expected cost is left at 0.
@@ -2333,6 +2405,11 @@ def _resets(entry: dict[str, Any]) -> datetime:
     return datetime.fromisoformat(str(entry["resets_at"]))
 
 
+def _due(entry: dict[str, Any], at: datetime) -> bool:
+    """Whether a parked job may run: its reset has passed, or a restart tries it at once."""
+    return bool(entry.get(RETRY)) or _resets(entry) <= at
+
+
 def _limits_ahead(
     s: Session, at: datetime, tickets: Collection[str] | None = None
 ) -> list[datetime]:
@@ -2343,7 +2420,7 @@ def _limits_ahead(
         for ticket, entry in s.state.parked.items()
         if entry["kind"] != "reserve"
         and (tickets is None or ticket in tickets)
-        and _resets(entry) > at
+        and not _due(entry, at)
     ]
 
 
@@ -2381,6 +2458,22 @@ def _at_the_reserve(s: Session, at: datetime) -> tuple[str, datetime] | None:
     return f"{left}, resets {resets:%a} {resets.day} {resets:%b %H:%M}", resets
 
 
+def _resolve_reserve_item(conn: sqlite3.Connection, project_id: int, task_id: str) -> None:
+    at = now().isoformat()
+    for row in metrics.open_owner_items(conn, project_id):
+        if (row["kind"], row["subject"]) == ("reserve", task_id):
+            metrics.resolve_owner_item(conn, row["id"], at)
+
+
+def _reserve_granted(s: Session, task_id: str) -> None:
+    """The owner said yes: the ticket's reserve item is answered now, not at the verdict, and
+    the run is on the reserve (f1 D3 and D8, amended)."""
+    if s.project_id is not None:
+        _record(s, _resolve_reserve_item, s.project_id, task_id)
+    if s.run_id is not None:
+        _record(s, metrics.set_run_reserve, s.run_id)
+
+
 def at_reserve(s: Session, task: Task) -> bool:
     """Before a lead ticket: whether it waits for Claude's reserve (ADR 15 item 5). The owner
     is asked once per command, and only when nothing else can run (`_next_task`), so the
@@ -2401,6 +2494,7 @@ def at_reserve(s: Session, task: Task) -> bool:
         if answer is not None and answer.lower() in ("y", "yes"):
             RESERVE.yes = True
             s.log(f"✔ [{RUNNER_AGENT}] Claude's reserve is used for the rest of this run")
+            _reserve_granted(s, task.id)
             return False
         if answer is None and _at_the_reserve(s, now()) is None:
             return False  # the week reset while it waited: no reserve to ask about
@@ -2438,7 +2532,7 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
     (ADR 15 item 5)."""
     at = now()
     held = {t.id for t in ready if t.id in s.state.parked}
-    due = [t for t in ready if t.id in held and _resets(s.state.parked[t.id]) <= at]
+    due = [t for t in ready if t.id in held and _due(s.state.parked[t.id], at)]
     if (task := pick_next(due, done, paused)) is not None:
         return task
     limited = bool(_limits_ahead(s, at))
@@ -2467,7 +2561,7 @@ def _wait_for_reset(s: Session, ready: list[Task]) -> bool:
     s.report.notes.append(
         f"Paused {wait / 60:.0f} min for a Claude usage limit, with nothing to run."
     )
-    time.sleep(wait)
+    wait_for_claude(s, wait, resumes)
     s.state.paused_until = None
     save_state(s.state, s.state_path)
     return True

@@ -8,7 +8,7 @@ JSON. An optional argument left as ``None`` keeps the column's current value.
 
 import json
 import sqlite3
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 
 _V1 = """
@@ -163,8 +163,16 @@ DROP TABLE usage_events_v1;
 CREATE UNIQUE INDEX usage_events_key ON usage_events (agent, at, kind, ifnull("window", ''));
 """
 
+# f1-51 (D3 amended): what a run does outside a job, until when it waits, and whether the
+# owner said yes to Claude's reserve for it.
+_V3 = """
+ALTER TABLE runs ADD COLUMN activity TEXT;
+ALTER TABLE runs ADD COLUMN waiting_until TEXT;
+ALTER TABLE runs ADD COLUMN reserve INTEGER;
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2]
+MIGRATIONS: list[str] = [_V1, _V2, _V3]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -290,6 +298,22 @@ def update_run_heartbeat(conn: sqlite3.Connection, run_id: int, at: str) -> None
     _update(conn, "runs", run_id, {"heartbeat": at})
 
 
+def update_run_activity(
+    conn: sqlite3.Connection, run_id: int, activity: str | None, waiting_until: str | None = None
+) -> None:
+    """What the run does outside a job ("gates · f1-21", "waiting for Claude"), and until when
+    it waits (f1 D3). Both are written as given: None clears them."""
+    conn.execute(
+        "UPDATE runs SET activity = ?, waiting_until = ? WHERE id = ?",
+        (activity, waiting_until, run_id),
+    )
+
+
+def set_run_reserve(conn: sqlite3.Connection, run_id: int) -> None:
+    """The owner said yes to Claude's reserve for this run's command (ADR 15 item 5)."""
+    _update(conn, "runs", run_id, {"reserve": 1})
+
+
 def upsert_ticket(
     conn: sqlite3.Connection,
     project_id: int,
@@ -324,6 +348,20 @@ def upsert_ticket(
     )
     key: dict[str, Value] = {"project_id": project_id, "ticket": ticket}
     return _upsert(conn, "tickets", "project_id, ticket", key, values)
+
+
+def remove_missing_tickets(
+    conn: sqlite3.Connection, project_id: int, present: Collection[str]
+) -> int:
+    """Mark ``removed`` the project's ``ready`` rows whose ticket isn't in ``present`` (deleted
+    from tasks/): they leave the queue (f1 D8). Returns how many."""
+    rows = conn.execute(
+        "SELECT id, ticket FROM tickets WHERE project_id = ? AND state = 'ready'", (project_id,)
+    ).fetchall()
+    gone = [row["id"] for row in rows if row["ticket"] not in present]
+    for ticket_id in gone:
+        _update(conn, "tickets", ticket_id, {"state": "removed"})
+    return len(gone)
 
 
 def start_job(
