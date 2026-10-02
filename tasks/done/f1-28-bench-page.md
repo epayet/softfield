@@ -28,3 +28,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - with no bench jobs, the empty state shows the command
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 297
+gate_failures: []
+tokens: 8930
+```
