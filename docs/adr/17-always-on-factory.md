@@ -1,6 +1,6 @@
 # ADR 17: An always-on factory: Sonnet as the step-up, auto-format, tickets for later, milestones that wait, review fixes as tickets
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-10-02)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 15](15-allowance-aware-routing.md) item 6 and [ADR 16](16-claude-window-and-named-milestones.md) item 2 (who develops); `docs/task-format.md` (a `later/` folder); `docs/workflow.md` (the review loop, gates); lead.md's Review
