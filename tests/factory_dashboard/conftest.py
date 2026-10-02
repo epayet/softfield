@@ -954,6 +954,49 @@ def bench_client(db_path: Path) -> TestClient:
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
+SHADOW, OTHER_SHADOW = "copilot-auto", "copilot-gpt"
+
+
+def write_shadows(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``, checkpoint shadows: ``OTHER_SHADOW`` shadowed f1 and m4 and
+    is rated 8.5 (eligible, 2 jobs); ``SHADOW`` shadowed f1 only and is rated 6 (not eligible,
+    1 job)."""
+    project = metrics.upsert_project(conn, PROJECT)
+    run = metrics.upsert_run(conn, project, "shadow-20260930-100000")
+    shadows = ((OTHER_SHADOW, "f1"), (OTHER_SHADOW, "m4"), (SHADOW, "f1"))
+    for attempt, (agent, milestone) in enumerate(shadows, start=1):
+        _job(
+            conn,
+            run,
+            metrics.upsert_milestone(conn, project, milestone),
+            None,
+            "checkpoint-shadow",
+            agent,
+            attempt,
+            "passed",
+        )
+    metrics.add_rating_change(
+        conn, OTHER_SHADOW, "reviewing", 6, 8.5, at="2026-09-30T11:00:00+02:00"
+    )
+    metrics.add_rating_change(conn, SHADOW, "reviewing", 5, 6, at="2026-09-30T11:00:00+02:00")
+
+
+@pytest.fixture
+def shadow_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_shadows``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_shadows(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
 @pytest.fixture
 def serve(db_path: Path) -> Callable[..., TestClient]:
     """A client for the dashboard over the fixture, with ``write_live``'s rows unless

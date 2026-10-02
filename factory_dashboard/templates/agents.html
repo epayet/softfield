@@ -51,6 +51,28 @@
   </table></div>
 </section>
 
+<section id="eligibility" class="panel">
+  <h2>Eligibility</h2>
+  {% if shadows %}
+  <div class="scroll"><table>
+    <thead><tr><th>Agent</th><th>Role</th><th>Status</th><th class="num">Shadow jobs</th></tr></thead>
+    <tbody>
+    {% for s in shadows %}
+    <tr>
+      <td class="mono">{{ s.agent }}</td>
+      <td>{{ s.role }}</td>
+      <td>{{ "eligible" if s.eligible else s.reason }}</td>
+      <td class="num">{{ s.jobs }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="sub">The owner changes [roles] at a milestone review; this only says who qualifies.</p>
+  {% else %}
+  <p class="sub">No agent has shadowed a role yet.</p>
+  {% endif %}
+</section>
+
 <section id="ratings" class="panel">
   <h2>Ratings over time</h2>
   {% if ratings.labels %}
