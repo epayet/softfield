@@ -35,3 +35,10 @@ Read `docs/adr/16-claude-window-and-named-milestones.md` item 6 and `docs/milest
 - a milestone keyed `f3-factory-line` finds its `f3-01-…` tickets, its doc and its review, in the runner and in backfill
 - every existing test passes unchanged
 - `uv run runner check-all --task f2-01-named-milestones` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
