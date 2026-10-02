@@ -28,3 +28,10 @@ Read `docs/reviews/factory-f1.md` ("The local developer, in detail") and `runner
 - a fake stream whose reasoning repeats one phrase is stopped within one tick
 - a stream that edits at minute 9 runs on
 - `uv run runner check-all --task f2-05-stop-stuck-attempts` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
