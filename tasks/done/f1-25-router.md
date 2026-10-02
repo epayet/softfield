@@ -30,3 +30,10 @@ Read `docs/adr/15-allowance-aware-routing.md` items 1, 5–7 and 9 (they replace
 - in the loop, a fake cloud agent's refusal reruns the same attempt on local, and the attempt count doesn't grow
 - each job row has its routing reason
 - `uv run runner check-all --task f1-25-router` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
