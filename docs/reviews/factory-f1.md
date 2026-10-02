@@ -36,6 +36,32 @@ Of the 36 hours from first job to stop, about:
 - **Reviewing is about 10× cheaper than writing:** a Sonnet checkpoint reads ≈500 lines for ≈$0.24 (≈$0.50 per 1,000 lines), while Opus writes at $4.65 per 1,000. So "the cheap model writes, a stronger or different model reviews" pays off, as long as most first attempts pass.
 - **A different model catches different things:** Copilot's shadow found a should-fix that Opus's checkpoint missed on the same merges (f1-S166-1: the bench page counts attempts by list length). It's one data point, but it supports ADR 15 item 9 (a reviewer is always a different model).
 
+## The local developer (Qwen 3.6 35B-A3B on the GPU), in detail
+F1 was its real test: 19 tickets, 42 attempts, on a new codebase (FastAPI, Jinja, htmx, SQLite fixtures).
+
+**Where it's good.** 12 of 19 passed at the first attempt, all of difficulty 2–4:
+- **Page tickets with a worked example:** f1-08, 09, 10, 12 and 14 all passed first time, at 390–660 lines each. That's more than M4's known range (180–500), in 22–27 minutes, with peak context at 41–57%.
+- **Small fix tickets with exact facts:** f1-36 to f1-41 and f1-48 all passed first time (28–224 lines, 11–27 min).
+
+**Where it fails, and why.** The 24 failed attempts fall into four groups:
+| Cause | Attempts | Tickets | Whose fault |
+|---|---|---|---|
+| **Degenerate thinking:** a 200 KB loop ("Building the template structure…" thousands of times), or "I'm going to write the code now" and then stopping, with 0 edits after 25–30 min | 6 | f1-13 ×2, f1-15 ×2, f1-34 ×2 | the model; the runner could stop it at minute 5 |
+| **Timeouts at 45 min,** still working | 6 | f1-11, 15 ×2, 34 ×2, 35 | difficulty 5–6 and fixture-heavy tests |
+| **Fighting wrong facts or a red main:** a direction's wrong job count (f1-34), main failing its tests (f1-35, f1-50), a ticket missing a file (f1-29), an invalid ticket (f1-35) | ≈6 | f1-29, 34, 35, 50 | the lead and the runner (lead.md already has the f1-34 lesson; checkpoints now run `test_tasks.py`) |
+| **Gate misses:** edited a protected path, ruff, its own tests | ≈6 | f1-11, 29, 34, 35, 50 | the model, mostly fixed on the retry with the gate output |
+
+**Difficulty is a clean predictor.** At difficulty ≤4: 12 of 16 first time. At 5–6 (f1-11, 13, 15): 0 of 3, each taking 3–5 attempts and $0.45–2.66 of Claude support.
+
+**What it costs.** $0 of tokens, but 28 minutes an attempt, and its failures drew ≈$9 of the $11.9 of Claude support (≈$0.60 a ticket on average, ≈$1.40 a failed one). Its 19 tickets saved ≈$27 net against the lead writing them (`runner report f1`).
+
+**Going forward:**
+- **Keep it as the floor and the night shift:** free, private and never limited. Route it difficulty ≤4 tickets that follow a worked example; that's where it passes first time.
+- **Difficulty 5–6 goes to a cloud developer first** (Ollama once benched, Sonnet when no lead work waits), and local only when they're out of allowance.
+- **Stop the degenerate attempts early** (F2): an attempt with no edit after 10 minutes, or whose thinking repeats the same line, is cut and counted as failed. That gives back about 2.5 h of GPU per F1-sized milestone and costs no Claude.
+- **Our mistakes caused a quarter of its failures:** check facts against a run (lead.md), and keep main green before queueing (the `test_tasks.py` check).
+- **Measure it against the Ollama models on the same tickets** with `runner bench` (F2): if a free cloud model passes difficulty 5–6 in a few minutes, local becomes the fallback rather than the default.
+
 ## The replans: worth it, make them standard at joints
 - **f1-07 ($3.94):** changed no Decision, but found the gates' blind spot (queued tests skipped since f1 started; `test_loop.py` red on main) → f1-33.
 - **f1-19 ($1.64):** fixed three wrong facts that tickets would have trusted: Ollama's refusal, Copilot's credits, and the separate reviewing rating.
@@ -55,10 +81,11 @@ Of the 36 hours from first job to stop, about:
 | 9 | nit | f1-S166-1 (bench attempt count), f1-C165-1/2 and f1-S166-2/3 (loose substring tests, cached tokens left out). | backlog |
 | 10 | process | Scope grew from 32 to 58 tickets mid-milestone (ADR 15 +7, the owner's watch +2, the factory line +6, fixes +9). | lead.md |
 | 11 | owner | **M4 was never signed off** (`docs/milestones/m4.md` says "in review"), and its finding m4-F9 is still queued as `m4-12-send-recovers`. | the owner |
+| 12 | should-fix | 6 local attempts (≈2.5 h of GPU) were degenerate: a thinking loop or a stop before any edit, run to 25–30 min. Nothing cuts them early. | f2 |
 
 f1-52 (Sonnet, left unchecked when the run stopped) was read for this review. It's sound: the tests read the rendered panels, and the one gap is finding 4.
 
 ## What changes now
 - **ADR 16 (Proposed):** a shared 5-hour window with 25% kept for the owner, lead work first, checkpoints and escalations park, the exact model per job, named milestone keys, and standard replans.
-- **[F2](../milestones/f2.md), cloud first:** findings 1–8.
+- **[F2](../milestones/f2.md), cloud first:** findings 1–8 and 12.
 - **lead.md:** a standing "Factory" section in every milestone review; new ideas go to the next milestone; plans keep developer work runnable beside a lead chain; Known range gains Sonnet and the local model's F1 numbers.

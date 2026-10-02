@@ -1,0 +1,41 @@
+# ADR 16: Keep Claude's 5-hour window for the lead and the owner; name milestones
+
+- **Status:** Proposed
+- **Date:** 2026-10-02
+- **Deciders:** project owner (accepts), Claude (drafts)
+- **Amends:** [ADR 15](15-allowance-aware-routing.md) items 1, 4, 5 and 6; `docs/task-format.md` (milestone keys); the lead's replans (lead.md, a trial in F1)
+- **Evidence:** [`docs/reviews/factory-f1.md`](../reviews/factory-f1.md); the owner's notes after F1 (2026-10-02). The owner chose the 25% (2026-10-02).
+
+## Context
+- **F1 stopped on Claude's 5-hour window, never on the week.** The week peaked at 20%. The 5-hour window refused Opus four times, for ≈11 h of waiting, and the GPU idled with it.
+- **The last stop came from developer work on Claude.** At 05:26 the router gave f1-28, f1-31 and f1-52 to Sonnet because "week 16% used, under its pace line". Only the week is paced. The 5-hour window is a plain cap (`runner/allowance.py`), and Sonnet and Opus share it: its reading went from 22% at 05:04 to 100% at 06:12, and lead ticket f1-53 was parked mid-work. The owner couldn't plan either until 09:50.
+- **The owner's yes to the reserve was meant for the week.** It lifts only the week's 30% (`at_reserve` in `runner/loop.py`), but nothing kept any of the 5-hour window back.
+- **Checkpoints skip the allowance** (`router._reviewer`). Checkpoints and escalations hit by a limit sleep inside `call_claude`, which holds up the whole queue, while lead tickets and directions park.
+- **`claude-sonnet` names no version.** The exact model (`claude-opus-5-5`) is only in each job's raw log, so a new Sonnet can't be compared with the old one.
+- **Milestone keys say nothing:** the owner can't tell what `f2` is from its key, and types it in commands.
+- **Replans earned their cost in F1:** $5.6 (7% of lead spend) for a gate blind spot (f1-33) and three wrong facts that tickets would have trusted.
+
+## Decisions (⚑ = deviates from an earlier decision)
+1. **⚑ The owner's share of the 5-hour window: 25%** (amends ADR 15 item 1). Unattended jobs, of every role, stop at 75% of Claude's 5-hour window. The last 25% is for the owner's interactive sessions.
+   - A job that would pass 75% is parked like one at a limit (ADR 15 item 10) until the window has room again, and other agents go on.
+   - Claude's windows stay one account: readings from Opus and Sonnet count for both, as they already do (`agent_windows`).
+2. **⚑ Lead work first** (amends ADR 15 item 6). Claude takes a developer ticket only when no lead work is ready (a lead ticket, a direction, an escalation, a checkpoint, a review) and the 5-hour window is under **50%**, so a lead job that follows has room. Otherwise a developer ticket goes to the next permitted agent: Ollama Cloud, then local.
+3. **⚑ Two questions, one per window** (amends ADR 15 item 5). The week's reserve question stays as it is. Passing 75% of the 5-hour window asks its own question, naming the window and its reset: `Claude's 5-hour window is at 76% (resets 14:50), kept for you. Use it for this run? [y/N]`. A yes to one doesn't answer the other. Same rules otherwise: asked only when nothing else can run, a yes lasts for the command, and no answer becomes a Needs-you item.
+4. **Support roles go through the allowance and park** (amends ADR 15 item 4's "support roles may always use the reserve" only for the 5-hour window). Checkpoints and escalations check the 5-hour window like the others, and park instead of sleeping when it's full or refused, so other agents keep working.
+5. **Every job records its exact model:** a `jobs.model` column, from the harness's own report (Claude's stream, OpenCode's model id). The agent id stays the role's handle (`claude-sonnet`); pages and reports can split an agent's results by model.
+6. **⚑ Named milestones** (amends `docs/task-format.md`).
+   - A key is `<series><n>-<slug>`: `f2-cloud-first`, `m5-history`. The slug is a few words, short enough to type.
+   - The command takes the full key or its short form (`f2`, or `5` for `m5`).
+   - Ticket ids stay short, `<series><n>-<nn>-<slug>` (`f2-03-runner-status`). Frontmatter's `milestone:` takes either form. Docs are `docs/milestones/<full key>.md` and `docs/reviews/<full key>.md`.
+   - Existing milestones keep their keys (`m1`–`m4`, `f1`).
+7. **⚑ Replans become standard at joints** (ends the F1 trial). A plan adds a replan lead ticket after any chain of three or more lead tickets whose results later tickets rely on (a schema, a probe, a new module's functions). They are not added at fixed intervals.
+
+## Consequences
+- Unattended runs use at most 75% of each 5-hour window, about 4 of every 5 hours of Claude. Overnight, that may mean one more park per night. The owner can always plan.
+- Sonnet does less developer work while lead tickets are queued. Ollama Cloud picks that up once F2 has benched it.
+- A one-time migration adds `jobs.model`; earlier jobs keep it empty, except where backfill can read it from the log.
+
+## Alternatives considered
+- **A reserve of the 5-hour window only while the owner is at the keyboard:** the runner can't tell.
+- **Sonnet never as a developer:** it passed 3/3 at ≈$0.40 a ticket; that's worth keeping when no lead work waits.
+- **A separate allowance per Claude model:** the readings show one account window.

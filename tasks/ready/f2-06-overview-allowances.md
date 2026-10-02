@@ -1,0 +1,32 @@
+---
+id: f2-06-overview-allowances
+milestone: f2
+depends_on: []
+difficulty: 4
+files:
+  - factory_dashboard/overview.py
+  - factory_dashboard/templates/overview.html
+  - tests/factory_dashboard/conftest.py
+tests:
+  - tests/factory_dashboard/test_overview.py
+---
+
+### Goal
+The Overview shows every agent's allowance: each window's latest reading and when it resets.
+
+### Context
+Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/test_overview.py`. `write_fixture`'s numbers are pinned by `tests/factory_dashboard/test_queries.py` and `tests/factory_dashboard/test_overview.py`: put your rows in a function of your own in `tests/factory_dashboard/conftest.py`, as `write_live` is.
+- Today the panel is Claude's only (`claude_allowance`, "Claude allowance, last 5 h"), estimated from job tokens. Replace it with one row per window, from `usage_events` rows of kind `reading` (columns `agent`, `window`, `value` from 0 to 1, `resets_at`, `at`): the latest reading per window.
+- Claude's readings come from both `claude-opus` and `claude-sonnet` but are one account: show them once, as "Claude", with its `five_hour` ("5-hour window") and `seven_day` ("week") windows. Copilot (`copilot-auto`) has a `month` window.
+- Mark the week at 70% ("reserve kept for the lead from here") and the 5-hour window at 75% ("kept for you from here"). Write these two numbers as constants at the top of `factory_dashboard/overview.py`, each with a comment naming `workflow/runner.toml`'s `[claude]`.
+- A reading whose reset has passed shows "reset since, no new reading". Agents seen in `jobs` with no reading (the Ollama ones) say "no data yet".
+- Every bar says what it means in words (lead.md: no unexplained marks).
+
+**The dashboard is English-only and never writes the database.** Tests check the panel's text, not only that the page answers 200.
+
+### Done when
+- with readings of 0.8 (5-hour) and 0.2 (week) for Claude and 0.02 for Copilot's month, the panel shows "80%", "20%" and "2%" with their reset times
+- an agent with jobs but no readings shows "no data yet"
+- a reading past its reset shows "reset since"
+- the listed `tests:` pass, and fail without the change
+- all gates pass (see `docs/workflow.md`)
