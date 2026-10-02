@@ -53,10 +53,11 @@ class OpencodeRun:
     facts: StreamFacts = StreamFacts()
     stderr: str = ""
     errors: str = ""  # the stream's error events, if any
+    stopped: str = ""  # why it was stopped early, one of STOP_REASONS (f2-05)
 
     @property
     def timed_out(self) -> bool:
-        return self.exit_code is None
+        return self.exit_code is None and not self.stopped
 
 
 def parse_events(lines: Iterable[str]) -> TokenTotals:
@@ -152,6 +153,37 @@ def session_reasoning(db: Path, session_id: str) -> str:
     return "\n\n".join(texts)
 
 
+# f2-05: in f1, 6 of 24 failed local attempts made no edit in 25-30 minutes, some thinking
+# one phrase over and over; at each tick an attempt stuck like this is stopped.
+NO_EDIT_AFTER = 10 * 60.0
+REPEAT_WINDOW = 4000  # the characters of reasoning, last first, that must all repeat
+MAX_PHRASE = 200  # how long the repeated phrase may be
+STOP_NO_EDIT = "stopped: no edit after 10 min"
+STOP_REPEATING = "stopped: repeating itself"
+STOP_REASONS = (STOP_NO_EDIT, STOP_REPEATING)
+
+
+def repeating(reasoning: str) -> bool:
+    """Whether the last ``REPEAT_WINDOW`` characters of reasoning, its spacing ignored, are
+    one phrase of at most ``MAX_PHRASE`` characters repeated."""
+    tail = " ".join(reasoning.split())[-REPEAT_WINDOW:]
+    if len(tail) < REPEAT_WINDOW:
+        return False
+    return any(tail[n:] == tail[:-n] for n in range(1, MAX_PHRASE + 1))
+
+
+def stuck(lines: list[str], reasoning: str, elapsed: float) -> str:
+    """Why an attempt so far should be stopped (one of ``STOP_REASONS``), or ''."""
+    if elapsed >= NO_EDIT_AFTER and not stream_facts(lines).edits:
+        return STOP_NO_EDIT
+    return STOP_REPEATING if repeating(reasoning) else ""
+
+
+def stop_reason(result: JobResult) -> str | None:
+    """Why an OpenCode attempt was stopped early, or None if it wasn't."""
+    return result.text if not result.ok and result.text in STOP_REASONS else None
+
+
 def warmup(base_url: str, model: str, timeout: int) -> float:
     """One sequential tiny request so LM Studio JIT-loads the model with the owner's settings."""
     body = json.dumps(
@@ -189,21 +221,34 @@ def run_opencode(
     clock: Callable[[], float] = time.monotonic,
 ) -> OpencodeRun:
     """One attempt. Its stream goes into ``log_path`` line by line; every ``LIVE_EVERY``
-    seconds ``on_progress`` gets the tokens so far (f1 D3)."""
+    seconds ``on_progress`` gets the tokens so far (f1 D3), and an attempt found ``stuck``
+    is stopped (f2-05). Its reasoning isn't in the stream: OpenCode's database has it."""
     cmd = ["opencode", "run", "--format", "json", "-m", model, "--title", title, prompt]
     started = time.monotonic()
+    begun = clock()
+    stopped = ""
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     def read() -> list[str]:
         return log_path.read_text(encoding="utf-8", errors="replace").splitlines()
 
-    def tick() -> None:
+    def tick() -> bool:
+        nonlocal stopped
+        lines = read()
         if on_progress is not None:
-            on_progress(parse_events(read()))
+            on_progress(parse_events(lines))
+        reasoning = session_reasoning(OPENCODE_DB, stream_facts(lines).session_id)
+        stopped = stuck(lines, reasoning, clock() - begun)
+        return bool(stopped)
 
     stderr, exit_code = run_streaming(cmd, repo, timeout, log_path, tick, clock=clock)
     lines = read()
-    marker = "\n--- timed out ---\n" if exit_code is None else "\n--- stderr ---\n" + stderr
+    if stopped:
+        marker = f"\n--- {stopped} ---\n"
+    elif exit_code is None:
+        marker = "\n--- timed out ---\n"
+    else:
+        marker = "\n--- stderr ---\n" + stderr
     with log_path.open("a", encoding="utf-8") as log:
         log.write(marker)
     return OpencodeRun(
@@ -213,6 +258,7 @@ def run_opencode(
         facts=stream_facts(lines),
         stderr=stderr,
         errors=stream_errors(lines),
+        stopped=stopped,
     )
 
 
@@ -236,10 +282,10 @@ def classify(run: OpencodeRun, local: bool, now: datetime) -> tuple[Refusal | No
     before. No Ollama refusal has been seen (f1-18), so a cloud error that names a limit is
     one, a passing one is transient, and any other is a possible limit with no reset, which
     the allowance cools down (ADR 15 item 2) rather than counting as a failed attempt.
-    A timeout is a failure everywhere.
+    A timeout, or an attempt stopped stuck, is a failure everywhere.
     """
     text = "\n".join(t for t in (run.errors, run.stderr.strip()) if t)
-    if local or run.timed_out or (run.exit_code == 0 and not run.errors):
+    if local or run.exit_code is None or (run.exit_code == 0 and not run.errors):
         return None, False
     limited, resets_at = usage_limit_reset(text, now)
     if limited:
@@ -269,10 +315,16 @@ class OpencodeAdapter:
         )
         refusal, transient = classify(run, is_local(agent), now)
         tokens, facts = run.tokens, run.facts
-        failed = run.timed_out or run.exit_code != 0 or bool(run.errors)
+        failed = run.exit_code != 0 or bool(run.errors)
+        if run.stopped:
+            text = run.stopped
+        elif run.timed_out:
+            text = "timed out"
+        else:
+            text = (run.errors or run.stderr.strip())[:500]
         return JobResult(
             ok=not failed,
-            text=("timed out" if run.timed_out else run.errors or run.stderr.strip())[:500],
+            text=text,
             duration_s=run.duration_s,
             usage={
                 "input_tokens": tokens.input,

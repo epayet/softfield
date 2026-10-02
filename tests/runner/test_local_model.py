@@ -10,12 +10,16 @@ from runner import local_model
 from runner.agents import FAILURE, LIMIT, TRANSIENT, Agent, JobSpec, adapter_for
 from runner.config import load_config
 from runner.local_model import (
+    STOP_NO_EDIT,
+    STOP_REPEATING,
     StreamFacts,
     TokenTotals,
     empty_cause,
     is_local,
     parse_events,
+    repeating,
     session_reasoning,
+    stop_reason,
     stream_facts,
 )
 
@@ -113,7 +117,9 @@ def test_opencode_reports_progress_as_it_runs(tmp_path, monkeypatch):
     so far. The clock is a parameter, so the test doesn't wait 30 s."""
     from runner.local_model import run_opencode
 
-    _fake_opencode(tmp_path, monkeypatch, "\n".join([_step(100, 1), _step(200, 2), _tool("edit")]))
+    # The edit first: this clock passes 10 minutes in a few ticks, and stops an attempt with none
+    _fake_opencode(tmp_path, monkeypatch, "\n".join([_tool("edit"), _step(100, 1), _step(200, 2)]))
+    monkeypatch.setattr(local_model, "session_reasoning", lambda db, session: "")
     ticks = itertools.count(0, 40)  # every read of the clock is 40 s later
     seen: list[TokenTotals] = []
     log = tmp_path / "logs" / "opencode-1.jsonl"
@@ -123,7 +129,7 @@ def test_opencode_reports_progress_as_it_runs(tmp_path, monkeypatch):
     assert seen and all(t.input <= 300 for t in seen)
     assert seen[-1].steps >= 1
     assert (run.tokens.input, run.tokens.steps, run.facts.edits) == (300, 2, 1)
-    assert log.read_text().startswith(_step(100, 1) + "\n")
+    assert log.read_text().startswith(_tool("edit") + "\n")
     assert run.exit_code == 0
 
 
@@ -332,3 +338,102 @@ def test_the_developers_thinking_is_read_from_opencodes_database(tmp_path):
     con.close()
     assert session_reasoning(db, "ses_1") == "First, read compose.js.\n\nThen the CSP blocks it."
     assert session_reasoning(tmp_path / "missing.db", "ses_1") == ""
+
+
+# --- stuck attempts (f2-05) -----------------------------------------------------------------
+
+# f1-13's first attempt ended in thousands of lines of this (thinking-1.md, 205 KB).
+LOOPING = "I'll read the views first, then the templates.\n\n" + (
+    "Building out the template structure... Building the template structure...\n" * 120
+)
+VARIED = "\n".join(
+    f"Step {i}: read file {i * 7 % 13}, then check gate {i % 5} against test {i * 3}."
+    for i in range(80)
+)
+
+
+def test_reasoning_made_of_one_short_phrase_repeated_is_repeating():
+    assert repeating(LOOPING)
+    assert repeating("OK, let me write the code now. " * 200)
+
+
+def test_varied_or_short_reasoning_is_not_repeating():
+    assert len(VARIED) > 4000 and not repeating(VARIED)
+    assert not repeating("Building the template structure... " * 20)  # under ~4,000 characters
+    assert not repeating("")
+
+
+def _ticking(monkeypatch, frames: list[tuple[float, list[str]]]):
+    """`run_streaming` faked: at each (minute, new lines) frame the stream grows by its lines
+    and a tick comes; it ends after the last frame unless a tick stops it. Returns the clock
+    and the minutes of the ticks that came."""
+    minute = [0.0]
+    ticked: list[float] = []
+
+    def run_streaming(cmd, cwd, timeout, out_path, on_tick=None, **kwargs):
+        lines: list[str] = []
+        for at, new in frames:
+            minute[0] = at
+            lines += new
+            out_path.write_text("".join(line + "\n" for line in lines), encoding="utf-8")
+            ticked.append(at)
+            if on_tick is not None and on_tick():
+                return "", None
+        return "", 0
+
+    monkeypatch.setattr(local_model, "run_streaming", run_streaming)
+    return (lambda: minute[0] * 60), ticked
+
+
+def _thinking(monkeypatch, text: str) -> None:
+    monkeypatch.setattr(local_model, "session_reasoning", lambda db, session: text)
+
+
+def _attempt(tmp_path: Path, clock):
+    log = tmp_path / "logs" / "opencode-1.jsonl"
+    return local_model.run_opencode(tmp_path, "m", "t", "p", 45 * 60, log, clock=clock)
+
+
+def test_a_stream_with_no_edit_for_10_minutes_is_stopped(tmp_path, monkeypatch):
+    """f1: 6 of 24 failed local attempts made no edit in 25-30 minutes."""
+    frames = [(m / 2, [_tool("read"), _step(100, 1)]) for m in range(1, 41)]
+    clock, ticked = _ticking(monkeypatch, frames)
+    _thinking(monkeypatch, VARIED)
+    run = _attempt(tmp_path, clock)
+    assert run.stopped == STOP_NO_EDIT == "stopped: no edit after 10 min"
+    assert ticked[-1] == 10 and run.exit_code is None
+    assert not run.timed_out  # stopped, not out of time
+    assert (
+        "--- stopped: no edit after 10 min ---"
+        in (tmp_path / "logs" / "opencode-1.jsonl").read_text()
+    )
+
+
+def test_a_stream_whose_reasoning_repeats_one_phrase_is_stopped_within_one_tick(
+    tmp_path, monkeypatch
+):
+    clock, ticked = _ticking(monkeypatch, [(m / 2, [_step(100, 1)]) for m in range(1, 10)])
+    _thinking(monkeypatch, LOOPING)
+    run = _attempt(tmp_path, clock)
+    assert run.stopped == STOP_REPEATING == "stopped: repeating itself"
+    assert ticked == [0.5]
+
+
+def test_a_stream_that_edits_at_minute_9_runs_on(tmp_path, monkeypatch):
+    frames = [(m / 2, [_tool("edit")] if m == 18 else [_step(100, 1)]) for m in range(1, 41)]
+    clock, ticked = _ticking(monkeypatch, frames)
+    _thinking(monkeypatch, VARIED)
+    run = _attempt(tmp_path, clock)
+    assert (run.stopped, run.exit_code, ticked[-1]) == ("", 0, 20)
+
+
+def test_a_stopped_attempt_fails_with_its_reason(tmp_path, monkeypatch):
+    _ticking(monkeypatch, [(0.5, [_step(100, 1)])])
+    _thinking(monkeypatch, LOOPING)
+    result = _run(CLOUD, tmp_path)  # a cloud agent's stop isn't a refusal either
+    assert result.error == FAILURE and result.refusal is None and not result.transient
+    assert result.text == STOP_REPEATING and not result.timed_out
+    assert stop_reason(result) == STOP_REPEATING
+    assert stop_reason(_run(LOCAL, tmp_path)) is not None
+    _fake_stream(monkeypatch, [_step(100, 1)], code=None)
+    assert stop_reason(_run(LOCAL, tmp_path)) is None  # a plain timeout

@@ -43,7 +43,7 @@ def run_streaming(
     cwd: Path,
     timeout: float,
     out_path: Path,
-    on_tick: Callable[[], None] | None = None,
+    on_tick: Callable[[], bool | None] | None = None,
     every: float = LIVE_EVERY,
     clock: Callable[[], float] = time.monotonic,
     *,
@@ -51,7 +51,8 @@ def run_streaming(
     stdin: int | None = None,
 ) -> tuple[str, int | None]:
     """Run ``cmd`` in its own process group, its stdout written straight into ``out_path``
-    as it comes, calling ``on_tick`` every ``every`` seconds; on timeout kill the whole group.
+    as it comes, calling ``on_tick`` every ``every`` seconds; on timeout, or when ``on_tick``
+    returns True (a stuck attempt, f2-05), kill the whole group.
 
     OpenCode and Claude Code start shell commands of their own (pytest, ruff…). Killing only
     the harness would leave a hung child running after the job. Returns (stderr, exit code or
@@ -77,13 +78,14 @@ def run_streaming(
                 break
             except subprocess.TimeoutExpired:
                 pass
-            if clock() >= deadline:
+            stop = clock() >= deadline
+            if not stop and on_tick is not None and clock() >= next_tick:
+                stop = bool(on_tick())
+                next_tick = clock() + every
+            if stop:
                 with contextlib.suppress(ProcessLookupError):
                     os.killpg(proc.pid, signal.SIGKILL)
                 proc.wait()
                 break
-            if on_tick is not None and clock() >= next_tick:
-                on_tick()
-                next_tick = clock() + every
         err.seek(0)
         return err.read(), code

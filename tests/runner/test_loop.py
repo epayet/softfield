@@ -18,7 +18,7 @@ from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
 from runner.claude import ClaudeJob, Progress, TransientError, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
-from runner.local_model import OpencodeRun, StreamFacts, TokenTotals
+from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTotals
 from runner.report import SessionReport
 from runner.state import load_state, save_state
 from runner.tasks import parse_task
@@ -401,6 +401,32 @@ def test_a_retry_after_a_timeout_says_so(repo, fake_model):
     fake_model.extend([_timed_out, fix])
     report = _run(repo, once=True)
     assert report.tasks[0].result == "done"
+
+
+def _repeating(repo: Path, prompt: str) -> OpencodeRun:
+    (repo / "coucou" / "thing.py").write_text("def thing() -> int:\n    return 0\n")
+    return OpencodeRun(
+        exit_code=None, duration_s=60.0, tokens=TokenTotals(), stopped=STOP_REPEATING
+    )
+
+
+def test_a_stopped_attempt_fails_with_its_reason_as_the_gate_output(repo, fake_model):
+    """f2-05: a stuck attempt is stopped early, noted on its job, and the next attempt is
+    told why; its gates don't run, and it isn't a timeout."""
+    _add_task(repo, "m1-01-thing")
+
+    def fix(repo, prompt):
+        assert "repeating itself" in prompt and "ran out of time" not in prompt
+        _implement(repo, prompt)
+
+    fake_model.extend([_repeating, fix])
+    [task] = _run(repo, once=True).tasks
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["stopped"])
+    assert task.timeouts == 0
+    stopped, passed = _rows(repo, "jobs")
+    assert (stopped["outcome"], stopped["note"]) == ("failed", "stopped: repeating itself")
+    assert json.loads(str(stopped["gates"]))[0]["name"] == "stopped"
+    assert passed["outcome"] == "passed"
 
 
 def test_the_lead_gives_direction_before_the_last_attempt(repo, fake_model, fake_lead, monkeypatch):

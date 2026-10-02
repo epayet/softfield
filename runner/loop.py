@@ -61,6 +61,7 @@ from runner.local_model import (
     is_local,
     loaded_context_length,
     session_reasoning,
+    stop_reason,
     stream_facts,
     warmup,
 )
@@ -277,6 +278,13 @@ INTERRUPTED_GATE = "interrupted"
 INTERRUPTED_OUTPUT = (
     "The attempt was cut off (a Ctrl-C, a crash or a reboot) before its gates ran. Its changes"
     " are committed on this branch."
+)
+# f2-05: an attempt stopped stuck isn't judged by the gates; the next is told why it stopped.
+STOPPED_GATE = "stopped"
+STOPPED_OUTPUT = (
+    "The attempt was stopped early ({why}): it was getting nowhere. Its"
+    " changes so far are committed on this branch. Make one small edit at a time, starting now,"
+    " and don't plan the whole change before the first."
 )
 
 
@@ -1732,7 +1740,10 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         if run.timed_out and not edited:  # its work so far is judged unusable (ADR 15 item 7)
             pending = "timeout"
         started = time.monotonic()
-        if s.git.changed_files(MAIN):
+        stopped = stop_reason(run)
+        if stopped:
+            results = [GateResult(STOPPED_GATE, False, STOPPED_OUTPUT.format(why=stopped))]
+        elif s.git.changed_files(MAIN):
             context = GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout)
             with doing(s, f"gates · {task.id}"):
                 results = run_gates(context)
@@ -1762,14 +1773,17 @@ def run_task(s: Session, task: Task) -> TaskRecord:
                 }
                 for r in results
             ],
+            note=stopped,
         )
         if failed is None:
             end("passed")
             _merge(s, task, rec, agent)
             return rec
-        end(("timed out, " if run.timed_out else "") + f"failed gate {failed.name}")
+        end(stopped or ("timed out, " if run.timed_out else "") + f"failed gate {failed.name}")
         if run.timed_out:
             s.report.notes.append(f"{task.id} attempt {attempt}: {agent} timed out.")
+        if stopped:
+            s.report.notes.append(f"{task.id} attempt {attempt}: {agent} {stopped}.")
         rec.gate_failures.append(failed.name)
         last, failed_agent = failed, agent
 
