@@ -112,6 +112,8 @@ def main(argv: list[str] | None = None) -> int:
     # so that nothing this process starts inherits it (ADR 15 item 5).
     if os.environ.pop(loop.RESERVE_ENV, None) == "1":
         loop.RESERVE.yes = True
+    if os.environ.pop(loop.FIVE_HOUR_ENV, None) == "1":  # the 5-hour question's, its own
+        loop.FIVE_HOUR.yes = True
 
     repo = _repo()
     cfg = load_config(repo)
@@ -134,6 +136,8 @@ def main(argv: list[str] | None = None) -> int:
                 env = dict(os.environ)
                 if loop.RESERVE.yes:  # the owner's yes lasts for the whole command
                     env[loop.RESERVE_ENV] = "1"
+                if loop.FIVE_HOUR.yes:
+                    env[loop.FIVE_HOUR_ENV] = "1"
                 os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
             state = load_state(cfg.runs_dir / "state.json")
             code, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)

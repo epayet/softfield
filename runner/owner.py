@@ -50,6 +50,7 @@ _RERUN_KINDS = {
     "escalated": True,
     "blocked": True,
     "reserve": True,
+    "five-hour": True,  # a lead ticket waiting for the owner's 25% (ADR 16 item 3)
     "review-stop": False,
     "signoff": False,
 }

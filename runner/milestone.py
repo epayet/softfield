@@ -29,6 +29,7 @@ from runner.loop import (
     run_e2e,
     runner_commit,
     starting_ratings,
+    wait_for_room,
     with_progress,
     work_queue,
 )
@@ -372,6 +373,7 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
             commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS),
         )
         since = s.git.head()
+        wait_for_room(s, "the review")  # nothing else runs: it waits rather than parks
         call_claude(s, job, milestone, f"{milestone}-review-r{round_no}")
         try:
             round_ = parse_review(out)

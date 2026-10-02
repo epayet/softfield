@@ -59,6 +59,19 @@ def test_claudes_reserve_is_read_from_the_toml(tmp_path):
     assert load_config(repo).claude_reserve == 0.4
 
 
+def test_the_owners_share_of_the_5_hour_window_and_the_developers_cap_are_read(tmp_path):
+    """ADR 16 items 1–2 (f2 D1): unattended jobs keep 25% of Claude's 5-hour window for the
+    owner, and Claude takes developer tickets only under 50% of it."""
+    cfg = load_config(REPO)
+    assert (cfg.five_hour_reserve, cfg.developer_five_hour_cap) == (0.25, 0.5)
+    extra = "five_hour_reserve = 0.2\ndeveloper_five_hour_cap = 0.4\n"
+    repo = _repo(tmp_path, "")
+    toml = repo / "workflow" / "runner.toml"
+    toml.write_text(toml.read_text().replace("[claude]\n", "[claude]\n" + extra))
+    cfg = load_config(repo)
+    assert (cfg.five_hour_reserve, cfg.developer_five_hour_cap) == (0.2, 0.4)
+
+
 def test_the_repos_toml_declares_f1s_agents_and_roles():
     """ADR 14 item 3, D6; f1-25 turns on Sonnet as a developer after local (ADR 15 item 6),
     with Opus to check Sonnet's merges (item 9); f1-26 shadows the checkpoint with Copilot."""
@@ -78,6 +91,7 @@ def test_the_repos_toml_declares_f1s_agents_and_roles():
         "narrative": (opus,),
         "checkpoint": (sonnet, opus),
         "checkpoint-shadow": (),  # off: the bench replaces shadowing (ADR 16 item 10)
+        "checkpoint-stand-in": ("copilot-auto",),  # when Claude can't (ADR 16 item 9)
     }
     assert cfg.agents["copilot-auto"].harness == "copilot"
     assert cfg.agent_for("checkpoint").id == sonnet

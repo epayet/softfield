@@ -7,17 +7,18 @@ one unit: Claude's are fractions of 1 (its readings), Ollama's tokens, Copilot's
 - **Fixed windows** (a week, a month) are paced. Spread: ``used + c`` stays under the pace
   line, ``(capacity − reserve) × elapsed / length``. In the last 10% (the sweep) the line is
   ``capacity − reserve``, and a capacity that is only learned or seeded may be passed.
-- **Rolling windows** (Claude's 5 h) are a cap: ``used + c ≤ capacity``.
+- **Rolling windows** (Claude's 5 h) are a cap: ``used + c ≤ capacity − reserve``.
 - Every window must agree; the tightest gives the reason. No window (local): always yes.
 - **Learning:** a refusal sets the capacity at the usage it came at, and the window rests
   until its reset (with no reset known: for an hour, then the next window starts).
-- **The reserve** (Claude's week) is kept for the lead's support roles: with
-  ``use_reserve`` a fixed window is a cap on its whole capacity instead of a pace.
+- **The reserve** is kept back: Claude's week for the lead's support roles, its 5-hour
+  window for the owner (ADR 16 item 1). With ``use_reserve`` (every window's, or the names
+  of those whose reserve may be used) a window is a cap on its whole capacity instead.
 """
 
 import math
 import statistics
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import NamedTuple
@@ -48,7 +49,8 @@ class Window:
     resets_at: datetime | None
     capacity: float | None  # None: unknown, used until refused
     used: float
-    reserve: float = 0.0  # the share of capacity kept for support roles (Claude's week: 0.3)
+    # The share of capacity kept back: Claude's week 0.3 (support roles), 5 h 0.25 (the owner)
+    reserve: float = 0.0
     measured: bool = False  # the provider reports the capacity (Claude): never swept past
     cooldown_until: datetime | None = None  # set by `learn` after a refusal
 
@@ -72,28 +74,47 @@ class Answer(NamedTuple):
     reason: str  # one line for `jobs.routing_reason`
 
 
+type Reserves = bool | Collection[str]  # every window's reserve, or the windows' names
+
+
 def answer(
-    agent: str, windows: Sequence[Window], cost: float, now: datetime, *, use_reserve: bool = False
+    agent: str,
+    windows: Sequence[Window],
+    cost: float,
+    now: datetime,
+    *,
+    use_reserve: Reserves = False,
 ) -> Answer:
     """May ``agent`` take a job of expected cost ``cost`` now?"""
     if not windows:
         return Answer(True, f"{agent}: no allowance window, always allowed")
-    checks = [_check(w, cost, now, use_reserve) for w in windows]
+    checks = [_check(w, cost, now, _uses(use_reserve, w)) for w in windows]
     refused = [c for c in checks if not c[0]]
     ok, _, text = min(refused or checks, key=lambda c: c[1])
     return Answer(ok, f"{agent}: {text}")
 
 
-def reserve_only(agent: str, windows: Sequence[Window], cost: float, now: datetime) -> bool:
-    """Is the job refused only because it would dip into a reserve? The caller asks the owner."""
+def reserve_only(
+    agent: str, windows: Sequence[Window], cost: float, now: datetime, name: str | None = None
+) -> bool:
+    """Is the job refused only because it would dip into a reserve (window ``name``'s, if
+    given)? The other windows' reserves count as usable: each window has its own question,
+    and the caller asks the owner."""
     if answer(agent, windows, cost, now).ok:
         return False
     if not answer(agent, windows, cost, now, use_reserve=True).ok:
         return False
     return any(
-        w.reserve and w.capacity is not None and w.used + cost > w.capacity * (1 - w.reserve) + EPS
+        w.reserve
+        and (name is None or w.name == name)
+        and w.capacity is not None
+        and w.used + cost > w.capacity * (1 - w.reserve) + EPS
         for w in windows
     )
+
+
+def _uses(use_reserve: Reserves, window: Window) -> bool:
+    return use_reserve if isinstance(use_reserve, bool) else window.name in use_reserve
 
 
 def learn(window: Window, refusals: Sequence[Refusal], now: datetime) -> Window:
@@ -160,11 +181,16 @@ def _check(
     capacity = window.capacity
     need = window.used + cost
     used = f"{label} {window.used / capacity:.0%} used"
-    if window.kind == "rolling" or window.resets_at is None or use_reserve:
-        ok = need <= capacity + EPS
-        note = " (using the reserve)" if use_reserve and window.reserve else ""
-        return ok, (capacity - need) / capacity, f"{used}, {_side(ok)} its cap of 100%{note}"
     share = capacity * (1 - window.reserve)
+    if window.kind == "rolling" or window.resets_at is None or use_reserve:
+        cap = capacity if use_reserve else share
+        ok = need <= cap + EPS
+        note = " (using the reserve)" if use_reserve and window.reserve else ""
+        return (
+            ok,
+            (cap - need) / capacity,
+            f"{used}, {_side(ok)} its cap of {cap / capacity:.0%}{note}",
+        )
     elapsed = min(max((now - (window.resets_at - window.length)) / window.length, 0.0), 1.0)
     if elapsed >= 1 - SWEEP - EPS:
         headroom = (share - need) / capacity

@@ -13,8 +13,11 @@ plain line, the job's ``routing_reason``.
   they are skipped. Local never refuses, so there is always someone.
 - **Lead-only work** (a lead ticket, or one touching protected paths) never goes to a
   developer: ``LeadOnly`` is raised.
+- **Lead work first** (ADR 16 item 2): Claude takes a developer ticket only when no lead
+  work is ready and its 5-hour window is under the developers' cap.
 - **A checkpoint** goes to the first agent its role lists whose model differs from every
-  author of the merges it reviews.
+  author of the merges it reviews. When Claude can't take it, a read-only agent may stand in
+  (ADR 16 item 9): ``stand_in``.
 """
 
 from collections.abc import Callable, Collection, Mapping, Sequence
@@ -32,6 +35,7 @@ DEVELOPER_ROLES = ("developer", "last-attempt")
 CHECKPOINT = "checkpoint"
 STEP_UP = 2  # rating points above the agent that failed (ADR 15 item 7)
 READ_ONLY_HARNESSES = frozenset({"copilot"})  # reviews only, never a developer (f1-22)
+CLAUDE = "claude"  # the lead's harness: its 5-hour window is shared with the owner (ADR 16)
 
 type _Rating = Callable[[Agent], float]
 type _Permitted = Callable[[Agent], bool]
@@ -71,6 +75,8 @@ def route(
     failed: str | None = None,
     refused: Collection[str] = (),
     authors: Collection[Agent] = (),
+    lead_ready: bool = False,
+    five_hour_cap: float = 1.0,
 ) -> Route:
     """The agent for ``role``'s job on ``ticket`` (None for a milestone-wide job).
 
@@ -78,12 +84,24 @@ def route(
     ratings now (an agent missing takes its config estimate); ``windows`` and ``costs`` each
     agent's allowance windows and its expected cost in their unit. ``failed`` names the agent
     whose attempt failed before this one, ``refused`` the agents that refused this attempt,
-    ``authors`` the developers whose merges a checkpoint reviews."""
+    ``authors`` the developers whose merges a checkpoint reviews. ``lead_ready`` says lead
+    work waits (a lead ticket, a direction, an escalation or a checkpoint), and
+    ``five_hour_cap`` is the share of Claude's 5-hour window a developer job may start under."""
     if role in DEVELOPER_ROLES:
         if ticket is None or ticket.lead_only:
             raise LeadOnly(f"{ticket.id if ticket else 'this job'} is the lead's work, not {role}")
         return _developer(
-            ticket, attempt, candidates, ratings, windows, costs, now, failed, refused
+            ticket,
+            attempt,
+            candidates,
+            ratings,
+            windows,
+            costs,
+            now,
+            failed,
+            refused,
+            lead_ready,
+            five_hour_cap,
         )
     if not candidates:
         raise LookupError(f"[roles] {role} names no agent")
@@ -102,6 +120,8 @@ def _developer(
     now: datetime,
     failed: str | None,
     refused: Collection[str],
+    lead_ready: bool,
+    five_hour_cap: float,
 ) -> Route:
     pool = [a for a in candidates if a.harness not in READ_ONLY_HARNESSES and a.id not in refused]
     if not pool:
@@ -111,7 +131,8 @@ def _developer(
         return ratings.get(agent.id, float(agent.rating))
 
     answers = {
-        a.id: allowance.answer(a.id, windows.get(a.id, ()), costs.get(a.id, 0.0), now)
+        a.id: _lead_first(a, windows.get(a.id, ()), lead_ready, five_hour_cap)
+        or allowance.answer(a.id, windows.get(a.id, ()), costs.get(a.id, 0.0), now)
         for a in pool
         if not is_local(a)
     }
@@ -139,6 +160,43 @@ def _developer(
         why = answers[failed].reason if failed in answers else "it isn't a candidate now"
         return Route(first.agent, f"{failed} may not retry: {why}; {first.reason}")
     return _first_pick(ticket, pool, rating, answers, permitted, refused)
+
+
+def _lead_first(
+    agent: Agent, windows: Sequence[allowance.Window], lead_ready: bool, cap: float
+) -> allowance.Answer | None:
+    """Claude refused a developer job so the lead's work has room (ADR 16 item 2); else None."""
+    if agent.harness != CLAUDE:
+        return None
+    if lead_ready:
+        return allowance.Answer(False, f"{agent.id}: lead work is ready, it goes first")
+    five = next((w for w in windows if w.name == "five_hour" and w.capacity), None)
+    if five is not None and five.capacity and five.used >= five.capacity * cap - allowance.EPS:
+        return allowance.Answer(
+            False,
+            f"{agent.id}: 5-hour window {five.used / five.capacity:.0%} used,"
+            f" not under the developers' cap of {cap:.0%}",
+        )
+    return None
+
+
+def stand_in(
+    candidates: Sequence[Agent],
+    windows: Mapping[str, Sequence[allowance.Window]],
+    now: datetime,
+    authors: Collection[Agent],
+    because: str,
+) -> Route | None:
+    """Who does a checkpoint Claude can't take (ADR 16 item 9; ``because`` says why): the first
+    agent listed that its allowance permits, its month a cap at its capacity rather than a pace
+    (emergency use). Its model is unknown, so never one whose harness wrote a merge."""
+    for agent in candidates:
+        if any(author.harness == agent.harness for author in authors):
+            continue
+        fit = allowance.answer(agent.id, windows.get(agent.id, ()), 0.0, now, use_reserve=True)
+        if fit.ok:
+            return Route(agent, f"{agent.id} stands in for Claude ({because}): {fit.reason}")
+    return None
 
 
 def _first_pick(

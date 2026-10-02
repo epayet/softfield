@@ -220,6 +220,22 @@ none):
   "route": "backlog", "ticket": "<the merged ticket at fault>"}}]}}
 """
 
+# ADR 16 item 9: when Claude can't, a read-only agent does the checkpoint; the runner turns
+# each finding that isn't a nit into a fix ticket for a developer.
+CHECKPOINT_STAND_IN = """\
+You are doing a checkpoint for this repo's lead, read-only: developers just merged these
+tickets. Read each ticket's file, then the files it changed and their tests.
+{merges}
+
+Look for bugs, tests that check presence instead of content, and anything masked instead of
+fixed. Change nothing. Each finding that isn't a nit becomes a fix ticket for a developer:
+say plainly what is wrong and why, in the file at fault. Answer with only this JSON, one
+entry per problem (an empty list if none):
+{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
+  "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
+  "route": "backlog", "ticket": "<the merged ticket at fault>"}}]}}
+"""
+
 REVIEW = """\
 You are the lead, reviewing milestone {milestone} of Coucou. Follow docs/agents/lead.md
 (Review) and docs/workflow.md (Milestone review loop).

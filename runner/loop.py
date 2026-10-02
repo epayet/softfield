@@ -17,6 +17,8 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Concatenate, NoReturn
 
+import yaml
+
 from runner import allowance, checks, console, messages, metrics, prompts, ratings, router
 from runner.agents import (
     ANY,
@@ -81,6 +83,7 @@ from runner.tasks import (
     parse_task,
     pick_next,
     preflight,
+    short_key,
     split_frontmatter,
     stopped_ids,
     task_ids,
@@ -763,18 +766,24 @@ def agent_windows(
 ) -> dict[str, list[allowance.Window]]:
     """Each cloud agent's allowance windows now (ADR 15 items 1–3). Claude's come from the
     account's latest readings, whichever model read them; a window it hasn't read since its
-    reset is unknown until refused. An agent with no reading at all (Ollama) has one window
-    of unknown capacity, which its refusals rest (``allowance.learn``)."""
+    reset is unknown until refused. Another agent's readings (Copilot's month) count the same
+    way. An agent with no reading at all (Ollama) has one window of unknown capacity, which
+    its refusals rest (``allowance.learn``)."""
     windows: dict[str, list[allowance.Window]] = {}
     for agent in agents:
         if is_local(agent):
             continue
         if agent.harness == CLAUDE:
-            rows = _record(s, metrics.refusals, f"{CLAUDE}-") or []
-            read = [_rested(w, rows, at) for w in claude_windows(s, at)]
+            read = rested_claude_windows(s, at)
             if not any(w.name == "seven_day" for w in read):
                 read.append(allowance.Window("seven_day", "fixed", allowance.WEEK, None, None, 0.0))
             windows[agent.id] = read
+            continue
+        if read := _read_windows(s, agent.id, at):
+            rows = [
+                r for r in _record(s, metrics.refusals, agent.id) or [] if r["agent"] == agent.id
+            ]
+            windows[agent.id] = [_rested(w, rows, at) for w in read]
             continue
         refusals = [
             allowance.Refusal(_at(r["at"]), 0.0, _at(r["resets_at"]) if r["resets_at"] else None)
@@ -797,7 +806,7 @@ def route_developer(
 ) -> router.Route:
     """Who takes this attempt (ADR 15 items 6–7). Expected costs are left at 0, as for a lead
     ticket (``LEAD_COST``): no agent's share of a window per job is learned yet, so where it
-    stands against its pace line decides."""
+    stands against its pace line decides. Lead work comes first (ADR 16 item 2)."""
     at = now()
     agents = candidates(s, role)
     ticket = router.Ticket(task.id, task.difficulty)
@@ -812,6 +821,27 @@ def route_developer(
         at,
         failed=failed,
         refused=refused,
+        lead_ready=lead_work_ready(s),
+        five_hour_cap=s.cfg.developer_five_hour_cap,
+    )
+
+
+def lead_work_ready(s: Session) -> bool:
+    """Lead work waits (ADR 16 item 2): a lead ticket whose dependencies are done, a parked
+    direction, escalation or checkpoint, or a checkpoint due."""
+    if any(e["kind"] in (*SUPPORT, "direction") for e in s.state.parked.values()):
+        return True
+    if len(s.state.unchecked) >= s.cfg.checkpoint_every:
+        return True
+    protected = tuple(read_protected(s.repo))
+    ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
+    done = task_ids(s.tasks_dir("done"))
+    paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
+    return any(
+        router.lead_only(t.agent, t.files, protected)
+        and t.id not in paused
+        and all(d in done for d in t.depends_on)
+        for t in ready
     )
 
 
@@ -840,11 +870,23 @@ PARKED_NOTE = "\n\nAn earlier run of this job was stopped part-way by a Claude u
 
 class Parked(Exception):
     """A Claude job stopped by a limit and parked instead of waiting (ADR 15 item 10): its work
-    is committed on its branch, its session and ``resets_at`` are in state.json."""
+    is committed on its branch, its session and ``resets_at`` are in state.json. With
+    ``five_hour``, only the owner's share of the 5-hour window held it (ADR 16 item 1)."""
 
-    def __init__(self, resets_at: datetime) -> None:
+    def __init__(self, resets_at: datetime, five_hour: bool = False) -> None:
         super().__init__(f"parked until {resets_at.isoformat()}")
         self.resets_at = resets_at
+        self.five_hour = five_hour
+
+
+# Support jobs that park in the queue rather than sleep in it (ADR 16 item 4), keyed by
+# `job_key` in state.json's `parked`; a ticket's own jobs are keyed by its id.
+SUPPORT = ("checkpoint", "escalation")
+FIVE_HOUR_HELD = "five_hour"  # a parked entry's flag: held by the owner's 25%, not a limit
+
+
+def parked_key(role: str, name: str) -> str:
+    return job_key(role, name) if role in SUPPORT else name
 
 
 def _park(
@@ -856,18 +898,30 @@ def _park(
     job_id: int | None,
     session: str | None,
     resets_at: datetime | None,
+    extra: Mapping[str, Any] | None = None,
 ) -> NoReturn:
-    """Park the job: its changes committed on its branch, its session kept for the resume, its
-    ticket held until the reset (with none given, ``backoff_min`` from now)."""
+    """Park the job: its changes committed on its branch (on ``parked/…`` if it ran on main),
+    its session kept for the resume, its ticket held until the reset (with none given,
+    ``backoff_min`` from now). ``extra`` is what a support job needs to start again."""
     at = now()
     resets = resets_at or at + timedelta(seconds=s.cfg.backoff_min)
     branch = s.git.current_branch()
     kept = "" if branch == MAIN else branch
+    if not kept and not s.git.is_clean():  # a support job edits main: keep its work aside
+        kept = _free_branch(s.git, f"parked/{job.role}-{name}")
+        s.git.run("checkout", "-q", "-b", kept)
     if kept:
         s.git.commit_all(with_trailers(f"wip {name} (parked)", agent=CLAUDE_HEADLESS_AGENT))
+    if kept and kept != branch:
+        s.git.checkout(MAIN)
     entry = {"session_id": session or "", "branch": kept}
     s.state.interrupted[job_key(job.role, name)] = {**entry, "cause": "limit"}
-    s.state.parked[name] = {"kind": job.role, **entry, "resets_at": resets.isoformat()}
+    s.state.parked[parked_key(job.role, name)] = {
+        "kind": job.role,
+        **entry,
+        "resets_at": resets.isoformat(),
+        **(extra or {}),
+    }
     s.state.in_flight = None
     s.state.count_run(milestone)
     save_state(s.state, s.state_path)
@@ -948,13 +1002,15 @@ def call_claude(
     park: bool = False,
     process_note: Path | None = None,
     routed: router.Route | None = None,
+    parked: Mapping[str, Any] | None = None,
 ) -> JobResult:
     """Run a lead job on the agent ``routed`` names, else the first its role lists, waiting
     out usage limits. Each trigger bounds its own runs (ADR 12 item 10); the count per
     milestone is kept for the metrics.
 
-    With ``park`` (a ticket's job), a certain limit parks it instead of waiting: ``Parked``
-    is raised, and the queue goes on without Claude until the reset (ADR 15 item 10).
+    With ``park`` (a ticket's job, a checkpoint or an escalation), a certain limit parks it
+    instead of waiting: ``Parked`` is raised, and the queue goes on without Claude until the
+    reset (ADR 15 item 10, ADR 16 item 4). ``parked`` is kept with it, to start it again.
 
     A job stopped mid-way by a limit resumes its session after the reset (f1: lead tickets
     cost 0.5-1.5M, so a limit will land inside one); if the session can't be resumed, it
@@ -1083,7 +1139,8 @@ def call_claude(
             )
             if park and limit.certain:
                 session = result.session_id or resume
-                _park(s, job, ticket or subject, milestone, agent, job_id, session, limit.resets_at)
+                name = ticket or subject
+                _park(s, job, name, milestone, agent, job_id, session, limit.resets_at, parked)
             # A known limit with no time: retry at the minimum, since a refused call costs
             # nothing and the exponential backoff overshot a 5 h window by hours (f1).
             wait = (
@@ -1272,11 +1329,12 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
     """Before the last attempt, the lead reads the work and writes a short direction; it may
     repair the ticket instead. Returns the (maybe repaired) task and the direction.
 
-    While Claude is limited it raises ``Parked`` instead, as does a limit during the direction:
-    the ticket waits rather than going undirected (ADR 15 item 10). A parked direction isn't
-    counted: its ticket gets it after the reset."""
-    if ahead := _limits_ahead(s, now()):
-        raise Parked(min(ahead))
+    While Claude is limited, or at the owner's share of its 5-hour window, it raises ``Parked``
+    instead, as does a limit during the direction: the ticket waits rather than going
+    undirected (ADR 15 item 10, ADR 16 item 4). A parked direction isn't counted: its ticket
+    gets it after the reset."""
+    if (hold := claude_hold(s, now())) is not None:
+        raise Parked(hold.until, hold.five_hour)
     (logs / "last.diff").write_text(s.git.diff(MAIN), encoding="utf-8")
     rel = logs.relative_to(s.repo).as_posix()
     _save_thinking(rec, logs, s.repo)
@@ -1361,6 +1419,8 @@ def _park_direction(
             "resets_at": parked.resets_at.isoformat(),
         },
     )
+    if parked.five_hour:
+        entry[FIVE_HOUR_HELD] = True
     entry.update(
         logs=_rel(s, logs),
         gate=last.name if last else "",
@@ -1544,6 +1604,8 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     held = s.state.parked.pop(task.id, None)
     if held is not None:
         save_state(s.state, s.state_path)
+        if held["kind"] == FIVE_HOUR_KIND:  # it waited out the reset: nothing left to answer
+            _resolve_item(s, FIVE_HOUR_KIND, task.id)
     # A direction parked for a limit goes on in the logs of the attempts it reads.
     directing = held if held is not None and held["kind"] == "direction" else None
     logs = rec.logs = s.repo / directing["logs"] if directing else _logs_dir(s.run_dir, task.id)
@@ -1566,7 +1628,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     if router.lead_only(task.agent, task.files, protected):
         if task.agent != "lead":
             s.report.notes.append(f"{task.id} touches protected paths: the lead does it.")
-        if at_reserve(s, task):
+        if at_reserve(s, task) or at_five_hour(s, task):
             rec.result = "parked"
             return rec
         run_lead_task(s, task, rec)
@@ -1841,11 +1903,12 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
 
 def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     """After a developer merge (``_merge`` lists it as unchecked): every ``checkpoint_every``
-    of them, run a checkpoint."""
+    of them, run a checkpoint. One already parked runs after its reset, on every merge since."""
     if rec.result != "done" or task.agent != "developer":
         return
-    # While Claude is limited, the checkpoint waits for a merge after the reset (ADR 15 item 10).
-    if len(s.state.unchecked) >= s.cfg.checkpoint_every and not _limits_ahead(s, now()):
+    if parked_key(CHECKPOINT, CHECKPOINT) in s.state.parked:
+        return
+    if len(s.state.unchecked) >= s.cfg.checkpoint_every:
         checkpoint(s, task.milestone)
 
 
@@ -2062,9 +2125,27 @@ def rate_finished(s: Session, ticket: str) -> None:
         _record(s, rate_ticket, s.project_id, ticket, starting_ratings(s.cfg), now())
 
 
-def checkpoint(s: Session, milestone: str) -> None:
+CHECKPOINT = router.CHECKPOINT
+STAND_IN = "checkpoint-stand-in"  # who does the checkpoint when Claude can't (ADR 16 item 9)
+
+
+def _authors(s: Session, merged: Iterable[str]) -> list[Agent]:
+    """The developers of the merges: each entry is "ticket commit agent"; one from before
+    f1-25 has no agent: local's."""
+    ids = [m.split()[2] if len(m.split()) > 2 else local_agent(s.cfg) for m in merged]
+    return [s.cfg.agents[i] for i in dict.fromkeys(ids) if i in s.cfg.agents]
+
+
+def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
+    """Review the unchecked merges. When Claude can't (a limit, or the owner's share of its
+    5-hour window), a stand-in does it read-only; with none permitted, it parks and the queue
+    goes on (ADR 16 items 4 and 9). ``out`` is a parked checkpoint's note, for its resume."""
     merged = list(s.state.unchecked)
-    out = s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
+    if (hold := claude_hold(s, now())) is not None:
+        if not stand_in_checkpoint(s, milestone, merged, hold):
+            _park_support(s, CHECKPOINT, CHECKPOINT, hold, milestone=milestone)
+        return
+    out = out or s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
     findings_out = out.with_suffix(".json")
     job = JobSpec(
         role="checkpoint",
@@ -2081,13 +2162,22 @@ def checkpoint(s: Session, milestone: str) -> None:
     s.log("")
     s.log(console.ticket_header(f"{milestone} checkpoint", "lead", None))
     s.log("Review the last merges: " + ", ".join(m.split()[0] for m in merged))
-    # Each entry is "ticket commit agent"; one from before f1-25 has no agent: local's.
-    ids = [m.split()[2] if len(m.split()) > 2 else local_agent(s.cfg) for m in merged]
-    authors = [s.cfg.agents[i] for i in dict.fromkeys(ids) if i in s.cfg.agents]
     routed = router.route(
-        job.role, None, 1, candidates(s, job.role), {}, {}, {}, now(), authors=authors
+        job.role, None, 1, candidates(s, job.role), {}, {}, {}, now(), authors=_authors(s, merged)
     )
-    call_claude(s, job, milestone, "checkpoint", notes=(out,), routed=routed)
+    try:
+        call_claude(
+            s,
+            job,
+            milestone,
+            CHECKPOINT,
+            notes=(out,),
+            routed=routed,
+            park=True,
+            parked={"milestone": milestone, "out": _rel(s, out)},
+        )
+    except Parked:
+        return
     s.state.unchecked = []
     save_state(s.state, s.state_path)
     if out.is_file():
@@ -2165,22 +2255,34 @@ def shadow_checkpoint(s: Session, milestone: str, merged: list[str], out: Path) 
 
 def _shadow(s: Session, agent: Agent, job: JobSpec, milestone: str, out: Path, reason: str) -> None:
     base = out.with_name(f"{out.stem}-shadow-{agent.id}")
+    what = "the checkpoint's shadow"
+    _, findings, job_id = _read_only_review(s, agent, job, milestone, base, reason, what)
+    if job_id is not None:
+        record_findings(s, milestone, findings, agent.id, f"{milestone}-S{job_id}-")
+
+
+def _read_only_review(
+    s: Session, agent: Agent, job: JobSpec, milestone: str, base: Path, reason: str, what: str
+) -> tuple[JobResult, tuple[Finding, ...], int | None]:
+    """One read-only agent's review (``what`` it is, for the notes): its job row, its readings,
+    and the findings in its answer (kept as ``base``.json). A refusal is recorded for its
+    allowance; the caller records the findings. Returns the result, findings and job row."""
     log = base.with_suffix(".log")
     started = clock()
-    s.log(console.start(agent.id, SHADOW))
+    s.log(console.start(agent.id, job.role))
     job_id = s.last_job_id = record_start(
         s,
         None,
         milestone,
-        SHADOW,
+        job.role,
         agent.id,
-        attempt=next_number(s, None, SHADOW),
+        attempt=next_number(s, None, job.role),
         log_path=_rel(s, log),
         routing_reason=reason,
     )
     result = with_progress(
         partial(adapter_for(agent.harness).run, agent, job, s.repo, log, now()),
-        partial(_log_running, s, agent.id, SHADOW),
+        partial(_log_running, s, agent.id, job.role),
     )
     _record_readings(s, agent.id, result.readings)
     findings: tuple[Finding, ...] = ()
@@ -2193,14 +2295,14 @@ def _shadow(s: Session, agent: Agent, job: JobSpec, milestone: str, out: Path, r
             findings = parse_checkpoint(answer)
         except ReviewFileError as exc:
             note = f"findings unusable: {exc}"
-            s.report.notes.append(f"The checkpoint's shadow on {agent.id}: {note}")
+            s.report.notes.append(f"{what.capitalize()} on {agent.id}: {note}")
     else:
         outcome = "refused" if result.refusal is not None else "failed"
         note = result.text[:SHADOW_NOTE_MAX]
         if result.refusal is not None:
-            _record_refusal(s, agent.id, result, "the checkpoint's shadow")
+            _record_refusal(s, agent.id, result, what)
         else:
-            s.report.notes.append(f"The checkpoint's shadow on {agent.id} failed: {note}")
+            s.report.notes.append(f"{what.capitalize()} on {agent.id} failed: {note}")
     if job_id is not None:
         _record(
             s,
@@ -2215,8 +2317,126 @@ def _shadow(s: Session, agent: Agent, job: JobSpec, milestone: str, out: Path, r
             note=note,
             session_id=result.session_id,
         )
-        record_findings(s, milestone, findings, agent.id, f"{milestone}-S{job_id}-")
-    s.log(console.claude_end(agent.id, SHADOW, result.ok, clock() - started, result.cost_usd))
+    s.log(console.claude_end(agent.id, job.role, result.ok, clock() - started, result.cost_usd))
+    return result, findings, job_id
+
+
+# --- a stand-in for Claude's checkpoint (ADR 16 item 9) ------------------------------------
+
+
+def stand_in_checkpoint(s: Session, milestone: str, merged: list[str], hold: "Hold") -> bool:
+    """A checkpoint Claude can't take, done read-only by the first agent `[roles]
+    checkpoint-stand-in` lists that may (its month a cap, not a pace). It is acted on as
+    Claude's would be: each finding that isn't a nit becomes a fix ticket (`fix_ticket`),
+    routed "local". False when none may, or its job failed: the checkpoint then parks."""
+    agents = [s.cfg.agents[agent_id] for agent_id in s.cfg.roles.get(STAND_IN, ())]
+    if not agents:
+        return False
+    at = now()
+    windows = agent_windows(s, agents, at)
+    routed = router.stand_in(agents, windows, at, _authors(s, merged), hold.reason)
+    if routed is None:
+        s.report.notes.append(f"No checkpoint stand-in may run now ({hold.reason}).")
+        return False
+    agent = routed.agent
+    s.log("")
+    s.log(console.ticket_header(f"{milestone} checkpoint", agent.id, None))
+    s.log("Review the last merges: " + ", ".join(m.split()[0] for m in merged))
+    job = JobSpec(
+        role=CHECKPOINT,
+        prompt=prompts.CHECKPOINT_STAND_IN.format(merges=_merge_files(s, merged)),
+        timeout=s.cfg.claude_timeout,
+        title=f"{milestone} checkpoint",
+    )
+    base = s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}-{agent.id}"
+    what = "the stand-in checkpoint"
+    result, findings, job_id = _read_only_review(
+        s, agent, job, milestone, base, routed.reason, what
+    )
+    if not result.ok:
+        return False
+    s.state.interrupted.pop(job_key(CHECKPOINT, CHECKPOINT), None)  # Claude's run is superseded
+    prefix = f"{milestone}-C{job_id}-"
+    acted, written = [], []
+    for finding in findings:
+        path = None
+        if finding.actionable:
+            path = fix_ticket(s.repo, milestone, finding, prefix + finding.id, agent.id)
+        if path is not None:
+            written.append(path)
+            finding = replace(finding, route="local")
+        acted.append(finding)
+    if job_id is not None:
+        record_findings(s, milestone, acted, agent.id, prefix)
+    s.state.unchecked = []
+    save_state(s.state, s.state_path)
+    tickets = ", ".join(p.stem for p in written) or "none"
+    s.report.notes.append(
+        f"Checkpoint by {agent.id}, standing in for Claude: {len(findings)} findings;"
+        f" fix tickets: {tickets}."
+    )
+    runner_commit(
+        s,
+        "checkpoint after " + ", ".join(m.split()[0] for m in merged) + f" (by {agent.id},"
+        " standing in for Claude)",
+    )
+    for path in written:
+        record_ticket(s, path)
+    return True
+
+
+_FIX_PATH_RE = re.compile(r"[\w-][\w.-]*(?:/[\w-][\w.-]*)*")  # repo-relative, never `..`
+_TICKET_ID_RE = re.compile(r"[\w-]+")
+
+
+def fix_ticket(repo: Path, milestone: str, finding: Finding, key: str, by: str) -> Path | None:
+    """A developer ticket in tasks/ready/ for a stand-in checkpoint's ``finding`` (``key``),
+    from the ticket at fault in tasks/done/: its tests, its difficulty, and the finding's file
+    (else its files). The finding is untrusted text: it goes in the body, quoted, and only a
+    checked path reaches the frontmatter. None when no done ticket is at fault."""
+    if not _TICKET_ID_RE.fullmatch(finding.ticket):
+        return None
+    source_path = repo / "tasks" / "done" / f"{finding.ticket}.md"
+    try:
+        source = parse_task(source_path, 1)
+    except (OSError, ValueError, yaml.YAMLError):
+        return None
+    file = finding.file if _FIX_PATH_RE.fullmatch(finding.file) else ""
+    short = short_key(milestone)
+    numbers = [
+        int(found[1])
+        for path in (repo / "tasks").glob("*/*.md")
+        if (found := re.match(rf"{re.escape(short)}-(\d+)-", path.stem))
+    ]
+    words = re.findall(r"[a-z0-9]+", finding.summary.lower())[:4]
+    task_id = f"{short}-{max(numbers, default=0) + 1:02d}-fix" + "".join(f"-{w}" for w in words)
+    meta: dict[str, Any] = {"id": task_id, "milestone": milestone}
+    if source.difficulty is not None:
+        meta["difficulty"] = source.difficulty
+    meta |= {
+        "depends_on": [],
+        "files": [file] if file else list(source.files),
+        "tests": list(source.tests),
+        "finding": key,
+    }
+    summary = " ".join(finding.summary.split())
+    where = (
+        f"`{file}`" + (f", line {finding.line}" if finding.line else "") if file else "its files"
+    )
+    quoted = "\n".join(f"> {line}" for line in (finding.detail or summary).splitlines())
+    body = (
+        f"### Goal\nFix a checkpoint finding on {finding.ticket}: {summary}\n\n"
+        f"### Context\nA {finding.severity} finding ({key}) by {by}, standing in for the lead at"
+        f" a checkpoint, on the merge of `tasks/done/{finding.ticket}.md`: in {where}. What it"
+        " found is under Finding.\n\n"
+        f"### Finding\n{quoted}\n\n"
+        "### Done when\n- what the finding describes no longer holds, and a test shows it\n"
+        "- the listed `tests:` pass, and fail without the change\n- all gates pass\n"
+    )
+    frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)
+    path = repo / "tasks" / "ready" / f"{task_id}.md"
+    path.write_text(f"---\n{frontmatter}---\n\n{body}", encoding="utf-8")
+    return path
 
 
 # --- escalation handling ------------------------------------------------------------
@@ -2228,10 +2448,17 @@ def _only_docs_and_tasks(s: Session) -> bool:
 
 
 def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
+    """The lead's decision on an escalated ticket. While Claude can't take it (a limit, or the
+    owner's share of its 5-hour window), it parks and the queue goes on; a parked escalation
+    isn't counted (ADR 16 item 4)."""
     escalated = s.tasks_dir("escalated") / task.path.name
     used = s.state.escalations.get(task.id, 0)
     if used >= s.cfg.escalations_per_task:
         block(s, escalated, f"{used} escalations used; last: {reason}")
+        return
+    resume = {"milestone": task.milestone, "logs": _rel(s, logs), "reason": reason}
+    if (hold := claude_hold(s, now())) is not None:
+        _park_support(s, "escalation", task.id, hold, **resume)
         return
     s.state.escalations[task.id] = used + 1
     save_state(s.state, s.state_path)
@@ -2255,15 +2482,24 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, f"git checkout {branch}"),
     )
     decision_path = logs / "decision.json"
-    call_claude(
-        s,
-        job,
-        task.milestone,
-        task.id,
-        ticket=task.id,
-        notes=(decision_path, logs / "escalation.md"),
-        process_note=logs / NOTE_FILE,
-    )
+    try:
+        call_claude(
+            s,
+            job,
+            task.milestone,
+            task.id,
+            ticket=task.id,
+            notes=(decision_path, logs / "escalation.md"),
+            process_note=logs / NOTE_FILE,
+            park=True,
+            parked=resume,
+        )
+    except Parked:
+        s.state.escalations[task.id] = used
+        if not used:
+            del s.state.escalations[task.id]
+        save_state(s.state, s.state_path)
+        return
     try:
         decision = json.loads(decision_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -2386,6 +2622,10 @@ class ReserveAnswer:
 
 RESERVE = ReserveAnswer()
 RESERVE_ENV = "COUCOU_RUNNER_RESERVE_YES"  # set only by cli's restart after a yes
+# The 5-hour question's answer, its own (ADR 16 item 3): a yes to one doesn't answer the other.
+FIVE_HOUR = ReserveAnswer()
+FIVE_HOUR_ENV = "COUCOU_RUNNER_FIVE_HOUR_YES"
+FIVE_HOUR_KIND = "five-hour"  # a lead ticket parked for the owner's 25%, and its owner item
 RETRY = "retry"  # a parked entry's flag: a restart tries it again before its reset
 CLAUDE = "claude"
 # Where Claude's week stands now decides the question: a lead ticket's share of the week
@@ -2411,46 +2651,149 @@ def _due(entry: dict[str, Any], at: datetime) -> bool:
 
 
 def _limits_ahead(
-    s: Session, at: datetime, tickets: Collection[str] | None = None
+    s: Session, at: datetime, tickets: Collection[str] | None = None, *, five_hour: bool = True
 ) -> list[datetime]:
     """The resets still ahead of the jobs parked for a limit (of ``tickets``, if given): while
-    there is one, Claude is limited and only local work runs."""
+    there is one, Claude is limited and only local work runs. Without ``five_hour``, the jobs
+    held only by the owner's share of the 5-hour window are left out: a yes may yet free them."""
     return [
         _resets(entry)
         for ticket, entry in s.state.parked.items()
         if entry["kind"] != "reserve"
+        and (five_hour or not entry.get(FIVE_HOUR_HELD))
         and (tickets is None or ticket in tickets)
         and not _due(entry, at)
     ]
 
 
-def claude_windows(s: Session, at: datetime) -> list[allowance.Window]:
-    """Claude's windows from its latest readings (f1-44): capacity 1, usage the share read. A
-    window whose reset has passed since is left out: its reading is stale."""
+def _read_windows(s: Session, prefix: str, at: datetime) -> list[allowance.Window]:
+    """The windows of the agents named ``prefix…`` from their latest readings (f1-44):
+    capacity 1, usage the share read. A window whose reset has passed since is left out: its
+    reading is stale."""
     windows = []
-    for name, row in (_record(s, metrics.latest_readings, "claude-") or {}).items():
+    for name, row in (_record(s, metrics.latest_readings, prefix) or {}).items():
         if name not in allowance.NAMED or row["value"] is None or not row["resets_at"]:
             continue
         resets = datetime.fromisoformat(row["resets_at"])
         if resets <= at:
             continue
         kind, length = allowance.NAMED[name]
-        reserve = s.cfg.claude_reserve if name == "seven_day" else 0.0
         windows.append(
-            allowance.Window(
-                name, kind, length, resets, 1.0, float(row["value"]), reserve, measured=True
-            )
+            allowance.Window(name, kind, length, resets, 1.0, float(row["value"]), measured=True)
         )
     return windows
+
+
+def claude_windows(s: Session, at: datetime) -> list[allowance.Window]:
+    """Claude's windows from its latest readings, each with what it keeps back: the week's
+    reserve for the lead's support roles, the 5-hour window's share for the owner (ADR 16)."""
+    kept = {"seven_day": s.cfg.claude_reserve, "five_hour": s.cfg.five_hour_reserve}
+    return [replace(w, reserve=kept.get(w.name, 0.0)) for w in _read_windows(s, "claude-", at)]
+
+
+def rested_claude_windows(s: Session, at: datetime) -> list[allowance.Window]:
+    """Claude's windows, each resting after a refusal in it (`_rested`)."""
+    rows = _record(s, metrics.refusals, f"{CLAUDE}-") or []
+    return [_rested(w, rows, at) for w in claude_windows(s, at)]
+
+
+@dataclass(frozen=True)
+class Hold:
+    """Why Claude may not take a support job now, and until when."""
+
+    until: datetime
+    reason: str
+    five_hour: bool  # only the owner's share of the 5-hour window holds it: a yes lifts it
+
+
+def claude_hold(s: Session, at: datetime) -> Hold | None:
+    """Whether a support job (a direction, a checkpoint, an escalation, a review) must wait
+    for Claude (ADR 16 item 4): a job parked for a limit, a refusal still resting a window, or
+    the owner's share of the 5-hour window with no yes. The week's reserve is theirs to use
+    (ADR 15 item 4)."""
+    if ahead := _limits_ahead(s, at, five_hour=False):
+        return Hold(max(min(ahead), at + timedelta(minutes=1)), "Claude is limited", False)
+    windows = rested_claude_windows(s, at)
+    kept = {"seven_day", *(("five_hour",) if FIVE_HOUR.yes else ())}
+    fit = allowance.answer(CLAUDE, windows, LEAD_COST, at, use_reserve=kept)
+    if fit.ok:
+        return None
+    ends = [
+        w.cooldown_until or w.resets_at
+        for w in windows
+        if not allowance.answer(CLAUDE, [w], LEAD_COST, at, use_reserve=kept).ok
+    ]
+    until = min(
+        (e for e in ends if e is not None), default=at + timedelta(seconds=s.cfg.backoff_min)
+    )
+    five_hour = not FIVE_HOUR.yes and allowance.reserve_only(
+        CLAUDE, windows, LEAD_COST, at, "five_hour"
+    )
+    return Hold(max(until, at + timedelta(minutes=1)), fit.reason, five_hour)
+
+
+def _park_support(s: Session, role: str, name: str, hold: Hold, **resume: str) -> None:
+    """Park a checkpoint or an escalation Claude can't take now (ADR 16 item 4): it goes
+    first once ``hold`` ends, and the queue goes on meanwhile. ``resume`` is what it needs to
+    start again; one parked already keeps its entry (and its session, if it had one)."""
+    key = parked_key(role, name)
+    what = role if name == role else f"{role} of {name}"
+    if key not in s.state.parked:
+        entry: dict[str, Any] = {"kind": role, "branch": "", "session_id": "", **resume}
+        entry["resets_at"] = hold.until.isoformat()
+        if hold.five_hour:
+            entry[FIVE_HOUR_HELD] = True
+        s.state.parked[key] = entry
+        save_state(s.state, s.state_path)
+        s.report.notes.append(f"Parked the {what}: {hold.reason}.")
+    s.log(console.paused(RUNNER_AGENT, f"the {what} waits for Claude", hold.until, now()))
+
+
+def _resume_support(s: Session, *, escalate: bool) -> bool:
+    """Run the first parked checkpoint or escalation whose reset has passed, before any ticket
+    (ADR 16 item 4). True when one ran (it may have parked again)."""
+    at = now()
+    for key, entry in list(s.state.parked.items()):
+        kind = entry["kind"]
+        if kind not in SUPPORT or not _due(entry, at) or (kind != CHECKPOINT and not escalate):
+            continue
+        del s.state.parked[key]
+        save_state(s.state, s.state_path)
+        if kind == CHECKPOINT:
+            if s.state.unchecked:
+                out = s.repo / entry["out"] if entry.get("out") else None
+                checkpoint(s, str(entry["milestone"]), out)
+            return True
+        escalated = s.tasks_dir("escalated") / f"{key.split(':', 1)[1]}.md"
+        if escalated.is_file():
+            task = parse_task(escalated, s.cfg.default_max_diff)
+            handle_escalation(s, task, s.repo / str(entry["logs"]), str(entry["reason"]))
+        return True
+    return False
+
+
+def wait_for_room(s: Session, what: str) -> None:
+    """Before a support job nothing else waits behind (the review): while Claude can't take
+    it, ask the 5-hour question once if only the owner's share holds it, else wait for the
+    reset (ADR 16 items 3 and 4)."""
+    while (hold := claude_hold(s, now())) is not None:
+        if hold.five_hour and not FIVE_HOUR.no and (found := _at_five_hour(s, now())):
+            _ask_five_hour(s, *found)
+            continue
+        at = now()
+        wait = max(60.0, (hold.until - at).total_seconds() + 60)
+        resumes = at + timedelta(seconds=wait)
+        s.log(console.paused(RUNNER_AGENT, f"{what} waits for Claude ({hold.reason})", resumes, at))
+        wait_for_claude(s, wait, resumes)
 
 
 def _at_the_reserve(s: Session, at: datetime) -> tuple[str, datetime] | None:
     """``("21% of the week left, resets Mon 5 Oct 16:00", reset)`` when a lead ticket is
     refused only because it would dip into Claude's reserve; else None."""
     windows = claude_windows(s, at)
-    if not allowance.reserve_only(CLAUDE, windows, LEAD_COST, at):
+    if not allowance.reserve_only(CLAUDE, windows, LEAD_COST, at, "seven_day"):
         return None
-    week = next((w for w in windows if w.reserve), None)
+    week = next((w for w in windows if w.name == "seven_day"), None)
     if week is None or week.resets_at is None:
         return None
     resets = week.resets_at.astimezone(at.tzinfo)
@@ -2458,18 +2801,23 @@ def _at_the_reserve(s: Session, at: datetime) -> tuple[str, datetime] | None:
     return f"{left}, resets {resets:%a} {resets.day} {resets:%b %H:%M}", resets
 
 
-def _resolve_reserve_item(conn: sqlite3.Connection, project_id: int, task_id: str) -> None:
+def _resolve_items(conn: sqlite3.Connection, project_id: int, kind: str, subject: str) -> None:
+    """``kind``'s open items about ``subject`` (every one, for an empty subject) resolved."""
     at = now().isoformat()
     for row in metrics.open_owner_items(conn, project_id):
-        if (row["kind"], row["subject"]) == ("reserve", task_id):
+        if row["kind"] == kind and subject in ("", row["subject"]):
             metrics.resolve_owner_item(conn, row["id"], at)
+
+
+def _resolve_item(s: Session, kind: str, subject: str) -> None:
+    if s.project_id is not None:
+        _record(s, _resolve_items, s.project_id, kind, subject)
 
 
 def _reserve_granted(s: Session, task_id: str) -> None:
     """The owner said yes: the ticket's reserve item is answered now, not at the verdict, and
     the run is on the reserve (f1 D3 and D8, amended)."""
-    if s.project_id is not None:
-        _record(s, _resolve_reserve_item, s.project_id, task_id)
+    _resolve_item(s, "reserve", task_id)
     if s.run_id is not None:
         _record(s, metrics.set_run_reserve, s.run_id)
 
@@ -2525,32 +2873,126 @@ def at_reserve(s: Session, task: Task) -> bool:
     return True
 
 
+def _at_five_hour(s: Session, at: datetime) -> tuple[str, datetime] | None:
+    """``("80%", reset)`` when Claude is refused only by the owner's share of its 5-hour
+    window (ADR 16 item 1); else None."""
+    windows = rested_claude_windows(s, at)
+    if not allowance.reserve_only(CLAUDE, windows, LEAD_COST, at, "five_hour"):
+        return None
+    five = next((w for w in windows if w.name == "five_hour"), None)
+    if five is None or five.resets_at is None:
+        return None
+    return f"{five.used:.0%}", five.resets_at.astimezone(at.tzinfo)
+
+
+def _ask_five_hour(s: Session, used: str, resets: datetime) -> bool:
+    """The 5-hour question (ADR 16 item 3), waiting for an answer until the window resets: it
+    is asked only when nothing else can run. True on a yes, which lasts for the command."""
+    at = now()
+    s.log(
+        f"? [{RUNNER_AGENT}] Claude's 5-hour window is at {used} (resets {resets:%H:%M}),"
+        " kept for you. Use it for this run? [y/N]"
+    )
+    answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
+    if answer is not None and answer.lower() in ("y", "yes"):
+        FIVE_HOUR.yes = True
+        s.log(f"✔ [{RUNNER_AGENT}] Claude's 5-hour window is used for the rest of this run")
+        _five_hour_granted(s)
+        return True
+    if answer is not None or _at_five_hour(s, now()) is not None:
+        FIVE_HOUR.no = True  # no, or no answer: the rest waits for the resets unasked
+    return False
+
+
+def _five_hour_granted(s: Session) -> None:
+    """The owner said yes: the 5-hour items are answered, and what waited for it goes now."""
+    _resolve_item(s, FIVE_HOUR_KIND, "")
+    for entry in s.state.parked.values():
+        if entry.get(FIVE_HOUR_HELD):
+            entry[RETRY] = True
+    save_state(s.state, s.state_path)
+
+
+def at_five_hour(s: Session, task: Task) -> bool:
+    """Before a lead ticket: whether it waits for the owner's share of Claude's 5-hour window
+    (ADR 16 items 1 and 3). The owner is asked once per command, only when nothing else can
+    run (`_next_task`), with its own question and its own yes. With no yes, the ticket parks
+    until the window resets and then goes on by itself; meanwhile it is a Needs-you item."""
+    at = now()
+    found = None if FIVE_HOUR.yes else _at_five_hour(s, at)
+    if found is None:
+        return False
+    used, resets = found
+    text = (
+        f"{task.id} waits for Claude's 5-hour window ({used} used, kept for you):"
+        f" it goes on after {resets:%H:%M}, or at once if you answer y to the runner"
+    )
+    if s.project_id is not None:
+        command = f"uv run runner milestone {command_arg(task.milestone)}"
+        _record(
+            s,
+            metrics.upsert_owner_item,
+            s.project_id,
+            FIVE_HOUR_KIND,
+            task.id,
+            text=text,
+            command=command,
+            created=at.isoformat(),
+        )
+    if not FIVE_HOUR.no and _ask_five_hour(s, used, resets):
+        return False
+    if _at_five_hour(s, now()) is None:  # the window reset while it waited
+        _resolve_item(s, FIVE_HOUR_KIND, task.id)
+        return False
+    s.state.parked[task.id] = {
+        "kind": FIVE_HOUR_KIND,
+        "branch": "",
+        "session_id": "",
+        "resets_at": resets.isoformat(),
+        "text": text,
+        FIVE_HOUR_HELD: True,
+    }
+    save_state(s.state, s.state_path)
+    s.report.notes.append(text)
+    reason = f"Claude's 5-hour window is at {used}, kept for you"
+    where = f"goes on after {resets:%H:%M}"
+    s.log(console.stopped(task.id, "parked", reason, where, waiting_behind(s, task.id)))
+    return True
+
+
+def _waits_for_the_owner(s: Session, at: datetime) -> bool:
+    """A lead ticket would stop at a question (the week's or the 5-hour window's)."""
+    week = not (RESERVE.yes or RESERVE.no) and _at_the_reserve(s, at) is not None
+    five = not (FIVE_HOUR.yes or FIVE_HOUR.no) and _at_five_hour(s, at) is not None
+    return week or five
+
+
 def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) -> Task | None:
     """Parked tickets whose reset has passed go first; while Claude is limited, only work that
-    needs no Claude: developer tickets, which local takes. At Claude's reserve, developer
-    tickets go before lead ones, so the reserve question comes only when nothing else can run
-    (ADR 15 item 5)."""
+    needs no Claude: developer tickets, which local takes. At Claude's reserve or the owner's
+    share of its 5-hour window, developer tickets go before lead ones, so a question comes
+    only when nothing else can run (ADR 15 item 5, ADR 16 item 3)."""
     at = now()
     held = {t.id for t in ready if t.id in s.state.parked}
     due = [t for t in ready if t.id in held and _due(s.state.parked[t.id], at)]
     if (task := pick_next(due, done, paused)) is not None:
         return task
-    limited = bool(_limits_ahead(s, at))
+    limited = bool(_limits_ahead(s, at, five_hour=False))
     free = [t for t in ready if t.id not in held and not (limited and t.agent != "developer")]
     task = pick_next(free, done, paused)
-    if task is None or task.agent != "lead" or RESERVE.yes or RESERVE.no:
-        return task
-    if _at_the_reserve(s, at) is None:
+    if task is None or task.agent != "lead" or not _waits_for_the_owner(s, at):
         return task
     developers = pick_next([t for t in free if t.agent != "lead"], done, paused)
     return developers or task
 
 
 def _wait_for_reset(s: Session, ready: list[Task]) -> bool:
-    """With nothing runnable left, sleep until the earliest reset a parked ticket waits for.
-    False when none does: a ticket parked at the reserve waits for the owner, not the week."""
+    """With nothing runnable left, sleep until the earliest reset a parked ticket, checkpoint
+    or escalation waits for. False when none does: a ticket parked at the reserve waits for
+    the owner, not the week."""
     at = now()
-    ahead = _limits_ahead(s, at, {t.id for t in ready})
+    support = {k for k, entry in s.state.parked.items() if entry["kind"] in SUPPORT}
+    ahead = _limits_ahead(s, at, {t.id for t in ready} | support)
     if not ahead:
         return False
     wait = max(60.0, (min(ahead) - at).total_seconds() + 60)
@@ -2591,8 +3033,9 @@ def work_queue(
     and escalations. Returns True if Claude (a lead ticket or an escalation) changed the
     runner, which needs a restart.
 
-    A ticket parked for a Claude limit goes first once its reset has passed; until then only
-    developer tickets run, and with none left the queue sleeps until the earliest reset.
+    A ticket parked for a Claude limit goes first once its reset has passed (a parked
+    checkpoint or escalation before it); until then only developer tickets run, and with none
+    left the queue sleeps until the earliest reset.
     """
     code = _runner_code(s.repo)
     while True:
@@ -2601,6 +3044,8 @@ def work_queue(
             # only takes effect in a new process. Stop rather than run requeued tasks stale.
             s.report.notes.append(RESTART_NOTE)
             return True
+        if _resume_support(s, escalate=escalate):
+            continue
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
         if milestone is not None:
             ready = [t for t in ready if t.milestone == milestone]

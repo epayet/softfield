@@ -32,8 +32,10 @@ def claude_week(used, reserve=0.3):
     return Window("seven_day", "fixed", WEEK, WEEK_RESET, 1.0, used, reserve, measured=True)
 
 
-def claude_five_hour(used, now):
-    return Window("five_hour", "rolling", 5 * HOUR, now + 2 * HOUR, 1.0, used, measured=True)
+def claude_five_hour(used, now, reserve=0.0):
+    return Window(
+        "five_hour", "rolling", 5 * HOUR, now + 2 * HOUR, 1.0, used, reserve, measured=True
+    )
 
 
 @pytest.mark.parametrize(
@@ -215,6 +217,51 @@ def test_reserve_only_says_when_the_reserve_alone_refuses(windows, now, only):
 def test_the_reserve_lets_support_roles_take_the_rest_of_the_window():
     got = answer("claude-opus", [claude_week(0.79)], 0.03, THURSDAY, use_reserve=True)
     assert got == (True, "claude-opus: week 79% used, under its cap of 100% (using the reserve)")
+
+
+@pytest.mark.parametrize(
+    ("used", "ok", "reason"),
+    [
+        (0.70, True, "claude-opus: 5-hour window 70% used, under its cap of 75%"),
+        (0.80, False, "claude-opus: 5-hour window 80% used, over its cap of 75%"),
+    ],
+)
+def test_a_rolling_window_with_a_reserve_caps_short_of_it(used, ok, reason):
+    """ADR 16 item 1: the last 25% of Claude's 5-hour window is the owner's."""
+    got = answer("claude-opus", [claude_five_hour(used, THURSDAY, 0.25)], 0.0, THURSDAY)
+    assert (got.ok, got.reason) == (ok, reason)
+
+
+def test_each_windows_reserve_is_used_only_when_named():
+    """ADR 16 item 3: a yes to the week's reserve doesn't lift the 5-hour window's."""
+    windows = [claude_week(0.79), claude_five_hour(0.80, THURSDAY, 0.25)]
+    week_only = answer("claude-opus", windows, 0.0, THURSDAY, use_reserve={"seven_day"})
+    assert week_only == (False, "claude-opus: 5-hour window 80% used, over its cap of 75%")
+    five_only = answer("claude-opus", windows, 0.0, THURSDAY, use_reserve={"five_hour"})
+    assert five_only == (False, "claude-opus: week 79% used, over its pace line of 30%")
+    both = answer("claude-opus", windows, 0.0, THURSDAY, use_reserve={"seven_day", "five_hour"})
+    assert both.ok
+    assert answer("claude-opus", windows, 0.0, THURSDAY, use_reserve=True).ok
+
+
+@pytest.mark.parametrize(
+    ("week", "five_hour", "asked"),
+    [
+        (0.10, 0.80, {"five_hour"}),
+        (0.79, 0.07, {"seven_day"}),
+        (0.79, 0.80, {"seven_day", "five_hour"}),
+        (0.10, 0.70, set()),
+        (0.10, 0.99, set()),  # past even the owner's share: the reserve can't help
+    ],
+)
+def test_reserve_only_names_the_window_whose_reserve_alone_refuses(week, five_hour, asked):
+    windows = [claude_week(week), claude_five_hour(five_hour, THURSDAY, 0.25)]
+    got = {
+        name
+        for name in ("seven_day", "five_hour")
+        if reserve_only("claude-opus", windows, 0.02, THURSDAY, name)
+    }
+    assert got == asked
 
 
 def probe_windows(now):

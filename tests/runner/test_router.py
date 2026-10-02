@@ -4,7 +4,7 @@ import pytest
 
 from runner.agents import Agent
 from runner.allowance import Window
-from runner.router import LeadOnly, Ticket, lead_only, route
+from runner.router import LeadOnly, Ticket, lead_only, route, stand_in
 
 HOUR = timedelta(hours=1)
 DAY = timedelta(days=1)
@@ -52,6 +52,7 @@ def developer(
     failed=None,
     refused=(),
     ratings=None,
+    **lead_first,
 ):
     return route(
         "developer",
@@ -64,6 +65,7 @@ def developer(
         now,
         failed=failed,
         refused=refused,
+        **lead_first,
     )
 
 
@@ -187,6 +189,80 @@ def test_a_failed_cloud_agent_no_longer_permitted_hands_back_to_the_first_pick()
     picked = developer(DEVELOPERS, windows, attempt=2, failed=SONNET.id)
     assert picked.agent == LOCAL
     assert picked.reason.startswith("claude-sonnet may not retry: ")
+
+
+def test_with_lead_work_ready_a_developer_ticket_never_goes_to_claude():
+    """ADR 16 item 2: lead work comes first; the next permitted agent takes the ticket."""
+    windows = {SONNET.id: claude(0.1), OPUS.id: claude(0.1), OLLAMA.id: unknown()}
+    assert developer((LOCAL, SONNET), windows, lead_ready=True) == (
+        LOCAL,
+        "local-qwen, the floor: claude-sonnet: lead work is ready, it goes first",
+    )
+    assert developer((LOCAL, OLLAMA, SONNET), windows, lead_ready=True).agent == OLLAMA
+    # Nor as a step up
+    stepped = developer(LADDER, windows, attempt=2, failed=LOCAL.id, lead_ready=True)
+    assert stepped == (LOCAL, "local-qwen again: no permitted agent rated 7 or more")
+
+
+@pytest.mark.parametrize(
+    ("used", "agent", "reason"),
+    [
+        (
+            0.4,
+            SONNET,
+            "claude-sonnet (rated 7) covers difficulty 5, the best permitted:"
+            " claude-sonnet: week 10% used, under its pace line of 30%",
+        ),
+        (
+            0.5,
+            LOCAL,
+            "local-qwen, the floor: claude-sonnet: 5-hour window 50% used,"
+            " not under the developers' cap of 50%",
+        ),
+    ],
+)
+def test_claude_develops_only_under_half_its_5_hour_window(used, agent, reason):
+    """ADR 16 item 2: so a lead job that follows has room."""
+    windows = {SONNET.id: [five_hour(used, THURSDAY), week(0.1)]}
+    assert developer(windows=windows, five_hour_cap=0.5) == (agent, reason)
+
+
+MONTH = timedelta(days=30)
+MONTH_RESET = datetime(2026, 10, 16, tzinfo=UTC)  # THURSDAY is half-way through its month
+
+
+def copilot_month(used: float, cooldown_until: datetime | None = None) -> list[Window]:
+    return [
+        Window(
+            "month",
+            "fixed",
+            MONTH,
+            MONTH_RESET,
+            1.0,
+            used,
+            measured=True,
+            cooldown_until=cooldown_until,
+        )
+    ]
+
+
+def test_copilot_stands_in_for_claude_past_its_pace_line_up_to_its_capacity():
+    """ADR 16 item 9: emergency use may pass Copilot's monthly pace line, not its capacity."""
+    picked = stand_in((COPILOT,), {COPILOT.id: copilot_month(0.8)}, THURSDAY, [LOCAL], "full")
+    assert picked == (
+        COPILOT,
+        "copilot-auto stands in for Claude (full):"
+        " copilot-auto: month 80% used, under its cap of 100%",
+    )
+    resting = copilot_month(0.1, cooldown_until=THURSDAY + HOUR)
+    assert stand_in((COPILOT,), {COPILOT.id: resting}, THURSDAY, [LOCAL], "") is None
+
+
+def test_copilot_never_stands_in_on_a_copilot_developers_merges():
+    """Its model is unknown (`auto`), so it may be the author's (ADR 16 item 9)."""
+    windows = {COPILOT.id: copilot_month(0.1)}
+    assert stand_in((COPILOT,), windows, THURSDAY, [LOCAL, COPILOT], "") is None
+    assert stand_in((), windows, THURSDAY, [LOCAL], "") is None
 
 
 def test_a_lead_ticket_is_never_routed_to_a_developer():
