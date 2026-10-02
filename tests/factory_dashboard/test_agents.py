@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 
-from tests.factory_dashboard.conftest import LOCAL, OPUS, SONNET
+from tests.factory_dashboard.conftest import LOCAL, OPUS, SONNET, SONNET_45, SONNET_46
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
 
@@ -129,6 +129,39 @@ def test_milestone_filter_filters_every_query(serve):
     # m4-01-old job drops out: jobs=4 (was 5), merged=1 (was 2)
     assert '<td class="num">4</td>' in local_row
     assert '<td class="num">1</td>' in local_row
+
+
+def efficiency_rows(html: str) -> list[list[str]]:
+    """The efficiency table's rows, each a list of its cells' text."""
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", section_raw(html, "efficiency"), re.S)
+    cells = [re.findall(r"<td[^>]*>(.*?)</td>", row, re.S) for row in rows]
+    return [[" ".join(re.sub(r"<[^>]+>|&nbsp;|↳", " ", c).split()) for c in r] for r in cells if r]
+
+
+def test_agent_on_two_models_gets_a_row_per_model(models_client):
+    """f2-07: claude-sonnet's own row totals its 5 jobs, then one row per model; NULL and ''
+    are one "not recorded" group."""
+    rows = efficiency_rows(models_client.get("/agents").text)
+    names = [r[0] for r in rows]
+    at = names.index(SONNET)
+    sonnet = {r[0]: (r[1], r[-1]) for r in rows[at : at + 4]}
+    assert sonnet == {
+        SONNET: ("5", "$1.80"),
+        "not recorded": ("2", "$0.50"),
+        SONNET_45: ("1", "$0.50"),
+        SONNET_46: ("2", "$0.80"),
+    }
+
+
+def test_agent_on_one_model_gets_no_model_rows(models_client):
+    """Only claude-sonnet's three model rows appear, none for the local agent or Opus."""
+    eff = section_raw(models_client.get("/agents").text, "efficiency")
+    assert eff.count('<tr class="model">') == 3
+
+
+def test_default_fixture_has_no_model_rows(serve):
+    eff = section_raw(serve(live=False).get("/agents").text, "efficiency")
+    assert '<tr class="model">' not in eff
 
 
 def test_rating_chart_has_one_series_per_agent(rating_client):

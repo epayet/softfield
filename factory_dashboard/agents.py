@@ -40,6 +40,12 @@ class Efficiency:
     escalation_rate: float | None
     most_failed_gate: str
     dollars: float
+    # Set on the rows under an agent's that split its jobs by model.
+    model: str | None = None
+
+
+# Jobs whose model is NULL or '' (before f2-04, or a harness that didn't say).
+NOT_RECORDED = "not recorded"
 
 
 def _equivalents(job: sqlite3.Row) -> float:
@@ -94,77 +100,92 @@ def efficiency(
             " LEFT JOIN tickets t ON t.id = j.ticket_id" + " WHERE " + agent_cond,
             agent_params,
         ).fetchall()
+        found.append(_efficiency(conn, agent, rows))
 
-        total_jobs = len(rows)
-        merged = sum(1 for r in rows if r["merged_by"] == agent)
-
-        attempt_rows = [r for r in rows if r["role"] in ("developer", "last-attempt")]
-        attempt_ticket_ids = {r["ticket_id"] for r in attempt_rows if r["ticket_id"]}
-        attempt_tickets = len(attempt_ticket_ids)
-
-        first_pass = None
-        if attempt_tickets:
-            first = sum(
-                1
-                for tid in attempt_ticket_ids
-                if len([r for r in attempt_rows if r["ticket_id"] == tid]) == 1
-                and any(r["outcome"] == "passed" for r in attempt_rows if r["ticket_id"] == tid)
-            )
-            first_pass = round(first / attempt_tickets * 100)
-
-        attempts_per_m = round(len(attempt_rows) / merged, 1) if merged else None
-
-        total_seconds = sum(_secs(r["started"], r["ended"]) for r in attempt_rows)
-        minutes_per_m = round(total_seconds / 60 / merged, 1) if merged else None
-
-        total_tokens = sum(
-            (r["tokens_in"] or 0) + (r["tokens_cached"] or 0) + (r["tokens_out"] or 0) for r in rows
-        )
-        tokens_per_m = round(total_tokens / merged) if merged else None
-
-        tps = round(total_tokens / total_seconds) if total_seconds and merged else None
-
-        esc_rate = None
-        if attempt_tickets and attempt_ticket_ids:
-            placeholders = ",".join(["?"] * len(attempt_ticket_ids))
-            esc_count = conn.execute(
-                "SELECT count(DISTINCT ticket_id) FROM jobs"  # noqa: S608
-                " WHERE ticket_id IN (" + placeholders + ")"
-                " AND role = 'escalation'",
-                list(attempt_ticket_ids),
-            ).fetchone()[0]
-            esc_rate = round(esc_count / attempt_tickets * 100)
-
-        gate_fails: dict[str, int] = defaultdict(int)
+        # One row per model, under the agent's, when its jobs ran on more than one (f2-07).
+        by_model: dict[str, list[sqlite3.Row]] = defaultdict(list)
         for r in rows:
-            gates = r["gates"]
-            if isinstance(gates, str):
-                gates = json.loads(gates)
-            if isinstance(gates, list):
-                for g in gates:
-                    if g.get("ok") is False:
-                        gate_fails[g["name"]] += 1
-        most_failed = max(gate_fails, key=lambda k: gate_fails[k]) if gate_fails else ""
-
-        dollars = sum(_dollars(r) for r in rows)
-
-        found.append(
-            Efficiency(
-                agent=agent,
-                jobs=total_jobs,
-                merged=merged,
-                attempt_tickets=attempt_tickets,
-                first_attempt_pass=first_pass,
-                attempts_per_merge=attempts_per_m,
-                minutes_per_merge=minutes_per_m,
-                tokens_per_merge=tokens_per_m,
-                tokens_per_second=tps,
-                escalation_rate=esc_rate,
-                most_failed_gate=most_failed or "\u2013",
-                dollars=dollars,
-            )
-        )
+            by_model[r["model"] or NOT_RECORDED].append(r)
+        if len(by_model) > 1:
+            found.extend(_efficiency(conn, agent, jobs, m) for m, jobs in by_model.items())
     return found
+
+
+def _efficiency(
+    conn: sqlite3.Connection,
+    agent: str,
+    rows: Sequence[sqlite3.Row],
+    model: str | None = None,
+) -> Efficiency:
+    """One row of the efficiency table, over ``rows``: an agent's jobs, or one model's."""
+    total_jobs = len(rows)
+    merged = sum(1 for r in rows if r["merged_by"] == agent)
+
+    attempt_rows = [r for r in rows if r["role"] in ("developer", "last-attempt")]
+    attempt_ticket_ids = {r["ticket_id"] for r in attempt_rows if r["ticket_id"]}
+    attempt_tickets = len(attempt_ticket_ids)
+
+    first_pass = None
+    if attempt_tickets:
+        first = sum(
+            1
+            for tid in attempt_ticket_ids
+            if len([r for r in attempt_rows if r["ticket_id"] == tid]) == 1
+            and any(r["outcome"] == "passed" for r in attempt_rows if r["ticket_id"] == tid)
+        )
+        first_pass = round(first / attempt_tickets * 100)
+
+    attempts_per_m = round(len(attempt_rows) / merged, 1) if merged else None
+
+    total_seconds = sum(_secs(r["started"], r["ended"]) for r in attempt_rows)
+    minutes_per_m = round(total_seconds / 60 / merged, 1) if merged else None
+
+    total_tokens = sum(
+        (r["tokens_in"] or 0) + (r["tokens_cached"] or 0) + (r["tokens_out"] or 0) for r in rows
+    )
+    tokens_per_m = round(total_tokens / merged) if merged else None
+
+    tps = round(total_tokens / total_seconds) if total_seconds and merged else None
+
+    esc_rate = None
+    if attempt_tickets and attempt_ticket_ids:
+        placeholders = ",".join(["?"] * len(attempt_ticket_ids))
+        esc_count = conn.execute(
+            "SELECT count(DISTINCT ticket_id) FROM jobs"  # noqa: S608
+            " WHERE ticket_id IN (" + placeholders + ")"
+            " AND role = 'escalation'",
+            list(attempt_ticket_ids),
+        ).fetchone()[0]
+        esc_rate = round(esc_count / attempt_tickets * 100)
+
+    gate_fails: dict[str, int] = defaultdict(int)
+    for r in rows:
+        gates = r["gates"]
+        if isinstance(gates, str):
+            gates = json.loads(gates)
+        if isinstance(gates, list):
+            for g in gates:
+                if g.get("ok") is False:
+                    gate_fails[g["name"]] += 1
+    most_failed = max(gate_fails, key=lambda k: gate_fails[k]) if gate_fails else ""
+
+    dollars = sum(_dollars(r) for r in rows)
+
+    return Efficiency(
+        agent=agent,
+        jobs=total_jobs,
+        merged=merged,
+        attempt_tickets=attempt_tickets,
+        first_attempt_pass=first_pass,
+        attempts_per_merge=attempts_per_m,
+        minutes_per_merge=minutes_per_m,
+        tokens_per_merge=tokens_per_m,
+        tokens_per_second=tps,
+        escalation_rate=esc_rate,
+        most_failed_gate=most_failed or "\u2013",
+        dollars=dollars,
+        model=model,
+    )
 
 
 def _secs(started: str | None, ended: str | None) -> int:

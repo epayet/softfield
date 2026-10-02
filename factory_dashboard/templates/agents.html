@@ -15,8 +15,13 @@
     </tr></thead>
     <tbody>
     {% for e in efficiency %}
+    {% if e.model %}
+    <tr class="model">
+      <td class="mono">&nbsp;&nbsp;↳ {{ e.model }}</td>
+    {% else %}
     <tr>
       <td class="mono">{{ e.agent }}</td>
+    {% endif %}
       <td class="num">{{ e.jobs }}</td>
       <td class="num">{{ e.merged }}</td>
       <td class="num">{{ e.attempt_tickets }}</td>

@@ -1309,3 +1309,50 @@ def allowance_client(db_path: Path) -> TestClient:
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+SONNET_45, SONNET_46 = "claude-sonnet-4-5", "claude-sonnet-4-6"
+
+
+def write_models(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``, f1 checkpoints by ``SONNET`` on two models: one on
+    ``SONNET_45`` ($0.50), two on ``SONNET_46`` ($0.40 each), and one whose model is ``''``
+    ($0.20), counted with the fixture's checkpoint that has none ($0.30)."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    run = metrics.upsert_run(conn, project, "20261001-090000", command="milestone f1")
+    for attempt, model, cost in (
+        (1, SONNET_45, 0.5),
+        (2, SONNET_46, 0.4),
+        (3, SONNET_46, 0.4),
+        (4, "", 0.2),
+    ):
+        _job(
+            conn,
+            run,
+            f1,
+            None,
+            "checkpoint",
+            SONNET,
+            attempt,
+            "passed",
+            model=model,
+            cost_usd=cost,
+            **CLAUDE_TOKENS,
+        )
+
+
+@pytest.fixture
+def models_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_models``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_models(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
