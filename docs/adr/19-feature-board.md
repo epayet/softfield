@@ -1,6 +1,6 @@
 # ADR 19: A board of milestones and bugs, planner questions, and priorities that the runner follows
 
-- **Status:** Proposed (draft, to discuss with the owner; items 4 and 5 especially)
+- **Status:** Accepted (by the owner, 2026-10-02)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 13](13-factory-dashboard.md) (new pages); `docs/task-format.md` (a `feature:` field); `runner/tasks.py` `pick_next` (priority before milestone order)
