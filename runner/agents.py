@@ -58,7 +58,7 @@ class JobSpec:
 class Reading:
     """One of an agent's allowance windows as its harness reported it (ADR 15 item 3)."""
 
-    window: str  # "five_hour" | "seven_day"
+    window: str  # "five_hour" | "seven_day" (Claude) | "month" (Copilot)
     utilization: float  # the share used, 0–1
     resets_at: datetime
 
@@ -112,7 +112,11 @@ class UnknownHarness(KeyError):
 
 
 # A harness's adapter is its module's ``ADAPTER``, imported when first asked for.
-HARNESSES = {"claude": "runner.claude", "opencode": "runner.local_model"}
+HARNESSES = {
+    "claude": "runner.claude",
+    "opencode": "runner.local_model",
+    "copilot": "runner.copilot",
+}
 
 
 def adapter_for(harness: str) -> Adapter:

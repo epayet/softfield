@@ -75,6 +75,14 @@ harness = "claude"
 model = "opus"
 rating = 9
 
+# Copilot Free through its CLI, read-only reviews only (runner/copilot.py). `auto` lets Copilot
+# pick the model and doesn't say which (f1-18's probe). In no role yet: f1-26 adds the shadow.
+[agents.copilot-auto]
+harness = "copilot"
+model = "auto"
+rating = 6                              # unknown models behind it; a mid estimate
+windows = [{ name = "month", capacity = 200 }]  # credits, fractional (f1-18)
+
 # Who does each kind of job; the first agent listed does it until f1-25 routes among them.
 # `developer` may list claude-sonnet and claude-opus after local (ADR 15 item 6), from f1-25.
 [roles]

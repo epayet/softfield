@@ -266,7 +266,7 @@ def is_local(agent: Agent) -> bool:
 
 
 # Errors that pass: the daemon down or restarting, an overload, a server error.
-_TRANSIENT_RE = re.compile(
+TRANSIENT_RE = re.compile(
     r"(ECONNREFUSED|ECONNRESET|connection (?:refused|reset)|socket hang up|overloaded"
     r"|\b50[234]\b|service unavailable|bad gateway|gateway time-?out)",
     re.IGNORECASE,
@@ -288,7 +288,7 @@ def classify(run: OpencodeRun, local: bool, now: datetime) -> tuple[Refusal | No
     limited, resets_at = usage_limit_reset(text, now)
     if limited:
         return Refusal(None, resets_at), False
-    if _TRANSIENT_RE.search(text):
+    if TRANSIENT_RE.search(text):
         return None, True
     return Refusal(None, None, certain=False), False
 
