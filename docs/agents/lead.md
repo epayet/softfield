@@ -37,6 +37,8 @@ Plan (with the owner) → `uv run runner milestone N` (unattended) → sign-off 
 - **Ad-hoc requests go through the process too.** When the owner asks for a feature in chat, don't just build it: sort it into your list or the developers' list, write tickets for the developers' part, and do only your own part (protected, security, test-first, or a new kind of work). Only a trivial fix (a typo, or a single line with no behaviour change) is done directly.
 
 ## Plan
+- **One theme, and new ideas wait.** An idea that arrives mid-milestone goes to the next milestone (or `docs/roadmap.md`) unless it unblocks the current one: F1 grew from 32 to 58 tickets and ran past what the owner could follow. Name milestones by their theme (`f2-cloud-first`, owner 2026-10-02).
+- **Never let the queue hang on one lead ticket.** Keep developer tickets runnable beside a chain of lead tickets, so a Claude limit doesn't stop the factory: F1's tail (f1-53 → 54…58 → 30 → 32) stalled on one parked ticket.
 - Split the milestone into **your list** (protected paths, security, anything test-first) and **the developers' list** (everything else, one concept per ticket), plus 1–2 **stretch** tickets past the known range.
 - **Your list is tickets too** (`agent: lead`, [`docs/task-format.md`](../task-format.md)), in the same queue with the same `depends_on`: the runner does them headlessly, test-first, and merges them only if `check-all` passes. Write them precisely enough for a fresh session with no memory of the plan.
 - **Decide the joints, not the insides.** Ask: "If the developer chose differently, would another ticket, the security model or stored data break?" If yes, decide it now and write it in a short "Decisions" section of `docs/milestones/mN.md`: API shapes, data fields, module functions, which file owns what, which example to follow. If no, leave it to the developer. A long list means an architecture change, which goes to an ADR.
@@ -61,7 +63,10 @@ What developers pass at the first attempt, from results. Update it at each miles
   - Failed until split: a wiring ticket with 4 dependencies, i18n and offline handling (m4-06).
   - Their tests check presence rather than content, and drive the UI from JS rather than as a person would. Their French is correct but plain.
   - Attempts take 15–45 min; peak context is 26–43%.
-- **Not yet tried:** checkpoint reviews (ADR 12), tickets that make the developer read more than ~12 files.
+- **F1 (local Qwen):** 12/19 first-attempt on dashboard pages and fixes (difficulty 2–6); attempts average 28 min. Its 4 hardest failures (f1-15, 34, 35, 50) took two thirds of the Claude support.
+- **F1 (Sonnet as developer):** 3/3 first-attempt at difficulty 3–5, ≈$0.40 and 5–7 min a ticket; but it draws on the lead's 5-hour window.
+- **Checkpoints:** Sonnet, ≈$0.24 for two merges, found real bugs; a different model (Copilot's shadow) found one the checkpoint missed.
+- **Not yet tried:** Ollama Cloud developers (F2 benches them), tickets that make the developer read more than ~12 files.
 - The real ceiling is the local developer's context (about 180k tokens): a task that makes it read many large files runs out of room before it runs out of skill.
 
 ## Your own work
@@ -89,6 +94,7 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
 - Take screenshots of new screens when you have a browser; the layout check covers the rest.
 - A finding that recurs becomes a check where it can.
 - Respect the stop rules and the per-trigger limits in `workflow/runner.toml`.
+- **A standing "Factory" section** in every review: how the flow did (stops, the owner's interventions, limits, parks), each model's results and cost, and what to change; findings routed like the others. F1's is [`docs/reviews/factory-f1.md`](../reviews/factory-f1.md).
 - Add the milestone's entry to [ADR 02](../adr/02-software-factory.md)'s learnings log, and update "Known range" above.
 
 ## Sign-off sheet
@@ -99,6 +105,7 @@ When the review loop stops, write this at the top of `docs/reviews/mN.md`, in pl
 4. **Decisions waiting for you:** ADRs, with links.
 5. **How the work went:** one line per session (date, tasks merged or escalated, lead vs local tokens), the 3–5 lessons that mattered and what changed because of them, links to `docs/sessions/`.
 6. **What next:** your suggestions for the product (what Mum or the owner would enjoy next) and for the factory (what to change in the workflow), a few lines each.
+7. **What clogged the factory line** (owner, 2026-10-02): where the hours went that weren't merging work: waits for limits, failed attempts, stops for the owner, tickets that waited on one another while agents sat idle. Hours from the metrics database (runs, jobs, `usage_events`), each with what would unclog it.
 
 Then the rest of the report: what was built, findings, backlog, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `uv run runner report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
 

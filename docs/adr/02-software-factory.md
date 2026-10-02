@@ -238,6 +238,14 @@ _(to fill in at the M3 review)_
 - **Decisions affected:** ADR 07's keep-and-extend rule wasn't met, so tighten, per ADR 07: [ADR 12](12-junior-feedback-and-checkpoints.md). Dashboard: [ADR 13](13-factory-dashboard.md).
 - **Owner's direction at sign-off:** steer mid-milestone rather than limit the plan: a checkpoint every 2 merges, lead direction before a ticket's last attempt, limits per trigger instead of a milestone cap, and one command (`runner milestone N`) that runs everything unattended. The owner prefers runs that need no oversight over the cheapest possible session pattern ([ADR 12](12-junior-feedback-and-checkpoints.md), Accepted).
 
+### F1 (2026-10-02): the factory measures itself ([review](../reviews/f1.md), [factory review](../reviews/factory-f1.md))
+
+- **Q1:** 7 escalations, 6 directions, 3 parks at a limit. Headless handling carried a 36-hour run with two owner sessions; build-on and `finish` (ADR 15) stopped retries throwing away nearly-right work.
+- **Q3:** local Qwen 12/19 first-attempt at difficulty 2–6; Sonnet 3/3 as a developer; Opus merged all 28 lead tickets (14.8k lines, $4.65 per 1,000).
+- **Q5:** ≈$84 of headless Claude, 82% on lead tickets. The week never passed 20%; the 5-hour window stopped the run four times (≈11 h of waiting).
+- **Anything else:** reviewing costs about a tenth of writing (a checkpoint ≈$0.50 per 1,000 lines read); a different model's review found a bug the checkpoint missed. Replans cost 7% of lead spend and caught a gate blind spot and three wrong facts.
+- **Decisions affected:** [ADR 16](16-claude-window-and-named-milestones.md) (Proposed): Claude's shared 5-hour window, the exact model per job, named milestones, standard replans. The extraction (this ADR) gains a concrete shape from the owner: `factory init` for any project (`docs/roadmap.md`).
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

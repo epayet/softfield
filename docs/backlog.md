@@ -21,3 +21,6 @@ Nits from reviews and triaged discoveries that aren't scheduled yet. One bullet 
 - [m4-review nit] `Delivery` with no items still renders an empty `<div class="delivery-list">`.
 - [m4-review nit, French] The note label "Écrivez une note à envoyer." is stiff; something like "Un petit mot ?" suits the tone. Check with the owner.
 - [ADR 12 item 3] `compose.js` still has the "empty" and "too long" alerts, which a person can't reach now that Send is disabled and the textarea has `maxlength`. Remove them (and their strings) next time the composer changes.
+- [f1-review, f1-S166-1] The bench page counts a bench's attempts by list length, not by the attempt number it ran (found by Copilot's shadow, missed by the checkpoint).
+- [f1-review nit, f1-C165-1] Bench cells add tokens in and out but leave out cached tokens, unlike the other pages.
+- [f1-review nit, f1-C165-2, f1-S166-2/3] The bench and eligibility tests match substrings instead of the exact cell (the eligible row, the status column).

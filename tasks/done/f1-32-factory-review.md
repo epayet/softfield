@@ -34,3 +34,10 @@ Read `docs/agents/lead.md`, `docs/workflow.md`, `docs/adr/02-software-factory.md
 - `docs/reviews/factory-f1.md` exists with findings, routes and the replan verdict, each backed by a number or a file
 - lead.md's "Review" asks for a "Factory" section
 - `uv run runner check-all --task f1-32-factory-review` passes
+
+```yaml
+# --- runner ---
+result: done
+merged_by: the lead, interactively with the owner (2026-10-02)
+report: docs/reviews/factory-f1.md
+```
