@@ -27,3 +27,12 @@ Read `factory_dashboard/agents.py` (`efficiency`, `agents_page`), its template a
 - jobs without a model show under "not recorded"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: needs-info
+attempts: 1
+tokens: 752269
+logs: var/runs/20261002-151301/f2-07-agents-models
+```
