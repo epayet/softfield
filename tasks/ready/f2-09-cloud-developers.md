@@ -1,7 +1,7 @@
 ---
 id: f2-09-cloud-developers
 milestone: f2
-depends_on: [f2-02-claude-window, f2-06-overview-allowances, f2-07-agents-models]
+depends_on: [f2-02-claude-window, f2-06-overview-allowances, f2-13-overview-allowances-fixes, f2-07-agents-models]
 agent: lead
 difficulty: 5
 commands: [uv run runner report]
