@@ -61,7 +61,7 @@ def test_claudes_reserve_is_read_from_the_toml(tmp_path):
 
 def test_the_repos_toml_declares_f1s_agents_and_roles():
     """ADR 14 item 3, D6; f1-25 turns on Sonnet as a developer after local (ADR 15 item 6),
-    with Opus to check Sonnet's merges (item 9)."""
+    with Opus to check Sonnet's merges (item 9); f1-26 shadows the checkpoint with Copilot."""
     cfg = load_config(REPO)
     local, opus, sonnet = "local-qwen3.6-35b-a3b", "claude-opus", "claude-sonnet"
     assert cfg.agents[local] == Agent(local, "opencode", "lmstudio/qwen/qwen3.6-35b-a3b", 5)
@@ -77,7 +77,9 @@ def test_the_repos_toml_declares_f1s_agents_and_roles():
         "review": (opus,),
         "narrative": (opus,),
         "checkpoint": (sonnet, opus),
+        "checkpoint-shadow": ("copilot-auto",),
     }
+    assert cfg.agents["copilot-auto"].harness == "copilot"
     assert cfg.agent_for("checkpoint").id == sonnet
     assert not hasattr(cfg, "checkpoint_model")
 

@@ -3,6 +3,7 @@
 import hashlib
 import itertools
 import json
+import re
 import select
 import sqlite3
 import sys
@@ -1359,8 +1360,10 @@ def _tally(rec: TaskRecord, run: JobResult) -> None:
     rec.timeouts += run.timed_out
 
 
-def _record_refusal(s: Session, agent: str, run: JobResult) -> None:
-    """A cloud developer's refusal, for the allowance (ADR 15 item 2): its reset if it said."""
+def _record_refusal(
+    s: Session, agent: str, run: JobResult, what: str = "a developer attempt"
+) -> None:
+    """A cloud agent's refusal, for the allowance (ADR 15 item 2): its reset if it said."""
     if (limit := run.refusal) is None:
         return
     _record(
@@ -1373,7 +1376,7 @@ def _record_refusal(s: Session, agent: str, run: JobResult) -> None:
         resets_at=limit.resets_at.isoformat() if limit.resets_at else None,
     )
     sure = "a limit" if limit.certain else "an error that may be a limit"
-    s.report.notes.append(f"{agent} refused a developer attempt ({sure}): {run.text[:200]}")
+    s.report.notes.append(f"{agent} refused {what} ({sure}): {run.text[:200]}")
 
 
 def _log_running(s: Session, agent: str, what: str, elapsed: float) -> None:
@@ -2033,6 +2036,116 @@ def checkpoint(s: Session, milestone: str) -> None:
             agent=CLAUDE_HEADLESS_AGENT,
         )
     )
+    shadow_checkpoint(s, milestone, merged, out)
+
+
+# --- the checkpoint's shadow (ADR 14 item 12) ----------------------------------------------
+
+SHADOW = "checkpoint-shadow"
+SHADOW_NOTE_MAX = 300  # chars of a failed shadow's error kept on its job
+_FENCED_JSON = re.compile(r"```(?:json)?\s*(\{.*\})\s*```", re.DOTALL)
+
+
+def _answer_json(text: str) -> str:
+    """The JSON object in an answer: a fenced block's, else its first ``{`` to its last ``}``."""
+    if found := _FENCED_JSON.search(text):
+        return found[1]
+    start, end = text.find("{"), text.rfind("}")
+    return text[start : end + 1] if 0 <= start < end else text
+
+
+def _merge_files(s: Session, merged: Iterable[str]) -> str:
+    """Each merge's ticket and the files it changed: a read-only shadow may run no git."""
+    lines = []
+    for entry in merged:
+        ticket, sha = entry.split()[:2]
+        files = [f for f in s.git.run("show", "--name-only", "--format=", sha).splitlines() if f]
+        lines.append(f"- {ticket} (tasks/done/{ticket}.md): {', '.join(files)}")
+    return "\n".join(lines)
+
+
+def shadow_checkpoint(s: Session, milestone: str, merged: list[str], out: Path) -> None:
+    """Each agent `[roles] checkpoint-shadow` lists reviews the checkpoint's merges, read-only,
+    paced by its allowance like any agent. Its findings and readings are recorded on its own
+    job and never acted on; a refusal or an error is recorded and the run goes on. Its model
+    may be unknown (`copilot-auto`), so ADR 15 item 9's other-model rule isn't checked."""
+    agents = [s.cfg.agents[agent_id] for agent_id in s.cfg.roles.get(SHADOW, ())]
+    if not agents:
+        return
+    job = JobSpec(
+        role=SHADOW,
+        prompt=prompts.CHECKPOINT_SHADOW.format(merges=_merge_files(s, merged)),
+        timeout=s.cfg.claude_timeout,
+        title=f"{milestone} checkpoint shadow",
+    )
+    at = now()
+    windows = agent_windows(s, agents, at)
+    for agent in agents:
+        fit = allowance.answer(agent.id, windows.get(agent.id, ()), 0.0, at)
+        if fit.ok:
+            _shadow(s, agent, job, milestone, out, f"{agent.id}, a shadow: {fit.reason}")
+        else:
+            s.report.notes.append(f"The checkpoint's shadow on {agent.id} waits: {fit.reason}")
+    if not s.git.is_clean():  # a shadow edits nothing: what it left never reaches the repo
+        s.git.run("checkout", "-q", "--", ".")
+        s.git.run("clean", "-q", "-fd")
+        s.report.notes.append("The checkpoint's shadow left changes in the tree; dropped.")
+
+
+def _shadow(s: Session, agent: Agent, job: JobSpec, milestone: str, out: Path, reason: str) -> None:
+    base = out.with_name(f"{out.stem}-shadow-{agent.id}")
+    log = base.with_suffix(".log")
+    started = clock()
+    s.log(console.start(agent.id, SHADOW))
+    job_id = s.last_job_id = record_start(
+        s,
+        None,
+        milestone,
+        SHADOW,
+        agent.id,
+        attempt=next_number(s, None, SHADOW),
+        log_path=_rel(s, log),
+        routing_reason=reason,
+    )
+    result = with_progress(
+        partial(adapter_for(agent.harness).run, agent, job, s.repo, log, now()),
+        partial(_log_running, s, agent.id, SHADOW),
+    )
+    _record_readings(s, agent.id, result.readings)
+    findings: tuple[Finding, ...] = ()
+    note: str | None = None
+    if result.ok:
+        outcome = "passed"
+        answer = base.with_suffix(".json")
+        answer.write_text(_answer_json(result.text), encoding="utf-8")
+        try:
+            findings = parse_checkpoint(answer)
+        except ReviewFileError as exc:
+            note = f"findings unusable: {exc}"
+            s.report.notes.append(f"The checkpoint's shadow on {agent.id}: {note}")
+    else:
+        outcome = "refused" if result.refusal is not None else "failed"
+        note = result.text[:SHADOW_NOTE_MAX]
+        if result.refusal is not None:
+            _record_refusal(s, agent.id, result, "the checkpoint's shadow")
+        else:
+            s.report.notes.append(f"The checkpoint's shadow on {agent.id} failed: {note}")
+    if job_id is not None:
+        _record(
+            s,
+            metrics.finish_job,
+            job_id,
+            ended=now().isoformat(),
+            outcome=outcome,
+            tokens_in=_tokens_in(result),
+            tokens_out=_tokens_out(result),
+            cost_usd=result.cost_usd,
+            steps=result.num_turns,
+            note=note,
+            session_id=result.session_id,
+        )
+        record_findings(s, milestone, findings, agent.id, f"{milestone}-S{job_id}-")
+    s.log(console.claude_end(agent.id, SHADOW, result.ok, clock() - started, result.cost_usd))
 
 
 # --- escalation handling ------------------------------------------------------------

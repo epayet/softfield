@@ -206,6 +206,20 @@ route: "local" if you wrote a fix ticket for it, "backlog" otherwise.
 Change nothing else; don't run git beyond diff, log and show.
 """
 
+# ADR 14 item 12: beside the checkpoint, read-only; what it finds is recorded, never acted on.
+CHECKPOINT_SHADOW = """\
+Review these just-merged tickets of this repo, read-only: each ticket's file, then the files
+it changed and their tests.
+{merges}
+
+Look for bugs, tests that check presence instead of content, and anything masked instead of
+fixed. Change nothing. Answer with only this JSON, one entry per problem (an empty list if
+none):
+{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
+  "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
+  "route": "backlog", "ticket": "<the merged ticket at fault>"}}]}}
+"""
+
 REVIEW = """\
 You are the lead, reviewing milestone {milestone} of Coucou. Follow docs/agents/lead.md
 (Review) and docs/workflow.md (Milestone review loop).

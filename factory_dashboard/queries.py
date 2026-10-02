@@ -342,6 +342,100 @@ def savings(conn: sqlite3.Connection, project: str, key: str | None = None) -> S
     return _combine([agent for part in parts for agent in part.agents])
 
 
+# --- eligibility (ADR 14 item 12, ADR 15 item 9) -------------------------------------------
+
+SHADOW_SUFFIX = "-shadow"  # a shadow of the role `checkpoint` runs as `checkpoint-shadow`
+# The starting bars per role: the rating, and the milestones shadowed.
+BARS = {"checkpoint": (8.0, 2)}
+
+
+@dataclass(frozen=True)
+class Eligibility:
+    """Whether an agent that shadowed ``role`` meets its starting bars; ``reason`` says what
+    it lacks, or what it met."""
+
+    agent: str
+    role: str
+    eligible: bool
+    reason: str
+
+
+def _rating(conn: sqlite3.Connection, agent: str) -> float | None:
+    """The agent's one rating: its latest change, whatever its skill (ADR 15 item 9)."""
+    row = conn.execute(
+        "SELECT after FROM rating_changes WHERE agent = ? ORDER BY at DESC, id DESC LIMIT 1",
+        (agent,),
+    ).fetchone()
+    return None if row is None else float(row["after"])
+
+
+def _eligible(conn: sqlite3.Connection, project_id: int, agent: str, role: str) -> Eligibility:
+    """The checkpoint's bars: a rating ≥ 8, shadowed over 2+ milestones, no missed blocking
+    finding there, and a rating ≥ the difficulty of the tickets it reviewed: every developer
+    ticket merged in a milestone it shadowed."""
+    need, milestones = BARS[role]
+    shadowed = [
+        row["milestone_id"]
+        for row in conn.execute(
+            "SELECT DISTINCT j.milestone_id FROM jobs j JOIN milestones m ON m.id = j.milestone_id"
+            " WHERE m.project_id = ? AND j.agent = ? AND j.role = ? AND j.outcome = 'passed'",
+            (project_id, agent, role + SHADOW_SUFFIX),
+        )
+    ]
+    marks = ", ".join("?" for _ in shadowed)
+    missed = conn.execute(
+        f"SELECT count(*) FROM findings WHERE milestone_id IN ({marks})"  # noqa: S608
+        " AND verdict = 'missed' AND severity = 'blocking'",
+        shadowed,
+    ).fetchone()[0]
+    hardest = conn.execute(
+        f"SELECT max(coalesce(difficulty_corrected, difficulty)) FROM tickets WHERE milestone_id"  # noqa: S608
+        f" IN ({marks}) AND kind = 'developer' AND \"commit\" IS NOT NULL",
+        shadowed,
+    ).fetchone()[0]
+    rating = _rating(conn, agent)
+    lacks = []
+    if rating is None:
+        lacks.append("no rating yet")
+    elif rating < need:
+        lacks.append(f"rated {rating:g}, needs {need:g}")
+    if len(shadowed) < milestones:
+        lacks.append(
+            f"shadowed {len(shadowed)} milestone{'' if len(shadowed) == 1 else 's'},"
+            f" needs {milestones}"
+        )
+    if missed:
+        lacks.append(f"{missed} missed blocking finding{'' if missed == 1 else 's'}")
+    if rating is not None and hardest is not None and rating < hardest:
+        lacks.append(f"rated {rating:g}, below difficulty {hardest} of a ticket it reviewed")
+    if lacks:
+        return Eligibility(agent, role, False, "; ".join(lacks))
+    met = (
+        f"rated {rating:g} over {len(shadowed)} milestones, no missed blocking finding, tickets"
+        f" up to difficulty {hardest if hardest is not None else '?'}"
+    )
+    return Eligibility(agent, role, True, met)
+
+
+def eligibility(conn: sqlite3.Connection, project: str) -> list[Eligibility]:
+    """Per agent that shadowed a role in the project, whether it meets that role's starting
+    bars (ADR 14 item 12); the owner changes `[roles]` at a milestone review."""
+    project_id = _project_id(conn, project)
+    if project_id is None:
+        return []
+    pairs = conn.execute(
+        "SELECT DISTINCT j.agent, j.role FROM jobs j JOIN runs r ON r.id = j.run_id"
+        " WHERE r.project_id = ? AND j.role LIKE ? ORDER BY j.agent, j.role",
+        (project_id, "%" + SHADOW_SUFFIX),
+    ).fetchall()
+    found = []
+    for row in pairs:
+        role = row["role"].removesuffix(SHADOW_SUFFIX)
+        if role in BARS:
+            found.append(_eligible(conn, project_id, row["agent"], role))
+    return found
+
+
 def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:
     """Each milestone's results and savings, oldest first."""
     found = []

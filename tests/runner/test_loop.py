@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from runner import checks, claude, gates, local_model, loop, metrics
-from runner.agents import Agent, JobResult, JobSpec, Reading
+from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
 from runner.claude import ClaudeJob, TransientError, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
@@ -661,6 +661,158 @@ def test_a_malformed_checkpoint_file_is_noted_not_fatal(repo, fake_model, fake_l
     assert [t.result for t in report.tasks] == ["done", "done"]
     assert _rows(repo, "findings") == []
     assert any(n.startswith("Checkpoint findings unusable:") for n in report.notes)
+
+
+# --- the checkpoint's shadow (f1-26, ADR 14 item 12) --------------------------------------
+
+COPILOT = Agent("copilot-auto", "copilot", "auto", 6)
+COPILOT_RESETS = datetime(2026, 11, 1, tzinfo=UTC)
+
+
+def _shadowed(repo: Path) -> Config:
+    roles = {**ROLES, "checkpoint-shadow": ("copilot-auto",)}
+    return replace(_config(repo), agents={**_config(repo).agents, COPILOT.id: COPILOT}, roles=roles)
+
+
+def _fake_copilot(monkeypatch, result: JobResult, act=None) -> list[JobSpec]:
+    """Copilot's adapter, scripted: every job's spec is kept; ``act`` runs against the repo."""
+    from runner import copilot
+
+    specs: list[JobSpec] = []
+
+    class Fake:
+        def run(self, agent, spec, repo, log_path, now):
+            specs.append(spec)
+            log_path.write_text(result.text)
+            if act is not None:
+                act(repo)
+            return result
+
+    monkeypatch.setattr(copilot, "ADAPTER", Fake())
+    return specs
+
+
+def _checkpoint_changes(text: str) -> Callable[[ClaudeJob, Path], None]:
+    """A checkpoint that writes its findings and a line in developer.md."""
+    write = _checkpoint_writes(text)
+
+    def review(job, repo_):
+        write(job, repo_)
+        notes = repo_ / "docs" / "agents" / "developer.md"
+        notes.parent.mkdir(parents=True, exist_ok=True)
+        notes.write_text("- Check content, not presence.\n")
+
+    return review
+
+
+SHADOW_FINDING = {
+    "severity": "blocking",
+    "file": "coucou/part2.py",
+    "line": 1,
+    "summary": "PART is reassigned",
+    "detail": "Two modules share a name.",
+    "route": "backlog",
+    "ticket": "m1-02-thing",
+}
+
+
+def test_a_shadow_reviews_the_same_merges_and_only_the_checkpoint_acts(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _two_merges(repo, fake_model)
+    script, _ = fake_lead
+    finding = {**SHADOW_FINDING, "severity": "nit", "summary": "A nit", "ticket": "m1-01-thing"}
+    script.append(_checkpoint_changes(json.dumps({"findings": [finding]})))
+    answer = "One problem.\n```json\n" + json.dumps({"findings": [SHADOW_FINDING]}) + "\n```\n"
+    reading = Reading("month", 0.0015, COPILOT_RESETS)
+    result = JobResult(ok=True, text=answer, duration_s=1.0, num_turns=1, readings=(reading,))
+
+    def stray(repo_):  # a write the deny rules would stop; the runner drops it anyway
+        (repo_ / "coucou" / "shadow.py").write_text("X = 1\n")
+
+    specs = _fake_copilot(monkeypatch, result, stray)
+    report = loop.run_session(_shadowed(repo), once=False, dry_run=False, escalate=False)
+    assert report is not None and [t.result for t in report.tasks] == ["done", "done"]
+    # One short read-only prompt over the same merges, naming what each changed
+    [spec] = specs
+    assert spec.role == "checkpoint-shadow" and spec.read_only
+    for name in ("m1-01-thing", "m1-02-thing", "coucou/part1.py", "coucou/part2.py"):
+        assert name in spec.prompt
+    assert '"findings"' in spec.prompt
+    # Two jobs, two sets of findings, each on its own job and agent
+    jobs = {j["role"]: j for j in _rows(repo, "jobs") if j["ticket_id"] is None}
+    checkpoint, shadow = jobs["checkpoint"], jobs["checkpoint-shadow"]
+    assert (shadow["agent"], shadow["outcome"]) == ("copilot-auto", "passed")
+    assert shadow["routing_reason"]
+    found = {f["key"]: f for f in _rows(repo, "findings")}
+    assert set(found) == {f"m1-C{checkpoint['id']}-1", f"m1-S{shadow['id']}-1"}
+    mine = found[f"m1-S{shadow['id']}-1"]
+    assert (mine["job_id"], mine["agent"], mine["severity"]) == (
+        shadow["id"],
+        "copilot-auto",
+        "blocking",
+    )
+    assert found[f"m1-C{checkpoint['id']}-1"]["agent"] == "claude-sonnet"
+    # Its reading of the month's credits is kept for the allowance
+    [event] = [e for e in _rows(repo, "usage_events") if e["agent"] == "copilot-auto"]
+    assert (event["kind"], event["window"], event["value"]) == ("reading", "month", 0.0015)
+    # Only the checkpoint's changes reach the repo; nothing is acted on for the shadow
+    assert (repo / "docs" / "agents" / "developer.md").is_file()
+    assert not (repo / "coucou" / "shadow.py").exists()
+    assert git(repo, "status", "--porcelain") == ""
+    tracked = git(repo, "log", "--all", "--name-only", "--format=")
+    assert "coucou/shadow.py" not in tracked
+
+
+@pytest.mark.parametrize(
+    ("result", "outcome"),
+    [
+        (
+            JobResult(
+                ok=False,
+                text="You've hit your monthly limit.",
+                duration_s=1.0,
+                refusal=Refusal(None, None),
+            ),
+            "refused",
+        ),
+        (JobResult(ok=False, text="something broke", duration_s=1.0), "failed"),
+    ],
+)
+def test_a_shadow_that_refuses_or_fails_is_recorded_and_the_run_goes_on(
+    repo, fake_model, fake_lead, monkeypatch, result, outcome
+):
+    _two_merges(repo, fake_model)
+    _add_task(repo, "m1-03-thing")
+    fake_model.append(lambda repo_, prompt: (repo_ / "coucou" / "part3.py").write_text("P = 3\n"))
+    script, _ = fake_lead
+    script.append(_checkpoint_writes("{}"))
+    _fake_copilot(monkeypatch, result)
+    report = loop.run_session(_shadowed(repo), once=False, dry_run=False, escalate=False)
+    assert report is not None and [t.result for t in report.tasks] == ["done"] * 3
+    [shadow] = [j for j in _rows(repo, "jobs") if j["role"] == "checkpoint-shadow"]
+    assert (shadow["agent"], shadow["outcome"]) == ("copilot-auto", outcome)
+    assert result.text in str(shadow["note"])
+    assert _rows(repo, "findings") == []
+    refusals = [e for e in _rows(repo, "usage_events") if e["kind"] == "refusal"]
+    assert [e["agent"] for e in refusals] == (["copilot-auto"] if outcome == "refused" else [])
+    assert any("copilot-auto" in n and "shadow" in n for n in report.notes)
+
+
+def test_a_shadow_over_its_pace_is_skipped(repo, fake_model, fake_lead, monkeypatch):
+    """runner/allowance.py paces a shadow like any agent: one resting after a refusal waits."""
+    _two_merges(repo, fake_model)
+    script, _ = fake_lead
+    script.append(_checkpoint_writes("{}"))
+    specs = _fake_copilot(monkeypatch, JobResult(ok=True, text="{}", duration_s=1.0))
+    conn = metrics.open_db(_config(repo).metrics_db)
+    metrics.add_usage_event(conn, "copilot-auto", loop.now().isoformat(), "refusal")
+    conn.close()
+    report = loop.run_session(_shadowed(repo), once=False, dry_run=False, escalate=False)
+    assert report is not None and [t.result for t in report.tasks] == ["done", "done"]
+    assert specs == []
+    assert [j["role"] for j in _rows(repo, "jobs") if j["ticket_id"] is None] == ["checkpoint"]
+    assert any("copilot-auto" in n and "shadow" in n for n in report.notes)
 
 
 def test_a_directions_process_note_lands_on_its_job(repo, fake_model, fake_lead):

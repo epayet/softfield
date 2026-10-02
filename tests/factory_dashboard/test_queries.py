@@ -5,6 +5,7 @@ import pytest
 from factory_dashboard.queries import (
     SEED_DOLLARS_PER_LINE,
     connect,
+    eligibility,
     milestone_results,
     savings,
     trends,
@@ -96,6 +97,88 @@ def test_trends_run_oldest_first(db):
     assert [p.results.key for p in points] == ["m4", "f1"]
     assert points[0].results.pass_rate == 1.0
     assert points[1].savings.net == pytest.approx(-2.70)
+
+
+SHADOW, OTHER_SHADOW = "copilot-auto", "copilot-gpt"
+
+
+def _shadows(db_path) -> sqlite3.Connection:
+    """Two shadows of the checkpoint (ADR 14 item 12) on top of the fixture: copilot-auto
+    shadowed f1 only (its m4 shadow was refused); copilot-gpt shadowed f1 and m4. Both are
+    rated 8.5 by their latest change, whatever its skill."""
+    writer = metrics.open_db(db_path)
+    project = metrics.upsert_project(writer, PROJECT)
+    run = metrics.upsert_run(writer, project, "20260930-100000")
+    shadows = (
+        (SHADOW, "f1", "passed"),
+        (SHADOW, "m4", "refused"),
+        (OTHER_SHADOW, "f1", "passed"),
+        (OTHER_SHADOW, "m4", "passed"),
+    )
+    for attempt, (agent, milestone, outcome) in enumerate(shadows, start=1):
+        job = metrics.start_job(
+            writer,
+            run,
+            ticket_id=None,
+            milestone_id=metrics.upsert_milestone(writer, project, milestone),
+            role="checkpoint-shadow",
+            agent=agent,
+            attempt=attempt,  # one run: the jobs' key needs them apart
+            started="2026-09-30T10:30:00+02:00",
+        )
+        metrics.finish_job(writer, job, ended="2026-09-30T10:31:00+02:00", outcome=outcome)
+    for agent in (SHADOW, OTHER_SHADOW):
+        metrics.add_rating_change(writer, agent, "reviewing", 6, 9, at="2026-09-30T11:00:00+02:00")
+        metrics.add_rating_change(writer, agent, "coding", 6, 8.5, at="2026-09-30T12:00:00+02:00")
+    writer.commit()
+    return writer
+
+
+def test_eligibility_says_no_with_its_reason_for_one_milestone(db, db_path):
+    _shadows(db_path).close()
+    found = {(e.agent, e.role): e for e in eligibility(db, PROJECT)}
+    assert set(found) == {(SHADOW, "checkpoint"), (OTHER_SHADOW, "checkpoint")}
+    one = found[SHADOW, "checkpoint"]
+    assert not one.eligible
+    assert one.reason == "shadowed 1 milestone, needs 2"
+
+
+def test_eligibility_says_yes_for_an_agent_meeting_every_bar(db, db_path):
+    _shadows(db_path).close()
+    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_SHADOW)
+    assert both.eligible
+    # f1's tickets go up to d5, m4's is d2: rated 8.5 covers them
+    assert both.reason == (
+        "rated 8.5 over 2 milestones, no missed blocking finding, tickets up to difficulty 5"
+    )
+
+
+def test_eligibility_names_every_bar_it_misses(db, db_path):
+    writer = _shadows(db_path)
+    project = metrics.upsert_project(writer, PROJECT)
+    m4 = metrics.upsert_milestone(writer, project, "m4")
+    metrics.add_finding(writer, m4, "m4-F9", severity="blocking", verdict="missed")
+    metrics.add_rating_change(
+        writer, OTHER_SHADOW, "coding", 8.5, 4, at="2026-09-30T13:00:00+02:00"
+    )
+    metrics.upsert_ticket(writer, project, "f1-01-first", difficulty_corrected=9)
+    writer.commit()
+    writer.close()
+    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_SHADOW)
+    assert not both.eligible
+    assert both.reason == (
+        "rated 4, needs 8; 1 missed blocking finding; rated 4, below difficulty 9 of a ticket"
+        " it reviewed"
+    )
+
+
+def test_eligibility_without_a_rating_says_so(db, db_path):
+    writer = _shadows(db_path)
+    writer.execute("DELETE FROM rating_changes WHERE agent = ?", (OTHER_SHADOW,))
+    writer.commit()
+    writer.close()
+    both = next(e for e in eligibility(db, PROJECT) if e.agent == OTHER_SHADOW)
+    assert (both.eligible, both.reason) == (False, "no rating yet")
 
 
 def test_the_connection_is_read_only(db):
