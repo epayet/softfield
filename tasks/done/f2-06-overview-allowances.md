@@ -57,3 +57,12 @@ attempts: 0
 tokens: 0
 logs: var/runs/20261002-121726/f2-06-overview-allowances
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 1900
+gate_failures: ['ruff', 'ruff']
+tokens: 3988217
+```
