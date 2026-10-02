@@ -48,3 +48,12 @@ attempts: 3
 tokens: 184779
 logs: var/runs/20261002-115807/f2-06-overview-allowances
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: pre-flight failed
+attempts: 0
+tokens: 0
+logs: var/runs/20261002-121726/f2-06-overview-allowances
+```
