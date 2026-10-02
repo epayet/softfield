@@ -31,3 +31,10 @@ Read `docs/milestones/f1.md` D3 (amended 2026-10-02) and `docs/reviews/factory-f
 - a wait for a reset names the ticket it waits for, in `activity` and on the Overview
 - after a simulated Ctrl-C the run has `ended` set and `reserve` 0, and the Overview says nothing is running
 - `uv run runner check-all --task f2-03-runner-status` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
