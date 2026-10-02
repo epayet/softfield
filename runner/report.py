@@ -10,6 +10,7 @@ from factory_dashboard.queries import (
     MilestoneResults,
     Savings,
     connect,
+    is_claude,
     milestone_results,
     savings,
     trends,
@@ -257,7 +258,7 @@ def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
         "|---|---|---|---|",
     ]
     for a in r.agents:
-        tokens = a.token_equivalents if (a.agent or "").startswith("claude-") else a.tokens
+        tokens = a.token_equivalents if is_claude(a.agent) else a.tokens
         lines.append(f"| {a.agent} | {a.jobs} | {short(tokens)} | {_usd(a.dollars)} |")
     lines += [
         "",

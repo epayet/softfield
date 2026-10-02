@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Project, render
 from factory_dashboard.eligibility import shadow_rows
-from runner.usage import CACHE_READ_WEIGHT, OUTPUT_WEIGHT
+from factory_dashboard.queries import dollars
 
 router = APIRouter()
 
@@ -46,26 +46,6 @@ class Efficiency:
 
 # Jobs whose model is NULL or '' (before f2-04, or a harness that didn't say).
 NOT_RECORDED = "not recorded"
-
-
-def _equivalents(job: sqlite3.Row) -> float:
-    return (
-        (job["tokens_in"] or 0)
-        + CACHE_READ_WEIGHT * (job["tokens_cached"] or 0)
-        + OUTPUT_WEIGHT * (job["tokens_out"] or 0)
-    )
-
-
-def _is_lead(agent: str | None) -> bool:
-    return bool(agent) and str(agent).startswith("claude-")
-
-
-def _dollars(job: sqlite3.Row) -> float:
-    if not _is_lead(job["agent"]):
-        return 0.0
-    if job["cost_usd"] is not None:
-        return float(job["cost_usd"])
-    return _equivalents(job) * (4 / 1_000_000)
 
 
 def efficiency(
@@ -169,8 +149,6 @@ def _efficiency(
                     gate_fails[g["name"]] += 1
     most_failed = max(gate_fails, key=lambda k: gate_fails[k]) if gate_fails else ""
 
-    dollars = sum(_dollars(r) for r in rows)
-
     return Efficiency(
         agent=agent,
         jobs=total_jobs,
@@ -183,7 +161,7 @@ def _efficiency(
         tokens_per_second=tps,
         escalation_rate=esc_rate,
         most_failed_gate=most_failed or "\u2013",
-        dollars=dollars,
+        dollars=sum(dollars(r) for r in rows),
         model=model,
     )
 

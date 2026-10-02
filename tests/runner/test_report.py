@@ -22,6 +22,7 @@ from runner.report import (
 )
 from runner.usage import ClaudeUsage
 from tests.factory_dashboard.conftest import PROJECT, write_fixture
+from tests.factory_dashboard.test_queries import write_sonnet_ticket
 
 T0 = datetime(2026, 9, 27, 14, 0, tzinfo=UTC)
 
@@ -136,6 +137,14 @@ def test_the_report_shows_savings_in_dollars_with_tokens_underneath(db_path):
     assert "| local-qwen3.6-35b-a3b | 2 | 100 | $1.50 | $4.20 | **-$2.70** |" in text
     assert "doing it itself ≈15k token-equivalents, supporting ≈100k" in text
     assert "| claude-opus | 4 | 120k | $7.50 |" in text
+
+
+def test_the_report_credits_sonnets_lines_and_leaves_removed_tickets_out(db_path):
+    write_sonnet_ticket(db_path)
+    text = _numbers(db_path)
+    assert "| Tickets merged | 4 of 4 |" in text
+    # 60 lines at $3 per 200; its own $0.40 job and a fifth of the review and checkpoint
+    assert "| claude-sonnet | 1 | 60 | $0.90 | $0.76 | **$0.14** |" in text
 
 
 def test_the_report_has_the_trend_across_milestones(db_path):

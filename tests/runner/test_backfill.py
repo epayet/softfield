@@ -355,6 +355,23 @@ def test_the_milestone_gets_its_doc_review_and_dates(m4, tmp_path):
     assert milestone["started"] is not None and milestone["ended"] is not None
 
 
+def test_a_milestones_status_comes_from_its_doc(m4, tmp_path):
+    doc = m4 / "docs" / "milestones" / "m4.md"
+    text = doc.read_text(encoding="utf-8")
+    doc.write_text(
+        text.replace("\n\n", "\n\n> **Status: in review** (2026-09-30). Base: `m4-start`.\n\n", 1)
+    )
+    _write(
+        m4 / "docs" / "milestones" / "m0.md",
+        "# Milestone 0: Setup\n\n> **Status: done.** Signed off by the owner on 2026-09-27.\n",
+    )
+    db = tmp_path / "metrics.sqlite"
+    _run(m4, db)
+    status = {m["key"]: m["status"] for m in _rows(db, "SELECT key, status FROM milestones")}
+    # m4 is tagged m4-done, but its doc says it's still in review; m0 has no tags
+    assert (status["m4"], status["m0"]) == ("in review", "done")
+
+
 def test_the_summary_counts_what_it_wrote_per_milestone(m4, tmp_path):
     summary = _run(m4, tmp_path / "metrics.sqlite")
     m4_counts = summary.written["m4"]

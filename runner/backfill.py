@@ -68,6 +68,8 @@ _CLAUDE_LOG_RE = re.compile(
     r"^claude-(?P<kind>lead-ticket|[a-z]+)-(?P<subject>.+?)"
     r"(?:-(?P<number>\d+))?(?:-retry(?P<retry>\d+))?\.log$"
 )
+# A milestone doc's `> **Status: in review** (…)` or `> **Status: done.** …`
+_STATUS_RE = re.compile(r"^>\s*\*\*Status:\s*(.+?)\.?\*\*", re.MULTILINE)
 _GATE_RE = re.compile(r"^## (.+?): (ok|FAIL)$", re.MULTILINE)
 _STDERR = "\n--- stderr ---\n"
 _TIMED_OUT = "--- timed out ---"
@@ -583,7 +585,9 @@ def _milestones(b: _Backfill) -> None:
     for key in sorted(keys | set(b.milestones)):
         doc_path = milestone_file(b.repo, "milestones", key)
         review_path = milestone_file(b.repo, "reviews", key)
-        doc = milestone_doc(doc_path.read_text(encoding="utf-8")) if doc_path.is_file() else {}
+        text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
+        doc = milestone_doc(text)
+        status = _STATUS_RE.search(text)
         sheet = (
             signoff_sections(review_path.read_text(encoding="utf-8"))
             if review_path.is_file()
@@ -602,7 +606,7 @@ def _milestones(b: _Backfill) -> None:
             review_rounds=len(round_counts) if isinstance(round_counts, list) else None,
             started=started.isoformat() if started else None,
             ended=ended.isoformat() if ended else None,
-            status="done" if ended else None,
+            status=status[1] if status else ("done" if ended else None),
         )
 
 

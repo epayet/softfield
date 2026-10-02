@@ -3,7 +3,9 @@ and the dashboard's pages.
 
 Plain functions over a read-only connection that return data, never text. Dollars are
 API-equivalent: a Claude job's ``cost_usd``, or its token-equivalents at ≈$4 per 1M when the
-cost wasn't kept. Local jobs cost nothing. "The lead" is any ``claude-*`` agent (f1 D6).
+cost wasn't kept. Local jobs cost nothing. The lead is a role, not a harness: a job is the
+lead's when its role is one of ``LEAD_ROLES``, so Sonnet doing a developer's ticket is a
+developer (factory-f1 finding 5).
 """
 
 import sqlite3
@@ -20,8 +22,9 @@ DOLLARS_PER_TOKEN = 4 / 1_000_000  # per token-equivalent (D7)
 # D7's seed: the lead's M4 tickets L0–L3 took 3.5M token-equivalents for 1,979 lines.
 SEED_TOKENS_PER_LINE = 3_500_000 / 1979
 SEED_DOLLARS_PER_LINE = SEED_TOKENS_PER_LINE * DOLLARS_PER_TOKEN
-LEAD_PREFIX = "claude-"
+LEAD_PREFIX = "claude-"  # Claude's agents, whose jobs cost dollars, whatever their role
 LOCAL_ROLES = ("developer", "last-attempt")  # a developer's attempts at a ticket
+LEAD_ROLES = ("lead-ticket", "direction", "escalation", "checkpoint", "review", "narrative")
 UNKNOWN_AGENT = "backfill-unknown"  # D6
 SEVERITIES = ("blocking", "should-fix", "nit")
 
@@ -109,8 +112,13 @@ class Trend:
 # --- helpers -------------------------------------------------------------------------------
 
 
-def _is_lead(agent: str | None) -> bool:
+def is_claude(agent: str | None) -> bool:
+    """Whether the agent's jobs cost dollars (and are counted in token-equivalents)."""
     return bool(agent) and str(agent).startswith(LEAD_PREFIX)
+
+
+def _is_lead(job: sqlite3.Row) -> bool:
+    return job["role"] in LEAD_ROLES
 
 
 def _equivalents(job: sqlite3.Row) -> float:
@@ -121,8 +129,9 @@ def _equivalents(job: sqlite3.Row) -> float:
     )
 
 
-def _dollars(job: sqlite3.Row) -> float:
-    if not _is_lead(job["agent"]):
+def dollars(job: sqlite3.Row) -> float:
+    """A job's API-equivalent dollars: its cost, or its tokens priced; 0 for a free agent."""
+    if not is_claude(job["agent"]):
         return 0.0
     if job["cost_usd"] is not None:
         return float(job["cost_usd"])
@@ -135,7 +144,7 @@ def _spend(jobs: Sequence[sqlite3.Row], agent: str | None = None) -> Spend:
         tokens_in=sum(j["tokens_in"] or 0 for j in jobs),
         tokens_cached=sum(j["tokens_cached"] or 0 for j in jobs),
         tokens_out=sum(j["tokens_out"] or 0 for j in jobs),
-        dollars=sum(_dollars(j) for j in jobs),
+        dollars=sum(dollars(j) for j in jobs),
         agent=agent,
     )
 
@@ -192,7 +201,8 @@ def milestone_results(conn: sqlite3.Connection, project: str, key: str) -> Miles
     m = _milestone(conn, project, key)
     if m is None:
         return None
-    tickets, jobs = _tickets(conn, m["id"]), _jobs(conn, m["id"])
+    jobs = _jobs(conn, m["id"])
+    tickets = [t for t in _tickets(conn, m["id"]) if t["state"] != "removed"]
     attempts = _by_ticket(j for j in jobs if j["role"] in LOCAL_ROLES)
     developer = [t for t in tickets if t["kind"] == "developer" and attempts.get(t["id"])]
     first = [
@@ -222,8 +232,8 @@ def milestone_results(conn: sqlite3.Connection, project: str, key: str) -> Miles
         checkpoints=roles["checkpoint"],
         review_rounds=int(rounds),
         findings=_findings(conn, m["id"]),
-        local=_spend([j for j in jobs if not _is_lead(j["agent"])]),
-        claude=_spend([j for j in jobs if _is_lead(j["agent"])]),
+        local=_spend([j for j in jobs if not is_claude(j["agent"])]),
+        claude=_spend([j for j in jobs if is_claude(j["agent"])]),
         agents=tuple(_spend(by_agent[a], agent=a) for a in sorted(by_agent)),
     )
 
@@ -253,19 +263,30 @@ def _lead_rates(conn: sqlite3.Connection, project_id: int) -> dict[int, tuple[fl
     totals: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
     for ticket in rows:
         jobs = conn.execute("SELECT * FROM jobs WHERE ticket_id = ?", (ticket["id"],)).fetchall()
-        claude = [j for j in jobs if _is_lead(j["agent"])]
-        if not claude:
+        lead = [j for j in jobs if _is_lead(j)]
+        if not lead:
             continue
         total = totals[ticket["difficulty"]]
-        total[0] += sum(_dollars(j) for j in claude)
-        total[1] += sum(_equivalents(j) for j in claude)
+        total[0] += sum(dollars(j) for j in lead)
+        total[1] += sum(_equivalents(j) for j in lead)
         total[2] += ticket["lines_changed"]
     return {d: (dollars / lines, tokens / lines) for d, (dollars, tokens, lines) in totals.items()}
 
 
-def _developer_of(ticket: sqlite3.Row, jobs: Sequence[sqlite3.Row]) -> str:
+def _merged_itself(ticket: sqlite3.Row, jobs: Sequence[sqlite3.Row]) -> bool:
+    """Whether a developer merged the ticket: its merger tried it, or did none of the lead's
+    jobs on it (an escalation's finish is the lead's merge)."""
+    merger = ticket["merged_by"]
+    if not merger:
+        return False
+    if any(j["agent"] == merger and j["role"] in LOCAL_ROLES for j in jobs):
+        return True
+    return not any(j["agent"] == merger and _is_lead(j) for j in jobs)
+
+
+def _developer_of(ticket: sqlite3.Row, jobs: Sequence[sqlite3.Row], merged_itself: bool) -> str:
     """Who a delegated ticket went to: who merged it, or who last tried it."""
-    if ticket["merged_by"] and not _is_lead(ticket["merged_by"]):
+    if merged_itself:
         return str(ticket["merged_by"])
     tried = [j["agent"] for j in jobs if j["role"] in LOCAL_ROLES]
     return str(tried[-1]) if tried else UNKNOWN_AGENT
@@ -295,34 +316,36 @@ def _milestone_savings(
     conn: sqlite3.Connection, milestone_id: int, rates: dict[int, tuple[float, float]]
 ) -> Savings:
     """Per delegated ticket: what the lead would have spent on the lines its developer merged,
-    against the lead's jobs on it plus its share of the milestone-wide ones (reviews,
-    checkpoints)."""
+    against the lead's jobs on it, the attempts of a developer that costs dollars (Sonnet),
+    and its share of the lead's milestone-wide jobs (reviews, checkpoints)."""
     jobs = _jobs(conn, milestone_id)
     by_ticket = _by_ticket(jobs)
     worked = [t for t in _tickets(conn, milestone_id) if t["commit"] or by_ticket.get(t["id"])]
     if not worked:
         return Savings()
-    wide = [j for j in jobs if j["ticket_id"] is None and _is_lead(j["agent"])]
-    share_dollars = sum(_dollars(j) for j in wide) / len(worked)
+    wide = [j for j in jobs if j["ticket_id"] is None and _is_lead(j)]
+    share_dollars = sum(dollars(j) for j in wide) / len(worked)
     share_tokens = sum(_equivalents(j) for j in wide) / len(worked)
     parts = []
     for ticket in worked:
         if ticket["kind"] != "developer":
             continue
         own = by_ticket.get(ticket["id"], [])
-        merged_itself = ticket["merged_by"] and not _is_lead(ticket["merged_by"])
+        merged_itself = _merged_itself(ticket, own)
         lines = int(ticket["lines_changed"] or 0) if merged_itself else 0
         per_line = rates.get(ticket["difficulty"], (SEED_DOLLARS_PER_LINE, SEED_TOKENS_PER_LINE))
-        lead_jobs = [j for j in own if _is_lead(j["agent"])]
+        paid = [
+            j for j in own if _is_lead(j) or (j["role"] in LOCAL_ROLES and is_claude(j["agent"]))
+        ]
         parts.append(
             Savings(
                 tickets=1,
                 lines=lines,
                 doing_itself=lines * per_line[0],
                 doing_itself_tokens=lines * per_line[1],
-                supporting=sum(_dollars(j) for j in lead_jobs) + share_dollars,
-                supporting_tokens=sum(_equivalents(j) for j in lead_jobs) + share_tokens,
-                agent=_developer_of(ticket, own),
+                supporting=sum(dollars(j) for j in paid) + share_dollars,
+                supporting_tokens=sum(_equivalents(j) for j in paid) + share_tokens,
+                agent=_developer_of(ticket, own, merged_itself),
             )
         )
     return _combine(parts)

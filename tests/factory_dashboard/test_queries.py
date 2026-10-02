@@ -11,7 +11,7 @@ from factory_dashboard.queries import (
     trends,
 )
 from runner import metrics
-from tests.factory_dashboard.conftest import LOCAL, OPUS, PROJECT, SONNET
+from tests.factory_dashboard.conftest import CLAUDE_TOKENS, LOCAL, OPUS, PROJECT, SONNET, _job
 
 
 def test_milestone_results_count_what_a_person_would(db):
@@ -90,6 +90,56 @@ def test_overall_savings_add_up_the_milestones(db):
     assert overall.lines == 180
     [agent] = overall.agents
     assert (agent.agent, agent.tickets) == (LOCAL, 3)
+
+
+def write_sonnet_ticket(db_path) -> None:
+    """f1-04-sonnet: a d4 developer ticket Sonnet merged (60 lines) at its one attempt ($0.40),
+    and f1-05-removed, attempted once by the local model, then removed."""
+    writer = metrics.open_db(db_path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1")
+    run = metrics.upsert_run(writer, project, "20260930-100000")
+    sonnet = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-04-sonnet",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        merged_by=SONNET,
+        commit="e" * 40,
+        lines_changed=60,
+    )
+    _job(writer, run, f1, sonnet, "developer", SONNET, 1, "passed", cost_usd=0.4, **CLAUDE_TOKENS)
+    removed = metrics.upsert_ticket(
+        writer, project, "f1-05-removed", milestone_id=f1, kind="developer", state="removed"
+    )
+    _job(writer, run, f1, removed, "developer", LOCAL, 1, "failed", tokens_in=1_000)
+    writer.close()
+
+
+def test_a_ticket_sonnet_merged_counts_its_lines_and_its_sonnet_jobs(db, db_path):
+    write_sonnet_ticket(db_path)
+    s = savings(db, PROJECT, "f1")
+    by_agent = {a.agent: a for a in s.agents}
+    sonnet = by_agent[SONNET]
+    assert (sonnet.tickets, sonnet.lines) == (1, 60)
+    # 60 lines at the lead's d4 rate ($3 for 200 lines); its own job, and a fifth of the review
+    # and checkpoint (the removed ticket was worked on too)
+    assert sonnet.doing_itself == pytest.approx(0.90)
+    assert sonnet.supporting == pytest.approx(0.40 + 1.80 / 5)
+    assert sonnet.doing_itself_tokens == pytest.approx(60 * 30_000 / 200)
+    # the lead's escalation of f1-02 still doesn't credit its lines to anyone
+    assert by_agent[LOCAL].lines == 100
+
+
+def test_removed_tickets_are_out_of_the_milestones_tickets(db, db_path):
+    write_sonnet_ticket(db_path)
+    r = milestone_results(db, PROJECT, "f1")
+    assert r is not None
+    assert (r.tickets, r.merged) == (4, 4)
+    assert (r.first_attempt, r.developer_tickets) == (2, 3)
 
 
 def test_trends_run_oldest_first(db):
