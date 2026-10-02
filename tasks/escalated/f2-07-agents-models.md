@@ -41,3 +41,12 @@ attempts: 1
 tokens: 752269
 logs: var/runs/20261002-151301/f2-07-agents-models
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: needs-file
+attempts: 1
+tokens: 1095940
+logs: var/runs/20261002-151301/f2-07-agents-models-run2
+```
