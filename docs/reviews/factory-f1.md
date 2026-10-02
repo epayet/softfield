@@ -56,8 +56,8 @@ F1 was its real test: 19 tickets, 42 attempts, on a new codebase (FastAPI, Jinja
 **What it costs.** $0 of tokens, but 28 minutes an attempt, and its failures drew ≈$9 of the $11.9 of Claude support (≈$0.60 a ticket on average, ≈$1.40 a failed one). Its 19 tickets saved ≈$27 net against the lead writing them (`runner report f1`).
 
 **Going forward:**
-- **Keep it as the floor and the night shift:** free, private and never limited. Route it difficulty ≤4 tickets that follow a worked example; that's where it passes first time.
-- **Difficulty 5–6 goes to a cloud developer first** (Ollama once benched, Sonnet when no lead work waits), and local only when they're out of allowance.
+- **Keep it as the floor and the night shift:** free, private and never limited. It passes first time on difficulty ≤4 tickets that follow a worked example.
+- **Cloud first already holds** (ADR 15 item 6): a cloud developer whose rating covers the ticket takes it while it has allowance. Open question for ADR 16: when no cloud developer may take a difficulty 5–6 ticket, should it wait for one rather than go to local (0 of 3 first time, $0.45–2.66 of support each)?
 - **Stop the degenerate attempts early** (F2): an attempt with no edit after 10 minutes, or whose thinking repeats the same line, is cut and counted as failed. That gives back about 2.5 h of GPU per F1-sized milestone and costs no Claude.
 - **Our mistakes caused a quarter of its failures:** check facts against a run (lead.md), and keep main green before queueing (the `test_tasks.py` check).
 - **Measure it against the Ollama models on the same tickets** with `runner bench` (F2): if a free cloud model passes difficulty 5–6 in a few minutes, local becomes the fallback rather than the default.
@@ -85,7 +85,9 @@ F1 was its real test: 19 tickets, 42 attempts, on a new codebase (FastAPI, Jinja
 
 f1-52 (Sonnet, left unchecked when the run stopped) was read for this review. It's sound: the tests read the rendered panels, and the one gap is finding 4.
 
-## What changes now
-- **ADR 16 (Proposed):** a shared 5-hour window with 25% kept for the owner, lead work first, checkpoints and escalations park, the exact model per job, named milestone keys, and standard replans.
-- **[F2](../milestones/f2.md), cloud first:** findings 1–8 and 12.
-- **lead.md:** a standing "Factory" section in every milestone review; new ideas go to the next milestone; plans keep developer work runnable beside a lead chain; Known range gains Sonnet and the local model's F1 numbers.
+## What changed, and where each item went
+- **Done in this session:** lead.md (the standing "Factory" section and "What clogged the factory line" in every review; new ideas wait for the next milestone; plans keep developer work runnable beside a lead chain; Known range with F1's numbers); the sign-off sheet's two new sections on the dashboard (f2-10).
+- **ADR 16 (Proposed):** findings 1, 2 and 6; replans become standard (lead.md's "Replans" line changes when it's accepted).
+- **[F2](../milestones/f2.md):** findings 1–8 and 12, as f2-01 to f2-09.
+- **Backlog:** finding 9. **The owner:** finding 11 (M4's sign-off).
+- **F1's Done when, not met as written:** no screenshots (every page answered 200 against the real database on 2026-10-02; the factory line's screenshots moved to F3); `runner report m4` can't reproduce M4's Claude numbers, since M4's lead work was interactive and only its 2 escalations are jobs.
