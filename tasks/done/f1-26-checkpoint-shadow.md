@@ -29,3 +29,10 @@ Read `docs/adr/14-developers-and-agents.md` item 12 and its probe results, and `
 - a shadow that refuses leaves a refused job and doesn't stop the run
 - eligibility says no with its reason for an agent with one milestone, and yes for one meeting every bar (fixture ratings)
 - `uv run runner check-all --task f1-26-checkpoint-shadow` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
