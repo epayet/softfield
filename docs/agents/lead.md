@@ -22,6 +22,17 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
   - **Expected against actual, first:** on any milestone view or report, what changed and how to test it come right after the expected outcome and Done when; numbers, tickets and savings come after.
   - **Savings are shown in dollars** (API-equivalent), not in token counts.
   - **The dashboard (owner, 2026-10-02):** show "Needs you" only when something does, and clear an item as soon as the owner has acted on it. Plain words only: the agents' own names, no invented names, no abbreviations, no unexplained marks (every colour, bar or light says what it means, or goes). The owner likes game-like, factory-style views of the work (D10 in `docs/milestones/f1.md`) and checks pages on a phone too.
+  - **Priorities (owner, 2026-10-02), in order:**
+    1. the runner works on its own and takes any ready ticket;
+    2. a backlog of features;
+    3. reviewing features from the dashboard;
+    4. nice visuals;
+    5. more cloud workers;
+    6. adding features from the dashboard;
+    7. faster, parallel workers.
+
+    The aim is "a management system, not a dashboard": lots of work planned ahead, run with little supervision, watched live from a phone on the home Wi-Fi.
+  - **Planning sessions:** first capture every idea the owner raises in `docs/roadmap.md`, so none is lost. Then go through them all: for each, answer it **and suggest an action** (a ticket, an ADR item, the roadmap, nothing). The owner only says what they disagree with.
   - **Mock-ups before UI tickets:** for a new view, iterate a mock-up on real data with the owner (an artifact) until they're happy, then keep it as the picture the tickets point at.
 
 ## Authority

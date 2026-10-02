@@ -90,7 +90,8 @@ def test_the_repos_toml_declares_f1s_agents_and_roles():
     assert (cfg.agents[sonnet].harness, cfg.agents[sonnet].model) == ("claude", "sonnet")
     assert all(1 <= agent.rating <= 10 for agent in cfg.agents.values())
     assert dict(cfg.roles) == {
-        "developer": (local, "ollama-gpt-oss-120b", sonnet),  # f2-09: from their F2 jobs
+        # f2-09: from their F2 jobs; Sonnet off first attempts (ADR 17 item 1, until f4-13)
+        "developer": (local, "ollama-gpt-oss-120b"),
         "last-attempt": (local,),
         "direction": (opus,),
         "escalation": (opus,),
