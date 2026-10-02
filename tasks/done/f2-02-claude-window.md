@@ -42,3 +42,10 @@ Read `docs/adr/16-claude-window-and-named-milestones.md` items 1–4 and 9, `doc
 - a yes to the week's reserve doesn't lift the 5-hour reserve
 - with Claude at 80%, a due checkpoint runs on `copilot-auto` and its findings are acted on
 - `uv run runner check-all --task f2-02-claude-window` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
