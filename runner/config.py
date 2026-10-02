@@ -9,6 +9,8 @@ from typing import Any
 from runner.agents import Agent, WindowSeed
 
 DEFAULT_METRICS_DB = "~/.local/share/software-factory/factory-metrics.sqlite"
+# Outside any repo; a copy holds a .venv of a few hundred MB, and /tmp may be RAM (f2-12)
+DEFAULT_BENCH_DIR = "~/.cache/software-factory/bench"
 
 
 class ConfigError(ValueError):
@@ -40,6 +42,8 @@ class Config:
     developer_five_hour_cap: float = 0.5  # Claude develops only under it (ADR 16 item 2)
     agents: Mapping[str, Agent] = field(default_factory=dict)  # by id (ADR 14 item 3)
     roles: Mapping[str, tuple[str, ...]] = field(default_factory=dict)  # role → agent ids
+    # `[bench] dir`: where the bench clones its copies of the repo (f2-12)
+    bench_copies: Path = field(default_factory=lambda: Path(DEFAULT_BENCH_DIR).expanduser())
 
     @property
     def runs_dir(self) -> Path:
@@ -105,6 +109,7 @@ def load_config(repo: Path) -> Config:
         developer_five_hour_cap=data["claude"].get("developer_five_hour_cap", 0.5),
         agents=agents,
         roles=_roles(data, agents),
+        bench_copies=Path(data.get("bench", {}).get("dir", DEFAULT_BENCH_DIR)).expanduser(),
     )
 
 

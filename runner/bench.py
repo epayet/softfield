@@ -1,11 +1,14 @@
 """`runner bench`: replay finished tickets for chosen agents, in identical conditions (ADR 14
 item 8).
 
-Each ticket × agent gets a throwaway worktree in `var/bench/`, detached at the parent of the
-ticket's merge, with today's workflow files overlaid and the ticket back in `tasks/ready/`.
-The agent gets the usual attempts and gates there, as jobs of role `bench`; no Claude, so a
-failed last attempt is recorded as "would escalate". Nothing reaches main, `tasks/` or a
-branch. The first refusal stops the bench.
+Each ticket × agent gets a throwaway copy of the repo under `[bench] dir`, detached at the
+parent of the ticket's merge, with today's workflow files overlaid and the ticket back in
+`tasks/ready/`. The agent gets the usual attempts and gates there, as jobs of role `bench`;
+no Claude, so a failed last attempt is recorded as "would escalate". Nothing reaches main,
+`tasks/` or a branch. The first refusal stops the bench. The logs stay in `var/bench/`.
+
+The copy is a clone with its own `.git`, never a `git worktree`: OpenCode takes its project
+from the git common dir, so in a worktree it edited the main checkout (f2-12).
 """
 
 import shutil
@@ -105,16 +108,27 @@ def _overlay(repo: Path, work: Path) -> None:
             shutil.copy2(source, target)
 
 
-def make_worktree(cfg: Config, work: Path, parent: str, ticket: str, text: str) -> str:
-    """A detached worktree at ``parent``, with today's workflow and the ticket in ready/,
+def _check_outside_repo(cfg: Config) -> None:
+    copies = cfg.bench_copies.resolve()
+    if copies.is_relative_to(cfg.repo.resolve()):
+        raise RunnerError(f"[bench] dir must be outside the repo: {copies} is inside it")
+
+
+def make_copy(cfg: Config, work: Path, parent: str, ticket: str, text: str) -> str:
+    """A clone detached at ``parent``, with today's workflow and the ticket in ready/,
     committed so the gates see only the agent's changes. Returns that base commit."""
     work.parent.mkdir(parents=True, exist_ok=True)
-    Git(cfg.repo).run("worktree", "add", "-q", "--detach", str(work), parent)
+    Git(work.parent).run("clone", "-q", "--local", "--no-checkout", str(cfg.repo), str(work))
+    git = Git(work)
+    git.run("remote", "remove", "origin")  # nothing in the copy leads back to the repo
+    for key in ("user.name", "user.email"):  # commit as the repo does, global or local
+        if value := Git(cfg.repo).run("config", key, check=False).strip():
+            git.run("config", key, value)
+    git.run("checkout", "-q", "--detach", parent)
     _overlay(cfg.repo, work)
     ready = work / "tasks" / "ready" / f"{ticket}.md"
     ready.parent.mkdir(parents=True, exist_ok=True)
     ready.write_text(text, encoding="utf-8")
-    git = Git(work)
     git.run("add", "-A")
     message = with_trailers(f"bench: {ticket} from {parent[:9]}", agent=RUNNER_AGENT)
     git.run(
@@ -123,11 +137,8 @@ def make_worktree(cfg: Config, work: Path, parent: str, ticket: str, text: str) 
     return git.head()
 
 
-def remove_worktree(cfg: Config, work: Path) -> None:
-    git = Git(cfg.repo)
-    git.run("worktree", "remove", "--force", str(work), check=False)
+def remove_copy(work: Path) -> None:
     shutil.rmtree(work, ignore_errors=True)
-    git.run("worktree", "prune", check=False)
 
 
 def _open(cfg: Config) -> Session:
@@ -208,15 +219,15 @@ def _attempt(
 
 
 def bench_one(s: Session, agent: Agent, ticket: str, parent: str, text: str) -> BenchResult:
-    """One agent on one ticket, in its own worktree, removed afterwards."""
-    work = s.run_dir / f"work-{ticket}-{agent.id}"
+    """One agent on one ticket, in its own copy, removed afterwards."""
+    work = s.cfg.bench_copies / f"{s.run_dir.name}-{ticket}-{agent.id}"
     logs = s.run_dir / f"{ticket}-{agent.id}"
     logs.mkdir(parents=True, exist_ok=True)
-    base = make_worktree(s.cfg, work, parent, ticket, text)
     try:
+        base = make_copy(s.cfg, work, parent, ticket, text)
         return _attempts(s, agent, work, base, logs, ticket)
     finally:
-        remove_worktree(s.cfg, work)
+        remove_copy(work)
 
 
 def _attempts(
@@ -278,10 +289,11 @@ def run_bench(cfg: Config, tickets: list[str], agent_ids: list[str]) -> BenchRep
     """Each ticket for each agent, in order, until done or the first refusal."""
     if unknown := [a for a in agent_ids if a not in cfg.agents]:
         raise RunnerError(f"no such agent in workflow/runner.toml: {', '.join(unknown)}")
+    _check_outside_repo(cfg)
     git = Git(cfg.repo)
     plan = [(t, merge_commit(git, t) + "^", _ticket_text(cfg, t)) for t in tickets]
     parents = [(t, git.run("rev-parse", parent).strip(), text) for t, parent, text in plan]
-    git.run("worktree", "prune", check=False)  # an interrupted bench's leftovers
+    git.run("worktree", "prune", check=False)  # leftovers of benches that used worktrees
     s = _open(cfg)
     report = BenchReport()
     try:

@@ -1,7 +1,9 @@
 """`runner bench` (ADR 14 item 8) on a real temporary git repo, with the agents faked."""
 
+import os
 import sqlite3
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -19,13 +21,21 @@ AGENTS = (
     Agent("fake-a", "fake", "a", 5),
     Agent("fake-b", "fake", "b", 5),
     Agent("claude-opus", "claude", "opus", 9),
+    Agent("ollama-x", "opencode", "ollama/x", 5),  # the real OpenCode adapter, a fake binary
 )
 RESETS = datetime(2026, 10, 3, 4, 0, tzinfo=UTC)
 
 
-def _config(repo: Path) -> Config:
+@pytest.fixture
+def copies(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """The `[bench] dir`: outside the repo, as in real use."""
+    return tmp_path_factory.mktemp("bench-copies")
+
+
+def _config(repo: Path, copies: Path) -> Config:
     return Config(
         repo=repo,
+        bench_copies=copies,
         max_attempts=3,
         directions_per_task=1,
         escalations_per_task=2,
@@ -138,12 +148,12 @@ def _snapshot(repo: Path) -> tuple[str | int, ...]:
     )
 
 
-def test_two_agents_get_their_own_bench_jobs_and_main_is_untouched(repo, fake_agents):
+def test_two_agents_get_their_own_bench_jobs_and_main_is_untouched(repo, copies, fake_agents):
     _history(repo)
     before = _snapshot(repo)
     fake_agents["fake-a"].append(_implement)
     fake_agents["fake-b"].extend([_stray, _fix])
-    report = bench.run_bench(_config(repo), [TICKET], ["fake-a", "fake-b"])
+    report = bench.run_bench(_config(repo, copies), [TICKET], ["fake-a", "fake-b"])
     assert report.stopped is None
     assert [(r.ticket, r.agent, r.outcome, r.attempts) for r in report.results] == [
         (TICKET, "fake-a", "passed", 1),
@@ -158,14 +168,14 @@ def test_two_agents_get_their_own_bench_jobs_and_main_is_untouched(repo, fake_ag
     ]
     assert len({j["attempt"] for j in jobs}) == 3  # one row each: two agents never share a key
     assert '"name": "protected-paths", "ok": false' in jobs[1]["gates"]
-    # main, the branches, the tree and tasks/ are as they were; the worktrees are gone
+    # main, the branches, the tree and tasks/ are as they were; the copies are gone
     assert _snapshot(repo) == before
     assert not (repo / "coucou" / "secret.py").exists()
     assert "raise NotImplementedError" not in (repo / "coucou" / "thing.py").read_text()
-    assert not list((repo / "var" / "bench").glob("*/work-*"))
+    assert not list(copies.iterdir())
 
 
-def test_the_worktree_starts_at_the_merges_parent_with_todays_workflow(repo, fake_agents):
+def test_the_copy_starts_at_the_merges_parent_with_todays_workflow(repo, copies, fake_agents):
     parent = _history(repo)
     seen: dict[str, str] = {}
 
@@ -176,22 +186,72 @@ def test_the_worktree_starts_at_the_merges_parent_with_todays_workflow(repo, fak
         seen["notes"] = (work / "docs" / "agents" / "developer.md").read_text()
         seen["ticket"] = (work / "tasks" / "ready" / f"{TICKET}.md").read_text()
         seen["branch"] = git(work, "rev-parse", "--abbrev-ref", "HEAD").strip()
-        assert work != repo and work.is_relative_to(repo / "var" / "bench")
+        seen["remotes"] = git(work, "remote")
+        # its own clone: its own .git, under [bench] dir, nothing shared with the repo's
+        assert work.is_relative_to(copies) and not work.is_relative_to(repo)
+        common = git(work, "rev-parse", "--path-format=absolute", "--git-common-dir").strip()
+        assert Path(common) == work / ".git"
         _implement(work, spec)
 
     fake_agents["fake-a"].append(look)
-    bench.run_bench(_config(repo), [TICKET], ["fake-a"])
+    bench.run_bench(_config(repo, copies), [TICKET], ["fake-a"])
     assert seen["parent"] == parent
     assert "raise NotImplementedError" in seen["thing"]
     assert (seen["agents"], seen["notes"]) == ("today's rules\n", "today's notes\n")
     assert "Make the thing work." in seen["ticket"] and "# --- runner ---" not in seen["ticket"]
     assert seen["branch"] == "HEAD"  # detached: no branch of the repo moves
+    assert seen["remotes"] == ""  # no remote leads back to the repo
 
 
-def test_a_failing_agent_would_escalate_without_calling_claude(repo, fake_agents):
+# Resolves its project the way OpenCode does: the worktree, then the repository it belongs
+# to (the common dir's parent), and edits there. In a `git worktree` that's the main checkout.
+FAKE_OPENCODE = """\
+#!/bin/sh
+top=$(git rev-parse --show-toplevel)
+common=$(git rev-parse --path-format=absolute --git-common-dir)
+project=$(dirname "$common")
+echo "worktree: $top"
+echo "project: $project"
+echo "X = 1" > "$project/coucou/opencode_was_here.py"
+"""
+
+
+def test_an_opencode_agent_edits_its_copy_never_the_main_checkout(
+    repo, copies, tmp_path_factory, monkeypatch
+):
+    _history(repo)
+    bin_dir = tmp_path_factory.mktemp("bin")
+    fake = bin_dir / "opencode"
+    fake.write_text(FAKE_OPENCODE)
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setattr(loop, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
+    file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
+    monkeypatch.setattr(gates, "GATES", file_gates)
+    cfg = replace(_config(repo, copies), opencode_timeout=60)
+    before = _snapshot(repo)
+    report = bench.run_bench(cfg, [TICKET], ["ollama-x"])
+    assert _snapshot(repo) == before
+    assert not (repo / "coucou" / "opencode_was_here.py").exists()
+    [result] = report.results
+    assert (result.outcome, result.attempts) == ("passed", 1)  # the edit landed in the copy
+    [log] = (repo / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
+    project = Path(log.read_text().split("project: ")[1].splitlines()[0])
+    assert project.is_relative_to(copies)
+    assert not list(copies.iterdir())  # removed afterwards
+
+
+def test_a_bench_dir_inside_the_repo_is_refused(repo, fake_agents):
+    _history(repo)
+    with pytest.raises(loop.RunnerError, match=r"\[bench\] dir"):
+        bench.run_bench(_config(repo, repo / "var" / "copies"), [TICKET], ["fake-a"])
+    assert not (repo / "var" / "copies").exists()
+
+
+def test_a_failing_agent_would_escalate_without_calling_claude(repo, copies, fake_agents):
     _history(repo)
     fake_agents["fake-a"].extend([_stray, _stray, _stray])  # the file stays: each one fails
-    report = bench.run_bench(_config(repo), [TICKET], ["fake-a"])
+    report = bench.run_bench(_config(repo, copies), [TICKET], ["fake-a"])
     [result] = report.results
     assert (result.outcome, result.attempts) == ("would escalate", 3)
     jobs = _jobs(repo)
@@ -200,7 +260,7 @@ def test_a_failing_agent_would_escalate_without_calling_claude(repo, fake_agents
     assert not fake_agents["fake-a"]
 
 
-def test_a_refusal_stops_the_bench_and_says_who_and_when_it_resets(repo, fake_agents):
+def test_a_refusal_stops_the_bench_and_says_who_and_when_it_resets(repo, copies, fake_agents):
     _history(repo)
 
     def refuse(work: Path, spec: JobSpec) -> JobResult:
@@ -212,7 +272,7 @@ def test_a_refusal_stops_the_bench_and_says_who_and_when_it_resets(repo, fake_ag
     fake_agents["fake-a"].append(refuse)
     fake_agents["fake-b"].append(_implement)
     before = _snapshot(repo)
-    report = bench.run_bench(_config(repo), [TICKET], ["fake-a", "fake-b"])
+    report = bench.run_bench(_config(repo, copies), [TICKET], ["fake-a", "fake-b"])
     assert report.stopped is not None
     assert "fake-a" in report.stopped and RESETS.astimezone().strftime("%H:%M") in report.stopped
     assert [(r.agent, r.outcome) for r in report.results] == [("fake-a", "refused")]
@@ -221,10 +281,10 @@ def test_a_refusal_stops_the_bench_and_says_who_and_when_it_resets(repo, fake_ag
     assert _snapshot(repo) == before
 
 
-def test_unknown_tickets_and_agents_fail_before_anything_runs(repo, fake_agents):
+def test_unknown_tickets_and_agents_fail_before_anything_runs(repo, copies, fake_agents):
     _history(repo)
     with pytest.raises(loop.RunnerError, match="no-such-agent"):
-        bench.run_bench(_config(repo), [TICKET], ["no-such-agent"])
+        bench.run_bench(_config(repo, copies), [TICKET], ["no-such-agent"])
     with pytest.raises(loop.RunnerError, match="m1-99-none"):
-        bench.run_bench(_config(repo), ["m1-99-none"], ["fake-a"])
+        bench.run_bench(_config(repo, copies), ["m1-99-none"], ["fake-a"])
     assert not (repo / "var" / "factory-metrics.sqlite").exists()

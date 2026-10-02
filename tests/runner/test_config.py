@@ -46,6 +46,14 @@ def test_metrics_db_falls_back_to_the_default(tmp_path):
     assert load_config(_repo(tmp_path)).metrics_db == expected
 
 
+def test_the_bench_dir_is_read_from_the_toml_or_defaults_outside_the_repo(tmp_path):
+    repo = _repo(tmp_path, '[bench]\ndir = "~/elsewhere/bench"\n')
+    assert load_config(repo).bench_copies == Path.home() / "elsewhere" / "bench"
+    expected = Path.home() / ".cache/software-factory/bench"
+    (tmp_path / "default").mkdir()
+    assert load_config(_repo(tmp_path / "default")).bench_copies == expected
+
+
 def test_the_repos_toml_loads_with_an_absolute_metrics_db():
     assert load_config(REPO).metrics_db.is_absolute()
 

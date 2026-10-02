@@ -126,6 +126,10 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 
 `uv run runner commits --milestone N` lists the local model's commits since `mN-start`. Milestone reports include that list.
 
+## Bench
+
+`uv run runner bench` replays finished tickets for chosen agents ([ADR 14](adr/14-developers-and-agents.md) item 8; `runner/bench.py`). Each ticket × agent works in its own clone of the repo under `[bench] dir` in `workflow/runner.toml` (default `~/.cache/software-factory/bench/`, which must be outside the repo), removed afterwards; the logs stay in `var/bench/`. A clone, never a `git worktree`: OpenCode takes its project from the git common dir, so in a worktree a bench agent edited the main checkout (2026-10-02, f2-12).
+
 ## Improving the workflow
 
 Evidence from milestone reports leads to an ADR, and nothing changes until the owner accepts it. Runner bug fixes that don't change behaviour are exempt.
