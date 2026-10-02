@@ -19,14 +19,20 @@
    - Adding an idea creates `docs/milestones/<key>.md` at once, with the next free key in its series, the owner's notes and two header lines: `State:` and `Priority:`.
    - States: idea → planning → ready → building → needs sign-off → done.
    - A milestone is planned from its own card. There is no separate feature file, and the roadmap's ideas move into cards over time.
-2. **⚑ Bugs are tickets outside milestones** (owner, 2026-10-02; amends `docs/task-format.md`).
-   - A bug is `tasks/ready/bug-<nn>-<slug>.md` with `milestone: bugs`. It needs no plan or sign-off: it's done when it merges, and checkpoints read it like any merge.
+2. **⚑ Bugs are tickets outside milestones, and first-class cards** (owner, 2026-10-02; amends `docs/task-format.md`).
+   - A bug is `bug-<nn>-<slug>` with `milestone: bugs`: no plan or sign-off, done when it merges. Checkpoints read it like any merge.
+   - On the board each bug is its own card in the same field, with its own states:
+     - **seed:** its ticket is in `tasks/later/`;
+     - **ready:** its ticket is in `tasks/ready/`;
+     - **growing:** a job is running on it;
+     - **harvested:** merged.
    - `docs/backlog.md` becomes bug tickets in `tasks/later/` over time, with the lead triaging.
+2b. **Area: factory or product** (owner, 2026-10-02). Every card says which, like an epic: a milestone doc's `**Area:**` (default from its series: `f` factory, `m` product), and a bug ticket's `area:`. When the factory is extracted to control several projects (ADR 02), the area becomes the project; sub-areas wait for a real need.
 3. **⚑ Priorities** (amends `runner/tasks.py` `pick_next`): a card's `Priority:` and a bug ticket's `priority:` (an integer, lower first).
    - The runner picks by priority, then milestone order, then ticket number. A change takes effect at the next pick.
    - The lead sets priorities at planning; the owner changes them, on the console or the board (owner, 2026-10-02).
 4. **The board:** `/board` on the dashboard.
-   - Columns by state; the cards are milestones and bug tickets; search, and the done ones.
+   - Columns by state; the cards are milestones and bugs, coloured by area, with bugs marked as bugs; search; the harvested column shows the latest few, with a link to the rest.
    - A card opens its milestone page, which gains the notes and the planner answers.
    - **Read-only at first** (owner, 2026-10-02): cards are created, edited and reprioritised in a Claude Code session. Moving, editing and adding cards from the board come later, as [ADR 18](18-dashboard-writes.md) requests, with the planner questions.
    - **A mock-up comes before its tickets** (lead.md).

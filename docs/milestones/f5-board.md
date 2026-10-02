@@ -1,7 +1,7 @@
 # Milestone F5: steer from the phone, and the board
 
 > **Status: planned** (2026-10-02), on [ADR 18](../adr/18-dashboard-writes.md) and [ADR 19](../adr/19-feature-board.md). The owner's priorities 2 and 3: a backlog of features, and reviewing from the dashboard. Its tickets can run beside F4's; some depend on F4 tickets by id.
-> **State:** building · **Priority:** 2
+> **State:** building · **Priority:** 2 · **Area:** factory
 
 ## Outcome
 - From the phone, on the home Wi-Fi (`runner dashboard --lan`), the owner can:
@@ -35,11 +35,11 @@
   - It requires the `HX-Request` header and a same-origin `Origin` or `Referer`, else 403.
   - It answers with a small htmx partial: "asked: the runner will do it", then the result once done.
   - Worked example for the buttons (08–10).
-- **D4 Cards** (ADR 19 item 1): a milestone doc's header blockquote may hold `**State:** <state> · **Priority:** <n>`.
+- **D4 Cards** (ADR 19 items 1 and 2b): a milestone doc's header blockquote may hold `**State:** <state> · **Priority:** <n> · **Area:** factory|product`.
   - States: idea, planning, ready, building, needs sign-off, done.
-  - `runner/milestone.py` `card(text) -> Card(state, priority)`: a missing state is derived (done when "Status: done", else building), and a missing priority is 100.
-  - Synced to two new `milestones` columns, `state` and `priority`, in `_V5`.
-- **D5 Bug tickets** (ADR 19 item 2): id `bug-<nn>-<slug>`, `milestone: bugs`, and an optional `priority:` in frontmatter (default 50).
+  - `runner/milestone.py` `card(key, text) -> Card(state, priority, area)`: a missing state is derived (done when "Status: done", else building), a missing priority is 100, and a missing area comes from the key's series (`f` factory, `m` product).
+  - Synced to three new `milestones` columns, `state`, `priority` and `area`, in `_V5`.
+- **D5 Bug tickets** (ADR 19 items 2 and 2b): id `bug-<nn>-<slug>`, `milestone: bugs`, an optional `priority:` in frontmatter (default 50) and `area:` (factory or product, required on a bug). The ticket's area is stored in a new `tickets.area` column.
   - `bugs` is a standing key: never signed off, never reviewed. Checkpoints count its merges.
   - `docs/milestones/bugs.md` explains it, with **State:** building.
 - **D6 The pick** (ADR 19 item 3): `pick_next` sorts the runnable tickets by `(priority, milestone_order, id)`. A ticket's priority is its own `priority:`, else its milestone card's, else 100.
