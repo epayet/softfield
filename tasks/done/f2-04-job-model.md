@@ -31,3 +31,10 @@ Read `docs/adr/16-claude-window-and-named-milestones.md` item 5 and `docs/milest
 - a Claude job's row has the model its stream named; an OpenCode job's, its agent's model
 - backfill fills `model` for past Claude jobs whose logs still exist, and running it twice changes nothing
 - `uv run runner check-all --task f2-04-job-model` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
