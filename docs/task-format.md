@@ -6,8 +6,8 @@ Tasks ("tickets") are Markdown files with YAML frontmatter in `tasks/ready/`. Th
 
 ```yaml
 ---
-id: m4-03-compose-screen            # unique; m<milestone>-<nn>-<slug>
-milestone: 4
+id: m4-03-compose-screen            # unique; <short key>-<nn>-<slug> (see "Milestone keys")
+milestone: 4                        # the key in either form: 4 (m4), f2, f3-factory-line or f3
 difficulty: 5                       # 1 to 10, from the rubric in task-writing.md (ADR 14 item 5)
 depends_on: [m4-01-upload-api]      # task ids; [] if none
 files:                              # where to work (a pointer, not a limit); may be new files
@@ -25,6 +25,15 @@ difficulty_corrected: 7             # optional: set by the lead at review when `
 ```
 
 `max_diff` is optional and rarely needed: the default is a 1000-line backstop against a rewritten file (`workflow/runner.toml`), not a sizing tool.
+
+### Milestone keys
+A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` ([ADR 16](adr/16-claude-window-and-named-milestones.md) item 6).
+- **Short form:** `m4`, `f2` (a bare number `4` means `m4`). Milestones planned before ADR 16 keep it.
+- **Full form:** `f3-factory-line`, `m5-history`. The slug is a few lowercase words joined by `-`, starting with a letter, short enough to type.
+- **Ticket ids always use the short form:** `f3-01-factory-line`, never `f3-factory-line-01-…`.
+- **Docs use the full key:** `docs/milestones/<full key>.md` and `docs/reviews/<full key>.md`. An existing short-key doc (`docs/milestones/f2.md`) still works.
+- **Frontmatter and commands take either form:** `uv run runner milestone f3` and `uv run runner milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `docs/milestones/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
+- **Tags use the key as resolved:** `f3-factory-line-start` and `f3-factory-line-done`.
 
 ## Body
 

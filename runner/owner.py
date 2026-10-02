@@ -17,7 +17,7 @@ from runner import metrics
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.milestone import footer_fields, signoff_sections
 from runner.state import State
-from runner.tasks import STOPPED, blocked_ids, command_arg, load_dir
+from runner.tasks import STOPPED, blocked_ids, command_arg, load_dir, milestone_file, short_key
 
 # Review stops that need the owner, not another run (docs/workflow.md, review loop).
 OWNER_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone")
@@ -32,7 +32,7 @@ class OwnerError(RuntimeError):
 
 
 def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
-    return sorted(p.stem for p in (repo / "tasks" / folder).glob(f"{milestone}-*.md"))
+    return sorted(p.stem for p in (repo / "tasks" / folder).glob(f"{short_key(milestone)}-*.md"))
 
 
 def _needs_owner(stop: str) -> bool:
@@ -61,7 +61,7 @@ def _reserve_waits(state: State, milestone: str) -> list[tuple[str, str]]:
     return sorted(
         (task_id, str(entry.get("text") or f"{task_id} waits for Claude's reserve"))
         for task_id, entry in state.parked.items()
-        if entry.get("kind") == "reserve" and task_id.startswith(f"{milestone}-")
+        if entry.get("kind") == "reserve" and task_id.startswith(f"{short_key(milestone)}-")
     )
 
 
@@ -123,10 +123,12 @@ def _write(repo: Path, db: Path | None, write: Callable[[sqlite3.Connection, int
 def _cleared_by_rerun(milestone: str) -> Callable[[str, str], bool]:
     """Whether an item is one of ``milestone``'s that a rerun of it clears."""
 
+    prefix = f"{short_key(milestone)}-"
+
     def wanted(kind: str, subject: str) -> bool:
         if kind not in _RERUN_KINDS:
             return False
-        return subject.startswith(f"{milestone}-") if _RERUN_KINDS[kind] else subject == milestone
+        return subject.startswith(prefix) if _RERUN_KINDS[kind] else subject == milestone
 
     return wanted
 
@@ -169,7 +171,11 @@ def verdict(
     """The last thing ``runner milestone`` prints, and its exit code: 0 ready, 2 needs you.
     With a metrics ``db``, its items become owner items there (f1 D8)."""
     items = owner_items(repo, milestone, state, review_stop)
-    ready = [t for t in load_dir(repo / "tasks" / "ready", 1000) if t.milestone == milestone]
+    ready = [
+        t
+        for t in load_dir(repo / "tasks" / "ready", 1000)
+        if short_key(t.milestone) == short_key(milestone)
+    ]
     needs = []
     for task_id in _ids(repo, "escalated", milestone):
         paused = sorted(blocked_ids(ready, {task_id}))
@@ -196,7 +202,7 @@ def verdict(
             lambda conn, project: _record_items(milestone, "needs you", items, conn, project),
         )
         return 2, "\n".join(lines) + "\n"
-    review = repo / "docs" / "reviews" / f"{milestone}.md"
+    review = milestone_file(repo, "reviews", milestone)
     lines = ["✅ READY FOR SIGN-OFF", f"  Review: {review.relative_to(repo)} ({review_stop})"]
     match = _TEST_STEPS.search(review.read_text(encoding="utf-8")) if review.is_file() else None
     steps = match.group(1).strip() if match else ""
@@ -268,15 +274,15 @@ def signoff(
         raise OwnerError(
             "work is left: " + ", ".join(left) + ". Finish it, or sign off with --force."
         )
-    doc = repo / "docs" / "milestones" / f"{milestone}.md"
+    doc = milestone_file(repo, "milestones", milestone)
+    review = milestone_file(repo, "reviews", milestone)
     _replace_line(
         doc,
         _STATUS_MILESTONE,
         f"> **Status: done.** Signed off by the owner on {today.isoformat()}."
         f" Base: git tag `{milestone}-start`."
-        f" Report: [`docs/reviews/{milestone}.md`](../reviews/{milestone}.md).",
+        f" Report: [`docs/reviews/{review.name}`](../reviews/{review.name}).",
     )
-    review = repo / "docs" / "reviews" / f"{milestone}.md"
     sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
     if review.is_file():
         _replace_line(

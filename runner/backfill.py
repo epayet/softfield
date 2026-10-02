@@ -26,10 +26,14 @@ from runner.milestone import _commit_time, all_footers, milestone_doc, signoff_s
 from runner.review import ReviewFileError, parse_review
 from runner.state import load_state
 from runner.tasks import (
+    TaskError,
     difficulty,
+    milestone_file,
     milestone_key,
     milestone_order,
+    named_keys,
     parse_sections,
+    short_key,
     split_frontmatter,
 )
 
@@ -57,7 +61,7 @@ _TICKET_RE = re.compile(r"^([a-z]+\d+)-\d+-")
 _RUN_DIR_RE = re.compile(r"^\d{8}-\d{6}$")
 _TASK_DIR_RE = re.compile(r"^(.+?)(?:-run(\d+))?$")
 _OPENCODE_RE = re.compile(r"^opencode-(\d+)\.jsonl$")
-_REVIEW_JSON_RE = re.compile(r"^review-([a-z]+\d+)-r(\d+)\.json$")
+_REVIEW_JSON_RE = re.compile(r"^review-(.+?)-r(\d+)\.json$")
 _ROUND_RE = re.compile(r"-r(\d+)$")
 _CLAUDE_LOG_RE = re.compile(
     r"^claude-(?P<kind>lead-ticket|[a-z]+)-(?P<subject>.+?)"
@@ -157,8 +161,17 @@ def _iso_mtime(path: Path, minus_s: float = 0.0) -> str:
 
 
 def _key_of(ticket: str) -> str | None:
+    """A ticket's short key, ``f3`` for ``f3-01-…``; ``_Backfill.key`` gives the full one."""
     match = _TICKET_RE.match(ticket)
     return match[1] if match else None
+
+
+def _is_key(text: str) -> bool:
+    """A milestone key in either form, as written (not a bare number)."""
+    try:
+        return milestone_key(text) == text
+    except TaskError:
+        return False
 
 
 # --- the backfill --------------------------------------------------------------------------
@@ -191,6 +204,7 @@ class _Backfill:
     milestones: dict[str, int] = field(default_factory=dict)
     tickets: dict[str, int] = field(default_factory=dict)
     local_logs: Counter[str] = field(default_factory=Counter)  # ticket -> attempts with a log
+    full: dict[str, str] = field(default_factory=dict)  # short key -> named key (ADR 16 item 6)
 
     def rel(self, path: Path) -> str:
         return path.relative_to(self.repo).as_posix()
@@ -198,11 +212,16 @@ class _Backfill:
     def gap(self, path: Path, why: str) -> None:
         self.gaps.append(f"{self.rel(path)}: {why}")
 
+    def key(self, key: str) -> str:
+        """A key in either form as the full one: ``f3`` is ``f3-factory-line``."""
+        return self.full.get(short_key(key), key)
+
     def count(self, key: str | None, what: str, item: object) -> None:
         if key is not None:
-            self.seen.setdefault(key, {}).setdefault(what, set()).add(item)
+            self.seen.setdefault(self.key(key), {}).setdefault(what, set()).add(item)
 
     def milestone(self, key: str) -> int:
+        key = self.key(key)
         if key not in self.milestones:
             self.milestones[key] = metrics.upsert_milestone(self.conn, self.project_id, key)
         return self.milestones[key]
@@ -233,6 +252,7 @@ def backfill(conn: sqlite3.Connection, repo: Path, runs_dir: Path, *, local_agen
     b = _Backfill(
         conn, repo, runs_dir, local_agent, metrics.upsert_project(conn, repo.name, repo=str(repo))
     )
+    b.full = named_keys(repo)
     footers = _tickets(b)
     if runs_dir.is_dir():
         for entry in sorted(runs_dir.iterdir()):
@@ -422,6 +442,7 @@ def _claude_jobs(
         if kind == "review":
             key = subject.split("-", 1)[0] if _KEY_RE.fullmatch(subject.split("-", 1)[0]) else None
         key = key or run_key
+        key = b.key(key) if key else None
         results = [parse_claude_log(p.read_text(encoding="utf-8", errors="replace")) for p in paths]
         for path, result in zip(paths, results, strict=True):
             if result is None:
@@ -469,7 +490,11 @@ def _claude_jobs(
 
 
 def _review_findings(b: _Backfill, run: Path, reviews: dict[tuple[str, int], int]) -> None:
-    found = [(m[1], int(m[2]), p) for p in run.iterdir() if (m := _REVIEW_JSON_RE.match(p.name))]
+    found = [
+        (b.key(m[1]), int(m[2]), p)
+        for p in run.iterdir()
+        if (m := _REVIEW_JSON_RE.match(p.name)) and _is_key(m[1])
+    ]
     for key, round_, path in sorted(found):
         try:
             review = parse_review(path)
@@ -534,9 +559,10 @@ def _milestones(b: _Backfill) -> None:
         except (ValueError, TypeError) as exc:
             b.gap(state_path, f"unreadable ({exc}); review rounds not recovered")
     docs = b.repo / "docs"
-    keys = {p.stem for p in (docs / "milestones").glob("*.md") if _KEY_RE.fullmatch(p.stem)}
+    keys = {b.key(p.stem) for p in (docs / "milestones").glob("*.md") if _is_key(p.stem)}
     for key in sorted(keys | set(b.milestones)):
-        doc_path, review_path = docs / "milestones" / f"{key}.md", docs / "reviews" / f"{key}.md"
+        doc_path = milestone_file(b.repo, "milestones", key)
+        review_path = milestone_file(b.repo, "reviews", key)
         doc = milestone_doc(doc_path.read_text(encoding="utf-8")) if doc_path.is_file() else {}
         sheet = (
             signoff_sections(review_path.read_text(encoding="utf-8"))

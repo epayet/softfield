@@ -20,7 +20,7 @@ from runner.milestone import (
     run_milestone,
 )
 from runner.state import load_state
-from runner.tasks import TaskError, milestone_key
+from runner.tasks import TaskError, milestone_arg
 
 
 def _repo() -> Path:
@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
                 escalate=not getattr(args, "no_escalate", False),
             )
         elif args.command == "milestone":
-            key = milestone_key(args.number)
+            key = milestone_arg(repo, args.number)
             owner.rerun_started(repo, key, db=cfg.metrics_db)
             stop = run_milestone(cfg, key, args.base or f"{key}-start")
             if stop == RESTART:
@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             print("\n" + text, end="")
             return code
         elif args.command == "signoff":
-            key = milestone_key(args.number)
+            key = milestone_arg(repo, args.number)
             owner.signoff(
                 repo, key, _today(), force=args.force, db=cfg.metrics_db, score=args.score
             )
@@ -151,16 +151,17 @@ def main(argv: list[str] | None = None) -> int:
             path = owner.decide_adr(repo, args.number, decision, _today(), db=cfg.metrics_db)
             print(f"{path.relative_to(repo)}: {decision}.")
         elif args.command == "review":
-            key = milestone_key(args.milestone)
+            key = milestone_arg(repo, args.milestone)
             stop = review_milestone(cfg, key, args.base or f"{key}-start")
             print(f"Review loop stopped: {stop}")
         elif args.command == "status":
-            m = milestone_metrics(repo, milestone_key(args.milestone))
+            key = milestone_arg(repo, args.milestone)
+            m = milestone_metrics(repo, key)
             print(f"done {m.done}, escalated {m.escalated}, attempts {m.attempts}")
-            print(milestone_summary(repo, milestone_key(args.milestone)))
+            print(milestone_summary(repo, key))
         elif args.command == "commits":
             found = Git(repo).local_model_commits(
-                args.base or f"{milestone_key(args.milestone)}-start"
+                args.base or f"{milestone_arg(repo, args.milestone)}-start"
             )
             for c in found:
                 print(f"{c.sha[:9]}  {c.task}  attempts {c.attempts}  {c.size} lines  ({c.author})")
@@ -221,7 +222,7 @@ def main(argv: list[str] | None = None) -> int:
             for agent, rating in sorted(current.items(), key=lambda item: -item[1]):
                 print(f"{agent:<28} {rating:.2f}")
         elif args.command == "report":
-            key = milestone_key(args.number)
+            key = milestone_arg(repo, args.number)
             path = report.write_milestone_report(repo, args.db or cfg.metrics_db, key)
             print(f"{path.relative_to(repo)}: {key.upper()}'s numbers written.")
         elif args.command == "dashboard":

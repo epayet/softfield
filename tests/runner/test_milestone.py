@@ -369,6 +369,45 @@ def test_a_factory_milestones_metrics_and_summary(repo):
     assert "there's no `f1-start` yet" in milestone_summary(repo, "f1")
 
 
+def test_a_named_milestone_finds_its_short_tickets(repo):
+    """ADR 16 item 6: f3-factory-line's tickets are f3-01-…, not f30's or f2's."""
+    for tid in ("f3-01-a", "f30-01-b", "f2-01-c"):
+        write_task(repo / "tasks" / "done", tid)
+    assert milestone_metrics(repo, "f3-factory-line").tasks == ["a"]
+    summary = milestone_summary(repo, "f3-factory-line")
+    assert "there's no `f3-factory-line-start` yet" in summary
+
+
+def test_a_named_milestone_run_records_its_doc_and_review(repo, monkeypatch):
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f3-factory-line.md").write_text(MILESTONE_DOC)
+    (repo / "docs" / "reviews").mkdir(parents=True)
+    (repo / "docs" / "reviews" / "f3-factory-line.md").write_text(REVIEW_DOC)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "plan")
+    git(repo, "tag", "f3-factory-line-start")
+    monkeypatch.setattr(milestone, "review_milestone", lambda *a: "clean")
+    milestone.run_milestone(_config(repo), "f3-factory-line", "f3-factory-line-start")
+    [row] = _rows(repo, "milestones")
+    assert (row["key"], row["title"]) == ("f3-factory-line", "Photos for Mum")
+    assert row["started"]
+    assert json.loads(str(row["signoff"]))["decisions"] == "None."
+
+
+def test_a_named_milestone_waits_for_tickets_written_with_its_short_key(repo, monkeypatch):
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f3-factory-line.md").write_text(MILESTONE_DOC)
+    write_task(repo / "tasks" / "blocked", "f3-01-a")
+    ready = write_task(repo / "tasks" / "ready", "f3-02-b", deps="[f3-01-a]")
+    ready.write_text(ready.read_text().replace("milestone: 1\n", "milestone: f3\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: False)
+    monkeypatch.setattr(milestone, "review_milestone", lambda *a: pytest.fail("reviewed early"))
+    stop = milestone.run_milestone(_config(repo), "f3-factory-line", "HEAD")
+    assert stop == milestone.PAUSED + "f3-02-b"
+
+
 def test_a_paused_stop_always_needs_the_owner():
     from runner.owner import _needs_owner
 

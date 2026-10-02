@@ -8,14 +8,20 @@ from runner.tasks import (
     TaskError,
     append_footer,
     blocked_ids,
+    command_arg,
+    full_key,
     load_dir,
+    milestone_arg,
+    milestone_file,
     milestone_key,
+    milestone_order,
     next_milestone_key,
     parse_sections,
     parse_task,
     pick_next,
     preflight,
     queued_tests,
+    short_key,
     task_ids,
 )
 from tests.runner.conftest import write_task
@@ -299,6 +305,96 @@ def test_milestone_key_refuses_anything_else(given):
 
 def test_next_milestone_key():
     assert next_milestone_key("m4") == "m5" and next_milestone_key("f9") == "f10"
+
+
+@pytest.mark.parametrize("given", ["f3-factory-line", "m5-history", "f2-cloud-first", "f3-v2"])
+def test_a_named_key_is_accepted(given):
+    """ADR 16 item 6: a key may be `<series><n>-<slug>`."""
+    assert milestone_key(given) == given
+
+
+@pytest.mark.parametrize(
+    "given",
+    [
+        "f3-",
+        "F3",
+        "f-1",
+        "F3-factory",
+        "f3-Factory",
+        "f3--line",
+        "f3-line-",
+        "f3-01",
+        "f3-01-x",
+        "-f3",
+    ],
+)
+def test_a_named_key_refuses_a_bad_slug(given):
+    """A slug starts with a letter, so a ticket id (`f3-01-x`) is never a milestone key."""
+    with pytest.raises(TaskError):
+        milestone_key(given)
+
+
+def test_a_named_key_orders_like_its_short_form():
+    assert milestone_order("f3-factory-line") == milestone_order("f3") == ("f", 3)
+    assert milestone_order("f3-factory-line") < milestone_order("f10")
+    assert short_key("f3-factory-line") == "f3" and short_key("m4") == "m4"
+    assert next_milestone_key("f3-factory-line") == "f4"
+    assert command_arg("f3-factory-line") == "f3-factory-line" and command_arg("m4") == "4"
+
+
+def _docs(repo: Path, *names: str) -> None:
+    (repo / "docs" / "milestones").mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (repo / "docs" / "milestones" / f"{name}.md").write_text(f"# {name}\n")
+
+
+def test_the_full_key_comes_from_the_milestone_doc(tmp_path):
+    _docs(tmp_path, "f2", "f3-factory-line", "m4")
+    assert full_key(tmp_path, "f3") == "f3-factory-line"
+    assert full_key(tmp_path, "f3-factory-line") == "f3-factory-line"
+    assert full_key(tmp_path, "f2") == "f2"  # an existing short-key doc
+    assert full_key(tmp_path, "f4") == "f4"  # no doc yet
+    assert full_key(tmp_path / "nowhere", "f3") == "f3"
+
+
+def test_a_milestone_file_is_the_full_keys_or_else_the_short_keys(tmp_path):
+    _docs(tmp_path, "f2", "f3-factory-line")
+    docs = tmp_path / "docs" / "milestones"
+    assert milestone_file(tmp_path, "milestones", "f3-factory-line") == docs / "f3-factory-line.md"
+    assert milestone_file(tmp_path, "milestones", "f2") == docs / "f2.md"
+    assert milestone_file(tmp_path, "milestones", "f2-cloud-first") == docs / "f2.md"
+    reviews = tmp_path / "docs" / "reviews"
+    assert milestone_file(tmp_path, "reviews", "f3-factory-line") == reviews / "f3-factory-line.md"
+
+
+def _ticket_of(repo: Path, folder: str, task_id: str, milestone: str) -> Path:
+    path = write_task(repo / "tasks" / folder, task_id)
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {milestone}\n"))
+    return path
+
+
+def test_a_tickets_milestone_in_either_form_is_the_full_key_once_its_doc_exists(tmp_path):
+    short = _ticket_of(tmp_path, "ready", "f3-01-a", "f3")
+    full = _ticket_of(tmp_path, "ready", "f3-02-b", "f3-factory-line")
+    assert parse_task(short, 150).milestone == "f3"
+    assert parse_task(full, 150).milestone == "f3-factory-line"
+    _docs(tmp_path, "f3-factory-line")
+    assert parse_task(short, 150).milestone == "f3-factory-line"
+    assert parse_task(full, 150).milestone == "f3-factory-line"
+
+
+def test_the_command_takes_either_form(tmp_path):
+    """`runner milestone f3` is f3-factory-line when its tickets say so, even with no doc."""
+    _ticket_of(tmp_path, "ready", "f3-01-a", "f3-factory-line")
+    _ticket_of(tmp_path, "done", "m4-01-b", "4")
+    (tmp_path / "tasks" / "done" / "broken.md").write_text("no frontmatter\n")
+    assert milestone_arg(tmp_path, "f3") == "f3-factory-line"
+    assert milestone_arg(tmp_path, "f3-factory-line") == "f3-factory-line"
+    assert milestone_arg(tmp_path, "4") == "m4" and milestone_arg(tmp_path, "f1") == "f1"
+    _docs(tmp_path, "f3-assembly")  # the doc wins over the tickets
+    assert milestone_arg(tmp_path, "f3") == "f3-assembly"
+    with pytest.raises(TaskError):
+        milestone_arg(tmp_path, "F3")
 
 
 def test_pick_next_orders_milestones_by_number(tmp_path):

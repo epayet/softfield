@@ -26,12 +26,15 @@ class TaskError(ValueError):
 
 
 # A milestone is Coucou's `mN` (a bare number N in frontmatter or on the command line) or a
-# named series like the factory's `f1` (the f1 plan): lowercase letters, then a number.
-_KEY_RE = re.compile(r"([a-z]+)(0|[1-9]\d*)")
+# named series like the factory's `f1` (the f1 plan): lowercase letters, then a number. It
+# may carry a slug, `f3-factory-line` (ADR 16 item 6); its short form `f3` prefixes its ticket
+# ids. A slug starts with a letter, so a ticket id is never a key.
+_KEY_RE = re.compile(r"([a-z]+)(0|[1-9]\d*)(-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?")
 
 
 def milestone_key(value: object) -> str:
-    """``4``, ``"4"`` and ``"m4"`` are ``"m4"``; ``"f1"`` is ``"f1"``."""
+    """``4``, ``"4"`` and ``"m4"`` are ``"m4"``; ``"f1"`` and ``"f3-factory-line"`` are
+    themselves."""
     if isinstance(value, bool):
         raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
     text = str(value)
@@ -43,7 +46,7 @@ def milestone_key(value: object) -> str:
 
 
 def command_arg(milestone: str) -> str:
-    """What the owner types: ``4`` for m4 (as before), ``f1`` for f1."""
+    """What the owner types: ``4`` for m4 (as before), ``f1`` for f1, a named key whole."""
     return milestone[1:] if milestone.startswith("m") and milestone[1:].isdigit() else milestone
 
 
@@ -54,14 +57,68 @@ def _key_parts(key: str) -> tuple[str, int]:
     return match.group(1), int(match.group(2))
 
 
+def short_key(key: str) -> str:
+    """``f3`` for ``f3-factory-line``: its tickets' prefix, ``f3-01-…``."""
+    prefix, number = _key_parts(key)
+    return f"{prefix}{number}"
+
+
+def _named(key: str) -> bool:
+    return key != short_key(key)
+
+
 def next_milestone_key(key: str) -> str:
+    """The next milestone's short key: ``f4`` after ``f3`` or ``f3-factory-line``."""
     prefix, number = _key_parts(key)
     return f"{prefix}{number + 1}"
 
 
 def milestone_order(key: str) -> tuple[str, int]:
-    """Sorts m9 before m10."""
+    """Sorts m9 before m10; a named key sorts as its short form."""
     return _key_parts(key)
+
+
+def _doc_keys(repo: Path) -> dict[str, str]:
+    """Short key -> full key, from each ``docs/milestones/<full key>.md``."""
+    found: dict[str, str] = {}
+    for path in sorted((repo / "docs" / "milestones").glob("*-*.md")):
+        if _KEY_RE.fullmatch(path.stem):
+            found.setdefault(short_key(path.stem), path.stem)
+    return found
+
+
+def full_key(repo: Path, key: str) -> str:
+    """A key in either form, as its doc names it: ``f3`` is ``f3-factory-line`` once
+    ``docs/milestones/f3-factory-line.md`` exists; otherwise the key as given."""
+    return key if _named(key) else _doc_keys(repo).get(key, key)
+
+
+def named_keys(repo: Path) -> dict[str, str]:
+    """Short key -> full key, from the tickets' frontmatter and then the docs (which win)."""
+    found: dict[str, str] = {}
+    for path in sorted((repo / "tasks").glob("*/*.md")):
+        try:
+            meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+            key = milestone_key(meta.get("milestone"))
+        except (TaskError, yaml.YAMLError, UnicodeDecodeError):
+            continue
+        if _named(key):
+            found.setdefault(short_key(key), key)
+    return found | _doc_keys(repo)
+
+
+def milestone_arg(repo: Path, value: object) -> str:
+    """A command's milestone in either form (``f3``, ``f3-factory-line``, ``4``) as its full
+    key, from its doc or its tickets."""
+    key = milestone_key(value)
+    return key if _named(key) else named_keys(repo).get(key, key)
+
+
+def milestone_file(repo: Path, folder: str, key: str) -> Path:
+    """``docs/<folder>/<full key>.md``, or an existing one named by the short key (f2's)."""
+    path = repo / "docs" / folder / f"{key}.md"
+    short = repo / "docs" / folder / f"{short_key(key)}.md"
+    return short if not path.is_file() and short.is_file() else path
 
 
 @dataclass(frozen=True)
@@ -164,6 +221,8 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
     if not isinstance(task_id, str) or task_id != path.stem:
         raise TaskError(f"'id' must match the file name ({path.stem})")
     milestone = milestone_key(meta.get("milestone"))
+    if path.parent.parent.name == "tasks":  # tasks/<folder>/<id>.md: its repo has the docs
+        milestone = full_key(path.parent.parent.parent, milestone)
     sections = parse_sections(body)
     missing = [name for name in SECTIONS if not sections.get(name)]
     if missing:

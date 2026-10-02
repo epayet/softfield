@@ -364,6 +364,41 @@ def test_the_summary_counts_what_it_wrote_per_milestone(m4, tmp_path):
     assert "m4" in text and "m1" in text
 
 
+def test_a_named_milestone_gathers_its_short_tickets_doc_review_and_findings(repo, tmp_path):
+    """ADR 16 item 6: f3-factory-line's tickets are f3-01-…, in either form of frontmatter."""
+    git(repo, "tag", "f3-factory-line-start")
+    _write(repo / "docs" / "milestones" / "f3-factory-line.md", "# Factory line\n")
+    _write(repo / "docs" / "reviews" / "f3-factory-line.md", "# F3\n\n### 1. What changed\nA.\n")
+    for task_id, key in (("f3-01-short", "f3"), ("f3-02-full", "f3-factory-line")):
+        _write(
+            repo / "tasks" / "done" / f"{task_id}.md",
+            TICKET.format(id=task_id, milestone=key, agent="lead", goal="G."),
+        )
+    run = repo / "var" / "runs" / RUN
+    _write(run / "f3-01-short" / "opencode-1.jsonl", OPENCODE_1)
+    _write(run / "f3-01-short" / "gates-1.txt", GATES_OK)
+    _write(run / "claude-review-f3-factory-line-review-r1.log", _claude_log(CLAUDE_OK))
+    _write(run / "review-f3-factory-line-r1.json", json.dumps(REVIEW))
+    state = {"review_counts": {"f3-factory-line": [2]}}
+    _write(repo / "var" / "runs" / "state.json", json.dumps(state))
+    db = tmp_path / "metrics.sqlite"
+    summary = _run(repo, db)
+    [milestone] = _rows(db, "SELECT * FROM milestones")
+    assert (milestone["key"], milestone["title"]) == ("f3-factory-line", "Factory line")
+    assert json.loads(milestone["signoff"])["changed"] == "A."
+    assert milestone["review_rounds"] == 1 and milestone["started"] is not None
+    tickets = _rows(db, "SELECT ticket, milestone_id FROM tickets ORDER BY ticket")
+    assert tickets == [
+        {"ticket": "f3-01-short", "milestone_id": milestone["id"]},
+        {"ticket": "f3-02-full", "milestone_id": milestone["id"]},
+    ]
+    [review] = _rows(db, "SELECT id, milestone_id FROM jobs WHERE role = 'review'")
+    assert review["milestone_id"] == milestone["id"]
+    findings = _rows(db, "SELECT job_id, milestone_id FROM findings")
+    assert findings == [{"job_id": review["id"], "milestone_id": milestone["id"]}] * 2
+    assert set(summary.written) == {"f3-factory-line"}
+
+
 # --- idempotent -------------------------------------------------------------------------------
 
 

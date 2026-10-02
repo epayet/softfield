@@ -340,3 +340,56 @@ def test_a_factory_milestone_uses_its_key_everywhere(repo: Path):
     assert "git tag `f1-start`" in (repo / "docs" / "milestones" / "f1.md").read_text()
     assert git(repo, "tag").split() == ["f1-done"]
     assert git(repo, "log", "-1", "--format=%s").strip() == "F1 signed off by the owner"
+
+
+def test_a_named_milestone_finds_its_short_tickets_and_its_docs(repo: Path):
+    """ADR 16 item 6: f3-factory-line's tickets are f3-01-…; its docs use the full key."""
+    write_task(repo / "tasks" / "escalated", "f30-02-other")  # f30's, not f3's
+    blocked = write_task(repo / "tasks" / "blocked", "f3-02-report")
+    append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
+    state = State(parked={"f3-03-wait": {"kind": "reserve", "text": "f3-03 waits"}})
+    code, text = owner.verdict(repo, "f3-factory-line", state, "clean")
+    assert code == 2 and "f3-02-report blocked" in text and "f30-02-other" not in text
+    assert "f3-03 waits" in text
+    assert "uv run runner milestone f3-factory-line" in text
+    with pytest.raises(owner.OwnerError, match="f3-02-report"):
+        owner.signoff(repo, "f3-factory-line", TODAY)
+    blocked.unlink()
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f3-factory-line.md").write_text(
+        "# Factory 3\n\n> **Status: in review** (2026-10-01).\n"
+    )
+    (repo / "docs" / "reviews").mkdir(parents=True)
+    (repo / "docs" / "reviews" / "f3-factory-line.md").write_text(
+        "# F3\n\n- **Status:** review done.\n"
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "docs")
+    code, text = owner.verdict(repo, "f3-factory-line", State(), "clean")
+    assert code == 0 and "Review: docs/reviews/f3-factory-line.md" in text
+    owner.signoff(repo, "f3-factory-line", TODAY, force=True)
+    doc = (repo / "docs" / "milestones" / "f3-factory-line.md").read_text()
+    assert "git tag `f3-factory-line-start`" in doc
+    assert "[`docs/reviews/f3-factory-line.md`](../reviews/f3-factory-line.md)" in doc
+    assert "signed off" in (repo / "docs" / "reviews" / "f3-factory-line.md").read_text()
+    assert git(repo, "tag").split() == ["f3-factory-line-done"]
+
+
+def test_a_rerun_of_a_named_milestone_clears_its_short_tickets_items():
+    cleared = owner._cleared_by_rerun("f3-factory-line")
+    assert cleared("blocked", "f3-02-report") and cleared("review-stop", "f3-factory-line")
+    assert not cleared("blocked", "f30-02-other") and not cleared("review-stop", "f3")
+
+
+def test_a_named_milestone_keeps_its_short_key_docs(repo: Path):
+    """f2 was planned before named keys: its docs stay docs/milestones/f2.md."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f2.md").write_text("# F2\n\n> **Status: in review**.\n")
+    (repo / "docs" / "reviews").mkdir(parents=True)
+    (repo / "docs" / "reviews" / "f2.md").write_text("# F2\n\n- **Status:** review done.\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "docs")
+    code, text = owner.verdict(repo, "f2-cloud-first", State(), "clean")
+    assert code == 0 and "Review: docs/reviews/f2.md" in text
+    owner.signoff(repo, "f2-cloud-first", TODAY)
+    assert "Signed off" in (repo / "docs" / "milestones" / "f2.md").read_text()

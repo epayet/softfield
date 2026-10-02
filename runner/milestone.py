@@ -41,7 +41,7 @@ from runner.review import (
     update_seen,
 )
 from runner.state import save_state
-from runner.tasks import load_dir, next_milestone_key
+from runner.tasks import full_key, load_dir, milestone_file, next_milestone_key, short_key
 from runner.usage import claude_tokens, transcripts_dir, work_summary
 
 _FOOTER_RE = re.compile(r"# --- runner ---\n(.*?)```", re.DOTALL)
@@ -91,7 +91,7 @@ def milestone_metrics(repo: Path, milestone: str) -> MilestoneMetrics:
     attempts: list[int] = []
     tasks: list[str] = []
     for folder in ("done", "escalated"):
-        for path in sorted((repo / "tasks" / folder).glob(f"{milestone}-*.md")):
+        for path in sorted((repo / "tasks" / folder).glob(f"{short_key(milestone)}-*.md")):
             text = path.read_text(encoding="utf-8")
             footers = all_footers(text)
             tokens += footer_tokens(text)
@@ -124,9 +124,8 @@ def milestone_summary(repo: Path, milestone: str, base: str | None = None) -> st
     started = _commit_time(repo, ref)
     if started is None:
         return f"**Who did the work in {label}.** Unknown: there's no `{ref}` yet."
-    claude = claude_tokens(
-        transcripts_dir(repo), started, _commit_time(repo, f"{next_milestone_key(milestone)}-start")
-    )
+    following = full_key(repo, next_milestone_key(milestone))
+    claude = claude_tokens(transcripts_dir(repo), started, _commit_time(repo, f"{following}-start"))
     return work_summary(label, m.tasks, m.local_tokens, claude)
 
 
@@ -199,10 +198,10 @@ def signoff_sections(text: str) -> dict[str, str]:
 def _record_milestone_doc(s: Session, milestone: str) -> None:
     if s.project_id is None:
         return
-    path = s.repo / "docs" / "milestones" / f"{milestone}.md"
+    path = milestone_file(s.repo, "milestones", milestone)
     doc = milestone_doc(path.read_text(encoding="utf-8")) if path.is_file() else {}
     # A sheet written outside the runner (an interactive review) reaches the dashboard too
-    review = s.repo / "docs" / "reviews" / f"{milestone}.md"
+    review = milestone_file(s.repo, "reviews", milestone)
     sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
     started = _commit_time(s.repo, f"{milestone}-start")
     _record(
@@ -278,7 +277,7 @@ def _rate_verdicts(s: Session, milestone: str) -> None:
 def _record_review(s: Session, milestone: str, rounds: int) -> None:
     if s.project_id is None:
         return
-    review = s.repo / "docs" / "reviews" / f"{milestone}.md"
+    review = milestone_file(s.repo, "reviews", milestone)
     sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
     _record(
         s,
@@ -322,7 +321,7 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
     waiting = sorted(
         t.id
         for t in load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
-        if t.milestone == milestone
+        if short_key(t.milestone) == short_key(milestone)
     )
     if waiting:
         return PAUSED + ", ".join(waiting)
