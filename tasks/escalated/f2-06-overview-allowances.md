@@ -30,3 +30,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - a reading past its reset shows "reset since"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 184779
+logs: var/runs/20261002-115807/f2-06-overview-allowances
+```
