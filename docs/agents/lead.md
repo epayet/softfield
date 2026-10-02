@@ -21,6 +21,8 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
 - **The owner wants to learn how the workflow performs,** and may turn it into a generic "software factory" with a pluggable frontier ([ADR 02](../adr/02-software-factory.md), waiting for more milestones). Keep workflow knowledge tool-neutral and in the repo. See "Reporting" below.
   - **Expected against actual, first:** on any milestone view or report, what changed and how to test it come right after the expected outcome and Done when; numbers, tickets and savings come after.
   - **Savings are shown in dollars** (API-equivalent), not in token counts.
+  - **The dashboard (owner, 2026-10-02):** show "Needs you" only when something does, and clear an item as soon as the owner has acted on it. Plain words only: the agents' own names, no invented names, no abbreviations, no unexplained marks (every colour, bar or light says what it means, or goes). The owner likes game-like, factory-style views of the work (D10 in `docs/milestones/f1.md`) and checks pages on a phone too.
+  - **Mock-ups before UI tickets:** for a new view, iterate a mock-up on real data with the owner (an artifact) until they're happy, then keep it as the picture the tickets point at.
 
 ## Authority
 - Only the owner marks an ADR **Accepted** or a milestone **done**.

@@ -1,7 +1,7 @@
 ---
 id: f1-32-factory-review
 milestone: f1
-depends_on: [f1-27-bench, f1-28-bench-page, f1-29-project-page, f1-38-project-page-fixes]
+depends_on: [f1-27-bench, f1-28-bench-page, f1-29-project-page, f1-38-project-page-fixes, f1-55-dependencies-tab, f1-56-timeline-and-plan-tabs, f1-57-factory-phone, f1-58-overview-factory]
 agent: lead
 difficulty: 7
 commands: [uv run runner report, uv run runner backfill, uv run runner run --dry-run]
@@ -26,6 +26,8 @@ Read `docs/agents/lead.md`, `docs/workflow.md`, `docs/adr/02-software-factory.md
   - Lead tickets were 65% of headless Claude ($18.7 of $28.7). Checkpoints on Sonnet: $0.24 each, 4 real bugs.
   - f1-07 (the first replan) cost $3.94, changed no Decision, and found the gates' blind spot (f1-33).
   - ADR 15 changed the flow mid-milestone. Measure parking, the reserve question, build-on and `finish` from their jobs, if f1 used them.
+- **The factory line (D10, f1-53 to f1-58):** take screenshots of `/` and `/milestones/f1/line` (every tab) at desktop and 400 px wide, and compare them with `docs/milestones/f1-factory-mockup.html`. Each D10 rule that doesn't hold on the page is a finding.
+- **The backfill's milestone rows:** after `runner backfill`, M4's `status` was blank and an empty `m0` row appeared (Replan log, 2026-10-02). Say whether that's right and fix it if not.
 - **From now on,** every milestone review has a standing "Factory" section: add it to "Review" in `docs/agents/lead.md`.
 
 ### Done when

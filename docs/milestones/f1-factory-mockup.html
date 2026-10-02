@@ -1,0 +1,1150 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><style>[hidden]{display:none!important}body{margin:0}</style>
+<!-- f1 factory view mock-up (v18, 2026-10-02): a picture for tickets f1-53 to f1-58, not a file to read. Data: the metrics DB on 2026-10-02. -->
+</head><body>
+<title>Coucou Production Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a control deck (milestone + tabs + stats) over one full-width bay; the bay holds the floor, the timeline or the plan. Single dark world by choice: a factory floor at night. */
+:root {
+  color-scheme: dark;
+  --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+  --fg: #dfe4e8; --muted: #8794a2; --hazard: #f2b10a; --hazard-ink: #1a1405;
+  --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62; --oss: #4fd1a5; --nemo: #c3e06a; --copilot: #7aa7ff; --ghost: #5b6876;
+  --fail: #ec5458; --clog: #ec5458; --done: #c9d3dc;
+  --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+* { box-sizing: border-box; }
+body { background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); }
+.wrap { max-width: 1320px; margin: 0 auto; padding-inline: 16px; padding-block: 12px 48px; display: grid; gap: 12px; }
+header.deck { display: grid; gap: 12px; }
+.brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.brand h1 { font: 700 22px/1.1 var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0; text-wrap: balance; }
+.brand .tag { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); padding: 3px 8px; }
+.brand p { margin: 0; color: var(--muted); max-width: 90ch; font-size: 13px; }
+.hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--rule); }
+.seg button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 0; border-right: 1px solid var(--rule); padding: 8px 14px; cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+.seg button:focus-visible, .play:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--sonnet); outline-offset: 2px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.stat { background: var(--bay); padding: 10px 14px; display: grid; gap: 2px; min-width: 0; }
+.stat b { font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
+.stat span { font: 500 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.stat.clog b { color: var(--clog); }
+.bay { background: var(--bay); border: 1px solid var(--rule); min-width: 0; }
+.bay-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.bay-head h2 { margin: 0; font: 600 15px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.bay-head p { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono); color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+.scroll { overflow-x: auto; }
+/* floor */
+.floor { display: grid; grid-template-columns: minmax(0, 1fr) 300px; }
+@media (max-width: 900px) { .floor { grid-template-columns: 1fr; } }
+.stage { position: relative; min-width: 0; }
+#floor { display: block; width: 100%; height: auto; background: var(--bay); user-select: none; }
+#floor.grab { cursor: grabbing; }
+.zoom { position: absolute; top: 10px; right: 10px; display: flex; border: 1px solid var(--rule); background: var(--plate); }
+.zoom button, .play.step { min-width: 0; padding: 8px 10px; }
+.replay select { font: 600 13px var(--mono); color: var(--fg); background: transparent; border: 0; border-right: 1px solid var(--rule); padding: 6px 11px; cursor: pointer; }
+.zoom button:last-child { border-right: 0; }
+.replay select { border: 1px solid var(--rule); background: var(--plate); }
+.belt .bed { fill: none; stroke: #222a33; stroke-width: 18; stroke-linejoin: round; cursor: help; }
+.belt .rollers { fill: none; stroke: #36414d; stroke-width: 14; stroke-dasharray: 2 7; stroke-linejoin: round; }
+.belt .rail { fill: none; stroke: transparent; stroke-width: 1.5; }
+.belt.came .rail, .belt.goes .rail { }
+.belt.moving .bed { stroke: #3a2f12; }
+.belt.came .rail { stroke: var(--hazard); stroke-width: 3; }
+.belt.goes .rail { stroke: var(--hazard); stroke-width: 3; stroke-dasharray: 7 6; animation: march 1.2s linear infinite; }
+@keyframes march { to { stroke-dashoffset: -13; } }
+.belt.came + *, .belt.goes + * { }
+.belt.moving .rollers { stroke: var(--hazard); animation: roll .35s linear infinite; }
+@keyframes roll { to { stroke-dashoffset: -9; } }
+.blabel { font: 10.5px var(--mono); fill: #7f8b98; }
+.bstat { font: 10px var(--mono); fill: #c7b27a; }
+.mlabel, .mwhat, .msub, .blabel, .bstat { paint-order: stroke; stroke: var(--bay); stroke-width: 4px; stroke-linejoin: round; }
+.linebox { margin: 8px 12px; } .linebox summary { cursor: pointer; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 6px 0; }
+#floor.tall .mlabel { font-size: 15px; } #floor.tall .msub { font-size: 12px; } #floor.tall .blabel { font-size: 12px; } #floor.tall .bstat { font-size: 11px; }
+#floor.tall .mlabel, #floor.tall .msub, #floor.tall .blabel, #floor.tall .bstat { stroke-width: 4px; }
+#floor.legacy-tall .mlabel { font-size: 22px; }
+#floor.tall .stencil { font-size: 14px; }
+#floor.tall .crate text { font-size: 10px; }
+@media (max-width: 640px) { .readout li, .now-run, .now-next, .work p, .pinned p { font-size: 13px; } .brand h1 { font-size: 19px; } }
+.line[hidden] { display: none; }
+#replay-slot-floor, #replay-slot-deps { display: contents; }
+@media (max-width: 900px) {
+  .replay { position: sticky; bottom: 0; z-index: 5; background: var(--plate); box-shadow: 0 -6px 16px rgba(0,0,0,.45); padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); gap: 8px; }
+  .replay { flex-wrap: wrap; padding-top: 8px; }
+  .replay input { order: -1; flex-basis: 100%; }
+  .replay .play { min-width: 0; padding: 8px 12px; }
+  .replay select { flex: 1; min-width: 0; padding: 7px 6px; font-size: 12px; }
+  .replay label { display: none; }
+}
+.floorbox { overflow-x: auto; }
+.swipe { display: none; margin: 6px 14px 0; font-size: 13px; color: var(--muted); }
+
+@media (max-width: 640px) { #v-floor .bay-head .legend { display: none; } }
+.line { display: grid; gap: 4px; padding: 14px 4px; }
+.lstation { border: 1px solid var(--rule); background: var(--plate); padding: 14px; display: grid; gap: 8px; }
+.lstation p { margin: 0; font-size: 15px; line-height: 1.5; }
+.lhead { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.lhead b { font: 600 16px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--mc, var(--fg)); }
+.lrole { font: 700 11px var(--display); letter-spacing: .1em; text-transform: uppercase; padding: 1px 6px; border: 1px dashed; }
+.lrole.lead { color: var(--opus); } .lrole.dev { color: var(--qwen); }
+.lbelt { margin-left: 20px; border-left: 6px dotted #3d4a57; padding: 12px 0 12px 14px; display: grid; gap: 4px; }
+.lname { font: 14px var(--mono); color: #9aa6b2; }
+.lstat { font: 14px var(--mono); color: #c7b27a; }
+.chips, .lwait { display: flex; flex-wrap: wrap; gap: 7px; }
+.chip { position: relative; font: 700 14px var(--mono); color: #1a1405; padding: 6px 10px; cursor: pointer; }
+.chip.lead { background: var(--opus); } .chip.dev { background: var(--qwen); }
+.chip.done { opacity: .45; } .chip.work { outline: 2px solid #fff; }
+.chip i { font-style: normal; background: var(--hazard); border-radius: 50%; padding: 0 5px; margin-right: 4px; }
+.bad { color: var(--clog); }
+.pad { stroke-width: 1.5; stroke-dasharray: 8 5; }
+.pad.lead { fill: rgba(255,150,64,.07); stroke: rgba(255,150,64,.45); }
+.pad.shadow { fill: rgba(122,167,255,.07); stroke: rgba(122,167,255,.5); }
+.shadowbelt .rollers { stroke-dasharray: 2 4; opacity: .7; }
+.grp.shadow { color: var(--copilot); border-color: var(--copilot); }
+.lrole.shadow { color: var(--copilot); }
+.pad.dev { fill: rgba(140,207,98,.07); stroke: rgba(140,207,98,.45); }
+.stencil { font: 700 10px var(--display); letter-spacing: .14em; }
+.stencil.lead { fill: rgba(255,150,64,.75); }
+.stencil.dev { fill: rgba(140,207,98,.75); }
+.prog .ptrack { fill: #222a33; stroke: #3d4a57; }
+.prog .pfill { fill: var(--hazard); }
+.prog .pfill.over { fill: var(--fail); }
+.crate[data-s="working"] .box { animation: work 1.2s ease-in-out infinite; }
+@keyframes work { 50% { stroke: var(--hazard); stroke-width: 4; } }
+.crate.latest .box { stroke: #fff; stroke-width: 2.5; fill-opacity: .9; }
+.gate .gbody { fill: #2a323c; stroke: #59646f; stroke-width: 2; }
+.gate .gbar { fill: #3d4854; }
+.crate .order circle { fill: var(--hazard); stroke: #0b0e12; stroke-width: 1.5; }
+.crate .order text { font: 700 9px var(--mono); fill: #1a1405; }
+.stagetext { margin: 6px 0 0; font: 12px/1.45 var(--body); color: var(--muted); }
+.stagetext b { color: var(--fg); font-weight: 600; }
+
+@keyframes flow { to { stroke-dashoffset: -22; } }
+.bin { fill: #232c36; stroke: #3d4a57; stroke-width: 2; }
+.mlabel { font: 600 14px var(--display); letter-spacing: .06em; text-transform: uppercase; fill: var(--fg); }
+.mlabel.hz { fill: var(--hazard); font-size: 12px; }
+.msub { font: 11px var(--mono); fill: var(--muted); }
+.msub.bad { fill: var(--clog); }
+.machine .shadow { fill: #0b0e12; opacity: .5; }
+.machine .body { fill: var(--mc); stroke: #0b0e12; stroke-width: 2; filter: saturate(.55) brightness(.6); }
+.machine .panel { fill: #0f1419; opacity: .55; }
+.machine .vent { fill: #23301c; }
+.machine.on .vent { fill: #e9ffd9; }
+.machine .lens { fill: #142029; stroke: var(--mc); stroke-width: 3; }
+.machine .pupil { fill: #2a3a44; }
+.machine.on .pupil { fill: #eaf8ff; }
+.machine .core { opacity: .25; }
+.machine.on .core { opacity: 1; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { opacity: .55; } }
+.machine .fin, .machine .stack { fill: #3a2c20; stroke: #0b0e12; }
+.machine.stacked.on .body { stroke: var(--mc); stroke-width: 3; animation: glow 1.4s ease-in-out infinite; }
+@keyframes glow { 50% { stroke-opacity: .35; } }
+.machine .plate.local { fill: #e6edf3; }
+.machine .plate.cloud { fill: #0f1419; stroke: #e6edf3; stroke-width: 1.2; }
+.machine .ptext { font: 700 9px var(--display); letter-spacing: .12em; text-anchor: middle; }
+.machine .ptext.local { fill: #0b0e12; }
+.machine .ptext.cloud { fill: #e6edf3; }
+#floor.tall .machine .ptext { font-size: 9px; }
+.where { font: 700 10px var(--display); letter-spacing: .1em; padding: 1px 5px; margin-left: 4px; }
+.where.local { background: #e6edf3; color: #0b0e12; }
+.where.cloud { border: 1px solid #e6edf3; color: #e6edf3; }
+.machine .mplate { fill: #0f1419; opacity: .6; }
+.machine .model .mname { font: 700 10px var(--display); letter-spacing: .1em; fill: #9aa6b2; }
+.machine .model.active .mplate { fill: #3a2f12; opacity: 1; stroke: var(--hazard); stroke-width: 1.5; }
+.machine .model.active .mname { fill: var(--hazard); }
+.machine .gauge { fill: #1a2028; stroke: #0b0e12; stroke-width: .5; }
+.machine .gauge.on { fill: var(--mc); }
+.machine .gtext { font: 700 11px var(--mono); fill: var(--fg); paint-order: stroke; stroke: #0b0e12; stroke-width: 3px; }
+#floor.tall .machine .gtext { font-size: 10px; }
+.machine .led { fill: #2a333d; }
+.machine.on .led { animation: led 1s steps(1) infinite; }
+@keyframes led { 0%, 40% { fill: var(--mc); } 41%, 100% { fill: #2a333d; } }
+.machine .piston { fill: #55606b; }
+.machine .head { fill: #c9d3dc; stroke: #0b0e12; }
+.machine .presshead { transform-box: fill-box; }
+.machine.on .presshead { animation: stamp .9s cubic-bezier(.6,0,.4,1) infinite; }
+@keyframes stamp { 0%, 100% { transform: translateY(-14px); } 45%, 55% { transform: translateY(0); } }
+.machine .spark { fill: #fff6c4; opacity: 0; }
+.machine.on .spark { animation: spark .9s linear infinite; }
+@keyframes spark { 45% { opacity: 0; } 50% { opacity: 1; } 70% { opacity: 0; transform: translateY(6px); } }
+.machine .limb { fill: none; stroke: #c9b49a; stroke-width: 6; stroke-linecap: round; stroke-linejoin: round; }
+.machine .claw { fill: none; stroke: #e8dccb; stroke-width: 3; stroke-linecap: round; }
+.machine .joint { fill: #3a2c20; stroke: #c9b49a; stroke-width: 2; }
+.machine.on .arm.l { animation: armL 2.2s ease-in-out infinite; }
+.machine.on .arm.r { animation: armR 2.2s ease-in-out infinite; animation-delay: -1.1s; }
+@keyframes armL { 0%, 100% { transform: rotate(-7deg); } 50% { transform: rotate(6deg); } }
+@keyframes armR { 0%, 100% { transform: rotate(7deg); } 50% { transform: rotate(-6deg); } }
+.machine .puff { fill: #9aa6b2; pointer-events: none; }
+.machine .smoke { fill: #8a96a3; opacity: 0; transform-box: fill-box; transform-origin: center; }
+.machine.on .smoke { animation: smoke 2.1s ease-out infinite; }
+@keyframes smoke { 0% { opacity: .55; transform: translateY(0) scale(.6); } 100% { opacity: 0; transform: translateY(-34px) scale(1.6); } }
+.machine .beam { fill: var(--mc); opacity: 0; }
+.machine.on .beam { animation: scan 2.4s ease-in-out infinite alternate; }
+@keyframes scan { 0% { opacity: .35; transform: translateX(0); } 100% { opacity: .35; transform: translateX(150px); } }
+.gate.pass .gbar { fill: #5fd17a; }
+.gate.fail .gbar { fill: var(--fail); }
+.gate .gbar { transition: fill .2s; }
+.machine .gearc { fill: none; stroke: var(--mc); stroke-width: 3; }
+.machine .gears { stroke: var(--mc); stroke-width: 2; }
+.machine.on .gear > * { animation: spin 2.4s linear infinite; transform-box: fill-box; transform-origin: center; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.machine .lamp { fill: #55606b; }
+.machine.on .lamp { fill: #7dff8a; }
+.machine.fail .lamp { fill: var(--fail); }
+.machine.cut .body { fill: #4a535c; filter: none; }
+.machine.cut .lamp { fill: var(--clog); animation: pulse .8s steps(2) infinite; }
+.machine.ghost .body { fill: transparent; stroke: var(--ghost); stroke-dasharray: 6 5; filter: none; }
+.machine.ghost .panel, .machine.ghost .shadow, .machine.ghost .vent, .machine.ghost .gear, .machine.ghost .lamp { display: none; }
+.crate { transition: opacity .4s; cursor: pointer; }
+.crate .hit { fill: transparent; }
+#chain .edge { fill: none; stroke: #3d4a57; stroke-width: 1.5; }
+#chain .node { cursor: pointer; }
+#chain .node text { font: 13px var(--mono); fill: var(--fg); pointer-events: none; }
+#chain .node .far { font-size: 12px; fill: var(--hazard); }
+#chain .steplabel { font: 12px var(--mono); fill: var(--muted); }
+#chain .kbadge { fill: var(--qwen); }
+#chain .lead .kbadge { fill: var(--opus); }
+#chain .node .ktext { font: 700 10.5px var(--display); letter-spacing: .08em; fill: #0b0e12; }
+#chain .lead .nbox { fill: #2a2119; }
+#chain .node .hsub { font-size: 12px; fill: var(--muted); }
+.badge { font: 700 10px var(--display); letter-spacing: .08em; padding: 1px 5px; color: #0b0e12; }
+.badge.lead { background: var(--opus); }
+.badge.dev { background: var(--qwen); }
+.muted { color: var(--muted); }
+.now { background: var(--bay); border: 1px solid var(--hazard); }
+.now-head { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.now-head h2 { margin: 0; font: 600 15px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard); }
+.now-head p { margin: 0; font-size: 13px; }
+.now-groups { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 14px 0; }
+.grp { font: 700 11px var(--display); letter-spacing: .1em; text-transform: uppercase; padding: 2px 8px; border: 1px dashed; }
+.grp.lead { color: var(--opus); border-color: var(--opus); }
+.grp.dev { color: var(--qwen); border-color: var(--qwen); }
+.now-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--rule); }
+.now-agent { background: var(--bay); padding: 10px 14px; min-width: 0; }
+.now-agent h3 { margin: 0 0 6px; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ac); }
+.now-agent h4 { margin: 10px 0 4px; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.now-agent p { margin: 0; font-size: 13px; }
+.now-run { font: 12px/1.5 var(--mono); }
+.now-next { margin: 0; padding-left: 20px; font: 12px/1.6 var(--mono); }
+#chain .nbox { fill: var(--plate); stroke: var(--muted); stroke-dasharray: 3 2; }
+#chain .node[data-s="ready"] .nbox { stroke: var(--nc); stroke-width: 2; stroke-dasharray: none; }
+#chain .node[data-s="working"] .nbox { stroke: #fff; stroke-width: 3; stroke-dasharray: none; }
+#chain .node[data-s="merged"] .nbox { stroke: #4a5562; stroke-dasharray: none; }
+#chain.focusing .node:not(.me):not(.up):not(.down), #chain.focusing .edge:not(.up):not(.down) { opacity: .2; }
+#chain .node.me .nbox { stroke: #fff; stroke-width: 3; stroke-dasharray: none; }
+#chain .node.up .nbox { stroke: var(--hazard); stroke-width: 2; stroke-dasharray: none; }
+#chain .node.down .nbox { stroke: var(--sonnet); stroke-width: 2; stroke-dasharray: none; }
+#chain .edge.up { stroke: var(--hazard); stroke-width: 2.5; }
+#chain .edge.down { stroke: var(--sonnet); stroke-width: 2.5; }
+.crate .box { fill: var(--cc); stroke: #0b0e12; stroke-width: 1.5; }
+.nohit, .links { pointer-events: none; }
+.link { stroke: var(--hazard); stroke-width: 2; stroke-dasharray: 5 4; }
+.crate.focus .box { stroke: #fff; stroke-width: 3; }
+.work p, .pinned p { margin: 0 0 4px; font: 12px/1.45 var(--mono); }
+.work .goal { color: var(--muted); font-family: var(--body); font-size: 13px; }
+.stages { list-style: none; display: flex; gap: 4px; padding: 0; margin: 6px 0 0; flex-wrap: wrap; }
+.stages li { font: 600 11px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 3px 8px; border: 1px solid var(--rule); color: var(--muted); }
+.stages li.now { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+.pinned { border: 1px solid var(--hazard); padding: 8px 10px; }
+.pinned h3 { display: flex; justify-content: space-between; align-items: center; }
+.pinned button { font: 11px var(--mono); background: transparent; color: var(--fg); border: 1px solid var(--rule); cursor: pointer; }
+.crate text { font: 700 8.5px var(--mono); fill: #1a1405; pointer-events: none; }
+.crate .slats { stroke: #0b0e12; stroke-opacity: .35; stroke-width: 1.2; fill: none; pointer-events: none; }
+.crate .tag { fill: #ece6d6; stroke: #0b0e12; stroke-opacity: .4; stroke-width: .6; pointer-events: none; }
+.machine .port { fill: #12171c; stroke: #4a5562; stroke-width: 1.5; }
+.mwhat { font: 10.5px var(--body); fill: var(--muted); }
+.crate[data-s="done"] rect, .crate[data-s="hand"] .box { fill: #59636e; }
+.crate[data-s="hand"] .box { stroke-dasharray: 3 2; stroke: var(--muted); }
+.crate[data-s="clog"] .box { fill: var(--clog); }
+.crate[data-s="next-wait"] .box { fill-opacity: .45; stroke-dasharray: 3 2; stroke: #c9d3dc; }
+.crate[data-s="working"] .box { stroke: #fff; stroke-width: 2.5; }
+li.hl { cursor: pointer; }
+li.hl:hover { color: var(--hazard); }
+.crate.called .box { stroke: var(--hazard); stroke-width: 4; }
+.crate.called { animation: call .7s ease-in-out infinite; }
+@keyframes call { 50% { opacity: .55; } }
+.crate.dep .box { stroke: var(--hazard); stroke-width: 3; }
+.crate:focus-visible .box { stroke: var(--sonnet); stroke-width: 3; }
+@media (prefers-reduced-motion: reduce) { .crate { transition: none; } .belt.goes .rail, .belt.moving .rollers, .machine.on .core, .machine.on .led, .machine.on .presshead, .machine.on .spark, .machine.on .arm.l, .machine.on .arm.r, .machine.on .smoke, .machine.on .beam { animation: none; } }
+.readout { border-left: 1px solid var(--rule); padding: 12px 14px; display: grid; gap: 12px; align-content: start; font-size: 13px; min-width: 0; }
+@media (max-width: 900px) { .readout { border-left: 0; border-top: 1px solid var(--rule); } }
+.readout h3 { margin: 0 0 4px; font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.readout ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.readout li { font: 12px/1.4 var(--mono); overflow-wrap: anywhere; }
+.readout .clock { font: 600 18px var(--mono); color: var(--hazard); font-variant-numeric: tabular-nums; }
+.dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; }
+.replay { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid var(--rule); flex-wrap: wrap; }
+.play { font: 700 12px var(--display); letter-spacing: .1em; text-transform: uppercase; background: var(--hazard); color: var(--hazard-ink); border: 0; padding: 8px 14px; cursor: pointer; min-width: 84px; }
+.replay input { flex: 1; min-width: 160px; accent-color: var(--hazard); }
+.replay label { font: 12px var(--mono); color: var(--muted); }
+/* svg charts */
+svg text { font-family: var(--mono); }
+.tip { position: fixed; pointer-events: none; background: #0b0e12; border: 1px solid var(--hazard); padding: 8px 10px; font: 12px/1.45 var(--mono); max-width: 360px; z-index: 9; color: var(--fg); }
+.tip b { color: var(--hazard); font-weight: 600; }
+details.note summary { cursor: pointer; color: var(--fg); font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.note { color: var(--muted); font-size: 13px; padding: 10px 14px; border-top: 1px solid var(--rule); max-width: 100ch; }
+@media (prefers-reduced-motion: reduce) { .hazard { opacity: .6; } }
+</style>
+
+<div class="wrap">
+  <header class="deck">
+    <div class="brand">
+      <span class="tag">Mock-up · real data</span>
+      <h1>Coucou production line</h1>
+      <p id="ms-title"></p>
+    </div>
+    <div class="controls">
+      <div class="seg" id="ms" role="group" aria-label="Milestone"></div>
+      <div class="seg" id="tabs" role="group" aria-label="View">
+        <button data-tab="floor" aria-pressed="true">Factory floor</button>
+        <button data-tab="deps" aria-pressed="false">Dependencies</button>
+        <button data-tab="timeline" aria-pressed="false">Production timeline</button>
+        <button data-tab="plan" aria-pressed="false">Plan vs actual</button>
+      </div>
+    </div>
+  </header>
+
+  <section class="bay" id="v-floor">
+    <div class="bay-head">
+      <h2>Factory floor</h2>
+      <div class="legend"><span><i style="background:linear-gradient(90deg,var(--qwen) 50%,#1a2028 50%)"></i>rating out of 10 (runner.toml; results move it)</span><span><span class="where local">LOCAL</span> your GPU, free</span><span><span class="where cloud">CLOUD</span> uses an allowance</span><span><i style="background:var(--copilot)"></i>being tested (shadow)</span><span><i style="background:var(--opus)"></i>lead ticket</span><span><i style="background:var(--qwen)"></i>developer ticket</span><span><i style="background:var(--qwen);opacity:.45;outline:1px dashed #c9d3dc"></i>waits for a dependency</span><span><i style="background:var(--hazard);border-radius:50%"></i>run order</span><span><i style="border:2px solid #fff"></i>working</span><span><i style="background:var(--clog)"></i>waiting for Claude's limit</span><span><i style="background:var(--qwen);opacity:.35"></i>merged</span><span><i style="background:var(--hazard);height:3px"></i>the belt the working ticket came on</span><span><i style="background:repeating-linear-gradient(90deg,var(--hazard) 0 5px,transparent 5px 9px);height:3px"></i>where it goes next</span></div>
+    </div>
+    <div class="floor">
+      <div class="stage"><div class="floorbox"><svg id="floor" role="img" aria-label="Factory floor at the chosen moment"></svg></div><details class="linebox" id="linebox" hidden><summary>The same, in words</summary><div id="line" class="line"></div></details></div>
+      <aside class="readout" id="readout"></aside>
+    </div>
+    <details class="note"><summary>How to read this</summary>Each agent is a machine, and stronger agents get bigger machines. The amber floor is the lead: one machine, Claude, running each job on Opus or (for checkpoints) Sonnet; the lit plate shows which; the green floor is a developer. Anything that changes code goes through Checks; directions and findings are text, so they go straight on. Each ticket is a box: it waits in the queue, moves to the agent working on it, and ends in Merged. Each belt is one path a ticket can take, named on the belt. A belt moves only while a ticket travels on it. When Claude reaches a usage limit its machine goes grey, and tickets waiting for it line up in red on its track. Hover or click a box to see the ticket; the tickets it needs get a yellow outline. The Dependencies tab shows the whole chain.</details>
+    <div id="replay-slot-floor"><div class="replay" id="replay">
+      <button class="play" id="play">Play</button>
+      <input type="range" id="t" min="0" max="10000" value="10000" aria-label="Replay time">
+      <button class="play step" id="prev" aria-label="Previous event">◀</button><button class="play step" id="next" aria-label="Next event">▶</button><select id="speed" aria-label="Replay speed"><option value="5000">every 5 s</option><option value="3000" selected>every 3 s</option><option value="1500">every 1.5 s</option></select>
+      <label for="t" id="t-label"></label>
+    </div></div>
+  </section>
+
+  <section class="bay" id="v-deps" hidden>
+    <div class="bay-head">
+      <h2>Dependencies</h2>
+      <div class="legend">
+        <span><span class="badge lead">LEAD</span> lead ticket</span>
+        <span><span class="badge dev">DEV</span> developer ticket</span>
+        <span><i style="background:var(--opus)"></i><i style="background:var(--qwen)"></i>one mark per job, in the agent's colour; red edge = failed</span>
+        <span><i style="background:#3a444f"></i>merged</span>
+        <span><i style="border:2px solid #fff"></i>working now</span>
+        <span><i style="border:2px solid var(--qwen)"></i>can start now</span>
+        <span><i style="border:1px dashed var(--muted)"></i>waits for a dependency</span>
+        <span>27 → 32: 27 must merge before 32 can start</span>
+        <span><i style="background:var(--hazard);height:2px"></i>what it needs</span>
+        <span><i style="background:var(--sonnet);height:2px"></i>what it unblocks</span>
+      </div>
+    </div>
+    <div class="scroll" id="deps"></div>
+    <p class="note">Work flows top to bottom. Each arrow points from a ticket to one that needs it, so a ticket always sits below everything it waits for, one row after the last of them. Lines join neighbouring steps only; a ticket that also waits for something further up says so in yellow ("also after 42"). Links implied by others are left out (if 25 needs 24 and 24 needs 21, there is no 21→25). Under each title, one mark per job shows who worked on it and in what order, up to the slider's time. Hover a box to light up what it needs and what it unblocks. The slider and play below work here too.</p>
+    <div id="replay-slot-deps"></div>
+  </section>
+
+  <section class="bay" id="v-timeline" hidden>
+    <div class="bay-head">
+      <h2>Production timeline</h2>
+      <div class="legend" id="tl-legend"></div>
+    </div>
+    <div class="scroll" id="tl"></div>
+    <p class="note">One lane per machine, one block per job (the number is the ticket). A red top edge is a failed attempt. Red hatching is a Claude usage limit. Idle stretches over 40 min are drawn shorter, with their real length written on them, so nights don't take the whole width.</p>
+  </section>
+
+  <section class="bay" id="v-plan" hidden>
+    <div class="bay-head">
+      <h2>Plan vs actual</h2>
+      <div class="legend">
+        <span><i style="border:1px dashed var(--hazard)"></i>planned (dependencies only, machines always free)</span>
+        <span><i style="background:var(--muted);height:2px"></i>waiting</span>
+        <span><i style="background:repeating-linear-gradient(-45deg,var(--clog) 0 3px,transparent 3px 6px)"></i>waiting for Claude’s limit to reset</span>
+      </div>
+    </div>
+    <div class="scroll" id="plan"></div>
+    <p class="note">Left: the line the dependencies allow, if every ticket started the moment its dependencies merged, each taking the work time it really took. Right: what happened, on the folded clock of the timeline. The gap between the two is queueing on one machine at a time, and the time work waited for Claude’s limit to reset.</p>
+  </section>
+  <section class="now" id="now" hidden></section>
+  <div class="stats" id="stats"></div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script id="data" type="application/json">{"milestones":{"m1":{"title":"Admin setup","status":"done","tickets":[{"ticket":"m1-01-space-reactions-column","title":"Show each space's reaction set as one readable line (e.g. `\u2764\ufe0f \ud83d\ude02 \ud83d\ude2e \ud83e\udd70`) in the admin's space list, and flag broken sets with `\u26a0 invalid`.","kind":"developer","deps":[],"d":2,"state":"done","lines":12},{"ticket":"m1-02-seed-demo","title":"Implement `manage.py seed_demo`: it creates a small demo world (vault \"Famille\", Mum and me as members, space \"Us\" with me as controller, one display waiting to be paired) and is safe to run again.","kind":"developer","deps":[],"d":3,"state":"done","lines":62},{"ticket":"m1-03-vault-list-counts","title":"The admin's vault list shows how many members and spaces each vault has.","kind":"developer","deps":[],"d":1,"state":"done","lines":18},{"ticket":"m1-04-people-vaults-column","title":"The admin's people list shows which vaults each person is in, e.g. `Amis, Famille`.","kind":"developer","deps":[],"d":2,"state":"done","lines":7},{"ticket":"m1-05-space-displays-inline","title":"A space's edit page lists its displays read-only (label, status, language), each with a link to its device page.","kind":"developer","deps":[],"d":2,"state":"done","lines":10}],"jobs":[{"id":88,"ticket":"m1-01-space-reactions-column","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-27T23:46:26.275000+01:00","end":"2026-09-27T23:46:59.452000+01:00","outcome":"failed","note":null,"tin":39921,"cost":null},{"id":89,"ticket":"m1-01-space-reactions-column","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-09-27T23:47:09.683000+01:00","end":"2026-09-27T23:48:10.431000+01:00","outcome":"failed","note":null,"tin":74828,"cost":null},{"id":90,"ticket":"m1-01-space-reactions-column","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-09-27T23:48:12.749862+01:00","end":"2026-09-27T23:48:52.875862+01:00","outcome":"passed","note":null,"tin":12,"cost":0.28045220000000004},{"id":87,"ticket":"m1-01-space-reactions-column","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-27T23:49:02.621000+01:00","end":"2026-09-27T23:49:52.908000+01:00","outcome":"passed","note":null,"tin":62396,"cost":null},{"id":92,"ticket":"m1-02-seed-demo","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-09-27T23:51:37.095236+01:00","end":"2026-09-27T23:52:27.398236+01:00","outcome":"passed","note":null,"tin":20,"cost":0.33524620000000005},{"id":91,"ticket":"m1-02-seed-demo","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-27T23:52:37.416000+01:00","end":"2026-09-27T23:53:46.738000+01:00","outcome":"passed","note":null,"tin":88015,"cost":null},{"id":93,"ticket":"m1-03-vault-list-counts","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T11:33:57.134000+01:00","end":"2026-09-28T11:34:45.019000+01:00","outcome":"passed","note":null,"tin":43925,"cost":null},{"id":94,"ticket":"m1-04-people-vaults-column","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T11:34:57.119000+01:00","end":"2026-09-28T11:35:49.233000+01:00","outcome":"passed","note":null,"tin":45014,"cost":null},{"id":95,"ticket":"m1-05-space-displays-inline","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T11:36:01.405000+01:00","end":"2026-09-28T11:36:44.213000+01:00","outcome":"passed","note":null,"tin":53666,"cost":null},{"id":96,"ticket":null,"role":"review","agent":"claude-opus","attempt":1,"start":"2026-09-28T11:37:22.885794+01:00","end":"2026-09-28T11:39:27.878794+01:00","outcome":"passed","note":null,"tin":44,"cost":0.8914058000000001}]},"m2":{"title":"Device pairing and authentication","status":"done","tickets":[{"ticket":"m2-01-pair-page-code","title":"The pairing page gets its heading, the text of its \"code\" state and a small stylesheet, in English and French.","kind":"developer","deps":[],"d":4,"state":"done","lines":null},{"ticket":"m2-02-pair-page-states","title":"The pairing page's other states and error messages get their text, in English and French.","kind":"developer","deps":["m2-01-pair-page-code"],"d":3,"state":"done","lines":48},{"ticket":"m2-03-all-set-page","title":"Once paired, a display and a phone each see a friendly \"all set\" page, in English or French.","kind":"developer","deps":["m2-01-pair-page-code"],"d":3,"state":"done","lines":23},{"ticket":"m2-04-language-choice","title":"Decide which language a paired device's screens use.","kind":"developer","deps":[],"d":2,"state":"done","lines":12},{"ticket":"m2-05-french-wording","title":"Reword nine French translations of the pairing screens so they read warmly and plainly.","kind":"developer","deps":[],"d":1,"state":"done","lines":18}],"jobs":[{"id":97,"ticket":"m2-04-language-choice","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T14:42:42.653000+01:00","end":"2026-09-28T14:43:18.854000+01:00","outcome":"passed","note":null,"tin":33853,"cost":null},{"id":98,"ticket":"m2-01-pair-page-code","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T14:54:32.841000+01:00","end":"2026-09-28T15:19:13.529000+01:00","outcome":"failed","note":null,"tin":155358,"cost":null},{"id":99,"ticket":"m2-01-pair-page-code","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-28T15:19:54.270000+01:00","end":"2026-09-28T15:22:07.156000+01:00","outcome":"failed","note":"BLOCKED: needs-file","tin":75125,"cost":null},{"id":100,"ticket":"m2-01-pair-page-code","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-09-28T15:22:09.412382+01:00","end":"2026-09-28T15:23:07.165382+01:00","outcome":"passed","note":null,"tin":22,"cost":0.3774717999999999},{"id":101,"ticket":"m2-02-pair-page-states","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T15:50:01.053000+01:00","end":"2026-09-28T15:51:25.374000+01:00","outcome":"passed","note":null,"tin":62765,"cost":null},{"id":102,"ticket":"m2-03-all-set-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T15:51:40.959000+01:00","end":"2026-09-28T15:53:37.683000+01:00","outcome":"passed","note":null,"tin":135103,"cost":null},{"id":104,"ticket":null,"role":"review","agent":"claude-opus","attempt":1,"start":"2026-09-28T15:54:20.448154+01:00","end":"2026-09-28T16:02:17.291154+01:00","outcome":"passed","note":null,"tin":88,"cost":2.6606452},{"id":103,"ticket":"m2-05-french-wording","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T16:04:37.192000+01:00","end":"2026-09-28T16:05:46.805000+01:00","outcome":"passed","note":null,"tin":47014,"cost":null},{"id":105,"ticket":null,"role":"review","agent":"claude-opus","attempt":2,"start":"2026-09-28T16:05:57.260053+01:00","end":"2026-09-28T16:06:57.257053+01:00","outcome":"passed","note":null,"tin":22,"cost":0.4111124}]},"m3":{"title":"Display app","status":"done","tickets":[{"ticket":"m3-01-display-page","title":"Write the display page's text, in English and French.","kind":"developer","deps":[],"d":2,"state":"done","lines":22},{"ticket":"m3-02-display-css","title":"Style the display: calm, full screen, readable from across a room.","kind":"developer","deps":["m3-01-display-page"],"d":3,"state":"done","lines":119},{"ticket":"m3-03-build-snapshot","title":"Build the part of a display's snapshot that says what to show: the current moment, the reactions on it, and the reaction set.","kind":"developer","deps":[],"d":3,"state":"done","lines":23},{"ticket":"m3-04-post-moment-command","title":"`manage.py post_moment famille/us --note \"Coucou\" --photo cat.jpg` posts a test moment to a space.","kind":"developer","deps":[],"d":3,"state":"done","lines":75},{"ticket":"m3-05-me-name-form","title":"Write the text of the `/me/` name screen, in English and French.","kind":"developer","deps":[],"d":2,"state":"done","lines":25},{"ticket":"m3-06-bad-origin-message","title":"When Coucou is opened at the wrong address, the pairing page says which address to use instead of \"Something went wrong.\"","kind":"developer","deps":[],"d":1,"state":"done","lines":4},{"ticket":"m3-07-render-moment","title":"`render.js` draws a display's snapshot on its page, shows the offline line, and floats reactions.","kind":"developer","deps":["m3-01-display-page"],"d":4,"state":"done","lines":57},{"ticket":"m3-09-french-wording","title":"Reword six French translations of the display and `/me/` screens so they read warmly and plainly.","kind":"developer","deps":[],"d":1,"state":"done","lines":12},{"ticket":"m3-10-render-names-nav","title":"`render.js` shows who posted a moment and when, who reacted, names on the floating emoji, and the arrows, \"New\" hint and settings panel (ADR 09).","kind":"developer","deps":[],"d":5,"state":"done","lines":112},{"ticket":"m3-11-display-texts","title":"Write the text for the display's new arrows, \"New\" hint and settings cog, in English and French.","kind":"developer","deps":[],"d":2,"state":"done","lines":30},{"ticket":"m3-12-display-css-history","title":"Style the display's new pieces calmly: the arrows, the byline, the reaction summary, names on floating emoji, the \"New\" hint and the settings cog with its panel (ADR 09).","kind":"developer","deps":[],"d":4,"state":"done","lines":null}],"jobs":[{"id":106,"ticket":"m3-01-display-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T23:15:02.365000+01:00","end":"2026-09-28T23:16:15.917000+01:00","outcome":"passed","note":null,"tin":66774,"cost":null},{"id":107,"ticket":"m3-03-build-snapshot","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T23:16:38.353000+01:00","end":"2026-09-28T23:18:51.477000+01:00","outcome":"passed","note":null,"tin":132671,"cost":null},{"id":108,"ticket":"m3-04-post-moment-command","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T23:19:14.262000+01:00","end":"2026-09-28T23:21:51.236000+01:00","outcome":"passed","note":null,"tin":197120,"cost":null},{"id":109,"ticket":"m3-06-bad-origin-message","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T23:22:14.438000+01:00","end":"2026-09-28T23:23:20.252000+01:00","outcome":"passed","note":null,"tin":70553,"cost":null},{"id":112,"ticket":"m3-02-display-css","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-09-28T23:34:32.725358+01:00","end":"2026-09-28T23:35:03.792358+01:00","outcome":"passed","note":null,"tin":14,"cost":0.21151399999999998},{"id":110,"ticket":"m3-02-display-css","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T23:35:12.857000+01:00","end":"2026-09-28T23:36:55.287000+01:00","outcome":"passed","note":null,"tin":41604,"cost":null},{"id":111,"ticket":"m3-07-render-moment","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-28T23:37:17.276000+01:00","end":"2026-09-28T23:38:42.196000+01:00","outcome":"passed","note":null,"tin":97305,"cost":null},{"id":113,"ticket":"m3-05-me-name-form","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T07:13:16.662000+01:00","end":"2026-09-29T07:14:25.962000+01:00","outcome":"passed","note":null,"tin":68085,"cost":null},{"id":115,"ticket":null,"role":"review","agent":"claude-opus","attempt":1,"start":"2026-09-29T07:16:36.422707+01:00","end":"2026-09-29T07:24:49.472707+01:00","outcome":"passed","note":null,"tin":108,"cost":3.4381497999999993},{"id":114,"ticket":"m3-09-french-wording","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T07:24:58.187000+01:00","end":"2026-09-29T07:25:53.191000+01:00","outcome":"passed","note":null,"tin":47365,"cost":null},{"id":116,"ticket":null,"role":"review","agent":"claude-opus","attempt":2,"start":"2026-09-29T07:26:30.642247+01:00","end":"2026-09-29T07:28:08.124247+01:00","outcome":"passed","note":null,"tin":20,"cost":0.4965840000000001},{"id":117,"ticket":null,"role":"review","agent":"claude-opus","attempt":3,"start":"2026-09-29T07:28:23.187541+01:00","end":"2026-09-29T07:29:43.997541+01:00","outcome":"passed","note":null,"tin":24,"cost":0.5301092},{"id":118,"ticket":"m3-10-render-names-nav","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T08:53:25.119000+01:00","end":"2026-09-29T08:56:12.840000+01:00","outcome":"passed","note":null,"tin":229099,"cost":null},{"id":119,"ticket":"m3-11-display-texts","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T08:56:52.594000+01:00","end":"2026-09-29T08:59:28.152000+01:00","outcome":"passed","note":null,"tin":198470,"cost":null},{"id":120,"ticket":"m3-12-display-css-history","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T09:00:33.774000+01:00","end":"2026-09-29T09:01:40.104000+01:00","outcome":"failed","note":null,"tin":51368,"cost":null},{"id":121,"ticket":"m3-12-display-css-history","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-29T09:01:49.393000+01:00","end":"2026-09-29T09:07:32.047000+01:00","outcome":"failed","note":null,"tin":31265,"cost":null},{"id":122,"ticket":"m3-12-display-css-history","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-09-29T09:07:41.378000+01:00","end":"2026-09-29T09:08:40.647000+01:00","outcome":"failed","note":null,"tin":51783,"cost":null},{"id":123,"ticket":"m3-12-display-css-history","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-09-29T09:08:41.726915+01:00","end":"2026-09-29T09:09:29.629915+01:00","outcome":"passed","note":null,"tin":14,"cost":0.2747922}]},"m4":{"title":"Sender app","status":null,"tickets":[{"ticket":"m4-01-compose-note","title":"`Compose({spaces, onSend})`: write a note, pick a space, press Send.","kind":"developer","deps":[],"d":6,"state":"done","lines":273},{"ticket":"m4-02-compose-photo","title":"Add the photo to `Compose`: take or choose one, preview it, remove it, send it.","kind":"developer","deps":["m4-01-compose-note"],"d":6,"state":"done","lines":268},{"ticket":"m4-03-thumbnail","title":"`thumbnail(file, {max = 320}) \u2192 Promise<string>`: a small JPEG data URL of a photo, for the delivery list.","kind":"developer","deps":[],"d":5,"state":"done","lines":180},{"ticket":"m4-04-delivery-list","title":"`Delivery({items, onRetry, onDiscard})`: shows each moment's delivery state.","kind":"developer","deps":[],"d":5,"state":"done","lines":308},{"ticket":"m4-05-me-css","title":"Style `/me/` for a phone: the name screen, `Compose` and `Delivery`.","kind":"developer","deps":["m4-06-me-wiring"],"d":6,"state":"done","lines":496},{"ticket":"m4-06-me-wiring","title":"Once named, `me.js` shows `Compose` and `Delivery` in place of the placeholder, and sends through the outbox.","kind":"developer","deps":["m4-01-compose-note","m4-02-compose-photo","m4-03-thumbnail","m4-04-delivery-list"],"d":9,"state":"done","lines":200},{"ticket":"m4-07-display-long-note","title":"A 280-character note (the longest a person can now send) fits the display without overflowing, at phone and display sizes.","kind":"developer","deps":[],"d":5,"state":"done","lines":97},{"ticket":"m4-08-sent-log","title":"Keep the last 10 delivered moments on the device and show them in the delivery list.","kind":"developer","deps":["m4-06-me-wiring"],"d":7,"state":"done","lines":242},{"ticket":"m4-09-me-offline","title":"The /me/ app shows a quiet line while the device is offline.","kind":"developer","deps":["m4-06-me-wiring"],"d":5,"state":"done","lines":73},{"ticket":"m4-10-photo-buttons","title":"On `/me/`, only the two photo buttons show (\"Take a photo\", \"Choose a photo\"): the browser's own file inputs, with their English \"Choose File / No file chosen\", don't.","kind":"developer","deps":[],"d":3,"state":"done","lines":78},{"ticket":"m4-11-send-once","title":"A double tap on Send posts one moment, not two.","kind":"developer","deps":[],"d":4,"state":"done","lines":49},{"ticket":"m4-12-send-recovers","title":"If reading the chosen photo fails when Send is pressed, Send works again and the person is told why.","kind":"developer","deps":[],"d":null,"state":"ready","lines":null}],"jobs":[{"id":124,"ticket":"m4-01-compose-note","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T14:27:06.392000+01:00","end":"2026-09-29T14:42:28.053000+01:00","outcome":"passed","note":null,"tin":1328226,"cost":null},{"id":125,"ticket":"m4-02-compose-photo","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T14:43:35.454000+01:00","end":"2026-09-29T14:53:48.688000+01:00","outcome":"passed","note":null,"tin":1105229,"cost":null},{"id":126,"ticket":"m4-03-thumbnail","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T14:58:59.802000+01:00","end":"2026-09-29T15:28:04.295000+01:00","outcome":"timeout","note":null,"tin":2347349,"cost":null},{"id":127,"ticket":"m4-03-thumbnail","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-29T15:29:03.842000+01:00","end":"2026-09-29T15:48:17.985000+01:00","outcome":"passed","note":null,"tin":1154154,"cost":null},{"id":128,"ticket":"m4-04-delivery-list","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T15:49:27.436000+01:00","end":"2026-09-29T16:03:26.312000+01:00","outcome":"failed","note":null,"tin":1192412,"cost":null},{"id":129,"ticket":"m4-04-delivery-list","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-29T16:04:06.677000+01:00","end":"2026-09-29T16:23:11.306000+01:00","outcome":"failed","note":null,"tin":28972,"cost":null},{"id":130,"ticket":"m4-04-delivery-list","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-09-29T16:23:51.065000+01:00","end":"2026-09-29T16:38:49.845000+01:00","outcome":"passed","note":null,"tin":1598348,"cost":null},{"id":131,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T16:40:03.151000+01:00","end":"2026-09-29T17:09:24.355000+01:00","outcome":"timeout","note":null,"tin":2451798,"cost":null},{"id":132,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-29T17:10:13.934000+01:00","end":"2026-09-29T17:28:00.311000+01:00","outcome":"timeout","note":null,"tin":1561851,"cost":null},{"id":133,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-09-29T17:40:13.275000+01:00","end":"2026-09-29T18:09:19.596000+01:00","outcome":"timeout","note":null,"tin":3754779,"cost":null},{"id":134,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":4,"start":"2026-09-29T18:12:27.347000+01:00","end":"2026-09-29T18:40:16.165000+01:00","outcome":"timeout","note":null,"tin":704414,"cost":null},{"id":135,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":5,"start":"2026-09-29T18:42:36.001000+01:00","end":"2026-09-29T19:00:35.878000+01:00","outcome":"timeout","note":null,"tin":206484,"cost":null},{"id":136,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":6,"start":"2026-09-29T19:14:24.019000+01:00","end":"2026-09-29T19:42:11.743000+01:00","outcome":"timeout","note":null,"tin":1461681,"cost":null},{"id":140,"ticket":"m4-06-me-wiring","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-09-29T19:44:57.876340+01:00","end":"2026-09-29T19:45:53.020340+01:00","outcome":"passed","note":null,"tin":22,"cost":0.3918388},{"id":137,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":7,"start":"2026-09-29T19:46:38.365000+01:00","end":"2026-09-29T20:15:40.424000+01:00","outcome":"timeout","note":null,"tin":1462187,"cost":null},{"id":138,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":8,"start":"2026-09-29T20:16:42.133000+01:00","end":"2026-09-29T20:42:47.741000+01:00","outcome":"timeout","note":null,"tin":840456,"cost":null},{"id":139,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":9,"start":"2026-09-29T20:46:46.079000+01:00","end":"2026-09-29T21:07:37.804000+01:00","outcome":"passed","note":null,"tin":190098,"cost":null},{"id":142,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T22:25:28.486000+01:00","end":"2026-09-29T23:06:49.344000+01:00","outcome":"timeout","note":null,"tin":2651257,"cost":null},{"id":143,"ticket":"m4-06-me-wiring","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-29T23:11:16.833000+01:00","end":"2026-09-29T23:31:08.181000+01:00","outcome":"passed","note":null,"tin":1190642,"cost":null},{"id":141,"ticket":"m4-05-me-css","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-29T23:35:55.478000+01:00","end":"2026-09-30T00:16:55.086000+01:00","outcome":"passed","note":null,"tin":3288380,"cost":null},{"id":144,"ticket":"m4-07-display-long-note","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T00:18:09.496000+01:00","end":"2026-09-30T01:01:17.917000+01:00","outcome":"timeout","note":null,"tin":3763666,"cost":null},{"id":145,"ticket":"m4-07-display-long-note","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-30T01:03:12.729000+01:00","end":"2026-09-30T01:12:06.967000+01:00","outcome":"failed","note":null,"tin":319822,"cost":null},{"id":146,"ticket":"m4-07-display-long-note","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-09-30T01:12:46.411000+01:00","end":"2026-09-30T01:22:56.898000+01:00","outcome":"failed","note":"BLOCKED: needs-file","tin":217942,"cost":null},{"id":151,"ticket":"m4-07-display-long-note","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-09-30T01:25:39.837231+01:00","end":"2026-09-30T01:27:44.486231+01:00","outcome":"passed","note":null,"tin":34,"cost":0.6290078},{"id":147,"ticket":"m4-07-display-long-note","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":4,"start":"2026-09-30T01:28:23.339000+01:00","end":"2026-09-30T02:04:31.693000+01:00","outcome":"failed","note":null,"tin":7168009,"cost":null},{"id":148,"ticket":"m4-07-display-long-note","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":5,"start":"2026-09-30T02:05:12.378000+01:00","end":"2026-09-30T02:15:52.295000+01:00","outcome":"passed","note":null,"tin":1387528,"cost":null},{"id":149,"ticket":"m4-08-sent-log","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T02:17:10.866000+01:00","end":"2026-09-30T02:46:18.917000+01:00","outcome":"passed","note":null,"tin":3292403,"cost":null},{"id":150,"ticket":"m4-09-me-offline","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T02:48:12.486000+01:00","end":"2026-09-30T02:56:31.880000+01:00","outcome":"passed","note":null,"tin":958347,"cost":null},{"id":152,"ticket":"m4-10-photo-buttons","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T03:17:46.847000+01:00","end":"2026-09-30T03:24:06.408000+01:00","outcome":"passed","note":null,"tin":525480,"cost":null},{"id":153,"ticket":"m4-11-send-once","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T03:25:32.069000+01:00","end":"2026-09-30T03:34:19.109000+01:00","outcome":"passed","note":null,"tin":702165,"cost":null}]},"f1":{"title":"the factory measures itself","status":"in progress","tickets":[{"ticket":"f1-01-metrics-db","title":"`runner/metrics.py` holds the factory's metrics database: D2's tables, their migrations, and the functions that open it and write each kind of row.","kind":"lead","deps":[],"d":6,"state":"done","lines":809},{"ticket":"f1-02-runner-writes-jobs","title":"The runner writes each run and each job to the metrics database as it happens, so a crash loses nothing and the dashboard can show what's running now.","kind":"lead","deps":["f1-01-metrics-db"],"d":7,"state":"done","lines":656},{"ticket":"f1-03-runner-writes-state","title":"The runner keeps the database's projects, milestones, tickets, findings and owner items current, so the dashboard never reads the repo.","kind":"lead","deps":["f1-02-runner-writes-jobs"],"d":6,"state":"done","lines":780},{"ticket":"f1-04-backfill","title":"`uv run runner backfill` loads M1\u2013M4 into the metrics database from what's left of their logs, and says what it couldn't recover.","kind":"lead","deps":["f1-03-runner-writes-state"],"d":7,"state":"done","lines":1027},{"ticket":"f1-05-runner-report","title":"`factory_dashboard/queries.py` holds the numbers a milestone review needs, and `uv run runner report <key>` writes them into the review.","kind":"lead","deps":["f1-04-backfill"],"d":6,"state":"done","lines":971},{"ticket":"f1-06-dashboard-service","title":"`uv run runner dashboard` serves the factory dashboard at `127.0.0.1`, with its Overview page built as the worked example developers will copy.","kind":"lead","deps":["f1-05-runner-report"],"d":8,"state":"done","lines":1157},{"ticket":"f1-07-replan-foundation","title":"Check the rest of f1's plan against what f1-01 to f1-06 actually built, and fix the plan before developers and later lead tickets build on it.","kind":"lead","deps":["f1-06-dashboard-service"],"d":5,"state":"done","lines":183},{"ticket":"f1-08-jobs-list","title":"`/jobs` lists every job, newest first, with filters.","kind":"developer","deps":["f1-33-runner-check-fixes"],"d":4,"state":"done","lines":459},{"ticket":"f1-09-job-page","title":"`/jobs/{n}` shows one job in full.","kind":"developer","deps":["f1-08-jobs-list"],"d":4,"state":"done","lines":393},{"ticket":"f1-10-ticket-pages","title":"`/tickets` lists tickets, and `/tickets/{id}` tells one ticket's whole story.","kind":"developer","deps":["f1-09-job-page","f1-34-jobs-pages-fixes"],"d":4,"state":"done","lines":664},{"ticket":"f1-11-timeline","title":"`/timeline` draws runs and jobs over time, one lane per agent, coloured by outcome.","kind":"developer","deps":["f1-33-runner-check-fixes"],"d":6,"state":"done","lines":464},{"ticket":"f1-12-milestones-list","title":"`/milestones` lists the milestones, newest first, with the trends across them.","kind":"developer","deps":["f1-33-runner-check-fixes"],"d":4,"state":"done","lines":431},{"ticket":"f1-13-milestone-page","title":"`/milestones/{key}` shows one milestone: what was expected, what changed, and how the work went.","kind":"developer","deps":["f1-12-milestones-list","f1-35-timeline-milestones-fixes"],"d":5,"state":"done","lines":393},{"ticket":"f1-14-runs-pages","title":"`/runs` lists runs, newest first, and `/runs/{run_dir}` shows what one run did.","kind":"developer","deps":["f1-10-ticket-pages","f1-36-ticket-pages-fixes"],"d":3,"state":"done","lines":453},{"ticket":"f1-15-agents-page","title":"`/agents` compares the agents: how efficient each is, who did what, and their ratings over time.","kind":"developer","deps":["f1-10-ticket-pages","f1-36-ticket-pages-fixes"],"d":6,"state":"done","lines":480},{"ticket":"f1-16-developer-rename","title":"\"Junior\" becomes \"developer\" everywhere it names a role (ADR 14 item 1), and `docs/agents/junior.md` becomes `docs/agents/developer.md`.","kind":"lead","deps":["f1-15-agents-page"],"d":5,"state":"done","lines":240},{"ticket":"f1-17-difficulty","title":"Tickets carry `difficulty:` from 1 to 10, set by a short rubric, and M1\u2013M4's tickets get theirs.","kind":"lead","deps":["f1-16-developer-rename","f1-42-console-log"],"d":4,"state":"done","lines":null},{"ticket":"f1-18-probes","title":"Find the facts the agent tickets need about Ollama Cloud and the Copilot CLI, and record them in ADR 14.","kind":"lead","deps":["f1-17-difficulty"],"d":5,"state":"done","lines":97},{"ticket":"f1-19-replan-agents","title":"Check f1's agent tickets (f1-20 on) against what the probes found, and fix the plan before the adapters, ratings and router are built.","kind":"lead","deps":["f1-18-probes","f1-49-heartbeat"],"d":5,"state":"done","lines":55},{"ticket":"f1-20-agents-config","title":"Agents and roles are declared in `workflow/runner.toml`, every job is a neutral spec, and `runner/claude.py` is the first adapter that runs one.","kind":"lead","deps":["f1-19-replan-agents","f1-47-build-on-and-finish"],"d":7,"state":"done","lines":895},{"ticket":"f1-21-opencode-adapter","title":"OpenCode is an adapter like Claude's, so a developer job can run on the local model or on an Ollama Cloud model by configuration alone.","kind":"lead","deps":["f1-20-agents-config"],"d":6,"state":"done","lines":631},{"ticket":"f1-22-copilot-adapter","title":"`runner/copilot.py` runs a job spec through the Copilot CLI, for read-only review jobs.","kind":"lead","deps":["f1-20-agents-config"],"d":6,"state":"ready","lines":null},{"ticket":"f1-23-findings-json","title":"Checkpoints and reviews report findings as JSON, directions and escalations leave a process note, and the final review judges the checkpoint findings and scores the milestone.","kind":"lead","deps":["f1-20-agents-config","f1-41-scores-and-project-crumb-fix"],"d":6,"state":"ready","lines":null},{"ticket":"f1-24-ratings","title":"`runner/ratings.py` rates each agent once, from 1 to 10 (ADR 15 item 9: coding and reviewing blended), as plain functions, and the runner records every change.","kind":"lead","deps":["f1-17-difficulty","f1-23-findings-json"],"d":6,"state":"ready","lines":null},{"ticket":"f1-25-router","title":"`runner/router.py` picks the agent for each developer job, and the loop follows it, falling through to the next candidate on a refusal.","kind":"lead","deps":["f1-21-opencode-adapter","f1-22-copilot-adapter","f1-24-ratings","f1-43-allowance"],"d":8,"state":"ready","lines":null},{"ticket":"f1-26-checkpoint-shadow","title":"A `checkpoint-shadow` agent reviews the same merges as each checkpoint; its findings are recorded and never acted on.","kind":"lead","deps":["f1-22-copilot-adapter","f1-23-findings-json"],"d":5,"state":"ready","lines":null},{"ticket":"f1-27-bench","title":"`uv run runner bench <ticket\u2026> --agents <id\u2026>` replays finished tickets for chosen agents, in identical conditions, and records the results.","kind":"lead","deps":["f1-25-router"],"d":7,"state":"ready","lines":null},{"ticket":"f1-28-bench-page","title":"`/bench` shows each replayed ticket against each agent that tried it.","kind":"developer","deps":["f1-27-bench"],"d":3,"state":"ready","lines":null},{"ticket":"f1-29-project-page","title":"`/projects/{name}` says what a project is, where it lives, and how its milestones went.","kind":"developer","deps":["f1-12-milestones-list","f1-35-timeline-milestones-fixes"],"d":3,"state":"done","lines":272},{"ticket":"f1-30-allowance-forecast","title":"Stretch: the Overview shows one allowance bar per service, with when it will run out and what's left to spend before it resets.","kind":"developer","deps":["f1-25-router"],"d":5,"state":"ready","lines":null},{"ticket":"f1-30-work-split-and-allowance","title":"The milestone page and the Overview show who did the work, as each agent's share, and each allowance before and after the milestone.","kind":"developer","deps":["f1-25-router","f1-48-ticket-work-split"],"d":5,"state":"ready","lines":null},{"ticket":"f1-31-eligibility-view","title":"Stretch: the Agents page shows which roles each agent has earned by shadowing, and why not yet for the others.","kind":"developer","deps":["f1-26-checkpoint-shadow","f1-15-agents-page","f1-40-runs-agents-fixes"],"d":4,"state":"ready","lines":null},{"ticket":"f1-32-factory-review","title":"Review the whole factory flow with the evidence f1 now holds, and write what to change.","kind":"lead","deps":["f1-27-bench","f1-28-bench-page","f1-29-project-page","f1-38-project-page-fixes"],"d":7,"state":"ready","lines":null},{"ticket":"f1-33-runner-check-fixes","title":"The gates run every test that already passes, and `uv run runner run --dry-run` works on a lead ticket's branch.","kind":"lead","deps":["f1-07-replan-foundation"],"d":3,"state":"done","lines":98},{"ticket":"f1-34-jobs-pages-fixes","title":"`/jobs` shows what f1-08 asked: readable cells, a link to each job, and tests that would catch a wrong list.","kind":"developer","deps":["f1-09-job-page"],"d":3,"state":"done","lines":57},{"ticket":"f1-35-timeline-milestones-fixes","title":"`/milestones` really lists newest first with its status, and `/timeline` does what f1-11 asked, with tests that would catch a wrong page.","kind":"developer","deps":["f1-12-milestones-list"],"d":4,"state":"done","lines":265},{"ticket":"f1-36-ticket-pages-fixes","title":"`/tickets/{id}` shows that ticket's own findings and its merge commit, and the tests would catch a wrong page.","kind":"developer","deps":["f1-10-ticket-pages"],"d":3,"state":"done","lines":179},{"ticket":"f1-37-milestone-page-fixes","title":"`/milestones/{key}` shows the milestone's Done when and its two scores truthfully, and the tests read the text the page shows.","kind":"developer","deps":["f1-13-milestone-page"],"d":3,"state":"done","lines":73},{"ticket":"f1-38-project-page-fixes","title":"`/projects/{name}` keeps the top bar and breadcrumbs right, and lists milestones and runs the way f1-29 asked, with tests that read what the page shows.","kind":"developer","deps":["f1-29-project-page"],"d":3,"state":"done","lines":111},{"ticket":"f1-39-ticket-findings-fix","title":"`/tickets/{id}` shows only findings written with that ticket's `ticket_id`, and a ticket with none shows no Findings section.","kind":"developer","deps":["f1-36-ticket-pages-fixes"],"d":2,"state":"done","lines":28},{"ticket":"f1-40-runs-agents-fixes","title":"`/runs` and `/runs/{run_dir}` tell running from stopped by the page's `now`, and `/agents` works with `?milestone=` and draws one rating line per agent; the tests check the numbers and statuses a person reads.","kind":"developer","deps":["f1-15-agents-page"],"d":4,"state":"done","lines":224},{"ticket":"f1-41-scores-and-project-crumb-fix","title":"`/milestones/{key}` shows the stored review and owner scores as they are on the 1\u201310 scale, and `/projects/{name}` has no empty crumb.","kind":"developer","deps":["f1-37-milestone-page-fixes","f1-38-project-page-fixes"],"d":2,"state":"done","lines":170},{"ticket":"f1-42-console-log","title":"`runner milestone` tells the owner, as it happens, which agent is doing what, how each job ended, and what is blocked, in a few readable lines per ticket.","kind":"lead","deps":[],"d":4,"state":"done","lines":null},{"ticket":"f1-43-allowance","title":"One pure function answers, for any agent, \"may it take a job of expected cost `c` now?\", from its windows, learned capacities and Claude's reserve.","kind":"lead","deps":["f1-17-difficulty","f1-49-heartbeat"],"d":6,"state":"done","lines":476},{"ticket":"f1-44-claude-readings","title":"Every headless Claude job records Claude's allowance as it goes: how much of the 5-hour and weekly windows is used, and when each resets.","kind":"lead","deps":["f1-42-console-log","f1-43-allowance"],"d":6,"state":"done","lines":389},{"ticket":"f1-45-recovery","title":"After a Ctrl-C, a crash or a reboot, `uv run runner milestone <key>` picks up the job that was cut off instead of refusing to start.","kind":"lead","deps":["f1-44-claude-readings"],"d":6,"state":"done","lines":378},{"ticket":"f1-46-parking-and-reserve","title":"While Claude is limited or down to its reserve, the queue keeps the GPU busy with work that doesn't need Claude, and it asks the owner before lead work spends the reserve.","kind":"lead","deps":["f1-45-recovery"],"d":7,"state":"done","lines":752},{"ticket":"f1-47-build-on-and-finish","title":"A retried or escalated ticket builds on the work already on its branch, unless the lead says it is unusable, and an escalation can finish the work itself.","kind":"lead","deps":["f1-46-parking-and-reserve"],"d":6,"state":"done","lines":473},{"ticket":"f1-48-ticket-work-split","title":"`/tickets/{id}` shows who did the work on that ticket: each agent's part, with its jobs, time, tokens or dollars, and who merged it.","kind":"developer","deps":["f1-49-heartbeat"],"d":3,"state":"done","lines":158},{"ticket":"f1-49-heartbeat","title":"A runner that is alive keeps its run's heartbeat under 30 s old, whatever it is doing, so the dashboard stops reporting a live runner as stopped.","kind":"lead","deps":[],"d":5,"state":"done","lines":145},{"ticket":"f1-50-ticket-work-split-tests","title":"Each row of \"Who did the work\" on `/tickets/{id}` names its agent and its cells, and the tests read each agent's row cell by cell, so a wrong count, role, minutes or dollars value fails them.","kind":"developer","deps":[],"d":2,"state":"done","lines":100}],"jobs":[{"id":154,"ticket":"f1-01-metrics-db","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T18:26:12.986459+01:00","end":"2026-09-30T18:30:24.701459+01:00","outcome":"passed","note":null,"tin":34,"cost":1.072522},{"id":155,"ticket":"f1-02-runner-writes-jobs","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T18:31:01.175886+01:00","end":"2026-09-30T18:39:08.321886+01:00","outcome":"passed","note":null,"tin":80,"cost":3.0382042},{"id":1,"ticket":"f1-03-runner-writes-state","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T18:39:43.268731+01:00","end":"2026-09-30T19:02:01.902579+01:00","outcome":"passed","note":null,"tin":78,"cost":2.8980626},{"id":2,"ticket":"f1-04-backfill","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T19:02:38.120397+01:00","end":"2026-09-30T19:10:00.150782+01:00","outcome":"passed","note":null,"tin":70,"cost":2.6422604000000005},{"id":3,"ticket":"f1-05-runner-report","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T19:10:36.765152+01:00","end":"2026-09-30T19:19:04.599255+01:00","outcome":"passed","note":null,"tin":96,"cost":3.1547327999999992},{"id":4,"ticket":"f1-06-dashboard-service","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T19:19:41.306331+01:00","end":"2026-09-30T19:29:14.963849+01:00","outcome":"passed","note":null,"tin":88,"cost":3.3449986},{"id":5,"ticket":"f1-07-replan-foundation","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T19:29:53.659552+01:00","end":"2026-09-30T19:39:58.664993+01:00","outcome":"passed","note":null,"tin":140,"cost":3.9435928000000002},{"id":6,"ticket":"f1-33-runner-check-fixes","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-09-30T19:40:41.092221+01:00","end":"2026-09-30T19:44:02.137141+01:00","outcome":"passed","note":null,"tin":42,"cost":0.8637552000000001},{"id":7,"ticket":"f1-08-jobs-list","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T19:45:16.810396+01:00","end":"2026-09-30T20:09:28.058282+01:00","outcome":"passed","note":null,"tin":2271187,"cost":null},{"id":8,"ticket":"f1-09-job-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T20:09:30.420372+01:00","end":"2026-09-30T20:36:19.723832+01:00","outcome":"passed","note":null,"tin":2720373,"cost":null},{"id":9,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":1,"start":"2026-09-30T20:36:19.808827+01:00","end":"2026-09-30T20:36:54.832685+01:00","outcome":"passed","note":null,"tin":12,"cost":0.23315880000000003},{"id":10,"ticket":"f1-11-timeline","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T20:36:57.188943+01:00","end":"2026-09-30T21:21:57.306714+01:00","outcome":"timeout","note":null,"tin":5689814,"cost":null},{"id":11,"ticket":"f1-11-timeline","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-30T21:22:00.443293+01:00","end":"2026-09-30T21:47:00.186513+01:00","outcome":"failed","note":null,"tin":2362131,"cost":null},{"id":12,"ticket":"f1-11-timeline","role":"direction","agent":"claude-opus","attempt":1,"start":"2026-09-30T21:47:00.208072+01:00","end":"2026-09-30T21:47:49.525246+01:00","outcome":"passed","note":null,"tin":18,"cost":0.6551904000000001},{"id":13,"ticket":"f1-11-timeline","role":"last-attempt","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-09-30T21:47:52.268637+01:00","end":"2026-09-30T22:18:52.072794+01:00","outcome":"passed","note":null,"tin":2124415,"cost":null},{"id":14,"ticket":"f1-12-milestones-list","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T22:18:54.735040+01:00","end":"2026-09-30T22:41:09.386466+01:00","outcome":"passed","note":null,"tin":2333944,"cost":null},{"id":15,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":2,"start":"2026-09-30T22:41:09.473886+01:00","end":"2026-09-30T22:41:44.686124+01:00","outcome":"passed","note":null,"tin":12,"cost":0.24752720000000003},{"id":16,"ticket":"f1-34-jobs-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-09-30T22:41:47.163402+01:00","end":"2026-09-30T23:12:12.103264+01:00","outcome":"failed","note":null,"tin":1900667,"cost":null},{"id":17,"ticket":"f1-34-jobs-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-09-30T23:12:14.804127+01:00","end":"2026-09-30T23:24:53.443039+01:00","outcome":"failed","note":null,"tin":615369,"cost":null},{"id":18,"ticket":"f1-34-jobs-pages-fixes","role":"direction","agent":"claude-opus","attempt":1,"start":"2026-09-30T23:24:53.465252+01:00","end":"2026-09-30T23:25:41.245315+01:00","outcome":"passed","note":null,"tin":18,"cost":0.47545540000000003},{"id":19,"ticket":"f1-34-jobs-pages-fixes","role":"last-attempt","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-09-30T23:25:43.540925+01:00","end":"2026-10-01T00:10:53.406352+01:00","outcome":"timeout","note":null,"tin":2520887,"cost":null},{"id":20,"ticket":"f1-34-jobs-pages-fixes","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-10-01T00:10:53.488721+01:00","end":"2026-10-01T00:14:43.426518+01:00","outcome":"passed","note":null,"tin":46,"cost":1.1573062},{"id":21,"ticket":"f1-34-jobs-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":4,"start":"2026-10-01T00:14:45.044323+01:00","end":"2026-10-01T00:59:45.812959+01:00","outcome":"timeout","note":null,"tin":1163276,"cost":null},{"id":22,"ticket":"f1-34-jobs-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":5,"start":"2026-10-01T00:59:48.647206+01:00","end":"2026-10-01T01:31:40.095250+01:00","outcome":"failed","note":null,"tin":573849,"cost":null},{"id":23,"ticket":"f1-34-jobs-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":6,"start":"2026-10-01T01:31:42.573127+01:00","end":"2026-10-01T01:51:38.625895+01:00","outcome":"failed","note":null,"tin":36349,"cost":null},{"id":24,"ticket":"f1-34-jobs-pages-fixes","role":"escalation","agent":"claude-opus","attempt":2,"start":"2026-10-01T01:51:38.767266+01:00","end":"2026-10-01T01:53:04.469168+01:00","outcome":"passed","note":null,"tin":30,"cost":0.7686322000000001},{"id":25,"ticket":"f1-34-jobs-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":7,"start":"2026-10-01T01:53:05.825120+01:00","end":"2026-10-01T02:12:56.773712+01:00","outcome":"failed","note":null,"tin":35544,"cost":null},{"id":26,"ticket":"f1-34-jobs-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":8,"start":"2026-10-01T02:12:57.811660+01:00","end":"2026-10-01T02:44:58.873087+01:00","outcome":"passed","note":null,"tin":2638839,"cost":null},{"id":27,"ticket":"f1-10-ticket-pages","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T02:45:01.671653+01:00","end":"2026-10-01T03:11:59.976731+01:00","outcome":"passed","note":null,"tin":3719035,"cost":null},{"id":28,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":3,"start":"2026-10-01T03:12:00.053789+01:00","end":"2026-10-01T03:12:30.084819+01:00","outcome":"passed","note":null,"tin":10,"cost":0.2029892},{"id":29,"ticket":"f1-35-timeline-milestones-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T03:12:32.858264+01:00","end":"2026-10-01T03:49:43.978714+01:00","outcome":"failed","note":null,"tin":4187679,"cost":null},{"id":30,"ticket":"f1-35-timeline-milestones-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-10-01T03:49:46.740186+01:00","end":"2026-10-01T04:24:24.464337+01:00","outcome":"failed","note":"BLOCKED: invalid","tin":1993832,"cost":null},{"id":31,"ticket":"f1-35-timeline-milestones-fixes","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-10-01T04:24:24.542414+01:00","end":"2026-10-01T04:26:42.375099+01:00","outcome":"passed","note":null,"tin":30,"cost":0.4776953999999999},{"id":32,"ticket":"f1-35-timeline-milestones-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-10-01T04:26:45.169102+01:00","end":"2026-10-01T05:03:37.263696+01:00","outcome":"failed","note":null,"tin":3274214,"cost":null},{"id":33,"ticket":"f1-35-timeline-milestones-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":4,"start":"2026-10-01T05:03:39.994376+01:00","end":"2026-10-01T05:48:48.622751+01:00","outcome":"timeout","note":null,"tin":2591270,"cost":null},{"id":34,"ticket":"f1-35-timeline-milestones-fixes","role":"direction","agent":"claude-opus","attempt":1,"start":"2026-10-01T05:48:48.649242+01:00","end":"2026-10-01T05:50:20.182790+01:00","outcome":"passed","note":null,"tin":26,"cost":0.8205712000000001},{"id":35,"ticket":"f1-35-timeline-milestones-fixes","role":"last-attempt","agent":"local-qwen3.6-35b-a3b","attempt":5,"start":"2026-10-01T05:50:23.105092+01:00","end":"2026-10-01T06:36:59.567398+01:00","outcome":"passed","note":null,"tin":4989727,"cost":null},{"id":36,"ticket":"f1-13-milestone-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T06:37:02.618430+01:00","end":"2026-10-01T07:02:06.764293+01:00","outcome":"failed","note":null,"tin":218735,"cost":null},{"id":37,"ticket":"f1-13-milestone-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-10-01T07:02:08.768488+01:00","end":"2026-10-01T07:27:15.309229+01:00","outcome":"failed","note":null,"tin":214343,"cost":null},{"id":38,"ticket":"f1-13-milestone-page","role":"direction","agent":"claude-opus","attempt":1,"start":"2026-10-01T07:27:15.335758+01:00","end":"2026-10-01T07:28:06.854788+01:00","outcome":"passed","note":null,"tin":28,"cost":0.4549682},{"id":39,"ticket":"f1-13-milestone-page","role":"last-attempt","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-10-01T07:28:08.512407+01:00","end":"2026-10-01T07:46:40.442414+01:00","outcome":"passed","note":null,"tin":1915804,"cost":null},{"id":40,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":4,"start":"2026-10-01T07:46:40.525610+01:00","end":"2026-10-01T07:47:20.385503+01:00","outcome":"passed","note":null,"tin":14,"cost":0.2463128},{"id":41,"ticket":"f1-29-project-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T07:47:23.154023+01:00","end":"2026-10-01T08:02:21.974280+01:00","outcome":"failed","note":null,"tin":1544476,"cost":null},{"id":42,"ticket":"f1-29-project-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-10-01T08:02:24.255950+01:00","end":"2026-10-01T08:20:26.329705+01:00","outcome":"failed","note":"BLOCKED: needs-file","tin":649254,"cost":null},{"id":43,"ticket":"f1-29-project-page","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-10-01T08:20:26.403012+01:00","end":"2026-10-01T08:23:40.673595+01:00","outcome":"passed","note":null,"tin":38,"cost":0.5912358000000001},{"id":44,"ticket":"f1-29-project-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T08:24:56.691928+01:00","end":"2026-10-01T08:40:12.027508+01:00","outcome":"passed","note":null,"tin":1886909,"cost":null},{"id":45,"ticket":"f1-36-ticket-pages-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T08:40:14.501279+01:00","end":"2026-10-01T09:06:24.652620+01:00","outcome":"passed","note":null,"tin":1550418,"cost":null},{"id":46,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":1,"start":"2026-10-01T09:06:24.755043+01:00","end":"2026-10-01T09:07:22.855321+01:00","outcome":"passed","note":null,"tin":22,"cost":0.3377712},{"id":47,"ticket":"f1-14-runs-pages","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T09:07:25.335062+01:00","end":"2026-10-01T09:32:52.267819+01:00","outcome":"passed","note":null,"tin":2915671,"cost":null},{"id":48,"ticket":"f1-15-agents-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T09:32:55.165823+01:00","end":"2026-10-01T10:03:07.809507+01:00","outcome":"failed","note":null,"tin":314199,"cost":null},{"id":49,"ticket":"f1-15-agents-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-10-01T10:03:09.764668+01:00","end":"2026-10-01T10:48:16.138514+01:00","outcome":"timeout","note":null,"tin":3743808,"cost":null},{"id":50,"ticket":"f1-15-agents-page","role":"direction","agent":"claude-opus","attempt":1,"start":"2026-10-01T10:48:16.175499+01:00","end":"2026-10-01T10:49:27.120887+01:00","outcome":"passed","note":null,"tin":20,"cost":0.9037430000000001},{"id":51,"ticket":"f1-15-agents-page","role":"last-attempt","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-10-01T10:49:30.437367+01:00","end":"2026-10-01T11:34:31.190664+01:00","outcome":"timeout","note":null,"tin":6461070,"cost":null},{"id":52,"ticket":"f1-15-agents-page","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-10-01T11:34:31.388991+01:00","end":"2026-10-01T11:36:08.646186+01:00","outcome":"passed","note":null,"tin":34,"cost":0.9110543999999999},{"id":53,"ticket":"f1-15-agents-page","role":"escalation","agent":"claude-opus","attempt":2,"start":"2026-10-01T11:36:08.744007+01:00","end":"2026-10-01T11:39:36.245375+01:00","outcome":"passed","note":null,"tin":46,"cost":0.8446688},{"id":54,"ticket":"f1-15-agents-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":4,"start":"2026-10-01T11:39:39.342809+01:00","end":"2026-10-01T12:04:00.955990+01:00","outcome":"failed","note":null,"tin":162444,"cost":null},{"id":55,"ticket":"f1-15-agents-page","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":5,"start":"2026-10-01T12:04:02.975023+01:00","end":"2026-10-01T12:50:29.335222+01:00","outcome":"passed","note":null,"tin":8529304,"cost":null},{"id":56,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":2,"start":"2026-10-01T12:50:29.427732+01:00","end":"2026-10-01T12:51:23.015393+01:00","outcome":"passed","note":null,"tin":22,"cost":0.32795160000000007},{"id":57,"ticket":"f1-16-developer-rename","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T12:51:23.096176+01:00","end":"2026-10-01T12:57:37.141300+01:00","outcome":"passed","note":null,"tin":76,"cost":1.8483108000000006},{"id":58,"ticket":"f1-37-milestone-page-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T12:58:50.694772+01:00","end":"2026-10-01T13:22:32.163290+01:00","outcome":"passed","note":null,"tin":1541673,"cost":null},{"id":59,"ticket":"f1-38-project-page-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T13:22:34.561425+01:00","end":"2026-10-01T13:40:16.255056+01:00","outcome":"passed","note":null,"tin":1139151,"cost":null},{"id":60,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":3,"start":"2026-10-01T13:40:16.346461+01:00","end":"2026-10-01T13:40:57.101230+01:00","outcome":"passed","note":null,"tin":20,"cost":0.22794999999999999},{"id":61,"ticket":"f1-39-ticket-findings-fix","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T13:40:59.796306+01:00","end":"2026-10-01T13:52:17.982787+01:00","outcome":"passed","note":null,"tin":586428,"cost":null},{"id":62,"ticket":"f1-40-runs-agents-fixes","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T13:52:19.961926+01:00","end":"2026-10-01T14:19:24.167630+01:00","outcome":"passed","note":null,"tin":2800643,"cost":null},{"id":63,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":4,"start":"2026-10-01T14:19:24.263726+01:00","end":"2026-10-01T14:19:40.447986+01:00","outcome":"passed","note":null,"tin":8,"cost":0.125201},{"id":64,"ticket":"f1-41-scores-and-project-crumb-fix","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T14:19:42.924984+01:00","end":"2026-10-01T14:38:30.272870+01:00","outcome":"passed","note":null,"tin":1616788,"cost":null},{"id":65,"ticket":null,"role":"review","agent":"claude-opus","attempt":1,"start":"2026-10-01T14:39:51.873378+01:00","end":"2026-10-01T14:45:06+01:00","outcome":"failed","note":"interrupted by the owner: the review started while 15 tickets were paused (fixed in 95ab2f2); its 3 fixes were finished by the lead (ca9408e)","tin":null,"cost":null},{"id":66,"ticket":"f1-42-console-log","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T16:07:56.939308+01:00","end":"2026-10-01T16:07:56.939308+01:00","outcome":"interrupted","note":null,"tin":null,"cost":null},{"id":67,"ticket":"f1-17-difficulty","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T16:22:42.442151+01:00","end":"2026-10-01T16:22:42.442151+01:00","outcome":"interrupted","note":null,"tin":null,"cost":null},{"id":68,"ticket":"f1-18-probes","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T16:43:58.249017+01:00","end":"2026-10-01T16:48:30.300050+01:00","outcome":"passed","note":null,"tin":46,"cost":0.96386},{"id":69,"ticket":"f1-19-replan-agents","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T16:49:55.328983+01:00","end":"2026-10-01T16:49:55.328983+01:00","outcome":"interrupted","note":null,"tin":null,"cost":null},{"id":70,"ticket":"f1-49-heartbeat","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T16:55:18.318221+01:00","end":"2026-10-01T16:58:23.313218+01:00","outcome":"passed","note":null,"tin":24,"cost":0.8656886},{"id":71,"ticket":"f1-19-replan-agents","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T16:59:49.490378+01:00","end":"2026-10-01T17:05:48.549796+01:00","outcome":"passed","note":null,"tin":66,"cost":1.6422168000000001},{"id":72,"ticket":"f1-43-allowance","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T17:07:14.996497+01:00","end":"2026-10-01T17:14:13.095203+01:00","outcome":"passed","note":null,"tin":30,"cost":1.2034424},{"id":73,"ticket":"f1-44-claude-readings","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T17:15:42.717293+01:00","end":"2026-10-01T17:21:49.815031+01:00","outcome":"passed","note":null,"tin":68,"cost":1.7063932},{"id":74,"ticket":"f1-45-recovery","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T17:23:18.219056+01:00","end":"2026-10-01T20:49:29.868433+01:00","outcome":"passed","note":null,"tin":60,"cost":2.8036982000000004},{"id":75,"ticket":"f1-46-parking-and-reserve","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T20:50:59.213682+01:00","end":"2026-10-01T21:05:17.106736+01:00","outcome":"passed","note":null,"tin":92,"cost":4.136055799999999},{"id":76,"ticket":"f1-48-ticket-work-split","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T21:17:28.429892+01:00","end":"2026-10-01T21:40:17.173900+01:00","outcome":"passed","note":null,"tin":1960402,"cost":null},{"id":77,"ticket":null,"role":"checkpoint","agent":"claude-sonnet","attempt":1,"start":"2026-10-01T21:40:17.273797+01:00","end":"2026-10-01T21:40:43.172951+01:00","outcome":"passed","note":null,"tin":12,"cost":0.16999160000000002},{"id":78,"ticket":"f1-50-ticket-work-split-tests","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":1,"start":"2026-10-01T21:40:45.281652+01:00","end":"2026-10-01T22:04:49.999596+01:00","outcome":"failed","note":null,"tin":161052,"cost":null},{"id":79,"ticket":"f1-50-ticket-work-split-tests","role":"developer","agent":"local-qwen3.6-35b-a3b","attempt":2,"start":"2026-10-01T22:04:51.418269+01:00","end":"2026-10-01T22:18:32.085065+01:00","outcome":"failed","note":null,"tin":203692,"cost":null},{"id":80,"ticket":"f1-50-ticket-work-split-tests","role":"direction","agent":"claude-opus","attempt":1,"start":"2026-10-01T22:18:32.141140+01:00","end":"2026-10-01T22:19:25.714358+01:00","outcome":"passed","note":null,"tin":20,"cost":0.5256921999999999},{"id":81,"ticket":"f1-50-ticket-work-split-tests","role":"last-attempt","agent":"local-qwen3.6-35b-a3b","attempt":3,"start":"2026-10-01T22:19:27.005950+01:00","end":"2026-10-01T22:28:41.891528+01:00","outcome":"failed","note":null,"tin":442231,"cost":null},{"id":82,"ticket":"f1-50-ticket-work-split-tests","role":"escalation","agent":"claude-opus","attempt":1,"start":"2026-10-01T22:28:41.959697+01:00","end":"2026-10-01T22:35:07.492023+01:00","outcome":"passed","note":null,"tin":64,"cost":1.0060680000000004},{"id":83,"ticket":"f1-47-build-on-and-finish","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T23:10:56.195607+01:00","end":"2026-10-01T23:23:48.747533+01:00","outcome":"passed","note":null,"tin":72,"cost":2.6772762000000006},{"id":84,"ticket":"f1-20-agents-config","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T23:25:34.550203+01:00","end":"2026-10-01T23:35:33.333256+01:00","outcome":"passed","note":null,"tin":112,"cost":3.7603959999999996},{"id":85,"ticket":"f1-21-opencode-adapter","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T23:37:19.235871+01:00","end":"2026-10-01T23:46:17.989885+01:00","outcome":"passed","note":null,"tin":88,"cost":3.0884886000000003},{"id":86,"ticket":"f1-22-copilot-adapter","role":"lead-ticket","agent":"claude-opus","attempt":1,"start":"2026-10-01T23:48:04.670046+01:00","end":"2026-10-01T23:52:35.107402+01:00","outcome":"failed","note":"parked","tin":null,"cost":null}]}},"limits":[{"at":"2026-09-30T18:39:49.606901+01:00","until":null,"agent":"claude-opus"},{"at":"2026-10-01T17:23:43.892124+01:00","until":"2026-10-01T20:40:00+01:00","agent":"claude-opus"},{"at":"2026-10-01T23:52:35.101243+01:00","until":"2026-10-02T01:40:00+01:00","agent":"claude-opus"}]}
+</script>
+<script>
+(() => {
+const DATA = JSON.parse(document.getElementById("data").textContent);
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const MACHINES = {
+  "local-qwen3.6-35b-a3b": { rating: 5, what: "developer tickets, on your GPU", name: "Qwen (local)", tier: 1, color: "--qwen", kind: "local" },
+  "claude-sonnet": { rating: 7, what: "checkpoints: reviews developers' work", name: "Claude Sonnet", lane: "The lead on Sonnet", tier: 2, color: "--sonnet", kind: "frontier" },
+  "claude-opus": { rating: 9, what: "plans, lead tickets, directions, escalations, checkpoints, reviews", name: "The lead (Claude)", short: "The lead", tier: 3, color: "--opus", kind: "frontier" },
+  "ollama-gpt-oss-120b": { rating: 6, what: "developer tickets, Ollama Cloud", name: "gpt-oss 120B (cloud)", short: "gpt-oss 120B", tier: 2, color: "--oss", kind: "cloud" },
+  "ollama-nemotron-3-super": { rating: 6, what: "developer tickets, Ollama Cloud", name: "Nemotron 3 Super (cloud)", short: "Nemotron 3", tier: 2, color: "--nemo", kind: "cloud" },
+  developer: { name: "a developer", tier: 1, color: "--qwen" },
+  "copilot-auto": { what: "checkpoint shadow: same review as Sonnet, recorded, not acted on", name: "Copilot", short: "Copilot", rating: null, tier: 1, color: "--copilot", kind: "shadow" },
+};
+const GHOSTS = [{ id: "ollama-*", name: "Ollama Cloud", note: "not in use yet" }, { id: "copilot-auto", name: "Copilot", note: "not in use yet (f1-22)" }];
+const GAP = 40 * 60e3, GAPW = 14 * 60e3;
+const T = s => s ? Date.parse(s) : null;
+const short = id => id ? id.split("-")[1] : "";
+const fmtDur = ms => { const m = Math.round(ms / 60e3); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; };
+const fmtClock = t => new Date(t).toLocaleString("en-GB", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+const SHADOW = "copilot-auto";
+const where = a => (MACHINES[a] || {}).kind === "local" ? "local" : "cloud";
+const isDev = a => !a.startsWith("claude") && a !== SHADOW;
+const agentColor = a => css((MACHINES[a] || { color: "--ghost" }).color);
+const tip = document.getElementById("tip");
+function showTip(e, html) { tip.innerHTML = html; tip.hidden = false; const w = Math.min(360, innerWidth - 24); tip.style.maxWidth = w + "px"; const x = Math.max(12, Math.min(e.clientX + 14, innerWidth - w - 12)); tip.style.left = x + "px"; tip.style.top = Math.min(e.clientY + 14, innerHeight - 200) + "px"; }
+function hideTip() { tip.hidden = true; }
+
+/* ---------- model: one milestone, prepared once ---------- */
+function prepare(key) {
+  const multi = key === "multi", example = key === "live" || multi, asked = key;
+  if (example) key = "f1";
+  const m = DATA.milestones[key];
+  let jobs = m.jobs.map(j => ({ ...j, s: T(j.start), e: T(j.end) || T(j.start) })).filter(j => j.s && !(example && j.outcome === "running"));
+  let devs = [QWEN], cut = null;
+  if (multi) { // invented: the moment f1-33 merged, 08, 11 and 12 could all start; three developers take one each
+    cut = Math.max(...jobs.filter(j => j.ticket === "f1-33-runner-check-fixes").map(j => j.e));
+    jobs = jobs.filter(j => j.e <= cut);
+    devs = [QWEN, "ollama-gpt-oss-120b", "ollama-nemotron-3-super"];
+    const now = cut + 12 * 60e3;
+    [["f1-08-jobs-list", devs[0], 11], ["f1-11-timeline", devs[1], 10], ["f1-12-milestones-list", devs[2], 9]].forEach(([ticket, agent, min], i) =>
+      jobs.push({ id: -10 - i, ticket, role: "developer", agent, attempt: 1, s: now - min * 60e3, e: now, outcome: "running", tin: 310000 + i * 70000, steps: 30 + i * 6, cost: null, example: true }));
+  }
+  if (example && !multi) { // invented for the example: f1-22's second attempt, running now, after the limit reset
+    const now = Math.max(...jobs.map(j => j.e), ...DATA.limits.map(l => T(l.until) || 0)) + 20 * 60e3;
+    jobs.push({ id: -1, ticket: "f1-22-copilot-adapter", role: "lead-ticket", agent: "claude-opus", attempt: 2, s: now - 14 * 60e3, e: now, outcome: "running", tin: 1240000, steps: 37, cost: null, example: true });
+  }
+  const t0 = Math.min(...jobs.map(j => j.s)), t1 = Math.max(...jobs.map(j => j.e));
+  const claude = jobs.filter(j => j.agent.startsWith("claude")).sort((a, b) => a.s - b.s);
+  const limits = DATA.limits.map(l => {
+    const at = T(l.at); let until = T(l.until);
+    if (!until) { const next = claude.find(j => j.s > at); until = next ? next.s : at + 60e3; }
+    return { at, until };
+  }).filter(l => l.until > t0 && l.at < t1);
+  const had = new Set(m.jobs.map(j => j.ticket));
+  const tickets = m.tickets.filter(t => !multi || +short(t.ticket) < 34).map(t => {
+    const tj = jobs.filter(j => j.ticket === t.ticket).sort((a, b) => a.s - b.s);
+    const work = tj.reduce((n, j) => n + (j.e - j.s), 0);
+    if (multi) t = { ...t, state: tj.some(j => j.example) ? "ready" : t.state === "done" && (tj.length ? tj[tj.length - 1].e <= cut : !had.has(t.ticket)) ? "done" : "ready" };
+    return { ...t, jobs: tj, first: tj.length ? tj[0].s : null, last: tj.length ? tj[tj.length - 1].e : null, work };
+  });
+  const byId = Object.fromEntries(tickets.map(t => [t.ticket, t]));
+  // clogs: a ticket's wait (before its first Claude job or between jobs) that overlaps a limit window
+  for (const t of tickets) {
+    t.clogs = [];
+    const depsDone = Math.max(t0, ...t.deps.map(d => byId[d] && byId[d].last).filter(Boolean));
+    let prev = depsDone;
+    for (const j of t.jobs) {
+      if (j.agent.startsWith("claude")) for (const l of limits) {
+        const a = Math.max(prev, l.at), b = Math.min(j.s, l.until);
+        if (b - a > 60e3) t.clogs.push([a, b]);
+      }
+      prev = Math.max(prev, j.e);
+    }
+  }
+  // folded clock: merge busy intervals; idle gaps longer than GAP shrink to GAPW
+  const iv = [...jobs.map(j => [j.s, j.e]), ...limits.map(l => [Math.max(l.at, t0), Math.min(l.until, t1)])].sort((a, b) => a[0] - b[0]);
+  const merged = [];
+  for (const [a, b] of iv) { const last = merged[merged.length - 1]; if (last && a <= last[1] + GAP) last[1] = Math.max(last[1], b); else merged.push([a, b]); }
+  const breaks = []; let folded = 0;
+  for (let i = 0; i < merged.length; i++) {
+    if (i > 0) { const gap = merged[i][0] - merged[i - 1][1]; breaks.push({ real: merged[i - 1][1], until: merged[i][0], at: merged[i - 1][1] - t0 - folded, gap }); folded += gap - GAPW; }
+  }
+  const fold = t => { let f = t - t0; for (const b of breaks) { if (t >= b.until) f -= b.gap - GAPW; else if (t > b.real) f -= (t - b.real) * (1 - GAPW / b.gap); } return f; };
+  const span = fold(t1);
+  const unfold = f => { let lo = t0, hi = t1; for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; if (fold(mid) < f) lo = mid; else hi = mid; } return lo; };
+  // ASAP plan from depends_on, each ticket taking its real work time (5 min floor)
+  const plan = {}; const visit = id => { if (plan[id]) return plan[id]; const t = byId[id]; const start = Math.max(0, ...t.deps.filter(d => byId[d]).map(d => visit(d).end)); return (plan[id] = { start, end: start + Math.max(t.work, 5 * 60e3) }); };
+  tickets.forEach(t => visit(t.ticket));
+  const done = new Set(tickets.filter(t => t.state === "done").map(t => t.ticket));
+  const ready = tickets.filter(t => t.state === "ready"); const next = []; const sched = new Set(done);
+  while (next.length < ready.length) {
+    const can = ready.filter(t => !next.includes(t) && t.deps.every(d => sched.has(d) || !byId[d]));
+    const pick = (can.length ? can : ready.filter(t => !next.includes(t))).sort((a, b) => a.ticket.localeCompare(b.ticket))[0];
+    next.push(pick); sched.add(pick.ticket);
+  }
+  const busy = new Set(jobs.filter(j => j.example).map(j => j.ticket));
+  const nextUp = next.filter(t => !busy.has(t.ticket)).map((t, i) => ({ ...t, order: i + 1, now: t.deps.every(d => done.has(d) || !byId[d]), machine: t.kind === "lead" ? "claude-opus" : multi ? "developer" : "local-qwen3.6-35b-a3b", waitsFor: t.deps.filter(d => byId[d] && !done.has(d)) }));
+  const clogMs = tickets.reduce((n, t) => n + t.clogs.reduce((k, c) => k + c[1] - c[0], 0), 0);
+  return { key: example ? asked : key, example, multi, devs, shadows: example ? [SHADOW] : [], m, jobs, tickets, byId, limits, t0, t1, fold, unfold, span, breaks, plan, clogMs, nextUp };
+}
+
+/* ---------- stats strip ---------- */
+function renderStats(P) {
+  const busy = P.jobs.reduce((n, j) => n + j.e - j.s, 0);
+  const crit = Math.max(...Object.values(P.plan).map(p => p.end));
+  const done = P.tickets.filter(t => t.state === "done").length;
+  const local = P.jobs.filter(j => !j.agent.startsWith("claude")).reduce((n, j) => n + j.e - j.s, 0);
+  const cells = [
+    ["Tickets merged", `${done} / ${P.tickets.length}`],
+    ["Start to finish", fmtDur(P.t1 - P.t0)],
+    ["Time agents worked", fmtDur(busy)],
+    ["Worked by the local model", `${Math.round(100 * local / Math.max(busy, 1))}%`],
+    ["Shortest possible, by dependencies", fmtDur(crit)],
+    ["Waited for Claude’s limit", P.clogMs ? fmtDur(P.clogMs) : "none", P.clogMs ? "clog" : ""],
+  ];
+  document.getElementById("stats").innerHTML = cells.map(([k, v, c]) => `<div class="stat ${c || ""}"><b>${v}</b><span>${k}</span></div>`).join("");
+}
+
+/* ---------- factory floor: the real process, stations and named belts ---------- */
+const NS = "http://www.w3.org/2000/svg";
+const VB0 = { x: 0, y: 0, w: 1200, h: 700 };
+const mSize = tier => LY && LY.small ? { w: 100 + tier * 30, h: 60 + tier * 22 } : { w: 120 + tier * 50, h: 70 + tier * 32 };
+const QWEN = "local-qwen3.6-35b-a3b", OPUS = "claude-opus", SONNET = "claude-sonnet";
+const mach = a => a.startsWith("claude") ? OPUS : a; // the lead is one machine, whichever model a job runs on
+const WIDE = {
+  vb: [1200, 720],
+  queue: { x: 20, y: 60, w: 150, h: 250, cols: 5 }, merged: { x: 1020, y: 60, w: 170, h: 220, cols: 6 },
+  [QWEN]: { cx: 515, cy: 130 }, [OPUS]: { cx: 430, cy: 500 }, [SONNET]: { cx: 1000, cy: 520 },
+  bay: { x: 330, y: 70, w: 370, h: 122 },
+  [SHADOW]: { cx: 1030, cy: 540, w: 150, h: 70 },
+  checks: { x: 785, y: 280, w: 90, h: 70, lx: 830, ly: 378, anchor: "middle" },
+  belts: {
+    q_qwen: { pts: [[170, 130], [330, 130]], label: "developer tickets", at: [250, 118] },
+    q_opus: { pts: [[95, 310], [95, 500], [295, 500]], label: "lead tickets", at: [195, 488] },
+    qwen_chk: { pts: [[700, 160], [800, 160], [800, 280]], label: "attempt done: to checks", at: [750, 150] },
+    opus_chk: { pts: [[565, 470], [800, 470], [800, 350]], label: "lead's work: to checks", at: [680, 460] },
+    chk_merged: { pts: [[875, 300], [1060, 300], [1060, 280]], label: "passed: merged", at: [968, 290] },
+    chk_qwen: { pts: [[860, 280], [860, 100], [700, 100]], label: "failed: retry", at: [780, 90] },
+    chk_opus: { pts: [[860, 350], [860, 530], [565, 530]], label: "failed twice: direction · 3 times: escalation", at: [712, 549] },
+    opus_qwen: { pts: [[310, 417], [310, 160], [330, 160]], label: "a direction: retry", at: [302, 300], anchor: "end" },
+    opus_q: { pts: [[295, 560], [140, 560], [140, 310]], label: "back to the queue", at: [218, 576], label2: "(findings, requeued, parked)" },
+    merged_copilot: { pts: [[1160, 280], [1160, 540], [1105, 540]], label: "same checkpoint", at: [1152, 420], anchor: "end", shadow: true },
+    merged_opus: { pts: [[1020, 240], [940, 240], [940, 565], [565, 565]], label: "checkpoints, milestone review", at: [760, 586] },
+  },
+};
+const TALL_MULTI = () => {
+  const L = JSON.parse(JSON.stringify(TALL)); L[QWEN] = TALL[QWEN]; L[OPUS] = TALL[OPUS]; L[SHADOW] = TALL[SHADOW];
+  L.bay = { x: 20, y: 196, w: 212, h: 236, stack: true };
+  L.belts.q_qwen = { pts: [[110, 166], [110, 196]], label: "", at: [0, 0] };
+  L.belts.qwen_chk = { pts: [[110, 432], [110, 515], [195, 515]], label: "to checks", at: [118, 475], anchor: "start" };
+  L.belts.chk_qwen = { pts: [[195, 545], [55, 545], [55, 432]], label: "retry", at: [47, 490], anchor: "end" };
+  L.belts.opus_qwen = { pts: [[245, 300], [232, 300]], label: "", at: [0, 0] };
+  L.multiOf = true; return L;
+};
+let TALLM = null;
+const TALL = {
+  vb: [480, 1010], small: true,
+  queue: { x: 20, y: 46, w: 440, h: 120, cols: 15 }, merged: { x: 20, y: 640, w: 290, h: 150, cols: 10 },
+  [QWEN]: { cx: 110, cy: 300 }, [OPUS]: { cx: 335, cy: 340 }, [SONNET]: { cx: 240, cy: 900 },
+  bay: { x: 20, y: 262, w: 212, h: 78 },
+  [SHADOW]: { cx: 240, cy: 905, w: 150, h: 66 },
+  checks: { x: 195, y: 500, w: 90, h: 56, lx: 240, ly: 492, anchor: "middle" },
+  belts: {
+    q_qwen: { pts: [[110, 166], [110, 259]], label: "developer tickets", at: [118, 186], anchor: "start" },
+    q_opus: { pts: [[350, 166], [350, 277]], label: "lead tickets", at: [342, 200], anchor: "end" },
+    opus_qwen: { pts: [[240, 300], [175, 300]], label: "direction", at: [207, 288] },
+    qwen_chk: { pts: [[110, 341], [110, 515], [195, 515]], label: "to checks", at: [118, 440], anchor: "start" },
+    chk_qwen: { pts: [[195, 545], [55, 545], [55, 341]], label: "retry", at: [47, 450], anchor: "end" },
+    opus_chk: { pts: [[300, 403], [300, 515], [285, 515]], label: "to checks", at: [292, 455], anchor: "end" },
+    chk_opus: { pts: [[285, 545], [400, 545], [400, 403]], label: "to the lead", at: [392, 480], anchor: "end" },
+    opus_q: { pts: [[430, 300], [470, 300], [470, 140], [460, 140]], label: "back", at: [462, 230], anchor: "end" },
+    chk_merged: { pts: [[240, 556], [240, 600], [165, 600], [165, 640]], label: "passed: merged", at: [248, 590], anchor: "start" },
+    merged_opus: { pts: [[310, 700], [445, 700], [445, 403]], label: "checkpoints, review", at: [437, 640], anchor: "end" },
+    merged_copilot: { pts: [[140, 790], [140, 905], [165, 905]], label: "same checkpoint", at: [132, 850], anchor: "end", shadow: true },
+  },
+};
+let LY = WIDE, ST = WIDE, BELTS = WIDE.belts;
+const narrow = () => (document.querySelector(".stage").getBoundingClientRect().width || 1000) < 640;
+function pickLayout(Px) { const p = Px || P; LY = ST = narrow() ? (p && p.multi ? (TALLM = TALLM || TALL_MULTI()) : TALL) : WIDE; BELTS = LY.belts; return LY; }
+const toChecks = a => a === OPUS ? "opus_chk" : "qwen_chk";
+const blen = pts => pts.slice(1).reduce((n, p, i) => n + Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]), 0);
+function pointAt(pts, d) {
+  for (let i = 1; i < pts.length; i++) { const [a, b] = [pts[i - 1], pts[i]], l = Math.hypot(b[0] - a[0], b[1] - a[1]); if (d <= l) return [a[0] + (b[0] - a[0]) * d / l, a[1] + (b[1] - a[1]) * d / l]; d -= l; }
+  return pts[pts.length - 1];
+}
+function floorState(P, t) {
+  const live = t >= P.t1 - 1;
+  const running = P.jobs.filter(j => j.s <= t && (t < j.e || (j.example && t >= j.e - 1)));
+  const runningTickets = new Set(running.map(j => j.ticket));
+  const cutL = P.limits.find(l => l.at <= t && t < l.until), powerCut = !!cutL, cutUntil = cutL ? cutL.until : null;
+  const clogged = P.tickets.filter(x => x.clogs.some(([a, b]) => a <= t && t < b));
+  const done = P.tickets.filter(x => x.state === "done" && x.last && x.last <= t);
+  const byHand = P.tickets.filter(x => x.state === "done" && !x.jobs.length);
+  const next = live ? P.nextUp : [];
+  const between = P.tickets.filter(x => x.first !== null && x.first <= t && !runningTickets.has(x.ticket) && x.last > t);
+  const lastFail = {}, count = {};
+  for (const j of P.jobs) if (j.e <= t) { lastFail[j.agent] = j.outcome !== "passed"; count[j.agent] = (count[j.agent] || 0) + 1; }
+  return { live, running, powerCut, cutUntil, clogged, done, byHand, next, between, lastFail, count };
+}
+// where a ticket is at time t: in the queue, at a machine, waiting on a belt, or merged
+function locate(P, x, t, S) {
+  if (!x.jobs.length) return x.state === "done" ? { k: "merged" } : { k: "queue" };
+  if (t < x.first) return { k: "queue" };
+  const run = S.running.find(j => j.ticket === x.ticket);
+  if (run) return { k: "at", agent: run.agent, role: run.role };
+  const prev = [...x.jobs].reverse().find(j => j.e <= t), next = x.jobs.find(j => j.s > t);
+  if (!next) return x.state === "done" ? { k: "merged", from: prev.agent } : { k: "wait", belt: prev.agent === QWEN ? "chk_opus" : "chk_opus", from: prev.agent };
+  if (prev.agent === OPUS && prev.role === "direction" && next.agent === QWEN) return { k: "wait", belt: "opus_qwen", from: OPUS };
+  if (prev.agent === OPUS && ["escalation", "lead-ticket"].includes(prev.role)) return { k: "wait", belt: "opus_q", from: OPUS };
+  return { k: "wait", belt: next.agent === OPUS ? "chk_opus" : "chk_qwen", from: prev.agent };
+}
+function transits(P) {
+  if (P._tr) return P._tr;
+  const out = [], add = (belt, t, who) => out.push({ belt, t, who });
+  for (const x of P.tickets) {
+    const js = x.jobs;
+    js.forEach((j, i) => {
+      const n = js[i + 1], who = short(x.ticket);
+      if (i === 0) add(j.agent === OPUS ? "q_opus" : "q_qwen", j.s, who);
+      if (j.outcome === "running") return;
+      if (!n) { add(toChecks(j.agent), j.e, who); add(x.state === "done" ? "chk_merged" : "chk_opus", j.e, who); return; }
+      if (j.agent === OPUS && j.role === "direction" && n.agent === QWEN) { add("opus_qwen", j.e, who); return; }
+      if (j.agent === OPUS && ["escalation", "lead-ticket"].includes(j.role)) { add("opus_q", j.e, who); add(n.agent === OPUS ? "q_opus" : "q_qwen", n.s, who); return; }
+      add(toChecks(j.agent), j.e, who); add(n.agent === OPUS ? "chk_opus" : "chk_qwen", j.e, who);
+    });
+  }
+  for (const j of P.jobs.filter(j => !j.ticket)) {
+    if (["checkpoint", "review"].includes(j.role)) { add("merged_opus", j.s, j.role); add("opus_q", j.e, j.role); }
+  }
+  return (P._tr = out.sort((a, b) => a.t - b.t));
+}
+// the belts a crate travels between two places
+function route(a, b) {
+  if (!a) return [];
+  if (a.k === "queue" && b.k === "at") return [b.agent === OPUS ? "q_opus" : "q_qwen"];
+  if (a.k === "at" && b.k === "merged") return [toChecks(a.agent), "chk_merged"];
+  if (a.k === "at" && b.k === "wait") return ["opus_qwen", "opus_q"].includes(b.belt) ? [b.belt] : [toChecks(a.agent), b.belt];
+  if (a.k === "wait" && a.belt === "opus_q" && b.k === "at") return [b.agent === OPUS ? "q_opus" : "q_qwen"];
+  if (a.k === "hidden" && b.k === "at") return ["merged_opus"];
+  if (a.k === "at" && b.k === "hidden") return ["opus_q"];
+  return [];
+}
+const el = (tag, attrs = {}, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; };
+let FL = null, FL_gate = null, FL_models = null;
+const stillMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+function smokeTick(now) {
+  if (FL) for (const m of FL.smoke) {
+    const on = m.g.classList.contains("on");
+    m.puffs.forEach((c, k) => {
+      if (!on) { c.setAttribute("opacity", 0); return; }
+      const f = stillMotion ? .2 + k * .2 : ((now / 2100) + k / 4) % 1;
+      c.setAttribute("cy", m.y - 4 - f * (16 + m.size * 3)); c.setAttribute("cx", m.x + Math.sin(f * 3 + k) * 3);
+      c.setAttribute("r", m.size * (.7 + f * 1.3)); c.setAttribute("opacity", (.6 * (1 - f)).toFixed(2));
+    });
+  }
+  requestAnimationFrame(smokeTick);
+}
+requestAnimationFrame(smokeTick);
+function flashGate(kind) { if (!FL_gate) return; FL_gate.classList.remove("pass", "fail"); setTimeout(() => { FL_gate.classList.add(kind); setTimeout(() => FL_gate.classList.remove(kind), 900); }, 500); }
+function buildFloor(P) {
+  const svg = document.getElementById("floor"); svg.innerHTML = "";
+  pickLayout(P);
+  svg.setAttribute("viewBox", `0 0 ${LY.vb[0]} ${LY.vb[1]}`); svg.classList.toggle("tall", LY === TALL); svg.style.aspectRatio = `${LY.vb[0]} / ${LY.vb[1]}`;
+  const defs = el("defs", {}, svg);
+  defs.innerHTML = `<pattern id="fgrid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="${css("--grid")}" stroke-width="1"/></pattern>
+    <pattern id="hz" width="12" height="8" patternUnits="userSpaceOnUse" patternTransform="skewX(-45)"><rect width="6" height="8" fill="${css("--hazard")}"/></pattern>
+    <marker id="arr" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto" markerUnits="userSpaceOnUse"><path d="M1 1L8 5L1 9" fill="none" stroke="#8a96a3" stroke-width="2"/></marker>
+    <radialGradient id="core"><stop offset="0" stop-color="#fff4c9"/><stop offset=".5" stop-color="${css("--opus")}"/><stop offset="1" stop-color="${css("--opus")}" stop-opacity="0"/></radialGradient>`;
+  el("rect", { x: 0, y: 0, width: LY.vb[0], height: LY.vb[1], fill: "url(#fgrid)" }, svg);
+  const belts = el("g", {}, svg), machines = el("g", {}, svg), crates = el("g", {}, svg), labels = el("g", { class: "nohit" }, svg);
+  const text = (x, y, s, cls, parent = labels, anchor = "middle") => { const t = el("text", { x, y, class: cls, "text-anchor": anchor }, parent); t.textContent = s; return t; };
+  FL = { smoke: [], svg, crates, els: {}, pos: {}, loc: {}, machines: {}, belts: {}, bstat: {}, anims: new Map(), ms: P.key, layout: LY };
+  for (const [id, b] of Object.entries(BELTS)) {
+    if (b.shadow && !P.shadows.length) continue;
+    const d = "M" + b.pts.map(p => p.join(" ")).join("L");
+    const dense = []; for (let i = 1; i < b.pts.length; i++) { const [p0, p1] = [b.pts[i - 1], b.pts[i]], L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), n = Math.max(1, Math.round(L / 46)); for (let k = 0; k < n; k++) dense.push([p0[0] + (p1[0] - p0[0]) * k / n, p0[1] + (p1[1] - p0[1]) * k / n]); }
+    dense.push(b.pts[b.pts.length - 1]);
+    const dd = "M" + dense.map(p => p.join(" ")).join("L");
+    const g = el("g", { class: "belt", "data-b": id }, belts);
+    el("path", { d, class: "bed" }, g); el("path", { d, class: "rollers" }, g); el("path", { d: dd, class: "rail", "marker-mid": "url(#arr)", "marker-end": "url(#arr)" }, g);
+    if (b.label) text(b.at[0], b.at[1], b.label, "blabel", labels, b.anchor || "middle");
+    if (b.shadow) g.classList.add("shadowbelt");
+    if (b.label2) { text(b.at[0], b.at[1] + 12, b.label2, "blabel", labels, b.anchor || "middle"); b.at = [b.at[0], b.at[1] + 12]; }
+    FL.belts[id] = g; FL.bstat = FL.bstat || {};
+    FL.bstat[id] = text(b.at[0], b.at[1] + 13, "", "bstat", labels, b.anchor || "middle");
+  }
+  const bin = (r, name, sub) => { const g = el("g", {}, machines); el("rect", { x: r.x, y: r.y, width: r.w, height: r.h, class: "bin" }, g); el("rect", { x: r.x, y: r.y, width: r.w, height: 8, fill: "url(#hz)" }, g); text(r.x + r.w / 2, r.y - 26, name, "mlabel"); return text(r.x + r.w / 2, r.y - 10, sub, "msub"); };
+  FL.queueSub = bin(ST.queue, "Queue", ""); FL.mergedSub = bin(ST.merged, "Merged", "");
+  // checks: the runner's gates, not an agent
+  const c = ST.checks, cg = el("g", { class: "gate" }, machines); FL_gate = cg;
+  el("rect", { x: c.x, y: c.y, width: c.w, height: c.h, class: "gbody" }, cg);
+  for (let k = 0; k < 4; k++) el("rect", { x: c.x + 10 + k * 20, y: c.y + 8, width: 10, height: c.h - 16, class: "gbar" }, cg);
+  if (LY === WIDE) { text(c.lx, c.ly, "CHECKS", "mlabel", labels); text(c.lx, c.ly + 15, "the runner: tests, lint, types", "mwhat", labels); }
+  else { text(c.lx, c.ly - 14, "CHECKS", "mlabel", labels); text(c.lx, c.ly, "the runner: tests, lint, types", "mwhat", labels); }
+  const n = P.devs.length, bay = LY.bay;
+  if (bay && (n > 1 || !LY.small)) {
+    el("rect", { x: bay.x - 10, y: bay.y - (bay.stack ? 8 : LY.small ? 34 : 50), width: bay.w + 20, height: bay.h + (bay.stack ? 16 : LY.small ? 44 : 70), class: "pad dev" }, machines);
+    if (!LY.small) text(bay.x + bay.w + 4, bay.y + bay.h + 14, n > 1 ? "DEVELOPERS · they share one queue" : "DEVELOPER", "stencil dev", machines, "end");
+  }
+  const place = a => {
+    if (a === SHADOW) return { ...ST[a] };
+    if (!isDev(a) || n === 1) { const { w, h } = mSize(MACHINES[a].tier); return { w, h, cx: ST[a].cx, cy: ST[a].cy }; }
+    if (bay.stack) { const i = P.devs.indexOf(a), h = (bay.h - (n + 1) * 8) / n; return { w: bay.w - 20, h, cx: bay.x + bay.w / 2, cy: bay.y + 8 + h / 2 + i * (h + 8), stacked: true }; }
+    const i = P.devs.indexOf(a), w = (bay.w - (n + 1) * 10) / n, h = LY.small ? 58 : 92;
+    return { w, h, cx: bay.x + 10 + w / 2 + i * (w + 10), cy: bay.y + bay.h / 2 + (LY.small ? 6 : 8) };
+  };
+  for (const a of [...P.devs, OPUS, ...P.shadows]) {
+    const M = MACHINES[a], pl = place(a), { w, h } = pl, x = pl.cx - w / 2, top = pl.cy - h / 2, y = pl.cy, col = agentColor(a), many = isDev(a) && n > 1;
+    const used = P.jobs.some(j => mach(j.agent) === a) || P.devs.includes(a) || P.example;
+    const g = el("g", { class: "machine" + (used ? "" : " ghost") + (pl.stacked ? " stacked" : "") }, machines); g.style.setProperty("--mc", col);
+    const lead = !isDev(a) && a !== SHADOW, pad = 16;
+    if (!many && !(isDev(a) && !LY.small)) el("rect", { x: x - pad, y: top - pad + 4, width: w + pad * 2, height: h + pad * 2 + 8, class: "pad " + (a === SHADOW ? "shadow" : lead ? "lead" : "dev") }, machines);
+    if (!LY.small && !many && a !== SHADOW && !isDev(a)) text(x + w + pad - 6, top + h + pad + 7, lead ? "THE LEAD · CLAUDE" : "DEVELOPER", "stencil " + (lead ? "lead" : "dev"), machines, "end");
+    el("rect", { x: x + 6, y: top + 6, width: w, height: h, class: "shadow" }, g);
+    el("rect", { x, y: top, width: w, height: h, class: "body" }, g);
+    el("rect", { x: x + 8, y: top + 8, width: w - 16, height: h - 16, class: "panel" }, g);
+    el("rect", { x: x + 2, y: top + h - 8, width: w - 4, height: 6, fill: "url(#hz)", opacity: .8 }, g);
+
+    if (M.tier >= 2 && !many) { el("circle", { cx: x + w - 38, cy: y, r: 10 + M.tier * 4, class: "lens" }, g); el("circle", { cx: x + w - 38, cy: y, r: 4 + M.tier * 2, class: "pupil" }, g); }
+    if (M.tier === 3) { el("circle", { cx: x + 60, cy: y, r: 36, fill: "url(#core)", class: "core" }, g); el("rect", { x: x + w - 34, y: top - 18, width: 22, height: 22, class: "stack" }, g); }
+    // a row of status lights that run in sequence while the machine works
+    // where it runs: a solid LOCAL plate (your GPU, free) or an outlined CLOUD one (uses an allowance)
+    const wh = where(a), pw = 44;
+    const px = M.tier === 3 ? x + w - pw - 46 : x + w - pw - 8;
+    el("rect", { x: px, y: top + 7, width: pw, height: 14, class: "plate " + wh }, g);
+    text(px + pw / 2, top + 17.5, wh.toUpperCase(), "ptext " + wh, g);
+    // rating gauge: the agent's 1-10 rating from runner.toml
+    const seg = Math.min(9, (w - 50) / 10);
+    const gy = pl.stacked ? top + h - 22 : many ? top + h - 30 : top + h - 24;
+    if (a === OPUS) {
+      const models = {};
+      [[OPUS, "OPUS"], [SONNET, "SONNET"]].forEach(([model, label], i) => {
+        const r = MACHINES[model].rating, gy2 = top + h - 46 + i * 20, mg = el("g", { class: "model" }, g);
+        el("rect", { x: x + 8, y: gy2 - 4, width: Math.min(w - 16, 210), height: 18, class: "mplate" }, mg);
+        text(x + 14, gy2 + 9, label, "mname", mg, "start");
+        for (let k = 0; k < 10; k++) el("rect", { x: x + 72 + k * 9, y: gy2, width: 7, height: 9, class: "gauge" + (k < r ? " on" : "") }, mg);
+        text(x + 166, gy2 + 9, `${r}/10`, "gtext", mg, "start");
+        models[model] = mg;
+      });
+      FL_models = models;
+    } else if (M.rating == null) text(x + 8, top + h - 14, "not rated yet", "gtext", g, "start");
+    else { for (let k = 0; k < 10; k++) el("rect", { x: x + 10 + k * seg, y: gy, width: seg - 2, height: 9, class: "gauge" + (k < M.rating ? " on" : "") }, g);
+      text(x + 13 + 10 * seg, gy + 8, `${M.rating}/10`, "gtext", g, "start"); }
+    if (!pl.stacked && a !== SHADOW) for (let k = 0; k < (many ? 3 : 5); k++) el("rect", { x: x + 10 + k * 12, y: top + 14, width: 8, height: 5, class: "led", style: `animation-delay:${k * .15}s` }, g);
+    const cx = x + w / 2;
+    if (a !== SHADOW && !pl.stacked) { // a chimney: bigger for a stronger agent; it smokes while the machine works
+      const r = M.rating || 5, cw = 6 + r * 1.6, ch = 8 + r * 1.8, chx = x + w - cw - 10;
+      if (M.tier !== 3) el("rect", { x: chx, y: top - ch, width: cw, height: ch, class: "stack" }, g);
+      const sx = M.tier === 3 ? x + w - 23 : chx + cw / 2, sy = M.tier === 3 ? top - 18 : top - ch;
+      FL.smoke.push({ g, x: sx, y: sy, size: 2 + r * 0.7, puffs: [0, 1, 2, 3].map(k => el("circle", { cx: sx, cy: sy, r: 1, class: "puff", opacity: 0 }, g)) });
+    }
+    if (a === SHADOW) { // a scanning beam across its window
+      el("rect", { x: x + 12, y: top + 10, width: 16, height: h - 28, class: "beam" }, g);
+    }
+    const below = !!pl.below, inside = LY.small || many, nm = pl.stacked ? text(x + 10, top + 17, "", "mlabel", labels, "start") : text(pl.cx, below ? top + h + 16 : many ? top - 22 : inside ? top - 24 : top - 40, (a === SHADOW ? (LY.small ? "COPILOT" : "COPILOT · shadow") : many ? (M.short || M.name.replace(" (local)", "")) : inside ? (a === OPUS ? M.name : M.name.replace(" (local)", "").replace("Claude ", "") + (isDev(a) ? " · developer" : " · lead")) : M.name), "mlabel"); nm.style.fill = used ? col : css("--ghost");
+    if (pl.stacked) nm.textContent = M.short || M.name.replace(" (local)", "");
+    if (!inside) text(pl.cx, below ? top + h + 30 : top - 25, a === SHADOW ? "same checkpoint, recorded only" : M.what, "mwhat");
+    if (many && a === P.devs[0] && !LY.small) text(bay.x + bay.w / 2, bay.y - 34, "developer tickets: whichever developer is free takes the next one", "mwhat", labels);
+    const sub = pl.stacked ? text(x + 10, top + 33, "", "msub", labels, "start") : text(pl.cx, below ? top + h + 44 : many ? top - 8 : inside ? top - 8 : top - 10, used ? "" : `not used in ${P.key.toUpperCase()}`, "msub");
+    const bar = el("g", { class: "prog", opacity: 0 }, labels);
+    el("rect", { x: x + 10, y: top + h - 20, width: w - 20, height: 6, class: "ptrack" }, bar);
+    const fill = el("rect", { x: x + 10, y: top + h - 20, width: 0, height: 6, class: "pfill" }, bar);
+    const ptext = { set textContent(v) { } };
+    FL.machines[a] = { models: a === OPUS ? FL_models : null, g, sub, x, y, w, h, bar, fill, ptext, crateX: pl.stacked ? x + w - 26 : null, noBar: true };
+  }
+  const mk = (id, label, hidden, wide) => {
+    const g = el("g", { class: "crate", "data-t": id, tabindex: 0 }, crates), hw = wide ? 36 : 12, tw = wide ? 30 : 8;
+    el("rect", { x: -hw - 2, y: -14, width: hw * 2 + 4, height: 28, class: "hit" }, g);
+    el("rect", { x: -hw, y: -12, width: hw * 2, height: 24, rx: 1.5, class: "box" }, g);
+    el("path", { d: `M${-hw} -6H${hw}M${-hw} 6H${hw}`, class: "slats" }, g);
+    el("rect", { x: -tw, y: -5, width: tw * 2, height: 10, class: "tag" }, g);
+    const lab = el("text", { y: 3.5, "text-anchor": "middle" }, g); lab.textContent = label;
+    if (hidden) g.style.opacity = 0;
+    FL.els[id] = g; return g;
+  };
+  for (const t of P.tickets) mk(t.ticket, short(t.ticket)).style.setProperty("--cc", t.kind === "lead" ? css("--opus") : css("--qwen"));
+  // milestone-wide jobs (checkpoints, reviews) travel as a batch crate
+  for (const j of P.jobs.filter(j => !j.ticket)) { const g = mk("job-" + j.id, j.role, true, true); g.classList.add("batch"); g.style.setProperty("--cc", "#9aa6b2"); }
+  FL.links = el("g", { class: "links" }, svg);
+}
+let hovered = null, pinned = null;
+function focusCrate(P, id) {
+  for (const g of Object.values(FL.els)) g.classList.remove("dep", "focus");
+  if (!id || !P.byId[id]) return;
+  FL.els[id].classList.add("focus");
+  for (const d of P.byId[id].deps) FL.els[d] && FL.els[d].classList.add("dep");
+}
+function crateTip(P, t, e) {
+  if (!t) return;
+  showTip(e, `<b>${t.ticket}</b> · ${t.kind} · d${t.d ?? "?"}<br>${(t.title || "").slice(0, 150)}<br>needs: ${t.deps.map(d => short(d) + (P.byId[d] && P.byId[d].state === "done" && (P.byId[d].last <= timeAt() || !P.byId[d].jobs.length) ? " ✓" : " not yet")).join(", ") || "nothing"}<br>${t.jobs.length ? t.jobs.map(j => `${(MACHINES[j.agent] || { name: j.agent }).name}: ${j.role} #${j.attempt} ${j.outcome}, ${fmtDur(j.e - j.s)}`).join("<br>") : t.state === "done" ? "done by the lead in chat" : "not started"}`);
+}
+function setOrder(id, n) {
+  const g = FL.els[id]; let b = g.querySelector(".order");
+  if (n == null) { if (b) b.remove(); return; }
+  if (!b) { b = el("g", { class: "order" }, g); el("circle", { cx: -12, cy: -12, r: 7.5 }, b); el("text", { x: -12, y: -9, "text-anchor": "middle" }, b); }
+  b.querySelector("text").textContent = n;
+}
+function setCrate(id, p) { FL.pos[id] = p; FL.els[id].setAttribute("transform", `translate(${p[0]},${p[1]})`); }
+function animate(id, pts, beltIds) {
+  const total = blen(pts), dur = Math.min(2400, 900 + total * 1.8), start = performance.now();
+  beltIds.forEach(b => FL.belts[b].classList.add("moving"));
+  if (beltIds.includes("chk_merged")) flashGate("pass"); else if (beltIds.includes("chk_qwen") || beltIds.includes("chk_opus")) flashGate("fail");
+  FL.anims.set(id, { pts, total, dur, start, beltIds });
+  if (FL.anims.size === 1) requestAnimationFrame(tickAnims);
+}
+function tickAnims(now) {
+  for (const [id, a] of FL.anims) {
+    const f = Math.min(1, (now - a.start) / a.dur), e = f < .5 ? 2 * f * f : 1 - Math.pow(-2 * f + 2, 2) / 2;
+    setCrate(id, pointAt(a.pts, e * a.total));
+    if (f >= 1) { FL.anims.delete(id); a.beltIds.forEach(b => { if (![...FL.anims.values()].some(o => o.beltIds.includes(b))) FL.belts[b].classList.remove("moving"); }); }
+  }
+  if (FL.anims.size) requestAnimationFrame(tickAnims);
+}
+function renderLine(P, t, S) {
+  const tr = transits(P), nextFor = {};
+  if (S.live) for (const x of P.nextUp) { const b = x.machine === OPUS ? "q_opus" : "q_qwen"; if (!nextFor[b]) nextFor[b] = short(x.ticket); }
+  const order = S.live ? new Map(P.nextUp.map(x => [x.ticket, x])) : new Map();
+  const locs = Object.fromEntries(P.tickets.map(x => [x.ticket, locate(P, x, t, S)]));
+  const chip = (x, extra = "") => `<span class="chip ${x.kind === "lead" ? "lead" : "dev"} ${extra}" data-t="${x.ticket}" role="button" tabindex="0">${order.has(x.ticket) && extra !== "done" ? `<i>${order.get(x.ticket).order}</i>` : ""}${short(x.ticket)}</span>`;
+  const queued = P.tickets.filter(x => locs[x.ticket].k === "queue").sort((a, b) => (order.get(a.ticket)?.order ?? 999) - (order.get(b.ticket)?.order ?? 999) || a.ticket.localeCompare(b.ticket));
+  const merged = P.tickets.filter(x => locs[x.ticket].k === "merged").sort((a, b) => (b.last || 0) - (a.last || 0));
+  const belt = id => { const b = BELTS[id], last = [...tr].reverse().find(r => r.belt === id && r.t <= t), nx = S.live ? nextFor[id] : (tr.find(r => r.belt === id && r.t > t) || {}).who; const waits = P.tickets.filter(x => locs[x.ticket].k === "wait" && locs[x.ticket].belt === id);
+    return `<div class="lbelt"><span class="lname">↓ ${b.label}${b.label2 ? " " + b.label2 : ""}</span><span class="lstat">${last ? `last: ${/^\d/.test(last.who) ? last.who : last.who} at ${fmtClock(last.t).slice(4)}` : "nothing yet"}${nx ? ` · next: ${nx}` : ""}</span>${waits.length ? `<span class="lwait">${waits.map(x => chip(x, "wait")).join("")}</span>` : ""}</div>`; };
+  const machine = a => { const M = MACHINES[a], run = S.running.filter(j => mach(j.agent) === a), cut = a === OPUS && S.powerCut;
+    return `<div class="lstation" style="--mc:${agentColor(a)}"><div class="lhead"><b>${M.name}</b><span class="where ${where(a)}">${where(a).toUpperCase()}</span><span class="lrole ${a === SHADOW ? "shadow" : isDev(a) ? "dev" : "lead"}">${a === SHADOW ? "checkpoint shadow" : isDev(a) ? "developer" : "the lead"}</span><span class="muted">${a === OPUS ? "Opus 9/10 · Sonnet 7/10" : M.rating == null ? "not rated yet" : `rating ${M.rating}/10`}</span></div><p class="muted">${M.what}</p>
+      <p>${cut ? `<span class="bad">Claude limit reached · resets ${fmtClock(S.cutUntil).slice(4)}</span>` : run.length ? run.map(j => `working on ${j.ticket ? chip(P.byId[j.ticket], "work") : j.role} ${j.role} · ${fmtDur(t - j.s)}`).join("<br>") : `idle · ${S.count[a] || 0} jobs done`}</p></div>`; };
+  document.getElementById("line").innerHTML = `
+    <div class="lstation"><div class="lhead"><b>Queue</b><span class="muted">${queued.length} waiting${S.live ? ", 1 goes first" : ""}</span></div><div class="chips">${queued.map(x => chip(x)).join("") || '<span class="muted">empty</span>'}</div></div>
+    ${belt("q_qwen")}${P.devs.map(machine).join("")}${belt("q_opus")}${machine(OPUS)}
+    ${belt("qwen_chk")}${belt("opus_chk")}
+    <div class="lstation"><div class="lhead"><b>Checks</b><span class="muted">the runner: tests, lint, types</span></div></div>
+    ${belt("chk_qwen")}${belt("chk_opus")}${belt("opus_qwen")}${belt("opus_q")}${belt("chk_merged")}
+    <div class="lstation"><div class="lhead"><b>Merged</b><span class="muted">${merged.length} merged, newest first</span></div><div class="chips">${merged.map(x => chip(x, "done")).join("")}</div></div>
+    ${P.shadows.length ? belt("merged_copilot") : ""}${P.shadows.map(machine).join("")}`;
+}
+function placeFloor(P, t, animateMoves) {
+  const small = narrow(), stage = document.querySelector(".stage");
+  stage.classList.toggle("phone", small); document.getElementById("linebox").hidden = !small;
+  if (small) renderLine(P, t, floorState(P, t));
+  if (!FL || FL.ms !== P.key || FL.layout !== pickLayout(P)) { buildFloor(P); animateMoves = false; }
+  const S = floorState(P, t), target = {}, locs = {}, onBelt = {};
+  const slot = (belt, i) => { const b = BELTS[belt].pts, L = blen(b); return pointAt(b, Math.max(0, L - 20 - i * 28)); };
+  const grid = (r, i, _c, fromBottom) => { const cols = r.cols; return gridAt(r, i, cols, fromBottom); };
+  const gridAt = (r, i, cols, fromBottom) => [r.x + 18 + (i % cols) * 27, fromBottom ? r.y + r.h - 18 - Math.floor(i / cols) * 28 : r.y + 30 + Math.floor(i / cols) * 28];
+  const queued = [], merged = [];
+  for (const x of P.tickets) {
+    const L = locate(P, x, t, S); locs[x.ticket] = L;
+    if (L.k === "queue") queued.push(x); else if (L.k === "merged") merged.push(x);
+    else if (L.k === "wait") { const i = onBelt[L.belt] = (onBelt[L.belt] || 0) + 1; target[x.ticket] = slot(L.belt, i - 1); }
+  }
+  // the queue: at "now", each agent's next three wait at the end of its intake belt; the rest in run order
+  const order = S.live ? new Map(P.nextUp.map((x, i) => [x.ticket, x])) : new Map();
+  queued.sort((a, b) => (order.has(a.ticket) ? order.get(a.ticket).order : 999) - (order.has(b.ticket) ? order.get(b.ticket).order : 999) || a.ticket.localeCompare(b.ticket));
+  let qi = 0; const lined = {};
+  for (const x of queued) {
+    const n = order.get(x.ticket), belt = n ? (n.machine === OPUS ? "q_opus" : "q_qwen") : null;
+    target[x.ticket] = grid(ST.queue, qi++, 5, false);
+    FL.els[x.ticket].dataset.s = n ? (n.now ? "next" : "next-wait") : "ready";
+    setOrder(x.ticket, n ? n.order : null);
+  }
+  for (const id of Object.keys(FL.els)) if (!queued.some(q => q.ticket === id)) setOrder(id, null);
+  merged.sort((a, b) => (a.last || 0) - (b.last || 0) || a.ticket.localeCompare(b.ticket));
+  const latest = [...merged].reverse().find(x => x.last);
+  for (const g of Object.values(FL.els)) g.classList.remove("latest");
+  merged.forEach((x, i) => { target[x.ticket] = grid(ST.merged, i, 6, true); FL.els[x.ticket].dataset.s = x.jobs.length ? "done" : "hand"; });
+  const atM = {};
+  for (const j of S.running) {
+    const id = j.ticket || "job-" + j.id; if (!FL.els[id]) continue;
+    const m = FL.machines[mach(j.agent)], k = atM[mach(j.agent)] = (atM[mach(j.agent)] || 0) + 1;
+    target[id] = [(m.crateX ?? m.x + m.w / 2) + (k - 1) * 28, m.y + (m.crateX ? 9 : 0)]; locs[id] = { k: "at", agent: j.agent, role: j.role }; FL.els[id].dataset.s = "working";
+  }
+  for (const [x, L] of Object.entries(locs)) if (L.k === "wait") FL.els[x].dataset.s = S.clogged.some(c => c.ticket === x) ? "clog" : "between";
+  // move every crate: along its belts when stepping, straight to its place when dragging the slider
+  for (const id of Object.keys(FL.els)) {
+    const g = FL.els[id], to = target[id], L = locs[id] || { k: "hidden" }, prev = FL.loc[id];
+    if (!to) {
+      if (animateMoves && prev && prev.k === "at" && id.startsWith("job-")) { const r = route(prev, { k: "hidden" }); if (r.length) { animate(id, [FL.pos[id], ...r.flatMap(b => BELTS[b].pts)], r); setTimeout(() => g.style.opacity = 0, 2400); } else g.style.opacity = 0; }
+      else if (!FL.anims.has(id)) g.style.opacity = 0;
+      FL.loc[id] = L; continue;
+    }
+    g.style.opacity = 1;
+    const moved = !FL.pos[id] || FL.pos[id][0] !== to[0] || FL.pos[id][1] !== to[1];
+    if (animateMoves && prev && moved) {
+      const r = route(prev, L);
+      const from = FL.pos[id] || (r.length ? BELTS[r[0]].pts[0] : to);
+      animate(id, [from, ...r.flatMap(b => BELTS[b].pts), to], r);
+    } else if (moved && !FL.anims.has(id)) setCrate(id, to);
+    FL.loc[id] = L;
+  }
+  // each belt: the last crate that went along it, and the next one that will
+  const tr = transits(P), nextFor = {};
+  if (S.live) for (const x of P.nextUp) { const b = x.machine === OPUS ? "q_opus" : "q_qwen"; if (!nextFor[b]) nextFor[b] = short(x.ticket); }
+  for (const id of Object.keys(BELTS).filter(b => FL.belts[b])) {
+    const last = [...tr].reverse().find(r => r.belt === id && r.t <= t), nx = S.live ? nextFor[id] : (tr.find(r => r.belt === id && r.t > t) || {}).who;
+    const parts = [last ? `last: ${/^\d/.test(last.who) ? last.who : last.who} at ${fmtClock(last.t).slice(4)}` : "", nx ? `next: ${nx}` : ""].filter(Boolean);
+    FL.bstat[id].textContent = ""; FL.belts[id].dataset.info = `<b>${BELTS[id].label}${BELTS[id].label2 ? " " + BELTS[id].label2 : ""}</b><br>${parts.join("<br>") || "nothing has gone along it yet"}`;
+    FL.belts[id].classList.remove("came", "goes");
+  }
+  for (const j of S.running) {
+    if (!j.ticket || P.limits.some(l => l.at <= t && t < l.until) && j.agent === OPUS) continue;
+    const came = [...tr].reverse().find(r => r.who === short(j.ticket) && r.t <= t);
+    if (came) FL.belts[came.belt].classList.add("came");
+    [toChecks(j.agent), "chk_merged"].forEach(b => FL.belts[b].classList.add("goes"));
+  }
+  for (const [a, m] of Object.entries(FL.machines)) {
+    const run = S.running.filter(j => mach(j.agent) === a), cut = a === OPUS && S.powerCut;
+    if (a === OPUS) for (const [model, plate] of Object.entries(m.models || {})) plate.classList.toggle("active", run.some(j => j.agent === model));
+    m.g.classList.toggle("on", run.length > 0 && !cut); m.g.classList.toggle("cut", cut);
+    if (a === SHADOW) m.sub.textContent = "idle";
+    else if ((P.jobs.some(j => mach(j.agent) === a) || P.example) && (LY.small || (isDev(a) && P.devs.length > 1))) m.sub.textContent = cut ? "Claude limit reached" : run.length ? `${run.map(j => short(j.ticket) || j.role).join(", ")} · ${fmtDur(t - run[0].s)}` : "idle";
+    else if (P.jobs.some(j => mach(j.agent) === a)) m.sub.textContent = cut ? `Claude limit reached · resets ${fmtClock(S.cutUntil).slice(4)}` : run.length ? `working: ${run.map(j => (short(j.ticket) || "") + " " + j.role + (j.ticket ? ` · attempt ${j.attempt}` : "") + (a === OPUS ? ` on ${j.agent === SONNET ? "Sonnet" : "Opus"}` : "") + ` · ${fmtDur(t - j.s)}`).join(", ")}` : `idle · ${S.count[a] || 0} jobs done${S.lastFail[a] ? " · last attempt failed" : ""}`;
+    m.sub.classList.toggle("bad", cut);
+    const j = run[0];
+    if (j && !cut && !m.noBar) {
+      const same = P.jobs.filter(o => o.agent === j.agent && o.role === j.role && o.outcome !== "running" && o.e > o.s).map(o => o.e - o.s).sort((a, b) => a - b);
+      const usual = same.length ? same[Math.floor(same.length / 2)] : null, el2 = t - j.s;
+      m.bar.setAttribute("opacity", 1);
+      m.fill.setAttribute("width", usual ? Math.min(1, el2 / usual) * (m.w - 20) : 0);
+      if (usual && !LY.small && !(isDev(a) && P.devs.length > 1)) m.sub.textContent += ` (usually ${fmtDur(usual)})`;
+      m.fill.classList.toggle("over", !!usual && el2 > usual);
+      m.ptext.textContent = usual ? `${fmtDur(el2)} so far · a ${j.role} job here usually takes ${fmtDur(usual)}` : `${fmtDur(el2)} so far`;
+    } else m.bar.setAttribute("opacity", 0);
+  }
+  FL.queueSub.textContent = `${queued.length} waiting${S.live && P.nextUp.length ? ", 1 goes first" : ""}`;
+  FL.mergedSub.textContent = `${S.done.length} merged${latest ? `, last: ${short(latest.ticket)} at ${fmtClock(latest.last).slice(4)}` : ""}`;
+  focusCrate(P, hovered || pinned);
+  renderReadout(P, t, S);
+  renderNow(P, floorState(P, P.t1));
+  if (tab === "deps") paintChain(P, S);
+}
+
+function renderReadout(P, t, S) {
+  const li = (c, s, id) => `<li${id ? ` data-t="${id}" class="hl"` : ""}><span class="dot" style="background:${c}"></span>${s}</li>`;
+  const recent = P.jobs.filter(j => j.s <= t).slice(-6).reverse();
+  const html = `
+    <div><h3>Time${S.live ? (P.example ? ' · <span style="color:var(--hazard)">example: a job running now</span>' : ' · <span style="color:var(--hazard)">now · live on the real page</span>') : ""}</h3><div class="clock">${fmtClock(t)}</div></div>
+    <div><h3>Working now</h3>${S.running.length ? S.running.map(j => working(P, j, t)).join("") : "<ul><li>nothing</li></ul>"}</div>
+    ${S.powerCut || S.clogged.length ? `<div><h3>Waiting for Claude’s limit to reset</h3><ul>${S.clogged.map(x => li(css("--clog"), x.ticket)).join("") || "<li>limit reached, no ticket waiting for Claude</li>"}</ul></div>` : ""}
+    ${S.live && P.nextUp.length ? `<div><h3>Up next, in run order</h3><ul>${P.nextUp.slice(0, 8).map(x => li(x.now ? agentColor(x.machine) : "#4a5562", `${x.order}. ${x.ticket.slice(3)} → ${MACHINES[x.machine].name}${x.waitsFor.length ? ` · after ${x.waitsFor.map(short).join(", ")}` : " · ready"}`, x.ticket)).join("")}</ul></div>` : ""}
+    <div><h3>Waiting for a retry</h3><ul>${S.between.slice(0, 6).map(x => li("#7b8794", x.ticket)).join("") || "<li>none</li>"}</ul></div>
+    <div><h3>Latest jobs</h3><ul>${recent.map(j => li(agentColor(j.agent), `${fmtClock(j.s).slice(4)} ${short(j.ticket) || j.role} ${j.outcome}`)).join("")}</ul></div>`;
+  const pin = pinned && P.byId[pinned];
+  const html2 = (pin ? `<div class="pinned"><h3>Selected ticket <button id="unpin">clear</button></h3><p><b>${pin.ticket}</b> · ${pin.kind} · difficulty ${pin.d ?? "?"}</p><p>${pin.title || ""}</p><p>Depends on: ${pin.deps.map(short).join(", ") || "nothing"}</p><p>${pin.jobs.length} job(s)${pin.work ? ", " + fmtDur(pin.work) + " of work" : ""}${pin.jobs.length ? ": " + pin.jobs.map(j => `${j.role} #${j.attempt} ${j.outcome}`).join(", ") : ""}</p></div>` : "") + html;
+  const r = document.getElementById("readout"); if (r.dataset.h !== html2) { r.innerHTML = html2; r.dataset.h = html2; }
+}
+function working(P, j, t) {
+  const tk = P.byId[j.ticket], stages = ["Work", "Checks", "Merge into main"];
+  return `<div class="work"><p><span class="dot" style="background:${agentColor(j.agent)}"></span><b>${j.ticket || j.role}</b></p>
+    ${tk ? `<p class="goal">${(tk.title || "").slice(0, 140)}</p>` : ""}
+    <p>${(MACHINES[j.agent] || { name: j.agent }).name} · ${j.role} · attempt ${j.attempt} · ${fmtDur(t - j.s)}${j.example ? ` · ${((j.tin + Math.max(0, timeAt() - j.e) * 1.6) / 1e6).toFixed(2)}M tokens · ${j.steps + Math.floor(Math.max(0, timeAt() - j.e) / 20000)} steps` : ""}</p>
+    <p class="stagetext">Stage 1 of 3: <b>the agent is working</b> · then checks · then merge into main</p></div>`;
+}
+function chainLayout(P) {
+  const byId = P.byId, ids = P.tickets.map(t => t.ticket), deps = id => byId[id].deps.filter(d => byId[d]);
+  const anc = {}; const ancestors = id => anc[id] || (anc[id] = new Set(deps(id).flatMap(d => [d, ...ancestors(d)])));
+  const depth = {}; const dep = id => depth[id] ?? (depth[id] = deps(id).length ? 1 + Math.max(...deps(id).map(dep)) : 0);
+  ids.forEach(dep);
+  const direct = {}; for (const id of ids) direct[id] = deps(id).filter(d => !deps(id).some(o => o !== d && ancestors(o).has(d)));
+  const cols = []; for (const id of ids) (cols[depth[id]] = cols[depth[id]] || []).push(id);
+  const y = {}; cols.forEach((col, c) => { if (c) col.sort((a, b) => avg(a) - avg(b) || a.localeCompare(b)); col.forEach((id, i) => y[id] = i); function avg(id) { const ds = direct[id]; return ds.length ? ds.reduce((n, d) => n + y[d], 0) / ds.length : 0; } });
+  const down = {}; for (const id of ids) for (const d of direct[id]) (down[d] = down[d] || []).push(id);
+  const desc = {}; const descendants = id => desc[id] || (desc[id] = new Set((down[id] || []).flatMap(c => [c, ...descendants(c)])));
+  return { depth, direct, cols, y, ancestors, descendants };
+}
+let CH = null;
+function buildChain(P) {
+  const L = chainLayout(P), NW = 240, NH = 62, CW = 256, RH = 100, X0 = 70, Y0 = 16;
+  const per = Math.max(...L.cols.map(c => c.length)), W = X0 + per * CW, H = Y0 * 2 + L.cols.length * RH - (RH - NH);
+  const at = id => [X0 + L.y[id] * CW, Y0 + L.depth[id] * RH];
+  let s = `<svg id="chain" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tickets by dependency"><defs><marker id="carr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0L10 5L0 10z" fill="context-stroke"/></marker></defs>`;
+  L.cols.forEach((c, i) => { s += `<text x="6" y="${Y0 + i * RH + 34}" class="steplabel">step ${i + 1}</text>`; });
+  for (const t of P.tickets) for (const d of L.direct[t.ticket].filter(d => L.depth[t.ticket] - L.depth[d] === 1)) { const [x1, y1] = at(d), [x2, y2] = at(t.ticket); const a = x1 + NW / 2, b = y1 + NH, c = x2 + NW / 2, e = y2, m = (b + e) / 2; s += `<path class="edge" data-from="${d}" data-to="${t.ticket}" d="M${a} ${b}C${a} ${m} ${c} ${m} ${c} ${e - 2}" marker-end="url(#carr)"/>`; }
+  for (const t of P.tickets) { const [x, y] = at(t.ticket), lead = t.kind === "lead"; s += `<g class="node ${lead ? "lead" : "dev"}" data-t="${t.ticket}" transform="translate(${x},${y})"><rect class="nbox" width="${NW}" height="${NH}" rx="2"/><rect class="kbadge" x="6" y="7" width="42" height="16"/><text class="ktext" x="27" y="19" text-anchor="middle">${lead ? "LEAD" : "DEV"}</text><text class="ntitle" x="56" y="20">${short(t.ticket)} ${t.ticket.split("-").slice(2).join("-").slice(0, 21)}</text><g class="hist" transform="translate(8,30)"></g>${(() => { const far = L.direct[t.ticket].filter(d => L.depth[t.ticket] - L.depth[d] > 1); return far.length ? `<text class="far" x="8" y="54">also after ${far.map(short).join(", ")} (further up)</text>` : ""; })()}</g>`; }
+  s += "</svg>";
+  const el = document.getElementById("deps"); el.innerHTML = s;
+  CH = { key: P.key, L, svg: el.querySelector("svg") };
+  el.querySelectorAll(".node").forEach(g => {
+    g.addEventListener("mouseenter", e => chainFocus(P, g.dataset.t, e));
+    g.addEventListener("mousemove", e => crateTip(P, P.byId[g.dataset.t], e));
+    g.addEventListener("mouseleave", () => chainFocus(P, null));
+  });
+}
+function chainFocus(P, id, e) {
+  const svg = CH.svg; svg.classList.toggle("focusing", !!id);
+  if (!id) { hideTip(); svg.querySelectorAll(".up,.down,.me").forEach(n => n.classList.remove("up", "down", "me")); return; }
+  const up = CH.L.ancestors(id), down = CH.L.descendants(id);
+  svg.querySelectorAll(".node").forEach(n => { const k = n.dataset.t; n.classList.toggle("me", k === id); n.classList.toggle("up", up.has(k)); n.classList.toggle("down", down.has(k)); });
+  svg.querySelectorAll(".edge").forEach(n => { const f = n.dataset.from, to = n.dataset.to; n.classList.toggle("up", (to === id || up.has(to)) && (up.has(f))); n.classList.toggle("down", (f === id || down.has(f)) && down.has(to)); });
+  if (e) crateTip(P, P.byId[id], e);
+}
+function whoDid(jobs) {
+  const runs = []; for (const j of jobs) { const name = (MACHINES[j.agent] || { name: j.agent }).name.replace(" (local)", "").replace("Claude ", ""); const last = runs[runs.length - 1]; if (last && last.name === name) last.n++; else runs.push({ name, n: 1 }); }
+  return runs.map(r => r.name + (r.n > 1 ? " ×" + r.n : "")).join(" → ");
+}
+function history(t, done, st) {
+  if (!t.jobs.length && t.state === "done") return `<text class="hsub" y="9">done by the lead in chat</text>`;
+  if (!done.length) return `<text class="hsub" y="9">${st === "ready" ? "can start now" : "not started"}</text>`;
+  const shown = done.slice(-12);
+  const marks = shown.map((j, i) => `<rect x="${i * 10}" y="1" width="8" height="8" fill="${agentColor(j.agent)}"${j.outcome !== "passed" && j.outcome !== "running" ? ` stroke="${css("--fail")}" stroke-width="2"` : ""}/>`).join("");
+  const room = Math.floor((224 - shown.length * 10) / 7.4), who = "by " + whoDid(done);
+  return marks + `<text class="hsub" x="${shown.length * 10 + 4}" y="9">${who.length > room ? who.slice(0, room - 1) + "…" : who}</text>`;
+}
+function paintChain(P, S) {
+  if (!CH || CH.key !== P.key) buildChain(P);
+  const working = new Map(S.running.filter(j => j.ticket).map(j => [j.ticket, j.agent]));
+  const merged = new Set([...S.done, ...S.byHand].map(t => t.ticket));
+  CH.svg.querySelectorAll(".node").forEach(n => {
+    const t = P.byId[n.dataset.t], ready = t.deps.every(d => !P.byId[d] || merged.has(d));
+    const st = merged.has(t.ticket) ? "merged" : working.has(t.ticket) ? "working" : ready ? "ready" : "waiting";
+    n.dataset.s = st;
+    const done = t.jobs.filter(j => j.s <= timeAt());
+    const key = done.map(j => j.id + j.outcome).join() + st;
+    if (n.dataset.h !== key) { n.dataset.h = key; n.querySelector(".hist").innerHTML = history(t, done, st); }
+    n.style.setProperty("--nc", st === "working" ? agentColor(working.get(t.ticket)) : t.kind === "lead" ? css("--opus") : css("--qwen"));
+  });
+}
+
+/* ---------- production timeline (svg) ---------- */
+function laneOrder(P) { const order = ["claude-opus", "claude-sonnet", "local-qwen3.6-35b-a3b"]; return [...new Set([...order.filter(a => P.jobs.some(j => j.agent === a)), ...P.jobs.map(j => j.agent)])]; }
+function axisFor(P, x0, width) {
+  const k = width / P.span; const X = t => x0 + P.fold(t) * k;
+  let ticks = ""; const step = P.span > 20 * 36e5 ? 4 : P.span > 8 * 36e5 ? 2 : 1;
+  const h0 = new Date(P.t0); h0.setMinutes(0, 0, 0);
+  for (let t = h0.getTime() + 36e5; t < P.t1; t += 36e5) {
+    if (new Date(t).getHours() % step) continue;
+    if (P.breaks.some(b => t > b.real && t < b.until)) continue;
+    ticks += `<line x1="${X(t)}" x2="${X(t)}" y1="0" y2="100%" stroke="${css("--grid")}"/>`;
+    ticks += `<text x="${X(t) + 3}" y="14" font-size="10" fill="${css("--muted")}">${new Date(t).toLocaleString("en-GB", { weekday: "short", hour: "2-digit" })}h</text>`;
+  }
+  return { X, k, ticks };
+}
+function breakMarks(P, X, y0, y1) {
+  return P.breaks.filter(b => b.gap > GAP).map(b => { const a = X(b.real), c = X(b.until), m = (a + c) / 2; return `<g><rect x="${a}" y="${y0}" width="${c - a}" height="${y1 - y0}" fill="${css("--floor")}"/><path d="M${m - 4} ${y0} l8 6 l-8 6 l8 6" stroke="${css("--muted")}" fill="none" transform="translate(0,${(y1 - y0) / 2 - 12})"/><text x="${m}" y="${y1 - 4}" font-size="9" text-anchor="middle" fill="${css("--muted")}">${fmtDur(b.gap)}</text></g>`; }).join("");
+}
+function renderTimeline(P) {
+  const lanes = laneOrder(P), LH = 46, top = 24, x0 = 170;
+  const width = Math.max(980, Math.min(3200, P.span / 6e4 * 1.6));
+  const { X, ticks } = axisFor(P, x0, width - x0 - 20);
+  const H = top + lanes.length * LH + 10;
+  let s = `<svg width="${width}" height="${H}" viewBox="0 0 ${width} ${H}" role="img" aria-label="Jobs per agent over time">${ticks}`;
+  s += P.limits.map(l => `<rect x="${X(Math.max(l.at, P.t0))}" y="${top - 4}" width="${Math.max(2, X(Math.min(l.until, P.t1)) - X(Math.max(l.at, P.t0)))}" height="${lanes.length * LH}" fill="url(#hatch)" opacity=".55"/>`).join("");
+  s += `<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="3" height="6" fill="${css("--clog")}"/></pattern></defs>`;
+  lanes.forEach((a, i) => {
+    const y = top + i * LH, M = MACHINES[a] || { name: a, tier: 1 };
+    s += `<line x1="0" x2="${width}" y1="${y + LH - 4}" y2="${y + LH - 4}" stroke="${css("--rule")}"/>`;
+    s += `<rect x="8" y="${y + 6}" width="6" height="${LH - 16}" fill="${agentColor(a)}"/><text x="22" y="${y + 20}" font-size="12" fill="${css("--fg")}" font-family="Chakra Petch, sans-serif" font-weight="600">${(a === OPUS ? "The lead on Opus" : M.lane || M.name).toUpperCase()}</text><text x="22" y="${y + 34}" font-size="10" fill="${css("--muted")}">${a}</text>`;
+    for (const j of P.jobs.filter(j => j.agent === a)) {
+      const xa = X(j.s), w = Math.max(2, X(j.e) - xa), bad = j.outcome !== "passed";
+      s += `<g class="job" data-j="${j.id}"><rect x="${xa}" y="${y + 6}" width="${w}" height="${LH - 16}" fill="${agentColor(a)}" opacity="${j.outcome === "interrupted" ? .35 : .9}"/>${bad ? `<rect x="${xa}" y="${y + 6}" width="${w}" height="3" fill="${css("--fail")}"/>` : ""}${w > 16 ? `<text x="${xa + w / 2}" y="${y + 26}" font-size="10" text-anchor="middle" fill="#0b0e12" font-weight="600">${short(j.ticket) || j.role.slice(0, 2)}</text>` : ""}</g>`;
+    }
+  });
+  s += breakMarks(P, X, top - 6, H) + "</svg>";
+  const el = document.getElementById("tl"); el.innerHTML = s;
+  const jobs = Object.fromEntries(P.jobs.map(j => [j.id, j]));
+  el.querySelectorAll(".job").forEach(g => { g.addEventListener("mousemove", e => { const j = jobs[g.dataset.j]; showTip(e, `<b>${j.ticket || "(milestone-wide)"}</b><br>${j.role} · attempt ${j.attempt} · ${j.agent}<br>${fmtClock(j.s)} → ${fmtDur(j.e - j.s)} · ${j.outcome}${j.cost ? ` · $${j.cost.toFixed(2)}` : ""}${j.note ? `<br>${j.note}` : ""}`); }); g.addEventListener("mouseleave", hideTip); });
+  document.getElementById("tl-legend").innerHTML = lanes.map(a => `<span><i style="background:${agentColor(a)}"></i>${(MACHINES[a] || { name: a }).name}</span>`).join("") + `<span><i style="background:var(--fail);height:3px"></i>failed attempt</span><span><i style="background:repeating-linear-gradient(-45deg,var(--clog) 0 3px,transparent 3px 6px)"></i>Claude limit</span>`;
+}
+
+/* ---------- plan vs actual (svg) ---------- */
+function renderPlan(P) {
+  const rows = P.tickets.filter(t => t.jobs.length).sort((a, b) => P.plan[a.ticket].start - P.plan[b.ticket].start || a.ticket.localeCompare(b.ticket));
+  const RH = 20, top = 30, lab = 170, planW = 360, gap = 30;
+  const actW = Math.max(600, Math.min(2400, P.span / 6e4 * 1.1));
+  const width = lab + planW + gap + actW + 20, H = top + rows.length * RH + 10;
+  const crit = Math.max(...rows.map(t => P.plan[t.ticket].end), 1);
+  const PX = ms => lab + ms / crit * planW;
+  const ax = axisFor(P, lab + planW + gap, actW); const X = ax.X;
+  let s = `<svg width="${width}" height="${H}" viewBox="0 0 ${width} ${H}" role="img" aria-label="Planned against actual line per ticket"><defs><pattern id="hatch2" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="2.5" height="5" fill="${css("--clog")}"/></pattern></defs>`;
+  s += `<g transform="translate(0,${top - 30})"><text x="${lab}" y="16" font-size="11" fill="${css("--hazard")}" font-family="Chakra Petch" font-weight="600">PLANNED · ${fmtDur(crit)}</text><text x="${lab + planW + gap}" y="16" font-size="11" fill="${css("--fg")}" font-family="Chakra Petch" font-weight="600">ACTUAL · ${fmtDur(P.t1 - P.t0)} START TO FINISH</text></g>`;
+  for (let h = 0; h <= crit; h += 36e5) s += `<line x1="${PX(h)}" x2="${PX(h)}" y1="${top - 6}" y2="${H}" stroke="${css("--grid")}"/><text x="${PX(h) + 2}" y="${top - 8}" font-size="9" fill="${css("--muted")}">${h / 36e5}h</text>`;
+  s += `<g transform="translate(0,${top - 20})">${ax.ticks.replace(/y2="100%"/g, `y2="${H}"`)}</g>`;
+  rows.forEach((t, i) => {
+    const y = top + i * RH, p = P.plan[t.ticket];
+    s += `<g class="row" data-t="${t.ticket}"><rect x="0" y="${y}" width="${width}" height="${RH}" fill="${i % 2 ? "transparent" : css("--plate")}" opacity=".5"/>`;
+    s += `<text x="8" y="${y + 14}" font-size="11" fill="${css("--fg")}">${t.ticket.slice(0, 22)}</text><text x="${lab - 14}" y="${y + 14}" font-size="10" text-anchor="end" fill="${t.kind === "lead" ? css("--opus") : css("--qwen")}">${t.kind === "lead" ? "L" : "D"}</text>`;
+    s += `<rect x="${PX(p.start)}" y="${y + 4}" width="${Math.max(2, PX(p.end) - PX(p.start))}" height="${RH - 8}" fill="none" stroke="${css("--hazard")}" stroke-dasharray="3 2"/>`;
+    s += `<line x1="${X(t.first)}" x2="${X(t.last)}" y1="${y + RH / 2}" y2="${y + RH / 2}" stroke="${css("--muted")}"/>`;
+    for (const [a, b] of t.clogs) s += `<rect x="${X(a)}" y="${y + 3}" width="${Math.max(2, X(b) - X(a))}" height="${RH - 6}" fill="url(#hatch2)"/>`;
+    for (const j of t.jobs) s += `<rect x="${X(j.s)}" y="${y + 4}" width="${Math.max(2, X(j.e) - X(j.s))}" height="${RH - 8}" fill="${agentColor(j.agent)}"/>${j.outcome !== "passed" ? `<rect x="${X(j.s)}" y="${y + 4}" width="${Math.max(2, X(j.e) - X(j.s))}" height="2" fill="${css("--fail")}"/>` : ""}`;
+    s += `</g>`;
+  });
+  s += breakMarks(P, X, top - 6, H) + "</svg>";
+  const el = document.getElementById("plan"); el.innerHTML = s;
+  el.querySelectorAll(".row").forEach(g => { g.addEventListener("mousemove", e => { const t = P.byId[g.dataset.t], p = P.plan[t.ticket]; showTip(e, `<b>${t.ticket}</b> · ${t.kind} · d${t.d ?? "?"}<br>${(t.title || "").slice(0, 160)}<br>depends on: ${t.deps.map(short).join(", ") || "nothing"}<br>planned: +${fmtDur(p.start)} for ${fmtDur(p.end - p.start)}<br>actual: ${t.jobs.length} job(s), first ${fmtClock(t.first)}, done after ${fmtDur(t.last - t.first)}${t.clogs.length ? `<br>waited for Claude’s limit ${fmtDur(t.clogs.reduce((n, c) => n + c[1] - c[0], 0))}` : ""}`); }); g.addEventListener("mouseleave", hideTip); });
+}
+
+/* ---------- wiring ---------- */
+let P, tab = "floor", playing = false, last = 0;
+const slider = document.getElementById("t"), STEPS = 10000;
+const opened = Date.now();
+const timeAt = () => +slider.value >= STEPS && P.example ? P.t1 + (Date.now() - opened) : P.unfold(slider.value / STEPS * P.span);
+setInterval(() => { if (P && P.example && +slider.value >= STEPS && !(FL && FL.anims.size)) refreshFloor(false); }, 1000);
+function setMilestone(key) {
+  P = prepare(key); pinned = null; hovered = null; CH = null;
+  document.querySelectorAll("#ms button").forEach(b => b.setAttribute("aria-pressed", b.dataset.k === key));
+  document.getElementById("ms-title").textContent = (P.multi ? "Example: F1 just after f1-33 merged. 08, 11 and 12 could all start then; with three developers, each takes one. The three running jobs are made up. " : P.example ? "Example: real F1 data plus a made-up 14-minute job, to show the live view. " : "") + `${P.example ? "F1" : key.toUpperCase()}: ${P.m.title}. ${P.tickets.length} tickets, ${P.jobs.length} jobs, from ${fmtClock(P.t0)} to ${fmtClock(P.t1)}.`;
+  renderStats(P); renderTimeline(P); renderPlan(P);
+  slider.value = STEPS; refreshFloor();
+}
+function nextByAgent(P) {
+  const by = {}; for (const x of P.nextUp) (by[x.machine] = by[x.machine] || []).push(x);
+  return by;
+}
+function renderNow(P, S) {
+  const el = document.getElementById("now");
+  if (!S.live || !(P.example || P.nextUp.length)) { el.hidden = true; return; }
+  el.hidden = false;
+  const by = nextByAgent(P);
+  const agents = [OPUS, ...P.devs, ...P.shadows];
+  const col = a => {
+    const run = S.running.filter(j => mach(j.agent) === a), pool = P.multi && isDev(a) ? (a === P.devs[0] ? by.developer : null) : by[a], nx = (pool || []).slice(0, 4);
+    const M = MACHINES[a];
+    return `<div class="now-agent" style="--ac:${agentColor(a)}"><h3>${M.name}<span class="where ${where(a)}">${where(a).toUpperCase()}</span> <span class="muted">· ${a === SHADOW ? "checkpoint shadow" : isDev(a) ? "developer" : "the lead"} · ${a === OPUS ? "Opus 9/10, Sonnet 7/10" : M.rating == null ? "not rated yet" : `rating ${M.rating}/10`}</span></h3>
+      ${run.length ? run.map(j => `<div class="now-run"><span class="badge ${P.byId[j.ticket] && P.byId[j.ticket].kind === "lead" ? "lead" : "dev"}">${P.byId[j.ticket] && P.byId[j.ticket].kind === "lead" ? "LEAD" : "DEV"}</span> <b>${j.ticket || j.role}</b><br><span class="muted">${j.role} · attempt ${j.attempt} · ${fmtDur(timeAt() - j.s)}${j.example ? ` · ${((j.tin + Math.max(0, timeAt() - j.e) * 1.6) / 1e6).toFixed(2)}M tokens · ${j.steps + Math.floor(Math.max(0, timeAt() - j.e) / 20000)} steps` : ""}</span><p class="stagetext">Stage 1 of 3: <b>the agent is working</b> · then checks · then merge into main</p></div>`).join("") : `<p class="muted">Not working${S.powerCut && a === "claude-opus" ? ": Claude limit reached" : ""}</p>`}
+      <h4>Next</h4>
+      ${nx.length ? `<ol class="now-next">${nx.map(x => `<li data-t="${x.ticket}" class="hl"><b>${short(x.ticket)}</b> ${x.ticket.split("-").slice(2).join("-")} <span class="muted">${x.waitsFor.length ? "after " + x.waitsFor.map(short).join(", ") : "ready"}</span></li>`).join("")}</ol>${(pool || []).length > 4 ? `<p class="muted">+ ${(pool || []).length - 4} more</p>` : ""}` : `<p class="muted">${a === SHADOW ? "Runs the same checkpoint as Sonnet when it comes; its findings are recorded and compared, not acted on" : a === "claude-sonnet" ? "No tickets of its own: it checks developers' work after their tickets merge" : P.multi && isDev(a) ? "Takes the next developer ticket when free (see the first developer)" : "Nothing queued"}</p>`}
+    </div>`;
+  };
+  const groups = `<div class="now-groups"><span class="grp lead">The lead: Claude (on Opus; Sonnet for checkpoints)</span><span class="grp dev">Developers: ${P.devs.map(d => MACHINES[d].name).join(", ")}</span>${P.shadows.length ? '<span class="grp shadow">Being tested: Copilot</span>' : ""}</div>`;
+  el.innerHTML = `<div class="now-head"><h2>${P.multi ? "Now, with 3 developers (example)" : P.example ? "Now (example)" : "At the last record"}</h2><p class="muted">${P.example ? (P.multi ? "Three developers working side by side on tickets that were all ready at the same moment." : "On the real page this is the default view: the current milestone, refreshed every 5 s while a run is going. Here f1-22's second attempt is made up.") : "Where this milestone stood at its last recorded job."}</p></div>${groups}<div class="now-grid">${agents.filter(a => P.jobs.some(j => j.agent === a) || by[a]).map(col).join("")}</div>`;
+}
+let scrolled = null;
+function scrollToWork() {
+  const box = document.querySelector(".floorbox"); if (!box || !document.querySelector(".stage.phone")) return;
+  const S = floorState(P, timeAt()), j = S.running[0], m = j && FL && FL.machines[mach(j.agent)];
+  const key = P.key + (j ? j.id : ""); if (scrolled === key) return; scrolled = key;
+  const x = m ? (m.x + m.w / 2) / 1200 * box.scrollWidth - box.clientWidth / 2 : 0;
+  box.scrollLeft = Math.max(0, x);
+}
+function refreshFloor(animate) { const t = timeAt(); document.getElementById("t-label").textContent = fmtClock(t); placeFloor(P, t, animate === true); scrollToWork(); }
+addEventListener("resize", () => { if (FL && FL.layout !== pickLayout()) refreshFloor(); });
+document.getElementById("ms").innerHTML = Object.keys(DATA.milestones).map(k => `<button data-k="${k}">${k.toUpperCase()}</button>`).join("") + `<button data-k="live">Now (example)</button><button data-k="multi">3 developers (example)</button>`;
+document.getElementById("ms").addEventListener("click", e => { const b = e.target.closest("button"); if (b) setMilestone(b.dataset.k); });
+document.getElementById("tabs").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; tab = b.dataset.tab; document.querySelectorAll("#tabs button").forEach(x => x.setAttribute("aria-pressed", x === b)); ["floor", "deps", "timeline", "plan"].forEach(v => document.getElementById("v-" + v).hidden = v !== tab); const slot = document.getElementById("replay-slot-" + tab); if (slot) slot.appendChild(document.getElementById("replay")); refreshFloor(); });
+slider.addEventListener("input", () => refreshFloor(false));
+const playBtn = document.getElementById("play");
+// play steps from one event to the next: a job starting or ending, a limit starting or ending
+const events = () => [...new Set([...P.jobs.flatMap(j => [j.s, j.e]), ...P.limits.flatMap(l => [l.at, l.until])])].filter(t => t >= P.t0 && t <= P.t1).sort((a, b) => a - b);
+const toSlider = t => Math.round(P.fold(t) / P.span * STEPS);
+function jump(dir) { const now = timeAt(), ev = events(); const t = dir > 0 ? ev.find(e => e > now + 1000) : [...ev].reverse().find(e => e < now - 1000); if (t === undefined) return false; slider.value = toSlider(t) + (dir > 0 ? 1 : 0); refreshFloor(true); return true; }
+let timer = null;
+function stop() { playing = false; playBtn.textContent = "Play"; clearTimeout(timer); }
+function step() { if (!playing) return; if (!jump(1)) return stop(); timer = setTimeout(step, +document.getElementById("speed").value); }
+playBtn.addEventListener("click", () => { if (playing) return stop(); if (+slider.value >= STEPS) { slider.value = 0; refreshFloor(); } playing = true; playBtn.textContent = "Pause"; timer = setTimeout(step, 400); });
+document.getElementById("prev").addEventListener("click", () => { stop(); jump(-1); });
+document.getElementById("next").addEventListener("click", () => { stop(); jump(1); });
+const fsvg = document.getElementById("floor");
+fsvg.addEventListener("pointerover", e => { const g = e.target.closest(".crate"); if (!g || e.pointerType === "touch") return; hovered = g.dataset.t; focusCrate(P, hovered); crateTip(P, P.byId[hovered], e); });
+fsvg.addEventListener("pointermove", e => { const g = e.target.closest(".crate"); if (g) return crateTip(P, P.byId[g.dataset.t], e); const b = e.target.closest(".belt"); if (b && e.pointerType !== "touch") showTip(e, b.dataset.info); else if (!b && !tapped && !hovered) hideTip(); });
+fsvg.addEventListener("pointerleave", () => { if (!tapped) hideTip(); });
+fsvg.addEventListener("pointerout", e => { const g = e.target.closest(".crate"); if (e.pointerType === "touch") return; if (!g || (e.relatedTarget && g.contains(e.relatedTarget))) return; hovered = null; hideTip(); focusCrate(P, pinned); });
+fsvg.addEventListener("click", e => { const b = e.target.closest(".belt"); if (b && !e.target.closest(".crate")) { pinned = null; hovered = null; showTip(e, b.dataset.info); tapped = true; e.stopPropagation(); refreshFloor(false); return; } const g = e.target.closest(".crate"); if (g) e.stopPropagation(); pinned = g ? g.dataset.t : null; hovered = null; refreshFloor(); if (g && P.byId[pinned]) { crateTip(P, P.byId[pinned], e); tapped = true; } });
+let tapped = false;
+document.getElementById("line").addEventListener("click", e => { const c = e.target.closest(".chip"); if (!c) return; e.stopPropagation(); const x = P.byId[c.dataset.t]; if (x) { crateTip(P, x, e); tapped = true; } });
+document.addEventListener("click", e => { if (e.target.closest(".chip, .crate, .belt")) return; hideTip(); tapped = false; if (pinned || hovered) { pinned = null; hovered = null; if (FL) focusCrate(P, null); refreshFloor(false); } });
+document.getElementById("readout").addEventListener("click", e => { if (e.target.id === "unpin") { pinned = null; refreshFloor(); } });
+// hovering a ticket in a list lights its box on the floor
+for (const id of ["readout", "now"]) {
+  const box = document.getElementById(id);
+  box.addEventListener("mouseover", e => { const li = e.target.closest("[data-t]"); if (!li || !FL) return; hovered = li.dataset.t; focusCrate(P, hovered); FL.els[hovered] && FL.els[hovered].classList.add("called"); });
+  box.addEventListener("mouseout", e => { const li = e.target.closest("[data-t]"); if (!li || !FL) return; FL.els[li.dataset.t] && FL.els[li.dataset.t].classList.remove("called"); hovered = null; focusCrate(P, pinned); });
+}
+setMilestone("live");
+})();
+</script>
+
+</body></html>
