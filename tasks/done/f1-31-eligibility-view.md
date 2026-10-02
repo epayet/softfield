@@ -27,3 +27,12 @@ Follow the worked example: `factory_dashboard/overview.py`, `factory_dashboard/t
 - an agent that never shadowed isn't listed
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 421
+gate_failures: []
+tokens: 7326
+```
