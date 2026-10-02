@@ -30,3 +30,12 @@ Read `tasks/done/f2-06-overview-allowances.md`, `factory_dashboard/overview.py` 
 - a reading past its reset shows "reset since, no new reading" in that window's row, and no percentage there
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 564
+gate_failures: []
+tokens: 41046
+```
