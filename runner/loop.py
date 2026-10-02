@@ -3095,8 +3095,8 @@ def work_queue(
         if _resume_support(s, escalate=escalate):
             continue
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
-        if milestone is not None:
-            ready = [t for t in ready if t.milestone == milestone]
+        if milestone is not None:  # either form of the key (ADR 16 item 6)
+            ready = [t for t in ready if short_key(t.milestone) == short_key(milestone)]
         done = task_ids(s.tasks_dir("done"))
         paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
         task = _next_task(s, ready, done, paused)

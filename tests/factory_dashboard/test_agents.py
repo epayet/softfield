@@ -138,6 +138,31 @@ def efficiency_rows(html: str) -> list[list[str]]:
     return [[" ".join(re.sub(r"<[^>]+>|&nbsp;|↳", " ", c).split()) for c in r] for r in cells if r]
 
 
+def test_a_ticket_merged_after_three_attempts_is_one_merge(serve, db_path):
+    """f2 review: `merged` counted the jobs on merged tickets, so three attempts at one ticket
+    read as three merges and 1.0 attempts per merge."""
+    from runner import metrics
+    from tests.factory_dashboard.conftest import PROJECT, _job
+
+    client = serve(live=False)
+    agent = "ollama-gpt-oss-120b"
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f2 = metrics.upsert_milestone(conn, project, "f2")
+        run = metrics.upsert_run(conn, project, "20261002-120000", command="milestone f2")
+        ticket = metrics.upsert_ticket(
+            conn, project, "f2-06-x", milestone_id=f2, kind="developer", merged_by=agent
+        )
+        for attempt, outcome in ((1, "failed"), (2, "failed"), (3, "passed")):
+            _job(conn, run, f2, ticket, "developer", agent, attempt, outcome)
+    finally:
+        conn.close()
+    [row] = [r for r in efficiency_rows(client.get("/agents").text) if r[0] == agent]
+    # jobs, merged, tickets attempted, first-attempt pass, attempts per merge
+    assert row[1:6] == ["3", "1", "1", "0%", "3.0"]
+
+
 def test_agent_on_two_models_gets_a_row_per_model(models_client):
     """f2-07: claude-sonnet's own row totals its 5 jobs, then one row per model; NULL and ''
     are one "not recorded" group."""

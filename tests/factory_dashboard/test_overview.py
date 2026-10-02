@@ -165,49 +165,58 @@ def test_the_last_verdict_is_the_milestones_and_the_last_runs(client):
     assert 'href="/runs/20260930-100000?project=coucou"' in html
 
 
-def test_week_row_shows_reset_date(allowance_client):
-    """Week window row should display the reset date (e.g., "resets on Oct 9")."""
-    html = allowance_client.get("/").text
-    allowance = section(html, "allowance")
-    # Find the week row (contains "week" and "20%")
-    assert "week" in allowance
-    assert "20%" in allowance
-    # The reset label should include the month abbreviation and day
-    assert re.search(r"resets on Oct \d+", allowance)
-
-    allowance = section(allowance_client.get("/").text, "allowance")
-    # Claude's two windows (opus wins latest per window)
-    assert "Claude" in allowance
-    assert "5-hour window" in allowance
-    assert "80%" in allowance
-    assert "week" in allowance
-    assert "20%" in allowance
-    # Copilot's window
-    assert "Copilot" in allowance
-    assert "month" in allowance
-    assert "2%" in allowance
+def allowance_rows(html: str) -> dict[str, str]:
+    """The allowance panel's rows by their id (``claude-five_hour``…), each row's own text."""
+    panel = re.search(r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>', html, re.S)
+    assert panel, "no allowance section"
+    parts = re.split(r'<div id="allow-([a-z_-]+)">', panel.group(1))[1:]
+    return {
+        key: " ".join(re.sub(r"<[^>]+>", " ", text).split())
+        for key, text in zip(parts[::2], parts[1::2], strict=True)
+    }
 
 
-def test_ollama_agent_shows_no_data_yet(allowance_client):
-    """The Ollama agent (ollama-*) has jobs but no readings, so its row says "no data yet"."""
-    html = allowance_client.get("/").text
-    allowance = section(html, "allowance")
-    assert "Ollama" in allowance
-    assert "no data yet" in allowance
-    # Ensure the local model does not appear (it has no allowance panel row)
-    assert "local-qwen3.6-35b-a3b" not in allowance
+def test_each_allowance_row_shows_its_own_reading_and_reset(allowance_client):
+    """f2-13: the latest reading per window (Opus's, written after Sonnet's), each in its row;
+    a later day's reset gives its date."""
+    rows = allowance_client.get("/").text
+    assert allowance_rows(rows) == {
+        "claude-five_hour": "Claude 5-hour window: 80% resets at 17:00 kept for you from here",
+        "claude-seven_day": "Claude week: 20% resets on Oct 9 12:00"
+        " reserve kept for the lead from here",
+        "copilot-month": "Copilot month: 2% resets on Nov 1 12:00",
+        "ollama-ollama": "Ollama allowance no data yet",
+    }
 
 
-def test_reset_since_applies_when_reading_has_passed(serve, db_path):
+def test_the_local_model_has_no_allowance_row(allowance_client):
+    assert LOCAL not in section(allowance_client.get("/").text, "allowance")
+
+
+def test_without_readings_every_row_says_no_data_yet(serve, db_path):
     from runner import metrics
 
     client = serve()
     conn = metrics.open_db(db_path)
     try:
-        # Overwrite Claude's five_hour reading with one that already reset
+        conn.execute("DELETE FROM usage_events WHERE kind = 'reading'")
+        conn.commit()
+    finally:
+        conn.close()
+    rows = allowance_rows(client.get("/").text)
+    assert len(rows) == 4
+    assert all("no data yet" in row and "%" not in row for row in rows.values())
+
+
+def test_a_reading_past_its_reset_says_reset_since_with_no_percentage(serve, db_path):
+    from runner import metrics
+
+    client = serve()
+    conn = metrics.open_db(db_path)
+    try:
         conn.execute(
             "DELETE FROM usage_events WHERE kind = 'reading' AND agent LIKE 'claude-%'"
-            " AND window = 'five_hour'",
+            " AND \"window\" = 'five_hour'",
         )
         metrics.add_usage_event(
             conn,
@@ -220,9 +229,8 @@ def test_reset_since_applies_when_reading_has_passed(serve, db_path):
         )
     finally:
         conn.close()
-    html = client.get("/").text
-    allowance = section(html, "allowance")
-    assert "reset since" in allowance
+    row = allowance_rows(client.get("/").text)["claude-five_hour"]
+    assert row == "Claude 5-hour window reset since, no new reading kept for you from here"
 
 
 def test_savings_are_for_the_current_milestone(client):

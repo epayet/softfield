@@ -19,7 +19,7 @@ from runner.claude import ClaudeJob, Progress, TransientError, UsageLimited
 from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTotals
-from runner.report import SessionReport
+from runner.report import SessionReport, TaskRecord
 from runner.state import load_state, save_state
 from runner.tasks import parse_task
 from tests.runner.conftest import git, write_task
@@ -159,6 +159,27 @@ def test_task_merges_on_first_attempt(repo, fake_model):
     assert "Defined by: tests/unit/test_thing.py" in body
     done = git(repo, "log", "--format=%s", "--grep=^runner: m1-01-thing done")
     assert done.strip() == f"runner: m1-01-thing done, merged as {merge[:9]}"
+
+
+def test_a_named_milestones_queue_takes_tickets_written_with_either_key(repo, monkeypatch):
+    """ADR 16 item 6: frontmatter may give `f3` or `f3-factory-line`. With no doc to resolve
+    `f3`, the command's full key (from the other ticket) still runs both (f2 review)."""
+    for task_id, key in (("f3-01-a", "f3-factory-line"), ("f3-02-b", "f3")):
+        path = write_task(repo / "tasks" / "ready", task_id)
+        path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    ran: list[str] = []
+
+    def run_task(s, task):
+        ran.append(task.id)
+        task.path.rename(repo / "tasks" / "done" / task.path.name)
+        return TaskRecord(id=task.id, milestone=task.milestone, result="done")
+
+    monkeypatch.setattr(loop, "run_task", run_task)
+    s = loop.open_session(_config(repo), None)
+    assert loop.work_queue(s, milestone="f3-factory-line") is False
+    assert ran == ["f3-01-a", "f3-02-b"]
 
 
 def test_retry_gets_gate_output_and_a_hint_and_can_recover(repo, fake_model):

@@ -26,3 +26,4 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 12. When a number in your ticket disagrees with your count, write the rows out as a table (duration in seconds, each token column) and add them once; never change fixture rows or invent new ones to make a number fit.
 13. A ticket that replaces a behaviour replaces its tests: rewrite the tests in your `tests:` that pin the old one, and never leave an assertion that can't fail.
 14. `check-all` and the full test suite take several minutes: give their shell call a timeout of 900000 ms. "(no output)" after a shell timeout means the call was killed, not that the checks hang; never write `BLOCKED.md` for it.
+15. To add to an existing file, Edit it, anchored on its last lines; never Write it: Write replaces the whole file (f2-07 wiped the 1,300-line dashboard `conftest.py` and lost the attempt).

@@ -1301,20 +1301,6 @@ def write_allowance(conn: sqlite3.Connection) -> None:
             value=value,
             resets_at=(NOW + offset).isoformat(),
         )
-        # Add an Ollama job with no reading (should appear as "no data yet")
-        ollama_run_id = metrics.upsert_run(
-            conn, metrics.upsert_project(conn, PROJECT), "20261002-120000", started=NOW.isoformat()
-        )
-        metrics.start_job(
-            conn,
-            ollama_run_id,
-            ticket_id=None,
-            milestone_id=None,
-            role="assistant",
-            agent="ollama-gpt4",
-            attempt=1,
-            started=NOW.isoformat(),
-        )
 
 
 @pytest.fixture

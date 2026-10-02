@@ -99,7 +99,8 @@ def _efficiency(
 ) -> Efficiency:
     """One row of the efficiency table, over ``rows``: an agent's jobs, or one model's."""
     total_jobs = len(rows)
-    merged = sum(1 for r in rows if r["merged_by"] == agent)
+    # Tickets, not jobs: three attempts at one merged ticket are one merge.
+    merged = len({r["ticket_id"] for r in rows if r["ticket_id"] and r["merged_by"] == agent})
 
     attempt_rows = [r for r in rows if r["role"] in ("developer", "last-attempt")]
     attempt_ticket_ids = {r["ticket_id"] for r in attempt_rows if r["ticket_id"]}

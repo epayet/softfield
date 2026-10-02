@@ -246,6 +246,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** reviewing costs about a tenth of writing (a checkpoint ≈$0.50 per 1,000 lines read); a different model's review found a bug the checkpoint missed. Replans cost 7% of lead spend and caught a gate blind spot and three wrong facts.
 - **Decisions affected:** [ADR 16](16-claude-window-and-named-milestones.md) (Proposed): Claude's shared 5-hour window, the exact model per job, named milestones, standard replans. The extraction (this ADR) gains a concrete shape from the owner: `factory init` for any project (`docs/roadmap.md`).
 
+### F2 (2026-10-02): cloud first ([review](../reviews/f2.md))
+
+- **Q1:** 4 escalations, 1 direction, 1 checkpoint over 9 runs in ≈9 h. One escalation was spent only because a requeue wrote bare paths into a ticket: the third time, so it needs a check, not a rule.
+- **Q3:** Opus merged all 9 lead tickets first time. Developers: 1 of 3 first time. gpt-oss-120b passed f2-13 in 9 min, but the gates passing didn't mean the Done when was met (3 of its 5 items weren't). nemotron-3-super blocked twice on f2-07.
+- **Q5:** $32.11 of Claude, net savings from delegating −$1.08. Two waits for Claude's 5-hour window took ≈5.2 h of the ≈9 h, with nothing else to run: 9 of 11 tickets were the lead's.
+- **Anything else:** a lead-only milestone is bound by the 5-hour window whatever the routing does. Cloud developers fail fast (minutes, not GPU half-hours), which makes a failure cheap but not useful.
+- **Decisions affected:** none yet. If the next milestone with developer work shows the same gap between passing the gates and meeting the Done when, an ADR should give checkpoints the last merges before the review.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

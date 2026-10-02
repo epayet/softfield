@@ -312,6 +312,10 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
     """ADR 12 item 12: the queue, then the review loop with its fix tickets. Returns the
     review's stop reason, or RESTART when an escalation changed the runner."""
     s = open_session(cfg, f"milestone {milestone}")
+    # The review diffs from `<key>-start`: the first run tags the plan's commit if the plan
+    # session didn't (f2 review); a rerun keeps it.
+    if base == f"{milestone}-start" and not s.git.run("tag", "--list", base).strip():
+        s.git.run("tag", base)
     _record_milestone_doc(s, milestone)
     restart = work_queue(s, milestone=milestone)
     close_session(s)

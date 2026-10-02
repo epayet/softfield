@@ -40,7 +40,7 @@
     <h2>Agent allowance <span class="src">latest reading per window</span></h2>
     <div class="allow">
       {% for a in allowance %}
-      <div>
+      <div id="allow-{{ a.label | lower }}-{{ a.window }}">
         <div class="line">
           <span class="agent">{{ a.label }}</span>
           <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span>
@@ -56,8 +56,6 @@
           <small>{{ a.reset_label }}</small>
           {% elif a.status %}
           <small class="warnline">{{ a.status }}</small>
-          {% else %}
-          <small>no data yet</small>
           {% endif %}
           {% if a.mark_label %}
           <small>{{ a.mark_label }}</small>

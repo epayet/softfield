@@ -408,6 +408,19 @@ def test_a_named_milestone_waits_for_tickets_written_with_its_short_key(repo, mo
     assert stop == milestone.PAUSED + "f3-02-b"
 
 
+def test_the_first_milestone_run_tags_its_start_and_a_rerun_keeps_it(repo, monkeypatch):
+    """f2 review: no plan session tagged `f2-start`, so the review had no base to diff."""
+    monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: False)
+    monkeypatch.setattr(milestone, "review_milestone", lambda *a: "clean")
+    first = git(repo, "rev-parse", "HEAD").strip()
+    milestone.run_milestone(_config(repo), "f3", "f3-start")
+    (repo / "later.txt").write_text("x")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "later")
+    milestone.run_milestone(_config(repo), "f3", "f3-start")
+    assert git(repo, "rev-parse", "f3-start^{commit}").strip() == first
+
+
 def test_a_paused_stop_always_needs_the_owner():
     from runner.owner import _needs_owner
 

@@ -265,21 +265,15 @@ class WindowAllowance:
     status: str | None  # e.g. "reset since, no new reading" or "no data yet"
 
 
-def _format_reset(at_str: str, now: datetime) -> tuple[str, str | None]:
-    """Return (percent_display, reset_label) for a reading's ``resets_at``."""
-    resets = datetime.fromisoformat(at_str)
-    if resets <= now:
-        return ("reset since, no new reading", None)
+NO_DATA = "no data yet"
+RESET_SINCE = "reset since, no new reading"
+
+
+def _reset_label(resets: datetime, now: datetime) -> str:
+    """A reading's reset: "resets at 17:00" later today, "resets on Oct 9 12:00" later on."""
     if resets.date() == now.date():
-        clock = resets.strftime("%H:%M")
-        return (f"resets at {clock}", clock)
-    day = resets.strftime("%b %-d")
-    clock = resets.strftime("%H:%M")
-    return (f"resets on {day} {clock}", clock)
-
-
-def _has_reading(row: sqlite3.Row | None) -> bool:
-    return row is not None and row["value"] is not None
+        return f"resets at {resets:%H:%M}"
+    return f"resets on {resets:%b} {resets.day} {resets:%H:%M}"
 
 
 def _agent_allowances(
@@ -289,7 +283,7 @@ def _agent_allowances(
     windows: list[tuple[str, str, float | None, str | None]],
     now: datetime,
 ) -> list[WindowAllowance]:
-    """Build allowance rows for one agent group (Claude or Copilot).
+    """One agent group's rows (Claude, Copilot, Ollama), from its latest reading per window.
 
     ``windows`` is a list of (window_key, display_label, mark_or_None, mark_label_or_None).
     """
@@ -297,57 +291,15 @@ def _agent_allowances(
     rows: list[WindowAllowance] = []
     for wkey, wdisplay, mark, mlabel in windows:
         row = readings.get(wkey)
-        if not _has_reading(row):
-            # Check if there's any reading at all for this window key
-            any_reading = any(r["window"] == wkey for r in readings.values())
-            if not any_reading:
-                rows.append(
-                    WindowAllowance(
-                        label=agent_label,
-                        window=wkey,
-                        display=wdisplay,
-                        value=None,
-                        resets_at=None,
-                        percent=None,
-                        mark=mark,
-                        mark_label=mlabel,
-                        reset_label=None,
-                        status="no data yet",
-                    )
-                )
-                continue
-            # There is a reading but its reset has passed
-            rows.append(
-                WindowAllowance(
-                    label=agent_label,
-                    window=wkey,
-                    display=wdisplay,
-                    value=None,
-                    resets_at=None,
-                    percent=None,
-                    mark=mark,
-                    mark_label=mlabel,
-                    reset_label=None,
-                    status="reset since, no new reading",
-                )
-            )
-            continue
-        # row has a value at this point
-        if row is None:
-            continue
-        value = row["value"]
-        pct = f"{int(value * 100)}%"
-        resets_at = row["resets_at"]
-        pct_display, reset_clock = _format_reset(resets_at, now)
-        if pct_display == "reset since, no new reading":
-            status = "reset since, no new reading"
-            reset_label = None
+        value = None if row is None else row["value"]
+        resets_at = None if row is None else row["resets_at"]
+        resets = datetime.fromisoformat(resets_at) if resets_at else None
+        if value is None:
+            status: str | None = NO_DATA
+        elif resets is not None and resets <= now:
+            status, value = RESET_SINCE, None  # the reading is stale: no percentage
         else:
             status = None
-            if pct_display.startswith("resets on"):
-                reset_label = pct_display
-            else:
-                reset_label = f"resets at {reset_clock}" if reset_clock else None
         rows.append(
             WindowAllowance(
                 label=agent_label,
@@ -355,10 +307,10 @@ def _agent_allowances(
                 display=wdisplay,
                 value=value,
                 resets_at=resets_at,
-                percent=pct,
+                percent=None if value is None else f"{value:.0%}",
                 mark=mark,
                 mark_label=mlabel,
-                reset_label=reset_label,
+                reset_label=_reset_label(resets, now) if resets and status is None else None,
                 status=status,
             )
         )
@@ -386,12 +338,13 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
         ],
         now,
     )
+    # Ollama reports no reading (ADR 15 item 2: used until refused), so its row says so.
     ollama = _agent_allowances(
         conn,
         "ollama-",
         "Ollama",
         [
-            ("ollama", "ollama", None, None),
+            ("ollama", "allowance", None, None),
         ],
         now,
     )
