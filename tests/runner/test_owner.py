@@ -1,5 +1,6 @@
 """The owner's side (ADR 12 items 13 and 14): the verdict, sign-off and ADR decisions."""
 
+import json
 import sqlite3
 from datetime import date
 from pathlib import Path
@@ -239,6 +240,18 @@ def test_sign_off_waiting_is_an_item_that_signoff_resolves(repo: Path):
     finally:
         conn.close()
     assert status == "done" and ended
+
+
+def test_signoff_stores_the_sign_off_sheet_as_signed(repo: Path):
+    """The dashboard shows the sheet the owner signed, wherever the review was written."""
+    _milestone(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))
+    conn = sqlite3.connect(_db(repo))
+    try:
+        (sheet,) = conn.execute("SELECT signoff FROM milestones").fetchone()
+    finally:
+        conn.close()
+    assert json.loads(sheet) == {"how_to_test": "1. Pair a phone.\n2. Send.", "later": "- nothing"}
 
 
 def _owner_score(repo: Path) -> object:

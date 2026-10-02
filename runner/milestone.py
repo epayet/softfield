@@ -164,7 +164,9 @@ SIGNOFF_SECTIONS = {
     "How to test it yourself": "how_to_test",
     "What next": "what_next",
     "Left for later": "later",
+    "Decisions waiting for you": "decisions",
     "How the work went": "lessons",
+    "What clogged the factory line": "clogged",
 }
 
 
@@ -199,6 +201,9 @@ def _record_milestone_doc(s: Session, milestone: str) -> None:
         return
     path = s.repo / "docs" / "milestones" / f"{milestone}.md"
     doc = milestone_doc(path.read_text(encoding="utf-8")) if path.is_file() else {}
+    # A sheet written outside the runner (an interactive review) reaches the dashboard too
+    review = s.repo / "docs" / "reviews" / f"{milestone}.md"
+    sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
     started = _commit_time(s.repo, f"{milestone}-start")
     _record(
         s,
@@ -208,6 +213,7 @@ def _record_milestone_doc(s: Session, milestone: str) -> None:
         title=doc.get("title"),
         outcome=doc.get("outcome"),
         done_when=doc.get("done_when"),
+        signoff=sheet or None,
         status="in progress",
         started=started.isoformat() if started else None,
     )

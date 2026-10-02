@@ -149,11 +149,21 @@ def test_the_sign_off_sections_leave_a_missing_heading_out():
         "changed": "Mum sees photos.",
         "how_to_test": "1. Send a photo.",
         "later": "- Albums.",
+        "decisions": "None.",
         "lessons": "- 2026-09-30: 2 merged.",
     }
     with_next = REVIEW_DOC.replace("### 3. Left", "### 6. What next\nAn album page.\n\n### 3. Left")
     assert signoff_sections(with_next)["what_next"] == "An album page."
     assert signoff_sections("# nothing\n") == {}
+
+
+def test_the_sign_off_sheet_has_what_clogged_the_factory_line():
+    """Item 7 of lead.md's sheet (the owner, 2026-10-02)."""
+    clogged = REVIEW_DOC.replace(
+        "## What was built",
+        "### 7. What clogged the factory line\n- 11 h waiting for Claude.\n\n## What was built",
+    )
+    assert signoff_sections(clogged)["clogged"] == "- 11 h waiting for Claude."
 
 
 def test_a_milestone_run_records_its_doc(repo, monkeypatch):
@@ -165,6 +175,21 @@ def test_a_milestone_run_records_its_doc(repo, monkeypatch):
     assert row["outcome"] == "- Mum sees photos."
     assert row["done_when"] == "- A photo shows.\n- Tests pass."
     assert row["started"]
+    assert row["signoff"] is None  # no review report yet
+
+
+def test_a_milestone_run_records_a_sign_off_sheet_written_outside_the_runner(repo, monkeypatch):
+    """A review done interactively (f1's) reaches the dashboard at the next run, not only at
+    a headless review or a backfill."""
+    _milestone_repo(repo)
+    (repo / "docs" / "reviews").mkdir(parents=True)
+    (repo / "docs" / "reviews" / "m1.md").write_text(REVIEW_DOC)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "review")
+    monkeypatch.setattr(milestone, "review_milestone", lambda *a: "clean")
+    milestone.run_milestone(_config(repo), "m1", "m1-start")
+    [row] = _rows(repo, "milestones")
+    assert json.loads(str(row["signoff"]))["decisions"] == "None."
 
 
 def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypatch):

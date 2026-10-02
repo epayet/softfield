@@ -41,6 +41,15 @@
   {% endif %}
 </section>
 
+<section id="decisions">
+  <h2>Decisions waiting for you</h2>
+  {% if "decisions" in signoff_html %}
+  {{ signoff_html["decisions"] | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
 <section id="what-next">
   <h2>What next</h2>
   {% if "what_next" in signoff_html %}
@@ -63,6 +72,15 @@
   <h2>How the work went</h2>
   {% if "lessons" in signoff_html %}
   {{ signoff_html["lessons"] | safe }}
+  {% else %}
+  <p class="sub">Not written yet</p>
+  {% endif %}
+</section>
+
+<section id="clogged">
+  <h2>What clogged the factory line</h2>
+  {% if "clogged" in signoff_html %}
+  {{ signoff_html["clogged"] | safe }}
   {% else %}
   <p class="sub">Not written yet</p>
   {% endif %}

@@ -311,6 +311,8 @@ def write_milestone_detail(conn: sqlite3.Connection) -> None:
             "what_next": "- Close the factory review.\n- Replan the agents section.",
             "later": "- Full diffs and before/after screenshots.\n- ADRs view on the dashboard.",
             "lessons": "- Run the loop before the replan.",
+            "decisions": "- ADR 16, waiting for the owner.",
+            "clogged": "- 11 h waiting for Claude's 5-hour window.",
         },
     )
     metrics.upsert_milestone(
@@ -378,6 +380,8 @@ def write_milestone_detail_with_scores(conn: sqlite3.Connection) -> None:
             "what_next": "- Close the factory review.\n- Replan the agents section.",
             "later": "- Full diffs and before/after screenshots.\n- ADRs view on the dashboard.",
             "lessons": "- Run the loop before the replan.",
+            "decisions": "- ADR 16, waiting for the owner.",
+            "clogged": "- 11 h waiting for Claude's 5-hour window.",
         },
     )
     metrics.upsert_milestone(

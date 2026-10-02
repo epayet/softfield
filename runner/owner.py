@@ -15,7 +15,7 @@ from pathlib import Path
 
 from runner import metrics
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
-from runner.milestone import footer_fields
+from runner.milestone import footer_fields, signoff_sections
 from runner.state import State
 from runner.tasks import STOPPED, blocked_ids, command_arg, load_dir
 
@@ -231,9 +231,21 @@ def _replace_line(path: Path, pattern: re.Pattern[str], line: str) -> None:
     path.write_text(pattern.sub(line, text, count=1), encoding="utf-8")
 
 
-def _signed_off(milestone: str, score: int | None, conn: sqlite3.Connection, project: int) -> None:
+def _signed_off(
+    milestone: str,
+    score: int | None,
+    sheet: dict[str, str],
+    conn: sqlite3.Connection,
+    project: int,
+) -> None:
     metrics.upsert_milestone(
-        conn, project, milestone, status="done", ended=_now(), owner_score=score
+        conn,
+        project,
+        milestone,
+        status="done",
+        ended=_now(),
+        owner_score=score,
+        signoff=sheet or None,
     )
     _resolve(conn, project, lambda kind, subject: (kind, subject) == ("signoff", milestone))
 
@@ -265,6 +277,7 @@ def signoff(
         f" Report: [`docs/reviews/{milestone}.md`](../reviews/{milestone}.md).",
     )
     review = repo / "docs" / "reviews" / f"{milestone}.md"
+    sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
     if review.is_file():
         _replace_line(
             review, _STATUS_LINE, f"- **Status:** done, signed off by the owner on {today}."
@@ -272,7 +285,7 @@ def signoff(
     git = Git(repo)
     git.commit_all(f"{milestone.upper()} signed off by the owner")
     git.run("tag", f"{milestone}-done")
-    _write(repo, db, lambda conn, project: _signed_off(milestone, score, conn, project))
+    _write(repo, db, lambda conn, project: _signed_off(milestone, score, sheet, conn, project))
 
 
 def _is_adr(number: int) -> Callable[[str, str], bool]:

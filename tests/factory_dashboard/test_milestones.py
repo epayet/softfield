@@ -225,9 +225,17 @@ def test_milestone_detail_shows_signoff_parts_by_text(milestone_detail_client):
         ("what-next", "Close the factory review"),
         ("later", "Full diffs"),
         ("lessons", "Run the loop before the replan"),
+        ("decisions", "ADR 16, waiting for the owner"),
+        ("clogged", "11 h waiting for Claude"),
     ):
         sec_text = section(html, section_name)
         assert expected_text in sec_text, f"{section_name} missing expected text"
+
+
+def test_milestone_detail_follows_the_sheets_order(milestone_detail_client):
+    html = milestone_detail_client.get("/milestones/f1").text
+    ids = ["what-changed", "how-to-test", "decisions", "what-next", "later", "lessons", "clogged"]
+    assert [html.index(f'id="{i}"') for i in ids] == sorted(html.index(f'id="{i}"') for i in ids)
 
 
 def test_milestone_detail_tickets_section_lists_exactly_milestone_tickets(milestone_detail_client):
@@ -266,7 +274,15 @@ def test_milestone_detail_without_signoff_shows_not_written_yet(milestone_detail
     assert resp.status_code == 200
     html = resp.text
     # f10 has no signoff, so all signoff sections should show "Not written yet"
-    for section_name in ("what-changed", "how-to-test", "what-next", "later", "lessons"):
+    for section_name in (
+        "what-changed",
+        "how-to-test",
+        "decisions",
+        "what-next",
+        "later",
+        "lessons",
+        "clogged",
+    ):
         sec_text = section(html, section_name)
         assert "Not written yet" in sec_text, f"{section_name} should show 'Not written yet'"
 

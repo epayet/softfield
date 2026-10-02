@@ -273,7 +273,15 @@ def milestone_detail(
         return HTMLResponse(status_code=404, content="Not found")
     signoff_html: dict[str, str] = {}
     if detail.signoff:
-        for k in ("changed", "how_to_test", "what_next", "later", "lessons"):
+        for k in (
+            "changed",
+            "how_to_test",
+            "decisions",
+            "what_next",
+            "later",
+            "lessons",
+            "clogged",
+        ):
             if k in detail.signoff:
                 signoff_html[k] = _to_html(detail.signoff[k])
     return render(
