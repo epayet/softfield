@@ -165,7 +165,16 @@ def test_the_last_verdict_is_the_milestones_and_the_last_runs(client):
     assert 'href="/runs/20260930-100000?project=coucou"' in html
 
 
-def test_the_allowance_panel_shows_each_window(allowance_client):
+def test_week_row_shows_reset_date(allowance_client):
+    """Week window row should display the reset date (e.g., "resets on Oct 9")."""
+    html = allowance_client.get("/").text
+    allowance = section(html, "allowance")
+    # Find the week row (contains "week" and "20%")
+    assert "week" in allowance
+    assert "20%" in allowance
+    # The reset label should include the month abbreviation and day
+    assert re.search(r"resets on Oct \d+", allowance)
+
     allowance = section(allowance_client.get("/").text, "allowance")
     # Claude's two windows (opus wins latest per window)
     assert "Claude" in allowance
@@ -179,15 +188,14 @@ def test_the_allowance_panel_shows_each_window(allowance_client):
     assert "2%" in allowance
 
 
-def test_an_agent_with_jobs_but_no_readings_says_no_data_yet(serve):
-    html = serve().get("/").text
+def test_ollama_agent_shows_no_data_yet(allowance_client):
+    """The Ollama agent (ollama-*) has jobs but no readings, so its row says "no data yet"."""
+    html = allowance_client.get("/").text
     allowance = section(html, "allowance")
-    # LOCAL (local-qwen3.6-35b-a3b) has jobs in write_fixture but no readings
-    # It won't appear because no prefix matches it - agents with jobs but
-    # no readings for the queried prefixes show "no data yet"
-    # The panel only shows Claude and Copilot (the queried prefixes)
-    assert "Claude" in allowance
-    assert "Copilot" in allowance
+    assert "Ollama" in allowance
+    assert "no data yet" in allowance
+    # Ensure the local model does not appear (it has no allowance panel row)
+    assert "local-qwen3.6-35b-a3b" not in allowance
 
 
 def test_reset_since_applies_when_reading_has_passed(serve, db_path):

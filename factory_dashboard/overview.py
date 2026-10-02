@@ -344,7 +344,10 @@ def _agent_allowances(
             reset_label = None
         else:
             status = None
-            reset_label = f"resets at {reset_clock}" if reset_clock else None
+            if pct_display.startswith("resets on"):
+                reset_label = pct_display
+            else:
+                reset_label = f"resets at {reset_clock}" if reset_clock else None
         rows.append(
             WindowAllowance(
                 label=agent_label,
@@ -383,7 +386,16 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
         ],
         now,
     )
-    return claude + copilot
+    ollama = _agent_allowances(
+        conn,
+        "ollama-",
+        "Ollama",
+        [
+            ("ollama", "ollama", None, None),
+        ],
+        now,
+    )
+    return claude + copilot + ollama
 
 
 def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] | list[float]]:
