@@ -1,6 +1,7 @@
 # Milestone F4: always on
 
-> **Status: planned** (2026-10-02). From the owner's notes after F2 (`docs/roadmap.md`, "Owner's notes after F2"). The owner's priority 1: the runner works on its own and takes any ready ticket, for a weekend unattended. [ADR 17](../adr/17-always-on-factory.md) must be Accepted before tickets 09, 11, 13, 15 and 18 run; if it isn't, they wait in `tasks/later/`.
+> **Status: planned** (2026-10-02). **State:** building · **Priority:** 1 · **Area:** factory
+> From the owner's notes after F2 (`docs/roadmap.md`, "Owner's notes after F2"). The owner's priority 1: the runner works on its own and takes any ready ticket, for a weekend unattended. [ADR 17](../adr/17-always-on-factory.md) must be Accepted before tickets 09, 11, 13, 15 and 18 run; if it isn't, they wait in `tasks/later/`.
 > Numbered F4 because F3 (the factory line) keeps its key: `f3-01` has a half-done branch and a saved session under that id.
 
 ## Outcome
@@ -55,6 +56,7 @@
 | 16 | allowance-mark | D | 2 | 12 | The reserve marks visible in both themes |
 | 17 | agents-model-label | D | 2 | – | "not recorded" says why |
 | 18 | later-list | D | 3 | 09 | The Tickets page lists the tickets set aside |
+| 19 | bench-own-project | L | 4 | – | Each bench copy is a project of its own for OpenCode, so a bench never edits the main checkout (it did again, 2026-10-02) |
 
 Not in F4 (roadmap, "Owner's notes after F2"):
 - a study of why `check-all` is slow (later, a proposal, not a fix);

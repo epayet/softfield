@@ -76,7 +76,7 @@ What developers pass at the first attempt, from results. Update it at each miles
   - Attempts take 15–45 min; peak context is 26–43%.
 - **F1 (local Qwen):** 12/19 first-attempt on dashboard pages and fixes (difficulty 2–6); attempts average 28 min. Its 4 hardest failures (f1-15, 34, 35, 50) took two thirds of the Claude support.
 - **F1 (Sonnet as developer):** 3/3 first-attempt at difficulty 3–5, ≈$0.40 and 5–7 min a ticket; but it draws on the lead's 5-hour window.
-- **Checkpoints:** Sonnet, ≈$0.24 for two merges, found real bugs; a different model (Copilot's shadow) found one the checkpoint missed.
+- **Checkpoints:** Sonnet, ≈$0.24 for two merges, found real bugs; a different model (Copilot's shadow) found one the checkpoint missed. Copilot's review bench on F2's checkpoint 189 (2026-10-02): 1 found, 3 missed, and 1 new finding that was real (the Ollama test checked no message; the F2 review's f2-F1 fixed it), so 2 of 5 and no false alarm. Good as the stand-in, not yet as the checkpoint.
 - **F2 (Ollama, real tickets; ADR 14's F2 entry):** gpt-oss-120b 1/2 first-attempt at difficulty 3–4. It passed a 56-line fix in 9 min, and failed f2-06 five times on ruff within minutes. nemotron-3-super 0/1: it blocked twice on a difficulty-3 ticket (17–20 min each). No refusals, so the allowance a ticket costs is still unmeasured. Passing the gates isn't meeting the Done when: f2-13 passed first time with 3 of its 5 items unmet, and no checkpoint followed it (the milestone's last developer merge): only the review read it.
 - **Not yet tried:** the Ollama models on a clean bench (after F2), tickets that make the developer read more than ~12 files.
 - The real ceiling is the local developer's context (about 180k tokens): a task that makes it read many large files runs out of room before it runs out of skill.
@@ -101,6 +101,9 @@ What developers pass at the first attempt, from results. Update it at each miles
 
 ## Review
 Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **should-fix** or **nit**, and route each: a ticket, a direct fix, or a draft ADR (which stops the loop).
+- **Fixes go to developer tickets by default** ([ADR 17](../adr/17-always-on-factory.md) item 5). F2's review cost $5.52, partly because it fixed five findings itself.
+  - Fix it yourself only when it's small (about 20 lines in one file), protected or security code, or a developer already failed that fix once.
+  - Fix tickets get the usual checkpoint, not another review round.
 - Read the tests as closely as the code: missing edge cases, and every existing test a developer changed (the session reports list them).
 - Check the French in `coucou/locale/fr/` reads naturally and warmly.
 - Take screenshots of new screens when you have a browser; the layout check covers the rest.

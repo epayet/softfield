@@ -82,8 +82,8 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    - **Should-fix:** design drift, missing edge cases, weak tests.
    - **Nit** → `docs/backlog.md`. Nits never loop.
 2. **Routing each blocking or should-fix finding:**
-   - small and clear → a fix task (`finding: mN-F3`)
-   - protected, or quicker to fix than to specify → Claude fixes it directly
+   - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5)
+   - small (about 20 lines in one file), protected or security, or a developer already failed it once → Claude fixes it directly
    - needs the owner (`docs/agents/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner in the backlog.
 3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code go to the backlog.
 

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The factory line on a phone</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&amp;family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#12161b}
+a{color:#ffc48a;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 390px; min-height: 1900px; box-sizing: border-box; background: #12161b; color: #dfe4e8; font: 15px/1.5 Barlow, system-ui, sans-serif; padding: 12px 16px 32px; display: flex; flex-direction: column; gap: 10px">
+
+  <header style="display: flex; flex-direction: column; gap: 8px">
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <h1 style="margin: 0; font: 700 18px/1.1 'Chakra Petch', sans-serif; letter-spacing: .04em; text-transform: uppercase">Coucou factory</h1>
+      <span style="font: 600 10px 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; color: #1a1405; background: #8ccf62; padding: 3px 6px">Running</span>
+    </div>
+    <div style="height: 5px; background: repeating-linear-gradient(-45deg, #f2b10a 0 8px, #12161b 8px 16px); opacity: .85"></div>
+  </header>
+
+  <section aria-label="Allowances" style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+    <sc-for list="{{dials}}" as="d" hint-placeholder-count="4">
+      <div style="background: #181e25; border: 1px solid #303b47; padding: 6px 2px 6px; display: flex; flex-direction: column; align-items: center; gap: 2px">
+        <svg width="64" height="64" viewBox="0 0 64 64" aria-hidden="true">
+          <circle cx="32" cy="32" r="25" fill="none" stroke="#222b34" stroke-width="7"></circle>
+          <circle cx="32" cy="32" r="25" fill="none" stroke="{{d.color}}" stroke-width="7" pathLength="100" stroke-dasharray="{{d.dash}}" transform="rotate(-90 32 32)"></circle>
+          <line x1="32" y1="2" x2="32" y2="12" stroke="#dfe4e8" stroke-width="2.5" transform="rotate({{d.markDeg}} 32 32)" opacity="{{d.markOpacity}}"></line>
+          <text x="32" y="37" text-anchor="middle" fill="#dfe4e8" font-family="JetBrains Mono, monospace" font-size="13" font-weight="700">{{d.label}}</text>
+        </svg>
+        <span style="font: 600 10.5px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; text-align: center; line-height: 1.2">{{d.name}}</span>
+        <span style="font: 9.5px 'JetBrains Mono', monospace; color: #8794a2; text-align: center">{{d.sub}}</span>
+      </div>
+    </sc-for>
+  </section>
+
+  <section aria-label="Needs you" style="background: #2a2208; border: 1px solid #f2b10a; padding: 10px 12px; display: flex; gap: 10px; align-items: center">
+    <span style="flex: 1; font-size: 14.5px">F2 <b>Cloud first</b> is ripe.</span>
+    <button type="button" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; border: 0; padding: 0 14px; min-height: 44px">Sign off</button>
+  </section>
+
+  <section aria-label="The floor" style="background: #181e25; border: 1px solid #303b47">
+    <svg viewBox="0 0 358 1140" width="358" height="1140" role="img" aria-label="The factory floor, top to bottom: the field, the queue, the lead and the reviewers, the developer bay, checks, merged, ripe and the harvest stash." style="display: block; width: 100%; height: auto; font-family: 'JetBrains Mono', monospace">
+      <defs>
+        <pattern id="psoil" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 10L10 0" stroke="#3a3122" stroke-width="2"></path></pattern>
+      </defs>
+
+      <rect x="6" y="8" width="346" height="300" fill="#1d1a14" stroke="#c9b48a" stroke-opacity=".45" stroke-dasharray="8 5"></rect>
+      <text x="16" y="28" fill="#c9b48a" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .16em">THE FIELD</text>
+
+      <path d="M22 48 L122 48 L106 138 L38 138 Z" fill="#2a2419" stroke="#c9b48a" stroke-width="2"></path>
+      <ellipse cx="58" cy="118" rx="7" ry="5" fill="#c9b48a"></ellipse><ellipse cx="76" cy="124" rx="7" ry="5" fill="#ec5458"></ellipse><ellipse cx="90" cy="114" rx="7" ry="5" fill="#c9b48a"></ellipse><ellipse cx="70" cy="104" rx="7" ry="5" fill="#c9b48a"></ellipse><ellipse cx="86" cy="96" rx="7" ry="5" fill="#ec5458"></ellipse>
+      <text x="72" y="158" text-anchor="middle" fill="#dfe4e8" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .1em">SEEDS · 19</text>
+      <text x="72" y="172" text-anchor="middle" fill="#8794a2" font-size="10">13 ideas · 6 bugs</text>
+
+      <path d="M122 92 L196 92" stroke="#222a33" stroke-width="14"></path><path d="M122 92 L196 92" stroke="#36414d" stroke-width="10" stroke-dasharray="2 6"></path>
+      <text x="159" y="82" text-anchor="middle" fill="#c7b27a" font-size="10">2 ›</text>
+      <rect x="196" y="48" width="140" height="92" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <rect x="306" y="24" width="18" height="24" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <circle cx="315" cy="16" r="5" fill="#8ccf62" opacity=".3"></circle>
+      <text x="266" y="74" text-anchor="middle" fill="#8ccf62" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .1em">PLANTING</text>
+      <text x="266" y="92" text-anchor="middle" fill="#dfe4e8" font-size="10.5">the lead plans</text>
+      <text x="266" y="106" text-anchor="middle" fill="#dfe4e8" font-size="10.5">with you</text>
+      <text x="266" y="128" text-anchor="middle" fill="#8794a2" font-size="10">F3 · Sonnet's future</text>
+
+      <rect x="16" y="190" width="326" height="108" fill="url(#psoil)" stroke="#3a3122"></rect>
+      <path d="M60 272 v-46 M60 258 c-12 0-16-5-16-13 12 0 16 5 16 13 M60 246 c0-12 5-16 16-16 0 12-5 16-16 16 M60 236 c-7 0-9-3-9-8 7 0 9 3 9 8" stroke="#ff9640" stroke-width="2.2" fill="none"></path>
+      <text x="60" y="288" text-anchor="middle" fill="#ff9640" font-size="10.5" font-weight="700">F4 · 3/17</text>
+      <path d="M170 272 v-28 M170 258 c-9 0-12-4-12-10 9 0 12 4 12 10 M170 252 c0-9 4-12 12-12 0 9-4 12-12 12" stroke="#4fd1a5" stroke-width="2.2" fill="none"></path>
+      <text x="170" y="288" text-anchor="middle" fill="#dfe4e8" font-size="10.5">F5 · 0/17</text>
+      <path d="M280 272 v-20 M280 262 c-7 0-10-3-10-8 7 0 10 3 10 8" stroke="#ec5458" stroke-width="2.2" fill="none"></path>
+      <text x="280" y="288" text-anchor="middle" fill="#dfe4e8" font-size="10.5">bug-07</text>
+      <text x="26" y="210" fill="#c9b48a" style="font: 700 10px 'Chakra Petch', sans-serif; letter-spacing: .14em">PLANTED ROWS</text>
+
+      <path d="M179 298 L179 352" stroke="#222a33" stroke-width="18"></path><path d="M179 298 L179 352" stroke="#f2b10a" stroke-width="13" stroke-dasharray="2 7"></path>
+      <text x="194" y="330" fill="#c7b27a" font-size="10.5">31 tickets ↓</text>
+
+      <path d="M109 352 L249 352 L229 452 L129 452 Z" fill="#1f2730" stroke="#5b6876" stroke-width="2"></path>
+      <text x="179" y="372" text-anchor="middle" fill="#dfe4e8" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .12em">QUEUE · 31</text>
+      <sc-for list="{{crates}}" as="c" hint-placeholder-count="6">
+        <g>
+          <rect x="{{c.x}}" y="{{c.y}}" width="30" height="20" fill="{{c.fill}}" stroke="#12161b" stroke-width="1.5"></rect>
+          <text x="{{c.tx}}" y="{{c.ty}}" text-anchor="middle" fill="#1a1405" font-size="10" font-weight="700">{{c.n}}</text>
+        </g>
+      </sc-for>
+
+      <path d="M139 452 L139 476 L90 476 L90 494" fill="none" stroke="#222a33" stroke-width="16"></path><path d="M139 452 L139 476 L90 476 L90 494" fill="none" stroke="#36414d" stroke-width="11" stroke-dasharray="2 6"></path>
+      <path d="M219 452 L219 476 L264 476 L264 640" fill="none" stroke="#222a33" stroke-width="16"></path><path d="M219 452 L219 476 L264 476 L264 640" fill="none" stroke="#f2b10a" stroke-width="11" stroke-dasharray="2 6"></path>
+      <text x="96" y="470" text-anchor="end" fill="#7f8b98" font-size="9.5">lead</text>
+      <text x="272" y="470" fill="#7f8b98" font-size="9.5">developers</text>
+
+      <rect x="14" y="494" width="160" height="118" fill="#1f2730" stroke="#ff9640" stroke-width="2.5"></rect>
+      <rect x="140" y="470" width="22" height="24" fill="#1f2730" stroke="#ff9640" stroke-width="2"></rect>
+      <text x="26" y="516" fill="#ff9640" style="font: 700 13px 'Chakra Petch', sans-serif; letter-spacing: .1em">THE LEAD</text>
+      <rect x="26" y="526" width="136" height="24" fill="#ff9640"></rect><text x="94" y="542" text-anchor="middle" fill="#1a1405" font-size="10.5" font-weight="700">OPUS</text>
+      <text x="26" y="570" fill="#8794a2" font-size="10">idle · next f4-03</text>
+      <text x="26" y="598" fill="#5b6876" font-size="9">TICKETS · REVIEWS · HELP</text>
+
+      <text x="190" y="508" fill="#ffc48a" style="font: 700 9.5px 'Chakra Petch', sans-serif; letter-spacing: .14em">REVIEWERS</text>
+      <rect x="186" y="514" width="70" height="98" fill="#1f2730" stroke="#ffc48a" stroke-width="2"></rect>
+      <text x="221" y="536" text-anchor="middle" fill="#ffc48a" style="font: 700 10.5px 'Chakra Petch', sans-serif">SONNET</text>
+      <text x="221" y="556" text-anchor="middle" fill="#8794a2" font-size="9">check-</text>
+      <text x="221" y="568" text-anchor="middle" fill="#8794a2" font-size="9">points</text>
+      <rect x="276" y="514" width="70" height="98" fill="#1f2730" stroke="#7aa7ff" stroke-width="2" stroke-dasharray="5 3"></rect>
+      <text x="311" y="536" text-anchor="middle" fill="#7aa7ff" style="font: 700 10.5px 'Chakra Petch', sans-serif">COPILOT</text>
+      <text x="311" y="556" text-anchor="middle" fill="#8794a2" font-size="9">stand-</text>
+      <text x="311" y="568" text-anchor="middle" fill="#8794a2" font-size="9">in</text>
+
+      <rect x="8" y="640" width="342" height="190" fill="rgba(140,207,98,.05)" stroke="rgba(140,207,98,.45)" stroke-dasharray="8 5"></rect>
+      <text x="18" y="660" fill="#8ccf62" style="font: 700 10px 'Chakra Petch', sans-serif; letter-spacing: .14em">DEVELOPER BAY</text>
+      <rect x="18" y="690" width="104" height="120" fill="#1f2730" stroke="#8ccf62" stroke-width="2.5"></rect>
+      <rect x="96" y="668" width="16" height="22" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <circle cx="104" cy="658" r="5" fill="#8ccf62" opacity=".35"></circle><circle cx="110" cy="648" r="6" fill="#8ccf62" opacity=".2"></circle>
+      <text x="28" y="710" fill="#8ccf62" style="font: 700 11px 'Chakra Petch', sans-serif">QWEN 35B</text>
+      <text x="28" y="724" fill="#8794a2" font-size="9">LOCAL GPU</text>
+      <rect x="28" y="738" width="44" height="24" fill="#8ccf62" stroke="#fff" stroke-width="2"></rect><text x="50" y="754" text-anchor="middle" fill="#1a1405" font-size="10" font-weight="700">f4-02</text>
+      <text x="28" y="790" fill="#dfe4e8" font-size="10">12 min</text>
+      <rect x="128" y="690" width="104" height="120" fill="#1f2730" stroke="#4fd1a5" stroke-width="2"></rect>
+      <text x="138" y="710" fill="#4fd1a5" style="font: 700 11px 'Chakra Petch', sans-serif">GPT-OSS</text>
+      <text x="138" y="724" fill="#8794a2" font-size="9">OLLAMA CLOUD</text>
+      <text x="138" y="760" fill="#8794a2" font-size="10">idle</text>
+      <text x="138" y="790" fill="#8794a2" font-size="9.5">3 merged</text>
+      <rect x="238" y="690" width="104" height="120" fill="none" stroke="#5b6876" stroke-width="2" stroke-dasharray="6 4"></rect>
+      <text x="248" y="710" fill="#8794a2" style="font: 700 11px 'Chakra Petch', sans-serif">QWEN 9B</text>
+      <text x="248" y="724" fill="#5b6876" font-size="9">2ND COMPUTER</text>
+      <text x="248" y="760" fill="#5b6876" font-size="10">coming</text>
+
+      <path d="M70 830 L70 852 L179 852 L179 868" fill="none" stroke="#222a33" stroke-width="16"></path><path d="M70 830 L70 852 L179 852 L179 868" fill="none" stroke="#f2b10a" stroke-width="11" stroke-dasharray="2 6"></path>
+      <path d="M94 612 L94 626 L32 626 L32 852 L70 852" fill="none" stroke="#36414d" stroke-width="6" stroke-dasharray="2 5"></path>
+
+      <rect x="134" y="868" width="90" height="70" fill="#1f2730" stroke="#8794a2" stroke-width="2"></rect>
+      <circle cx="160" cy="896" r="9" fill="#8ccf62"></circle>
+      <text x="198" y="900" text-anchor="middle" fill="#dfe4e8" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .1em">CHECKS</text>
+      <text x="179" y="926" text-anchor="middle" fill="#8794a2" font-size="9">ruff · tests · gates</text>
+
+      <path d="M224 903 L338 903 L338 820" fill="none" stroke="#3a2c2d" stroke-width="10" stroke-dasharray="2 6"></path>
+      <text x="332" y="880" text-anchor="end" fill="#ec8a8d" font-size="9.5">↺ retry 2</text>
+
+      <path d="M179 938 L179 962" stroke="#222a33" stroke-width="16"></path><path d="M179 938 L179 962" stroke="#36414d" stroke-width="11" stroke-dasharray="2 6"></path>
+      <rect x="14" y="962" width="160" height="62" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <text x="26" y="984" fill="#8ccf62" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .1em">MERGED TODAY · 5</text>
+      <text x="26" y="1004" fill="#8794a2" font-size="9.5">checkpoint after 2 more</text>
+      <path d="M174 993 L186 993" stroke="#36414d" stroke-width="8"></path>
+      <rect x="186" y="962" width="160" height="62" fill="#2a2208" stroke="#f2b10a" stroke-width="2.5"></rect>
+      <text x="198" y="984" fill="#f2b10a" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .1em">RIPE · 1</text>
+      <text x="198" y="1004" fill="#dfe4e8" font-size="10">F2 · sign it off</text>
+
+      <path d="M266 1024 L266 1046" stroke="#f2b10a" stroke-width="3" stroke-dasharray="6 4"></path>
+      <rect x="40" y="1046" width="278" height="86" fill="#1f2730" stroke="#c9d3dc" stroke-dasharray="6 4"></rect>
+      <text x="52" y="1066" fill="#c9d3dc" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .12em">HARVEST STASH · 6</text>
+      <sc-for list="{{stash}}" as="s" hint-placeholder-count="6">
+        <g>
+          <rect x="{{s.x}}" y="{{s.y}}" width="40" height="22" fill="#2b333d" stroke="{{s.color}}" stroke-width="1.5"></rect>
+          <text x="{{s.tx}}" y="{{s.ty}}" text-anchor="middle" fill="#c9d3dc" font-size="10" font-weight="700">{{s.key}}</text>
+        </g>
+      </sc-for>
+    </svg>
+  </section>
+
+  <section aria-label="Now" style="background: #181e25; border: 1px solid #8ccf62; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px">
+    <span style="font: 600 11px 'JetBrains Mono', monospace; color: #8794a2">NOW · f4-02 · Qwen 35B · 12 min</span>
+    <span style="font-size: 15px">The Tickets page lists the most recently worked tickets first.</span>
+    <span style="font: 11.5px 'JetBrains Mono', monospace; color: #8794a2">next: f4-03 the lead · f4-04 gpt-oss · f4-05 the lead</span>
+  </section>
+
+  <section aria-label="What clogged the line today" style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+    <div style="background: #181e25; border: 1px solid #303b47; padding: 8px 10px"><b style="font: 600 18px 'JetBrains Mono', monospace; color: #ec8a8d">2 of 3</b><div style="font-size: 12.5px; color: #8794a2">machines idle while one job runs</div></div>
+    <div style="background: #181e25; border: 1px solid #303b47; padding: 8px 10px"><b style="font: 600 18px 'JetBrains Mono', monospace; color: #ec8a8d">31 min</b><div style="font-size: 12.5px; color: #8794a2">on 2 failed attempts</div></div>
+    <div style="background: #181e25; border: 1px solid #303b47; padding: 8px 10px"><b style="font: 600 18px 'JetBrains Mono', monospace">0 min</b><div style="font-size: 12.5px; color: #8794a2">waiting for Claude</div></div>
+    <div style="background: #181e25; border: 1px solid #303b47; padding: 8px 10px"><b style="font: 600 18px 'JetBrains Mono', monospace">0 min</b><div style="font-size: 12.5px; color: #8794a2">stopped for you</div></div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":1900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = '#ff9640', D = '#8ccf62', B = '#ec5458';
+    const crates = [D, L, D, L, D, B].map((fill, i) => {
+      const col = i % 3, row = Math.floor(i / 3);
+      const x = 131 + col * 33, y = 422 - row * 24;
+      return { fill, n: String(i + 1), x, y, tx: x + 15, ty: y + 14 };
+    });
+    const keys = [['F1', '#f2b10a'], ['M4', '#4fd1a5'], ['M3', '#4fd1a5'], ['M2', '#4fd1a5'], ['M1', '#4fd1a5'], ['M0', '#4fd1a5']];
+    const stash = keys.map(([key, color], i) => {
+      const x = 52 + i * 44, y = 1088;
+      return { key, color, x, y, tx: x + 20, ty: y + 15 };
+    });
+    const dial = (name, v, mark, color, sub) => ({
+      name, sub, color, label: v === null ? '–' : v + '%',
+      dash: (v || 0) + ' 100', markDeg: String(mark === null ? 0 : mark * 3.6), markOpacity: mark === null ? '0' : '1',
+    });
+    const dials = [
+      dial('Claude 5-h', 42, 75, '#ff9640', 'to 14:50'),
+      dial('Claude week', 18, 70, '#ff9640', 'to Thu'),
+      dial('Copilot', 3, null, '#7aa7ff', 'month'),
+      dial('Ollama', null, null, '#4fd1a5', 'no data'),
+    ];
+    return { crates, stash, dials };
+  }
+}
+</script>
+</body>
+</html>

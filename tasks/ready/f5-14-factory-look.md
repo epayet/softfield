@@ -26,6 +26,7 @@ Read `factory_dashboard/static/dashboard.css` (its tokens and the dark override)
   - Download the woff2 files once (`curl`) into `factory_dashboard/static/vendor/fonts/`, with their licences, and record them in `factory_dashboard/static/vendor/README.md`.
   - No CDN at run time (AGENTS.md rule 7).
 - **The top bar:** the mock-up's title style, the hazard stripe and the tab segment, keeping today's links and the project filter. Board joins the tabs once f5-16 adds its route; leave a comment where it goes.
+- **The allowance meters say how close they are** (owner, 2026-10-02): the fill is the good colour under the window's mark, the hazard yellow from the mark, and `--fail` above 95%, in both themes. The legend says so in words.
 - Add a worked-example note to `docs/agents/developer.md`: "new UI uses the tokens, never raw colours".
 
 ### Done when

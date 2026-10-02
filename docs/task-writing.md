@@ -16,6 +16,12 @@ Practical guidance for whoever writes tickets: the lead, whichever frontier mode
 - **Retries:** it can ignore the gate output and declare success, especially when the failure is in a file it can't touch.
 - **Unstated cases:** told to report "if anything was created", it tracked only the objects it had assigned to variables. Whatever the tests don't pin, it doesn't do.
 
+## Every ticket leaves main shippable (ADR 17 item 6)
+Milestones can be reprioritised and interleaved, so main may sit between two tickets of a feature for days.
+- A ticket either completes a usable slice, or adds code nobody can reach yet: no link, no menu entry, no button.
+- Its Done when says what a person sees afterwards, or "nothing visible yet".
+- No feature flags until a real case needs one.
+
 ## Since ADR 07: tickets, not solutions
 
 Until M3 the lead wrote stubs, failing tests and a throwaway reference implementation for every task, then pasted the code into the spec. It worked (10/11 at the first attempt) but cost the lead more than doing the task. Now:

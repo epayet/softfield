@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The factory line</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&amp;family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#12161b}
+a{color:#ffc48a;text-decoration:none}a:hover{color:#ffe0bf;text-decoration:underline}
+</style>
+</helmet>
+<div style="background: #12161b; color: #dfe4e8; font: 15px/1.5 Barlow, system-ui, sans-serif; min-height: 100%">
+<div style="max-width: 1360px; margin: 0 auto; padding: 14px 16px 40px; display: flex; flex-direction: column; gap: 14px">
+
+  <header style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px">
+      <h1 style="margin: 0; font: 700 22px/1.1 'Chakra Petch', system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase">Coucou factory</h1>
+      <span style="font: 600 11px 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; color: #1a1405; background: #8ccf62; padding: 3px 8px">Running</span>
+      <p style="margin: 0; color: #8794a2; font-size: 13px">Live · refreshes every 5 s · Saturday 10:40 (an illustration of a mid-run moment)</p>
+    </div>
+    <div style="height: 6px; background: repeating-linear-gradient(-45deg, #f2b10a 0 10px, #12161b 10px 20px); opacity: .85"></div>
+    <nav aria-label="Pages" style="display: flex; flex-wrap: wrap; border: 1px solid #303b47; align-self: flex-start">
+      <a href="#" aria-current="page" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; padding: 8px 14px; border-right: 1px solid #303b47">Factory</a>
+      <a href="Main.dc.html" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Board</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Tickets</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Agents</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px">Runs</a>
+    </nav>
+  </header>
+
+  <section aria-label="Allowances" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1px; background: #303b47; border: 1px solid #303b47">
+    <sc-for list="{{meters}}" as="m" hint-placeholder-count="4">
+      <div style="background: #181e25; padding: 9px 14px; display: flex; flex-direction: column; gap: 5px">
+        <div style="display: flex; justify-content: space-between; gap: 8px; font-size: 13px"><b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">{{m.name}}</b><span style="font: 600 13px 'JetBrains Mono', monospace">{{m.pct}}</span></div>
+        <div style="height: 10px; background: #222b34; position: relative">
+          <span style="position: absolute; inset: 0 auto 0 0; width: {{m.width}}; background: {{m.color}}"></span>
+          <span title="{{m.markLabel}}" style="position: absolute; top: -4px; bottom: -4px; left: {{m.mark}}; width: 2px; background: #dfe4e8; box-shadow: 0 0 0 1px #181e25; display: {{m.markShow}}"></span>
+        </div>
+        <span style="font: 11.5px 'JetBrains Mono', monospace; color: #8794a2">{{m.sub}}</span>
+      </div>
+    </sc-for>
+  </section>
+
+  <section aria-label="Needs you" style="display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; background: #2a2208; border: 1px solid #f2b10a; padding: 10px 14px">
+    <span style="font: 700 11px 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; color: #1a1405; background: #f2b10a; padding: 3px 8px">Needs you</span>
+    <span style="flex: 1 1 320px">F2 <b>Cloud first</b> is ripe: the review is done. Try it, then sign it off.</span>
+    <button type="button" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; border: 0; padding: 0 16px; min-height: 44px">Sign off F2</button>
+  </section>
+
+  <section aria-label="The floor" style="background: #181e25; border: 1px solid #303b47">
+    <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #303b47">
+      <h2 style="margin: 0; font: 600 15px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">From the field to the stash</h2>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px 'JetBrains Mono', monospace; color: #8794a2">
+        <span><i style="display: inline-block; width: 12px; height: 10px; margin-right: 5px; background: #ff9640"></i>lead ticket</span>
+        <span><i style="display: inline-block; width: 12px; height: 10px; margin-right: 5px; background: #8ccf62"></i>developer ticket</span>
+        <span><i style="display: inline-block; width: 12px; height: 10px; margin-right: 5px; background: repeating-linear-gradient(-45deg, #ec5458 0 3px, #1f2730 3px 6px)"></i>bug</span>
+        <span><i style="display: inline-block; width: 12px; height: 10px; margin-right: 5px; background: #f2b10a"></i>belt carrying now</span>
+        <span>numbers on belts: how many went that way today</span>
+      </div>
+    </div>
+    <div style="overflow-x: auto">
+    <svg viewBox="0 0 1320 640" width="1320" height="640" role="img" aria-label="The factory floor: the field plants cards, tickets queue, the lead and the developers work them, checks merge them, cards ripen and are harvested." style="display: block; min-width: 1100px; width: 100%; height: auto; background: #181e25; font-family: 'JetBrains Mono', monospace">
+      <defs>
+        <pattern id="soil" width="10" height="10" patternUnits="userSpaceOnUse"><path d="M0 10L10 0" stroke="#3a3122" stroke-width="2"></path></pattern>
+      </defs>
+
+      <rect x="12" y="34" width="300" height="590" fill="#1d1a14" stroke="#c9b48a" stroke-opacity=".45" stroke-dasharray="8 5"></rect>
+      <text x="26" y="56" fill="#c9b48a" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .16em">THE FIELD</text>
+
+      <path d="M40 90 L150 90 L132 196 L58 196 Z" fill="#2a2419" stroke="#c9b48a" stroke-width="2"></path>
+      <ellipse cx="80" cy="170" rx="7" ry="5" fill="#c9b48a"></ellipse><ellipse cx="98" cy="178" rx="7" ry="5" fill="#c9b48a"></ellipse><ellipse cx="114" cy="168" rx="7" ry="5" fill="#c9b48a"></ellipse><ellipse cx="90" cy="156" rx="7" ry="5" fill="#ec5458"></ellipse><ellipse cx="108" cy="150" rx="7" ry="5" fill="#c9b48a"></ellipse>
+      <text x="95" y="216" text-anchor="middle" fill="#dfe4e8" style="font: 700 13px 'Chakra Petch', sans-serif; letter-spacing: .1em">SEEDS</text>
+      <text x="95" y="232" text-anchor="middle" fill="#8794a2" font-size="11">13 ideas · 6 bugs</text>
+
+      <path d="M150 140 L176 140" stroke="#222a33" stroke-width="16"></path><path d="M150 140 L176 140" stroke="#36414d" stroke-width="12" stroke-dasharray="2 6"></path>
+      <rect x="176" y="92" width="124" height="104" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <rect x="262" y="58" width="22" height="34" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <text x="238" y="120" text-anchor="middle" fill="#8ccf62" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .1em">PLANTING</text>
+      <text x="238" y="138" text-anchor="middle" fill="#dfe4e8" font-size="11">the lead plans</text>
+      <text x="238" y="152" text-anchor="middle" fill="#dfe4e8" font-size="11">with you</text>
+      <text x="238" y="178" text-anchor="middle" fill="#8794a2" font-size="10.5">2 sprouting</text>
+      <text x="163" y="128" text-anchor="middle" fill="#c7b27a" font-size="10">2</text>
+
+      <path d="M238 196 L238 262" stroke="#222a33" stroke-width="16"></path><path d="M238 196 L238 262" stroke="#36414d" stroke-width="12" stroke-dasharray="2 6"></path>
+      <text x="250" y="236" fill="#c7b27a" font-size="10">1 planted today</text>
+
+      <rect x="30" y="262" width="264" height="300" fill="url(#soil)" stroke="#3a3122"></rect>
+      <text x="40" y="284" fill="#c9b48a" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .14em">PLANTED ROWS</text>
+      <path d="M50 330 v-22 M50 318 c-8 0-11-4-11-9 8 0 11 4 11 9 M50 314 c0-7 3-10 10-10 0 7-3 10-10 10" stroke="#4fd1a5" stroke-width="2" fill="none"></path>
+      <text x="70" y="314" fill="#dfe4e8" font-size="12">F5 · steer and the board</text>
+      <text x="70" y="330" fill="#8794a2" font-size="10.5">P2 · 17 tickets · waits for f4-09</text>
+      <path d="M50 380 v-18" stroke="#ec5458" stroke-width="2" fill="none"></path><path d="M50 370 c-6 0-9-3-9-7 6 0 9 3 9 7" stroke="#ec5458" stroke-width="2" fill="none"></path>
+      <text x="70" y="368" fill="#dfe4e8" font-size="12">bug-07 · stale queue count</text>
+      <text x="70" y="384" fill="#8794a2" font-size="10.5">P5 · 1 ticket · ready</text>
+      <path d="M50 452 v-40 M50 440 c-11 0-15-5-15-12 11 0 15 5 15 12 M50 430 c0-11 5-15 15-15 0 11-5 15-15 15 M50 420 c-6 0-8-3-8-7 6 0 8 3 8 7" stroke="#ff9640" stroke-width="2" fill="none"></path>
+      <text x="70" y="426" fill="#ff9640" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .1em">GROWING</text>
+      <text x="70" y="442" fill="#dfe4e8" font-size="12">F4 · always on · P1</text>
+      <rect x="70" y="450" width="200" height="7" fill="#222b34"></rect><rect x="70" y="450" width="36" height="7" fill="#f2b10a"></rect>
+      <text x="70" y="472" fill="#8794a2" font-size="10.5">3 of 17 merged · 1 set aside</text>
+      <text x="40" y="540" fill="#8794a2" font-size="10.5">2 cards feed 31 tickets →</text>
+
+      <path d="M294 500 L360 500" stroke="#222a33" stroke-width="18"></path><path d="M294 500 L360 500" stroke="#f2b10a" stroke-width="13" stroke-dasharray="2 7"></path>
+
+      <path d="M360 330 L470 330 L452 560 L378 560 Z" fill="#1f2730" stroke="#5b6876" stroke-width="2"></path>
+      <text x="415" y="320" text-anchor="middle" fill="#dfe4e8" style="font: 700 13px 'Chakra Petch', sans-serif; letter-spacing: .12em">QUEUE · 31</text>
+      <sc-for list="{{crates}}" as="c" hint-placeholder-count="8">
+        <g>
+          <rect x="{{c.x}}" y="{{c.y}}" width="34" height="22" fill="{{c.fill}}" stroke="#12161b" stroke-width="1.5"></rect>
+          <text x="{{c.tx}}" y="{{c.ty}}" text-anchor="middle" fill="#1a1405" font-size="10" font-weight="700">{{c.n}}</text>
+        </g>
+      </sc-for>
+      <text x="415" y="580" text-anchor="middle" fill="#8794a2" font-size="10.5">in run order: priority first</text>
+
+      <path d="M470 360 L520 360 L520 210 L560 210" fill="none" stroke="#222a33" stroke-width="18"></path><path d="M470 360 L520 360 L520 210 L560 210" fill="none" stroke="#36414d" stroke-width="13" stroke-dasharray="2 7"></path>
+      <text x="530" y="300" fill="#7f8b98" font-size="10.5" transform="rotate(-90 530 300)">lead tickets · 2</text>
+      <path d="M462 480 L560 480" fill="none" stroke="#222a33" stroke-width="18"></path><path d="M462 480 L560 480" fill="none" stroke="#f2b10a" stroke-width="13" stroke-dasharray="2 7"></path>
+      <text x="474" y="470" fill="#7f8b98" font-size="10.5">developer · 4</text>
+
+      <rect x="560" y="120" width="230" height="170" fill="#1f2730" stroke="#ff9640" stroke-width="2.5"></rect>
+      <rect x="740" y="72" width="30" height="48" fill="#1f2730" stroke="#ff9640" stroke-width="2"></rect>
+      <circle cx="755" cy="60" r="6" fill="#5b6876" opacity=".35"></circle><circle cx="762" cy="48" r="7" fill="#5b6876" opacity=".25"></circle>
+      <text x="575" y="145" fill="#ff9640" style="font: 700 14px 'Chakra Petch', sans-serif; letter-spacing: .1em">THE LEAD</text>
+      <rect x="575" y="158" width="200" height="30" fill="#ff9640"></rect><text x="675" y="178" text-anchor="middle" fill="#1a1405" font-size="11" font-weight="700">OPUS · rated 9</text>
+      <text x="575" y="212" fill="#8794a2" font-size="11">idle: one job at a time</text>
+      <text x="575" y="230" fill="#8794a2" font-size="11">next: f4-03 requeue pre-flight</text>
+      <text x="575" y="270" fill="#8794a2" font-size="10.5">LEAD TICKETS · REVIEWS · ESCALATIONS</text>
+
+      <text x="812" y="56" fill="#ffc48a" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .14em">REVIEWERS</text>
+      <rect x="810" y="66" width="140" height="96" fill="#1f2730" stroke="#ffc48a" stroke-width="2"></rect>
+      <text x="822" y="88" fill="#ffc48a" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .1em">SONNET</text>
+      <text x="822" y="106" fill="#dfe4e8" font-size="10.5">checkpoints every</text>
+      <text x="822" y="120" fill="#dfe4e8" font-size="10.5">2 merges</text>
+      <text x="822" y="146" fill="#8794a2" font-size="10">developer: off for now</text>
+      <rect x="960" y="66" width="140" height="96" fill="#1f2730" stroke="#7aa7ff" stroke-width="2" stroke-dasharray="6 4"></rect>
+      <text x="972" y="88" fill="#7aa7ff" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .1em">COPILOT</text>
+      <text x="972" y="106" fill="#dfe4e8" font-size="10.5">checkpoints when</text>
+      <text x="972" y="120" fill="#dfe4e8" font-size="10.5">Claude can't</text>
+      <text x="972" y="146" fill="#8794a2" font-size="10">month 3% · standing by</text>
+
+      <rect x="548" y="326" width="430" height="246" fill="rgba(140,207,98,.05)" stroke="rgba(140,207,98,.45)" stroke-dasharray="8 5"></rect>
+      <text x="560" y="346" fill="#8ccf62" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .14em">DEVELOPER BAY</text>
+
+      <rect x="562" y="404" width="128" height="108" fill="#1f2730" stroke="#8ccf62" stroke-width="2.5"></rect>
+      <rect x="664" y="372" width="18" height="32" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <circle cx="673" cy="362" r="6" fill="#8ccf62" opacity=".35"></circle><circle cx="682" cy="350" r="8" fill="#8ccf62" opacity=".2"></circle>
+      <text x="572" y="424" fill="#8ccf62" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .06em">QWEN 35B</text>
+      <text x="572" y="440" fill="#8794a2" font-size="10">LOCAL GPU · rated 5</text>
+      <rect x="572" y="452" width="40" height="24" fill="#8ccf62" stroke="#fff" stroke-width="2"></rect><text x="592" y="468" text-anchor="middle" fill="#1a1405" font-size="10" font-weight="700">f4-02</text>
+      <text x="618" y="468" fill="#dfe4e8" font-size="10">12 min</text>
+      <text x="572" y="500" fill="#8794a2" font-size="10">attempt 1</text>
+
+      <rect x="702" y="404" width="128" height="108" fill="#1f2730" stroke="#4fd1a5" stroke-width="2"></rect>
+      <text x="712" y="424" fill="#4fd1a5" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .06em">GPT-OSS-120B</text>
+      <text x="712" y="440" fill="#8794a2" font-size="10">OLLAMA CLOUD · rated 5</text>
+      <text x="712" y="470" fill="#8794a2" font-size="10.5">idle: one job</text>
+      <text x="712" y="484" fill="#8794a2" font-size="10.5">at a time</text>
+      <text x="712" y="502" fill="#8794a2" font-size="10">3 merged today</text>
+
+      <rect x="842" y="404" width="124" height="108" fill="none" stroke="#5b6876" stroke-width="2" stroke-dasharray="6 4"></rect>
+      <text x="852" y="424" fill="#8794a2" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .06em">QWEN 9B</text>
+      <text x="852" y="440" fill="#5b6876" font-size="10">2ND COMPUTER</text>
+      <text x="852" y="470" fill="#5b6876" font-size="10.5">coming with</text>
+      <text x="852" y="484" fill="#5b6876" font-size="10.5">parallel developers</text>
+      <text x="562" y="560" fill="#5b6876" font-size="10.5">+ room for more cloud workers, once benched</text>
+
+      <path d="M790 205 L1010 205 L1010 260" fill="none" stroke="#222a33" stroke-width="18"></path><path d="M790 205 L1010 205 L1010 260" fill="none" stroke="#36414d" stroke-width="13" stroke-dasharray="2 7"></path>
+      <text x="830" y="196" fill="#7f8b98" font-size="10.5">lead's work: to checks · 2</text>
+      <path d="M978 440 L1000 440 L1000 380" fill="none" stroke="#222a33" stroke-width="18"></path><path d="M978 440 L1000 440 L1000 380" fill="none" stroke="#36414d" stroke-width="13" stroke-dasharray="2 7"></path>
+
+      <rect x="982" y="260" width="74" height="120" fill="#1f2730" stroke="#8794a2" stroke-width="2"></rect>
+      <circle cx="1019" cy="290" r="10" fill="#8ccf62"></circle>
+      <text x="1019" y="322" text-anchor="middle" fill="#dfe4e8" style="font: 700 11px 'Chakra Petch', sans-serif; letter-spacing: .12em">CHECKS</text>
+      <text x="1019" y="340" text-anchor="middle" fill="#8794a2" font-size="9.5">ruff · mypy</text>
+      <text x="1019" y="353" text-anchor="middle" fill="#8794a2" font-size="9.5">tests · gates</text>
+
+      <path d="M1019 380 L1019 600 L626 600 L626 512" fill="none" stroke="#222a33" stroke-width="14"></path><path d="M1019 380 L1019 600 L626 600 L626 512" fill="none" stroke="#3a2c2d" stroke-width="10" stroke-dasharray="2 6"></path>
+      <text x="700" y="592" fill="#ec8a8d" font-size="10.5">failed: retry · 2 today</text>
+      <path d="M1040 260 L1040 236 L790 236" fill="none" stroke="#3a2c2d" stroke-width="8" stroke-dasharray="6 5"></path>
+      <text x="850" y="252" fill="#ec8a8d" font-size="10">failed twice: direction · 3×: escalation · 0</text>
+
+      <path d="M1056 320 L1120 320" fill="none" stroke="#222a33" stroke-width="18"></path><path d="M1056 320 L1120 320" fill="none" stroke="#36414d" stroke-width="13" stroke-dasharray="2 7"></path>
+      <text x="1062" y="310" fill="#7f8b98" font-size="10.5">merged · 5</text>
+
+      <rect x="1120" y="270" width="186" height="100" fill="#1f2730" stroke="#8ccf62" stroke-width="2"></rect>
+      <text x="1134" y="292" fill="#8ccf62" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .12em">MERGED TODAY · 5</text>
+      <text x="1134" y="312" fill="#dfe4e8" font-size="10.5">F4 3 · bugs 1 · F5 0</text>
+      <text x="1134" y="330" fill="#8794a2" font-size="10.5">checkpoint after 2 more</text>
+      <text x="1134" y="356" fill="#8794a2" font-size="10.5">→ a card ripens when</text>
+
+      <path d="M1213 270 L1213 214" fill="none" stroke="#222a33" stroke-width="14"></path><path d="M1213 270 L1213 214" fill="none" stroke="#36414d" stroke-width="10" stroke-dasharray="2 6"></path>
+      <text x="1222" y="250" fill="#7f8b98" font-size="10">all its tickets</text>
+      <text x="1222" y="262" fill="#7f8b98" font-size="10">merge, then review</text>
+
+      <rect x="1120" y="84" width="186" height="130" fill="#2a2208" stroke="#f2b10a" stroke-width="2.5"></rect>
+      <circle cx="1146" cy="114" r="12" fill="none" stroke="#f2b10a" stroke-width="2"></circle><path d="M1146 102 v-6" stroke="#f2b10a" stroke-width="2"></path>
+      <text x="1166" y="112" fill="#f2b10a" style="font: 700 13px 'Chakra Petch', sans-serif; letter-spacing: .12em">RIPE · 1</text>
+      <text x="1166" y="128" fill="#dfe4e8" font-size="10.5">needs your sign-off</text>
+      <text x="1134" y="160" fill="#dfe4e8" font-size="12">F2 · cloud first</text>
+      <text x="1134" y="178" fill="#8794a2" font-size="10.5">review 7/10 · waiting 14 h</text>
+
+      <path d="M1306 150 L1316 150 L1316 470 L1306 470" fill="none" stroke="#f2b10a" stroke-width="3" stroke-dasharray="7 6"></path>
+      <text x="1300" y="320" fill="#f2b10a" font-size="10" text-anchor="end" transform="rotate(-90 1300 320)">your sign-off</text>
+
+      <rect x="1120" y="420" width="186" height="190" fill="#1f2730" stroke="#c9d3dc" stroke-dasharray="6 4"></rect>
+      <text x="1134" y="442" fill="#c9d3dc" style="font: 700 12px 'Chakra Petch', sans-serif; letter-spacing: .12em">HARVEST STASH · 6</text>
+      <sc-for list="{{stash}}" as="s" hint-placeholder-count="6">
+        <g>
+          <rect x="{{s.x}}" y="{{s.y}}" width="52" height="26" fill="#2b333d" stroke="{{s.color}}" stroke-width="1.5"></rect>
+          <text x="{{s.tx}}" y="{{s.ty}}" text-anchor="middle" fill="#c9d3dc" font-size="11" font-weight="700">{{s.key}}</text>
+        </g>
+      </sc-for>
+      <text x="1134" y="596" fill="#8794a2" font-size="10.5">latest on top · all on the board</text>
+    </svg>
+    </div>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
+    <section aria-label="Now" style="flex: 999 1 560px; min-width: 0; background: #181e25; border: 1px solid #303b47">
+      <div style="padding: 10px 14px; border-bottom: 1px solid #303b47"><h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Now</h2></div>
+      <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+        <div style="display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline"><span style="font: 700 11px 'JetBrains Mono', monospace; color: #1a1405; background: #8ccf62; padding: 2px 6px">attempt 1 · 12 min</span><b style="font: 600 13px 'JetBrains Mono', monospace">f4-02</b><span style="color: #8ccf62">Qwen 35B, local</span></div>
+        <p style="margin: 0; font-size: 16px">The Tickets page lists the most recently worked tickets first, and says when each was last worked.</p>
+        <p style="margin: 0; font: 12.5px 'JetBrains Mono', monospace; color: #8794a2">read 1.2M tokens · 31 turns · 4 files changed</p>
+      </div>
+      <div style="padding: 0 14px 12px; display: flex; flex-direction: column; gap: 4px">
+        <b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8794a2">Next in line</b>
+        <span style="font-size: 14px"><b style="font-family: 'JetBrains Mono', monospace; color: #ff9640">1 f4-03</b> a requeue is pre-flighted · the lead</span>
+        <span style="font-size: 14px"><b style="font-family: 'JetBrains Mono', monospace; color: #8ccf62">2 f4-04</b> Running now shows the goal · gpt-oss-120b</span>
+        <span style="font-size: 14px"><b style="font-family: 'JetBrains Mono', monospace; color: #ff9640">3 f4-05</b> OpenCode's shell timeout · the lead</span>
+      </div>
+    </section>
+    <section aria-label="What clogged the line today" style="flex: 1 1 320px; min-width: 0; background: #181e25; border: 1px solid #303b47">
+      <div style="padding: 10px 14px; border-bottom: 1px solid #303b47"><h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">What clogged the line today</h2></div>
+      <dl style="margin: 0; padding: 12px 14px; display: grid; grid-template-columns: 1fr auto; gap: 6px 14px; font-size: 14px">
+        <dt>Waiting for Claude's limit</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace">0 min</dd>
+        <dt>Failed attempts</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; color: #ec8a8d">2 · 31 min</dd>
+        <dt>Machines idle while one job runs</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace; color: #ec8a8d">2 of 3</dd>
+        <dt>Stopped for you</dt><dd style="margin: 0; font-family: 'JetBrains Mono', monospace">0 min</dd>
+      </dl>
+      <p style="margin: 0; padding: 0 14px 12px; font-size: 13px; color: #8794a2">Biggest unclog: parallel developers. gpt-oss sat idle while Qwen worked.</p>
+    </section>
+  </div>
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1260}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = '#ff9640', D = '#8ccf62', B = '#ec5458';
+    const order = [D, L, D, L, D, D, B, L];
+    const crates = order.map((fill, i) => {
+      const col = i % 2, row = Math.floor(i / 2);
+      const x = 380 + col * 38, y = 520 - row * 26;
+      return { fill, n: String(i + 1), x, y, tx: x + 17, ty: y + 15 };
+    });
+    const keys = [['F1', '#f2b10a'], ['M4', '#4fd1a5'], ['M3', '#4fd1a5'], ['M2', '#4fd1a5'], ['M1', '#4fd1a5'], ['M0', '#4fd1a5']];
+    const stash = keys.map(([key, color], i) => {
+      const col = i % 3, row = Math.floor(i / 3);
+      const x = 1134 + col * 56, y = 548 - row * 30;
+      return { key, color, x, y, tx: x + 26, ty: y + 17 };
+    });
+    const meters = [
+      { name: 'Claude · 5-hour', pct: '42%', width: '42%', color: '#ff9640', mark: '75%', markShow: 'block', markLabel: 'kept for you from 75%', sub: 'resets 14:50 · kept for you from 75%' },
+      { name: 'Claude · week', pct: '18%', width: '18%', color: '#ff9640', mark: '70%', markShow: 'block', markLabel: 'reserve kept for the lead from 70%', sub: 'resets Thu 12:00 · lead reserve from 70%' },
+      { name: 'Copilot · month', pct: '3%', width: '3%', color: '#7aa7ff', mark: '0%', markShow: 'none', markLabel: '', sub: 'resets 1 Nov' },
+      { name: 'Ollama', pct: 'no data', width: '0%', color: '#4fd1a5', mark: '0%', markShow: 'none', markLabel: '', sub: 'no usage API: used until refused' },
+    ];
+    return { crates, stash, meters };
+  }
+}
+</script>
+</body>
+</html>
