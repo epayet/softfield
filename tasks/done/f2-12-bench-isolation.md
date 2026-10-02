@@ -27,3 +27,10 @@ Read `runner/bench.py` (`make_worktree`, `remove_worktree`, `bench_dir`, `_overl
 - a bench attempt's edits land in its own copy, and the main checkout's `git status` is unchanged (the fake OpenCode test)
 - the copy lives under the configured `[bench] dir`, outside the repo, and is removed afterwards
 - `uv run runner check-all --task f2-12-bench-isolation` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
