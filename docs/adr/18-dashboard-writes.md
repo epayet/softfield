@@ -1,6 +1,6 @@
 # ADR 18: The dashboard on the home Wi-Fi, and what it may write
 
-- **Status:** Proposed (draft, to discuss with the owner)
+- **Status:** Accepted (by the owner, 2026-10-02)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 13](13-factory-dashboard.md) (the dashboard is read-only and listens on the desktop only)
