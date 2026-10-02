@@ -33,3 +33,10 @@ Read `docs/adr/14-developers-and-agents.md` items 6–7 and 11, and `docs/adr/15
 - `may_review` refuses Sonnet reviewing Sonnet's work and allows Opus reviewing it
 - `runner ratings --replay` twice gives the same ratings
 - `uv run runner check-all --task f1-24-ratings` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
