@@ -23,3 +23,10 @@ Read `runner/loop.py`: `at_five_hour`, `_ask_five_hour`, `_five_hour_granted`, `
 - a yes with nothing parked runs the asking ticket at once
 - the asking ticket gets no extra attempt, park or Needs-you item from waiting its turn
 - `uv run runner check-all --task f4-01-yes-resumes-parked` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
