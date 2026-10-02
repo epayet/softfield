@@ -31,10 +31,10 @@
 4. **⚑ A milestone can wait for another's sign-off.**
    - A milestone doc may say `After: <key> signed off`. Its tickets aren't picked until that milestone is done (`runner signoff`), and the verdict says what they wait for.
    - Without that line, milestones are independent, and `uv run runner run` (no key) is the standing command for unattended work.
-5. **⚑ A review files its fixes as developer tickets** (amends lead.md's Review and `docs/workflow.md`'s review loop).
-   - The review fixes directly only what developers can't do (protected paths, security, a one-line fix).
-   - Every other should-fix becomes a developer ticket, queued at once, with the finding's id.
-   - The review stays the place that reads and judges; it stops being the place that writes.
+5. **⚑ A review files its fixes as developer tickets** (amends lead.md's Review and `docs/workflow.md`'s review loop; the owner agreed the limits, 2026-10-02).
+   - Every should-fix becomes a developer ticket, queued at once, with the finding's id.
+   - **The review fixes it itself** when the fix is small (about 20 lines in one file), touches protected or security code, or a developer already failed that fix once.
+   - Fix tickets get the usual checkpoint, not another review round; the review closes when they merge. The loop stays bounded by `review_rounds` and the third-return stop.
 
 6. **⚑ Every ticket leaves main shippable** (owner, 2026-10-02; amends `docs/task-writing.md`). Milestones may be reprioritised and interleaved, so main can sit between two tickets of a feature for days.
    - A ticket either completes a usable slice, or adds code nobody can reach yet (no link, no route in the menu, no button). It never leaves something visible and half-working.

@@ -49,7 +49,7 @@
 | 10 | queue-live | D | 4 | 08 | The queue refreshes with Running now, beside it, with a height limit |
 | 11 | auto-format | L | 4 | – | `ruff format` and `ruff check --fix` before the gates (ADR 17 item 2) |
 | 12 | allowance-top | D | 3 | 10 | Allowances at the top of the Overview, refreshed every 5 s |
-| 13 | sonnet-step-up | L | 4 | – | Sonnet only as the step-up, under 30% (ADR 17 item 1) |
+| 13 | sonnet-step-up | L | 4 | – | In `tasks/later/`: Sonnet only as the step-up, under 30% (ADR 17 item 1), if F4's results say it should come back |
 | 14 | keep-selection | D | 2 | 12 | No refresh while text is selected |
 | 15 | milestone-after | L | 5 | – | `After: <key> signed off` in a milestone doc (ADR 17 item 4) |
 | 16 | allowance-mark | D | 2 | 12 | The reserve marks visible in both themes |

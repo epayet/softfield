@@ -1,4 +1,4 @@
-# ADR 19: A feature board, planner questions, and priorities that the runner follows
+# ADR 19: A board of milestones and bugs, planner questions, and priorities that the runner follows
 
 - **Status:** Proposed (draft, to discuss with the owner; items 4 and 5 especially)
 - **Date:** 2026-10-02
@@ -15,29 +15,28 @@
 - **Today ideas live as roadmap sections, bugs in `docs/backlog.md`, and the queue is milestone order then ticket number** (`pick_next`). Nothing ranks a bug against a feature.
 
 ## Decisions (draft)
-1. **A feature is a file:** `docs/features/<slug>.md` with frontmatter:
-   - `title`
-   - `kind`: feature or bug
-   - `state`: idea, planning, ready, building, needs sign-off, done
-   - `priority`: an integer, lower first
-   - `milestones`
-   - `created`
-
-   The body holds the owner's notes and the lead's answers. The backlog and the roadmap's ideas move there over time.
-2. **Tickets name their feature** (`feature: <slug>`, optional). The runner picks by the feature's priority first, then milestone order, then ticket number. Reordering the board changes what runs next, at the next pick.
-3. **The board:**
-   - `/features` on the dashboard: a kanban by state, with search, and the done ones.
-   - A feature's page lists its notes, ADRs, milestones and tickets. That's the pipeline in detail; the board is the high level.
-   - Moving cards and adding features are [ADR 18](18-dashboard-writes.md) requests.
-4. **Planner questions** (asynchronous):
-   - On a feature's page, the owner writes a question or a thought at any time, even while Claude is at its limit.
-   - Each becomes a `planner` lead job with the highest priority. It answers in the feature's file when Claude has room, and proposes the next step (an ADR draft, tickets, "ready to plan").
-   - Accepting is the owner's, as today.
-5. **Priorities: the lead sets them, the owner changes them** (owner, 2026-10-02). The lead ranks new features and bugs at planning, and the owner's change always wins.
+1. **A card is a milestone, from the idea stage** (one thing, not two).
+   - Adding an idea creates `docs/milestones/<key>.md` at once, with the next free key in its series, the owner's notes and two header lines: `State:` and `Priority:`.
+   - States: idea → planning → ready → building → needs sign-off → done.
+   - A milestone is planned from its own card. There is no separate feature file, and the roadmap's ideas move into cards over time.
+2. **⚑ Bugs are tickets outside milestones** (owner, 2026-10-02; amends `docs/task-format.md`).
+   - A bug is `tasks/ready/bug-<nn>-<slug>.md` with `milestone: bugs`. It needs no plan or sign-off: it's done when it merges, and checkpoints read it like any merge.
+   - `docs/backlog.md` becomes bug tickets in `tasks/later/` over time, with the lead triaging.
+3. **⚑ Priorities** (amends `runner/tasks.py` `pick_next`): a card's `Priority:` and a bug ticket's `priority:` (an integer, lower first).
+   - The runner picks by priority, then milestone order, then ticket number. A change takes effect at the next pick.
+   - The lead sets priorities at planning; the owner changes them, on the console or the board (owner, 2026-10-02).
+4. **The board:** `/board` on the dashboard.
+   - Columns by state; the cards are milestones and bug tickets; search, and the done ones.
+   - A card opens its milestone page, which gains the notes and the planner answers.
+   - **Read-only at first** (owner, 2026-10-02): cards are created, edited and reprioritised in a Claude Code session. Moving, editing and adding cards from the board come later, as [ADR 18](18-dashboard-writes.md) requests, with the planner questions.
+   - **A mock-up comes before its tickets** (lead.md).
+5. **Planner questions** (asynchronous; later, after the read-only board):
+   - On a card, the owner writes a question or a thought at any time, even while Claude is at its limit.
+   - Each becomes a `planner` lead job at the highest priority. It answers in the card's doc when Claude has room, and proposes the next step (an ADR draft, tickets, "ready to plan").
+   - It counts in the owner's 25% of Claude's window: it's the owner's own work.
+6. **The Overview stays the factory floor** (F3); the board is its own page.
 
 A live chat and Claude suggesting features are in the roadmap, not here (owner, 2026-10-02).
 
 ## Open questions
-- Does a planner question count against the 25% of Claude's window kept for the owner (ADR 16), since it is the owner's own work?
-- How does this sit with milestones: is a milestone still the unit of sign-off, while features are the unit of priority?
-- Is the factory line (F3) or the board the Overview?
+None left (2026-10-02).
