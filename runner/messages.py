@@ -33,8 +33,15 @@ def _changes(changes: Sequence[FileChange]) -> list[str]:
     return lines
 
 
-def merge_message(task: Task, rec: TaskRecord, model: str, changes: Sequence[FileChange]) -> str:
-    """The squash-merge of a task the local model finished."""
+def merge_message(
+    task: Task,
+    rec: TaskRecord,
+    model: str,
+    changes: Sequence[FileChange],
+    *,
+    by: str = "the local model",
+) -> str:
+    """The squash-merge of a task a developer (``by``, on ``model``) finished."""
     attempts = f"{rec.attempts} attempt{'s' if rec.attempts != 1 else ''}"
     failures = (
         f"; earlier gate failures: {', '.join(rec.gate_failures)}" if rec.gate_failures else ""
@@ -44,7 +51,7 @@ def merge_message(task: Task, rec: TaskRecord, model: str, changes: Sequence[Fil
         "",
         task.goal,
         "",
-        f"Implemented by the local model ({model}) via the runner in {attempts}{failures}.",
+        f"Implemented by {by} ({model}) via the runner in {attempts}{failures}.",
         f"Model {_duration(rec.model_s)}, gates {_duration(rec.gates_s)};"
         f" {rec.tokens_in:,} tokens in / {rec.tokens_out:,} out.",
         "",

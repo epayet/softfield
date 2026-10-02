@@ -1,6 +1,7 @@
 """The per-task loop and the session around it (docs/workflow.md)."""
 
 import hashlib
+import itertools
 import json
 import select
 import sqlite3
@@ -14,12 +15,13 @@ from functools import partial
 from pathlib import Path
 from typing import Any, Concatenate, NoReturn
 
-from runner import allowance, checks, console, messages, metrics, prompts, ratings
+from runner import allowance, checks, console, messages, metrics, prompts, ratings, router
 from runner.agents import (
     ANY,
     CHECK_COMMANDS,
     GIT_READ_COMMANDS,
     TRANSIENT,
+    Agent,
     JobResult,
     JobSpec,
     Reading,
@@ -529,8 +531,10 @@ def record_start(
     attempt: int = 1,
     log_path: str | None = None,
     context_limit: int | None = None,
+    routing_reason: str | None = None,
 ) -> int | None:
-    """Write a job as running (f1 D3) and beat the run's heartbeat; returns the job's id."""
+    """Write a job as running (f1 D3), with why its agent was chosen, and beat the run's
+    heartbeat; returns the job's id."""
     if s.run_id is None or s.project_id is None:
         return None
     at = now().isoformat()
@@ -547,6 +551,7 @@ def record_start(
         agent=agent,
         attempt=attempt,
         started=at,
+        routing_reason=routing_reason,
         context_limit=context_limit,
         log_path=log_path,
     )
@@ -624,6 +629,7 @@ def _finish_attempt(
         outcome=outcome,
         tokens_in=_tokens_in(run),
         tokens_out=_tokens_out(run),
+        cost_usd=run.cost_usd,
         steps=run.num_turns,
         peak_context=run.peak_context,
         context_limit=context_limit,
@@ -637,8 +643,109 @@ def _finish_attempt(
 
 
 def local_agent(cfg: Config) -> str:
-    """The developer role's agent: the local model in f1 (D6's `local-<model>`)."""
-    return cfg.agent_for("developer").id
+    """The local developer (D6's `local-<model>`): the first local agent the developer role
+    lists, else its first."""
+    ids = cfg.roles.get("developer", ())
+    local = next((i for i in ids if is_local(cfg.agents[i])), None)
+    return local or cfg.agent_for("developer").id
+
+
+# --- routing (f1-25, runner/router.py) ----------------------------------------------------
+
+UNKNOWN = "plan"  # the one window of an agent with no reading: capacity unknown (ADR 15 item 2)
+
+
+def candidates(s: Session, role: str) -> list[Agent]:
+    """The agents `[roles]` lists for ``role``, in order."""
+    s.cfg.agent_for(role)  # a role with no agent is a config error
+    return [s.cfg.agents[agent_id] for agent_id in s.cfg.roles[role]]
+
+
+def first_agent(s: Session, role: str) -> router.Route:
+    return router.route(role, None, 1, candidates(s, role), {}, {}, {}, now())
+
+
+def current_ratings(s: Session) -> dict[str, float]:
+    """Each agent's rating now: its latest change, else its config estimate."""
+    start = starting_ratings(s.cfg)
+    found = _record(s, standing, start)
+    return found[0] if found is not None else start
+
+
+def _at(value: str) -> datetime:
+    return datetime.fromisoformat(value)
+
+
+def _rested(window: allowance.Window, rows: list[sqlite3.Row], at: datetime) -> allowance.Window:
+    """A Claude window after the account's refusals: one in this window (or naming none) rests
+    it until its reset, or with none given for ``allowance.COOLDOWN``. Its capacity stays the
+    one Claude reports."""
+    if window.resets_at is None:
+        return window
+    start = window.resets_at - window.length
+    hits = [r for r in rows if r["window"] in (None, window.name) and _at(r["at"]) >= start]
+    if not hits:
+        return window
+    last = hits[-1]
+    until = _at(last["resets_at"]) if last["resets_at"] else _at(last["at"]) + allowance.COOLDOWN
+    return replace(window, cooldown_until=until) if until > at else window
+
+
+def agent_windows(
+    s: Session, agents: Iterable[Agent], at: datetime
+) -> dict[str, list[allowance.Window]]:
+    """Each cloud agent's allowance windows now (ADR 15 items 1–3). Claude's come from the
+    account's latest readings, whichever model read them; a window it hasn't read since its
+    reset is unknown until refused. An agent with no reading at all (Ollama) has one window
+    of unknown capacity, which its refusals rest (``allowance.learn``)."""
+    windows: dict[str, list[allowance.Window]] = {}
+    for agent in agents:
+        if is_local(agent):
+            continue
+        if agent.harness == CLAUDE:
+            rows = _record(s, metrics.refusals, f"{CLAUDE}-") or []
+            read = [_rested(w, rows, at) for w in claude_windows(s, at)]
+            if not any(w.name == "seven_day" for w in read):
+                read.append(allowance.Window("seven_day", "fixed", allowance.WEEK, None, None, 0.0))
+            windows[agent.id] = read
+            continue
+        refusals = [
+            allowance.Refusal(_at(r["at"]), 0.0, _at(r["resets_at"]) if r["resets_at"] else None)
+            for r in _record(s, metrics.refusals, agent.id) or []
+            if r["agent"] == agent.id
+        ]
+        plan = allowance.Window(UNKNOWN, "fixed", allowance.MONTH, None, None, 0.0)
+        windows[agent.id] = [allowance.learn(plan, refusals, at)]
+    return windows
+
+
+def route_developer(
+    s: Session,
+    task: Task,
+    role: str,
+    attempt: int,
+    *,
+    failed: str | None,
+    refused: Collection[str],
+) -> router.Route:
+    """Who takes this attempt (ADR 15 items 6–7). Expected costs are left at 0, as for a lead
+    ticket (``LEAD_COST``): no agent's share of a window per job is learned yet, so where it
+    stands against its pace line decides."""
+    at = now()
+    agents = candidates(s, role)
+    ticket = router.Ticket(task.id, task.difficulty)
+    return router.route(
+        role,
+        ticket,
+        attempt,
+        agents,
+        current_ratings(s),
+        agent_windows(s, agents, at),
+        {},
+        at,
+        failed=failed,
+        refused=refused,
+    )
 
 
 # --- headless Claude, with usage-limit pauses ------------------------------------------
@@ -773,9 +880,11 @@ def call_claude(
     notes: tuple[Path, ...] = (),
     park: bool = False,
     process_note: Path | None = None,
+    routed: router.Route | None = None,
 ) -> JobResult:
-    """Run a lead job on the agent its role names, waiting out usage limits. Each trigger
-    bounds its own runs (ADR 12 item 10); the count per milestone is kept for the metrics.
+    """Run a lead job on the agent ``routed`` names, else the first its role lists, waiting
+    out usage limits. Each trigger bounds its own runs (ADR 12 item 10); the count per
+    milestone is kept for the metrics.
 
     With ``park`` (a ticket's job), a certain limit parks it instead of waiting: ``Parked``
     is raised, and the queue goes on without Claude until the reset (ADR 15 item 10).
@@ -819,7 +928,7 @@ def call_claude(
     elif process_note is not None:
         process_note.unlink(missing_ok=True)
     number = next_number(s, ticket, job.role)
-    runner = s.cfg.agent_for(job.role)
+    runner, reason = routed or first_agent(s, job.role)
     adapter, agent = adapter_for(runner.harness), runner.id
     what = job.role if ticket or subject == job.role else f"{job.role} {subject}"
     started = clock()
@@ -827,7 +936,14 @@ def call_claude(
     base = f"claude-{job.role}-{subject}" + (f"-{number}" if number > 1 else "")
     log = s.run_dir / f"{base}.log"
     job_id = s.last_job_id = record_start(
-        s, ticket, milestone, job.role, agent, attempt=number, log_path=_rel(s, log)
+        s,
+        ticket,
+        milestone,
+        job.role,
+        agent,
+        attempt=number,
+        log_path=_rel(s, log),
+        routing_reason=reason,
     )
     _set_in_flight(
         s,
@@ -1260,6 +1376,10 @@ def _record_refusal(s: Session, agent: str, run: JobResult) -> None:
     s.report.notes.append(f"{agent} refused a developer attempt ({sure}): {run.text[:200]}")
 
 
+def _log_running(s: Session, agent: str, what: str, elapsed: float) -> None:
+    s.log(console.running(agent, what, elapsed))
+
+
 def _develop(
     s: Session,
     task: Task,
@@ -1272,24 +1392,24 @@ def _develop(
     branch: str,
     *,
     directed: bool,
+    failed: str | None = None,
 ) -> tuple[str, JobResult, int | None, int | None]:
-    """One developer attempt, on the agents ``role`` lists in order. A refusal doesn't count
-    (ADR 14 item 10): it is recorded and the same attempt reruns on the next agent; the last
-    agent's result stands, a refusal included (f1-25's router replaces the list order). Only the
-    local model is warmed up. Returns the agent, its result, its job row and its context limit.
-    """
-    s.cfg.agent_for(role)  # a role with no agent is a config error
-    ids = s.cfg.roles[role]
-    for n, agent_id in enumerate(ids, start=1):
-        agent = s.cfg.agents[agent_id]
-        if agent.harness != "opencode":
-            raise RunnerError(f"{agent.id}: developer attempts run on OpenCode agents (f1-25)")
+    """One developer attempt, on the agent the router picks (``failed``: the agent of the
+    attempt before, for a step up). A refusal doesn't count (ADR 14 item 10, ADR 15 item 12):
+    it is recorded and the same attempt reruns on the next agent the router picks; a cloud
+    agent's passing error is skipped the same way. With no one left, the last result stands.
+    Only the local model is warmed up. Returns the agent, its result, its job row and its
+    context limit."""
+    refused: set[str] = set()
+    for n in itertools.count(1):
+        agent, reason = route_developer(s, task, role, attempt, failed=failed, refused=refused)
         local = is_local(agent)
         if local:
             rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
             _check_context(s)
         context_limit = s.context_limit if local else None
-        log = logs / (f"opencode-{attempt}.jsonl" if n == 1 else f"opencode-{attempt}-{n}.jsonl")
+        name = f"{agent.harness}-{attempt}" + (f"-{n}" if n > 1 else "")
+        log = logs / (f"{name}.jsonl" if agent.harness == "opencode" else f"{name}.log")
         s.log(console.start(agent.id, what + (" (directed)" if directed else "")))
         job_id = record_start(
             s,
@@ -1300,6 +1420,7 @@ def _develop(
             attempt=next_number(s, task.id, "local"),
             log_path=_rel(s, log),
             context_limit=context_limit,
+            routing_reason=reason,
         )
         _set_in_flight(
             s,
@@ -1310,25 +1431,39 @@ def _develop(
             job_id=job_id,
             attempt=attempt,
         )
+        opencode = agent.harness == "opencode"
         spec = JobSpec(
             role,
             prompt,
-            s.cfg.opencode_timeout,
+            s.cfg.opencode_timeout if opencode else s.cfg.claude_timeout,
             edit=(ANY,),
-            commands=CHECK_COMMANDS,
+            commands=CHECK_COMMANDS if opencode else (*CHECK_COMMANDS, *GIT_READ_COMMANDS),
             title=f"{task.id} attempt {attempt}",
         )
-        progress = partial(attempt_progress, s, agent.id, job_id, what, log, Ticker())
-        run = OPENCODE.run(agent, spec, s.repo, log, now(), on_progress=progress)
+        if opencode:
+            progress = partial(attempt_progress, s, agent.id, job_id, what, log, Ticker())
+            run = OPENCODE.run(agent, spec, s.repo, log, now(), on_progress=progress)
+        else:
+            run = with_progress(
+                partial(adapter_for(agent.harness).run, agent, spec, s.repo, log, now()),
+                partial(_log_running, s, agent.id, what),
+            )
+            _record_readings(s, agent.id, run.readings)
         _tally(rec, run)
-        if run.refusal is None:
+        skipped = run.refusal is not None or (run.transient and not local)
+        if not skipped:
             return agent.id, run, job_id, context_limit
         _record_refusal(s, agent.id, run)
-        if n == len(ids):
+        refused.add(agent.id)
+        if not any(
+            a.id not in refused and a.harness not in router.READ_ONLY_HARNESSES
+            for a in candidates(s, role)
+        ):
             return agent.id, run, job_id, context_limit
-        _attempt_end(s, agent.id, what, run, "refused, rerun on the next agent")
-        _finish_attempt(s, job_id, run, "failed", note="refused", context_limit=context_limit)
-    raise AssertionError("unreachable: the role names at least one agent")
+        why = "refused" if run.refusal is not None else "transient"
+        _attempt_end(s, agent.id, what, run, f"{why}, rerun on the next agent")
+        _finish_attempt(s, job_id, run, "failed", note=why, context_limit=context_limit)
+    raise AssertionError("unreachable: itertools.count never ends")
 
 
 def run_task(s: Session, task: Task) -> TaskRecord:
@@ -1353,7 +1488,12 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         _finish_escalation(s, task, rec, "pre-flight failed", logs, "\n".join(problems))
         return rec
 
-    if task.agent == "lead":
+    protected = tuple(read_protected(s.repo))
+    # Lead-only work never routes to a developer (ADR 14 item 11): a developer ticket whose
+    # files are protected is the lead's.
+    if router.lead_only(task.agent, task.files, protected):
+        if task.agent != "lead":
+            s.report.notes.append(f"{task.id} touches protected paths: the lead does it.")
         if at_reserve(s, task):
             rec.result = "parked"
             return rec
@@ -1365,7 +1505,6 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     cut_off = s.state.timed_out.pop(task.id, 0)
     if cut_off:
         save_state(s.state, s.state_path)
-    protected = tuple(read_protected(s.repo))
     last = GateResult(INTERRUPTED_GATE, False, INTERRUPTED_OUTPUT) if cut_off else None
     timeouts = [True] * cut_off
     rec.attempts = rec.timeouts = cut_off
@@ -1379,6 +1518,7 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     _start_attempt(s, branch, "")
     earlier = s.git.changed_files(MAIN) if resumed and s.git.current_branch() == branch else []
     direction = pending = ""
+    failed_agent: str | None = None  # who failed the attempt before, for a step up
     for attempt in range(rec.attempts + 1, s.cfg.max_attempts + 1):
         rec.attempts = attempt
         reset, pending = pending, ""
@@ -1408,7 +1548,17 @@ def run_task(s: Session, task: Task) -> TaskRecord:
             earlier=earlier,
         )
         agent, run, job_id, context_limit = _develop(
-            s, task, rec, role, attempt, what, prompt, logs, branch, directed=bool(direction)
+            s,
+            task,
+            rec,
+            role,
+            attempt,
+            what,
+            prompt,
+            logs,
+            branch,
+            directed=bool(direction),
+            failed=failed_agent,
         )
         timeouts.append(run.timed_out)
 
@@ -1465,13 +1615,13 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         )
         if failed is None:
             end("passed")
-            _merge(s, task, rec)
+            _merge(s, task, rec, agent)
             return rec
         end(("timed out, " if run.timed_out else "") + f"failed gate {failed.name}")
         if run.timed_out:
-            s.report.notes.append(f"{task.id} attempt {attempt}: OpenCode timed out.")
+            s.report.notes.append(f"{task.id} attempt {attempt}: {agent} timed out.")
         rec.gate_failures.append(failed.name)
-        last = failed
+        last, failed_agent = failed, agent
 
     rec.result = "escalated"
     _finish_escalation(
@@ -1485,23 +1635,28 @@ def run_task(s: Session, task: Task) -> TaskRecord:
     return rec
 
 
-def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
+def _merge(s: Session, task: Task, rec: TaskRecord, agent: str) -> None:
+    """Merge the work of ``agent``, the developer whose attempt passed."""
     branch = f"task/{task.id}"
     changes = s.git.numstat(MAIN)
     changed = s.git.changed_files(MAIN)
     rec.outside_files = outside_allowed(changed, (*task.files, *task.tests))
     rec.changed_tests = [f for f in changed if is_test_file(f) and s.git.exists_at(MAIN, f)]
+    developer = s.cfg.agents[agent]
+    local = is_local(developer)
+    model = s.cfg.lm_model if local else developer.model
+    by = "the local model" if local else agent
     rec.commit = s.git.squash_merge(
         branch,
         MAIN,
         with_trailers(
-            messages.merge_message(task, rec, s.cfg.lm_model, changes),
-            agent=LOCAL_MODEL_AGENT,
+            messages.merge_message(task, rec, model, changes, by=by),
+            agent=LOCAL_MODEL_AGENT if local else agent,
             task=task.id,
-            model=s.cfg.lm_model,
+            model=model,
             attempts=str(rec.attempts),
         ),
-        author=LOCAL_MODEL_AUTHOR,
+        author=LOCAL_MODEL_AUTHOR if local else None,
     )
     target = s.tasks_dir("done") / task.path.name
     s.git.move(task.path, target)
@@ -1516,11 +1671,14 @@ def _merge(s: Session, task: Task, rec: TaskRecord) -> None:
         },
     )
     runner_commit(s, messages.done_message(task.id, rec))
-    record_ticket(s, target, merged_by=local_agent(s.cfg), commit=rec.commit)
+    record_ticket(s, target, merged_by=agent, commit=rec.commit)
     rate_finished(s, task.id)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
-    _merged_line(s, local_agent(s.cfg), task.id, rec)
+    # The next checkpoint reviews it, on another model than its author (ADR 15 item 9).
+    s.state.unchecked.append(f"{task.id} {rec.commit} {agent}")
+    save_state(s.state, s.state_path)
+    _merged_line(s, agent, task.id, rec)
 
 
 def _merged_line(s: Session, agent: str, task_id: str, rec: TaskRecord) -> None:
@@ -1608,11 +1766,10 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
 
 
 def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
-    """Count a developer merge; every ``checkpoint_every`` of them, run a checkpoint."""
+    """After a developer merge (``_merge`` lists it as unchecked): every ``checkpoint_every``
+    of them, run a checkpoint."""
     if rec.result != "done" or task.agent != "developer":
         return
-    s.state.unchecked.append(f"{task.id} {rec.commit}")
-    save_state(s.state, s.state_path)
     # While Claude is limited, the checkpoint waits for a merge after the reset (ADR 15 item 10).
     if len(s.state.unchecked) >= s.cfg.checkpoint_every and not _limits_ahead(s, now()):
         checkpoint(s, task.milestone)
@@ -1657,7 +1814,7 @@ def record_findings(
 
 # --- ratings (ADR 14 items 6–7, ADR 15 item 9; runner/ratings.py) ---------------------------
 
-# Jobs that attempt a ticket; a refused or parked one isn't an attempt (ADR 14 item 10).
+# Jobs that attempt a ticket; a refused, skipped or parked one isn't an attempt (ADR 14 item 10).
 _ATTEMPT_ROLES = ("developer", "last-attempt", "lead-ticket")
 REPLAYED = ("m1", "m2", "m3", "m4")  # the local model's history before ratings (ADR 14 item 7)
 
@@ -1694,7 +1851,7 @@ def _attempts(
     rows = conn.execute(
         f"SELECT agent, outcome FROM jobs WHERE ticket_id = ? AND role IN ({marks})"  # noqa: S608
         " AND outcome NOT IN ('running', 'interrupted', 'refused')"
-        " AND ifnull(note, '') NOT IN ('refused', 'parked') ORDER BY started, id",
+        " AND ifnull(note, '') NOT IN ('refused', 'transient', 'parked') ORDER BY started, id",
         (ticket_id, *_ATTEMPT_ROLES),
     ).fetchall()
     attempts = [ratings.Attempt(row["agent"]) for row in rows]
@@ -1850,7 +2007,13 @@ def checkpoint(s: Session, milestone: str) -> None:
     s.log("")
     s.log(console.ticket_header(f"{milestone} checkpoint", "lead", None))
     s.log("Review the last merges: " + ", ".join(m.split()[0] for m in merged))
-    call_claude(s, job, milestone, "checkpoint", notes=(out,))
+    # Each entry is "ticket commit agent"; one from before f1-25 has no agent: local's.
+    ids = [m.split()[2] if len(m.split()) > 2 else local_agent(s.cfg) for m in merged]
+    authors = [s.cfg.agents[i] for i in dict.fromkeys(ids) if i in s.cfg.agents]
+    routed = router.route(
+        job.role, None, 1, candidates(s, job.role), {}, {}, {}, now(), authors=authors
+    )
+    call_claude(s, job, milestone, "checkpoint", notes=(out,), routed=routed)
     s.state.unchecked = []
     save_state(s.state, s.state_path)
     if out.is_file():
@@ -1863,7 +2026,7 @@ def checkpoint(s: Session, milestone: str) -> None:
         # Keyed by the checkpoint's job, unique in the milestone (the review judges them)
         if s.last_job_id is not None:
             prefix = f"{milestone}-C{s.last_job_id}-"
-            record_findings(s, milestone, findings, s.cfg.agent_for(job.role).id, prefix)
+            record_findings(s, milestone, findings, routed.agent.id, prefix)
     s.git.commit_all(
         with_trailers(
             "checkpoint after " + ", ".join(m.split()[0] for m in merged) + " (by Claude)",

@@ -83,13 +83,15 @@ model = "auto"
 rating = 6                              # unknown models behind it; a mid estimate
 windows = [{ name = "month", capacity = 200 }]  # credits, fractional (f1-18)
 
-# Who does each kind of job; the first agent listed does it until f1-25 routes among them.
-# `developer` may list claude-sonnet and claude-opus after local (ADR 15 item 6), from f1-25.
+# Who does each kind of job. Developer jobs are routed (runner/router.py, ADR 15 items 6–7):
+# the best-rated listed agent that covers the ticket and its allowance permits, else local; a
+# step up after a failure. A checkpoint goes to the first listed that isn't an author's model
+# (item 9). Every other role takes its first agent.
 [roles]
-developer = ["local-qwen3.6-35b-a3b"]
+developer = ["local-qwen3.6-35b-a3b", "claude-sonnet"]
 last-attempt = ["local-qwen3.6-35b-a3b"]
 direction = ["claude-opus"]
-checkpoint = ["claude-sonnet"]         # a diff-only checkpoint; compare what it catches at M5
+checkpoint = ["claude-sonnet", "claude-opus"]  # Opus when Sonnet wrote the code
 escalation = ["claude-opus"]
 lead-ticket = ["claude-opus"]
 review = ["claude-opus"]

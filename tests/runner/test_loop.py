@@ -2153,3 +2153,180 @@ def test_a_restart_tries_a_ticket_parked_for_a_limit_again_at_once(
     assert calls == [(None, THURSDAY), ("s1", THURSDAY)]  # resumed without waiting
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
     assert _state(repo).parked == {}
+
+
+# --- routing (f1-25, runner/router.py; ADR 15 items 6, 7 and 9) ----------------------------
+
+
+def _routed(repo: Path) -> SessionReport:
+    """A session with Sonnet as a developer after local, and Opus to check Sonnet's merges."""
+    roles = {
+        **ROLES,
+        "developer": ("local-m", "claude-sonnet"),
+        "checkpoint": ("claude-sonnet", "claude-opus"),
+    }
+    cfg = replace(_config(repo), roles=roles)
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None
+    return report
+
+
+def _difficulty(repo: Path, task_id: str, difficulty: int) -> None:
+    path = write_task(repo / "tasks" / "ready", task_id)
+    text = path.read_text().replace("milestone: 1\n", f"milestone: 1\ndifficulty: {difficulty}\n")
+    path.write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", f"add {task_id}")
+
+
+def test_a_cloud_developers_refusal_reruns_the_same_attempt_on_local(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """ADR 14 item 10: a refusal doesn't count; local never refuses, so work never stops."""
+    _readings_at(repo, 0.20)  # under Thursday's pace line of 28%: Sonnet first
+    _add_task(repo, "m1-01-thing")
+    resets = THURSDAY + timedelta(hours=3)
+    kinds: list[str] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        kinds.append(job.kind)
+        raise UsageLimited(resets, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    fake_model.append(_implement)
+    [task] = _routed(repo).tasks
+    assert kinds == ["developer"]
+    assert fake_model.models == ["lmstudio/m"]
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 1, [])
+    refused, passed = _rows(repo, "jobs")
+    assert (refused["agent"], refused["outcome"], refused["note"]) == (
+        "claude-sonnet",
+        "failed",
+        "refused",
+    )
+    assert (passed["agent"], passed["outcome"]) == ("local-m", "passed")
+    # Each row says why its agent was chosen.
+    assert refused["routing_reason"] == (
+        "claude-sonnet (rated 7) covers difficulty ?, the best permitted:"
+        " claude-sonnet: week 20% used, under its pace line of 28%"
+    )
+    assert passed["routing_reason"] == "local-m, the floor: claude-sonnet refused this attempt"
+    [event] = [e for e in _rows(repo, "usage_events") if e["kind"] == "refusal"]
+    assert (event["agent"], event["resets_at"]) == ("claude-sonnet", resets.isoformat())
+    assert "Agent: local-model" in git(repo, "log", "-1", "--format=%B", task.commit)
+
+
+def test_local_takes_the_ticket_when_claudes_pace_is_spent(repo, fake_model, fake_clock):
+    _readings_at(repo, 0.31)
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    [task] = _routed(repo).tasks
+    assert task.result == "done"
+    [job] = _rows(repo, "jobs")
+    assert (job["agent"], job["routing_reason"]) == (
+        "local-m",
+        "local-m, the floor: claude-sonnet: week 31% used, over its pace line of 28%",
+    )
+
+
+def _claude_developer(kinds: list[str]):
+    """Headless Claude that implements a developer job and writes a checkpoint's note."""
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        kinds.append(f"{job.kind} {job.model}")
+        if job.kind == "developer":
+            secret = repo_ / "coucou" / "secret.py"
+            if secret.is_file():
+                secret.unlink()
+            n = len([k for k in kinds if k.startswith("developer")])
+            (repo_ / "coucou" / f"part{n}.py").write_text(f"PART = {n}\n")
+        elif job.kind == "checkpoint":
+            out = job.prompt.split("Write ", 1)[1].split(":", 1)[0]
+            (repo_ / out).write_text("Sound.")
+        usage = {"input_tokens": 100, "output_tokens": 10}
+        return JobResult(ok=True, text="", duration_s=1.0, usage=usage, cost_usd=0.4)
+
+    return run_claude
+
+
+def test_a_failed_attempt_steps_up_to_sonnet_which_builds_on_the_branch(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """ADR 15 item 7: local (5) fails; Sonnet (7) is 2 points above it and permitted."""
+    _readings_at(repo, 0.20)
+    _difficulty(repo, "m1-01-thing", 8)  # past every rating: local first
+    kinds: list[str] = []
+    monkeypatch.setattr(claude, "run_claude", _claude_developer(kinds))
+    fake_model.append(_stray)
+    [task] = _routed(repo).tasks
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["protected-paths"])
+    assert kinds == ["developer sonnet"]
+    first, second = _rows(repo, "jobs")
+    assert (first["agent"], first["routing_reason"]) == (
+        "local-m",
+        "local-m, the floor: no cloud agent rated 8 or more",
+    )
+    assert (second["agent"], second["outcome"], second["cost_usd"]) == (
+        "claude-sonnet",
+        "passed",
+        0.4,
+    )
+    assert second["routing_reason"] == (
+        "step up from local-m (rated 5) to claude-sonnet (rated 7):"
+        " claude-sonnet: week 20% used, under its pace line of 28%"
+    )
+    [ticket] = _rows(repo, "tickets")
+    assert ticket["merged_by"] == "claude-sonnet"
+    message = git(repo, "log", "-1", "--format=%B", task.commit)
+    assert "Implemented by claude-sonnet (sonnet)" in message
+    assert "Agent: claude-sonnet" in message
+
+
+def test_the_checkpoint_after_sonnets_merges_goes_to_opus(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """ADR 15 item 9: a reviewer is always another model than the author."""
+    _readings_at(repo, 0.20)
+    _add_task(repo, "m1-01-thing")
+    _add_task(repo, "m1-02-thing")
+    kinds: list[str] = []
+    monkeypatch.setattr(claude, "run_claude", _claude_developer(kinds))
+    report = _routed(repo)
+    assert [t.result for t in report.tasks] == ["done", "done"]
+    assert kinds == ["developer sonnet", "developer sonnet", "checkpoint opus"]
+    checkpoint = _rows(repo, "jobs")[-1]
+    assert (checkpoint["role"], checkpoint["agent"], checkpoint["routing_reason"]) == (
+        "checkpoint",
+        "claude-opus",
+        "claude-opus, another model than the authors (claude-sonnet)",
+    )
+    assert all(job["routing_reason"] for job in _rows(repo, "jobs"))
+
+
+def test_the_checkpoint_after_local_merges_stays_on_sonnet(repo, fake_model, fake_lead):
+    _two_merges(repo, fake_model)
+    script, jobs = fake_lead
+    script.append(_checkpoint_writes("{}"))
+    roles = {**ROLES, "checkpoint": ("claude-sonnet", "claude-opus")}
+    loop.run_session(replace(_config(repo), roles=roles), once=False, dry_run=False, escalate=False)
+    assert [job.model for job in jobs] == ["sonnet"]
+    checkpoint = _rows(repo, "jobs")[-1]
+    assert checkpoint["routing_reason"] == "claude-sonnet, another model than the authors (local-m)"
+
+
+def test_a_developer_ticket_touching_protected_paths_is_the_leads(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    """ADR 14 item 11: protected work never routes to a developer."""
+    path = write_task(repo / "tasks" / "ready", "m1-01-secret")
+    path.write_text(path.read_text().replace("coucou/thing.py\n", "coucou/secret.py\n", 1))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "add m1-01-secret")
+    script, jobs = fake_lead
+    script.append(lambda job, repo_: _lead_writes(repo_, "secret"))
+    _passes(monkeypatch)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"]
+    assert [job.kind for job in jobs] == ["lead-ticket"]
+    assert fake_model.models == []
+    assert "m1-01-secret touches protected paths: the lead does it." in report.notes

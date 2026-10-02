@@ -554,6 +554,15 @@ def latest_readings(conn: sqlite3.Connection, agent_prefix: str) -> dict[str, sq
     return {row["window"]: row for row in rows}
 
 
+def refusals(conn: sqlite3.Connection, agent_prefix: str) -> list[sqlite3.Row]:
+    """Every refusal by an agent named ``agent_prefix…``, oldest first (f1-25: what the
+    allowance learns from, ADR 15 item 2)."""
+    return conn.execute(
+        "SELECT * FROM usage_events WHERE kind = 'refusal' AND agent LIKE ? ORDER BY at, id",
+        (f"{agent_prefix}%",),
+    ).fetchall()
+
+
 def upsert_owner_item(
     conn: sqlite3.Connection,
     project_id: int,
