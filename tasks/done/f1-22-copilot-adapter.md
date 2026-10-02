@@ -30,3 +30,10 @@ Read `docs/adr/14-developers-and-agents.md` items 2–4 and 10, its probe result
 - a faked `/copilot_internal/user` answer with `percent_remaining` 99.8 gives a reading of 0.002 for window `month`, reset 2026-11-01; a failed one gives none
 - the "not available" model error is a failure; an unrecognised error is a limit with no reset
 - `uv run runner check-all --task f1-22-copilot-adapter` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
