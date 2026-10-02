@@ -34,3 +34,10 @@ Read `docs/adr/14-developers-and-agents.md` items 13–14 and `runner/review.py`
 - a direction's note lands on its job
 - `signoff f1 --score 7` stores 7; `--score 11` is refused; no `--score` leaves it empty
 - `uv run runner check-all --task f1-23-findings-json` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
