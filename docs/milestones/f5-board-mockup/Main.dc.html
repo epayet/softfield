@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The board</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&amp;family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#12161b}
+a{color:#ffc48a;text-decoration:none}a:hover{color:#ffe0bf;text-decoration:underline}
+input::placeholder{color:#8794a2}
+</style>
+</helmet>
+<div style="background: #12161b; color: #dfe4e8; font: 15px/1.5 Barlow, 'Segoe UI', system-ui, sans-serif; min-height: 100%; box-sizing: border-box">
+<div style="max-width: 1360px; margin: 0 auto; padding: 14px 16px 40px; display: flex; flex-direction: column; gap: 14px">
+
+  <header style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px">
+      <h1 style="margin: 0; font: 700 22px/1.1 'Chakra Petch', system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase">Coucou factory · the board</h1>
+      <span style="font: 600 11px 'JetBrains Mono', monospace; letter-spacing: .12em; text-transform: uppercase; color: #1a1405; background: #f2b10a; padding: 3px 8px">Read-only</span>
+      <p style="margin: 0; color: #8794a2; font-size: 13px; max-width: 80ch">Every feature starts as a seed in the field. Planning sprouts it, the factory grows it ticket by ticket, you harvest it at sign-off. Cards are in priority order: the lead sets it, you change it in a Claude Code chat.</p>
+    </div>
+    <div style="height: 6px; background: repeating-linear-gradient(-45deg, #f2b10a 0 10px, #12161b 10px 20px); opacity: .85"></div>
+    <nav aria-label="Pages" style="display: flex; flex-wrap: wrap; border: 1px solid #303b47; align-self: flex-start">
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Factory</a>
+      <a href="#" aria-current="page" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; padding: 8px 14px; border-right: 1px solid #303b47">Board</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Tickets</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Agents</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px">Runs</a>
+    </nav>
+  </header>
+
+  <section aria-label="Totals" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: #303b47; border: 1px solid #303b47">
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px"><b style="font: 600 20px 'JetBrains Mono', monospace">19</b><span style="font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">Seeds: 13 ideas, 6 bugs</span></div>
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px"><b style="font: 600 20px 'JetBrains Mono', monospace">2</b><span style="font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">Sprouting: being planned</span></div>
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px"><b style="font: 600 20px 'JetBrains Mono', monospace">2</b><span style="font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">Growing · 30 tickets ready</span></div>
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px"><b style="font: 600 20px 'JetBrains Mono', monospace; color: #f2b10a">1</b><span style="font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">Ripe: needs your sign-off</span></div>
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px"><b style="font: 600 20px 'JetBrains Mono', monospace">6</b><span style="font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">Harvested</span></div>
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 2px"><b style="font: 600 20px 'JetBrains Mono', monospace">2</b><span style="font: 500 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">Tickets set aside</span></div>
+  </section>
+
+  <form role="search" style="display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center">
+    <label style="display: flex; align-items: center; gap: 8px; font: 500 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8794a2">Search
+      <input type="search" placeholder="memory drift, f4, duck…" style="font: 14px Barlow, sans-serif; color: #dfe4e8; background: #181e25; border: 1px solid #303b47; padding: 9px 12px; width: 260px; min-height: 44px; box-sizing: border-box">
+    </label>
+    <div role="group" aria-label="Kind" style="display: flex; border: 1px solid #303b47">
+      <button type="button" aria-pressed="true" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; border: 0; border-right: 1px solid #303b47; padding: 0 14px; min-height: 44px">All</button>
+      <button type="button" aria-pressed="false" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; background: transparent; border: 0; border-right: 1px solid #303b47; padding: 0 14px; min-height: 44px">Factory</button>
+      <button type="button" aria-pressed="false" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; background: transparent; border: 0; border-right: 1px solid #303b47; padding: 0 14px; min-height: 44px">Product</button>
+      <button type="button" aria-pressed="false" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; background: transparent; border: 0; padding: 0 14px; min-height: 44px">Bugs</button>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px 'JetBrains Mono', monospace; color: #8794a2">
+      <span><i style="display: inline-block; width: 12px; height: 10px; margin-right: 5px; background: #f2b10a"></i>factory</span>
+      <span><i style="display: inline-block; width: 12px; height: 10px; margin-right: 5px; background: #4fd1a5"></i>product (for Mum)</span>
+      <span><i style="display: inline-block; width: 12px; height: 10px; margin-right: 5px; background: repeating-linear-gradient(-45deg, #ec5458 0 3px, #1f2730 3px 6px)"></i>bug (striped edge, and says "bug")</span>
+      <span>P1 = first in line</span>
+    </div>
+  </form>
+
+  <section aria-label="The field" style="background: #181e25; border: 1px solid #303b47">
+    <div style="display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid #303b47">
+      <h2 style="margin: 0; font: 600 15px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">The field</h2>
+      <p style="margin: 0; color: #8794a2; font-size: 13px">Left to right, a card grows. The runner takes tickets from growing cards by priority.</p>
+    </div>
+    <div style="overflow-x: auto">
+    <div style="display: grid; grid-template-columns: repeat(6, minmax(200px, 1fr)); gap: 1px; background: #303b47; min-width: 1240px">
+
+      <div style="background: #181e25; display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #303b47; background: #1f2730">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#c9b48a" stroke-width="1.8" aria-hidden="true"><path d="M3 22h22"/><ellipse cx="14" cy="17.5" rx="4" ry="3"/></svg>
+          <div style="display: flex; flex-direction: column"><b style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Seed</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">idea or set aside · 19</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px">
+          <sc-for list="{{seeds}}" as="c" hint-placeholder-count="5">
+            <a href="Card.dc.html" style="display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; background: #1f2730; border: 1px solid #303b47; border-left: 4px solid transparent; border-image: {{c.edge}} 1; color: #dfe4e8; text-decoration: none">
+              <span style="display: flex; gap: 8px; align-items: baseline; font: 600 11px 'JetBrains Mono', monospace; color: #8794a2"><b style="color: #dfe4e8">{{c.p}}</b><span>{{c.kind}}</span></span>
+              <span style="font: 600 14px/1.25 Barlow, sans-serif">{{c.title}}</span>
+              <span style="font-size: 12.5px; color: #8794a2; line-height: 1.35">{{c.note}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: #181e25; display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #303b47; background: #1f2730">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#8ccf62" stroke-width="1.8" aria-hidden="true"><path d="M3 23h22"/><path d="M14 23v-9"/><path d="M14 16c-3 0-5-2-5-5 3 0 5 2 5 5z"/><path d="M14 14c0-3 2-5 5-5 0 3-2 5-5 5z"/></svg>
+          <div style="display: flex; flex-direction: column"><b style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Sprouting</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">being planned · 2</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px">
+          <sc-for list="{{sprouting}}" as="c" hint-placeholder-count="2">
+            <a href="Card.dc.html" style="display: flex; flex-direction: column; gap: 4px; padding: 9px 10px; background: #1f2730; border: 1px solid #303b47; border-left: 4px solid transparent; border-image: {{c.edge}} 1; color: #dfe4e8; text-decoration: none">
+              <span style="display: flex; gap: 8px; align-items: baseline; font: 600 11px 'JetBrains Mono', monospace; color: #8794a2"><b style="color: #dfe4e8">{{c.p}}</b><span>{{c.key}}</span><span>{{c.kind}}</span></span>
+              <span style="font: 600 14px/1.25 Barlow, sans-serif">{{c.title}}</span>
+              <span style="font-size: 12.5px; color: #8794a2; line-height: 1.35">{{c.note}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: #181e25; display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #303b47; background: #1f2730">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#4fd1a5" stroke-width="1.8" aria-hidden="true"><path d="M3 24h22"/><path d="M14 24V8"/><path d="M14 18c-4 0-6-2-6-6 4 0 6 2 6 6z"/><path d="M14 14c0-4 2-6 6-6 0 4-2 6-6 6z"/><path d="M14 10c-2 0-3-1-3-3 2 0 3 1 3 3z"/></svg>
+          <div style="display: flex; flex-direction: column"><b style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Planted</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">tickets ready · 2</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px">
+          <sc-for list="{{planted}}" as="c" hint-placeholder-count="1">
+            <a href="Card.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 9px 10px; background: #1f2730; border: 1px solid #303b47; border-left: 4px solid transparent; border-image: {{c.edge}} 1; color: #dfe4e8; text-decoration: none">
+              <span style="display: flex; gap: 8px; align-items: baseline; font: 600 11px 'JetBrains Mono', monospace; color: #8794a2"><b style="color: #dfe4e8">{{c.p}}</b><span>{{c.key}}</span><span>{{c.kind}}</span></span>
+              <span style="font: 600 14px/1.25 Barlow, sans-serif">{{c.title}}</span>
+              <span style="display: block; height: 8px; background: #222b34; position: relative"><span style="position: absolute; inset: 0 auto 0 0; width: {{c.pct}}; background: {{c.color}}"></span></span>
+              <span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">{{c.count}}</span>
+              <span style="font-size: 12.5px; color: #8794a2; line-height: 1.35">{{c.note}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: #181e25; display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #303b47; background: #1f2730">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#ff9640" stroke-width="1.8" aria-hidden="true"><path d="M3 25h22"/><path d="M14 25V5"/><path d="M14 20c-5 0-7-2-7-6 5 0 7 2 7 6z"/><path d="M14 16c0-5 2-7 7-7 0 5-2 7-7 7z"/><path d="M14 11c-3 0-4-2-4-4 3 0 4 1 4 4z"/><path d="M8 25l2-3h8l2 3"/></svg>
+          <div style="display: flex; flex-direction: column"><b style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Growing</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">in the factory · 1</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px">
+          <sc-for list="{{growing}}" as="c" hint-placeholder-count="1">
+            <a href="Card.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 9px 10px; background: #1f2730; border: 1px solid #ff9640; border-left: 4px solid transparent; border-image: {{c.edge}} 1; color: #dfe4e8; text-decoration: none">
+              <span style="display: flex; gap: 8px; align-items: baseline; font: 600 11px 'JetBrains Mono', monospace; color: #8794a2"><b style="color: #dfe4e8">{{c.p}}</b><span>{{c.key}}</span><span>{{c.kind}}</span></span>
+              <span style="font: 600 14px/1.25 Barlow, sans-serif">{{c.title}}</span>
+              <span style="display: block; height: 8px; background: #222b34; position: relative"><span style="position: absolute; inset: 0 auto 0 0; width: {{c.pct}}; background: {{c.color}}"></span></span>
+              <span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">{{c.count}}</span>
+              <span style="font-size: 12.5px; color: #dfe4e8; line-height: 1.35"><span style="color: #ff9640; font-weight: 600">Now: </span>{{c.now}}</span>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: #181e25; display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #303b47; background: #1f2730">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#f2b10a" stroke-width="1.8" aria-hidden="true"><path d="M3 25h22"/><path d="M14 25V12"/><path d="M14 21c-4 0-6-2-6-5 4 0 6 2 6 5z"/><circle cx="14" cy="8" r="4.5"/><path d="M14 3.5V2"/></svg>
+          <div style="display: flex; flex-direction: column"><b style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #f2b10a">Ripe</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">needs your sign-off · 1</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 10px">
+          <sc-for list="{{ripe}}" as="c" hint-placeholder-count="1">
+            <a href="Card.dc.html" style="display: flex; flex-direction: column; gap: 6px; padding: 9px 10px; background: #1f2730; border: 1px solid #f2b10a; border-left: 4px solid transparent; border-image: {{c.edge}} 1; color: #dfe4e8; text-decoration: none">
+              <span style="display: flex; gap: 8px; align-items: baseline; font: 600 11px 'JetBrains Mono', monospace; color: #8794a2"><span>{{c.key}}</span><span>{{c.kind}}</span></span>
+              <span style="font: 600 14px/1.25 Barlow, sans-serif">{{c.title}}</span>
+              <span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">{{c.count}}</span>
+              <span style="font-size: 12.5px; color: #dfe4e8; line-height: 1.35">{{c.note}}</span>
+              <code style="font: 12px 'JetBrains Mono', monospace; background: #12161b; padding: 4px 6px; color: #f2b10a">{{c.cmd}}</code>
+            </a>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="background: #181e25; display: flex; flex-direction: column">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid #303b47; background: #1f2730">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="#c9d3dc" stroke-width="1.8" aria-hidden="true"><path d="M5 11h18v12H5z"/><path d="M5 15h18M5 19h18"/><path d="M10 11c0-3 1-5 4-6 3 1 4 3 4 6"/></svg>
+          <div style="display: flex; flex-direction: column"><b style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Harvested</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">signed off · 6, latest 4</span></div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px; padding: 10px">
+          <sc-for list="{{harvested}}" as="c" hint-placeholder-count="6">
+            <a href="Card.dc.html" style="display: flex; gap: 8px; align-items: baseline; padding: 7px 10px; background: #1f2730; border: 1px dashed #303b47; border-left: 4px solid transparent; border-image: {{c.edge}} 1; color: #c9d3dc; text-decoration: none">
+              <span style="font: 600 11px 'JetBrains Mono', monospace; color: #8794a2; min-width: 22px">{{c.key}}</span>
+              <span style="font-size: 13.5px; line-height: 1.3">{{c.title}}</span>
+            </a>
+          </sc-for>
+          <a href="#" style="font-size: 13px; padding: 4px 2px">2 more harvested ›</a>
+        </div>
+      </div>
+
+    </div>
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-top: 1px solid #303b47; background: #1f2730">
+      <span style="flex: 1; height: 10px; background: repeating-linear-gradient(90deg, #303b47 0 18px, #222b34 18px 24px)"></span>
+      <a href="#" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Growing cards feed the factory floor ›</a>
+    </div>
+  </section>
+
+
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const F = '#f2b10a', P = '#4fd1a5';
+    const solid = (c) => 'linear-gradient(' + c + ',' + c + ')';
+    const stripe = 'repeating-linear-gradient(-45deg, #ec5458 0 4px, #1f2730 4px 8px)';
+    const card = (o) => ({ ...o, edge: o.bug ? stripe : solid(o.color), color: o.bug ? '#ec5458' : o.color });
+    const seeds = [
+      ['P6', 'factory', 'Parallel developers', 'Several developers at once; a second computer runs Qwen 9B for easy tickets.', F],
+      ['P7', 'factory', 'More cloud workers', 'The free-tier survey: Groq, Cerebras, Mistral, GitHub Models…', F],
+      ['P8', 'factory', 'Research: software factories', 'What we do well and what to improve. Ramp Inspect, Linear.', F],
+      ['P9', 'factory', 'Why check-all is slow', 'A study and a proposal, not a fix.', F],
+      ['P10', 'factory', 'Planner questions', 'Ask the lead on a card; answered when Claude has room.', F],
+      ['P11', 'factory', 'Push notifications', 'Reach the phone when the page is closed.', F],
+      ['P15', 'bug · factory', 'The bench page counts attempts by list length', 'bug-01 · ticket written, set aside', F, true],
+      ['P16', 'bug · factory', 'Allowance marks copy runner.toml', 'bug-02 · ticket written, set aside', F, true],
+      ['P17', 'bug · factory', 'Sign-off fails on a review with no status line', 'bug-03 · ticket written, set aside', F, true],
+      ['P20', 'product', 'Memory drift', 'Old moments drift by when nothing new has come.', P],
+      ['P21', 'product', 'The coucou key (duck)', 'One glowing button that sends a coucou back.', P],
+      ['P22', 'product', 'Frame displays', 'An M5Stack Tab5 frame, cheaper than a tablet.', P],
+      ['P23', 'product', 'Phone widgets', 'The current moment on a home screen.', P],
+      ['P24', 'product', 'Avatars hanging out', 'Birds (or ducks) in a little living room.', P],
+      ['P25', 'bug · product', 'Send works again when reading the photo fails', 'bug-04 (was m4-12) · set aside', P, true],
+      ['P26', 'bug · product', 'seed_demo makes a second display after a rename', 'bug-05 · set aside', P, true],
+      ['P27', 'bug · product', 'Unreachable "empty" and "too long" alerts', 'bug-06 · set aside', P, true],
+      ['P30', 'factory', 'A public factory widget', 'Watch the factory on the website, without the code.', F],
+      ['P31', 'factory', 'factory init', 'The factory on any project.', F],
+    ].map(([p, kind, title, note, color, bug]) => card({ p, kind, title, note, color, bug: !!bug }));
+    const sprouting = [
+      { p: 'P3', key: 'F3', kind: 'factory', title: 'The factory line', note: 'A new mock-up first. Its one ticket, f3-01, is set aside.', color: F },
+      { p: 'P4', key: '·', kind: 'factory', title: 'Sonnet: back or off?', note: 'Decide from F4’s results.', color: F },
+    ].map(card);
+    const planted = [
+      { p: 'P2', key: 'F5', kind: 'factory', title: 'Steer from the phone, and the board', pct: '0%', count: '0 of 13 tickets', note: 'Starts when f4-09 is done.', color: F },
+      { p: 'P5', key: 'bug-07', kind: 'bug · factory', title: 'The queue count is stale after a refresh', pct: '0%', count: 'ready · 1 ticket', note: 'Queued by you this morning.', color: F, bug: true },
+    ].map(card);
+    const growing = [
+      { p: 'P1', key: 'F4', kind: 'factory', title: 'Always on', pct: '18%', count: '3 of 17 tickets · 1 set aside', now: 'f4-04 · Running now shows the goal · gpt-oss-120b, attempt 1', color: F },
+    ].map(card);
+    const ripe = [
+      { key: 'F2', kind: 'factory', title: 'Cloud first', count: '13 of 13 tickets · review 7/10', note: 'Review done. Sign it off when you’ve tried it.', cmd: 'uv run runner signoff f2', color: F },
+    ].map(card);
+    const harvested = [
+      ['F1', 'The factory measures itself', F], ['M4', 'Sender app', P], ['M3', 'Display app', P], ['M2', 'Device pairing', P],
+    ].map(([key, title, color]) => card({ key, title, color }));
+    return { seeds, sprouting, planted, growing, ripe, harvested };
+  }
+}
+</script>
+</body>
+</html>

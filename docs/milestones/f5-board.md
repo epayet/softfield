@@ -61,4 +61,11 @@
 | 12 | notifications | L | 4 | – | Browser notifications on an open page: needs you, all work done |
 | 13 | backlog-to-bugs | L | 3 | 05 | `docs/backlog.md` becomes bug tickets in `tasks/later/`, with priorities |
 
-Waiting for the mock-up: the board page (`/board`, read-only), and the card's page (the milestone page with its state, priority and notes).
+| 14 | factory-look | L | 5 | – | The mock-ups' look on every page: tokens, dark by default with a light variant (follows the system), fonts self-hosted |
+| 15 | board-data | D | 5 | 07 | `board.py`: every milestone and bug ticket as a card, in its stage and priority order |
+| 16 | board-page | D | 5 | 14, 15 | `/board`: the field, totals, search and kind filter; desktop and phone |
+| 17 | card-page | D | 4 | 14, 15 | A milestone's page as its card: stage, priority, area, how it grew, tickets in run order |
+
+The picture: the board mock-up, <https://claude.ai/artifact/PzgTodVwvuQKqLvxphPLGu> (accepted by the owner, 2026-10-02), with its sources in `docs/milestones/f5-board-mockup/` for the tickets to read.
+
+f5-07 (replan) also checks 15–17 against what 04–06 built.

@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>A card: F4 always on</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&amp;family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#12161b}
+a{color:#ffc48a;text-decoration:none}a:hover{color:#ffe0bf;text-decoration:underline}
+</style>
+</helmet>
+<div style="background: #12161b; color: #dfe4e8; font: 15px/1.5 Barlow, system-ui, sans-serif; min-height: 100%">
+<div style="max-width: 1280px; margin: 0 auto; padding: 14px 16px 40px; display: flex; flex-direction: column; gap: 14px">
+
+  <a href="Main.dc.html" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">‹ The board</a>
+
+  <header style="display: flex; flex-wrap: wrap; gap: 14px 20px; align-items: center; background: #181e25; border: 1px solid #303b47; border-left: 6px solid #f2b10a; padding: 14px 16px">
+    <svg width="48" height="48" viewBox="0 0 28 28" fill="none" stroke="#ff9640" stroke-width="1.6" aria-hidden="true"><path d="M3 25h22"/><path d="M14 25V5"/><path d="M14 20c-5 0-7-2-7-6 5 0 7 2 7 6z"/><path d="M14 16c0-5 2-7 7-7 0 5-2 7-7 7z"/><path d="M14 11c-3 0-4-2-4-4 3 0 4 1 4 4z"/><path d="M8 25l2-3h8l2 3"/></svg>
+    <div style="display: flex; flex-direction: column; gap: 2px; flex: 1 1 320px; min-width: 0">
+      <span style="font: 600 12px 'JetBrains Mono', monospace; color: #8794a2">F4 · f4-always-on · factory</span>
+      <h1 style="margin: 0; font: 700 24px/1.15 'Chakra Petch', sans-serif; letter-spacing: .03em; text-transform: uppercase">Always on</h1>
+      <p style="margin: 0; color: #c9d3dc; max-width: 75ch">The runner can be left on over a weekend: Claude's work waits for room while developer tickets keep going, and the Overview says what it does, for which goal, without a reload.</p>
+    </div>
+    <dl style="margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; font: 13px 'JetBrains Mono', monospace">
+      <dt style="color: #8794a2">State</dt><dd style="margin: 0; color: #ff9640; font-weight: 600">Growing</dd>
+      <dt style="color: #8794a2">Priority</dt><dd style="margin: 0; font-weight: 600">P1 · set by the lead</dd>
+      <dt style="color: #8794a2">Tickets</dt><dd style="margin: 0">3 of 17 done</dd>
+      <dt style="color: #8794a2">ADRs</dt><dd style="margin: 0"><a href="#">17</a> accepted</dd>
+    </dl>
+  </header>
+
+  <section aria-label="How it grew" style="background: #181e25; border: 1px solid #303b47; padding: 12px 16px">
+    <h2 style="margin: 0 0 10px; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">How it grew</h2>
+    <ol style="list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: #303b47">
+      <li style="background: #1f2730; padding: 8px 10px; display: flex; flex-direction: column"><b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #c9b48a">Seed</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">2 Oct 19:40 · your notes after F2</span></li>
+      <li style="background: #1f2730; padding: 8px 10px; display: flex; flex-direction: column"><b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8ccf62">Sprouting</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">2 Oct 20:10 · planned with you</span></li>
+      <li style="background: #1f2730; padding: 8px 10px; display: flex; flex-direction: column"><b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #4fd1a5">Planted</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">2 Oct 22:30 · 18 tickets</span></li>
+      <li style="background: #1f2730; padding: 8px 10px; display: flex; flex-direction: column; outline: 1px solid #ff9640; outline-offset: -1px"><b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #ff9640">Growing</b><span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">since 3 Oct 09:12</span></li>
+      <li style="background: #1a2028; padding: 8px 10px; display: flex; flex-direction: column"><b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #5b6876">Ripe</b><span style="font: 12px 'JetBrains Mono', monospace; color: #5b6876">after the review</span></li>
+      <li style="background: #1a2028; padding: 8px 10px; display: flex; flex-direction: column"><b style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #5b6876">Harvested</b><span style="font: 12px 'JetBrains Mono', monospace; color: #5b6876">at your sign-off</span></li>
+    </ol>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
+
+    <section aria-label="Tickets" style="flex: 999 1 560px; min-width: 0; background: #181e25; border: 1px solid #303b47">
+      <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid #303b47">
+        <h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Tickets</h2>
+        <span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">in run order</span>
+      </div>
+      <div style="overflow-x: auto">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px">
+          <tbody>
+            <sc-for list="{{tickets}}" as="t" hint-placeholder-count="10">
+              <tr>
+                <td style="padding: 7px 14px; border-bottom: 1px solid #222b34; font: 12px 'JetBrains Mono', monospace; color: {{t.idColor}}; white-space: nowrap">{{t.id}}</td>
+                <td style="padding: 7px 14px; border-bottom: 1px solid #222b34">{{t.goal}}</td>
+                <td style="padding: 7px 14px; border-bottom: 1px solid #222b34; font: 12px 'JetBrains Mono', monospace; color: #8794a2; white-space: nowrap">{{t.who}}</td>
+                <td style="padding: 7px 14px; border-bottom: 1px solid #222b34; font: 600 12px 'JetBrains Mono', monospace; color: {{t.stateColor}}; white-space: nowrap">{{t.state}}</td>
+              </tr>
+            </sc-for>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+      <section aria-label="Notes" style="background: #181e25; border: 1px solid #303b47; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Notes</h2>
+        <p style="margin: 0; font-size: 14px"><b style="color: #ffc48a">You, 2 Oct:</b> my priority now: the runner works on its own and takes any ticket as soon as it's ready. A whole weekend unattended, followed from my phone.</p>
+        <p style="margin: 0; font-size: 14px"><b style="color: #ff9640">The lead, 2 Oct:</b> the weekend depends on ready developer tickets more than on runner features; F2 waited 5.2 h with only lead work left. So lead and developer tickets alternate.</p>
+      </section>
+      <section aria-label="Ask the lead" style="background: #181e25; border: 1px dashed #303b47; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #8794a2">Ask the lead · later</h2>
+        <p style="margin: 0; font-size: 13.5px; color: #8794a2">Planner questions come after the read-only board: you'll write here, and the lead answers in this card when Claude has room. Until then, ask in a Claude Code chat.</p>
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #5b6876">Your question
+          <textarea disabled="disabled" rows="3" style="font: 14px Barlow, sans-serif; background: #12161b; color: #5b6876; border: 1px solid #303b47; padding: 8px"></textarea>
+        </label>
+      </section>
+    </aside>
+
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1180}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const L = '#ff9640', D = '#8ccf62';
+    const S = { merged: '#8ccf62', running: '#ff9640', ready: '#c9d3dc', waits: '#8794a2', later: '#5b6876' };
+    const rows = [
+      ['f4-01-yes-resumes-parked', 'After a yes, parked work goes first', 'the lead', 'merged', L],
+      ['f4-02-tickets-last-worked', 'Tickets page: latest work first', 'gpt-oss-120b', 'merged', D],
+      ['f4-03-requeue-preflight', 'A requeue is pre-flighted before it’s committed', 'the lead', 'merged', L],
+      ['f4-04-running-goal', 'Running now shows the goal', 'gpt-oss-120b', 'running', D],
+      ['f4-05-opencode-shell-timeout', 'OpenCode’s shell timeout set by the runner', 'the lead', 'ready', L],
+      ['f4-06-running-tokens', '“read N tokens · M turns”', 'a developer', 'waits for f4-04', D],
+      ['f4-07-fresh-reading', 'A fresh Claude reading at session start', 'the lead', 'ready', L],
+      ['f4-08-queue-waits-for', 'The queue says what each ticket waits for', 'a developer', 'ready', D],
+      ['f4-09-later-folder', 'tasks/later/ and runner queue', 'the lead', 'ready', L],
+      ['f4-10-queue-live', 'The queue beside Running now, live', 'a developer', 'waits for f4-08', D],
+      ['f4-11-auto-format', 'Format before the gates', 'the lead', 'ready', L],
+      ['f4-12-allowance-top', 'Allowances at the top, live', 'a developer', 'waits for f4-10', D],
+      ['f4-13-sonnet-step-up', 'Sonnet as the step-up', 'the lead', 'set aside', L],
+    ];
+    const tickets = rows.map(([id, goal, who, state, idColor]) => ({
+      id, goal, who, state, idColor,
+      stateColor: state === 'merged' ? S.merged : state === 'running' ? S.running : state === 'ready' ? S.ready : state === 'set aside' ? S.later : S.waits,
+    }));
+    return { tickets };
+  }
+}
+</script>
+</body>
+</html>
