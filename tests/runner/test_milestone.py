@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from runner import claude, milestone
+from runner import claude, metrics, milestone
 from runner.agents import JobResult
 from runner.gates import GateResult
 from runner.milestone import (
@@ -206,6 +206,93 @@ def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypat
     assert (leak["job_id"], leak["resolved"], leak["severity"]) == (reviews[1], 1, "should-fix")
     assert (leak["route"], leak["summary"], leak["milestone_id"]) == ("claude", "Leak", row["id"])
     assert (findings["m1-F2"]["job_id"], findings["m1-F2"]["resolved"]) == (reviews[0], 0)
+
+
+def _checkpoint_finding(repo, key: str) -> None:
+    """A finding an earlier checkpoint recorded on its job."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    try:
+        project = metrics.upsert_project(conn, repo.name)
+        milestone_id = metrics.upsert_milestone(conn, project, "m1")
+        run = metrics.upsert_run(conn, project, "earlier")
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=milestone_id,
+            role="checkpoint",
+            agent="claude-sonnet",
+            attempt=1,
+            started="2026-10-01T10:00:00+00:00",
+        )
+        metrics.add_finding(
+            conn, milestone_id, key, job_id=job, severity="nit", summary="Odd name", file="a.py"
+        )
+    finally:
+        conn.close()
+
+
+def test_the_last_rounds_verdicts_and_score_land_on_the_findings_and_milestone(repo, monkeypatch):
+    """f1-23 (ADR 14 item 13): the final review judges each checkpoint finding."""
+    _milestone_repo(repo)
+    (repo / "docs" / "reviews").mkdir()
+    _checkpoint_finding(repo, "m1-C1-1")
+    _checkpoint_finding(repo, "m1-C1-2")
+    leak = {"id": "m1-F1", "severity": "should-fix", "route": "claude", "summary": "Leak"}
+    rounds = [
+        {"findings": [leak], "checkpoint_verdicts": {"m1-C1-1": "rejected"}, "score": 4},
+        {
+            "findings": [{**leak, "resolved": True, "file": "a.py", "line": 3, "detail": "d"}],
+            "checkpoint_verdicts": {
+                "m1-C1-1": "confirmed",
+                "m1-C1-2": "rejected",
+                "m1-F1": "missed",
+                "m1-F9": "missed",  # no such finding: not recorded
+            },
+            "score": 8,
+        },
+    ]
+    prompts: list[str] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        prompts.append(job.prompt)
+        out = re.search(r"Write (\S+) as:", job.prompt)
+        assert out
+        (repo_ / out[1]).write_text(json.dumps(rounds.pop(0)))
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    milestone.review_milestone(_config(repo), "m1", "m1-start")
+    assert "m1-C1-1 (nit, a.py): Odd name" in prompts[0]
+    findings = {f["key"]: f for f in _rows(repo, "findings")}
+    assert set(findings) == {"m1-C1-1", "m1-C1-2", "m1-F1"}
+    assert [findings[k]["verdict"] for k in ("m1-C1-1", "m1-C1-2", "m1-F1")] == [
+        "confirmed",
+        "rejected",
+        "missed",
+    ]
+    assert (findings["m1-F1"]["file"], findings["m1-F1"]["line"]) == ("a.py", 3)
+    assert findings["m1-F1"]["detail"] == "d"
+    [row] = _rows(repo, "milestones")
+    assert row["review_score"] == 8
+
+
+def test_a_review_without_a_score_leaves_it_empty(repo, monkeypatch):
+    _milestone_repo(repo)
+    (repo / "docs" / "reviews").mkdir()
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        out = re.search(r"Write (\S+) as:", job.prompt)
+        assert out
+        (repo_ / out[1]).write_text(json.dumps({"findings": [], "stop": None}))
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
+    [row] = _rows(repo, "milestones")
+    assert row["review_score"] is None
 
 
 def test_a_factory_milestones_metrics_and_summary(repo):

@@ -2,6 +2,7 @@
 
 import io
 import json
+import re
 import sqlite3
 import threading
 import time
@@ -595,6 +596,106 @@ def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fa
     assert "Edit(docs/agents/developer.md)" in jobs[0].allowed_tools  # ADR 14 item 1
     assert "tests/runner/test_tasks.py" in jobs[0].prompt
     assert "Checkpoint: Sound. Tightened m1-03." in report.notes
+
+
+def _checkpoint_writes(text: str) -> Callable[[ClaudeJob, Path], None]:
+    """A checkpoint that writes its note and ``text`` as its findings file."""
+
+    def review(job, repo_):
+        out = job.prompt.split("Write ", 1)[1].split(":", 1)[0]
+        (repo_ / out).write_text("Found one leak.")
+        found = re.search(r"(var/runs/\S+/checkpoint-\d+\.json)", job.prompt)
+        assert found
+        (repo_ / found[1]).write_text(text)
+
+    return review
+
+
+def _two_merges(repo: Path, fake_model) -> None:
+    for n in (1, 2):
+        _add_task(repo, f"m1-0{n}-thing")
+
+    def change(n: int):
+        def run(repo, prompt):
+            (repo / "coucou" / f"part{n}.py").write_text(f"PART = {n}\n")
+
+        return run
+
+    fake_model.extend([change(1), change(2)])
+
+
+def test_a_checkpoints_findings_become_rows_on_its_job(repo, fake_model, fake_lead):
+    """f1-23 (ADR 14 item 13): judging the checkpoints needs their findings recorded."""
+    _two_merges(repo, fake_model)
+    script, _ = fake_lead
+    finding = {
+        "severity": "should-fix",
+        "file": "coucou/part1.py",
+        "line": 1,
+        "summary": "A leak",
+        "detail": "PART is global.",
+        "route": "local",
+        "ticket": "m1-01-thing",
+    }
+    script.append(_checkpoint_writes(json.dumps({"findings": [finding]})))
+    _run(repo)
+    [job] = [j for j in _rows(repo, "jobs") if j["role"] == "checkpoint"]
+    [row] = _rows(repo, "findings")
+    tickets = {t["ticket"]: t["id"] for t in _rows(repo, "tickets")}
+    assert row["key"] == f"m1-C{job['id']}-1" and row["job_id"] == job["id"]
+    assert (row["severity"], row["route"], row["file"], row["line"]) == (
+        "should-fix",
+        "local",
+        "coucou/part1.py",
+        1,
+    )
+    assert (row["summary"], row["detail"]) == ("A leak", "PART is global.")
+    assert (row["ticket_id"], row["agent"]) == (tickets["m1-01-thing"], "claude-sonnet")
+
+
+def test_a_malformed_checkpoint_file_is_noted_not_fatal(repo, fake_model, fake_lead):
+    _two_merges(repo, fake_model)
+    script, _ = fake_lead
+    script.append(_checkpoint_writes("{not json"))
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done", "done"]
+    assert _rows(repo, "findings") == []
+    assert any(n.startswith("Checkpoint findings unusable:") for n in report.notes)
+
+
+def test_a_directions_process_note_lands_on_its_job(repo, fake_model, fake_lead):
+    """f1-23 (ADR 14 item 13): a short, descriptive note on how the developer worked."""
+    _add_task(repo, "m1-01-thing")
+    script, _ = fake_lead
+
+    def direct(job, repo_):
+        assert "/note.md" in job.prompt
+        logs = repo_ / _logs_in(job.prompt)
+        (logs / "direction.md").write_text("Leave coucou/secret.py alone.")
+        (logs / "note.md").write_text("Followed the ticket.\nNever ran its checks.\n")
+
+    fake_model.extend([_stray, _stray, _undo_and_implement])
+    script.append(direct)
+    _run(repo, once=True)
+    [job] = [j for j in _rows(repo, "jobs") if j["role"] == "direction"]
+    assert job["note"] == "Followed the ticket.\nNever ran its checks."
+
+
+def test_an_escalation_does_not_take_the_directions_note(repo, fake_model, fake_lead):
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+
+    def direct(job, repo_):
+        (repo_ / _logs_in(job.prompt) / "note.md").write_text("Went round in circles.")
+
+    def escalate(job, repo_):
+        assert "/note.md" in job.prompt
+        (repo_ / _logs_of(job) / "decision.json").write_text('{"outcome": "requeue"}')
+
+    script.extend([direct, escalate])
+    loop.run_session(_config(repo), once=True, dry_run=False, escalate=True)
+    notes = {j["role"]: j["note"] for j in _rows(repo, "jobs")}
+    assert notes["direction"] == "Went round in circles." and notes["escalation"] is None
 
 
 def _escalate_on_protected(repo, fake_model) -> None:

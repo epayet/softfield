@@ -1,12 +1,19 @@
-"""Milestone review loop: finding files and the stop rules (docs/workflow.md)."""
+"""Milestone review loop: finding files and the stop rules (docs/workflow.md).
+
+Checkpoints and reviews write their findings as JSON (ADR 14 item 13); the review's last
+round also judges the checkpoints' findings and scores the milestone."""
 
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 SEVERITIES = ("blocking", "should-fix", "nit")
 ROUTES = ("local", "claude", "adr", "backlog")
 CLAUDE_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone")
+# A checkpoint finding the review confirmed or rejected, or a review finding a checkpoint
+# should have caught (missed).
+VERDICTS = ("confirmed", "rejected", "missed")
 
 
 class ReviewFileError(ValueError):
@@ -21,6 +28,10 @@ class Finding:
     summary: str
     resolved: bool = False
     security: bool = False
+    file: str = ""
+    line: int | None = None
+    detail: str = ""
+    ticket: str = ""  # the ticket whose work it is about
 
     @property
     def actionable(self) -> bool:
@@ -31,30 +42,90 @@ class Finding:
 class ReviewRound:
     findings: tuple[Finding, ...]
     stop: str | None  # a reason Claude asks to stop for, from CLAUDE_STOPS
+    checkpoint_verdicts: dict[str, str] = field(default_factory=dict)  # finding key: VERDICTS
+    score: int | None = None  # the milestone's, 1-10
 
 
-def parse_review(path: Path) -> ReviewRound:
+def _read(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
-        raise ReviewFileError(f"cannot read review file {path}: {exc}") from exc
+        raise ReviewFileError(f"cannot read {path}: {exc}") from exc
+    if not isinstance(data, dict):
+        raise ReviewFileError(f"{path} is not a JSON object")
+    return data
+
+
+def _line(value: object, finding: str) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int) and not isinstance(value, bool) and value > 0:
+        return value
+    raise ReviewFileError(f"bad line {value!r} in finding {finding}")
+
+
+def _finding(raw: dict[str, Any], finding_id: str) -> Finding:
+    finding = Finding(
+        id=finding_id,
+        severity=str(raw.get("severity")),
+        route=str(raw.get("route", "backlog")),
+        summary=str(raw.get("summary", "")),
+        resolved=bool(raw.get("resolved", False)),
+        security=bool(raw.get("security", False)),
+        file=str(raw.get("file") or ""),
+        line=_line(raw.get("line"), finding_id),
+        detail=str(raw.get("detail") or ""),
+        ticket=str(raw.get("ticket") or ""),
+    )
+    if finding.severity not in SEVERITIES or finding.route not in ROUTES:
+        raise ReviewFileError(f"bad severity/route in finding {finding.id}")
+    return finding
+
+
+def _findings(data: dict[str, Any]) -> list[dict[str, Any]]:
+    raws = data.get("findings", [])
+    if not isinstance(raws, list) or not all(isinstance(raw, dict) for raw in raws):
+        raise ReviewFileError("findings is not a list of objects")
+    return raws
+
+
+def _verdicts(value: object) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict) or any(v not in VERDICTS for v in value.values()):
+        raise ReviewFileError(f"bad checkpoint_verdicts {value!r}")
+    return {str(key): str(verdict) for key, verdict in value.items()}
+
+
+def _score(value: object) -> int | None:
+    if value is None:
+        return None
+    if isinstance(value, int) and not isinstance(value, bool) and 1 <= value <= 10:
+        return value
+    raise ReviewFileError(f"bad score {value!r}: a score is 1 to 10")
+
+
+def parse_review(path: Path) -> ReviewRound:
+    data = _read(path)
     findings = []
-    for raw in data.get("findings", []):
-        finding = Finding(
-            id=str(raw["id"]),
-            severity=str(raw["severity"]),
-            route=str(raw.get("route", "backlog")),
-            summary=str(raw.get("summary", "")),
-            resolved=bool(raw.get("resolved", False)),
-            security=bool(raw.get("security", False)),
-        )
-        if finding.severity not in SEVERITIES or finding.route not in ROUTES:
-            raise ReviewFileError(f"bad severity/route in finding {finding.id}")
-        findings.append(finding)
+    for raw in _findings(data):
+        if "id" not in raw:
+            raise ReviewFileError("a finding has no id")
+        findings.append(_finding(raw, str(raw["id"])))
     stop = data.get("stop")
     if stop is not None and stop not in CLAUDE_STOPS:
         raise ReviewFileError(f"unknown stop reason {stop!r}")
-    return ReviewRound(findings=tuple(findings), stop=stop)
+    return ReviewRound(
+        findings=tuple(findings),
+        stop=stop,
+        checkpoint_verdicts=_verdicts(data.get("checkpoint_verdicts")),
+        score=_score(data.get("score")),
+    )
+
+
+def parse_checkpoint(path: Path) -> tuple[Finding, ...]:
+    """A checkpoint's findings, numbered from 1 in order: the runner keys them."""
+    return tuple(_finding(raw, str(n)) for n, raw in enumerate(_findings(_read(path)), start=1))
 
 
 def update_seen(seen: dict[str, int], round_: ReviewRound) -> dict[str, int]:

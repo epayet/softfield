@@ -1,6 +1,7 @@
 """The milestone review loop (docs/workflow.md) and milestone metrics."""
 
 import re
+import sqlite3
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
@@ -22,6 +23,7 @@ from runner.loop import (
     clock,
     close_session,
     open_session,
+    record_findings,
     run_e2e,
     runner_commit,
     with_progress,
@@ -208,26 +210,50 @@ def _record_milestone_doc(s: Session, milestone: str) -> None:
     )
 
 
-def _record_findings(s: Session, milestone: str, round_: ReviewRound, agent: str) -> None:
-    """A review round's findings, on its review job, keyed by their ids."""
+def _milestone_findings(
+    conn: sqlite3.Connection, project_id: int, milestone: str
+) -> list[sqlite3.Row]:
+    """Every finding of the milestone so far, with the role of the job that found it."""
+    return conn.execute(
+        "SELECT f.key, f.severity, f.file, f.line, f.summary, j.role FROM findings f"
+        " JOIN milestones m ON m.id = f.milestone_id LEFT JOIN jobs j ON j.id = f.job_id"
+        " WHERE m.project_id = ? AND m.key = ? ORDER BY f.id",
+        (project_id, milestone),
+    ).fetchall()
+
+
+def _findings_so_far(s: Session, milestone: str) -> list[sqlite3.Row]:
+    if s.project_id is None:
+        return []
+    return _record(s, _milestone_findings, s.project_id, milestone) or []
+
+
+def _checkpoint_list(s: Session, milestone: str) -> str:
+    """The checkpoints' findings for the review to judge, one line each."""
+    lines = []
+    for row in _findings_so_far(s, milestone):
+        if row["role"] != "checkpoint":
+            continue
+        where = row["file"] + (f":{row['line']}" if row["line"] else "") if row["file"] else ""
+        about = ", ".join(part for part in (row["severity"], where) if part)
+        lines.append(f"- {row['key']} ({about}): {row['summary']}")
+    return "\n".join(lines) or "none"
+
+
+def _record_judging(s: Session, milestone: str, round_: ReviewRound) -> None:
+    """A round's verdicts on the findings it names, and its score on the milestone; a key
+    with no finding is left out. A later round's replace an earlier one's."""
     if s.project_id is None:
         return
-    milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
+    known = {row["key"] for row in _findings_so_far(s, milestone)}
+    milestone_id = _record(
+        s, metrics.upsert_milestone, s.project_id, milestone, review_score=round_.score
+    )
     if milestone_id is None:
         return
-    for finding in round_.findings:
-        _record(
-            s,
-            metrics.add_finding,
-            milestone_id,
-            finding.id,
-            job_id=s.last_job_id,
-            severity=finding.severity,
-            route=finding.route,
-            summary=finding.summary,
-            resolved=finding.resolved,
-            agent=agent,
-        )
+    for key, verdict in round_.checkpoint_verdicts.items():
+        if key in known:
+            _record(s, metrics.add_finding, milestone_id, key, verdict=verdict)
 
 
 def _record_review(s: Session, milestone: str, rounds: int) -> None:
@@ -320,6 +346,7 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
                 max_rounds=cfg.review_rounds,
                 scope=scope,
                 recurring=", ".join(recurring_for_claude(seen)) or "none",
+                checkpoints=_checkpoint_list(s, milestone),
                 out=out.relative_to(cfg.repo).as_posix(),
             ),
             timeout=cfg.claude_timeout,
@@ -333,7 +360,8 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
         except ReviewFileError as exc:
             stop = f"review output unusable: {exc}"
             break
-        _record_findings(s, milestone, round_, cfg.agent_for(job.role).id)
+        record_findings(s, milestone, round_.findings, cfg.agent_for(job.role).id)
+        _record_judging(s, milestone, round_)
         s.git.commit_all(
             with_trailers(
                 f"review {milestone} round {round_no} (by Claude)", agent=CLAUDE_HEADLESS_AGENT

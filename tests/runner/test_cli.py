@@ -102,6 +102,21 @@ def test_a_restart_without_a_yes_passes_none_on(in_repo, monkeypatch):
     assert loop.RESERVE_ENV not in envs[0]
 
 
+@pytest.mark.parametrize(("argv", "score"), [(["--score", "7"], 7), ([], None)])
+def test_signoff_passes_the_owners_score_on(in_repo, monkeypatch, argv, score):
+    seen: list[object] = []
+    monkeypatch.setattr(
+        owner, "signoff", lambda repo, key, today, force, db, score: seen.append((key, score))
+    )
+    assert cli.main(["signoff", "f1", *argv]) == 0
+    assert seen == [("f1", score)]
+
+
+def test_signoff_refuses_a_score_of_11(in_repo, capsys):
+    assert cli.main(["signoff", "f1", "--score", "11"]) == 1
+    assert "1 to 10" in capsys.readouterr().err
+
+
 def test_a_bad_milestone_name_is_an_error(in_repo, capsys):
     assert cli.main(["milestone", "F 1"]) == 1
     assert "milestone" in capsys.readouterr().err

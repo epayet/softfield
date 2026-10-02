@@ -215,16 +215,26 @@ def _replace_line(path: Path, pattern: re.Pattern[str], line: str) -> None:
     path.write_text(pattern.sub(line, text, count=1), encoding="utf-8")
 
 
-def _signed_off(milestone: str, conn: sqlite3.Connection, project: int) -> None:
-    metrics.upsert_milestone(conn, project, milestone, status="done", ended=_now())
+def _signed_off(milestone: str, score: int | None, conn: sqlite3.Connection, project: int) -> None:
+    metrics.upsert_milestone(
+        conn, project, milestone, status="done", ended=_now(), owner_score=score
+    )
     _resolve(conn, project, lambda kind, subject: (kind, subject) == ("signoff", milestone))
 
 
 def signoff(
-    repo: Path, milestone: str, today: date, force: bool = False, db: Path | None = None
+    repo: Path,
+    milestone: str,
+    today: date,
+    force: bool = False,
+    db: Path | None = None,
+    score: int | None = None,
 ) -> None:
     """Mark a milestone done: its doc and review, the ``<key>-done`` tag, one commit. With a
-    metrics ``db``, the milestone's row is done and its sign-off item resolved."""
+    metrics ``db``, the milestone's row is done and its sign-off item resolved. The owner's
+    optional ``score`` (1-10, ADR 14 item 14) is how the result felt on the devices."""
+    if score is not None and not 1 <= score <= 10:
+        raise OwnerError(f"a score is 1 to 10, not {score}")
     left = [f"{t} ({f})" for f in _UNFINISHED for t in _ids(repo, f, milestone)]
     if left and not force:
         raise OwnerError(
@@ -246,7 +256,7 @@ def signoff(
     git = Git(repo)
     git.commit_all(f"{milestone.upper()} signed off by the owner")
     git.run("tag", f"{milestone}-done")
-    _write(repo, db, lambda conn, project: _signed_off(milestone, conn, project))
+    _write(repo, db, lambda conn, project: _signed_off(milestone, score, conn, project))
 
 
 def _is_adr(number: int) -> Callable[[str, str], bool]:

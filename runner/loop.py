@@ -7,7 +7,7 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from functools import partial
@@ -60,6 +60,7 @@ from runner.local_model import (
 )
 from runner.procs import run_bounded
 from runner.report import ClaudeRunRecord, SessionReport, TaskRecord
+from runner.review import Finding, ReviewFileError, parse_checkpoint
 from runner.state import State, load_state, save_state
 from runner.tasks import (
     STOPPED,
@@ -752,6 +753,16 @@ def _note_summary(notes: tuple[Path, ...]) -> str:
     return " · ".join(parts)
 
 
+NOTE_FILE = "note.md"  # a direction's or an escalation's process note, in the ticket's logs
+PROCESS_NOTE_MAX = 2000  # chars: a note is 2-4 lines; more is cut
+
+
+def _process_note(path: Path | None) -> str | None:
+    if path is None or not path.is_file():
+        return None
+    return path.read_text(encoding="utf-8", errors="replace").strip()[:PROCESS_NOTE_MAX] or None
+
+
 def call_claude(
     s: Session,
     job: JobSpec,
@@ -761,6 +772,7 @@ def call_claude(
     ticket: str | None = None,
     notes: tuple[Path, ...] = (),
     park: bool = False,
+    process_note: Path | None = None,
 ) -> JobResult:
     """Run a lead job on the agent its role names, waiting out usage limits. Each trigger
     bounds its own runs (ADR 12 item 10); the count per milestone is kept for the metrics.
@@ -780,7 +792,11 @@ def call_claude(
     (the files it writes) or else its answer's first line.
 
     While it runs, it is the in-flight job in state.json (ADR 15 item 11); a run of it that was
-    interrupted resumes its session, told where its changes were kept."""
+    interrupted resumes its session, told where its changes were kept.
+
+    A direction or an escalation writes a ``process_note`` (ADR 14 item 13), kept as its job's
+    note. A ticket's direction and escalation share its logs, so an earlier job's is removed
+    first, unless this job resumes and may have written its own."""
     attempt = unsure = transient = 0
     resume: str | None = None
     interrupted = False
@@ -800,6 +816,8 @@ def call_claude(
             resume_prompt, partial_note = INTERRUPTED_PROMPT + where, INTERRUPTED_NOTE + where
         resume = earlier["session_id"] or None
         interrupted = True
+    elif process_note is not None:
+        process_note.unlink(missing_ok=True)
     number = next_number(s, ticket, job.role)
     runner = s.cfg.agent_for(job.role)
     adapter, agent = adapter_for(runner.harness), runner.id
@@ -924,6 +942,7 @@ def call_claude(
             tokens_cached=result.usage.get("cache_read_input_tokens", 0),
             tokens_out=result.usage.get("output_tokens", 0),
             cost_usd=result.cost_usd,
+            note=_process_note(process_note),
             session_id=result.session_id,
             log_path=_rel(s, log),
         )
@@ -1093,7 +1112,16 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
         commands=GIT_READ_COMMANDS,
     )
     direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
-    call_claude(s, job, task.milestone, task.id, ticket=task.id, notes=(direction_file,), park=True)
+    call_claude(
+        s,
+        job,
+        task.milestone,
+        task.id,
+        ticket=task.id,
+        notes=(direction_file,),
+        park=True,
+        process_note=logs / NOTE_FILE,
+    )
     s.state.directions[task.id] = s.state.directions.get(task.id, 0) + 1
     save_state(s.state, s.state_path)
     direction = (
@@ -1587,14 +1615,53 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
         checkpoint(s, task.milestone)
 
 
+def _ticket_id(conn: sqlite3.Connection, project_id: int, ticket: str) -> int | None:
+    """A ticket's row, if it has one: a finding naming a ticket never adds one."""
+    row = conn.execute(
+        "SELECT id FROM tickets WHERE project_id = ? AND ticket = ?", (project_id, ticket)
+    ).fetchone()
+    return int(row[0]) if row else None
+
+
+def record_findings(
+    s: Session, milestone: str, findings: Iterable[Finding], agent: str, prefix: str = ""
+) -> None:
+    """Findings on the last Claude job, keyed by ``prefix`` and their ids (ADR 14 item 13)."""
+    if s.project_id is None:
+        return
+    milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
+    if milestone_id is None:
+        return
+    for finding in findings:
+        ticket_id = _record(s, _ticket_id, s.project_id, finding.ticket) if finding.ticket else None
+        _record(
+            s,
+            metrics.add_finding,
+            milestone_id,
+            prefix + finding.id,
+            job_id=s.last_job_id,
+            ticket_id=ticket_id,
+            severity=finding.severity,
+            route=finding.route,
+            file=finding.file or None,
+            line=finding.line,
+            summary=finding.summary,
+            detail=finding.detail or None,
+            resolved=finding.resolved,
+            agent=agent,
+        )
+
+
 def checkpoint(s: Session, milestone: str) -> None:
     merged = list(s.state.unchecked)
     out = s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
+    findings_out = out.with_suffix(".json")
     job = JobSpec(
         role="checkpoint",
         prompt=prompts.CHECKPOINT.format(
             merges="\n".join(f"- {m.split()[0]}: `git show {m.split()[1]}`" for m in merged),
             out=out.relative_to(s.repo).as_posix(),
+            findings=findings_out.relative_to(s.repo).as_posix(),
         ),
         timeout=s.cfg.claude_timeout,
         edit=("tasks/ready/**", "docs/agents/developer.md", "var/runs/**"),
@@ -1609,6 +1676,15 @@ def checkpoint(s: Session, milestone: str) -> None:
     save_state(s.state, s.state_path)
     if out.is_file():
         s.report.notes.append("Checkpoint: " + out.read_text(encoding="utf-8").strip())
+    try:
+        findings = parse_checkpoint(findings_out)
+    except ReviewFileError as exc:
+        s.report.notes.append(f"Checkpoint findings unusable: {exc}")
+    else:
+        # Keyed by the checkpoint's job, unique in the milestone (the review judges them)
+        if s.last_job_id is not None:
+            prefix = f"{milestone}-C{s.last_job_id}-"
+            record_findings(s, milestone, findings, s.cfg.agent_for(job.role).id, prefix)
     s.git.commit_all(
         with_trailers(
             "checkpoint after " + ", ".join(m.split()[0] for m in merged) + " (by Claude)",
@@ -1660,6 +1736,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         task.id,
         ticket=task.id,
         notes=(decision_path, logs / "escalation.md"),
+        process_note=logs / NOTE_FILE,
     )
     try:
         decision = json.loads(decision_path.read_text(encoding="utf-8"))

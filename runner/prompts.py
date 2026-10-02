@@ -99,7 +99,14 @@ The lead read your work and your thinking, and says:
 """
 )
 
-DIRECTION = """\
+# ADR 14 item 13: directions and escalations already read the developer's thinking.
+PROCESS_NOTE = """\
+Also write {logs}/note.md, for the record, not the developer: 2-4 lines on how it worked. Did
+it follow the ticket, run its checks, go round in circles? Describe; don't score.
+"""
+
+DIRECTION = (
+    """\
 You are the lead. A developer (a local model) has failed task {id} twice; it gets one last
 attempt, which builds on its work on the branch. Give it direction (ADR 12 item 6; ADR 15
 item 7; docs/agents/lead.md, Escalations).
@@ -116,10 +123,14 @@ If its work is unusable and the last attempt should start again from main, make 
 `reset: true` (the developer doesn't see that line).
 If the ticket itself is wrong (a missing or false fact, a protected file, something its tools
 can't do), also write {logs}/ticket.md: the whole corrected ticket, frontmatter included.
-Write nothing else. Read-only git (diff, log, show) is fine.
 """
+    + PROCESS_NOTE
+    + """Write nothing else. Read-only git (diff, log, show) is fine.
+"""
+)
 
-ESCALATION = """\
+ESCALATION = (
+    """\
 You are the lead, handling an escalated task in the Coucou repo. Follow
 docs/agents/lead.md (Escalations).
 
@@ -149,10 +160,13 @@ Then write {logs}/decision.json as
 "reset": true, and for "owner" also {{"adr": "docs/adr/NN-slug.md", "question": "<one line
 for the owner>"}}, and {logs}/escalation.md: 3-6 lines on what happened, what the local
 model got wrong, and the lesson. Turn the lesson into a check, an example or a line in
-docs/agents/developer.md (its budget is in lead.md), and say which. Read-only git (diff, log,
-show) is fine; don't commit and don't edit tasks/escalated/: the runner commits and moves
-files.
+docs/agents/developer.md (its budget is in lead.md), and say which. """
+    + PROCESS_NOTE
+    + """\
+Read-only git (diff, log, show) is fine; don't commit and don't edit tasks/escalated/: the
+runner commits and moves files.
 """
+)
 
 LEAD_TICKET = """\
 You are the lead, doing your own ticket in the Coucou repo: {task}. Follow
@@ -183,8 +197,13 @@ If you wrote or changed a ticket, run `uv run pytest -q tests/runner/test_tasks.
 what it reports: it checks the tickets' format and that every path they name exists
 (repo-relative, e.g. `tests/factory_dashboard/conftest.py`, not `conftest.py`).
 
-Write {out}: 2-5 lines on what you found and did. Change nothing else; don't run git beyond
-diff, log and show.
+Write {out}: 2-5 lines on what you found and did. Also write {findings}, one entry per
+problem you found (an empty list if none; the final review judges them):
+{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
+  "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
+  "route": "local" | "backlog", "ticket": "<the merged ticket at fault>"}}]}}
+route: "local" if you wrote a fix ticket for it, "backlog" otherwise.
+Change nothing else; don't run git beyond diff, log and show.
 """
 
 REVIEW = """\
@@ -206,11 +225,23 @@ Grade each finding blocking / should-fix / nit and route it:
 - backlog: nits and should-fix points about untouched code go to docs/backlog.md.
 Recurring findings (fix these yourself): {recurring}
 
+The checkpoints' findings so far, by key (ADR 14 item 13):
+{checkpoints}
+Judge each: "confirmed" (a real problem) or "rejected" (not one). Also mark "missed" each of
+your own findings a checkpoint should have caught: in work merged before it ran, and visible
+in the diffs it read. Score the milestone from 1 to 10.
+
 Write {out} as:
 {{"findings": [{{"id": "{milestone}-F1", "severity": "...", "route": "...",
-  "summary": "...", "resolved": false, "security": false}}],
+  "summary": "one line", "file": "coucou/x.py", "line": 12 | null,
+  "detail": "what is wrong and why", "ticket": "<the ticket at fault>" | null,
+  "resolved": false, "security": false}}],
+  "checkpoint_verdicts": {{"<checkpoint finding key or your finding id>": "confirmed" |
+  "rejected" | "missed"}},
+  "score": 1-10,
   "stop": null | "adr-needed" | "security-unresolved" | "unforeseen-cross-milestone"}}
 Keep ids stable across rounds; mark findings fixed since the last round "resolved": true.
+Give checkpoint_verdicts and score every round, as they stand: the last round's are kept.
 Also create or update docs/reviews/{milestone}.md. It starts with the owner's sign-off
 sheet (lead.md, "Sign-off sheet"), ending with "6. What next": your product and factory
 suggestions. Then what was built, findings and resolutions, backlog and workflow

@@ -50,6 +50,9 @@ def main(argv: list[str] | None = None) -> int:
     signoff = sub.add_parser("signoff", help="the owner: mark a milestone done and tag it")
     signoff.add_argument("number", help="4 for M4, or a key like f1")
     signoff.add_argument("--force", action="store_true", help="even with tickets left")
+    signoff.add_argument(
+        "--score", type=int, help="optional, 1-10: how the result felt on the devices"
+    )
     for name in ("accept", "reject"):
         decide = sub.add_parser(name, help=f"the owner: {name} an ADR")
         decide.add_argument("number", type=int)
@@ -126,7 +129,9 @@ def main(argv: list[str] | None = None) -> int:
             return code
         elif args.command == "signoff":
             key = milestone_key(args.number)
-            owner.signoff(repo, key, _today(), force=args.force, db=cfg.metrics_db)
+            owner.signoff(
+                repo, key, _today(), force=args.force, db=cfg.metrics_db, score=args.score
+            )
             print(f"{key.upper()} signed off and tagged {key}-done.")
         elif args.command in ("accept", "reject"):
             decision = "Accepted" if args.command == "accept" else "Rejected"

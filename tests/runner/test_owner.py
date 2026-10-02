@@ -220,6 +220,36 @@ def test_sign_off_waiting_is_an_item_that_signoff_resolves(repo: Path):
     assert status == "done" and ended
 
 
+def _owner_score(repo: Path) -> object:
+    conn = sqlite3.connect(_db(repo))
+    try:
+        return conn.execute("SELECT owner_score FROM milestones").fetchone()[0]
+    finally:
+        conn.close()
+
+
+def test_signoff_stores_the_owners_score(repo: Path):
+    """ADR 14 item 14: how the result felt on the devices, 1 to 10."""
+    _milestone(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo), score=7)
+    assert _owner_score(repo) == 7
+
+
+def test_signoff_without_a_score_leaves_it_empty(repo: Path):
+    _milestone(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))
+    assert _owner_score(repo) is None
+
+
+@pytest.mark.parametrize("score", [0, 11])
+def test_signoff_refuses_a_score_out_of_range_before_changing_anything(repo: Path, score: int):
+    _milestone(repo)
+    with pytest.raises(owner.OwnerError, match="1 to 10"):
+        owner.signoff(repo, "m1", TODAY, db=_db(repo), score=score)
+    assert git(repo, "tag") == "" and git(repo, "status", "--porcelain") == ""
+    assert not _db(repo).exists()
+
+
 def test_the_verdict_is_on_the_milestone_row(repo: Path):
     _needs_you(repo)
     owner.verdict(repo, "m1", State(), "clean", db=_db(repo))
