@@ -41,3 +41,10 @@ Read `docs/milestones/f1.md` (D3 and D8, each "Amended 2026-10-02", and the Repl
 - a 300-character summary prints whole
 - an existing database migrates to version 3 and keeps its rows
 - `uv run runner check-all --task f1-51-runner-activity` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
