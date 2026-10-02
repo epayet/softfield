@@ -1,6 +1,6 @@
 # ADR 16: Keep Claude's 5-hour window for the lead and the owner; Copilot steps in; name milestones
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-10-02)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 14](14-developers-and-agents.md) item 12; [ADR 15](15-allowance-aware-routing.md) items 1, 4, 5 and 6; `docs/task-format.md` (milestone keys); the lead's replans (lead.md, a trial in F1)
