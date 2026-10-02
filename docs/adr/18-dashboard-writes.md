@@ -18,19 +18,14 @@
 
 ## Decisions (draft)
 1. **⚑ Listen on the home Wi-Fi.**
-   - `runner dashboard --lan` binds to the LAN address; the default stays `127.0.0.1`.
+   - `runner dashboard --lan` finds this machine's LAN address and binds to it (the owner runs `--host <ip>` today); the default stays `127.0.0.1`. It keeps picking up new code as it does now.
    - No tunnel, no public host.
 2. **⚑ Writes are requests, never direct changes.**
-   - The dashboard writes one row to a new `owner_requests` table: kind, subject, value, time, and a per-device key.
+   - The dashboard writes one row to a new `owner_requests` table: kind, subject, value and time.
    - The runner, or the `runner` command when no run is live, applies each request with the same code as its console command (`signoff`, `queue`, the 5-hour answer). It then marks the request done, with its result.
    - Git and `tasks/` keep one writer.
-3. **A guard even on the LAN.**
-   - A one-time pairing: the desktop shows a code, and the phone keeps a long random token in a cookie.
-   - Every write needs that token, and CSRF protection on every form.
-   - Reads stay open on the LAN. This is security-relevant, so the lead writes it, test-first.
-4. **Notifications:** web notifications from an open dashboard page first (no third party), for "needs you" and "all work done".
+3. **⚑ No pairing or login on the home network** (owner, 2026-10-02: "it's fine for people within my home to access"). Anyone on the Wi-Fi can read and write. The one guard kept is free: a write must come from the dashboard's own page (same origin, htmx's `HX-Request` header), so a website open in the owner's browser can't post to it.
+4. **Notifications:** browser notifications while a dashboard page is open, for "needs you" and "all work done". Push to a closed page is in the roadmap (owner, 2026-10-02).
 
 ## Open questions
-- Does a phone need a push when the page is closed? That needs a push service (web push through the browser vendor, or a self-hosted ntfy). Decide after using item 4.
 - Which requests come first: sign-off and the 5-hour answer, then queue/later, then priorities (with [ADR 19](19-feature-board.md)), then the manual Ollama reading?
-- Is the pairing code too much ceremony for a home network?

@@ -33,11 +33,11 @@
    - On a feature's page, the owner writes a question or a thought at any time, even while Claude is at its limit.
    - Each becomes a `planner` lead job with the highest priority. It answers in the feature's file when Claude has room, and proposes the next step (an ADR draft, tickets, "ready to plan").
    - Accepting is the owner's, as today.
-5. **A live chat on the web** (synchronous, a second Claude client): only if planner questions feel too slow. To discuss.
-6. **Claude suggests features** with spare capacity: a lowest-priority lead job that adds features in the `idea` state for the owner to triage. Never above the owner's work.
+5. **Priorities: the lead sets them, the owner changes them** (owner, 2026-10-02). The lead ranks new features and bugs at planning, and the owner's change always wins.
+
+A live chat and Claude suggesting features are in the roadmap, not here (owner, 2026-10-02).
 
 ## Open questions
-- Who sets a priority: only the owner, or the lead at planning with the owner's veto?
 - Does a planner question count against the 25% of Claude's window kept for the owner (ADR 16), since it is the owner's own work?
 - How does this sit with milestones: is a milestone still the unit of sign-off, while features are the unit of priority?
 - Is the factory line (F3) or the board the Overview?
