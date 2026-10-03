@@ -197,13 +197,3 @@ tbody tr:hover { background: var(--accent-wash); }
 .new-version { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent);
   border-radius: 4px; background: var(--accent-wash); color: var(--ink); }
 
-/* Replay bar (f3-07): sticky bar at the bottom on mobile */
-.replay { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px;
-  background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
-  font-size: 13px; color: var(--ink-2); }
-@media (max-width: 639px) { .replay { position: sticky; bottom: 0; z-index: 10;
-  box-shadow: 0 -2px 8px rgba(0,0,0,.1); } }
-.replay button, .replay select { min-width: 44px; min-height: 44px; padding: 4px 10px;
-  font: inherit; font-size: 13px; border: 1px solid var(--rule); border-radius: 4px;
-  background: var(--surface); color: var(--ink); cursor: pointer; }
-.replay button:hover { background: var(--accent-wash); }
