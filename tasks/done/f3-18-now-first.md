@@ -35,3 +35,12 @@ Read `factory_dashboard/templates/overview.html`, `factory_dashboard/templates/_
 - the allowance rows keep their ids, and the allowance tests still pass
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2931
+gate_failures: ['task-tests']
+tokens: 893468
+```
