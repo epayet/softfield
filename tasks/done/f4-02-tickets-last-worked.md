@@ -35,3 +35,9 @@ attempts: 1
 tokens: 40639
 logs: var/runs/20261003-071707/f4-02-tickets-last-worked
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
