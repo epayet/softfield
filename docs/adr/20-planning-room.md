@@ -1,6 +1,6 @@
 # ADR 20: The planning room: plan with the lead from the dashboard, asynchronously
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-10-03)
 - **Date:** 2026-10-03
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 16](16-claude-window-and-named-milestones.md) items 1–2 (who goes first, for planner jobs); [ADR 19](19-feature-board.md) item 5 (planner questions become this room); [ADR 18](18-dashboard-writes.md) (new request kinds)
