@@ -56,6 +56,7 @@
 | 16 | allowance-mark | D | 2 | 12 | The reserve marks visible in both themes |
 | 17 | agents-model-label | D | 2 | – | "not recorded" says why |
 | 18 | later-list | D | 3 | 09 | The Tickets page lists the tickets set aside |
+| 20 | run-reviews-milestones | L | 5 | – | Under `runner run`, a milestone whose tickets are all done gets its review and verdict, then the run carries on |
 | 19 | bench-own-project | L | 4 | – | Each bench copy is a project of its own for OpenCode, so a bench never edits the main checkout (it did again, 2026-10-02) |
 
 Not in F4 (roadmap, "Owner's notes after F2"):
