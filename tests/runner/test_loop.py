@@ -1160,6 +1160,97 @@ def test_a_requeued_ticket_continues_its_branch(repo, fake_model, fake_lead):
     assert git(repo, "status", "--porcelain") == ""
 
 
+def test_a_clean_requeue_gets_no_repair_turn(repo, fake_model, fake_lead):
+    _escalate_on_protected(repo, fake_model)
+    fake_model.extend([_undo_and_implement, _after])
+    script, jobs = fake_lead
+    script.extend([lambda job, repo_: None, _requeue(False), lambda job, repo_: None])
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert [j.kind for j in jobs] == ["direction", "escalation", "checkpoint"]
+    assert (repo / "tasks" / "done" / "m1-01-thing.md").is_file()
+
+
+def _lead_sessions(monkeypatch):
+    """Scripted headless Claude that hands out session ids and records what each job resumed."""
+    script: list[Callable[[ClaudeJob, Path], None]] = []
+    calls: list[tuple[ClaudeJob, str | None]] = []
+
+    def run_claude(job, repo, timeout, log_path, now, resume=None):
+        calls.append((job, resume))
+        script.pop(0)(job, repo)
+        return JobResult(ok=True, text="", duration_s=1.0, session_id=f"s{len(calls)}")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    return script, calls
+
+
+def _requeue_naming(path: str) -> Callable[[ClaudeJob, Path], None]:
+    """f1-36, f1-15, f2-06: a requeue whose Context names a bare path."""
+
+    def requeue(job, repo_):
+        _requeue(False)(job, repo_)
+        ready = repo_ / "tasks" / "ready" / "m1-01-thing.md"
+        ready.write_text(
+            ready.read_text().replace(
+                "### Pattern to follow", f"See `{path}`.\n\n### Pattern to follow"
+            )
+        )
+
+    return requeue
+
+
+def _repair_to(path: str) -> Callable[[ClaudeJob, Path], None]:
+    def repair(job, repo_):
+        ready = repo_ / "tasks" / "ready" / "m1-01-thing.md"
+        ready.write_text(ready.read_text().replace("`conftest.py`", f"`{path}`"))
+
+    return repair
+
+
+def test_a_requeue_naming_a_missing_path_gets_one_repair_turn_and_runs(
+    repo, fake_model, monkeypatch
+):
+    _escalate_on_protected(repo, fake_model)
+    fake_model.extend([_undo_and_implement, _after])
+    script, calls = _lead_sessions(monkeypatch)
+    script.extend(
+        [
+            lambda job, repo_: None,
+            _requeue_naming("conftest.py"),
+            _repair_to("coucou/thing.py"),
+            lambda job, repo_: None,  # the checkpoint
+        ]
+    )
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    (_, _), (escalation, _), (repair, resumed), _ = calls
+    assert resumed == "s2"  # the escalation's own session
+    assert "referenced path does not exist: conftest.py" in repair.prompt
+    assert "tasks/ready/m1-01-thing.md" in repair.prompt
+    assert repair.allowed_tools != escalation.allowed_tools
+    assert "Edit(tasks/ready/m1-01-thing.md)" in repair.allowed_tools
+    assert (repo / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert "Requeued" in (repo / "tasks" / "done" / "m1-01-thing.md").read_text()
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_requeue_still_failing_pre_flight_is_blocked_with_its_problems(
+    repo, fake_model, monkeypatch
+):
+    _escalate_on_protected(repo, fake_model)
+    script, calls = _lead_sessions(monkeypatch)
+    script.extend([lambda job, repo_: None, _requeue_naming("conftest.py"), _repair_to("x.py")])
+    report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert report is not None and len(calls) == 3  # one repair turn, no more
+    blocked = (repo / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+    assert "Requeued" in blocked  # the lead's rewrite, with its earlier runs' footers
+    assert "result: escalated" in blocked
+    assert "referenced path does not exist: x.py" in blocked.split("result: blocked", 1)[1]
+    assert not (repo / "tasks" / "ready" / "m1-01-thing.md").exists()
+    assert not (repo / "tasks" / "escalated" / "m1-01-thing.md").exists()
+    assert not (repo / "tasks" / "done" / "m1-02-after.md").exists()  # its dependant waits
+    assert git(repo, "status", "--porcelain") == ""
+
+
 def test_a_requeue_that_says_reset_starts_from_main(repo, fake_model, fake_lead):
     _escalate_on_protected(repo, fake_model)
     script, _ = fake_lead

@@ -1050,11 +1050,13 @@ def call_claude(
 
     A direction or an escalation writes a ``process_note`` (ADR 14 item 13), kept as its job's
     note. A ticket's direction and escalation share its logs, so an earlier job's is removed
-    first, unless this job resumes and may have written its own."""
+    first, unless this job resumes and may have written its own.
+
+    A ``job.resume`` session carries on an earlier job's with ``job.prompt``: one more turn."""
     attempt = unsure = transient = 0
-    resume: str | None = None
+    resume = job.resume
     interrupted = False
-    resume_prompt, partial_note = RESUME_PROMPT, PARTIAL_WORK_NOTE
+    resume_prompt, partial_note = job.prompt if resume else RESUME_PROMPT, PARTIAL_WORK_NOTE
     if (earlier := s.state.interrupted.pop(job_key(job.role, ticket or subject), None)) is not None:
         kept = earlier["branch"]
         where = (
@@ -2478,6 +2480,46 @@ def _only_docs_and_tasks(s: Session) -> bool:
     return checks.hook_can_skip(changed) or not changed
 
 
+REQUEUE_REPAIR_PROMPT = """\
+The ticket you requeued, {path}, fails the runner's pre-flight:
+{problems}
+Fix that file only: name repo-relative paths (`tests/conftest.py`, not `conftest.py`) and only
+paths and symbols that exist, or that its `files:` or `tests:` list. If it still fails, the
+runner blocks the ticket with these problems."""
+
+
+def _requeue_problems(s: Session, path: Path) -> list[str]:
+    try:
+        return preflight(parse_task(path, s.cfg.default_max_diff), s.repo)
+    except (OSError, ValueError, yaml.YAMLError) as e:
+        return [f"the ticket doesn't parse: {e}"]
+
+
+def _repair_requeue(s: Session, task: Task, requeued: Path, session: str | None) -> list[str]:
+    """f2-F4: a requeue naming a missing path (f1-36, f1-15, f2-06) cost the next run at its
+    pre-flight. Pre-flight it now; with problems, the escalation's session gets one turn to
+    fix them, as a direction's repair is checked (f1-50). Returns the problems left."""
+    if not requeued.is_file() or not (problems := _requeue_problems(s, requeued)):
+        return []
+    rel = requeued.relative_to(s.repo).as_posix()
+    s.log(f"escalation {task.id}: requeue fails pre-flight: {'; '.join(problems)}")
+    job = JobSpec(
+        role="escalation",
+        prompt=REQUEUE_REPAIR_PROMPT.format(
+            path=rel, problems="\n".join(f"- {p}" for p in problems)
+        ),
+        timeout=s.cfg.claude_timeout,
+        edit=(rel,),
+        commands=GIT_READ_COMMANDS,
+        resume=session,
+    )
+    call_claude(s, job, task.milestone, task.id, ticket=task.id)
+    problems = _requeue_problems(s, requeued) if requeued.is_file() else ["the repair removed it"]
+    if problems:
+        s.report.notes.append(f"Requeue of {task.id} still fails pre-flight after its repair.")
+    return problems
+
+
 def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     """The lead's decision on an escalated ticket. While Claude can't take it (a limit, or the
     owner's share of its 5-hour window), it parks and the queue goes on; a parked escalation
@@ -2514,7 +2556,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     )
     decision_path = logs / "decision.json"
     try:
-        call_claude(
+        result = call_claude(
             s,
             job,
             task.milestone,
@@ -2550,13 +2592,19 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         s.git.checkout(MAIN)
         block(s, escalated, f"the escalation's work failed check-all; it is on {branch}")
         return
+    problems: list[str] = []
     if outcome == "requeue":
         requeued = s.tasks_dir("ready") / task.path.name
+        problems = _repair_requeue(s, task, requeued, result.session_id)
         if requeued.is_file():
             carry_footers(escalated, requeued)
-        s.git.run("rm", "-q", str(escalated.relative_to(s.repo)))
+        if problems and requeued.is_file():  # blocked below as written, never committed to ready/
+            escalated.write_text(requeued.read_text(encoding="utf-8"), encoding="utf-8")
+            requeued.unlink()
+        elif not problems:
+            s.git.run("rm", "-q", str(escalated.relative_to(s.repo)))
         # Its next run builds on the branch, unless the lead found the work unusable
-        if decision.get("reset") is True and _has_branch(s.git, branch):
+        if not problems and decision.get("reset") is True and _has_branch(s.git, branch):
             s.git.run("branch", "-D", branch)
     elif outcome == "implemented":
         s.git.move(escalated, s.tasks_dir("done") / task.path.name)
@@ -2575,6 +2623,9 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
             agent=CLAUDE_HEADLESS_AGENT,
         )
     )
+    if problems:
+        block(s, escalated, "the requeued ticket fails pre-flight: " + "; ".join(problems))
+        return
     done = s.tasks_dir("done") / task.path.name
     if outcome == "implemented" and done.is_file():
         record_ticket(s, done, merged_by=s.cfg.agent_for(job.role).id, commit=s.git.head())
