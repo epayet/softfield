@@ -32,3 +32,9 @@ attempts: 3
 tokens: 473679
 logs: var/runs/20261003-201706/f4-21-fix-initial-page-load-can
 ```
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the finished work failed check-all; its work is on task/f4-21-fix-initial-page-load-can
+```
