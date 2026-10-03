@@ -16,8 +16,8 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 
 ## Notes
 1. French says `vous` and sounds warm and plain: "Réessayez un peu plus tard", never "Veuillez réessayer".
-2. After editing a `.po` file, compile it with `msgfmt` (AGENTS.md rule 9).
-3. Text lives where it's shown: `{% translate %}` in templates, `gettext("…")` with a literal in JS. JS French goes in `djangojs.po`, compiled to `djangojs.mo`.
+2. Text lives where it's shown: `{% translate %}` in templates, `gettext("…")` with a literal in JS. JS French goes in `djangojs.po`. After editing a `.po` file, compile it with `msgfmt` (AGENTS.md rule 9).
+3. If your new test passes before you change any code, the bug may already be fixed on main (f4-23: a finding fixed by two later tickets). Check the code the ticket names, then write `BLOCKED.md`: a first line that is exactly `CATEGORY: false-assumption`, then where main already does it. Don't rewrite the test to make it fail.
 4. Test the edges, not only the middle: empty, one, many, the longest note (280 characters), just before and after midnight.
 5. A UI test checks the layout at phone and display sizes: `layout_problems(page) == []` (`tests/browser/conftest.py`).
 6. Browser tests stub the network with `page.route`, never a real server.

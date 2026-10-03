@@ -924,11 +924,11 @@ def test_reduced_motion_disables_animations(page, line_client):
 # --- replay steps (f3-11) --------------------------------------------------------------------
 
 
-def start_replay(page, night_db) -> list[dict[str, Any]]:
+def start_replay(page, night_db, size: dict[str, int] | None = None) -> list[dict[str, Any]]:
     """The fixture night's line opened and its overnight replay loaded; returns its events,
     from the route, in the server's zone."""
     client = night_client(night_db)
-    open_line(page, client)
+    open_line(page, client, size)
     url = page.locator(".page").get_attribute("data-replay")
     assert url is not None
     events: list[dict[str, Any]] = client.get(url).json()["events"]
@@ -1000,3 +1000,13 @@ def test_a_replayed_machine_works_on_its_crate_and_a_failed_check_flashes_red(pa
     page.click("#replay-next")
     assert readout(page).endswith("n1-02-retry failed checks: ruff")
     assert page.locator("svg#floor .light.flash-red").count() == 1
+
+
+def test_a_failed_check_flashes_the_phone_floors_light(page, night_db):
+    events = start_replay(page, night_db, PHONE)
+    failed = next(n for n, e in enumerate(events) if e["kind"] == "check" and not e["passed"])
+
+    for _ in range(failed + 1):
+        page.click("#replay-next")
+    assert page.locator("svg#floor-phone .light.flash-red").count() == 1
+    assert page.locator("svg#floor .light.flash-red").count() == 0
