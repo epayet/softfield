@@ -80,6 +80,7 @@ from runner.tasks import (
     command_arg,
     difficulty,
     find_ticket,
+    held_ids,
     load_dir,
     milestone_key,
     milestone_order,
@@ -3243,12 +3244,15 @@ def work_queue(
             ready = [t for t in ready if short_key(t.milestone) == short_key(milestone)]
         done = task_ids(s.tasks_dir("done"))
         paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
-        task = _next_task(s, ready, done, paused)
+        held = _held(s.repo, ready)
+        task = _next_task(s, ready, done, paused | held.keys())
         if task is None:
             if _wait_for_reset(s, ready):
                 continue
             if paused:
                 s.report.notes.append("Paused (dependency escalated): " + ", ".join(sorted(paused)))
+            if held:
+                s.report.notes.append("Waiting: " + _waits_text(held))
             return False
         with doing(s, task.id):
             rec = run_task(s, task)
@@ -3271,7 +3275,9 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         ready = load_dir(tasks / "ready", cfg.default_max_diff)
         done = task_ids(tasks / "done")
         paused = blocked_ids(ready, stopped_ids(tasks))
-        _print_plan(ready, done, paused, pick_next(ready, done, paused), cfg.repo)
+        held = _held(cfg.repo, ready)
+        nxt = pick_next(ready, done, paused | held.keys())
+        _print_plan(ready, done, paused, nxt, cfg.repo, held)
         return None
     s = open_session(cfg)
     restart = work_queue(s, escalate=escalate, once=once)
@@ -3344,18 +3350,37 @@ def close_session(s: Session) -> SessionReport:
     return s.report
 
 
+def _held(repo: Path, ready: list[Task]) -> dict[str, str]:
+    """Ready tickets whose milestone waits for another's sign-off (ADR 17 item 4)."""
+    from runner.milestone import waits_for  # runner.milestone imports this module
+
+    return held_ids(ready, waits_for(repo, (t.milestone for t in ready)))
+
+
+def _waits_text(held: dict[str, str]) -> str:
+    return ", ".join(
+        f"{task_id} waits for {key}'s sign-off" for task_id, key in sorted(held.items())
+    )
+
+
 def _print_plan(
-    ready: list[Task], done: set[str], paused: set[str], nxt: Task | None, repo: Path
+    ready: list[Task],
+    done: set[str],
+    paused: set[str],
+    nxt: Task | None,
+    repo: Path,
+    held: dict[str, str],
 ) -> None:
     """What would run next, and each ready task's pre-flight problems (docs/task-writing.md)."""
     print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
     for task in sorted(ready, key=lambda t: (milestone_order(t.milestone), t.id)):
         waiting = [d for d in task.depends_on if d not in done]
-        status = (
-            "paused"
-            if task.id in paused
-            else ("waiting on " + ", ".join(waiting) if waiting else "runnable")
-        )
+        if task.id in paused:
+            status = "paused"
+        elif task.id in held:
+            status = f"waits for {held[task.id]}'s sign-off"
+        else:
+            status = "waiting on " + ", ".join(waiting) if waiting else "runnable"
         marker = "->" if nxt and task.id == nxt.id else "  "
         print(f"{marker} {task.id}: {status}")
         for problem in preflight(task, repo):

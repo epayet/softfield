@@ -2,6 +2,7 @@
 
 import re
 import sqlite3
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import partial
@@ -42,7 +43,14 @@ from runner.review import (
     update_seen,
 )
 from runner.state import save_state
-from runner.tasks import full_key, load_dir, milestone_file, next_milestone_key, short_key
+from runner.tasks import (
+    full_key,
+    held_ids,
+    load_dir,
+    milestone_file,
+    next_milestone_key,
+    short_key,
+)
 from runner.usage import claude_tokens, transcripts_dir, work_summary
 
 _FOOTER_RE = re.compile(r"# --- runner ---\n(.*?)```", re.DOTALL)
@@ -186,6 +194,47 @@ def milestone_doc(text: str) -> dict[str, str]:
     return {key: value for key, value in parts.items() if value}
 
 
+# ADR 17 item 4: `> **After:** f3-factory-line signed off`, in the header or under the title.
+_AFTER_RE = re.compile(
+    r"\bAfter:(?:\*\*)?\s*`?([a-z]+\d+(?:-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?)`?\s+signed off"
+)
+# `> **Status: done.** …`, what `runner signoff` writes (backfill reads it the same way).
+_STATUS_RE = re.compile(r"^>\s*\*\*Status:\s*(.+?)\.?\*\*", re.MULTILINE)
+
+
+def milestone_after(text: str) -> str | None:
+    """The milestone a milestone doc waits for (``After: <key> signed off``), if any. Only
+    its header counts: the text above its first ``## `` section."""
+    match = _AFTER_RE.search(re.split(r"^## ", text, maxsplit=1, flags=re.M)[0])
+    return match.group(1) if match else None
+
+
+def signed_off(repo: Path, key: str) -> bool:
+    """Whether the owner signed ``key`` off: its doc says "Status: done", or failing that a
+    ``<key>-done`` tag exists (either form of the key)."""
+    key = full_key(repo, key)
+    doc = milestone_file(repo, "milestones", key)
+    status = _STATUS_RE.search(doc.read_text(encoding="utf-8")) if doc.is_file() else None
+    if status and status.group(1).strip() == "done":
+        return True
+    try:
+        return bool(Git(repo).run("tag", "--list", f"{key}-done", f"{short_key(key)}-done").strip())
+    except GitError:
+        return False
+
+
+def waits_for(repo: Path, milestones: Iterable[str]) -> dict[str, str]:
+    """Short key -> the milestone it waits for, for each of ``milestones`` whose doc says
+    ``After: <key> signed off`` and whose ``<key>`` isn't signed off yet."""
+    waits = {}
+    for key in set(milestones):
+        doc = milestone_file(repo, "milestones", key)
+        after = milestone_after(doc.read_text(encoding="utf-8")) if doc.is_file() else None
+        if after and not signed_off(repo, after):
+            waits[short_key(key)] = after
+    return waits
+
+
 def signoff_sections(text: str) -> dict[str, str]:
     """The sign-off sheet of a review report by key; a heading missing leaves its key out."""
     found = {}
@@ -306,6 +355,7 @@ def _e2e(s: Session) -> GateResult:
 
 RESTART = "restart"
 PAUSED = "tickets paused behind a blocked or escalated one: "
+WAITS = "waits for "
 
 
 def run_milestone(cfg: Config, milestone: str, base: str) -> str:
@@ -323,11 +373,16 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
         return RESTART
     # Tickets still in ready/ after the queue ran are waiting on a stopped one: the milestone
     # isn't built, so the verdict asks the owner instead of reviewing half of it (f1-16).
-    waiting = sorted(
-        t.id
+    ready = [
+        t
         for t in load_dir(s.tasks_dir("ready"), cfg.default_max_diff)
         if short_key(t.milestone) == short_key(milestone)
-    )
+    ]
+    # Waiting for another milestone's sign-off (ADR 17 item 4) is all of its tickets' reason.
+    held = held_ids(ready, waits_for(s.repo, [milestone]))
+    if held:
+        return f"{WAITS}{next(iter(held.values()))}'s sign-off: " + ", ".join(sorted(held))
+    waiting = sorted(t.id for t in ready)
     if waiting:
         return PAUSED + ", ".join(waiting)
     return review_milestone(cfg, milestone, base)

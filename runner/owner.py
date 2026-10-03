@@ -15,7 +15,7 @@ from pathlib import Path
 
 from runner import metrics
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
-from runner.milestone import footer_fields, signoff_sections
+from runner.milestone import WAITS, footer_fields, signoff_sections
 from runner.state import State
 from runner.tasks import STOPPED, blocked_ids, command_arg, load_dir, milestone_file, short_key
 
@@ -37,7 +37,7 @@ def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
 
 def _needs_owner(stop: str) -> bool:
     return stop in OWNER_STOPS or stop.startswith(
-        ("end-to-end", "review output unusable", "tickets paused")
+        ("end-to-end", "review output unusable", "tickets paused", WAITS)
     )
 
 
@@ -191,7 +191,9 @@ def verdict(
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         needs.append(f"  • {task_id} blocked: {reason}")
     needs += [f"  • {text}" for _, text in _reserve_waits(state, milestone)]
-    if _needs_owner(review_stop):
+    if review_stop.startswith(WAITS):  # another milestone's sign-off (ADR 17 item 4)
+        needs.append(f"  • {milestone} {review_stop}")
+    elif _needs_owner(review_stop):
         needs.append(f"  • review stopped: {review_stop}")
     if needs:
         lines = ["⚠ NEEDS YOU", *needs, ""]

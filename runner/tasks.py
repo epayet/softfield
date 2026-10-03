@@ -1,7 +1,7 @@
 """Task files: parsing, validation, picking and pre-flight (docs/task-format.md)."""
 
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -322,6 +322,12 @@ def blocked_ids(ready: Iterable[Task], escalated: set[str]) -> set[str]:
                 blocked.add(task.id)
                 changed = True
     return blocked - escalated
+
+
+def held_ids(ready: Iterable[Task], waits: Mapping[str, str]) -> dict[str, str]:
+    """Ready tasks whose milestone waits for another's sign-off (ADR 17 item 4), each with the
+    milestone it waits for; ``waits`` maps a short key to that milestone. Never picked."""
+    return {t.id: waits[short_key(t.milestone)] for t in ready if short_key(t.milestone) in waits}
 
 
 def pick_next(ready: Iterable[Task], done: set[str], paused: set[str]) -> Task | None:

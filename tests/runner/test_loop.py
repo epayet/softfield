@@ -299,6 +299,72 @@ def test_dry_run_never_lists_a_ticket_set_aside_for_later(repo, capsys):
     assert "m1-02-aside" not in out
 
 
+def _milestone_doc(repo: Path, key: str, header: str) -> None:
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / f"{key}.md").write_text(
+        f"# Milestone {key.upper()}: a theme\n\n{header}\n\n## Outcome\n"
+    )
+
+
+def _waiting_milestones(repo: Path) -> None:
+    """m2 waits for m1's sign-off (ADR 17 item 4); m3 waits for nothing."""
+    _milestone_doc(repo, "m1-first", "> **Status: planned** (2026-10-02).")
+    _milestone_doc(
+        repo, "m2", "> **Status: planned** (2026-10-02).\n> **After:** m1-first signed off"
+    )
+    _milestone_doc(repo, "m3", "> **Status: planned** (2026-10-02).")
+    for task_id in ("m2-01-held", "m3-01-free"):
+        path = write_task(repo / "tasks" / "ready", task_id)
+        path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {task_id[1]}\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "milestones")
+
+
+def _dry_run(repo: Path, capsys) -> str:
+    assert loop.run_session(_config(repo), once=False, dry_run=True, escalate=False) is None
+    out: str = capsys.readouterr().out
+    return out
+
+
+def test_dry_run_names_a_milestone_waiting_for_a_sign_off(repo, capsys):
+    _waiting_milestones(repo)
+    out = _dry_run(repo, capsys)
+    assert "   m2-01-held: waits for m1-first's sign-off" in out
+    assert "-> m3-01-free: runnable" in out
+
+
+def test_a_signed_off_milestone_releases_the_tickets_waiting_for_it(repo, capsys):
+    _waiting_milestones(repo)
+    (repo / "docs" / "milestones" / "m1-first.md").write_text(
+        "# Milestone M1: a theme\n\n> **Status: done.** Signed off by the owner on 2026-10-03.\n"
+    )
+    out = _dry_run(repo, capsys)
+    assert "-> m2-01-held: runnable" in out
+
+
+def test_the_done_tag_releases_them_too(repo, capsys):
+    _waiting_milestones(repo)
+    git(repo, "tag", "m1-first-done")
+    assert "-> m2-01-held: runnable" in _dry_run(repo, capsys)
+
+
+def test_the_queue_goes_on_with_other_milestones_while_one_waits(repo, monkeypatch):
+    _waiting_milestones(repo)
+    ran: list[str] = []
+
+    def run_task(s, task):
+        ran.append(task.id)
+        task.path.rename(repo / "tasks" / "done" / task.path.name)
+        return TaskRecord(id=task.id, milestone=task.milestone, result="done")
+
+    monkeypatch.setattr(loop, "run_task", run_task)
+    s = loop.open_session(_config(repo), None)
+    assert loop.work_queue(s) is False
+    assert ran == ["m3-01-free"]
+    assert "Waiting: m2-01-held waits for m1-first's sign-off" in s.report.notes
+
+
 def test_blocked_escalates_immediately(repo, fake_model):
     _add_task(repo, "m1-01-thing")
 

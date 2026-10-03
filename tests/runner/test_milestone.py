@@ -4,16 +4,18 @@ import sqlite3
 
 import pytest
 
-from runner import claude, metrics, milestone
+from runner import claude, metrics, milestone, owner
 from runner.agents import JobResult
 from runner.gates import GateResult
 from runner.milestone import (
     footer_fields,
+    milestone_after,
     milestone_doc,
     milestone_metrics,
     milestone_summary,
     signoff_sections,
 )
+from runner.state import State
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
 from tests.runner.test_loop import _config
@@ -425,3 +427,53 @@ def test_a_paused_stop_always_needs_the_owner():
     from runner.owner import _needs_owner
 
     assert _needs_owner(milestone.PAUSED + "m1-02-b")
+    assert _needs_owner(milestone.WAITS + "m0's sign-off: m1-02-b")
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "> **After:** f3-factory-line signed off",
+        "> **Status: planned** (2026-10-02). **After:** f3-factory-line signed off.",
+        "After: `f3-factory-line` signed off",
+    ],
+)
+def test_milestone_after_reads_the_header(header):
+    """ADR 17 item 4: in the header blockquote or under the title."""
+    assert milestone_after(f"# Milestone F4: always on\n\n{header}\n\n## Outcome\n") == (
+        "f3-factory-line"
+    )
+
+
+def test_milestone_after_is_none_without_the_line_or_below_the_header():
+    assert milestone_after(MILESTONE_DOC) is None
+    body = "# Milestone F4: x\n\n## Outcome\n- After: f3 signed off, the line runs.\n"
+    assert milestone_after(body) is None
+
+
+def test_a_milestone_waits_until_its_after_is_signed_off(repo):
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True)
+    (docs / "f3-factory-line.md").write_text("# F3\n\n> **Status: in review** (2026-10-02).\n")
+    (docs / "f4-always-on.md").write_text("# F4\n\n> **After:** f3 signed off\n")
+    (docs / "f5.md").write_text("# F5\n\n> **Status: planned**\n")
+    keys = ["f4-always-on", "f5"]
+    assert milestone.waits_for(repo, keys) == {"f4": "f3"}
+    (docs / "f3-factory-line.md").write_text("# F3\n\n> **Status: done.** Signed off.\n")
+    assert milestone.waits_for(repo, keys) == {}
+
+
+def test_the_verdict_says_what_a_waiting_milestone_waits_for(repo, monkeypatch):
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True)
+    (docs / "m1.md").write_text("# M1\n\n> **After:** m0-base signed off\n")
+    write_task(repo / "tasks" / "ready", "m1-01-a")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: False)
+    monkeypatch.setattr(milestone, "review_milestone", lambda *a: pytest.fail("reviewed early"))
+    stop = milestone.run_milestone(_config(repo), "m1", "HEAD")
+    assert stop == "waits for m0-base's sign-off: m1-01-a"
+    code, text = owner.verdict(repo, "m1", State(), stop)
+    assert code == 2
+    assert "  • m1 waits for m0-base's sign-off: m1-01-a\n" in text

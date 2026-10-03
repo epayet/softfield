@@ -34,6 +34,7 @@ A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` (
 - **Docs use the full key:** `docs/milestones/<full key>.md` and `docs/reviews/<full key>.md`. An existing short-key doc (`docs/milestones/f2.md`) still works.
 - **Frontmatter and commands take either form:** `uv run runner milestone f3` and `uv run runner milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `docs/milestones/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
 - **Tags use the key as resolved:** `f3-factory-line-start` and `f3-factory-line-done`.
+- **A milestone can wait for another's sign-off** ([ADR 17](adr/17-always-on-factory.md) item 4): a line `> **After:** f3-factory-line signed off` in its doc's header (above the first `##`) keeps its tickets from being picked until that milestone's doc says "Status: done" (what `runner signoff` writes; the `<key>-done` tag also counts). `--dry-run` and the verdict say "waits for f3-factory-line's sign-off", and `runner run` goes on with the other milestones. With no `After:` line, milestones are independent.
 
 ## Body
 

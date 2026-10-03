@@ -10,6 +10,7 @@ from runner.tasks import (
     blocked_ids,
     command_arg,
     full_key,
+    held_ids,
     load_dir,
     milestone_arg,
     milestone_file,
@@ -84,6 +85,26 @@ def test_pick_next_respects_dependencies_and_order(tmp_path):
     assert first is not None and first.id == "m1-03-c"
     second = pick_next(ready, done={"m1-01-a"}, paused=set())
     assert second is not None and second.id == "m1-02-b"
+
+
+def test_a_milestone_waiting_for_a_sign_off_is_never_picked(tmp_path):
+    """ADR 17 item 4: m1's tickets wait for m0's sign-off; other milestones go on."""
+    ready = _tasks(tmp_path, {"m1-01-a": "[]", "m1-02-b": "[m1-01-a]"})
+    other = write_task(tmp_path, "m2-01-c")
+    other.write_text(other.read_text().replace("milestone: 1\n", "milestone: 2\n"))
+    ready.append(parse_task(other, 150))
+    held = held_ids(ready, {"m1": "m0-start-up"})
+    assert held == {"m1-01-a": "m0-start-up", "m1-02-b": "m0-start-up"}
+    picked = pick_next(ready, done=set(), paused=set(held))
+    assert picked is not None and picked.id == "m2-01-c"
+    assert pick_next(ready[:2], done=set(), paused=set(held)) is None
+
+
+def test_no_wait_changes_nothing(tmp_path):
+    ready = _tasks(tmp_path, {"m1-01-a": "[]", "m1-02-c": "[]"})
+    assert held_ids(ready, {}) == {}
+    picked = pick_next(ready, done=set(), paused=set(held_ids(ready, {})))
+    assert picked is not None and picked.id == "m1-01-a"
 
 
 def test_dependants_of_escalated_tasks_are_paused(tmp_path):
