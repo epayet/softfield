@@ -29,3 +29,10 @@ Read `docs/adr/17-always-on-factory.md` item 4, `runner/tasks.py` (`pick_next`, 
 - once F3's doc says done, they are picked
 - a doc with no `After:` line changes nothing
 - `uv run runner check-all --task f4-15-milestone-after` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
