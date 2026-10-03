@@ -32,3 +32,10 @@ Read `docs/milestones/f3.md` D10 (the trips, idle stretches over 40 min) and D11
 - for a fixture night (a merge, a failed attempt, a park at a limit, a 3 h idle stretch), the events come out in order, the idle stretch is one event, and the document at each event's time matches `live_line(at=…)`
 - `live_line(at=t)` at a moment mid-job shows that job's machine working
 - `uv run runner check-all --task f3-06-replay-data` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
