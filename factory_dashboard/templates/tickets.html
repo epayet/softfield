@@ -4,7 +4,7 @@
 <div class="page">
 
 <section id="tickets" class="panel">
-  <h2>Tickets <span class="src">newest first</span></h2>
+  <h2>Tickets <span class="src">latest work first</span></h2>
 
   <form class="filters" method="get">
     <label>Milestone
@@ -18,7 +18,7 @@
 
   {% if tickets %}
   <div class="scroll"><table>
-    <thead><tr><th>ID</th><th>Milestone</th><th>Kind</th><th class="num">Diff</th><th>State</th><th class="num">Attempts</th><th>Merged by</th><th class="num">Lines</th></tr></thead>
+    <thead><tr><th>ID</th><th>Milestone</th><th>Kind</th><th class="num">Diff</th><th>State</th><th class="num">Attempts</th><th>Last worked</th><th>Merged by</th><th class="num">Lines</th></tr></thead>
     <tbody>
       {% for t in tickets %}
       <tr>
@@ -28,6 +28,7 @@
         <td class="num">{{ t.difficulty or "–" }}</td>
         <td>{{ t.state or "–" }}</td>
         <td class="num">{{ t.attempts }}</td>
+        <td data-col="last-worked">{% if t.last_worked is not none %}{{ t.last_worked | ago }} ago{% else %}–{% endif %}</td>
         <td>{{ t.merged_by or "–" }}</td>
         <td class="num">{{ t.lines_changed if t.lines_changed is not none else "–" }}</td>
       </tr>

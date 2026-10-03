@@ -7,12 +7,13 @@
 import json
 import sqlite3
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
-from factory_dashboard.app import Db, Project, render
+from factory_dashboard.app import Db, Now, Project, render
 
 router = APIRouter()
 
@@ -28,6 +29,7 @@ class TicketRow:
     attempts: int
     merged_by: str | None
     lines_changed: int | None
+    last_worked: timedelta | None  # how long ago its latest job started
 
 
 @dataclass(frozen=True)
@@ -82,8 +84,12 @@ def list_tickets(
     *,
     milestone: str | None = None,
     state: str | None = None,
+    now: datetime,
 ) -> list[TicketRow]:
-    """All tickets for ``project``, newest first (by milestone.started DESC, id DESC)."""
+    """All tickets for ``project``, latest work first (by their jobs' latest start, then id DESC).
+
+    A ticket with no job yet comes after every worked one.
+    """
     conditions = ["p.name = ?"]
     params: list[object] = [project]
 
@@ -99,12 +105,13 @@ def list_tickets(
     query = (
         f"SELECT t.id, t.ticket, m.key AS milestone, t.kind, t.difficulty, t.state, "  # noqa: S608
         f"(SELECT COUNT(*) FROM jobs j WHERE j.ticket_id = t.id) AS attempts, "
-        f"t.merged_by, t.lines_changed "
+        f"t.merged_by, t.lines_changed, "
+        f"(SELECT MAX(j.started) FROM jobs j WHERE j.ticket_id = t.id) AS last_worked "
         f"FROM tickets t "
         f"JOIN projects p ON p.id = t.project_id "
         f"LEFT JOIN milestones m ON m.id = t.milestone_id "
         f"WHERE {where} "
-        f"ORDER BY COALESCE(m.started, '') DESC, t.id DESC"
+        f"ORDER BY last_worked IS NULL, last_worked DESC, t.id DESC"
     )
     rows = conn.execute(query, params).fetchall()
     return [
@@ -118,6 +125,9 @@ def list_tickets(
             attempts=row["attempts"],
             merged_by=row["merged_by"],
             lines_changed=row["lines_changed"],
+            last_worked=now - datetime.fromisoformat(row["last_worked"])
+            if row["last_worked"]
+            else None,
         )
         for row in rows
     ]
@@ -308,11 +318,12 @@ def tickets_page(
     request: Request,
     conn: Db,
     project: Project,
+    now: Now,
     *,
     milestone: Annotated[str | None, Query()] = None,
     state: Annotated[str | None, Query()] = None,
 ) -> HTMLResponse:
-    tickets = list_tickets(conn, project, milestone=milestone, state=state)
+    tickets = list_tickets(conn, project, milestone=milestone, state=state, now=now)
     return render(
         request,
         conn,

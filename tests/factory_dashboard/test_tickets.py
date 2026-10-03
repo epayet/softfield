@@ -1,13 +1,16 @@
 """Tests for the tickets list and ticket detail pages (f1-10, f1-36)."""
 
 import re
+from datetime import timedelta
 from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
 
+from runner import metrics
 from runner.metrics import open_db
 from tests.factory_dashboard.conftest import (
+    LOCAL,
     NOW,
     PROJECT,
     write_tickets,
@@ -51,30 +54,47 @@ def tickets_client(db_path: Path) -> TestClient:
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
-def test_list_shows_tickets_newest_first(tickets_client):
+def listed(html: str) -> list[tuple[str, str]]:
+    """Each listed ticket and its Last worked cell, in page order."""
+    return re.findall(
+        r'<tr>\s*<td class="id"><a href="/tickets/([^"?]+).*?'
+        r'<td data-col="last-worked">(.*?)</td>',
+        html,
+        re.S,
+    )
+
+
+def test_list_shows_latest_work_first_whatever_the_milestone(db_path, tickets_client):
+    conn = open_db(db_path)
+    try:
+        old, m4 = conn.execute(
+            "SELECT id, milestone_id FROM tickets WHERE ticket = 'm4-01-old'"
+        ).fetchone()
+        run = conn.execute("SELECT id FROM runs LIMIT 1").fetchone()[0]
+        metrics.start_job(
+            conn, run, ticket_id=old, milestone_id=m4, role="developer", agent=LOCAL,
+            attempt=9, started=(NOW - timedelta(minutes=3)).isoformat(),
+        )  # fmt: skip
+    finally:
+        conn.close()
     html = tickets_client.get("/tickets").text
-    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
-    tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
-    links = [
-        m.group(1) for r in tbody_rows for m in [re.search(r'href="/tickets/([^"?]+)', r)] if m
+    assert "latest work first" in html
+    rows = listed(html)
+    # m4 started before f1, but its ticket was worked 3 min ago, f1-04-live 12 min ago.
+    assert rows[:2] == [("m4-01-old", "3 min ago"), ("f1-04-live", "12 min ago")]
+
+
+def test_list_puts_unworked_tickets_last_newest_row_first(tickets_client):
+    rows = listed(tickets_client.get("/tickets").text)
+    cells = [cell for _, cell in rows]
+    unworked = cells.index("–")
+    assert all(cell != "–" for cell in cells[:unworked])
+    assert all(cell == "–" for cell in cells[unworked:])
+    assert [ticket for ticket, _ in rows[unworked:]] == [
+        "f1-05-first",
+        "f1-06-second",
+        "f1-12-escalated",
     ]
-    f1_tickets = [t for t in links if t.startswith("f1-")]
-    m4_tickets = [t for t in links if t.startswith("m4-")]
-    assert len(f1_tickets) == 9
-    assert len(m4_tickets) == 2
-    # f1 milestone (started 2026-09-30) > m4 (started 2026-09-20), so f1 first.
-    # Within each milestone, ordered by database id DESC.
-    assert f1_tickets[0] == "f1-04-live"
-    assert f1_tickets[1] == "f1-05-first"
-    assert f1_tickets[2] == "f1-06-second"
-    assert f1_tickets[3] == "f1-12-escalated"
-    assert f1_tickets[4] == "f1-11-ticket-b"
-    assert f1_tickets[5] == "f1-10-ticket-a"
-    assert f1_tickets[6] == "f1-03-lead"
-    assert f1_tickets[7] == "f1-02-escalated"
-    assert f1_tickets[8] == "f1-01-first"
-    assert m4_tickets[0] == "m4-02-ticket-c"
-    assert m4_tickets[1] == "m4-01-old"
 
 
 def test_filter_by_state_shows_only_matching(tickets_client):
