@@ -26,3 +26,10 @@ Read `runner/claude.py` (how `rate_limit_event` becomes readings), `runner/loop.
 - no probe is made when no Claude work is ready, or when the reading is under 10 minutes old
 - a failed probe (no event, an error) falls back to the stored reading, with a log line
 - `uv run runner check-all --task f4-07-fresh-reading` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
