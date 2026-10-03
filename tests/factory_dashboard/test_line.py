@@ -282,6 +282,17 @@ def test_the_page_carries_the_document_and_refreshes_every_5_s(line_db, line_cli
     assert block(live.text) == block(html)
 
 
+def test_the_floor_keeps_its_section_and_fetches_only_its_document(line_client):
+    """f3-17: swapping the section whole every 5 s restarted every animation (the flicker)."""
+    html = line_client.get("/").text
+    assert 'hx-swap="none"' in html
+    assert """hx-headers='{"Accept": "application/json"}'""" in html
+    live = line_client.get("/line/live", headers={"Accept": "application/json"})
+    assert live.status_code == 200
+    assert live.headers["content-type"] == "application/json"
+    assert live.json() == block(html)
+
+
 def test_the_old_milestone_line_is_gone(line_client):
     assert line_client.get("/milestones/f5/line").status_code == 404
 
@@ -586,9 +597,15 @@ def page(page):
     assert errors == [], f"factory.js threw: {errors}"
 
 
-def open_line(page, client: TestClient, size: dict[str, int] | None = None) -> dict[str, Any]:
+def open_line(
+    page,
+    client: TestClient,
+    size: dict[str, int] | None = None,
+    live: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     """``/`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk and
-    ``/line/replay`` from ``client``. Returns its document."""
+    ``/line/replay`` and ``/line/live`` from ``client``; or ``/line/live`` answers ``live``'s
+    documents in turn, the last one again. Returns its document."""
     html = client.get("/").text
 
     def serve(route) -> None:
@@ -598,10 +615,15 @@ def open_line(page, client: TestClient, size: dict[str, int] | None = None) -> d
             route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
         elif path == "/":
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
-        elif path == "/line/replay":
-            found = client.get(url)
+        elif path == "/line/live" and live:
+            body = json.dumps(live.pop(0) if len(live) > 1 else live[0])
+            route.fulfill(body=body, content_type="application/json")
+        elif path in ("/line/replay", "/line/live"):
+            found = client.get(url, headers={"Accept": route.request.headers.get("accept", "")})
             route.fulfill(
-                status=found.status_code, body=found.text, content_type="application/json"
+                status=found.status_code,
+                body=found.text,
+                content_type=found.headers["content-type"],
             )
         else:
             route.fulfill(status=404, body="")
@@ -610,7 +632,23 @@ def open_line(page, client: TestClient, size: dict[str, int] | None = None) -> d
     page.set_viewport_size(size or {"width": 1360, "height": 900})
     page.route(f"{ORIGIN}/**", serve)
     page.goto(ORIGIN + "/")
+    page.evaluate(
+        """() => {
+            window.refreshes = 0;
+            document.addEventListener("htmx:afterRequest", (event) => {
+                if (event.target.id === "line-live") window.refreshes += 1;
+            });
+        }"""
+    )
     return block(html)
+
+
+def refresh(page) -> None:
+    """The floor's 5 s refresh, once, on the page's clock (``page.clock.install()`` before
+    ``open_line``), and drawn."""
+    before = page.evaluate("() => window.refreshes")
+    page.clock.run_for(5100)
+    page.wait_for_function("n => window.refreshes > n", arg=before)
 
 
 def test_the_floor_draws_one_machine_per_agent_and_the_queue_in_run_order(page, line_client):
@@ -841,6 +879,93 @@ def test_working_machine_has_smoke_idle_does_not(page, line_client):
             assert has_smoke, f"{mid} is working but has no smoke"
         else:
             assert not has_smoke, f"{mid} is {m['state']} but has smoke"
+
+
+# --- refreshing in place (f3-17) -------------------------------------------------------------
+
+MARK = """() => {
+    const floor = document.getElementById("floor");
+    const nodes = [floor, ...floor.querySelectorAll("*")];
+    nodes.forEach((node) => { node.marked = true; });
+    return nodes.length;
+}"""
+MARKED = """() => {
+    const floor = document.getElementById("floor");
+    return [floor, ...floor.querySelectorAll("*")].filter((node) => !node.marked).length;
+}"""
+ROLLERS = 'svg#floor [data-belt="queue→developers"] .rollers'
+
+
+def later(client: TestClient, merged: int) -> dict[str, Any]:
+    """The page's document with ``merged`` more crates through the checks today."""
+    doc = block(client.get("/").text)
+    for b in doc["belts"]:
+        if b["id"] == "checks→merged":
+            b["today"] += merged
+    return doc
+
+
+def test_an_unchanged_document_leaves_every_node_of_the_floor_in_place(page, line_client):
+    """2026-10-03, the owner: "the factory on the homepage refreshes every 5 seconds and gets
+    flicky every 5 seconds". Two refreshes later, every node is still the one first drawn."""
+    page.clock.install()
+    open_line(page, line_client)
+    assert page.evaluate(MARK) > 100
+    refresh(page)
+    refresh(page)
+    assert page.evaluate(MARKED) == 0
+    assert page.locator("section#line-live").count() == 1
+
+
+def test_a_carrying_belt_keeps_rolling_across_a_refresh(page, line_client):
+    """2026-10-03, the owner: "factory lines currently don't move": every refresh drew new
+    rollers, so their animation started over every 5 s."""
+    page.clock.install()
+    doc = open_line(page, line_client, live=[later(line_client, merged=1)])
+    rollers = page.locator(ROLLERS)
+    rollers.evaluate("e => { window.rolling = e.getAnimations()[0]; }")
+    assert page.evaluate("() => window.rolling.playState") == "running"
+    refresh(page)
+    counted = belts(doc)["checks→merged"]["today"] + 1
+    assert page.locator('svg#floor [data-belt="checks→merged"] text').text_content() == (
+        f"merged · {counted}"
+    )  # drawn again, in place
+    assert rollers.evaluate(
+        """e => {
+            const now = e.getAnimations();
+            return now.length === 1 && now[0] === window.rolling && now[0].playState === "running";
+        }"""
+    )
+
+
+def test_opening_the_page_doesnt_flash_the_checks_light_a_later_merge_does(page, line_client):
+    """f4-21's finding: the first draw took today's checks count for a new result."""
+    page.clock.install()
+    page.add_init_script(FLASHES)
+    doc = open_line(page, line_client, live=[later(line_client, merged=0), later(line_client, 1)])
+    assert belts(doc)["checks→merged"]["today"] > 0
+    assert page.evaluate("() => window.flashes") == []
+    refresh(page)  # the same counts
+    assert page.evaluate("() => window.flashes") == []
+    refresh(page)
+    assert set(page.evaluate("() => window.flashes")) == {"light flash-green"}
+
+
+# The class of a checks light that flashes, from the page's first script on (once per record).
+FLASHES = """
+window.flashes = [];
+new MutationObserver((changes) => {
+    for (const change of changes) {
+        const nodes = change.type === "attributes" ? [change.target] : [...change.addedNodes];
+        for (const node of nodes.filter((n) => n instanceof Element)) {
+            for (const light of [node, ...node.querySelectorAll(".light")]) {
+                const cls = light.getAttribute("class") || "";
+                if (light.matches(".light") && cls.includes("flash")) window.flashes.push(cls);
+            }
+        }
+    }
+}).observe(document, { subtree: true, childList: true, attributeFilter: ["class"] });
+"""
 
 
 PAUSED = """() => {

@@ -20,6 +20,7 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
   up to ``until``; ``static/factory.js`` only steps through it.
 """
 
+import json
 import sqlite3
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -28,7 +29,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
@@ -862,6 +863,11 @@ def line_replay(
 
 
 @router.get("/line/live", response_class=HTMLResponse)
-def line_live(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
-    """The floor and its document, for htmx to swap in every 5 s."""
-    return render(request, conn, project, "_partials/line.html", _context(conn, project, now))
+def line_live(request: Request, conn: Db, project: Project, now: Now) -> Response:
+    """The floor and its document; only the document, as JSON, when asked with ``Accept:
+    application/json``: the page fetches it every 5 s and draws it in place (f3-17)."""
+    context = _context(conn, project, now)
+    if "application/json" in request.headers.get("accept", ""):
+        # keys sorted, as the page's own block (``tojson``): an unchanged document reads the same
+        return Response(json.dumps(context["line"], sort_keys=True), media_type="application/json")
+    return render(request, conn, project, "_partials/line.html", context)

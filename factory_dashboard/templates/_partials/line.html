@@ -1,5 +1,5 @@
-{# The floor (f3 D11): swapped in by htmx every 5 s from /line/live, so it carries its own hx-get. static/factory.js draws svg#floor from the JSON block. #}
-<section id="line-live" class="panel line" hx-get="/line/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-swap="outerHTML">
+{# The floor (f3 D11): it stays in the page; every 5 s htmx fetches only its document from /line/live as JSON (f3-17), and static/factory.js draws svg#floor from it in place. #}
+<section id="line-live" class="panel line" hx-get="/line/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-swap="none" hx-headers='{"Accept": "application/json"}'>
   <h2>From the field to the stash <span class="src">live · refreshes every 5 s</span></h2>
   <div class="legend">
     <span><i class="swatch lead"></i>lead ticket</span>

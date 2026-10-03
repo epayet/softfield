@@ -1,11 +1,61 @@
 // The factory line (f3 D11): draws svg#floor from the document in the JSON block
 // #factory-line that line.py's live_line wrote. Every rule lives in that document; this only
 // lays it out, as hand-written SVG after docs/milestones/f3-line-mockup/Line.dc.html, coloured
-// by the stylesheet's tokens. htmx swaps the floor in every 5 s, and it is drawn again.
+// by the stylesheet's tokens. Every 5 s htmx fetches the document alone (f3-17); when it
+// differs, the floor is drawn again in place: a node whose part didn't change stays the same
+// node, so its animation runs on.
 "use strict";
 
 (() => {
   const NS = "http://www.w3.org/2000/svg";
+
+  // A node's name among its siblings: its first data-* attribute; null: matched by tag, in order.
+  function key(node) {
+    for (const a of node.attributes) if (a.name.startsWith("data-")) return `${a.name}=${a.value}`;
+    return null;
+  }
+
+  // Gives `old` the children of `fresh` (a scratch drawing), keeping every old node that has a
+  // match: by its key, else the next of its tag. Kept nodes never move, so nothing restarts.
+  function morph(old, fresh) {
+    const named = new Map(), loose = [];
+    for (const child of old.children) {
+      const k = key(child);
+      if (k) named.set(k, child);
+      else loose.push(child);
+    }
+    const kids = [...fresh.children].map((next) => {
+      const k = key(next);
+      let was = null;
+      if (k) {
+        was = named.get(k) || null;
+        named.delete(k);
+      } else {
+        const n = loose.findIndex((c) => c.tagName === next.tagName);
+        if (n >= 0) was = loose.splice(n, 1)[0];
+      }
+      if (!was || was.tagName !== next.tagName) return next;
+      sync(was, next);
+      return was;
+    });
+    const keep = new Set(kids);
+    for (const child of [...old.children]) if (!keep.has(child)) child.remove();
+    kids.forEach((kid, n) => { if (old.children[n] !== kid) old.insertBefore(kid, old.children[n] || null); });
+  }
+
+  function sync(old, fresh) {
+    for (const a of [...old.attributes]) if (!fresh.hasAttribute(a.name)) old.removeAttribute(a.name);
+    for (const a of fresh.attributes) if (old.getAttribute(a.name) !== a.value) old.setAttribute(a.name, a.value);
+    if (old.children.length || fresh.children.length) morph(old, fresh);
+    else if (old.textContent !== fresh.textContent) old.textContent = fresh.textContent;
+  }
+
+  // The checks light's flash, started again even when the light flashed the same way before.
+  function flash(light, cls) {
+    light.className.baseVal = "light";
+    light.getBoundingClientRect();  // the style without the flash, so the next one starts over
+    light.className.baseVal = `light ${cls}`;
+  }
 
   function add(parent, tag, attrs = {}, words = null) {
     const node = document.createElementNS(NS, tag);
@@ -25,7 +75,7 @@
 
   // --- the belts: where each D11 belt runs, and where its words go -------------------------
 
-  let _prev = {};
+  let _prev = null;  // the checks' counts last drawn; null until the first draw sets them
 
   const BELTS = {
     "seeds→planting": { path: "M150 140 L176 140", at: [163, 128], middle: true, short: true },
@@ -280,8 +330,8 @@
     add(pattern, "path", { d: "M0 10L10 0", class: "soil-line" });
   }
 
-  function draw(svg, doc) {
-    svg.replaceChildren();
+  function draw(floor, doc) {
+    const svg = document.createElementNS(NS, "svg");  // drawn aside, then morphed into `floor`
     soil(svg, "soil");
     const count = Object.fromEntries(doc.stations.map((s) => [s.id, s.count]));
     field(svg, doc, count);
@@ -289,6 +339,7 @@
     machines(svg, doc);
     end(svg, doc, count);
     doc.belts.forEach((b) => belt(svg, b));  // over the units' edges, so every count shows
+    morph(floor, svg);
   }
 
   // --- phone: the same stations top to bottom, under 640 px (LinePhone.dc.html) ------------
@@ -322,9 +373,9 @@
     "merged→reviewers": { path: "M340 1360 L351 1360 L351 868 L340 868", at: [338, 1252], end: true, back: true, thin: true },
   };
 
-  function drawPhone(svg, doc) {
-    svg.replaceChildren();
-    svg.setAttribute("viewBox", `0 0 358 ${PHONE_HEIGHT}`);
+  function drawPhone(floor, doc) {
+    floor.setAttribute("viewBox", `0 0 358 ${PHONE_HEIGHT}`);
+    const svg = document.createElementNS(NS, "svg");  // drawn aside, then morphed into `floor`
     soil(svg, "soil-phone");
     const count = Object.fromEntries(doc.stations.map((s) => [s.id, s.count]));
     add(svg, "rect", { x: 6, y: 8, width: 346, height: 438, class: "field-plot" });
@@ -339,6 +390,7 @@
     ripe(svg, doc, count, 26, 1462, 314, 120);
     stash(svg, doc, count, 26, 1612, 314, 120, 5);
     doc.belts.forEach((b) => belt(svg, b, PHONE_BELTS));
+    morph(floor, svg);
   }
 
   const narrow = () => window.innerWidth < 640;
@@ -353,32 +405,28 @@
     else draw(svg, doc);
   }
 
+  let drawn = null;  // the live document last drawn, and on which floor; null: draw it again
+
   function drawAll(root) {
     const block = root.querySelector ? root.querySelector("#factory-line") : null;
     const svg = document.getElementById("floor");
     const phone = document.getElementById("floor-phone");
-    if (block && svg && phone) {
-      const doc = JSON.parse(block.textContent);
-      drawFloor(doc);
-      const cur = {};
-      for (const b of doc.belts) cur[b.id] = b.today || 0;
-      const checks = cur["checks→merged"] || 0;
-      const devs = cur["checks→developers"] || 0;
-      const lead = cur["checks→lead"] || 0;
-      const prev = _prev || {};
-      const prevM = prev["checks→merged"] || 0;
-      const prevD = prev["checks→developers"] || 0;
-      const prevL = prev["checks→lead"] || 0;
-      const light = shown().querySelector(".light");
-      if (light && (checks > prevM || devs > prevD || lead > prevL)) {
-        let cls = "light";
-        if (checks > prevM) cls += " flash-green";
-        else if (devs > prevD) cls += " flash-red";
-        else if (lead > prevL) cls += " flash-orange";
-        light.className.baseVal = cls;
-      }
-      _prev = cur;
-    }
+    if (replaying || !(block && svg && phone)) return;  // a replay holds the floor
+    const doc = JSON.parse(block.textContent);
+    const now = JSON.stringify([narrow(), { ...doc, at: null }]);  // `at` alone draws nothing
+    if (now === drawn) return;
+    drawn = now;
+    drawFloor(doc);
+    const cur = {};
+    for (const b of doc.belts) cur[b.id] = b.today || 0;
+    const prev = _prev;
+    _prev = cur;
+    if (!prev) return;  // the first draw: today's counts so far are no news
+    const light = shown().querySelector(".light");
+    if (!light) return;
+    if (cur["checks→merged"] > prev["checks→merged"]) flash(light, "flash-green");
+    else if (cur["checks→developers"] > prev["checks→developers"]) flash(light, "flash-red");
+    else if (cur["checks→lead"] > prev["checks→lead"]) flash(light, "flash-orange");
   }
 
   // --- replay (f3-07): the floor as it was at `since`; f3-11 steps through `replaying.events`
@@ -474,7 +522,7 @@
     readout.textContent = words(event);
     if (event.kind === "check") {
       const light = shown().querySelector(".light");
-      if (light) light.className.baseVal = `light ${event.passed ? "flash-green" : "flash-red"}`;
+      if (light) flash(light, event.passed ? "flash-green" : "flash-red");
     }
   }
 
@@ -512,12 +560,20 @@
     stop();
     replaying = null;
     document.getElementById("replay-controls").hidden = true;
+    drawn = null;  // the floor shows the replay's
     drawAll(document);
   }
 
   document.addEventListener("htmx:beforeRequest", (event) => {
     if (replaying && event.target.id === "line-live") event.preventDefault();  // paused
   });
+  // The 5 s refresh's document: kept in the block, drawn unless a replay holds the floor.
+  document.addEventListener("htmx:afterRequest", (event) => {
+    if (event.target.id !== "line-live" || !event.detail.successful) return;
+    document.getElementById("factory-line").textContent = event.detail.xhr.responseText;
+    drawAll(document);
+  });
+  addEventListener("resize", () => drawAll(document));  // a phone turned: the other floor
   document.getElementById("replay-start")?.addEventListener("click", startReplay);
   document.getElementById("replay-live")?.addEventListener("click", backToLive);
   document.getElementById("replay-play")?.addEventListener("click", play);
