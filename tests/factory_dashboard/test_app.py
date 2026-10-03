@@ -14,7 +14,6 @@ from tests.factory_dashboard.conftest import OTHER, PROJECT
 
 PAGES = [
     "/",
-    "/line",
     "/milestones",
     "/tickets",
     "/jobs",

@@ -31,7 +31,7 @@ def charts(html: str) -> dict[str, object]:
 def test_the_overview_shows_every_panel_in_order(client):
     html = client.get("/").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
-    assert ids == ["needs-you", "now", "verdict", "allowance", "savings", "spend"]
+    assert ids == ["needs-you", "line-live", "now", "verdict", "allowance", "savings", "spend"]
     assert "Next in line" in section(html, "now")
     assert 'id="running"' not in html and 'id="queue"' not in html
     live = client.get("/live").text

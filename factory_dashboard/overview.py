@@ -473,14 +473,26 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
 
 @router.get("/", response_class=HTMLResponse)
 def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
+    from factory_dashboard.line import SEEN, live_line, overnight
+
+    local = now.astimezone()
     milestone = current_milestone(conn, project)
-    return render(
+
+    def url(since: datetime) -> str:
+        from urllib.parse import urlencode
+
+        return "/line/replay?" + urlencode({"project": project, "since": since.isoformat()})
+
+    response = render(
         request,
         conn,
         project,
         "overview.html",
         {
             "active": "/",
+            "line": live_line(conn, project, local),
+            "replay": url(overnight(local, request.cookies.get(SEEN))),
+            "replay_day": url(local - timedelta(days=1)),
             **_live_context(conn, project, now),
             "verdict": last_verdict(conn, project),
             "allowance": agent_allowances(conn, now),
@@ -489,6 +501,14 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "spend": spend_chart(conn, project),
         },
     )
+    response.set_cookie(
+        SEEN,
+        local.isoformat(timespec="seconds"),
+        max_age=400 * 24 * 3600,
+        httponly=True,
+        samesite="lax",
+    )
+    return response
 
 
 @router.get("/live", response_class=HTMLResponse)

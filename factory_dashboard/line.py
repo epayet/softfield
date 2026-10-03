@@ -26,10 +26,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
@@ -828,30 +827,13 @@ def _context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str,
     return {"active": "/line", "line": live_line(conn, project, now.astimezone())}
 
 
-@router.get("/line", response_class=HTMLResponse)
-def line_page(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
-    """The line, with "overnight" since the last visit (``data-replay``) and the last 24 h
-    (``data-replay-day``), then remembers this one in a cookie. Both start in the server's
-    zone, which the replay's events then come back in."""
-    local = now.astimezone()
+@router.get("/line")
+def line_redirect(request: Request) -> RedirectResponse:
+    """The factory line is now the overview; /line redirects to / keeping query params."""
 
-    def url(since: datetime) -> str:
-        return "/line/replay?" + urlencode({"project": project, "since": since.isoformat()})
-
-    context = {
-        **_context(conn, project, now),
-        "replay": url(overnight(local, request.cookies.get(SEEN))),
-        "replay_day": url(local - timedelta(days=1)),
-    }
-    response = render(request, conn, project, "line.html", context)
-    response.set_cookie(
-        SEEN,
-        local.isoformat(timespec="seconds"),
-        max_age=400 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-    )
-    return response
+    query = request.url.query
+    target = "/" + ("?" + query if query else "")
+    return RedirectResponse(target, status_code=307)
 
 
 def _moment(value: str, name: str) -> datetime:

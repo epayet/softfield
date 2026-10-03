@@ -273,23 +273,23 @@ def block(html: str) -> dict[str, Any]:
 
 
 def test_the_page_carries_the_document_and_refreshes_every_5_s(line_db, line_client):
-    response = line_client.get("/line")
-    assert response.status_code == 200
-    assert block(response.text) == json.loads(json.dumps(document(line_db, NOW.astimezone())))
-    assert re.search(
-        r'<a href="/line\?project=coucou" aria-current="page">Factory line</a>', response.text
-    )
-    assert (
-        'hx-get="/line/live?project=coucou" hx-trigger="every 5s [window.liveIdle()]"'
-        in response.text
-    )
+    html = line_client.get("/").text
+    assert block(html) == json.loads(json.dumps(document(line_db, NOW.astimezone())))
+    assert re.search(r'<a href="/\?project=coucou" aria-current="page">Overview</a>', html)
+    assert 'hx-get="/line/live?project=coucou" hx-trigger="every 5s [window.liveIdle()]"' in html
     live = line_client.get("/line/live")
     assert live.status_code == 200 and "<html" not in live.text
-    assert block(live.text) == block(response.text)
+    assert block(live.text) == block(html)
 
 
 def test_the_old_milestone_line_is_gone(line_client):
     assert line_client.get("/milestones/f5/line").status_code == 404
+
+
+def test_line_redirects_to_overview_keeping_query(line_client):
+    resp = line_client.get("/line?project=coucou", follow_redirects=False)
+    assert resp.status_code == 307
+    assert resp.headers["location"] == "/?project=coucou"
 
 
 # --- replay (f3-06) -------------------------------------------------------------------------
@@ -544,22 +544,25 @@ def test_the_replay_route_serves_a_stretch_as_json(night_db):
 
 def test_the_line_page_remembers_when_it_was_opened_for_overnight(night_db):
     client = night_client(night_db)
-    first = client.get("/line")
-    assert first.status_code == 200
-    seen = first.cookies["line_seen"].strip('"')
+    first = client.get("/line", follow_redirects=False)
+    assert first.status_code == 307
+    # the redirect target sets the line_seen cookie
+    overview = client.get("/")
+    assert overview.status_code == 200
+    seen = overview.cookies["line_seen"].strip('"')
     assert datetime.fromisoformat(seen) == UNTIL
     # the page offers overnight from 20:00 yesterday the first time, then from the last visit
-    match = re.search(r'data-replay="([^"]+)"', first.text)
+    match = re.search(r'data-replay="([^"]+)"', overview.text)
     assert match is not None
     since = parse_qs(urlsplit(unescape(match.group(1))).query)["since"][0]
     assert datetime.fromisoformat(since) == overnight(UNTIL.astimezone(), None)
     # and the last 24 h, from the server's own clock
-    day = re.search(r'data-replay-day="([^"]+)"', first.text)
+    day = re.search(r'data-replay-day="([^"]+)"', overview.text)
     assert day is not None
     since = parse_qs(urlsplit(unescape(day.group(1))).query)["since"][0]
     assert since == (UNTIL.astimezone() - timedelta(days=1)).isoformat()
     client.cookies.set("line_seen", night("23:10").isoformat())
-    again = re.search(r'data-replay="([^"]+)"', client.get("/line").text)
+    again = re.search(r'data-replay="([^"]+)"', client.get("/").text)
     assert again is not None
     since = parse_qs(urlsplit(unescape(again.group(1))).query)["since"][0]
     assert datetime.fromisoformat(since) == night("23:10")
@@ -584,16 +587,16 @@ def page(page):
 
 
 def open_line(page, client: TestClient, size: dict[str, int] | None = None) -> dict[str, Any]:
-    """``/line`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk and
+    """``/`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk and
     ``/line/replay`` from ``client``. Returns its document."""
-    html = client.get("/line").text
+    html = client.get("/").text
 
     def serve(route) -> None:
         url = route.request.url.removeprefix(ORIGIN)
         path = url.split("?", 1)[0]
         if path.startswith("/static/"):
             route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
-        elif path == "/line":
+        elif path == "/":
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
         elif path == "/line/replay":
             found = client.get(url)
@@ -606,7 +609,7 @@ def open_line(page, client: TestClient, size: dict[str, int] | None = None) -> d
     page.set_default_timeout(5000)
     page.set_viewport_size(size or {"width": 1360, "height": 900})
     page.route(f"{ORIGIN}/**", serve)
-    page.goto(ORIGIN + "/line")
+    page.goto(ORIGIN + "/")
     return block(html)
 
 
