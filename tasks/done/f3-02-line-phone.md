@@ -33,3 +33,12 @@ Read `docs/milestones/f3-line-mockup/LinePhone.dc.html` (the picture: its SVG an
 - each dial shows its percentage and its mark (asserted from the drawing's attributes)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2368
+gate_failures: ['no-changes', 'stopped']
+tokens: 2744259
+```
