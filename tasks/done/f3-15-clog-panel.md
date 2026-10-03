@@ -33,3 +33,9 @@ attempts: 3
 tokens: 222484
 logs: var/runs/20261003-181609/f3-15-clog-panel
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
