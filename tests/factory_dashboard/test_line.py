@@ -527,6 +527,11 @@ def test_the_line_page_remembers_when_it_was_opened_for_overnight(night_db):
     assert match is not None
     since = parse_qs(urlsplit(unescape(match.group(1))).query)["since"][0]
     assert datetime.fromisoformat(since) == overnight(UNTIL.astimezone(), None)
+    # and the last 24 h, from the server's own clock
+    day = re.search(r'data-replay-day="([^"]+)"', first.text)
+    assert day is not None
+    since = parse_qs(urlsplit(unescape(day.group(1))).query)["since"][0]
+    assert since == (UNTIL.astimezone() - timedelta(days=1)).isoformat()
     client.cookies.set("line_seen", night("23:10").isoformat())
     again = re.search(r'data-replay="([^"]+)"', client.get("/line").text)
     assert again is not None
@@ -543,16 +548,22 @@ ORIGIN = "http://127.0.0.1:8765"
 
 
 def open_line(page, client: TestClient, size: dict[str, int] | None = None) -> dict[str, Any]:
-    """``/line`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk.
-    Returns its document."""
+    """``/line`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk and
+    ``/line/replay`` from ``client``. Returns its document."""
     html = client.get("/line").text
 
     def serve(route) -> None:
-        path = route.request.url.removeprefix(ORIGIN).split("?", 1)[0]
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
         if path.startswith("/static/"):
             route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
         elif path == "/line":
             route.fulfill(body=html, content_type="text/html; charset=utf-8")
+        elif path == "/line/replay":
+            found = client.get(url)
+            route.fulfill(
+                status=found.status_code, body=found.text, content_type="application/json"
+            )
         else:
             route.fulfill(status=404, body="")
 
@@ -643,6 +654,62 @@ def test_working_machine_has_smoke_idle_does_not(page, line_client):
             assert has_smoke, f"{mid} is working but has no smoke"
         else:
             assert not has_smoke, f"{mid} is {m['state']} but has smoke"
+
+
+PAUSED = """() => {
+    const event = new CustomEvent("htmx:beforeRequest", { bubbles: true, cancelable: true });
+    document.getElementById("line-live").dispatchEvent(event);
+    return event.defaultPrevented;
+}"""
+
+
+def merged_on_floor(page) -> list[str]:
+    found: list[str] = page.eval_on_selector_all(
+        "svg#floor [data-merged]", "els => els.map(e => e.dataset.merged)"
+    )
+    return found
+
+
+def test_replay_draws_the_floor_at_since_and_back_to_live_draws_it_again(page, night_db):
+    client = night_client(night_db)
+    open_line(page, client)
+    url = page.locator(".page").get_attribute("data-replay")
+    assert url is not None
+    expected = client.get(url).json()  # the server's zone: +01:00 here, 27 events since 20:00
+    assert merged_on_floor(page) == ["n1-03-parked"]
+    assert not page.locator("#replay-play").is_visible()
+    assert page.evaluate(PAUSED) is False
+
+    page.click("#replay-start")
+    page.wait_for_selector("#replay-live", state="visible")
+    assert merged_on_floor(page) == ["n0-01-early"]
+    count = len(expected["events"])
+    assert page.locator("#replay-readout").text_content() == (
+        f"{count} events since {expected['since'][11:16]}"
+    )
+    assert page.evaluate(PAUSED) is True  # the 5 s refresh is cancelled
+
+    page.click("#replay-live")
+    assert not page.locator("#replay-live").is_visible()
+    assert page.locator("#replay-start").is_visible()
+    assert merged_on_floor(page) == ["n1-03-parked"]
+    assert page.evaluate(PAUSED) is False
+
+
+def test_on_a_phone_the_replay_bar_sticks_to_the_bottom_with_44_px_controls(page, night_db):
+    size = {"width": 390, "height": 844}
+    open_line(page, night_client(night_db), size)
+    page.click("#replay-start")
+    page.wait_for_selector("#replay-live", state="visible")
+    bar = page.locator("#replay")
+    assert bar.evaluate("e => getComputedStyle(e).position") == "sticky"
+    box = bar.bounding_box()
+    assert box is not None and abs(box["y"] + box["height"] - size["height"]) <= 1
+    controls = page.locator("#replay button, #replay select")
+    assert controls.count() == 7  # Replay, its stretch, Play, ◀, ▶, the speed, Back to live
+    for n in range(controls.count()):
+        found = controls.nth(n).bounding_box()
+        assert found is not None and found["width"] >= 44 and found["height"] >= 44, n
 
 
 def test_reduced_motion_disables_animations(page, line_client):

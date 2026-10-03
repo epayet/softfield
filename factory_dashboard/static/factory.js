@@ -326,20 +326,23 @@
     doc.belts.forEach((b) => belt(svg, b));
   }
 
+  function drawFloor(doc) {
+    const svg = document.getElementById("floor");
+    const phone = document.getElementById("floor-phone");
+    const narrow = window.innerWidth < 640;
+    svg.style.display = narrow ? "none" : "block";
+    phone.style.display = narrow ? "block" : "none";
+    if (narrow) drawPhone(phone, doc);
+    else draw(svg, doc);
+  }
+
   function drawAll(root) {
     const block = root.querySelector ? root.querySelector("#factory-line") : null;
     const svg = document.getElementById("floor");
     const phone = document.getElementById("floor-phone");
     if (block && svg && phone) {
-      const narrow = window.innerWidth < 640;
-      svg.style.display = narrow ? "none" : "block";
-      phone.style.display = narrow ? "block" : "none";
-      if (narrow) {
-        drawPhone(phone, JSON.parse(block.textContent));
-      } else {
-        draw(svg, JSON.parse(block.textContent));
-      }
       const doc = JSON.parse(block.textContent);
+      drawFloor(doc);
       const cur = {};
       for (const b of doc.belts) cur[b.id] = b.today || 0;
       const checks = cur["checks→merged"] || 0;
@@ -360,6 +363,35 @@
       _prev = cur;
     }
   }
+
+  // --- replay (f3-07): the floor as it was at `since`; f3-11 steps through `replaying.events`
+
+  let replaying = null;  // /line/replay's {since, until, line, events} while replaying
+
+  async function startReplay() {
+    const page = document.querySelector(".page[data-replay]");
+    const span = document.getElementById("replay-span").value;  // "replay" or "replayDay"
+    const response = await fetch(page.dataset[span], { headers: { Accept: "application/json" } });
+    if (!response.ok) return;
+    replaying = await response.json();
+    drawFloor(replaying.line);
+    const clock = replaying.since.slice(11, 16);  // the server's own clock, not the browser's
+    const events = plural(replaying.events.length, "event", "events");
+    document.getElementById("replay-readout").textContent = `${events} since ${clock}`;
+    document.getElementById("replay-controls").hidden = false;
+  }
+
+  function backToLive() {
+    replaying = null;
+    document.getElementById("replay-controls").hidden = true;
+    drawAll(document);
+  }
+
+  document.addEventListener("htmx:beforeRequest", (event) => {
+    if (replaying && event.target.id === "line-live") event.preventDefault();  // paused
+  });
+  document.getElementById("replay-start")?.addEventListener("click", startReplay);
+  document.getElementById("replay-live")?.addEventListener("click", backToLive);
 
   drawAll(document);
   document.addEventListener("htmx:load", (event) => drawAll(event.detail.elt));

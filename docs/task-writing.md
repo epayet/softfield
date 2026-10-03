@@ -100,6 +100,7 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 ## Lessons from F3
 
 - **Score the ticket with the rubric, not by feel.** f3-07 (replay controls) was written as difficulty 5; the rubric gives 10 (markup, CSS, a stepping state, a timer and the htmx pause interlocked; seven files to read; four dependencies; UI; timing). Qwen re-planned it for 10 minutes three times without one edit, and a direction saying "edit early" didn't change that. Split it into the bar (f3-07) and the stepping (f3-11).
+- **Point into a long file by line numbers, not by "near `id=…`".** The split f3-07 still sent Qwen to "the `.replay` bar in `docs/milestones/f1-factory-mockup.html` (near `id="replay"`)": OpenCode's grep fails on that file ("Ripgrep JSON record exceeded 65536 bytes": line 382 is its embedded data, over 64 KB on one line) and shell `grep` is denied, so Qwen paged through 1,100 lines hunting for it in each attempt and never edited. For a file over ~300 lines, give the lines (`f1-factory-mockup.html` lines 286–289 and 327–332) or quote the few lines that matter in Context.
 
 ## Open questions
 

@@ -1,8 +1,28 @@
 {% extends "base.html" %}
 {% block title %}Factory line · {{ project }}{% endblock %}
 {% block content %}
-<div class="page" data-replay="{{ replay }}">
+<div class="page" data-replay="{{ replay }}" data-replay-day="{{ replay_day }}">
 {% include "_partials/line.html" %}
+{# The replay bar (f3-07): outside #line-live, which htmx replaces whole every 5 s. Only Replay and its stretch show until a replay is loaded. #}
+<div class="panel replay" id="replay">
+  <button type="button" class="play" id="replay-start">Replay</button>
+  <select id="replay-span" aria-label="Replay which stretch">
+    <option value="replay" selected>overnight</option>
+    <option value="replayDay">last 24 h</option>
+  </select>
+  <div class="replay-controls" id="replay-controls" hidden>
+    <button type="button" class="play" id="replay-play">Play</button>
+    <button type="button" class="play step" id="replay-prev" aria-label="Previous event">◀</button>
+    <button type="button" class="play step" id="replay-next" aria-label="Next event">▶</button>
+    <select id="replay-speed" aria-label="Replay speed">
+      <option value="5000">every 5 s</option>
+      <option value="3000" selected>every 3 s</option>
+      <option value="1500">every 1.5 s</option>
+    </select>
+    <span class="replay-readout" id="replay-readout" aria-live="polite"></span>
+    <button type="button" id="replay-live">Back to live</button>
+  </div>
+</div>
 </div>
 <script src="/static/factory.js" defer></script>
 {% endblock %}
