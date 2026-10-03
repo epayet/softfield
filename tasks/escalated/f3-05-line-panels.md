@@ -28,3 +28,12 @@ Read the line mock-up (`docs/milestones/f3-line-mockup/Line.dc.html` and `docs/m
 - the page has no `#running` or `#queue` section
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 141600
+logs: var/runs/20261003-132503/f3-05-line-panels
+```
