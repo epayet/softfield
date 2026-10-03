@@ -26,3 +26,12 @@ Read `factory_dashboard/tickets.py` (`list_tickets`, `TicketRow`), `factory_dash
 - the milestone and state filters still work
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: invalid
+attempts: 1
+tokens: 40639
+logs: var/runs/20261003-071707/f4-02-tickets-last-worked
+```
