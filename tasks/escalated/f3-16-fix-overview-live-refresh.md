@@ -28,3 +28,12 @@ Read `factory_dashboard/templates/overview.html`, `factory_dashboard/templates/_
 - the wrappers are written once
 - the listed `tests:` pass, and the new ones fail on the f3-14 templates
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 5988956
+logs: var/runs/20261003-181609/f3-16-fix-overview-live-refresh
+```
