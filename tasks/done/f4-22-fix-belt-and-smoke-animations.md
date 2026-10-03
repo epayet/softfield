@@ -23,3 +23,12 @@ A should-fix finding (f4-always-on-C228-2) by copilot-auto, standing in for the 
 - what the finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2009
+gate_failures: ['tests-fail-on-main']
+tokens: 777654
+```
