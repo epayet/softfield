@@ -22,3 +22,12 @@ f3-09-line-phone-fixes was merged with a one-line change (the lead no longer dra
 - the f3-09 Done when holds: at 390 px no horizontal scroll, stations in the order field, queue, lead, reviewers, developers, checks, merged, stash, no two `[data-machine]` boxes overlap, three developers all inside the bay's rect, every box at least 44 px wide and high, and a resize from 1280 to 390 px and back draws the phone floor then the desktop one (browser tests)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 538
+gate_failures: ['no-changes']
+tokens: 24248
+```
