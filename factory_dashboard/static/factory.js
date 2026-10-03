@@ -280,7 +280,7 @@
     const lead = station(svg, "lead");
     const leadM = doc.machines.find((m) => m.station === "lead");
     if (leadM) {
-      machine(lead, leadM, PHONE.lead.x + 100, PHONE.lead.y, PHONE.lead.w - 200, PHONE.lead.h);
+      machine(lead, leadM, PHONE.lead.x, PHONE.lead.y, PHONE.lead.w, PHONE.lead.h);
     }
 
     // reviewers
