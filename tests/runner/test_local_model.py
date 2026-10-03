@@ -133,6 +133,27 @@ def test_opencode_reports_progress_as_it_runs(tmp_path, monkeypatch):
     assert run.exit_code == 0
 
 
+def test_opencode_gets_a_15_minute_shell_timeout_and_the_rest_of_the_environment(
+    tmp_path, monkeypatch
+):
+    """f4-05: OpenCode killed shell calls at 120 s, check-all included; the runner raises
+    its default and keeps the environment it was given."""
+    from runner.local_model import run_opencode
+
+    _fake_opencode(tmp_path, monkeypatch, _tool("edit"))
+    script = tmp_path / "bin" / "opencode"
+    script.write_text(
+        '#!/bin/sh\necho "$OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS $COUCOU_KEPT"\n'
+    )
+    monkeypatch.setenv("COUCOU_KEPT", "kept")
+    monkeypatch.setenv("OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS", "120000")
+    monkeypatch.setattr(local_model, "session_reasoning", lambda db, session: "")
+    log = tmp_path / "logs" / "opencode-1.jsonl"
+    run = run_opencode(tmp_path, "m", "t", "p", 60, log)
+    assert run.exit_code == 0
+    assert log.read_text().startswith("900000 kept\n")
+
+
 def _tool(tool: str, status: str = "completed") -> str:
     return json.dumps(
         {

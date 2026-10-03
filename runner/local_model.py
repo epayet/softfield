@@ -6,6 +6,7 @@ the same events, so tokens and facts are read alike; only the local model is war
 """
 
 import json
+import os
 import re
 import sqlite3
 import time
@@ -24,6 +25,8 @@ from runner.procs import LIVE_EVERY as LIVE_EVERY
 from runner.procs import run_streaming as run_streaming
 
 LOCAL_PROVIDER = "lmstudio"
+# f4-05: OpenCode killed a shell call at 120 s, check-all included; 15 min is under [timeouts] gate
+SHELL_TIMEOUT_ENV = {"OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS": "900000"}
 
 
 @dataclass(frozen=True)
@@ -241,7 +244,8 @@ def run_opencode(
         stopped = stuck(lines, reasoning, clock() - begun)
         return bool(stopped)
 
-    stderr, exit_code = run_streaming(cmd, repo, timeout, log_path, tick, clock=clock)
+    env = {**os.environ, **SHELL_TIMEOUT_ENV}
+    stderr, exit_code = run_streaming(cmd, repo, timeout, log_path, tick, clock=clock, env=env)
     lines = read()
     if stopped:
         marker = f"\n--- {stopped} ---\n"
