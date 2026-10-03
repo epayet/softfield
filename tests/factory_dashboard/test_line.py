@@ -796,6 +796,40 @@ def test_carrying_belt_has_moving_class(page, line_client):
     assert "queue→developers" not in quiet
 
 
+def test_phone_floor_belt_and_smoke_get_their_animation_classes(page, line_client):
+    """f4-always-on-C228-2: the phone floor uses .floor-phone, so its belt and smoke
+    must carry the same animation classes as the desktop floor."""
+    open_line(page, line_client, PHONE)
+    phone_carrying = page.eval_on_selector_all(
+        "svg#floor-phone [data-belt].carrying.moving", "els => els.map(e => e.dataset.belt)"
+    )
+    assert phone_carrying == ["queue→developers"]
+    phone_on = page.eval_on_selector_all(
+        "svg#floor-phone [data-machine].on", "els => els.map(e => e.dataset.machine)"
+    )
+    assert LOCAL in phone_on
+
+
+def test_css_motion_query_targets_floor_phone_for_belt_and_smoke_animations():
+    """f4-always-on-C228-2: the phone floor uses .floor-phone, so its belt and smoke
+    must carry the same animation classes as the desktop floor."""
+    css = (STATIC / "dashboard.css").read_text()
+    # The motion query (prefers-reduced-motion: no-preference) must include .floor-phone
+    # alongside .floor so animations apply on the phone diagram.
+    # Before the fix, selectors only targeted .floor and missed the phone floor entirely.
+    in_motion = False
+    for line in css.splitlines():
+        if "prefers-reduced-motion: no-preference" in line:
+            in_motion = True
+        if in_motion:
+            if "}" in line and "{" not in line:
+                in_motion = False
+            if ".floor-phone" in line:
+                break
+    else:
+        pytest.fail(".floor-phone not found in prefers-reduced-motion: no-preference block")
+
+
 def test_working_machine_has_smoke_idle_does_not(page, line_client):
     open_line(page, line_client)
     doc = open_line(page, line_client)

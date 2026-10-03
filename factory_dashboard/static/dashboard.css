@@ -120,26 +120,26 @@ tbody tr:hover { background: var(--accent-wash); }
 @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2s ease-in-out infinite; } }
 @keyframes pulse { 50% { opacity: .45; } }
 @media (prefers-reduced-motion: no-preference) {
-  .floor .belt.carrying .rollers { animation: roll .35s linear infinite; }
+  .floor .belt.carrying .rollers, .floor-phone .belt.carrying .rollers { animation: roll .35s linear infinite; }
   @keyframes roll { to { stroke-dashoffset: -9; } }
-  .floor .machine.on .smoke { fill: var(--smoke, #8a96a3); animation: smoke 2.1s ease-out infinite; }
+  .floor .machine.on .smoke, .floor-phone .machine.on .smoke { fill: var(--smoke, #8a96a3); animation: smoke 2.1s ease-out infinite; }
   @keyframes smoke {
     0% { opacity: .55; transform: translateY(0) scale(.6); }
     100% { opacity: 0; transform: translateY(-34px) scale(1.6); }
   }
-  .floor .light.flash-green { animation: flash-green 1.2s ease-out; }
+  .floor .light.flash-green, .floor-phone .light.flash-green { animation: flash-green 1.2s ease-out; }
   @keyframes flash-green {
     0% { fill: var(--good); }
     50% { fill: #4cff4c; }
     100% { fill: var(--good); }
   }
-  .floor .light.flash-red { animation: flash-red 1.2s ease-out; }
+  .floor .light.flash-red, .floor-phone .light.flash-red { animation: flash-red 1.2s ease-out; }
   @keyframes flash-red {
     0% { fill: var(--good); }
     50% { fill: var(--critical); }
     100% { fill: var(--good); }
   }
-  .floor .light.flash-orange { animation: flash-orange 1.2s ease-out; }
+  .floor .light.flash-orange, .floor-phone .light.flash-orange { animation: flash-orange 1.2s ease-out; }
   @keyframes flash-orange {
     0% { fill: var(--good); }
     50% { fill: var(--warn); }
