@@ -46,3 +46,10 @@ Read `docs/milestones/f3.md` D11 (all of it: it's the contract for 02–08; wher
 - the rows, ripe and stash counts match the fixture's milestones
 - a browser test opens `/line` and finds one machine per agent and the queue's crates in run order
 - `uv run runner check-all --task f3-01-factory-line` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
