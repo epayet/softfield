@@ -25,3 +25,12 @@ Read `factory_dashboard/tickets.py` (`list_tickets`, `tickets_page`), `factory_d
 - with no later tickets, there is no panel
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1095
+gate_failures: []
+tokens: 1384144
+```
