@@ -287,6 +287,18 @@ def test_dry_run_works_on_a_dirty_branch_and_creates_nothing(repo, capsys):
     assert not cfg.metrics_db.exists()
 
 
+def test_dry_run_never_lists_a_ticket_set_aside_for_later(repo, capsys):
+    """ADR 17 item 3: tasks/later/ waits aside."""
+    _add_task(repo, "m1-01-thing")
+    write_task(repo / "tasks" / "later", "m1-02-aside")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "aside")
+    assert loop.run_session(_config(repo), once=False, dry_run=True, escalate=False) is None
+    out = capsys.readouterr().out
+    assert "m1-01-thing" in out
+    assert "m1-02-aside" not in out
+
+
 def test_blocked_escalates_immediately(repo, fake_model):
     _add_task(repo, "m1-01-thing")
 
@@ -2777,6 +2789,20 @@ def test_a_ticket_deleted_from_tasks_leaves_the_queue(repo):
     loop.open_session(_config(repo))
     states = {row["ticket"]: row["state"] for row in _rows(repo, "tickets")}
     assert states == {"m1-09-gone": "removed", "m1-01-thing": "ready"}
+
+
+def test_a_ticket_set_aside_is_recorded_as_later(repo):
+    """ADR 17 item 3; a later ticket that was ready before leaves the queue too."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name)
+    metrics.upsert_ticket(conn, project, "m1-02-aside", state="ready")
+    conn.close()
+    write_task(repo / "tasks" / "later", "m1-02-aside")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "aside")
+    loop.open_session(_config(repo))
+    states = {row["ticket"]: row["state"] for row in _rows(repo, "tickets")}
+    assert states == {"m1-02-aside": "later"}
 
 
 # --- routing (f1-25, runner/router.py; ADR 15 items 6, 7 and 9) ----------------------------

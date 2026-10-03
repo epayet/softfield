@@ -66,6 +66,8 @@ def main(argv: list[str] | None = None) -> int:
     signoff.add_argument(
         "--score", type=int, help="optional, 1-10: how the result felt on the devices"
     )
+    queue = sub.add_parser("queue", help="the owner: move a ticket from tasks/later to ready")
+    queue.add_argument("ticket", help="its id, or a unique prefix like m4-12")
     for name in ("accept", "reject"):
         decide = sub.add_parser(name, help=f"the owner: {name} an ADR")
         decide.add_argument("number", type=int)
@@ -164,6 +166,8 @@ def main(argv: list[str] | None = None) -> int:
                 repo, key, _today(), force=args.force, db=cfg.metrics_db, score=args.score
             )
             print(f"{key.upper()} signed off and tagged {key}-done.")
+        elif args.command == "queue":
+            print(f"{loop.queue_ticket(cfg, args.ticket)}: back in tasks/ready/.")
         elif args.command in ("accept", "reject"):
             decision = "Accepted" if args.command == "accept" else "Rejected"
             path = owner.decide_adr(repo, args.number, decision, _today(), db=cfg.metrics_db)

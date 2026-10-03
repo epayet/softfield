@@ -19,6 +19,8 @@ AGENTS = ("developer", "lead")  # who works a ticket (ADR 12 item 9)
 _AGENT_SYNONYMS = {"junior": "developer"}  # old tickets' name for a developer (ADR 14 item 1)
 # Folders whose tasks pause their dependants: waiting for the lead, or for the owner.
 STOPPED = ("escalated", "blocked")
+# Tickets set aside: never taken, until the owner queues one again (ADR 17 item 3).
+LATER = "later"
 
 
 class TaskError(ValueError):
@@ -278,6 +280,29 @@ def queued_tests(tasks_dir: Path, current: str) -> set[str]:
 
 def task_ids(directory: Path) -> set[str]:
     return {p.stem for p in directory.glob("*.md")}
+
+
+def find_ticket(tasks_dir: Path, folder: str, wanted: str) -> Path:
+    """The ticket in ``tasks_dir/folder`` whose id is ``wanted`` or starts with it. None, or
+    more than one, is an error that lists the choices; one found in another folder says
+    where it is."""
+    paths = sorted((tasks_dir / folder).glob("*.md"))
+    matches = [p for p in paths if p.stem == wanted] or [
+        p for p in paths if p.stem.startswith(wanted)
+    ]
+    if len(matches) == 1:
+        return matches[0]
+    if not matches:
+        elsewhere = sorted(
+            f"tasks/{p.parent.name}/{p.name}"
+            for p in tasks_dir.glob("*/*.md")
+            if p.parent.name != folder and p.stem.startswith(wanted)
+        )
+        if elsewhere:
+            raise TaskError(f"{wanted} isn't in tasks/{folder}/: " + ", ".join(elsewhere))
+    choices = ", ".join(p.stem for p in matches or paths) or "none"
+    found = "matches several tickets" if matches else "matches no ticket"
+    raise TaskError(f"{wanted} {found} in tasks/{folder}/. Choices: {choices}")
 
 
 def stopped_ids(tasks_dir: Path) -> set[str]:

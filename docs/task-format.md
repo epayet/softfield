@@ -1,6 +1,6 @@
 # Task format
 
-Tasks ("tickets") are Markdown files with YAML frontmatter in `tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner; see the verdict). The file name is `<id>.md`. Why they look like this: [ADR 07](adr/07-spend-less-frontier.md).
+Tasks ("tickets") are Markdown files with YAML frontmatter in `tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner; see the verdict). Tickets set aside wait in `tasks/later/`: the runner never takes them, and `uv run runner queue <id>` (an id or a unique prefix) moves one back to `ready/` in a commit ([ADR 17](adr/17-always-on-factory.md) item 3). The file name is `<id>.md`. Why they look like this: [ADR 07](adr/07-spend-less-frontier.md).
 
 ## Frontmatter
 

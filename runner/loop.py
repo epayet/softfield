@@ -70,6 +70,7 @@ from runner.report import ClaudeRunRecord, SessionReport, TaskRecord
 from runner.review import Finding, ReviewFileError, parse_checkpoint
 from runner.state import State, load_state, save_state
 from runner.tasks import (
+    LATER,
     STOPPED,
     Task,
     append_footer,
@@ -77,6 +78,7 @@ from runner.tasks import (
     carry_footers,
     command_arg,
     difficulty,
+    find_ticket,
     load_dir,
     milestone_key,
     milestone_order,
@@ -474,7 +476,7 @@ def _stop_heartbeat(s: Session) -> None:
         s.heartbeat = None
 
 
-TICKET_FOLDERS = ("ready", "done", *STOPPED)
+TICKET_FOLDERS = ("ready", "done", *STOPPED, LATER)
 
 
 def sync_tickets(s: Session) -> None:
@@ -3272,6 +3274,44 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
     report = close_session(s)
     report.restart = restart
     return report
+
+
+LIVE = timedelta(minutes=2)  # f1 D3: an older heartbeat means the runner stopped
+
+
+def live_run(cfg: Config) -> str | None:
+    """The run of this project whose heartbeat is under ``LIVE`` old, if any."""
+    if not cfg.metrics_db.is_file():
+        return None
+    conn = metrics.open_db(cfg.metrics_db)
+    try:
+        rows = conn.execute(
+            "SELECT r.run_dir, r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL",
+            (cfg.repo.name,),
+        ).fetchall()
+    finally:
+        conn.close()
+    at = now()
+    return next(
+        (r["run_dir"] for r in rows if at - datetime.fromisoformat(r["heartbeat"]) < LIVE), None
+    )
+
+
+def queue_ticket(cfg: Config, wanted: str) -> str:
+    """Move a ticket from tasks/later/ to tasks/ready/ in a commit of its own (ADR 17 item
+    3); ``wanted`` is its id or a unique prefix. Tasks only, so the commit skips the hook.
+    Refused while a run is live: the runner commits on the same branch."""
+    if (run := live_run(cfg)) is not None:
+        raise RunnerError(f"run {run} is running; queue {wanted} once it has stopped")
+    tasks = cfg.repo / "tasks"
+    src = find_ticket(tasks, LATER, wanted)
+    dst = tasks / "ready" / src.name
+    git = Git(cfg.repo)
+    git.move(src, dst)
+    paths = (src.relative_to(cfg.repo).as_posix(), dst.relative_to(cfg.repo).as_posix())
+    git.run("commit", "-q", "--no-verify", "-m", f"queue {src.stem} (by the owner)", "--", *paths)
+    return src.stem
 
 
 def close_session(s: Session) -> SessionReport:

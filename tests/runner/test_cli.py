@@ -2,13 +2,14 @@
 
 import os
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
 from runner import cli, loop, metrics, owner
 from runner.milestone import RESTART
 from runner.report import SessionReport
+from tests.runner.conftest import git, write_task
 
 
 @pytest.fixture
@@ -188,6 +189,78 @@ def test_signoff_passes_the_owners_score_on(in_repo, monkeypatch, argv, score):
 def test_signoff_refuses_a_score_of_11(in_repo, capsys):
     assert cli.main(["signoff", "f1", "--score", "11"]) == 1
     assert "1 to 10" in capsys.readouterr().err
+
+
+def _later(repo, *ids):
+    for task_id in ids:
+        write_task(repo / "tasks" / "later", task_id)
+    git(repo, "add", "tasks")
+    git(repo, "commit", "-q", "-m", "set aside")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def test_queue_puts_a_later_ticket_back_in_ready_and_commits(in_repo, capsys):
+    """ADR 17 item 3: a unique prefix will do; the commit holds the move alone."""
+    _later(in_repo, "m4-12-send-recovers", "f3-01-other")
+    assert cli.main(["queue", "m4-12"]) == 0
+    assert (in_repo / "tasks" / "ready" / "m4-12-send-recovers.md").is_file()
+    assert not (in_repo / "tasks" / "later" / "m4-12-send-recovers.md").exists()
+    assert git(in_repo, "log", "-1", "--format=%s").strip() == (
+        "queue m4-12-send-recovers (by the owner)"
+    )
+    changed = git(in_repo, "show", "--name-only", "--no-renames", "--format=", "HEAD").split()
+    assert sorted(changed) == [
+        "tasks/later/m4-12-send-recovers.md",
+        "tasks/ready/m4-12-send-recovers.md",
+    ]
+    assert "workflow/runner.toml" in git(in_repo, "status", "--porcelain")  # left alone
+    assert "m4-12-send-recovers" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("arg", "shown"), [("m9", ["m4-12-a", "m4-13-b"]), ("m4-1", ["m4-12-a", "m4-13-b"])]
+)
+def test_queue_with_an_unknown_or_ambiguous_id_shows_the_choices(in_repo, capsys, arg, shown):
+    head = _later(in_repo, "m4-12-a", "m4-13-b")
+    assert cli.main(["queue", arg]) == 1
+    err = capsys.readouterr().err
+    assert all(choice in err for choice in shown)
+    assert git(in_repo, "rev-parse", "HEAD") == head
+    assert sorted(p.name for p in (in_repo / "tasks" / "later").glob("*.md")) == [
+        "m4-12-a.md",
+        "m4-13-b.md",
+    ]
+
+
+def test_queue_refuses_a_ticket_that_isnt_in_later(in_repo, capsys):
+    write_task(in_repo / "tasks" / "ready", "m4-14-ready")
+    git(in_repo, "add", "tasks")
+    git(in_repo, "commit", "-q", "-m", "ready")
+    head = git(in_repo, "rev-parse", "HEAD")
+    assert cli.main(["queue", "m4-14"]) == 1
+    assert "tasks/ready/" in capsys.readouterr().err
+    assert git(in_repo, "rev-parse", "HEAD") == head
+
+
+@pytest.mark.parametrize(
+    ("age", "refused"), [(timedelta(seconds=30), True), (timedelta(minutes=5), False)]
+)
+def test_queue_refuses_while_a_run_is_live(in_repo, capsys, age, refused):
+    """A heartbeat under 2 minutes is a live run; an older one is a dead one."""
+    head = _later(in_repo, "m4-12-a")
+    conn = metrics.open_db(in_repo / "var" / "factory-metrics.sqlite")
+    project = metrics.upsert_project(conn, in_repo.name)
+    beat = (datetime.now(UTC) - age).isoformat()
+    metrics.upsert_run(
+        conn, project, "20261003-120000", command="run", started=beat, heartbeat=beat
+    )
+    conn.close()
+    assert cli.main(["queue", "m4-12"]) == (1 if refused else 0)
+    if refused:
+        assert "running" in capsys.readouterr().err
+        assert git(in_repo, "rev-parse", "HEAD") == head
+    else:
+        assert (in_repo / "tasks" / "ready" / "m4-12-a.md").is_file()
 
 
 def test_a_bad_milestone_name_is_an_error(in_repo, capsys):
