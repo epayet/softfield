@@ -659,6 +659,120 @@ def test_the_phone_floor_is_drawn_in_the_floors_colours_not_black(page, line_cli
     assert box is not None and box["width"] <= 390
 
 
+PHONE = {"width": 390, "height": 1200}
+
+
+def phone_drawn(page, selector: str, key: str) -> list[str]:
+    found: list[str] = page.eval_on_selector_all(
+        f"svg#floor-phone {selector}", f"els => els.map(e => e.dataset.{key})"
+    )
+    return found
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_a_phone_draws_every_station_with_its_crates_and_belts(page, line_client, scheme):
+    """2026-10-03, at 390 px: the portrait floor was outlines only: no planting and no rows,
+    an empty queue and stash, few belts."""
+    page.emulate_media(color_scheme=scheme)
+    doc = open_line(page, line_client, PHONE)
+    assert phone_drawn(page, "[data-station]", "station") == [s["id"] for s in doc["stations"]]
+    planting = page.locator('svg#floor-phone [data-station="planting"] text').all_text_contents()
+    assert planting[0] == "PLANTING"
+    assert phone_drawn(page, "[data-row]", "row") == [r["key"] for r in doc["field"]["rows"]]
+    assert phone_drawn(page, "[data-queue-crate]", "queueCrate") == [
+        c["ticket"] for c in doc["queue"]
+    ]
+    assert phone_drawn(page, "[data-machine]", "machine") == [m["id"] for m in doc["machines"]]
+    working = page.locator(f'svg#floor-phone [data-machine="{LOCAL}"] [data-crate]')
+    assert working.get_attribute("data-crate") == "f9-01-working"
+    assert phone_drawn(page, "[data-merged]", "merged") == [c["ticket"] for c in doc["merged"]]
+    assert phone_drawn(page, "[data-ripe]", "ripe") == ["f8"]
+    assert phone_drawn(page, "[data-stash]", "stash") == ["f7", "m4"]
+    assert phone_drawn(page, "[data-belt]", "belt") == [b["id"] for b in doc["belts"]]
+    assert phone_drawn(page, "[data-belt].carrying", "belt") == ["queue→developers"]
+    merged = belts(doc)["checks→merged"]["today"]
+    counted = page.locator('svg#floor-phone [data-belt="checks→merged"] text').text_content()
+    assert counted == f"merged · {merged}"
+
+
+def test_a_phones_queue_holds_its_first_six_crates_in_run_order(page, line_client):
+    doc = open_line(page, line_client, PHONE)
+    crates = [dict(doc["queue"][0], ticket=f"f6-{n:02}-crate", number=n) for n in range(1, 10)]
+    page.evaluate(
+        """queue => {
+            const block = document.getElementById("factory-line");
+            block.textContent = JSON.stringify({ ...JSON.parse(block.textContent), queue });
+            document.dispatchEvent(new CustomEvent("htmx:load", { detail: { elt: document } }));
+        }""",
+        crates,
+    )
+    assert phone_drawn(page, "[data-queue-crate]", "queueCrate") == [
+        c["ticket"] for c in crates[:6]
+    ]
+    head = page.locator('svg#floor-phone [data-station="queue"] text').first.text_content()
+    assert head == "QUEUE · 9"
+
+
+# Every text on the phone floor: its words, its box, the box of its machine's or station's own
+# shapes (null when the station has none of its own), and every machine's shapes, one by one.
+LABELS = """svg => {
+    const owner = (e) => e.closest("[data-machine], [data-station]");
+    const box = (e) => {
+        const r = e.getBoundingClientRect();
+        return [r.left, r.top, r.right, r.bottom];
+    };
+    const union = (boxes) => boxes.length ? [
+        Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])),
+        Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3])),
+    ] : null;
+    const shapes = [...svg.querySelectorAll("rect, path, ellipse, circle")]
+        .filter(s => !s.closest("[data-belt], defs"));
+    const frame = (g) => g ? union(shapes.filter(s => owner(s) === g).map(box)) : null;
+    const labels = [...svg.querySelectorAll("text")].filter(t => t.textContent.trim()).map(t => ({
+        words: t.textContent,
+        box: box(t),
+        frame: frame(owner(t)),
+        machine: t.closest("[data-machine]")?.dataset.machine ?? null,
+    }));
+    const machines = shapes.filter(s => s.closest("[data-machine]"))
+        .map(s => ({ machine: s.closest("[data-machine]").dataset.machine, box: box(s) }));
+    return { floor: box(svg), labels, machines };
+}"""
+
+
+def overlaps(a: list[float], b: list[float], slack: float = 0.5) -> bool:
+    return min(a[2], b[2]) - max(a[0], b[0]) > slack and min(a[3], b[3]) - max(a[1], b[1]) > slack
+
+
+def inside(a: list[float], b: list[float], slack: float = 0.5) -> bool:
+    return (
+        a[0] >= b[0] - slack
+        and a[1] >= b[1] - slack
+        and a[2] <= b[2] + slack
+        and a[3] <= b[3] + slack
+    )
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_no_phone_label_overlaps_another_or_leaves_its_station(page, line_client, scheme):
+    """2026-10-03, at 390 px: "SONNET" and "COPIL…" squeezed into 70 px boxes, "DEVELOPER BAY"
+    under a chimney, the ripe icon over "RIPE". Measured still: rising smoke fades over words."""
+    page.emulate_media(color_scheme=scheme, reduced_motion="reduce")
+    open_line(page, line_client, PHONE)
+    found = page.eval_on_selector("svg#floor-phone", LABELS)
+    labels = found["labels"]
+    assert len(labels) > 40
+    for n, label in enumerate(labels):
+        assert inside(label["box"], found["floor"]), label
+        if label["frame"] is not None:
+            assert inside(label["box"], label["frame"]), label
+        for other in labels[n + 1 :]:
+            assert not overlaps(label["box"], other["box"]), (label, other)
+        for shape in found["machines"]:
+            if shape["machine"] != label["machine"]:
+                assert not overlaps(label["box"], shape["box"]), (label, shape)
+
+
 def test_desktop_at_1280_sees_the_desktop_floor(page, line_client):
     open_line(page, line_client, {"width": 1280, "height": 900})
     assert page.locator("svg#floor").is_visible()

@@ -158,6 +158,9 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor { display: block; width: 100%; min-width: 1100px; height: auto; background: var(--bg);
   font-family: var(--mono); font-size: 11px; }
 .floor.floor-phone { min-width: 0; } /* the portrait floor shares .floor's colours */
+.floor-phone .soil { fill: url(#soil-phone); }
+.floor-phone .belt .bed { stroke-width: 14; } .floor-phone .belt .rollers { stroke-width: 9; }
+.floor-phone .belt.back .bed { stroke-width: 9; } .floor-phone .belt.back .rollers { stroke-width: 6; }
 .floor text { fill: var(--ink-2); }
 .floor text.head { fill: var(--c, var(--ink)); font: 700 12px var(--sans); letter-spacing: .12em; }
 .floor text.big { font-size: 14px; }
@@ -180,7 +183,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor .machine.stand-in .unit, .floor .machine.off .unit { stroke-dasharray: 6 4; }
 .floor .machine.off, .floor .machine.waiting { --c: var(--muted); }
 .floor .plate { fill: var(--c); }
-.floor .smoke { fill: var(--c); opacity: .3; }
+.floor .smoke { fill: var(--c); opacity: .3; transform-box: fill-box; transform-origin: center; } /* puffs grow in place, not from the floor's corner */
 .floor .crate { stroke: var(--ink); stroke-width: 1.2; }
 .floor .crate.lead { fill: var(--a2); } .floor .crate.developer { fill: var(--a3); }
 .floor .crate.batch { fill: var(--a4); }

@@ -43,8 +43,9 @@
     "merged→reviewers": { path: "M1150 270 L1150 248 L1080 248 L1080 162", at: [1145, 264], end: true },
   };
 
-  function belt(svg, b) {
-    const where = BELTS[b.id];
+  // `say`: shorter words for the phone, where the long ones don't fit; the title keeps them
+  function belt(svg, b, belts = BELTS) {
+    const where = belts[b.id];
     if (!where) return;
     const cls = ["belt", where.back ? "back" : "", b.carrying ? "carrying" : "", b.carrying ? "moving" : ""].join(" ").trim();
     const g = add(svg, "g", { class: cls, "data-belt": b.id });
@@ -52,7 +53,8 @@
     const width = where.thin ? 10 : 13;
     add(g, "path", { d: where.path, class: "bed", "stroke-width": width + 5 });
     add(g, "path", { d: where.path, class: "rollers", "stroke-width": width });
-    const words = b.today === null ? (where.short ? "" : b.label) : where.short ? `${b.today}` : `${b.label} · ${b.today}`;
+    const label = where.say || b.label;
+    const words = b.today === null ? (where.short ? "" : label) : where.short ? `${b.today}` : `${label} · ${b.today}`;
     const [x, y] = where.at;
     const attrs = {};
     if (where.turn) attrs.transform = `rotate(-90 ${x} ${y})`;
@@ -67,68 +69,93 @@
     return add(svg, "g", { class: "station", "data-station": id });
   }
 
+  // The seeds' hopper, `w` wide at its top; its words go under it, or `inside` its top.
+  function seeds(svg, doc, count, x, y, w, inside = false) {
+    const g = station(svg, "seeds");
+    const h = 106, mid = x + w / 2;
+    add(g, "path", { d: `M${x} ${y} L${x + w} ${y} L${x + w - 18} ${y + h} L${x + 18} ${y + h} Z`, class: "unit" });
+    const spots = [[-15, 80], [3, 88], [19, 78], [-5, 66], [13, 60], [-23, 66], [27, 64], [5, 50]];
+    spots.slice(0, Math.min(doc.field.seeds, spots.length)).forEach(([dx, dy]) =>
+      add(g, "ellipse", { cx: mid + dx, cy: y + dy, rx: 7, ry: 5, class: "seed" }));
+    const at = inside ? y + 18 : y + h + 20;
+    text(g, mid, at, "SEEDS", "head", { "text-anchor": "middle" });
+    text(g, mid, at + 16, `${plural(count.seeds, "ticket", "tickets")} set aside`, "dim", { "text-anchor": "middle" });
+  }
+
+  function planting(svg, count, x, y, w, h) {
+    const g = station(svg, "planting");
+    const mid = x + w / 2;
+    add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+    add(g, "rect", { x: x + w - 38, y: y - 34, width: 22, height: 34, class: "unit" });
+    text(g, mid, y + 28, "PLANTING", "head", { "text-anchor": "middle" });
+    text(g, mid, y + 46, "the lead plans", "", { "text-anchor": "middle" });
+    text(g, mid, y + 60, "with you", "", { "text-anchor": "middle" });
+    text(g, mid, y + 86, `${count.planting} sprouting`, "dim", { "text-anchor": "middle" });
+  }
+
+  // The planted rows, the first four `step` apart, then how many tickets they feed `toward`.
+  function rows(svg, doc, count, x, y, w, h, step, toward) {
+    const g = station(svg, "rows");
+    add(g, "rect", { x, y, width: w, height: h, class: "soil" });
+    text(g, x + 10, y + 22, "PLANTED ROWS", "head");
+    const bar = w - 64;
+    doc.field.rows.slice(0, 4).forEach((row, n) => {
+      const top = y + 54 + n * step, sx = x + 20, left = x + 40;
+      const r = add(g, "g", { "data-row": row.key });
+      add(r, "path", { class: "sprout", d: `M${sx} ${top + 14} v-22 M${sx} ${top + 2} c-8 0-11-4-11-9 8 0 11 4 11 9 M${sx} ${top - 2} c0-7 3-10 10-10 0 7-3 10-10 10` });
+      text(r, left, top - 2, cut(`${row.key.toUpperCase()} · ${row.title || ""}`, Math.floor((w - 50) / 7.2)), "name");
+      add(r, "rect", { x: left, y: top + 6, width: bar, height: 7, class: "bar-bg" });
+      add(r, "rect", { x: left, y: top + 6, width: row.total ? (bar * row.done) / row.total : 0, height: 7, class: "bar-fill" });
+      const running = row.running ? ` · ${row.running} running` : "";
+      text(r, left, top + 28, `${row.done} of ${row.total} merged · ${row.ready} ready${running}`, "dim");
+    });
+    const more = doc.field.rows.length > 4 ? `+ ${doc.field.rows.length - 4} more · ` : "";
+    const queued = doc.field.rows.reduce((sum, row) => sum + row.ready, 0);
+    text(g, x + 10, y + h - 10, `${more}${plural(count.rows, "row feeds", "rows feed")} ${plural(queued, "ticket", "tickets")} ${toward}`, "dim");
+  }
+
   function field(svg, doc, count) {
     add(svg, "rect", { x: 12, y: 34, width: 300, height: 590, class: "field-plot" });
     text(svg, 26, 56, "THE FIELD", "head");
-
-    const seeds = station(svg, "seeds");
-    add(seeds, "path", { d: "M40 90 L150 90 L132 196 L58 196 Z", class: "unit" });
-    const spots = [[80, 170], [98, 178], [114, 168], [90, 156], [108, 150], [72, 156], [122, 154], [100, 140]];
-    spots.slice(0, Math.min(doc.field.seeds, spots.length)).forEach(([cx, cy]) =>
-      add(seeds, "ellipse", { cx, cy, rx: 7, ry: 5, class: "seed" }));
-    text(seeds, 95, 216, "SEEDS", "head", { "text-anchor": "middle" });
-    text(seeds, 95, 232, `${plural(count.seeds, "ticket", "tickets")} set aside`, "dim", { "text-anchor": "middle" });
-
-    const planting = station(svg, "planting");
-    add(planting, "rect", { x: 176, y: 92, width: 124, height: 104, class: "unit" });
-    add(planting, "rect", { x: 262, y: 58, width: 22, height: 34, class: "unit" });
-    text(planting, 238, 120, "PLANTING", "head", { "text-anchor": "middle" });
-    text(planting, 238, 138, "the lead plans", "", { "text-anchor": "middle" });
-    text(planting, 238, 152, "with you", "", { "text-anchor": "middle" });
-    text(planting, 238, 178, `${count.planting} sprouting`, "dim", { "text-anchor": "middle" });
-
-    const rows = station(svg, "rows");
-    add(rows, "rect", { x: 30, y: 262, width: 264, height: 300, class: "soil" });
-    text(rows, 40, 284, "PLANTED ROWS", "head");
-    doc.field.rows.slice(0, 4).forEach((row, n) => {
-      const y = 316 + n * 58;
-      const g = add(rows, "g", { "data-row": row.key });
-      add(g, "path", { class: "sprout", d: `M50 ${y + 14} v-22 M50 ${y + 2} c-8 0-11-4-11-9 8 0 11 4 11 9 M50 ${y - 2} c0-7 3-10 10-10 0 7-3 10-10 10` });
-      text(g, 70, y - 2, cut(`${row.key.toUpperCase()} · ${row.title || ""}`, 30), "name");
-      add(g, "rect", { x: 70, y: y + 6, width: 200, height: 7, class: "bar-bg" });
-      add(g, "rect", { x: 70, y: y + 6, width: row.total ? (200 * row.done) / row.total : 0, height: 7, class: "bar-fill" });
-      const running = row.running ? ` · ${row.running} running` : "";
-      text(g, 70, y + 28, `${row.done} of ${row.total} merged · ${row.ready} ready${running}`, "dim");
-    });
-    if (doc.field.rows.length > 4) text(rows, 40, 540, `+ ${doc.field.rows.length - 4} more`, "dim");
-    const queued = doc.field.rows.reduce((sum, row) => sum + row.ready, 0);
-    text(rows, 40, 552, `${plural(count.rows, "row feeds", "rows feed")} ${plural(queued, "ticket", "tickets")} →`, "dim");
+    seeds(svg, doc, count, 40, 90, 110);
+    planting(svg, count, 176, 92, 124, 104);
+    rows(svg, doc, count, 30, 262, 264, 300, 58, "→");
   }
 
   // --- the queue ----------------------------------------------------------------------------
 
-  function queue(svg, doc) {
+  // The queue's hopper and its first `fit.most` crates in run order, `fit.cols` a row from the
+  // bottom up; its head over the hopper, or inside it when `fit.inside`.
+  const QUEUE = { cols: 2, most: 16, width: 34, pitch: 38, rise: 22, bottom: 40, inside: false };
+
+  function queue(svg, doc, x, y, w, h, fit = QUEUE) {
     const g = station(svg, "queue");
-    add(g, "path", { d: "M360 330 L470 330 L452 560 L378 560 Z", class: "unit" });
-    text(g, 415, 320, `QUEUE · ${doc.queue.length}`, "head", { "text-anchor": "middle" });
-    doc.queue.slice(0, 16).forEach((crate, i) => {
-      const col = i % 2, row = Math.floor(i / 2);
-      const x = 380 + col * 38, y = 520 - row * 22;
+    const mid = x + w / 2;
+    add(g, "path", { d: `M${x} ${y} L${x + w} ${y} L${x + w - 18} ${y + h} L${x + 18} ${y + h} Z`, class: "unit" });
+    text(g, mid, fit.inside ? y + 20 : y - 10, `QUEUE · ${doc.queue.length}`, "head", { "text-anchor": "middle" });
+    const left = mid - (fit.cols * fit.pitch - (fit.pitch - fit.width)) / 2;
+    doc.queue.slice(0, fit.most).forEach((crate, i) => {
+      const col = i % fit.cols, row = Math.floor(i / fit.cols);
+      const cx = left + col * fit.pitch, cy = y + h - fit.bottom - row * fit.rise;
       const c = add(g, "g", { "data-queue-crate": crate.ticket });
       add(c, "title", {}, `${crate.number} ${crate.ticket}: ${crate.title || ""}${crate.waits.length ? ` (after ${crate.waits.join(", ")})` : ""}`);
-      add(c, "rect", { x, y, width: 34, height: 20, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
-      text(c, x + 17, y + 14, String(crate.number), "on", { "text-anchor": "middle" });
+      add(c, "rect", { x: cx, y: cy, width: fit.width, height: 20, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
+      text(c, cx + fit.width / 2, cy + 14, String(crate.number), "on", { "text-anchor": "middle" });
     });
-    if (doc.queue.length > 16) text(g, 415, 352, `+ ${doc.queue.length - 16} more`, "dim", { "text-anchor": "middle" });
-    text(g, 415, 580, "in run order", "dim", { "text-anchor": "middle" });
+    if (fit.inside) {
+      text(g, mid, y + 38, "in run order", "dim", { "text-anchor": "middle" });
+      return;
+    }
+    if (doc.queue.length > fit.most) text(g, mid, y + 22, `+ ${doc.queue.length - fit.most} more`, "dim", { "text-anchor": "middle" });
+    text(g, mid, y + h + 20, "in run order", "dim", { "text-anchor": "middle" });
   }
 
   // --- the machines -------------------------------------------------------------------------
 
-  const AREAS = {  // where each machine station's machines go, side by side
+  const AREAS = {  // where each machine station's machines go, side by side; the bay's frame
     lead: { x: 560, y: 120, width: 230, height: 170, gap: 10 },
     reviewers: { x: 810, y: 50, width: 280, height: 112, gap: 10, most: 140 },
-    developers: { x: 562, y: 404, width: 402, height: 108, gap: 12, most: 128 },
+    developers: { x: 562, y: 404, width: 402, height: 108, gap: 12, most: 128, bay: { x: 548, y: 326, width: 430, height: 246 } },
   };
 
   function machine(svg, m, x, y, w, h) {
@@ -154,7 +181,7 @@
       line = y + 88;
     } else {
       text(g, left, line, cut(m.name.toUpperCase(), Math.floor((w - 16) / 8.5)), "head");
-      text(g, left, line + 16, cut(`${m.where.toUpperCase()}${rated}`, Math.floor(w / 6.5)), "dim");
+      text(g, left, line + 16, cut(`${m.where.toUpperCase()}${rated}`, Math.floor((w - 16) / 6.5)), "dim");
       line += 42;
     }
     if (m.state === "working" && m.crate) {
@@ -174,15 +201,16 @@
     if (m.off.length) text(g, left, y + h - 8, cut(`off: ${m.off.join(", ")}`, Math.floor((w - 16) / 6.5)), "dim");
   }
 
-  function machines(svg, doc) {
-    for (const [name, area] of Object.entries(AREAS)) {
+  function machines(svg, doc, areas = AREAS) {
+    for (const [name, area] of Object.entries(areas)) {
       const own = doc.machines.filter((m) => m.station === name);
       const g = station(svg, name);
       g.setAttribute("class", `station ${name}`);
       if (name === "reviewers") text(g, area.x + 2, area.y - 10, "REVIEWERS", "head");
-      if (name === "developers") {
-        add(g, "rect", { x: 548, y: 326, width: 430, height: 246, class: "unit", "stroke-dasharray": "8 5", "fill-opacity": 0.4 });
-        text(g, 560, 346, "DEVELOPER BAY", "head");
+      if (area.bay) {
+        const { x, y, width, height } = area.bay;
+        add(g, "rect", { x, y, width, height, class: "unit", "stroke-dasharray": "8 5", "fill-opacity": 0.4 });
+        text(g, x + 12, y + 20, "DEVELOPER BAY", "head");
       }
       if (!own.length) continue;
       const each = Math.min(area.most || area.width, (area.width - area.gap * (own.length - 1)) / own.length);
@@ -192,147 +220,136 @@
 
   // --- checks, merged, ripe, the stash ------------------------------------------------------
 
-  function end(svg, doc, count) {
-    const checks = station(svg, "checks");
-    add(checks, "rect", { x: 982, y: 260, width: 74, height: 120, class: "unit" });
-    add(checks, "circle", { cx: 1019, cy: 290, r: 10, class: "light" });
-    text(checks, 1019, 322, "CHECKS", "head", { "text-anchor": "middle" });
-    text(checks, 1019, 340, "ruff · mypy", "dim", { "text-anchor": "middle" });
-    text(checks, 1019, 353, "tests · gates", "dim", { "text-anchor": "middle" });
+  function checks(svg, x, y, w, h) {
+    const g = station(svg, "checks");
+    const mid = x + w / 2;
+    add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+    add(g, "circle", { cx: mid, cy: y + 30, r: 10, class: "light" });
+    text(g, mid, y + 62, "CHECKS", "head", { "text-anchor": "middle" });
+    text(g, mid, y + 80, "ruff · mypy", "dim", { "text-anchor": "middle" });
+    text(g, mid, y + 93, "tests · gates", "dim", { "text-anchor": "middle" });
+  }
 
-    const merged = station(svg, "merged");
-    add(merged, "rect", { x: 1120, y: 270, width: 186, height: 100, class: "unit" });
-    text(merged, 1134, 292, `MERGED TODAY · ${count.merged}`, "head");
+  function merged(svg, doc, count, x, y, w, h, cols) {
+    const g = station(svg, "merged");
+    add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+    text(g, x + 14, y + 22, `MERGED TODAY · ${count.merged}`, "head");
     doc.merged.slice(-6).forEach((crate, i) => {
-      const x = 1134 + (i % 3) * 56, y = 304 + Math.floor(i / 3) * 28;
-      const c = add(merged, "g", { "data-merged": crate.ticket });
+      const cx = x + 14 + (i % cols) * 56, cy = y + 34 + Math.floor(i / cols) * 28;
+      const c = add(g, "g", { "data-merged": crate.ticket });
       add(c, "title", {}, `${crate.ticket}: ${crate.title || ""}`);
-      add(c, "rect", { x, y, width: 50, height: 22, class: `crate ${crate.kind}` });
-      text(c, x + 25, y + 15, short(crate.ticket), "on", { "text-anchor": "middle" });
+      add(c, "rect", { x: cx, y: cy, width: 50, height: 22, class: `crate ${crate.kind}` });
+      text(c, cx + 25, cy + 15, short(crate.ticket), "on", { "text-anchor": "middle" });
     });
+  }
 
-    const ripe = station(svg, "ripe");
-    add(ripe, "rect", { x: 1120, y: 84, width: 186, height: 130, class: "unit" });
-    add(ripe, "circle", { cx: 1146, cy: 114, r: 12, class: "unit" });
-    text(ripe, 1166, 112, `RIPE · ${count.ripe}`, "head big");
-    text(ripe, 1166, 128, "needs your sign-off", "");
+  function ripe(svg, doc, count, x, y, w, h) {
+    const g = station(svg, "ripe");
+    add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+    add(g, "circle", { cx: x + 26, cy: y + 30, r: 12, class: "unit" });
+    text(g, x + 46, y + 28, `RIPE · ${count.ripe}`, "head big");
+    text(g, x + 46, y + 44, "needs your sign-off", "");
     doc.field.ripe.slice(0, 3).forEach((m, i) =>
-      text(ripe, 1134, 156 + i * 18, cut(`${m.key.toUpperCase()} · ${m.title || ""}`, 24), "name"));
+      text(g, x + 14, y + 72 + i * 18, cut(`${m.key.toUpperCase()} · ${m.title || ""}`, Math.floor((w - 28) / 7.2)), "name", { "data-ripe": m.key }));
+  }
 
-    const stash = station(svg, "stash");
-    add(stash, "rect", { x: 1120, y: 420, width: 186, height: 190, class: "unit" });
-    text(stash, 1134, 442, `HARVEST STASH · ${count.stash}`, "head");
-    doc.field.stash.slice(0, 12).forEach((m, i) => {
-      const x = 1134 + (i % 3) * 56, y = 456 + Math.floor(i / 3) * 30;
-      add(stash, "rect", { x, y, width: 52, height: 26, class: "tile" });
-      text(stash, x + 26, y + 17, m.key.toUpperCase(), "name", { "text-anchor": "middle" });
+  // The harvest stash, latest first: `cols` tiles a row, as many rows as `h` holds.
+  function stash(svg, doc, count, x, y, w, h, cols) {
+    const g = station(svg, "stash");
+    add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+    text(g, x + 14, y + 22, `HARVEST STASH · ${count.stash}`, "head");
+    doc.field.stash.slice(0, cols * Math.floor((h - 60) / 30)).forEach((m, i) => {
+      const tx = x + 14 + (i % cols) * 56, ty = y + 36 + Math.floor(i / cols) * 30;
+      const tile = add(g, "g", { "data-stash": m.key });
+      add(tile, "rect", { x: tx, y: ty, width: 52, height: 26, class: "tile" });
+      text(tile, tx + 26, ty + 17, m.key.toUpperCase(), "name", { "text-anchor": "middle" });
     });
-    text(stash, 1134, 600, "latest first", "dim");
+    text(g, x + 14, y + h - 10, "latest first", "dim");
+  }
+
+  function end(svg, doc, count) {
+    checks(svg, 982, 260, 74, 120);
+    merged(svg, doc, count, 1120, 270, 186, 100, 3);
+    ripe(svg, doc, count, 1120, 84, 186, 130);
+    stash(svg, doc, count, 1120, 420, 186, 190, 3);
+  }
+
+  function soil(svg, id) {
+    const defs = add(svg, "defs");
+    const pattern = add(defs, "pattern", { id, width: 10, height: 10, patternUnits: "userSpaceOnUse" });
+    add(pattern, "path", { d: "M0 10L10 0", class: "soil-line" });
   }
 
   function draw(svg, doc) {
     svg.replaceChildren();
-    const defs = add(svg, "defs");
-    const soil = add(defs, "pattern", { id: "soil", width: 10, height: 10, patternUnits: "userSpaceOnUse" });
-    add(soil, "path", { d: "M0 10L10 0", class: "soil-line" });
+    soil(svg, "soil");
     const count = Object.fromEntries(doc.stations.map((s) => [s.id, s.count]));
     field(svg, doc, count);
-    queue(svg, doc);
+    queue(svg, doc, 360, 330, 110, 230);
     machines(svg, doc);
     end(svg, doc, count);
     doc.belts.forEach((b) => belt(svg, b));  // over the units' edges, so every count shows
   }
 
-  // --- phone: portrait floor under 640 px -----------------------------------------------
+  // --- phone: the same stations top to bottom, under 640 px (LinePhone.dc.html) ------------
+  // Belts that skip stations run in the gutters: lead→checks and checks→lead on the left,
+  // queue→developers then merged→reviewers on the right; the developers' belt comes down
+  // between the two reviewers.
 
-  const PHONE = {
-    field:    { x: 6,  y: 8,  w: 346, h: 300 },
-    queue:    { x: 60, y: 308, w: 238, h: 40 },
-    lead:     { x: 6,  y: 358, w: 346, h: 118 },
-    rev1:     { x: 6,  y: 486, w: 70,  h: 90 },
-    rev2:     { x: 186, y: 486, w: 70,  h: 90 },
-    bay:      { x: 8,  y: 606, w: 342, h: 160 },
-    checks:   { x: 134, y: 806, w: 90,  h: 70 },
-    merged:   { x: 14, y: 896, w: 160, h: 62 },
-    ripe:     { x: 186, y: 896, w: 160, h: 62 },
-    stash:    { x: 40, y: 986, w: 278, h: 86 },
+  const PHONE_HEIGHT = 1740;
+
+  const PHONE_QUEUE = { cols: 3, most: 6, width: 30, pitch: 33, rise: 24, bottom: 30, inside: true };
+
+  const PHONE_AREAS = {
+    lead: { x: 26, y: 630, width: 314, height: 140, gap: 0 },
+    reviewers: { x: 26, y: 812, width: 314, height: 112, gap: 22, most: 146 },
+    developers: { x: 36, y: 1032, width: 294, height: 112, gap: 8, most: 146, bay: { x: 26, y: 940, width: 314, height: 216 } },
+  };
+
+  const PHONE_BELTS = {
+    "seeds→planting": { path: "M158 92 L196 92", at: [177, 82], middle: true, short: true },
+    "planting→rows": { path: "M266 146 L266 176", at: [278, 166] },
+    "rows→queue": { path: "M179 438 L179 492", at: [192, 470] },
+    "queue→lead": { path: "M125 592 L125 630", at: [114, 614], end: true },
+    "queue→developers": { path: "M248 552 L350 552 L350 782 L183 782 L183 940", at: [262, 540], say: "developer" },
+    "lead→checks": { path: "M26 700 L7 700 L7 1272 L134 1272", at: [30, 1262], say: "lead's work" },
+    "developers→checks": { path: "M150 1156 L150 1196", at: [140, 1180], end: true },
+    "checks→developers": { path: "M208 1196 L208 1156", at: [218, 1180], back: true, thin: true },
+    "checks→lead": { path: "M134 1222 L19 1222 L19 740 L26 740", at: [30, 1212], back: true, thin: true, say: "back to the lead" },
+    "checks→merged": { path: "M179 1306 L179 1336", at: [192, 1325] },
+    "merged→ripe": { path: "M100 1432 L100 1462", at: [112, 1451] },
+    "ripe→stash": { path: "M100 1582 L100 1612", at: [112, 1601] },
+    "merged→reviewers": { path: "M340 1360 L351 1360 L351 868 L340 868", at: [338, 1252], end: true, back: true, thin: true },
   };
 
   function drawPhone(svg, doc) {
     svg.replaceChildren();
+    svg.setAttribute("viewBox", `0 0 358 ${PHONE_HEIGHT}`);
+    soil(svg, "soil-phone");
     const count = Object.fromEntries(doc.stations.map((s) => [s.id, s.count]));
-
-    // field
-    const field = add(svg, "g", { class: "station", "data-station": "seeds" });
-    add(field, "rect", { x: PHONE.field.x, y: PHONE.field.y, width: PHONE.field.w, height: PHONE.field.h, class: "field-plot" });
-    text(field, 16, 28, "THE FIELD", "head");
-    const seeds = station(field, "seeds");
-    add(seeds, "path", { d: `M${PHONE.field.x + 16} ${PHONE.field.y + 40} L${PHONE.field.x + 116} ${PHONE.field.y + 40} L${PHONE.field.x + 100} ${PHONE.field.y + 130} L${PHONE.field.x + 32} ${PHONE.field.y + 130} Z`, class: "unit" });
-    text(seeds, 72, 158, "SEEDS", "head", { "text-anchor": "middle" });
-    text(seeds, 72, 172, `${plural(count.seeds || 0, "ticket", "tickets")} set aside`, "dim", { "text-anchor": "middle" });
-
-    // queue hopper
-    const queue = station(svg, "queue");
-    add(queue, "path", { d: `M${PHONE.queue.x} ${PHONE.queue.y} L${PHONE.queue.x + PHONE.queue.w} ${PHONE.queue.y} L${PHONE.queue.x + PHONE.queue.w - 18} ${PHONE.queue.y + PHONE.queue.h} L${PHONE.queue.x + 18} ${PHONE.queue.y + PHONE.queue.h} Z`, class: "unit" });
-    text(queue, 179, PHONE.queue.y + 26, `QUEUE · ${doc.queue.length}`, "head", { "text-anchor": "middle" });
-
-    // lead
-    const lead = station(svg, "lead");
-    const leadM = doc.machines.find((m) => m.station === "lead");
-    if (leadM) {
-      machine(lead, leadM, PHONE.lead.x, PHONE.lead.y, PHONE.lead.w, PHONE.lead.h);
-    }
-
-    // reviewers
-    const revs = doc.machines.filter((m) => m.station === "reviewers");
-    const revsStation = station(svg, "reviewers");
-    revs.forEach((m, i) => {
-      const x = i === 0 ? PHONE.rev1.x : PHONE.rev2.x;
-      machine(revsStation, m, x, PHONE.rev1.y, 70, PHONE.rev1.h);
-    });
-
-    // developer bay
-    const bay = station(svg, "developers");
-    add(bay, "rect", { x: PHONE.bay.x, y: PHONE.bay.y, width: PHONE.bay.w, height: PHONE.bay.h, class: "unit", "stroke-dasharray": "8 5", "fill-opacity": 0.4 });
-    text(bay, 18, PHONE.bay.y + 20, "DEVELOPER BAY", "head");
-    const devs = doc.machines.filter((m) => m.station === "developers");
-    devs.forEach((m, i) => {
-      const my = PHONE.bay.y + 30;
-      machine(bay, m, 18 + i * 108, my, 104, 120);
-    });
-
-    // checks
-    const checks = station(svg, "checks");
-    add(checks, "rect", { x: PHONE.checks.x, y: PHONE.checks.y, width: PHONE.checks.w, height: PHONE.checks.h, class: "unit" });
-    add(checks, "circle", { cx: PHONE.checks.x + 37, cy: PHONE.checks.y + 28, r: 10, class: "light" });
-    text(checks, 179, PHONE.checks.y + 50, "CHECKS", "head", { "text-anchor": "middle" });
-
-    // merged
-    const merged = station(svg, "merged");
-    add(merged, "rect", { x: PHONE.merged.x, y: PHONE.merged.y, width: PHONE.merged.w, height: PHONE.merged.h, class: "unit" });
-    text(merged, 26, PHONE.merged.y + 22, `MERGED TODAY · ${count.merged || 0}`, "head");
-
-    // ripe
-    const ripe = station(svg, "ripe");
-    add(ripe, "rect", { x: PHONE.ripe.x, y: PHONE.ripe.y, width: PHONE.ripe.w, height: PHONE.ripe.h, class: "unit" });
-    add(ripe, "circle", { cx: PHONE.ripe.x + 12, cy: PHONE.ripe.y + 30, r: 12, class: "unit" });
-    text(ripe, 198, PHONE.ripe.y + 30, `RIPE · ${count.ripe || 0}`, "head big");
-
-    // stash
-    const stash = station(svg, "stash");
-    add(stash, "rect", { x: PHONE.stash.x, y: PHONE.stash.y, width: PHONE.stash.w, height: PHONE.stash.h, class: "unit", "stroke-dasharray": "6 4" });
-    text(stash, 52, PHONE.stash.y + 20, `HARVEST STASH · ${count.stash || 0}`, "head");
-
-    doc.belts.forEach((b) => belt(svg, b));
+    add(svg, "rect", { x: 6, y: 8, width: 346, height: 438, class: "field-plot" });
+    text(svg, 16, 28, "THE FIELD", "head");
+    seeds(svg, doc, count, 16, 44, 150, true);
+    planting(svg, count, 196, 48, 140, 98);
+    rows(svg, doc, count, 16, 176, 326, 262, 50, "↓");
+    queue(svg, doc, 99, 492, 160, 100, PHONE_QUEUE);
+    machines(svg, doc, PHONE_AREAS);
+    checks(svg, 134, 1196, 90, 110);
+    merged(svg, doc, count, 26, 1336, 314, 96, 5);
+    ripe(svg, doc, count, 26, 1462, 314, 120);
+    stash(svg, doc, count, 26, 1612, 314, 120, 5);
+    doc.belts.forEach((b) => belt(svg, b, PHONE_BELTS));
   }
+
+  const narrow = () => window.innerWidth < 640;
+  const shown = () => document.getElementById(narrow() ? "floor-phone" : "floor");
 
   function drawFloor(doc) {
     const svg = document.getElementById("floor");
     const phone = document.getElementById("floor-phone");
-    const narrow = window.innerWidth < 640;
-    svg.style.display = narrow ? "none" : "block";
-    phone.style.display = narrow ? "block" : "none";
-    if (narrow) drawPhone(phone, doc);
+    svg.style.display = narrow() ? "none" : "block";
+    phone.style.display = narrow() ? "block" : "none";
+    if (narrow()) drawPhone(phone, doc);
     else draw(svg, doc);
   }
 
@@ -352,7 +369,7 @@
       const prevM = prev["checks→merged"] || 0;
       const prevD = prev["checks→developers"] || 0;
       const prevL = prev["checks→lead"] || 0;
-      const light = svg.querySelector(".light");
+      const light = shown().querySelector(".light");
       if (light && (checks > prevM || devs > prevD || lead > prevL)) {
         let cls = "light";
         if (checks > prevM) cls += " flash-green";
@@ -456,8 +473,7 @@
     const event = replaying.events[step - 1];
     readout.textContent = words(event);
     if (event.kind === "check") {
-      const svg = document.getElementById(window.innerWidth < 640 ? "floor-phone" : "floor");
-      const light = svg.querySelector(".light");
+      const light = shown().querySelector(".light");
       if (light) light.className.baseVal = `light ${event.passed ? "flash-green" : "flash-red"}`;
     }
   }
