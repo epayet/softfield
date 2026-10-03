@@ -20,7 +20,7 @@
       {% if job.waiting_clock %}
       <dt>Waiting</dt><dd class="mono">Waiting for Claude's limit to reset, until {{ job.waiting_clock }}</dd>
       {% else %}
-      <dt>Live</dt><dd class="mono">{% if job.tokens_in is not none %}{{ job.tokens_in | tokens }} tokens in · {{ job.steps or 0 }} steps{% else %}no tokens reported yet{% endif %}</dd>
+      <dt>Live</dt><dd class="mono">        {% if job.tokens_in is not none %}read {{ ((job.tokens_in or 0) + (job.tokens_cached or 0)) | tokens }} tokens · {{ job.steps or 0 }} turns{% else %}no tokens reported yet{% endif %}</dd>
       {% endif %}
       <dt>Heartbeat</dt><dd class="mono">{{ job.heartbeat | ago }} ago</dd>
     </dl>

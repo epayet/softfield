@@ -52,6 +52,7 @@ class Running:
     elapsed: timedelta
     heartbeat: timedelta | None  # how long ago the run last beat
     tokens_in: int | None
+    tokens_cached: int | None
     steps: int | None
     waiting_until: str | None = None  # ISO time while the run pauses for a limit
     reserve: bool = False  # the owner said yes to Claude's reserve for this command
@@ -121,7 +122,7 @@ def live_runs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Liv
 def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Running]:
     """Every job still ``running``, oldest first, live or not."""
     rows = conn.execute(
-        "SELECT j.id, j.role, j.agent, j.attempt, j.started, j.tokens_in, j.steps,"
+        "SELECT j.id, j.role, j.agent, j.attempt, j.started, j.tokens_in, j.tokens_cached, j.steps,"
         " t.ticket, t.title, t.difficulty, m.key AS milestone, r.run_dir, r.heartbeat,"
         " r.waiting_until, r.reserve"
         " FROM jobs j JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
@@ -144,6 +145,7 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
             elapsed=_age(now, row["started"]) or timedelta(0),
             heartbeat=_age(now, row["heartbeat"]),
             tokens_in=row["tokens_in"],
+            tokens_cached=row["tokens_cached"],
             steps=row["steps"],
             waiting_until=row["waiting_until"],
             reserve=bool(row["reserve"]),

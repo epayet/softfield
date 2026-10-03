@@ -45,7 +45,7 @@ def test_a_job_with_a_fresh_heartbeat_is_running_now(client):
     assert "f1-04-live" in running
     assert "attempt 2" in running and LOCAL in running and "developer" in running
     assert "12 min" in running  # elapsed
-    assert "42k tokens in · 17 steps" in running
+    assert "read 42k tokens · 17 turns" in running
     assert "30 s ago" in running  # the heartbeat
     assert "Running now." in running  # the ticket's title
     needs = section(html, "needs-you")
@@ -198,23 +198,40 @@ def test_a_run_on_the_reserve_has_the_pill(serve_between):
     html = serve_between(activity="gates · f1-21", reserve=True).get("/live").text
     assert "on Claude's reserve" in section(html, "running")
 
+    def test_claude_job_shows_cached_and_turns(client, db_path):
+        """Claude job with cached input should show summed tokens and turns."""
+        from runner import metrics
 
-def test_a_running_job_shows_waiting_reserve_and_claude_tokens(client, db_path):
-    from runner import metrics
-
-    conn = metrics.open_db(db_path)
-    try:
-        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
-        metrics.update_run_activity(conn, run, "waiting for Claude", "2026-10-02T01:40:00+00:00")
-        metrics.set_run_reserve(conn, run)
-    finally:
-        conn.close()
-    running = section(client.get("/live").text, "running")
-    assert "f1-04-live" in running
-    assert "Waiting for Claude's limit to reset, until 01:40" in running
-    assert "on Claude's reserve" in running
-    assert "42k tokens in" not in running  # the waiting line replaces the Live line
-    assert "elapsed time only" not in running
+        conn = metrics.open_db(db_path)
+        try:
+            project = metrics.upsert_project(conn, PROJECT)
+            f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
+            run = metrics.upsert_run(
+                conn,
+                project,
+                "20261002-123456",
+                command="milestone f1",
+                started="2026-10-02T12:00:00+00:00",
+                heartbeat="2026-10-02T12:00:30+00:00",
+            )
+            ticket = metrics.upsert_ticket(
+                conn, project, "f1-99-claude", milestone_id=f1, kind="developer", state="running"
+            )
+            job = metrics.start_job(
+                conn,
+                run,
+                ticket_id=ticket,
+                milestone_id=f1,
+                role="developer",
+                agent=OPUS,
+                attempt=1,
+                started="2026-10-02T12:00:00+00:00",
+            )
+            metrics.update_running_job(conn, job, tokens_in=36_000, tokens_cached=970_000, steps=18)
+        finally:
+            conn.close()
+        running = section(client.get("/").text, "running")
+        assert "read 970k tokens · 18 turns" in running
 
 
 def test_the_queue_has_its_tickets_and_the_command_that_drains_it(client):
