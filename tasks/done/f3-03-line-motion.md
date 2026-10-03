@@ -25,3 +25,12 @@ Read the belt, smoke and gate styles and animations in `docs/milestones/f1-facto
 - with reduced motion emulated (`page.emulate_media(reduced_motion="reduce")`), no element has a running animation
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2173
+gate_failures: ['stopped', 'stopped']
+tokens: 872900
+```
