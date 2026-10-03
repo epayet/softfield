@@ -48,3 +48,9 @@ attempts: 3
 tokens: 151897
 logs: var/runs/20261003-132503/f3-05-line-panels-run2
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
