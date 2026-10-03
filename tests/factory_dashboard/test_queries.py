@@ -9,11 +9,39 @@ from factory_dashboard.queries import (
     milestone_results,
     parse_review_note,
     review_note,
+    run_order,
     savings,
     trends,
 )
 from runner import metrics
 from tests.factory_dashboard.conftest import CLAUDE_TOKENS, LOCAL, OPUS, PROJECT, SONNET, _job
+
+
+def test_run_order_is_pick_next_applied_again_and_again(line_db):
+    conn = connect(line_db)
+    try:
+        order = run_order(conn, PROJECT)
+    finally:
+        conn.close()
+    # f1 runs before f5; f5-04 waits for f5-03, which goes first; f5-05 waits behind an
+    # escalated ticket, so the runner never takes it: last, with what it waits for
+    assert [(u.ticket, u.waits) for u in order] == [
+        ("f1-09-early", ()),
+        ("f5-03-next", ()),
+        ("f5-04-after", ("f5-03-next",)),
+        ("f5-05-stuck", ("f5-06-escalated",)),
+    ]
+    assert [u.ready_now for u in order] == [True, True, False, False]
+    assert (order[2].kind, order[2].milestone, order[2].title) == (
+        "lead",
+        "f5",
+        "Goal of f5-04-after.",
+    )
+
+
+def test_run_order_of_an_empty_queue(db):
+    assert run_order(db, PROJECT) == []
+    assert run_order(db, "elsewhere") == []
 
 
 def test_milestone_results_count_what_a_person_would(db):

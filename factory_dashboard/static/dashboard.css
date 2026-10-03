@@ -116,6 +116,54 @@ tbody tr:hover { background: var(--accent-wash); }
 @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2s ease-in-out infinite; } }
 @keyframes pulse { 50% { opacity: .45; } }
 
+/* The factory line (f3 D11): factory.js draws svg#floor; colours only from the tokens above */
+.line .legend { margin: 0 0 10px; }
+.line .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+.swatch.lead { background: var(--a2); } .swatch.developer { background: var(--a3); }
+.swatch.carrying { background: var(--warn); }
+.floor-wrap { overflow-x: auto; }
+.line-narrow { display: none; }
+@media (max-width: 639px) { .floor-wrap { display: none; } .line-narrow { display: block; } }
+.floor { display: block; width: 100%; min-width: 1100px; height: auto; background: var(--bg);
+  font-family: var(--mono); font-size: 11px; }
+.floor text { fill: var(--ink-2); }
+.floor text.head { fill: var(--c, var(--ink)); font: 700 12px var(--sans); letter-spacing: .12em; }
+.floor text.big { font-size: 14px; }
+.floor text.name { fill: var(--ink); font-size: 12px; }
+.floor text.dim, .floor .belt text { fill: var(--muted); font-size: 10.5px; }
+.floor text.on { fill: var(--surface); font-weight: 700; font-size: 10px; }
+.floor .unit { fill: var(--surface); stroke: var(--c, var(--rule)); stroke-width: 2; }
+.floor .field-plot { fill: var(--surface); stroke: var(--rule); stroke-dasharray: 8 5; }
+.floor .soil { fill: url(#soil); stroke: var(--rule); }
+.floor .soil-line { stroke: var(--rule); stroke-width: 2; }
+.floor .seed { fill: var(--muted); }
+.floor .sprout { stroke: var(--a3); stroke-width: 2; fill: none; }
+.floor .bar-bg { fill: var(--grid); } .floor .bar-fill { fill: var(--warn); }
+.floor [data-station="seeds"], .floor [data-station="rows"] { --c: var(--ink-2); }
+.floor [data-station="planting"], .floor .developers { --c: var(--a3); }
+.floor .lead { --c: var(--a2); }
+.floor .reviewers { --c: var(--a4); }
+.floor .reviewers.stand-in { --c: var(--a1); }
+.floor .machine .unit { stroke-width: 2.5; }
+.floor .machine.stand-in .unit, .floor .machine.off .unit { stroke-dasharray: 6 4; }
+.floor .machine.off, .floor .machine.waiting { --c: var(--muted); }
+.floor .plate { fill: var(--c); }
+.floor .smoke { fill: var(--c); opacity: .3; }
+.floor .crate { stroke: var(--ink); stroke-width: 1.2; }
+.floor .crate.lead { fill: var(--a2); } .floor .crate.developer { fill: var(--a3); }
+.floor .crate.batch { fill: var(--a4); }
+.floor .crate.waits { fill-opacity: .45; stroke-dasharray: 3 2; }
+.floor .belt .bed { fill: none; stroke: var(--grid); stroke-width: 18; }
+.floor .belt .rollers { fill: none; stroke: var(--rule); stroke-width: 12; stroke-dasharray: 2 7; }
+.floor .belt.back .rollers { stroke: var(--critical); opacity: .35; }
+.floor .belt.carrying .rollers { stroke: var(--warn); opacity: 1; }
+.floor .belt.carrying text { fill: var(--ink); }
+.floor .light { fill: var(--good); }
+.floor [data-station="ripe"] { --c: var(--warn-ink); }
+.floor [data-station="ripe"] .unit { stroke-width: 2.5; }
+.floor [data-station="stash"] .unit { stroke-dasharray: 6 4; }
+.floor .tile { fill: var(--bg); stroke: var(--a3); stroke-width: 1.5; }
+
 /* "New version of the dashboard: refresh" (app.py's /version poller) */
 .new-version { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent);
   border-radius: 4px; background: var(--accent-wash); color: var(--ink); }

@@ -10,6 +10,7 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 - CSS + test: `coucou/static/coucou/css/display.css` → `tests/integration/test_display_css.py`
 - Management command: `coucou/management/commands/post_moment.py` → `tests/integration/test_post_moment.py`
 - Dashboard page: `factory_dashboard/overview.py` (an `APIRouter` with its own SQL, included in `app.py`'s `create_app`) + `factory_dashboard/templates/overview.html` (extends `base.html`; a chart is a `data-chart` div, its JSON and a function in `static/charts.js`) → `tests/factory_dashboard/test_overview.py` (checks the rendered text and each chart's JSON)
+- Factory line: the data and every rule in Python, `factory_dashboard/line.py` (`live_line`, a JSON block in the page); the drawing only in `factory_dashboard/static/factory.js` (hand-written SVG) → `tests/factory_dashboard/test_line.py` (tests on the JSON, plus one browser test: the page from `TestClient`, `/static/` from disk with `page.route`)
 
 ## Notes
 1. French says `vous` and sounds warm and plain: "Réessayez un peu plus tard", never "Veuillez réessayer".

@@ -15,7 +15,7 @@ wasn't kept: 500k input tokens.
 
 import sqlite3
 from collections.abc import Callable, Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -1199,6 +1199,191 @@ def project_client(db_path: Path) -> TestClient:
         conn.close()
 
     app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+LINE = "f5"  # the factory line's milestone (f1 D10)
+
+
+def _timed(
+    conn: sqlite3.Connection,
+    run: int,
+    milestone: int,
+    ticket: int | None,
+    role: str,
+    agent: str,
+    attempt: int,
+    span: tuple[str, str | None],
+    outcome: str = "passed",
+    note: str | None = None,
+) -> int:
+    """A job from ``span[0]`` to ``span[1]`` (HH:MM on 2026-09-30, +02:00, or a full ISO
+    time); no end: running."""
+
+    def moment(clock: str) -> str:
+        return clock if "T" in clock else f"2026-09-30T{clock}:00+02:00"
+
+    job = metrics.start_job(
+        conn,
+        run,
+        ticket_id=ticket,
+        milestone_id=milestone,
+        role=role,
+        agent=agent,
+        attempt=attempt,
+        started=moment(span[0]),
+    )
+    if span[1] is not None:
+        metrics.finish_job(conn, job, ended=moment(span[1]), outcome=outcome, note=note)
+    return job
+
+
+def write_line(conn: sqlite3.Connection, repo: str | None) -> None:
+    """On top of ``write_fixture``: milestone ``f5`` for the factory line, its project's repo
+    at ``repo``. Times are 2026-09-30, +02:00.
+    - ``f5-01-retry`` (developer, done): failed 10:00–10:20, a direction 10:21–10:25, passed
+      10:30–10:50;
+    - ``f5-02-parked`` (lead, done, after f5-01): parked by a Claude limit 10:55–11:00 (the
+      refusal at 11:00 resets at 11:30), resumed and passed 11:45–12:05;
+    - a checkpoint on Sonnet 12:10–12:20, shadowed by Copilot 12:10–12:25;
+    - queued: ``f5-03-next`` (after f5-02, so ready now), ``f5-04-after`` (a lead ticket,
+      after f5-03), ``f5-05-stuck`` (after the escalated ``f5-06-escalated``), and
+      ``f1-09-early`` in f1, with no dependencies.
+    Nothing runs from 11:00 to 11:45: one idle stretch over 40 min.
+    """
+    project = metrics.upsert_project(conn, PROJECT, repo=repo)
+    f5 = metrics.upsert_milestone(
+        conn, project, LINE, title="The factory line", started="2026-09-30T09:55:00+02:00"
+    )
+    run = metrics.upsert_run(conn, project, "20260930-095500", command="milestone f5")
+
+    def ticket(name: str, kind: str, state: str, after: list[str], milestone: int = f5) -> int:
+        return metrics.upsert_ticket(
+            conn,
+            project,
+            name,
+            milestone_id=milestone,
+            kind=kind,
+            state=state,
+            depends_on=after,
+            title=f"Goal of {name}.",
+        )
+
+    retry = ticket("f5-01-retry", "developer", "done", [])
+    _timed(conn, run, f5, retry, "developer", LOCAL, 1, ("10:00", "10:20"), "failed")
+    _timed(conn, run, f5, retry, "direction", OPUS, 1, ("10:21", "10:25"))
+    _timed(conn, run, f5, retry, "developer", LOCAL, 2, ("10:30", "10:50"))
+
+    parked = ticket("f5-02-parked", "lead", "done", ["f5-01-retry"])
+    _timed(conn, run, f5, parked, "lead-ticket", OPUS, 1, ("10:55", "11:00"), "failed", "parked")
+    metrics.add_usage_event(
+        conn,
+        OPUS,
+        "2026-09-30T11:00:00+02:00",
+        "refusal",
+        window="five_hour",
+        resets_at="2026-09-30T11:30:00+02:00",
+    )
+    _timed(conn, run, f5, parked, "lead-ticket", OPUS, 2, ("11:45", "12:05"))
+
+    _timed(conn, run, f5, None, "checkpoint", SONNET, 1, ("12:10", "12:20"))
+    _timed(conn, run, f5, None, "checkpoint-shadow", "copilot-auto", 1, ("12:10", "12:25"))
+
+    ticket("f5-03-next", "developer", "ready", ["f5-02-parked"])
+    ticket("f5-04-after", "lead", "ready", ["f5-03-next"])
+    ticket("f5-05-stuck", "developer", "ready", ["f5-06-escalated"])
+    ticket("f5-06-escalated", "developer", "escalated", [])
+    ticket("f1-09-early", "developer", "ready", [], metrics.upsert_milestone(conn, project, "f1"))
+
+
+LINE_NOW = NOW.astimezone(timezone(timedelta(hours=2)))  # 14:00 on 2026-10-02, +02:00
+
+
+def write_today(conn: sqlite3.Connection) -> None:
+    """On top of ``write_line``, the live line at ``LINE_NOW`` (times +02:00):
+    - ``f9`` (in progress): ``f9-01-working`` on Qwen since 13:48 (attempt 1; the run beat
+      30 s ago); ``f9-02-overnight`` on Qwen 23:40 yesterday to 00:20, merged; the lead's
+      ``f9-03-lead`` 09:00–09:40, merged; ``f9-04-later`` set aside; a checkpoint on Sonnet
+      10:00–10:10;
+    - Claude refused at 13:30, until 15:00;
+    - the milestones: ``f8`` ripe (its one ticket merged yesterday), ``f7`` signed off at 08:00
+      (Sonnet did its ticket as a developer, on 2026-09-25), ``m4`` signed off on 2026-09-21;
+      ``f1``, ``f5`` and ``f9`` are rows.
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    run = metrics.upsert_run(
+        conn,
+        project,
+        "20261002-090000",
+        command="milestone f9",
+        started="2026-10-02T09:00:00+02:00",
+        heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+    )
+
+    def milestone(key: str, **values: Any) -> int:
+        return metrics.upsert_milestone(conn, project, key, **values)
+
+    def ticket(name: str, kind: str, state: str, m: int) -> int:
+        return metrics.upsert_ticket(
+            conn, project, name, milestone_id=m, kind=kind, state=state, title=f"Goal of {name}."
+        )
+
+    f9 = milestone("f9", title="Today's line", status="in progress")
+    working = ticket("f9-01-working", "developer", "running", f9)
+    _timed(conn, run, f9, working, "developer", LOCAL, 1, ("2026-10-02T13:48:00+02:00", None))
+    overnight = ticket("f9-02-overnight", "developer", "done", f9)
+    span = ("2026-10-01T23:40:00+02:00", "2026-10-02T00:20:00+02:00")
+    _timed(conn, run, f9, overnight, "developer", LOCAL, 1, span)
+    lead = ticket("f9-03-lead", "lead", "done", f9)
+    span = ("2026-10-02T09:00:00+02:00", "2026-10-02T09:40:00+02:00")
+    _timed(conn, run, f9, lead, "lead-ticket", OPUS, 1, span)
+    ticket("f9-04-later", "developer", "later", f9)
+    span = ("2026-10-02T10:00:00+02:00", "2026-10-02T10:10:00+02:00")
+    _timed(conn, run, f9, None, "checkpoint", SONNET, 1, span)
+    metrics.add_usage_event(
+        conn,
+        SONNET,
+        "2026-10-02T13:30:00+02:00",
+        "refusal",
+        window="five_hour",
+        resets_at="2026-10-02T15:00:00+02:00",
+    )
+
+    f8 = milestone("f8", title="Ripe one", status="review")
+    ripe = ticket("f8-01-ripe", "developer", "done", f8)
+    span = ("2026-10-01T15:00:00+02:00", "2026-10-01T15:30:00+02:00")
+    _timed(conn, run, f8, ripe, "developer", LOCAL, 1, span)
+    f7 = milestone("f7", title="Harvested", status="done", ended="2026-10-02T08:00:00+02:00")
+    sonnet = ticket("f7-01-sonnet", "developer", "done", f7)
+    span = ("2026-09-25T10:00:00+02:00", "2026-09-25T10:30:00+02:00")
+    _timed(conn, run, f7, sonnet, "developer", SONNET, 1, span)
+    milestone("m4", status="done", ended="2026-09-21T12:00:00+02:00")
+
+
+@pytest.fixture
+def line_db(db_path: Path, tmp_path: Path) -> Path:
+    """The fixture plus ``write_line``'s and ``write_today``'s rows, its repo a copy of this
+    repo's runner.toml."""
+    repo = tmp_path / "repo"
+    (repo / "workflow").mkdir(parents=True)
+    toml = Path(__file__).resolve().parents[2] / "workflow" / "runner.toml"
+    (repo / "workflow" / "runner.toml").write_text(toml.read_text(encoding="utf-8"))
+    conn = metrics.open_db(db_path)
+    try:
+        write_line(conn, str(repo))
+        write_today(conn)
+    finally:
+        conn.close()
+    return db_path
+
+
+@pytest.fixture
+def line_client(line_db: Path) -> TestClient:
+    """A client over ``line_db``."""
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(line_db, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
 

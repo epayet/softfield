@@ -25,7 +25,7 @@
     </form>
   </div>
   <nav class="tabs" aria-label="Pages">
-    {% for path, label in [("/", "Overview"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
+    {% for path, label in [("/", "Overview"), ("/line", "Factory line"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
     <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>

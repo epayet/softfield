@@ -8,6 +8,7 @@ lead's when its role is one of ``LEAD_ROLES``, so Sonnet doing a developer's tic
 developer (factory-f1 finding 5).
 """
 
+import json
 import re
 import sqlite3
 from collections import Counter, defaultdict
@@ -16,7 +17,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
-from runner.tasks import milestone_order
+from runner.tasks import Task, blocked_ids, milestone_order, pick_next
 from runner.usage import CACHE_READ_WEIGHT, OUTPUT_WEIGHT
 
 DOLLARS_PER_TOKEN = 4 / 1_000_000  # per token-equivalent (D7)
@@ -485,6 +486,87 @@ def eligibility(conn: sqlite3.Connection, project: str) -> list[Eligibility]:
     for replay in review_replays(conn, project):
         by_agent[replay.agent].append(replay)
     return [_eligible(conn, agent, by_agent[agent]) for agent in sorted(by_agent)]
+
+
+# --- the run order (f1 D10) ----------------------------------------------------------------
+
+STOPPED_STATES = ("escalated", "blocked")  # their dependants pause (`runner.tasks.stopped_ids`)
+
+
+@dataclass(frozen=True)
+class Upcoming:
+    """A ``ready`` ticket in the order the runner will take it."""
+
+    ticket: str
+    title: str | None
+    kind: str | None
+    milestone: str | None
+    waits: tuple[str, ...]  # its dependencies not merged yet
+
+    @property
+    def ready_now(self) -> bool:
+        return not self.waits
+
+
+def depends_on(ticket: sqlite3.Row) -> tuple[str, ...]:
+    """A ticket row's ``depends_on`` (JSON), as a tuple."""
+    return tuple(json.loads(ticket["depends_on"])) if ticket["depends_on"] else ()
+
+
+def as_task(ticket: str, milestone: str | None, after: Sequence[str]) -> Task:
+    """Enough of a ``Task`` for ``pick_next``: its id, milestone and dependencies."""
+    return Task(
+        id=ticket,
+        milestone=milestone or "m0",
+        depends_on=tuple(after),
+        files=(),
+        tests=(),
+        max_diff=0,
+        finding=None,
+        sections={},
+        path=Path(ticket),
+    )
+
+
+def in_run_order(
+    ready: Sequence[Task], done: set[str], stopped: set[str]
+) -> tuple[list[Task], list[Task]]:
+    """``pick_next`` applied again and again, each pick counted as merged: the tickets of
+    ``ready`` in the order the runner takes them, then those it never would (waiting on a
+    ticket that isn't ready, or paused behind a ``stopped`` one)."""
+    paused = blocked_ids(ready, stopped)
+    left, merged, picked = list(ready), set(done), []
+    while (task := pick_next(left, merged, paused)) is not None:
+        picked.append(task)
+        left.remove(task)
+        merged.add(task.id)
+    return picked, sorted(left, key=lambda t: (milestone_order(t.milestone), t.id))
+
+
+def run_order(conn: sqlite3.Connection, project: str) -> list[Upcoming]:
+    """The project's ``ready`` tickets in the order the runner will take them, each with the
+    dependencies it still waits for (none: ready now); those it can't take yet come last."""
+    rows = conn.execute(
+        "SELECT t.ticket, t.title, t.kind, t.state, t.depends_on, m.key AS milestone"
+        " FROM tickets t JOIN projects p ON p.id = t.project_id"
+        " LEFT JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ?",
+        (project,),
+    ).fetchall()
+    done = {r["ticket"] for r in rows if r["state"] == "done"}
+    stopped = {r["ticket"] for r in rows if r["state"] in STOPPED_STATES}
+    ready = {r["ticket"]: r for r in rows if r["state"] == "ready"}
+    tasks = [as_task(r["ticket"], r["milestone"], depends_on(r)) for r in ready.values()]
+    picked, left = in_run_order(tasks, done, stopped)
+    return [
+        Upcoming(
+            ticket=t.id,
+            title=ready[t.id]["title"],
+            kind=ready[t.id]["kind"],
+            milestone=ready[t.id]["milestone"],
+            waits=tuple(d for d in t.depends_on if d not in done),
+        )
+        for t in [*picked, *left]
+    ]
 
 
 def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:

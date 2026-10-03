@@ -1,0 +1,15 @@
+{# The floor (f3 D11): swapped in by htmx every 5 s from /line/live, so it carries its own hx-get. static/factory.js draws svg#floor from the JSON block. #}
+<section id="line-live" class="panel line" hx-get="/line/live{{ q }}" hx-trigger="every 5s" hx-swap="outerHTML">
+  <h2>From the field to the stash <span class="src">live · refreshes every 5 s</span></h2>
+  <div class="legend">
+    <span><i class="swatch lead"></i>lead ticket</span>
+    <span><i class="swatch developer"></i>developer ticket</span>
+    <span><i class="swatch carrying"></i>belt carrying now</span>
+    <span>numbers on belts: how many went that way today</span>
+  </div>
+  <p id="line-narrow" class="line-narrow">The floor needs a wider screen for now: the phone's own drawing comes next. Turn the phone sideways to see it.</p>
+  <div class="floor-wrap">
+    <svg id="floor" class="floor" viewBox="0 0 1320 640" role="img" aria-label="The factory floor: the field plants milestones, tickets queue, the lead and the developers work them, checks merge them, milestones ripen and are harvested."></svg>
+  </div>
+  <script type="application/json" id="factory-line">{{ line | tojson }}</script>
+</section>

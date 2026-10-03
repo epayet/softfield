@@ -59,6 +59,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
         agents,
         bench,
         jobs,
+        line,
         milestones,
         overview,
         projects,
@@ -76,6 +77,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.mount("/static", StaticFiles(directory=HERE / "static"), name="static")
     app.include_router(overview.router)
     app.include_router(milestones.router)
+    app.include_router(line.router)
     app.include_router(tickets.router)
     app.include_router(jobs.router)
     app.include_router(timeline.router)

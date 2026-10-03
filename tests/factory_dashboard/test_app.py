@@ -12,7 +12,17 @@ from factory_dashboard.queries import connect
 from runner import cli
 from tests.factory_dashboard.conftest import OTHER, PROJECT
 
-PAGES = ["/", "/milestones", "/tickets", "/jobs", "/runs", "/timeline", "/agents", "/bench"]
+PAGES = [
+    "/",
+    "/line",
+    "/milestones",
+    "/tickets",
+    "/jobs",
+    "/runs",
+    "/timeline",
+    "/agents",
+    "/bench",
+]
 
 
 def test_the_app_refuses_to_write(db_path):
