@@ -141,3 +141,24 @@ def test_a_tick_that_returns_nothing_lets_the_command_run(tmp_path: Path):
     out = tmp_path / "out.log"
     _, code = run_streaming(cmd, tmp_path, 10, out, lambda: ticks.append(1), every=0.1)
     assert code == 4 and ticks
+
+
+def _leaver(pidfile: Path) -> list[str]:
+    """Exits at once, leaving a grandchild running in its group (its output detached)."""
+    return ["sh", "-c", f"sleep 60 >/dev/null 2>&1 & echo $! > {pidfile}; exit 0"]
+
+
+def test_an_agent_that_exits_leaves_no_command_running(tmp_path: Path):
+    """2026-10-03: an attempt's `uv run pytest … tests/browser` outlived its OpenCode and spun
+    a core for 2½ h in the main checkout, slowing the next gates (f4-21 blocked)."""
+    pidfile = tmp_path / "child.pid"
+    _, code = run_streaming(_leaver(pidfile), tmp_path, 60, tmp_path / "out.log", every=0.1)
+    assert code == 0
+    assert _gone(pidfile)
+
+
+def test_a_command_that_exits_leaves_no_child_running(tmp_path: Path):
+    pidfile = tmp_path / "child.pid"
+    code, _, _ = run_bounded(_leaver(pidfile), tmp_path, 10)
+    assert code == 0
+    assert _gone(pidfile)

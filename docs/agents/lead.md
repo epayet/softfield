@@ -22,6 +22,7 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
   - **Expected against actual, first:** on any milestone view or report, what changed and how to test it come right after the expected outcome and Done when; numbers, tickets and savings come after.
   - **Savings are shown in dollars** (API-equivalent), not in token counts.
   - **The dashboard (owner, 2026-10-02):** show "Needs you" only when something does, and clear an item as soon as the owner has acted on it. Plain words only: the agents' own names, no invented names, no abbreviations, no unexplained marks (every colour, bar or light says what it means, or goes). The owner likes game-like, factory-style views of the work (D10 in `docs/milestones/f1.md`) and checks pages on a phone too.
+  - **What's running comes first** (owner, 2026-10-03): on any live page, what is being worked on now sits at the top, above the fold on a phone, and anything drawn (a crate, a machine) can be tapped for what it is.
   - **Priorities (owner, 2026-10-02), in order:**
     1. the runner works on its own and takes any ready ticket;
     2. a backlog of features;
@@ -78,6 +79,7 @@ What developers pass at the first attempt, from results. Update it at each miles
 - **F1 (Sonnet as developer):** 3/3 first-attempt at difficulty 3–5, ≈$0.40 and 5–7 min a ticket; but it draws on the lead's 5-hour window.
 - **Checkpoints:** Sonnet, ≈$0.24 for two merges, found real bugs; a different model (Copilot's shadow) found one the checkpoint missed. Copilot's review bench on F2's checkpoint 189 (2026-10-02): 1 found, 3 missed, and 1 new finding that was real (the Ollama test checked no message; the F2 review's f2-F1 fixed it), so 2 of 5 and no false alarm. Good as the stand-in, not yet as the checkpoint.
 - **F2 (Ollama, real tickets; ADR 14's F2 entry):** gpt-oss-120b 1/2 first-attempt at difficulty 3–4. It passed a 56-line fix in 9 min, and failed f2-06 five times on ruff within minutes. nemotron-3-super 0/1: it blocked twice on a difficulty-3 ticket (17–20 min each). No refusals, so the allowance a ticket costs is still unmeasured. Passing the gates isn't meeting the Done when: f2-13 passed first time with 3 of its 5 items unmet, and no checkpoint followed it (the milestone's last developer merge): only the review read it.
+- **F3 (2026-10-03, the line's SVG in `factory.js`):** beyond the developers. Opus finished 7 of their 12 tickets, and Qwen passed first time only on small template and Python tickets (4 of 12). Give developers one small, picture-backed change on top of a lead-written core. gpt-oss-120b passed first time on 1 of 8: 8 of its 12 failures came within a minute, from careless edits it never checked (syntax, undefined names, empty files).
 - **Not yet tried:** the Ollama models on a clean bench (after F2), tickets that make the developer read more than ~12 files.
 - The real ceiling is the local developer's context (about 180k tokens): a task that makes it read many large files runs out of room before it runs out of skill.
 

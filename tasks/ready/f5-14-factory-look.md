@@ -1,6 +1,6 @@
 ---
 id: f5-14-factory-look
-milestone: f5-board
+milestone: f3
 depends_on: []
 agent: lead
 difficulty: 5

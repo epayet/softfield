@@ -65,6 +65,10 @@
 | 15 | board-data | D | 5 | 07 | `board.py`: every milestone and bug ticket as a card, in its stage and priority order |
 | 16 | board-page | D | 5 | 14, 15 | `/board`: the field, totals, search and kind filter; desktop and phone |
 | 17 | card-page | D | 4 | 14, 15 | A milestone's page as its card: stage, priority, area, how it grew, tickets in run order |
+| 18 | pause | L | 4 | 01, 02 | `pause` / `resume` requests: the runner finishes its job and holds; "Pause after this job" and "Resume" on Now (owner, 2026-10-03) |
+| f3-08 | field-cards | D | 3 | 15 | Moved from F3: the line's field from the board's cards |
+
+14 (factory-look) runs with F3 (`milestone: f3`), right after the line fixes (owner, 2026-10-03: "the small factory line fixes first, then the global redesign").
 
 The picture: the board mock-up, <https://claude.ai/artifact/PzgTodVwvuQKqLvxphPLGu> (accepted by the owner, 2026-10-02), with its sources in `docs/milestones/f5-board-mockup/` for the tickets to read.
 

@@ -1,6 +1,6 @@
 ---
 id: f4-20-run-reviews-milestones
-milestone: f4-always-on
+milestone: f3
 depends_on: []
 agent: lead
 difficulty: 5

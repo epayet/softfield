@@ -58,6 +58,14 @@
 | 18 | later-list | D | 3 | 09 | The Tickets page lists the tickets set aside |
 | 20 | run-reviews-milestones | L | 5 | – | Under `runner run`, a milestone whose tickets are all done gets its review and verdict, then the run carries on |
 | 19 | bench-own-project | L | 4 | – | Each bench copy is a project of its own for OpenCode, so a bench never edits the main checkout (it did again, 2026-10-02) |
+| 33 | finding-tickets | L | 3 | – | A checkpoint's fix ticket goes to the at-fault ticket's milestone, with paths that exist (Copilot's stand-in wrote `coucou/…` paths, 2026-10-03) |
+
+**Changes, 2026-10-03 (lead, after the owner's notes):**
+- 20 runs with F3 (`milestone: f3`), so F3's review isn't left waiting behind F4.
+- 12 (allowance-top) and 16 (allowance-mark) are in `tasks/later/`. f3-18 puts Now first with a compact allowance row, and f5-14 colours the meters.
+- 21 (initial flash) is deleted: its finding is part of f3-17, which rewrites that code. Its branch, `task/f4-21-fix-initial-page-load-can`, is left unmerged.
+- 25–29: the paths were fixed by hand (`coucou/factory_dashboard/…` → `factory_dashboard/…`); 33 fixes the cause.
+- The runner now kills what is left of an agent's process group when the agent exits normally (`runner/procs.py`, by the lead): an attempt's `pytest … tests/browser` had outlived its OpenCode for 2½ h at 99% CPU.
 
 Not in F4 (roadmap, "Owner's notes after F2"):
 - a study of why `check-all` is slow (later, a proposal, not a fix);

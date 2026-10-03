@@ -42,6 +42,11 @@ def _owned(proc: subprocess.Popen[str]) -> Iterator[None]:
     except BaseException:
         _stop(proc)
         raise
+    else:
+        # A child that exits can leave its own commands running in the group: an attempt's
+        # pytest outlived its OpenCode for 2½ h (2026-10-03). Nothing in the group may outlive it.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
     finally:
         with _live_lock:
             _live.discard(proc)

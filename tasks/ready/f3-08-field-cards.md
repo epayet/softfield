@@ -1,6 +1,6 @@
 ---
 id: f3-08-field-cards
-milestone: f3
+milestone: f5-board
 depends_on: [f3-01-factory-line, f5-15-board-data]
 difficulty: 3
 files:

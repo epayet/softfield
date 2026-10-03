@@ -25,7 +25,8 @@
 
 - **D2 The reply block:** the planner ends each reply with a fenced `json` block:
   - `points`: a list of `{n, title, answer, action}`;
-  - `proposals`: a list of `{id, kind (adr | mockup | plan | seed), title, path, key_points: [{n, title, text, flag}]}`.
+  - `proposals`: a list of `{id, kind (adr | mockup | plan | seed | replan), title, path, key_points: [{n, title, text, flag}]}`.
+  - A `replan` (owner, 2026-10-03: "direct a milestone as it's happening… trigger a replan from the result of the chat") changes the ready tickets of a milestone that is running. f5-18's pause holds the line while the owner and the lead talk, and approving the proposal applies it and resumes. f6-03 handles it as a `plan`; f6-05 checks this against what 01–04 built.
 
   `runner/planner.py` owns `parse_reply(text) -> Reply` and checks it.
 - **D3 Sessions:** a thread's first planner job starts a Claude session; later ones `--resume` it. The session id lives on the thread.
