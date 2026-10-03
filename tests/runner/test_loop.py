@@ -405,6 +405,57 @@ def test_an_attempt_that_changes_nothing_fails_instead_of_merging(repo, fake_mod
     assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["no-changes"])
 
 
+RUFF_TOML = 'line-length = 100\n\n[lint]\nselect = ["E", "F", "I"]\n'
+# A long line ruff format can split, and an unused import ruff check --fix removes (f2-06).
+UNFORMATTED = (
+    "import os\n\n\ndef thing() -> int:\n    return sum([1111111111, 2222222222, 3333333333,"
+    " 4444444444, 5555555555, 6666666666, 7777777777, 8888888888]) - 42\n"
+)
+
+
+@pytest.fixture
+def ruff_gate(repo, fake_model, monkeypatch):
+    """The real ruff gate after the file gates, with ruff configured as the repo's is."""
+    (repo / "ruff.toml").write_text(RUFF_TOML)
+    monkeypatch.setattr(gates, "GATES", (*gates.GATES, gates.gate_ruff))
+
+
+def test_an_attempt_whose_only_problem_is_formatting_passes_the_gates(repo, fake_model, ruff_gate):
+    """ADR 17 item 2: the runner formats the changed files before the gates."""
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(lambda repo, prompt: (repo / "coucou" / "thing.py").write_text(UNFORMATTED))
+    report = _run(repo, once=True)
+    task = report.tasks[0]
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 1, [])
+    merged = (repo / "coucou" / "thing.py").read_text()
+    assert "import os" not in merged
+    assert all(len(line) <= 100 for line in merged.splitlines())
+
+
+def test_an_attempt_with_an_undefined_name_still_fails_ruff(repo, fake_model, ruff_gate):
+    _add_task(repo, "m1-01-thing")
+    broken = UNFORMATTED.replace("- 42", "- undefined_name")
+    fake_model.extend([lambda repo, prompt: (repo / "coucou" / "thing.py").write_text(broken)] * 3)
+    report = _run(repo, once=True)
+    task = report.tasks[0]
+    assert (task.result, task.gate_failures) == ("escalated", ["ruff"] * 3)
+    assert "F821" in next(repo.glob("var/runs/*/m1-01-thing/gates-3.txt")).read_text()
+    # The formatting went into each attempt, as its developer's work.
+    log = git(repo, "log", "--format=%an|%s%n%b", "task/m1-01-thing")
+    assert "Coucou local model|wip m1-01-thing attempt 1 (formatted)\nAgent: local-model" in log
+
+
+def test_formatting_never_touches_a_file_the_branch_did_not_change(repo, fake_model):
+    untouched = repo / "coucou" / "other.py"
+    untouched.write_text(UNFORMATTED)
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    report = _run(repo, once=True)
+    assert report.tasks[0].result == "done"
+    assert untouched.read_text() == UNFORMATTED
+    assert git(repo, "status", "--porcelain") == ""
+
+
 def _stray(repo: Path, prompt: str) -> None:
     (repo / "coucou" / "secret.py").write_text("X = 1\n")
 

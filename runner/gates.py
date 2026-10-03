@@ -307,6 +307,20 @@ def gate_translations(ctx: GateContext) -> GateResult:
     return _result("translations", problems + i18n.compiled_out_of_date(ctx.repo))
 
 
+def autoformat(repo: Path, changed: Iterable[str], timeout: int) -> list[str]:
+    """Format and autofix the changed Python files before the gates (ADR 17 item 2).
+
+    Returns the files it ran on. A non-zero exit isn't a failure: the ruff gate judges
+    what's left. The fixes go first, as a removed import leaves lines only the formatter
+    tidies. ``--force-exclude`` keeps ruff's own excludes (migrations) untouched.
+    """
+    files = sorted(f for f in changed if f.endswith(".py") and (repo / f).is_file())
+    if files:
+        for command in (("check", "--fix"), ("format",)):
+            run_bounded(["uv", "run", "ruff", *command, "--force-exclude", *files], repo, timeout)
+    return files
+
+
 def gate_ruff(ctx: GateContext) -> GateResult:
     check = _command("ruff", ctx, "uv", "run", "ruff", "check", ".")
     if not check.ok:

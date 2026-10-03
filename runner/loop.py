@@ -39,6 +39,7 @@ from runner.gates import (
     NO_CHANGES,
     GateContext,
     GateResult,
+    autoformat,
     is_test_file,
     outside_allowed,
     parse_blocked,
@@ -1755,7 +1756,10 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         stopped = stop_reason(run)
         if stopped:
             results = [GateResult(STOPPED_GATE, False, STOPPED_OUTPUT.format(why=stopped))]
-        elif s.git.changed_files(MAIN):
+        elif changed := s.git.changed_files(MAIN):
+            # Formatting alone never costs an attempt (ADR 17 item 2).
+            if autoformat(s.repo, changed, s.cfg.gate_timeout):
+                local_wip_commit(s, f"wip {task.id} attempt {attempt} (formatted)")
             context = GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout)
             with doing(s, f"gates · {task.id}"):
                 results = run_gates(context)
