@@ -26,3 +26,12 @@ Read `factory_dashboard/overview.py` (`Running`, `running_jobs`, `LiveRun`, `liv
 - each assertion reads the card's own text, not the whole page
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2015
+gate_failures: []
+tokens: 2233419
+```
