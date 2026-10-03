@@ -29,3 +29,10 @@ Read `docs/milestones/f3.md` D11 ("What clogged the line today"), `docs/agents/l
 - on a fixture day with a 30 min park, two failed attempts (12 and 19 min), and one developer job running while two machines idle, the numbers come out as 30, 31 and the idle shares, with 0 for the owner
 - a day with no runs gives zeros, not errors
 - `uv run runner check-all --task f3-04-clog-today` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
