@@ -363,4 +363,97 @@
 
   drawAll(document);
   document.addEventListener("htmx:load", (event) => drawAll(event.detail.elt));
+
+  // --- replay bar (f3-07) ---------------------------------------------------------------
+
+  let replayData = null;
+  let readout = null;
+
+  function getReplayUrl(attr) {
+    const page = document.querySelector(".page");
+    return page ? page.dataset[attr] || "" : "";
+  }
+
+  function clockFromIso(iso) {
+    const d = new Date(iso);
+    return d.toLocaleTimeString(navigator.language || "en", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function updateReadout() {
+    if (!replayData) {
+      if (readout) { readout.textContent = "live · refreshes every 5 s"; }
+      return;
+    }
+    const count = replayData.events ? replayData.events.length : 0;
+    const since = replayData.since ? clockFromIso(replayData.since) : "";
+    readout.textContent = count > 0 ? `${count} events since ${since}` : `since ${since}`;
+  }
+
+  function drawReplay() {
+    if (!replayData) return;
+    const block = document.getElementById("factory-line");
+    const svg = document.getElementById("floor");
+    const phone = document.getElementById("floor-phone");
+    if (block && svg && phone) {
+      const narrow = window.innerWidth < 640;
+      svg.style.display = narrow ? "none" : "block";
+      phone.style.display = narrow ? "block" : "none";
+      if (narrow) {
+        drawPhone(phone, replayData.line);
+      } else {
+        draw(svg, replayData.line);
+      }
+    }
+  }
+
+  function backToLive() {
+    replayData = null;
+    const bar = document.getElementById("replay-bar");
+    if (bar) bar.hidden = true;
+    drawAll(document);
+    updateReadout();
+  }
+
+  function loadReplay(url) {
+    fetch(url).then(r => r.json()).then(data => {
+      replayData = data;
+      const bar = document.getElementById("replay-bar");
+      if (bar) bar.hidden = false;
+      drawReplay();
+      updateReadout();
+    });
+  }
+
+  // Prevent htmx from swapping #line-live while replaying
+  document.addEventListener("htmx:beforeRequest", (event) => {
+    if (event.target.id === "line-live" && replayData) {
+      event.preventDefault();
+    }
+  });
+
+  // Wire up the replay buttons
+  const replayOvernight = document.getElementById("replay-overnight");
+  const replay24h = document.getElementById("replay-24h");
+  const backToLive = document.getElementById("back-to-live");
+  const speedSelect = document.getElementById("speed");
+  const readoutEl = document.getElementById("replay-readout");
+
+  if (replayOvernight) {
+    replayOvernight.addEventListener("click", () => loadReplay(getReplayUrl("replay")));
+  }
+  if (replay24h) {
+    replay24h.addEventListener("click", () => loadReplay(getReplayUrl("replay24h")));
+  }
+  if (backToLive) {
+    backToLive.addEventListener("click", backToLive);
+  }
+  if (readoutEl) {
+    readout = readoutEl;
+    updateReadout();
+  }
+  if (speedSelect) {
+    speedSelect.addEventListener("change", () => {
+      // f3-11: use speedSelect.value as the interval in ms
+    });
+  }
 })();

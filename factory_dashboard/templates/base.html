@@ -8,6 +8,13 @@
 <script src="/static/vendor/htmx.min.js" defer></script>
 <script src="/static/vendor/echarts.min.js" defer></script>
 <script src="/static/charts.js" defer></script>
+<script>
+  // The live parts poll every 5 s and swap their HTML: wait while the owner scrolls (10 s)
+  // or has text selected, so neither the queue's scroll nor a selection is lost (2026-10-03).
+  let lastScroll = 0;
+  addEventListener("scroll", () => { lastScroll = Date.now(); }, { capture: true, passive: true });
+  window.liveIdle = () => Date.now() - lastScroll > 10000 && !String(getSelection());
+</script>
 </head>
 <body>
 <header class="bar">

@@ -21,3 +21,10 @@ Read `factory_dashboard/templates/_partials/live.html` and the live tests in `te
 - the `#live` element's `hx-trigger` keeps polling every 5 s, with a filter that is false while text is selected (assert the attribute's value)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+note: done directly by the lead on 2026-10-03, with the queue's scroll (base.html's liveIdle)
+```

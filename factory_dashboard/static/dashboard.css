@@ -154,8 +154,7 @@ tbody tr:hover { background: var(--accent-wash); }
 @media (max-width: 639px) { .floor-wrap { display: none; } .line-narrow { display: block; } }
 .floor { display: block; width: 100%; min-width: 1100px; height: auto; background: var(--bg);
   font-family: var(--mono); font-size: 11px; }
-.floor-phone { display: block; width: 100%; height: auto; background: var(--bg);
-  font-family: var(--mono); font-size: 11px; }
+.floor.floor-phone { min-width: 0; } /* the portrait floor shares .floor's colours */
 .floor text { fill: var(--ink-2); }
 .floor text.head { fill: var(--c, var(--ink)); font: 700 12px var(--sans); letter-spacing: .12em; }
 .floor text.big { font-size: 14px; }
@@ -197,3 +196,14 @@ tbody tr:hover { background: var(--accent-wash); }
 /* "New version of the dashboard: refresh" (app.py's /version poller) */
 .new-version { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent);
   border-radius: 4px; background: var(--accent-wash); color: var(--ink); }
+
+/* Replay bar (f3-07): sticky bar at the bottom on mobile */
+.replay { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 10px;
+  background: var(--surface); border: 1px solid var(--rule); border-radius: 6px;
+  font-size: 13px; color: var(--ink-2); }
+@media (max-width: 639px) { .replay { position: sticky; bottom: 0; z-index: 10;
+  box-shadow: 0 -2px 8px rgba(0,0,0,.1); } }
+.replay button, .replay select { min-width: 44px; min-height: 44px; padding: 4px 10px;
+  font: inherit; font-size: 13px; border: 1px solid var(--rule); border-radius: 4px;
+  background: var(--surface); color: var(--ink); cursor: pointer; }
+.replay button:hover { background: var(--accent-wash); }

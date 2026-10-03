@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Factory line · {{ project }}{% endblock %}
 {% block content %}
-<div class="page" data-replay="{{ replay }}">
+<div class="page" data-replay="{{ replay }}" data-replay-24h="{{ replay_24h }}">
 {% include "_partials/line.html" %}
+<div class="replay" id="replay-bar" hidden>
+  <button id="replay-overnight">Replay</button>
+  <button id="replay-24h">Last 24 h</button>
+  <button id="back-to-live">Back to live</button>
+</div>
 </div>
 <script src="/static/factory.js" defer></script>
 {% endblock %}

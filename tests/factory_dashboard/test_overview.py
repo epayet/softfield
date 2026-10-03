@@ -58,7 +58,7 @@ def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
     assert "f1-04-live" not in section(html, "running")
     needs = section(html, "needs-you")
     assert "heartbeat stopped 3 min ago" in needs and "f1-04-live" in needs
-    assert "uv run runner milestone f1" in needs
+    assert "uv run runner run" in needs  # the standing command (ADR 17), not one milestone
     # with the runner gone, the queue waits on nobody
     assert "2 tickets waiting and the runner is idle" in needs
 
@@ -72,7 +72,7 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
     assert "f1-04-live" in section(html, "running")
     # it asks to be fetched again every 5 s, keeping the project
     assert 'hx-get="/live?project=coucou"' in html
-    assert 'hx-trigger="every 5s"' in html
+    assert 'hx-trigger="every 5s [window.liveIdle()]"' in html
     assert 'hx-get="/live?project=coucou"' in client.get("/").text
     assert client.get("/running").status_code == 404
 
@@ -238,7 +238,7 @@ def test_the_queue_has_its_tickets_and_the_command_that_drains_it(client):
     queue = section(client.get("/").text, "queue")
     assert queue.index("f1-05-first") < queue.index("f1-06-second")
     assert "Queued first." in queue
-    assert "uv run runner milestone f1" in queue
+    assert "uv run runner run" in queue
     assert "f1-01-first" not in queue  # merged
 
 
@@ -337,7 +337,7 @@ def test_the_spend_chart_holds_each_milestones_claude_dollars(serve):
 def test_another_project_shows_only_its_own(client):
     html = client.get(f"/?project={OTHER}").text
     assert "m1-01-elsewhere" in section(html, "queue")
-    assert "uv run runner milestone m1" in section(html, "queue")
+    assert "uv run runner run" in section(html, "queue")
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
         assert mine not in html
     assert "m1-01-elsewhere" not in client.get("/").text
@@ -436,3 +436,11 @@ def test_ready_now_comes_before_waiting(queue_client):
             waiting_pos.append(pos)
     if ready_pos and waiting_pos:
         assert max(ready_pos) < min(waiting_pos), "ready-now rows should come before waiting rows"
+
+
+def test_the_live_part_pauses_while_the_owner_scrolls_or_selects(client):
+    """2026-10-03: the queue jumped back to the top every 5 s while the owner scrolled it,
+    and a selection was lost (f4-14)."""
+    html = client.get("/").text
+    assert 'hx-trigger="every 5s [window.liveIdle()]"' in html
+    assert "window.liveIdle" in html.split('<div id="live"')[0]  # defined once, outside the swap

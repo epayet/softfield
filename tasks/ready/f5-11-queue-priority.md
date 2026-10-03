@@ -14,6 +14,7 @@ tests:
 The Overview's queue follows the runner's new order (priority first) and shows each ticket's priority.
 
 ### Context
+**Since f3-05 the Overview has no Queue panel:** the queue is the line's hopper (`factory_dashboard/line.py`, its run order) and Now's "Next in line". Apply the new order and show each ticket's priority there.
 Read `factory_dashboard/overview.py` (`queue`, as f4-08 and f4-10 left it), `runner/tasks.py` (`pick_next`'s order since f5-06), `runner/metrics.py` (where a ticket's and a milestone's priority are stored) and `tests/factory_dashboard/test_overview.py`.
 - A ticket's priority is its own, else its milestone's, else 100, as in `pick_next`. Ready-now tickets still come before waiting ones. Within each group sort by `(priority, milestone order, id)`.
 - Add a "Priority" column.

@@ -27,9 +27,11 @@ Read `docs/adr/17-always-on-factory.md` (item 4: `runner run` is the standing co
 
   Run it as `run_milestone` does after its queue (same caps, same stop rules), record its verdict, then go back to the queue. One review at a time.
 - **Restarts:** a review that changes runner/ restarts the command like a ticket does. The review's state lives in the runner's state file (`review_counts` in `var/runs/state.json`), so the restarted run carries on with it.
+- **Visible like a ticket** (owner, 2026-10-03: "I thought it would be a task scheduled like the others"): a milestone whose review is due shows in the line's queue and in Now's "Next in line" as "review F3", a batch crate, and in `runner run --dry-run`.
 - `runner milestone <key>` keeps working as it is.
 
 ### Done when
 - a fake run where F9's last ticket merges while F10 still has tickets reviews F9, records its verdict, and then runs F10's next ticket
 - a milestone already reviewed, or signed off, isn't reviewed again
+- `--dry-run` and the line's document list the due review
 - `uv run runner check-all --task f4-20-run-reviews-milestones` passes

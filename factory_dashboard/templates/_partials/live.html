@@ -1,5 +1,5 @@
 {# Needs you, then Running now and the Queue (D3, D4, D8): swapped in by htmx every 5 s from /live, so it carries its own hx-get. #}
-<div id="live" hx-get="/live{{ q }}" hx-trigger="every 5s" hx-swap="outerHTML">
+<div id="live" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-swap="outerHTML">
 {% if needs %}
 <section id="needs-you" class="panel needs">
   <h2>Needs you <span class="src">each item goes when it's done</span></h2>

@@ -33,7 +33,9 @@ def _age(now: datetime, at: str | None) -> timedelta | None:
 
 
 def _drain(key: str) -> str:
-    return f"uv run runner milestone {key}"
+    """The command that works through the queue: `runner run`, the standing command (ADR 17),
+    whichever milestone ``key`` the work is in."""
+    return "uv run runner run"
 
 
 # --- Running now and the runner's heartbeat (D3) ------------------------------------------

@@ -253,7 +253,10 @@ def test_the_page_carries_the_document_and_refreshes_every_5_s(line_db, line_cli
     assert re.search(
         r'<a href="/line\?project=coucou" aria-current="page">Factory line</a>', response.text
     )
-    assert 'hx-get="/line/live?project=coucou" hx-trigger="every 5s"' in response.text
+    assert (
+        'hx-get="/line/live?project=coucou" hx-trigger="every 5s [window.liveIdle()]"'
+        in response.text
+    )
     live = line_client.get("/line/live")
     assert live.status_code == 200 and "<html" not in live.text
     assert block(live.text) == block(response.text)
@@ -592,6 +595,18 @@ def test_a_phone_sees_the_portrait_floor(page, line_client):
     )
     doc = open_line(page, line_client)
     assert sorted(drawn) == sorted(m["id"] for m in doc["machines"])
+
+
+def test_the_phone_floor_is_drawn_in_the_floors_colours_not_black(page, line_client):
+    """2026-10-03: on the owner's phone the portrait floor was black boxes with black text:
+    its svg lacked the `floor` class that every colour rule is scoped to."""
+    open_line(page, line_client, {"width": 390, "height": 1200})
+    for selector in ("svg#floor-phone .unit", "svg#floor-phone text"):
+        fills = page.eval_on_selector_all(selector, "els => els.map(e => getComputedStyle(e).fill)")
+        assert fills, selector
+        assert "rgb(0, 0, 0)" not in fills, selector
+    box = page.locator("svg#floor-phone").bounding_box()
+    assert box is not None and box["width"] <= 390
 
 
 def test_desktop_at_1280_sees_the_desktop_floor(page, line_client):
