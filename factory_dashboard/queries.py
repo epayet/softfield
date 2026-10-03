@@ -12,7 +12,7 @@ import json
 import re
 import sqlite3
 from collections import Counter, defaultdict
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
@@ -543,18 +543,22 @@ def in_run_order(
     return picked, sorted(left, key=lambda t: (milestone_order(t.milestone), t.id))
 
 
-def run_order(conn: sqlite3.Connection, project: str) -> list[Upcoming]:
+def run_order(
+    conn: sqlite3.Connection, project: str, states: Mapping[str, str] | None = None
+) -> list[Upcoming]:
     """The project's ``ready`` tickets in the order the runner will take them, each with the
-    dependencies it still waits for (none: ready now); those it can't take yet come last."""
+    dependencies it still waits for (none: ready now); those it can't take yet come last.
+    ``states`` overrides tickets' states (the line at a past moment, f3-06)."""
     rows = conn.execute(
         "SELECT t.ticket, t.title, t.kind, t.state, t.depends_on, m.key AS milestone"
         " FROM tickets t JOIN projects p ON p.id = t.project_id"
         " LEFT JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ?",
         (project,),
     ).fetchall()
-    done = {r["ticket"] for r in rows if r["state"] == "done"}
-    stopped = {r["ticket"] for r in rows if r["state"] in STOPPED_STATES}
-    ready = {r["ticket"]: r for r in rows if r["state"] == "ready"}
+    state = {r["ticket"]: (states or {}).get(r["ticket"], r["state"]) for r in rows}
+    done = {r["ticket"] for r in rows if state[r["ticket"]] == "done"}
+    stopped = {r["ticket"] for r in rows if state[r["ticket"]] in STOPPED_STATES}
+    ready = {r["ticket"]: r for r in rows if state[r["ticket"]] == "ready"}
     tasks = [as_task(r["ticket"], r["milestone"], depends_on(r)) for r in ready.values()]
     picked, left = in_run_order(tasks, done, stopped)
     return [

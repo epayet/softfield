@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Factory line · {{ project }}{% endblock %}
 {% block content %}
-<div class="page">
+<div class="page" data-replay="{{ replay }}">
 {% include "_partials/line.html" %}
 </div>
 <script src="/static/factory.js" defer></script>

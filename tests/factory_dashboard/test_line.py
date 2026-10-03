@@ -9,13 +9,16 @@ The browser test is the pattern for the factory's tickets: render the page with 
 
 import json
 import re
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from html import unescape
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
+import pytest
 from fastapi.testclient import TestClient
 
-from factory_dashboard.line import BELTS, STATIONS, live_line, trips
+from factory_dashboard.line import BELTS, STATIONS, live_line, overnight, replay, trips
 from factory_dashboard.queries import connect
 from runner import metrics
 from tests.factory_dashboard.conftest import LINE_NOW, LOCAL, NOW, OPUS, PROJECT, SONNET
@@ -258,6 +261,277 @@ def test_the_page_carries_the_document_and_refreshes_every_5_s(line_db, line_cli
 
 def test_the_old_milestone_line_is_gone(line_client):
     assert line_client.get("/milestones/f5/line").status_code == 404
+
+
+# --- replay (f3-06) -------------------------------------------------------------------------
+
+TZ = timezone(timedelta(hours=2))
+SINCE, UNTIL = datetime(2026, 10, 1, 20, 45, tzinfo=TZ), datetime(2026, 10, 2, 2, 30, tzinfo=TZ)
+
+
+def night(clock: str) -> datetime:
+    """``clock`` on the fixture night: the evening on 2026-10-01, the small hours on 10-02."""
+    hour, minute = map(int, clock.split(":"))
+    return datetime(2026, 10, 1 if hour >= 12 else 2, hour, minute, tzinfo=TZ)
+
+
+def write_night(conn: Any) -> None:
+    """A night (+02:00) in a project of its own, no repo:
+    - ``n0`` is ripe at 20:45 (its one ticket merged at 19:30) and signed off at 23:00;
+    - ``n1`` (started 20:30): ``n1-01-merge`` passes on Qwen 21:00–21:30; ``n1-02-retry``
+      fails ruff 21:40–22:00 and passes 22:05–22:30; the lead's ``n1-03-parked`` is parked at
+      22:40 by a Claude limit (until 23:30), then idles to 01:40 (3 h) and passes 01:40–02:10;
+      ``n1-04-next`` waits for it.
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    run = metrics.upsert_run(conn, project, "20261001-183000", command="milestone n1")
+
+    def job(ticket: int, role: str, agent: str, n: int, span: str, ok: bool = True, **end: Any):
+        start, stop = (night(c).isoformat() for c in span.split("–"))
+        job = metrics.start_job(
+            conn, run, ticket_id=ticket, milestone_id=None, role=role, agent=agent, attempt=n,
+            started=start,
+        )  # fmt: skip
+        metrics.finish_job(conn, job, ended=stop, outcome="passed" if ok else "failed", **end)
+
+    def ticket(name: str, m: int, kind: str = "developer", state: str = "done", **more: Any):
+        return metrics.upsert_ticket(
+            conn, project, name, milestone_id=m, kind=kind, state=state, title=f"Goal of {name}.",
+            **more,
+        )  # fmt: skip
+
+    n0 = metrics.upsert_milestone(
+        conn, project, "n0", title="Ripe", status="done",
+        started=night("18:00").isoformat(), ended=night("23:00").isoformat(),
+    )  # fmt: skip
+    job(ticket("n0-01-early", n0), "developer", LOCAL, 1, "19:00–19:30")
+    n1 = metrics.upsert_milestone(
+        conn, project, "n1", title="The night", status="in progress",
+        started=night("20:30").isoformat(),
+    )  # fmt: skip
+    job(ticket("n1-01-merge", n1), "developer", LOCAL, 1, "21:00–21:30")
+    retry = ticket("n1-02-retry", n1)
+    ruff = [{"name": "tests", "ok": True}, {"name": "ruff", "ok": False}]
+    job(retry, "developer", LOCAL, 1, "21:40–22:00", ok=False, gates=ruff)
+    job(retry, "developer", LOCAL, 2, "22:05–22:30")
+    parked = ticket("n1-03-parked", n1, kind="lead")
+    job(parked, "lead-ticket", OPUS, 1, "22:35–22:40", ok=False, note="parked")
+    metrics.add_usage_event(
+        conn, OPUS, night("22:40").isoformat(), "refusal", window="five_hour",
+        resets_at=night("23:30").isoformat(),
+    )  # fmt: skip
+    job(parked, "lead-ticket", OPUS, 2, "01:40–02:10")
+    ticket("n1-04-next", n1, state="ready", depends_on=["n1-03-parked"])
+
+
+@pytest.fixture
+def night_db(tmp_path: Path) -> Path:
+    path = tmp_path / "night.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        write_night(conn)
+    finally:
+        conn.close()
+    return path
+
+
+def replayed(db: Path, since: datetime = SINCE, until: datetime = UNTIL) -> dict[str, Any]:
+    conn = connect(db)
+    try:
+        return replay(conn, PROJECT, since, until)
+    finally:
+        conn.close()
+
+
+def brief(event: dict[str, Any]) -> tuple[str, ...]:
+    """An event in a line: its clock, its kind, what it's about and what happened."""
+    clock, kind = (
+        datetime.fromisoformat(event["at"]).astimezone(TZ).strftime("%H:%M"),
+        event["kind"],
+    )
+    if kind == "trip":
+        return clock, kind, event["crate"], " ".join(event["belts"]), event["to"] or "off"
+    if kind == "check":
+        result = "passed" if event["passed"] else f"failed: {event['gate']}"
+        return clock, kind, event["crate"], result
+    if kind == "machine":
+        extra = event["ticket"] or event["reset"]
+        return clock, kind, event["machine"], " ".join(s for s in (event["state"], extra) if s)
+    if kind == "limit":
+        return clock, kind, event["agent"], event["state"]
+    if kind == "card":
+        return clock, kind, event["card"], event["stage"] or "gone"
+    return clock, kind, f"{event['minutes']} min"
+
+
+def test_a_night_replays_in_order_with_the_idle_stretch_as_one_event(night_db):
+    found = replayed(night_db)
+    assert (found["since"], found["until"]) == (SINCE.isoformat(), UNTIL.isoformat())
+    assert [brief(e) for e in found["events"]] == [
+        ("21:00", "trip", "n1-01-merge", "queue→developers", "developers"),
+        ("21:00", "machine", LOCAL, "working n1-01-merge"),
+        ("21:30", "trip", "n1-01-merge", "developers→checks checks→merged", "merged"),
+        ("21:30", "check", "n1-01-merge", "passed"),
+        ("21:30", "machine", LOCAL, "idle"),
+        ("21:40", "trip", "n1-02-retry", "queue→developers", "developers"),
+        ("21:40", "machine", LOCAL, "working n1-02-retry"),
+        ("22:00", "trip", "n1-02-retry", "developers→checks", "checks"),
+        ("22:00", "check", "n1-02-retry", "failed: ruff"),
+        ("22:00", "machine", LOCAL, "idle"),
+        ("22:05", "trip", "n1-02-retry", "checks→developers", "developers"),
+        ("22:05", "machine", LOCAL, "working n1-02-retry"),
+        ("22:30", "trip", "n1-02-retry", "developers→checks checks→merged", "merged"),
+        ("22:30", "check", "n1-02-retry", "passed"),
+        ("22:30", "machine", LOCAL, "idle"),
+        ("22:35", "trip", "n1-03-parked", "queue→lead", "lead"),
+        ("22:35", "machine", OPUS, "working n1-03-parked"),
+        ("22:40", "trip", "n1-03-parked", "", "queue"),  # parked: simply moved
+        ("22:40", "machine", OPUS, "waiting 23:30"),
+        ("22:40", "limit", OPUS, "start"),
+        ("22:40", "idle", "180 min"),  # the 3 h stretch, one event with its real length
+        ("23:00", "card", "n0", "stash"),  # signed off
+        ("23:30", "machine", OPUS, "idle"),
+        ("23:30", "limit", OPUS, "end"),
+        ("01:40", "trip", "n1-03-parked", "queue→lead", "lead"),
+        ("01:40", "machine", OPUS, "working n1-03-parked"),
+        ("02:10", "trip", "n1-03-parked", "lead→checks checks→merged", "merged"),
+        ("02:10", "check", "n1-03-parked", "passed"),
+        ("02:10", "machine", OPUS, "idle"),
+    ]
+    idle = [e for e in found["events"] if e["kind"] == "idle"]
+    assert idle[0]["until"] == night("01:40").isoformat()
+
+
+def test_a_replay_starts_from_the_line_at_since(night_db):
+    found = replayed(night_db)
+    conn = connect(night_db)
+    try:
+        assert found["line"] == live_line(conn, PROJECT, UNTIL, at=SINCE)
+    finally:
+        conn.close()
+    assert found["line"]["at"] == SINCE.isoformat()
+    assert [c["ticket"] for c in found["line"]["queue"]] == [
+        "n1-01-merge", "n1-02-retry", "n1-03-parked", "n1-04-next",
+    ]  # fmt: skip
+    assert ([r["key"] for r in found["line"]["field"]["rows"]], found["line"]["field"]["ripe"]) == (
+        ["n1"],
+        [{"key": "n0", "title": "Ripe"}],
+    )
+    assert {m["id"]: m["state"] for m in found["line"]["machines"]} == {LOCAL: "idle", OPUS: "idle"}
+
+
+def test_the_line_at_each_event_agrees_with_the_event(night_db):
+    conn = connect(night_db)
+    try:
+        events = replay(conn, PROJECT, SINCE, UNTIL)["events"]
+        for event in events:
+            doc = live_line(conn, PROJECT, UNTIL, at=datetime.fromisoformat(event["at"]))
+            found = machines(doc)
+            kind = event["kind"]
+            if kind == "trip" and event["to"] == "merged":
+                assert event["crate"] in [c["ticket"] for c in doc["merged"]], brief(event)
+            elif kind == "trip" and event["to"] == "queue":
+                assert event["crate"] in [c["ticket"] for c in doc["queue"]], brief(event)
+            elif kind == "trip" and event["to"] in ("developers", "lead"):
+                working = [m["crate"]["ticket"] for m in found.values() if m["crate"]]
+                assert event["crate"] in working, brief(event)
+            elif kind == "machine":
+                m = found[event["machine"]]
+                assert m["state"] == event["state"], brief(event)
+                assert (m["crate"] or {}).get("ticket") == event["ticket"], brief(event)
+                assert m["reset"] == event["reset"], brief(event)
+            elif kind == "limit":
+                waits = found[event["agent"]]["state"] == "waiting"
+                assert waits == (event["state"] == "start"), brief(event)
+            elif kind == "card":
+                field = doc["field"]
+                stage = {r["key"]: "rows" for r in field["rows"]}
+                stage |= {m["key"]: "ripe" for m in field["ripe"]}
+                stage |= {m["key"]: "stash" for m in field["stash"]}
+                assert stage.get(event["card"]) == event["stage"], brief(event)
+            elif kind == "idle":
+                assert doc["now"]["working"] == [], brief(event)
+    finally:
+        conn.close()
+
+
+def test_the_line_mid_job_shows_its_machine_working(night_db):
+    conn = connect(night_db)
+    try:
+        doc = live_line(conn, PROJECT, UNTIL, at=night("21:15"))
+        later = live_line(conn, PROJECT, UNTIL, at=night("22:50"))
+        small_hours = live_line(conn, PROJECT, UNTIL, at=UNTIL)
+    finally:
+        conn.close()
+    qwen = machines(doc)[LOCAL]
+    assert (qwen["state"], qwen["crate"]["ticket"], qwen["crate"]["minutes"]) == (
+        "working",
+        "n1-01-merge",
+        15,
+    )
+    assert [w["ticket"] for w in doc["now"]["working"]] == ["n1-01-merge"]
+    assert belts(doc)["queue→developers"]["carrying"] is True
+    assert [c["ticket"] for c in doc["queue"]] == ["n1-02-retry", "n1-03-parked", "n1-04-next"]
+    assert [c["ticket"] for c in doc["merged"]] == ["n0-01-early"]  # at 19:30
+    # parked: back in the queue, the lead waiting for its limit
+    assert [(c["ticket"], c["waits"]) for c in later["queue"]] == [
+        ("n1-03-parked", []),
+        ("n1-04-next", ["n1-03-parked"]),
+    ]
+    assert (machines(later)[OPUS]["state"], machines(later)[OPUS]["reset"]) == ("waiting", "23:30")
+    assert [c["ticket"] for c in later["merged"]] == ["n0-01-early", "n1-01-merge", "n1-02-retry"]
+    # after midnight, today's counts start again
+    assert [c["ticket"] for c in small_hours["merged"]] == ["n1-03-parked"]
+    assert belts(small_hours)["checks→merged"]["today"] == 1
+    assert [s["key"] for s in small_hours["field"]["stash"]] == ["n0"]
+
+
+def test_overnight_starts_when_the_line_was_last_opened_or_at_20_yesterday():
+    morning = datetime(2026, 10, 2, 7, 5, tzinfo=TZ)
+    assert overnight(morning, None) == datetime(2026, 10, 1, 20, 0, tzinfo=TZ)
+    assert overnight(morning, "not a time") == datetime(2026, 10, 1, 20, 0, tzinfo=TZ)
+    assert overnight(morning, "2026-10-01T23:10:00+02:00") == night("23:10")
+    assert overnight(morning, "2026-10-02T09:00:00+02:00") == night("20:00")  # not yet: ignored
+
+
+def night_client(db: Path) -> TestClient:
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: UNTIL
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_the_replay_route_serves_a_stretch_as_json(night_db):
+    client = night_client(night_db)
+    response = client.get("/line/replay", params={"since": SINCE.isoformat()})
+    assert response.status_code == 200
+    expected = json.loads(json.dumps(replayed(night_db, SINCE, UNTIL.astimezone())))
+    assert response.json() == expected
+    assert client.get("/line/replay", params={"since": "yesterday"}).status_code == 400
+    late = {"since": UNTIL.isoformat(), "until": SINCE.isoformat()}
+    assert client.get("/line/replay", params=late).status_code == 400
+
+
+def test_the_line_page_remembers_when_it_was_opened_for_overnight(night_db):
+    client = night_client(night_db)
+    first = client.get("/line")
+    assert first.status_code == 200
+    seen = first.cookies["line_seen"].strip('"')
+    assert datetime.fromisoformat(seen) == UNTIL
+    # the page offers overnight from 20:00 yesterday the first time, then from the last visit
+    match = re.search(r'data-replay="([^"]+)"', first.text)
+    assert match is not None
+    since = parse_qs(urlsplit(unescape(match.group(1))).query)["since"][0]
+    assert datetime.fromisoformat(since) == overnight(UNTIL.astimezone(), None)
+    client.cookies.set("line_seen", night("23:10").isoformat())
+    again = re.search(r'data-replay="([^"]+)"', client.get("/line").text)
+    assert again is not None
+    since = parse_qs(urlsplit(unescape(again.group(1))).query)["since"][0]
+    assert datetime.fromisoformat(since) == night("23:10")
+    # without a since, the route takes the cookie's
+    found = client.get("/line/replay").json()
+    assert datetime.fromisoformat(found["since"]) == night("23:10")
 
 
 # --- in a browser ---------------------------------------------------------------------------
