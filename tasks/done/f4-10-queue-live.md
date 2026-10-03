@@ -27,3 +27,12 @@ Read `factory_dashboard/overview.py` (`_live_context`, `overview`, `live`), `fac
 - on `/`, `#running` and `#queue` are inside one `.row`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 872
+gate_failures: []
+tokens: 939301
+```
