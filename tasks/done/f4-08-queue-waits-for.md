@@ -33,3 +33,12 @@ Read `factory_dashboard/overview.py` (`Queued`, `queue`, `live_runs`), the `queu
 - each assertion reads its own row
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2592
+gate_failures: []
+tokens: 5008300
+```
