@@ -1,0 +1,37 @@
+---
+id: f6-01-planner-threads
+milestone: f6-planning-room
+depends_on: [f5-01-requests-apply, f5-04-cards]
+agent: lead
+difficulty: 7
+files:
+  - runner/metrics.py
+  - runner/planner.py
+  - runner/loop.py
+  - runner/claude.py
+  - workflow/runner.toml
+tests:
+  - tests/runner/test_planner.py
+  - tests/runner/test_loop.py
+---
+
+### Goal
+The runner answers the owner's planning messages first: each card (and one general thread) has a conversation with the lead, continued turn by turn, stored for the dashboard.
+
+### Context
+Read `docs/adr/20-planning-room.md` (items 1–5), D1–D3 in `docs/milestones/f6-planning-room.md`, `runner/requests.py` and `runner/metrics.py` (F5's requests), `runner/claude.py` (how `claude -p` runs, sessions, readings) and `runner/loop.py` (`work_queue`, `_next_task`, `_resume_support`). Test-first.
+- **Tables (D1):** `planner_threads` (card key or `general`, Claude session id) and `planner_messages` (thread, author, time, text, `points` JSON, `proposals` JSON, job id).
+- **The request kind `plan_message`** carries: thread, free text, and comments per point number.
+- **At each pick, before every other lead job,** take the oldest open `plan_message`:
+  - run a `planner` job (role in `[roles]`: `claude-opus`) with `claude -p --resume <session>` (a new session for a new thread);
+  - parse the reply's JSON block (D2);
+  - record it, and resolve the request.
+  - A reply without a valid block is recorded as text, with a note.
+- **The window:** a planner job may use the owner's 25% (ADR 20 item 2). At a hard limit it parks like other lead work, and the message waits.
+- Each reply raises an owner item `planning` (ADR 20 item 9), resolved when the owner sends their answers.
+
+### Done when
+- two queued messages and a ready lead ticket: the messages' planner jobs run first, the second resuming the first's session
+- a reply's points and proposals are stored; a reply with a broken block is stored as text with a note
+- at 80% of the 5-hour window a planner job still runs; a lead ticket parks
+- `uv run runner check-all --task f6-01-planner-threads` passes
