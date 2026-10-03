@@ -30,3 +30,12 @@ Read the replay controls and the sticky phone bar in `docs/milestones/f1-factory
 - the phone layout shows the sticky bar, with every control at least 44 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 562968
+logs: var/runs/20261003-074205/f3-07-replay-controls
+```
