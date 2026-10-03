@@ -24,3 +24,12 @@ Read `factory_dashboard/overview.py` (`Running`, `running_jobs`), the "Live" lin
 - a job with neither reads "no tokens reported yet"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 684
+gate_failures: []
+tokens: 51139
+```
