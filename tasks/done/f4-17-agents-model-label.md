@@ -21,3 +21,12 @@ Read `factory_dashboard/agents.py` (`NOT_RECORDED`, `efficiency`) and the model-
 - an agent with jobs on two models and older jobs with no model shows a row labelled "before 2 Oct (model not recorded)"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 515
+gate_failures: ['ruff']
+tokens: 39523
+```
