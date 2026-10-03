@@ -329,3 +329,50 @@ def test_desktop_at_1280_sees_the_desktop_floor(page, line_client):
     )
     doc = open_line(page, line_client)
     assert sorted(drawn) == sorted(m["id"] for m in doc["machines"])
+
+
+def test_carrying_belt_has_moving_class(page, line_client):
+    open_line(page, line_client)
+    carrying = page.eval_on_selector_all(
+        "svg#floor [data-belt].carrying.moving", "els => els.map(e => e.dataset.belt)"
+    )
+    assert carrying == ["queue→developers"]
+    quiet = page.eval_on_selector_all(
+        "svg#floor [data-belt]:not(.moving)", "els => els.map(e => e.dataset.belt)"
+    )
+    assert "queue→developers" not in quiet
+
+
+def test_working_machine_has_smoke_idle_does_not(page, line_client):
+    open_line(page, line_client)
+    doc = open_line(page, line_client)
+    machines = {m["id"]: m for m in doc["machines"]}
+    for mid, m in machines.items():
+        smoke = page.locator(f'svg#floor [data-machine="{mid}"] circle.smoke')
+        has_smoke = smoke.count() > 0
+        if m["state"] == "working":
+            assert has_smoke, f"{mid} is working but has no smoke"
+        else:
+            assert not has_smoke, f"{mid} is {m['state']} but has smoke"
+
+
+def test_reduced_motion_disables_animations(page, line_client):
+    page.emulate_media(reduced_motion="reduce")
+    open_line(page, line_client)
+    running = page.evaluate("""
+        () => {
+            const els = document.querySelectorAll('svg#floor *');
+            const style = getComputedStyle(document.body);
+            const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+            if (!media.matches) return ['no reduced motion media query'];
+            const animated = [];
+            for (const el of els) {
+                const cs = getComputedStyle(el);
+                if (cs.animationName && cs.animationName !== 'none') {
+                    animated.push(el.className.baseVal || el.tagName);
+                }
+            }
+            return animated;
+        }
+    """)
+    assert running == [], f"elements still animated: {running}"

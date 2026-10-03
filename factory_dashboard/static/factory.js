@@ -25,6 +25,8 @@
 
   // --- the belts: where each D11 belt runs, and where its words go -------------------------
 
+  let _prev = {};
+
   const BELTS = {
     "seeds→planting": { path: "M150 140 L176 140", at: [163, 128], middle: true, short: true },
     "planting→rows": { path: "M238 196 L238 262", at: [250, 236] },
@@ -44,7 +46,7 @@
   function belt(svg, b) {
     const where = BELTS[b.id];
     if (!where) return;
-    const cls = ["belt", where.back ? "back" : "", b.carrying ? "carrying" : ""].join(" ").trim();
+    const cls = ["belt", where.back ? "back" : "", b.carrying ? "carrying" : "", b.carrying ? "moving" : ""].join(" ").trim();
     const g = add(svg, "g", { class: cls, "data-belt": b.id });
     add(g, "title", {}, b.label);
     const width = where.thin ? 10 : 13;
@@ -130,7 +132,7 @@
   };
 
   function machine(svg, m, x, y, w, h) {
-    const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : ""].join(" ").trim();
+    const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : "", m.state === "working" ? "on" : ""].join(" ").trim();
     const g = add(svg, "g", { class: cls, "data-machine": m.id });
     add(g, "title", {}, `${m.name} · ${m.where} · ${m.state}${m.rating !== null ? ` · rated ${m.rating}` : ""}`);
     const tall = Math.round(30 * m.scale);
@@ -336,6 +338,25 @@
       } else {
         draw(svg, JSON.parse(block.textContent));
       }
+      const doc = JSON.parse(block.textContent);
+      const cur = {};
+      for (const b of doc.belts) cur[b.id] = b.today || 0;
+      const checks = cur["checks→merged"] || 0;
+      const devs = cur["checks→developers"] || 0;
+      const lead = cur["checks→lead"] || 0;
+      const prev = _prev || {};
+      const prevM = prev["checks→merged"] || 0;
+      const prevD = prev["checks→developers"] || 0;
+      const prevL = prev["checks→lead"] || 0;
+      const light = svg.querySelector(".light");
+      if (light && (checks > prevM || devs > prevD || lead > prevL)) {
+        let cls = "light";
+        if (checks > prevM) cls += " flash-green";
+        else if (devs > prevD) cls += " flash-red";
+        else if (lead > prevL) cls += " flash-orange";
+        light.className.baseVal = cls;
+      }
+      _prev = cur;
     }
   }
 
