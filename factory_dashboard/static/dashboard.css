@@ -126,6 +126,8 @@ tbody tr:hover { background: var(--accent-wash); }
 @media (max-width: 639px) { .floor-wrap { display: none; } .line-narrow { display: block; } }
 .floor { display: block; width: 100%; min-width: 1100px; height: auto; background: var(--bg);
   font-family: var(--mono); font-size: 11px; }
+.floor-phone { display: block; width: 100%; height: auto; background: var(--bg);
+  font-family: var(--mono); font-size: 11px; }
 .floor text { fill: var(--ink-2); }
 .floor text.head { fill: var(--c, var(--ink)); font: 700 12px var(--sans); letter-spacing: .12em; }
 .floor text.big { font-size: 14px; }

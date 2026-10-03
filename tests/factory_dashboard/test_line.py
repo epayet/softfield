@@ -309,7 +309,23 @@ def test_the_floor_draws_one_machine_per_agent_and_the_queue_in_run_order(page, 
     )
 
 
-def test_a_phone_sees_a_note_until_the_portrait_floor(page, line_client):
-    open_line(page, line_client, {"width": 390, "height": 844})
-    assert page.locator("#line-narrow").is_visible()
+def test_a_phone_sees_the_portrait_floor(page, line_client):
+    open_line(page, line_client, {"width": 390, "height": 1200})
+    assert page.locator("svg#floor-phone").is_visible()
     assert not page.locator("svg#floor").is_visible()
+    drawn = page.eval_on_selector_all(
+        "svg#floor-phone [data-machine]", "els => els.map(e => e.dataset.machine)"
+    )
+    doc = open_line(page, line_client)
+    assert sorted(drawn) == sorted(m["id"] for m in doc["machines"])
+
+
+def test_desktop_at_1280_sees_the_desktop_floor(page, line_client):
+    open_line(page, line_client, {"width": 1280, "height": 900})
+    assert page.locator("svg#floor").is_visible()
+    assert not page.locator("svg#floor-phone").is_visible()
+    drawn = page.eval_on_selector_all(
+        "svg#floor [data-machine]", "els => els.map(e => e.dataset.machine)"
+    )
+    doc = open_line(page, line_client)
+    assert sorted(drawn) == sorted(m["id"] for m in doc["machines"])

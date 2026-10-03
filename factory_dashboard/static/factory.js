@@ -241,10 +241,102 @@
     doc.belts.forEach((b) => belt(svg, b));  // over the units' edges, so every count shows
   }
 
+  // --- phone: portrait floor under 640 px -----------------------------------------------
+
+  const PHONE = {
+    field:    { x: 6,  y: 8,  w: 346, h: 300 },
+    queue:    { x: 60, y: 308, w: 238, h: 40 },
+    lead:     { x: 6,  y: 358, w: 346, h: 118 },
+    rev1:     { x: 6,  y: 486, w: 70,  h: 90 },
+    rev2:     { x: 186, y: 486, w: 70,  h: 90 },
+    bay:      { x: 8,  y: 606, w: 342, h: 160 },
+    checks:   { x: 134, y: 806, w: 90,  h: 70 },
+    merged:   { x: 14, y: 896, w: 160, h: 62 },
+    ripe:     { x: 186, y: 896, w: 160, h: 62 },
+    stash:    { x: 40, y: 986, w: 278, h: 86 },
+  };
+
+  function drawPhone(svg, doc) {
+    svg.replaceChildren();
+    const count = Object.fromEntries(doc.stations.map((s) => [s.id, s.count]));
+
+    // field
+    const field = add(svg, "g", { class: "station", "data-station": "seeds" });
+    add(field, "rect", { x: PHONE.field.x, y: PHONE.field.y, width: PHONE.field.w, height: PHONE.field.h, class: "field-plot" });
+    text(field, 16, 28, "THE FIELD", "head");
+    const seeds = station(field, "seeds");
+    add(seeds, "path", { d: `M${PHONE.field.x + 16} ${PHONE.field.y + 40} L${PHONE.field.x + 116} ${PHONE.field.y + 40} L${PHONE.field.x + 100} ${PHONE.field.y + 130} L${PHONE.field.x + 32} ${PHONE.field.y + 130} Z`, class: "unit" });
+    text(seeds, 72, 158, "SEEDS", "head", { "text-anchor": "middle" });
+    text(seeds, 72, 172, `${plural(count.seeds || 0, "ticket", "tickets")} set aside`, "dim", { "text-anchor": "middle" });
+
+    // queue hopper
+    const queue = station(svg, "queue");
+    add(queue, "path", { d: `M${PHONE.queue.x} ${PHONE.queue.y} L${PHONE.queue.x + PHONE.queue.w} ${PHONE.queue.y} L${PHONE.queue.x + PHONE.queue.w - 18} ${PHONE.queue.y + PHONE.queue.h} L${PHONE.queue.x + 18} ${PHONE.queue.y + PHONE.queue.h} Z`, class: "unit" });
+    text(queue, 179, PHONE.queue.y + 26, `QUEUE · ${doc.queue.length}`, "head", { "text-anchor": "middle" });
+
+    // lead
+    const lead = station(svg, "lead");
+    const leadM = doc.machines.find((m) => m.station === "lead");
+    if (leadM) {
+      machine(lead, leadM, PHONE.lead.x + 100, PHONE.lead.y, PHONE.lead.w - 200, PHONE.lead.h);
+    }
+
+    // reviewers
+    const revs = doc.machines.filter((m) => m.station === "reviewers");
+    const revsStation = station(svg, "reviewers");
+    revs.forEach((m, i) => {
+      machine(revsStation, m, 6 + i * 180, PHONE.rev1.y, 70, PHONE.rev1.h);
+    });
+
+    // developer bay
+    const bay = station(svg, "developers");
+    add(bay, "rect", { x: PHONE.bay.x, y: PHONE.bay.y, width: PHONE.bay.w, height: PHONE.bay.h, class: "unit", "stroke-dasharray": "8 5", "fill-opacity": 0.4 });
+    text(bay, 18, PHONE.bay.y + 20, "DEVELOPER BAY", "head");
+    const devs = doc.machines.filter((m) => m.station === "developers");
+    devs.forEach((m, i) => {
+      const my = PHONE.bay.y + 30 + i * 100;
+      machine(bay, m, 18 + i * 108, my, 104, 100);
+    });
+
+    // checks
+    const checks = station(svg, "checks");
+    add(checks, "rect", { x: PHONE.checks.x, y: PHONE.checks.y, width: PHONE.checks.w, height: PHONE.checks.h, class: "unit" });
+    add(checks, "circle", { cx: PHONE.checks.x + 37, cy: PHONE.checks.y + 28, r: 10, class: "light" });
+    text(checks, 179, PHONE.checks.y + 50, "CHECKS", "head", { "text-anchor": "middle" });
+
+    // merged
+    const merged = station(svg, "merged");
+    add(merged, "rect", { x: PHONE.merged.x, y: PHONE.merged.y, width: PHONE.merged.w, height: PHONE.merged.h, class: "unit" });
+    text(merged, 26, PHONE.merged.y + 22, `MERGED TODAY · ${count.merged || 0}`, "head");
+
+    // ripe
+    const ripe = station(svg, "ripe");
+    add(ripe, "rect", { x: PHONE.ripe.x, y: PHONE.ripe.y, width: PHONE.ripe.w, height: PHONE.ripe.h, class: "unit" });
+    add(ripe, "circle", { cx: PHONE.ripe.x + 12, cy: PHONE.ripe.y + 30, r: 12, class: "unit" });
+    text(ripe, 198, PHONE.ripe.y + 30, `RIPE · ${count.ripe || 0}`, "head big");
+
+    // stash
+    const stash = station(svg, "stash");
+    add(stash, "rect", { x: PHONE.stash.x, y: PHONE.stash.y, width: PHONE.stash.w, height: PHONE.stash.h, class: "unit", "stroke-dasharray": "6 4" });
+    text(stash, 52, PHONE.stash.y + 20, `HARVEST STASH · ${count.stash || 0}`, "head");
+
+    doc.belts.forEach((b) => belt(svg, b));
+  }
+
   function drawAll(root) {
     const block = root.querySelector ? root.querySelector("#factory-line") : null;
     const svg = document.getElementById("floor");
-    if (block && svg) draw(svg, JSON.parse(block.textContent));
+    const phone = document.getElementById("floor-phone");
+    if (block && svg && phone) {
+      const narrow = window.innerWidth < 640;
+      svg.style.display = narrow ? "none" : "block";
+      phone.style.display = narrow ? "block" : "none";
+      if (narrow) {
+        drawPhone(phone, JSON.parse(block.textContent));
+      } else {
+        draw(svg, JSON.parse(block.textContent));
+      }
+    }
   }
 
   drawAll(document);
