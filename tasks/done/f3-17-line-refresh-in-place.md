@@ -36,3 +36,10 @@ Read `factory_dashboard/templates/_partials/line.html`, `factory_dashboard/stati
 - the replay still pauses the live refresh, and "Back to live" draws the live document again
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
