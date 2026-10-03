@@ -1,7 +1,7 @@
 ---
 id: f3-15-clog-panel
 milestone: f3
-depends_on: [f3-04-clog-today, f3-05-line-panels]
+depends_on: [f3-04-clog-today, f3-05-line-panels, f3-16-fix-overview-live-refresh]
 difficulty: 3
 files:
   - factory_dashboard/overview.py
