@@ -10,6 +10,7 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -442,6 +443,24 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
     return claude + copilot + ollama
 
 
+def biggest_clog(clog: dict[str, Any]) -> str:
+    """The line under "What clogged the line today" (f3 D11): the highest of the limit, the
+    failed minutes, the most idle machine's minutes and the owner's, a tie to the first."""
+    idle = max(clog["idle"], key=lambda i: i["minutes"], default=None)
+    minutes, label = max(
+        [
+            (clog["limit"], "Waiting for Claude's limit"),
+            (clog["failed"], "Failed attempts"),
+            (idle["minutes"] if idle else 0, f"Idle: {idle['name'] if idle else ''}"),
+            (clog["owner"], "Stopped for you"),
+        ],
+        key=lambda c: c[0],
+    )
+    if not minutes:
+        return "Nothing clogged the line today."
+    return f"Biggest clog: {label}, {minutes} min."
+
+
 def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] | list[float]]:
     """Claude's dollars per milestone, oldest first: the data of ``charts.js``'s ``spend``."""
     points = queries.trends(conn, project)
@@ -476,6 +495,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
     from factory_dashboard.line import SEEN, live_line, overnight
 
     local = now.astimezone()
+    line = live_line(conn, project, local)
     milestone = current_milestone(conn, project)
 
     def url(since: datetime) -> str:
@@ -490,7 +510,8 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
         "overview.html",
         {
             "active": "/",
-            "line": live_line(conn, project, local),
+            "line": line,
+            "clog_biggest": biggest_clog(line["clog"]) if line["clog"] else None,
             "replay": url(overnight(local, request.cookies.get(SEEN))),
             "replay_day": url(local - timedelta(days=1)),
             **_live_context(conn, project, now),

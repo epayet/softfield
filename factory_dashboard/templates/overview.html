@@ -32,8 +32,24 @@
   </div>
 </div>
 
+<div class="row">
 <div id="live-now" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#now" hx-swap="innerHTML">
 {% include "_partials/running.html" %}
+</div>
+
+{% if line.clog %}
+{% set clog = line.clog %}
+<section id="clog" class="panel">
+  <h2>What clogged the line today</h2>
+  <dl class="kv">
+    <dt>Waiting for Claude's limit</dt><dd class="mono">{{ clog.limit }} min</dd>
+    <dt>Failed attempts</dt><dd class="mono">{{ clog.failures }} · {{ clog.failed }} min</dd>
+    <dt>Machines idle while one job runs</dt><dd class="mono">{{ clog.idle | selectattr("minutes") | list | length }} of {{ clog.idle | length }}</dd>
+    <dt>Stopped for you</dt><dd class="mono">{{ clog.owner }} min</dd>
+  </dl>
+  <p class="sub">{{ clog_biggest }}</p>
+</section>
+{% endif %}
 </div>
 
 <div class="row">

@@ -1,6 +1,7 @@
 import json
 import re
 from datetime import timedelta
+from html import unescape
 from pathlib import Path
 
 from factory_dashboard.overview import queue
@@ -14,7 +15,7 @@ def section(html: str, name: str) -> str:
     """The text of the page's ``<section id="name">``, tags stripped."""
     match = re.search(rf'<section[^>]*\bid="{name}"[^>]*>(.*?)</section>', html, re.S)
     assert match, f"no section {name}"
-    return " ".join(re.sub(r"<[^>]+>", " ", match.group(1)).split())
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", match.group(1))).split())
 
 
 def charts(html: str) -> dict[str, object]:
@@ -31,7 +32,9 @@ def charts(html: str) -> dict[str, object]:
 def test_the_overview_shows_every_panel_in_order(client):
     html = client.get("/").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
-    assert ids == ["needs-you", "line-live", "now", "verdict", "allowance", "savings", "spend"]
+    assert ids == [
+        "needs-you", "line-live", "now", "clog", "verdict", "allowance", "savings", "spend",
+    ]  # fmt: skip
     assert "Next in line" in section(html, "now")
     assert 'id="running"' not in html and 'id="queue"' not in html
     live = client.get("/live").text
@@ -257,6 +260,64 @@ def test_the_last_verdict_is_the_milestones_and_the_last_runs(client):
     assert "F1" in verdict and "ready" in verdict
     assert "3 merged, 0 not" in verdict
     assert 'href="/runs/20260930-100000?project=coucou"' in html
+
+
+def with_clog(monkeypatch, clog: dict[str, object] | None) -> None:
+    """The line's ``clog`` set to ``clog``, the rest of the document as it is."""
+    from factory_dashboard import line
+
+    real = line.live_line
+
+    def live_line(*args, **kwargs):
+        doc = real(*args, **kwargs)
+        doc["clog"] = clog
+        return doc
+
+    monkeypatch.setattr(line, "live_line", live_line)
+
+
+def clog(**numbers: object) -> dict[str, object]:
+    idle = [
+        {"agent": LOCAL, "name": "qwen", "minutes": 0, "share": 0.0},
+        {"agent": "gpt-oss", "name": "gpt-oss", "minutes": 25, "share": 0.1},
+        {"agent": "devstral", "name": "devstral", "minutes": 25, "share": 0.1},
+    ]
+    zero = {"limit": 0, "failed": 0, "failures": 0, "idle": idle, "owner": 0, "live": 240}
+    return zero | numbers
+
+
+def test_what_clogged_the_line_shows_the_four_numbers_and_the_biggest(client, monkeypatch):
+    with_clog(monkeypatch, clog(limit=12, failed=31, failures=2, owner=5))
+    panel = section(client.get("/").text, "clog")
+    assert "What clogged the line today" in panel
+    assert "Waiting for Claude's limit 12 min" in panel
+    assert "Failed attempts 2 · 31 min" in panel
+    assert "Machines idle while one job runs 2 of 3" in panel
+    assert "Stopped for you 5 min" in panel
+    assert "Biggest clog: Failed attempts, 31 min." in panel
+    assert "240" not in panel  # the runner's live time isn't one of the four
+
+
+def test_the_biggest_clog_names_the_most_idle_machine_and_a_tie_goes_first(client, monkeypatch):
+    with_clog(monkeypatch, clog(limit=25))
+    panel = section(client.get("/").text, "clog")
+    assert "Biggest clog: Waiting for Claude's limit, 25 min." in panel
+    with_clog(monkeypatch, clog(limit=10, owner=20))
+    panel = section(client.get("/").text, "clog")
+    assert "Biggest clog: Idle: gpt-oss, 25 min." in panel
+
+
+def test_a_day_without_clogs_says_so(client, monkeypatch):
+    with_clog(monkeypatch, clog(idle=[]))
+    panel = section(client.get("/").text, "clog")
+    assert "Machines idle while one job runs 0 of 0" in panel
+    assert "Nothing clogged the line today." in panel and "Biggest" not in panel
+
+
+def test_without_a_clog_document_there_is_no_clog_panel(client, monkeypatch):
+    with_clog(monkeypatch, None)
+    html = client.get("/").text
+    assert 'id="clog"' not in html and "What clogged the line today" not in html
 
 
 def allowance_rows(html: str) -> dict[str, str]:
