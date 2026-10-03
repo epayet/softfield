@@ -24,3 +24,12 @@ Read the `aria-label="What clogged the line today"` section of `docs/milestones/
 - with `clog` `None` the page has no `#clog` section
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 222484
+logs: var/runs/20261003-181609/f3-15-clog-panel
+```
