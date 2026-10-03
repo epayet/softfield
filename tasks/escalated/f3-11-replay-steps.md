@@ -27,3 +27,12 @@ Read `factory_dashboard/static/factory.js` (f3-07's replay bar and the JSON it k
 - after the first `machine` event that sets a machine working, that machine is drawn `on` with the crate's ticket; after the failed check (`n1-02-retry`, ruff) the light flashes red
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 4294026
+logs: var/runs/20261003-150632/f3-11-replay-steps
+```
