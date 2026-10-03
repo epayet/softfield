@@ -36,3 +36,9 @@ attempts: 3
 tokens: 4294026
 logs: var/runs/20261003-150632/f3-11-replay-steps
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
