@@ -48,3 +48,12 @@ Read these first:
 - `/line?project=x` redirects to `/?project=x`, and no tab links to `/line`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 4859
+gate_failures: ['stopped', 'task-tests']
+tokens: 6125606
+```
