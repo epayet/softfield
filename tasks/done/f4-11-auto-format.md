@@ -25,3 +25,10 @@ Read `docs/adr/17-always-on-factory.md` item 2, `runner/loop.py` (the attempt lo
 - an attempt with an undefined name still fails ruff
 - files the branch didn't change are never touched
 - `uv run runner check-all --task f4-11-auto-format` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
