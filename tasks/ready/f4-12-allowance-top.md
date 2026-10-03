@@ -1,7 +1,7 @@
 ---
 id: f4-12-allowance-top
 milestone: f4-always-on
-depends_on: [f4-10-queue-live]
+depends_on: [f4-10-queue-live, f4-30-queue-live-tests]
 difficulty: 3
 files:
   - factory_dashboard/overview.py

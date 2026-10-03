@@ -1,7 +1,7 @@
 ---
 id: f3-07-replay-controls
 milestone: f3
-depends_on: [f3-06-replay-data, f3-03-line-motion, f3-09-line-phone-fixes]
+depends_on: [f3-06-replay-data, f3-03-line-motion, f3-09-line-phone-fixes, f3-10-line-phone-finish]
 difficulty: 5
 files:
   - factory_dashboard/static/factory.js

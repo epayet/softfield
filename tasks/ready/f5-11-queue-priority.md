@@ -1,7 +1,7 @@
 ---
 id: f5-11-queue-priority
 milestone: f5-board
-depends_on: [f5-07-replan, f4-10-queue-live]
+depends_on: [f5-07-replan, f4-10-queue-live, f4-30-queue-live-tests]
 difficulty: 2
 files:
   - factory_dashboard/overview.py
