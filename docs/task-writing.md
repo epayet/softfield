@@ -97,6 +97,10 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 - **Ask for tests that act as a person would:** click, fill, `select_option`. A test that dispatches events or sets `.value` from JavaScript reaches states nobody can (m4-F1). The `test-patterns` gate flags it (ADR 12).
 - **Split wide fan-in.** A developer ticket depends on at most two other developer tickets. m4-06 wired four, plus i18n and offline, and failed until it was split. Past two, split it or make it a lead ticket (ADR 12).
 
+## Lessons from F3
+
+- **Score the ticket with the rubric, not by feel.** f3-07 (replay controls) was written as difficulty 5; the rubric gives 10 (markup, CSS, a stepping state, a timer and the htmx pause interlocked; seven files to read; four dependencies; UI; timing). Qwen re-planned it for 10 minutes three times without one edit, and a direction saying "edit early" didn't change that. Split it into the bar (f3-07) and the stepping (f3-11).
+
 ## Open questions
 
 - Outcome vs dictation: no visible difference in M2 (4 tasks). Keep sampling both.
