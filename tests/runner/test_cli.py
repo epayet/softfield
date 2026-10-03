@@ -1,11 +1,14 @@
 """The owner's commands exit 0 when ready, 2 when something needs them, 1 on an error."""
 
 import os
+import sys
+from datetime import UTC, datetime
 
 import pytest
 
 from runner import cli, loop, metrics, owner
 from runner.milestone import RESTART
+from runner.report import SessionReport
 
 
 @pytest.fixture
@@ -119,6 +122,39 @@ def test_a_restart_without_a_yes_passes_none_on(in_repo, monkeypatch):
     with pytest.raises(Restarted):
         cli.main(["milestone", "1"])
     assert loop.RESERVE_ENV not in envs[0]
+
+
+def test_runner_run_restarts_itself_after_a_runner_change(in_repo, monkeypatch):
+    """2026-10-03: `runner run`, the standing command (ADR 17), stopped for good after f4-01
+    changed runner/; only `runner milestone` restarted itself."""
+    envs: list[dict[str, str]] = []
+    argvs: list[list[str]] = []
+
+    def execve(path, args, env):
+        argvs.append(list(args))
+        envs.append(dict(env))
+        raise Restarted
+
+    def run_session(cfg, *, once, dry_run, escalate):
+        loop.FIVE_HOUR.yes = True  # the owner answered y before the change
+        return SessionReport(started=datetime.now(UTC), restart=True)
+
+    monkeypatch.setattr(cli, "run_session", run_session)
+    monkeypatch.setattr(os, "execve", execve)
+    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
+    monkeypatch.setattr(sys, "argv", ["runner", "run"])
+    with pytest.raises(Restarted):
+        cli.main(["run"])
+    assert argvs[0][-1] == "run"
+    assert envs[0][loop.FIVE_HOUR_ENV] == "1"
+
+
+def test_runner_run_without_a_runner_change_just_ends(in_repo, monkeypatch):
+    monkeypatch.setattr(
+        cli, "run_session", lambda cfg, **kw: SessionReport(started=datetime.now(UTC))
+    )
+    monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
+    assert cli.main(["run"]) == 0
 
 
 def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):

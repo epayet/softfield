@@ -35,6 +35,18 @@ def _today() -> date:
     return datetime.now().astimezone().date()
 
 
+def _restart() -> None:
+    """Carry on in a fresh process: Claude changed runner/, and Python keeps the old modules."""
+    print("runner: the runner's code changed; restarting.", flush=True)
+    argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
+    env = dict(os.environ)
+    if loop.RESERVE.yes:  # the owner's yes lasts for the whole command
+        env[loop.RESERVE_ENV] = "1"
+    if loop.FIVE_HOUR.yes:
+        env[loop.FIVE_HOUR_ENV] = "1"
+    os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="runner", description=__doc__)
     sub = parser.add_subparsers(dest="command")
@@ -126,26 +138,20 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(repo)
     try:
         if args.command in (None, "run"):
-            run_session(
+            session = run_session(
                 cfg,
                 once=getattr(args, "once", False),
                 dry_run=getattr(args, "dry_run", False),
                 escalate=not getattr(args, "no_escalate", False),
             )
+            if session is not None and session.restart:
+                _restart()  # `runner run` is the standing command (ADR 17): it carries on
         elif args.command == "milestone":
             key = milestone_arg(repo, args.number)
             owner.rerun_started(repo, key, db=cfg.metrics_db)
             stop = run_milestone(cfg, key, args.base or f"{key}-start")
             if stop == RESTART:
-                # An escalation changed the runner: carry on in a fresh process (ADR 12).
-                print("runner: the runner's code changed; restarting.", flush=True)
-                argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
-                env = dict(os.environ)
-                if loop.RESERVE.yes:  # the owner's yes lasts for the whole command
-                    env[loop.RESERVE_ENV] = "1"
-                if loop.FIVE_HOUR.yes:
-                    env[loop.FIVE_HOUR_ENV] = "1"
-                os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
+                _restart()  # an escalation changed the runner (ADR 12)
             state = load_state(cfg.runs_dir / "state.json")
             code, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
             owner.record_verdict(repo, text)

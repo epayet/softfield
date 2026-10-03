@@ -3142,8 +3142,10 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         _print_plan(ready, done, paused, pick_next(ready, done, paused), cfg.repo)
         return None
     s = open_session(cfg)
-    work_queue(s, escalate=escalate, once=once)
-    return close_session(s)
+    restart = work_queue(s, escalate=escalate, once=once)
+    report = close_session(s)
+    report.restart = restart
+    return report
 
 
 def close_session(s: Session) -> SessionReport:

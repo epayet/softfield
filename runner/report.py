@@ -66,6 +66,7 @@ class SessionReport:
     claude_runs: list[ClaudeRunRecord] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
     narrative: str = ""
+    restart: bool = False  # Claude changed runner/: the command carries on in a new process
 
 
 def _minutes(seconds: float) -> str:
