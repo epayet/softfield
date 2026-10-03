@@ -3,24 +3,10 @@
 {% block content %}
 <div class="page" data-replay="{{ replay }}" data-replay-day="{{ replay_day }}">
 
-{# Needs you: refreshed from /live every 5 s, picks out its own section. #}
-<div id="live-needs-you" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#needs-you" hx-swap="outerHTML">
-{% if needs %}
-<section id="needs-you" class="panel needs">
-  <h2>Needs you <span class="src">each item goes when it's done</span></h2>
-  <ul class="steps">
-    {% for need in needs %}
-    <li>
-      <span class="when"><span class="pill warn">{{ need.kind }}</span></span>
-      <span class="what">
-        <span>{{ need.text }}{% if need.ticket %} (<a class="mono" href="/tickets/{{ need.ticket }}{{ q }}">{{ need.ticket }}</a>){% endif %}</span>
-        {% if need.command %}<code>{{ need.command }}</code>{% endif %}
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
+{# Needs you and Now: each wrapper fetches /live every 5 s and swaps its own section into
+   itself (innerHTML), so it keeps polling, and Needs you comes back after an empty spell (f3-16). #}
+<div id="live-needs-you" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#needs-you" hx-swap="innerHTML">
+{% include "_partials/needs_you.html" %}
 </div>
 
 {% include "_partials/line.html" %}
@@ -46,8 +32,7 @@
   </div>
 </div>
 
-{# Now: refreshed from /live every 5 s, picks out its own section. #}
-<div id="live-now" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#now" hx-swap="outerHTML">
+<div id="live-now" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#now" hx-swap="innerHTML">
 {% include "_partials/running.html" %}
 </div>
 

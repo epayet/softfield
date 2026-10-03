@@ -76,10 +76,11 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
     assert "<html" not in html
     assert "Should reactions be editable" in section(html, "needs-you")
     assert "f1-04-live" in section(html, "now")
-    # it asks to be fetched again every 5 s, keeping the project
-    assert 'hx-get="/live?project=coucou"' in html
-    assert 'hx-trigger="every 5s [window.liveIdle()]"' in html
-    assert 'hx-get="/live?project=coucou"' in client.get("/").text
+    # the bare sections: the page's two wrappers fetch it every 5 s, keeping the project (f3-16)
+    assert "hx-get" not in html
+    page = client.get("/?project=coucou").text
+    assert page.count('hx-get="/live?project=coucou"') == 2
+    assert page.count('hx-swap="innerHTML"') == 2
     assert client.get("/running").status_code == 404
 
 
@@ -397,4 +398,93 @@ def test_the_live_part_pauses_while_the_owner_scrolls_or_selects(client):
     and a selection was lost (f4-14)."""
     html = client.get("/").text
     assert 'hx-trigger="every 5s [window.liveIdle()]"' in html
-    assert "window.liveIdle" in html.split('<div id="live"')[0]  # defined once, outside the swap
+    assert "window.liveIdle" in html.split('<div id="live-')[0]  # defined once, outside the swap
+
+
+# --- in a browser: the 5 s refresh (f3-16) -----------------------------------------------
+
+ORIGIN = "http://127.0.0.1:8765"
+STATIC = Path(__file__).parents[2] / "factory_dashboard" / "static"
+REFRESH = 12_000  # ms: up to two 5 s polls
+
+
+def open_overview(page, client) -> None:
+    """``/`` in Chromium, with ``/`` and ``/live`` rendered by ``client`` on every request, so
+    what the database holds at each poll is what the page gets."""
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+    page.goto(ORIGIN + "/")
+
+
+def test_needs_you_comes_back_when_a_need_appears_after_the_page_loaded(
+    page, serve_between, db_path
+):
+    """In f3-14 the empty Needs you swapped its wrapper away, so a later need never showed."""
+    open_overview(page, serve_between(activity="check-all on main"))
+    assert page.locator("#needs-you").count() == 0
+    page.wait_for_timeout(6_000)  # one refresh with nothing to show
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 30",
+            text="A question that came later.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    page.wait_for_selector("#needs-you", timeout=REFRESH)
+    assert "A question that came later." in page.locator("#needs-you").inner_text()
+
+
+def test_now_keeps_refreshing_after_the_first_refresh(page, serve_between, db_path):
+    """In f3-14 the first refresh replaced #live-now with a bare section that didn't poll."""
+    client = serve_between(activity="check-all on main")
+
+    def running(title: str) -> None:
+        conn = metrics.open_db(db_path)
+        try:
+            project = metrics.upsert_project(conn, PROJECT)
+            f1 = metrics.upsert_milestone(conn, project, "f1")
+            ticket = metrics.upsert_ticket(
+                conn,
+                project,
+                "f1-30-now",
+                milestone_id=f1,
+                kind="developer",
+                state="running",
+                title=title,
+            )
+            metrics.start_job(
+                conn,
+                metrics.upsert_run(conn, project, "20261002-115000"),
+                ticket_id=ticket,
+                milestone_id=f1,
+                role="developer",
+                agent=LOCAL,
+                attempt=1,
+                started=NOW.isoformat(),
+            )
+        finally:
+            conn.close()
+
+    open_overview(page, client)
+    now = page.locator("#now")
+    for title in ("The first title.", "The second title."):
+        running(title)
+        now.get_by_text(title).wait_for(timeout=REFRESH)
+    assert "The first title." not in now.inner_text()

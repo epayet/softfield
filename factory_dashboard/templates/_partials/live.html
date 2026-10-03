@@ -1,24 +1,3 @@
-{# Needs you, then Now (D3, D4, D8): swapped in by htmx every 5 s from /live, so it carries its own hx-get. #}
-<div id="live-needs-you" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#needs-you" hx-swap="outerHTML">
-{% if needs %}
-<section id="needs-you" class="panel needs">
-  <h2>Needs you <span class="src">each item goes when it's done</span></h2>
-  <ul class="steps">
-    {% for need in needs %}
-    <li>
-      <span class="when"><span class="pill warn">{{ need.kind }}</span></span>
-      <span class="what">
-        <span>{{ need.text }}{% if need.ticket %} (<a class="mono" href="/tickets/{{ need.ticket }}{{ q }}">{{ need.ticket }}</a>){% endif %}</span>
-        {% if need.command %}<code>{{ need.command }}</code>{% endif %}
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-</div>
-<div id="live-now" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#now" hx-swap="outerHTML">
-<div class="row">
-  {% include "_partials/running.html" %}
-</div>
-</div>
+{# Needs you, then Now (D3, D4, D8), bare: the Overview's #live-needs-you and #live-now fetch this every 5 s and each picks out its own section into itself (innerHTML), so their hx-get stays on the page. #}
+{% include "_partials/needs_you.html" %}
+{% include "_partials/running.html" %}

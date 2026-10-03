@@ -11,6 +11,7 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 - Management command: `coucou/management/commands/post_moment.py` → `tests/integration/test_post_moment.py`
 - Dashboard page: `factory_dashboard/overview.py` (an `APIRouter` with its own SQL, included in `app.py`'s `create_app`) + `factory_dashboard/templates/overview.html` (extends `base.html`; a chart is a `data-chart` div, its JSON and a function in `static/charts.js`) → `tests/factory_dashboard/test_overview.py` (checks the rendered text and each chart's JSON)
 - Factory line: the data and every rule in Python, `factory_dashboard/line.py` (`live_line`, a JSON block in the page; `line.py` imports from `overview.py`, so `overview.py` imports `live_line` inside `_live_context`, never at the top); the drawing only in `factory_dashboard/static/factory.js` (hand-written SVG) → `tests/factory_dashboard/test_line.py` (tests on the JSON, plus one browser test: the page from `TestClient`, `/static/` from disk with `page.route`)
+- A live part's 5 s refresh in a browser: `open_overview` and the two tests after it in `tests/factory_dashboard/test_overview.py` (`/` and `/live` rendered on every request, the database changed between polls, waits longer than 5 s)
 
 ## Notes
 1. French says `vous` and sounds warm and plain: "Réessayez un peu plus tard", never "Veuillez réessayer".
@@ -27,4 +28,4 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 12. When a number in your ticket disagrees with your count, write the rows out as a table (duration in seconds, each token column) and add them once; never change fixture rows or invent new ones to make a number fit.
 13. A ticket that replaces a behaviour replaces its tests: rewrite the tests in your `tests:` that pin the old one, and never leave an assertion that can't fail. Keep them as narrow: an assertion within a panel that goes moves to the panel that replaces it, never to the whole page (f3-05).
 14. `check-all` and the full test suite take several minutes: give their shell call a timeout of 900000 ms. "(no output)" after a shell timeout means the call was killed, not that the checks hang; never write `BLOCKED.md` for it.
-15. To add to an existing file, Edit it, anchored on its last lines; never Write it: Write replaces the whole file (f2-07 wiped the 1,300-line dashboard `conftest.py` and lost the attempt).
+15. To add to an existing file, Edit it, anchored on its last lines; never Write it: Write replaces the whole file (f2-07 wiped the 1,300-line dashboard `conftest.py` and lost the attempt). You can't delete or rename files, so create only those your ticket names: f3-16 made two empty ones and spent its last attempt failing to remove them.

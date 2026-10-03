@@ -1,0 +1,17 @@
+{# Needs you (D3, D8): what waits on the owner; absent when nothing does. Drawn on the Overview and in /live. #}
+{% if needs %}
+<section id="needs-you" class="panel needs">
+  <h2>Needs you <span class="src">each item goes when it's done</span></h2>
+  <ul class="steps">
+    {% for need in needs %}
+    <li>
+      <span class="when"><span class="pill warn">{{ need.kind }}</span></span>
+      <span class="what">
+        <span>{{ need.text }}{% if need.ticket %} (<a class="mono" href="/tickets/{{ need.ticket }}{{ q }}">{{ need.ticket }}</a>){% endif %}</span>
+        {% if need.command %}<code>{{ need.command }}</code>{% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
