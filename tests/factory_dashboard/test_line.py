@@ -573,6 +573,16 @@ def test_the_line_page_remembers_when_it_was_opened_for_overnight(night_db):
 ORIGIN = "http://127.0.0.1:8765"
 
 
+@pytest.fixture
+def page(page):
+    """pytest-playwright's page, failing on any error the page throws. In f3-11 a syntax error
+    stopped factory.js whole; every browser test timed out and the error was never shown."""
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    yield page
+    assert errors == [], f"factory.js threw: {errors}"
+
+
 def open_line(page, client: TestClient, size: dict[str, int] | None = None) -> dict[str, Any]:
     """``/line`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk and
     ``/line/replay`` from ``client``. Returns its document."""
@@ -758,3 +768,84 @@ def test_reduced_motion_disables_animations(page, line_client):
         }
     """)
     assert running == [], f"elements still animated: {running}"
+
+
+# --- replay steps (f3-11) --------------------------------------------------------------------
+
+
+def start_replay(page, night_db) -> list[dict[str, Any]]:
+    """The fixture night's line opened and its overnight replay loaded; returns its events,
+    from the route, in the server's zone."""
+    client = night_client(night_db)
+    open_line(page, client)
+    url = page.locator(".page").get_attribute("data-replay")
+    assert url is not None
+    events: list[dict[str, Any]] = client.get(url).json()["events"]
+    page.click("#replay-start")
+    page.wait_for_selector("#replay-live", state="visible")
+    return events
+
+
+def readout(page) -> str:
+    return page.locator("#replay-readout").text_content() or ""
+
+
+def about(event: dict[str, Any]) -> str:
+    """What the readout must name for ``event``: its crate, machine, agent or card."""
+    key = {"trip": "crate", "check": "crate", "machine": "machine", "limit": "agent"}
+    return str(event.get(key.get(event["kind"], "card"), f"{event.get('minutes')} min"))
+
+
+def test_replay_steps_through_the_events_by_hand_and_on_play(page, night_db):
+    events = start_replay(page, night_db)
+    assert len(events) > 3
+    for event in events:
+        page.click("#replay-next")
+        assert readout(page).startswith(event["at"][11:16] + " "), (readout(page), event)
+        assert about(event) in readout(page), (readout(page), event)
+    page.click("#replay-next")  # past the last event: nothing moves
+    assert about(events[-1]) in readout(page)
+    page.click("#replay-prev")
+    assert readout(page).startswith(events[-2]["at"][11:16])
+    assert about(events[-2]) in readout(page)
+
+    for _ in events:
+        page.click("#replay-prev")
+    first = readout(page)
+    assert first.startswith(f"{len(events)} events since ")  # back at the start
+    page.select_option("#replay-speed", "1500")
+    page.click("#replay-play")
+    assert page.locator("#replay-play").text_content() == "Pause"
+    page.wait_for_function(
+        "first => document.getElementById('replay-readout').textContent !== first", arg=first
+    )
+    assert readout(page).startswith(events[0]["at"][11:16])
+    page.click("#replay-next")  # stops playing
+    assert page.locator("#replay-play").text_content() == "Play"
+
+    page.click("#replay-live")
+    assert not page.locator("#replay-live").is_visible()
+    assert merged_on_floor(page) == ["n1-03-parked"]
+
+
+def test_a_replayed_machine_works_on_its_crate_and_a_failed_check_flashes_red(page, night_db):
+    events = start_replay(page, night_db)
+    working = next(
+        n for n, e in enumerate(events) if e["kind"] == "machine" and e["state"] == "working"
+    )
+    failed = next(n for n, e in enumerate(events) if e["kind"] == "check" and not e["passed"])
+    assert (events[failed]["crate"], events[failed]["gate"]) == ("n1-02-retry", "ruff")
+    assert working < failed
+
+    for _ in range(working + 1):
+        page.click("#replay-next")
+    machine = page.locator(f'svg#floor [data-machine="{events[working]["machine"]}"]')
+    assert "on" in (machine.get_attribute("class") or "").split()
+    assert machine.locator("[data-crate]").get_attribute("data-crate") == events[working]["ticket"]
+
+    for _ in range(failed - working - 1):
+        page.click("#replay-next")
+    assert page.locator("svg#floor .light.flash-red").count() == 0
+    page.click("#replay-next")
+    assert readout(page).endswith("n1-02-retry failed checks: ruff")
+    assert page.locator("svg#floor .light.flash-red").count() == 1

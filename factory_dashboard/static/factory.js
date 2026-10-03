@@ -367,21 +367,133 @@
   // --- replay (f3-07): the floor as it was at `since`; f3-11 steps through `replaying.events`
 
   let replaying = null;  // /line/replay's {since, until, line, events} while replaying
+  let step = 0;  // how many of replaying.events the floor shows
+  let playing = null;  // Play's timer
+
+  // One event applied to the document `doc` (a copy of replaying.line), as live_line would
+  // have it after the event. `crates` remembers each crate's {ticket, title, kind} and attempts.
+  function apply(doc, event, crates) {
+    if (event.at.slice(0, 10) !== doc.at.slice(0, 10)) {  // past midnight: today's counts restart
+      doc.belts.forEach((b) => { if (b.today !== null) b.today = 0; });
+      doc.merged = [];
+    }
+    doc.at = event.at;
+    if (event.kind === "trip") {
+      const crate = crates[event.crate] || { ticket: event.crate, title: null, kind: "developer" };
+      doc.queue = doc.queue.filter((c) => c.ticket !== event.crate);
+      if (event.to === "queue") doc.queue.unshift({ ...crate, milestone: null, waits: [] });
+      if (event.to === "merged") doc.merged.push({ ticket: crate.ticket, title: crate.title, kind: crate.kind });
+      doc.queue.forEach((c, n) => { c.number = n + 1; });
+      doc.belts.forEach((b) => {
+        b.carrying = event.belts.includes(b.id);
+        if (b.carrying && b.today !== null) b.today += 1;
+      });
+    } else if (event.kind === "machine") {
+      const m = doc.machines.find((one) => one.id === event.machine);
+      if (!m) return;
+      m.state = event.state;
+      m.reset = event.reset;
+      if (!event.ticket) {
+        m.crate = null;
+      } else if (m.crate?.ticket !== event.ticket) {
+        const crate = crates[event.ticket] || { ticket: event.ticket, title: null, kind: "developer" };
+        crate.attempt = (crate.attempt || 0) + 1;
+        crates[event.ticket] = crate;
+        m.crate = { ticket: crate.ticket, title: crate.title, kind: crate.kind, role: null, attempt: crate.attempt, minutes: 0 };
+        m.started = Date.parse(event.at);
+      }
+    }
+    doc.machines.forEach((m) => {  // a working crate's minutes run on with the clock
+      if (m.crate && m.started !== undefined) m.crate.minutes = Math.floor((Date.parse(event.at) - m.started) / 60000);
+    });
+    const count = { queue: doc.queue.length, merged: doc.merged.length };
+    doc.stations.forEach((s) => { if (s.id in count) s.count = count[s.id]; });
+  }
+
+  // The event in words, after its own clock (the `at` string's, never the browser's zone).
+  function words(event) {
+    const clock = event.at.slice(11, 16);
+    if (event.kind === "trip") {
+      const to = event.to === null ? "leaves the line" : event.to === "queue" ? "goes back to the queue" : `goes to ${event.to}`;
+      return `${clock} ${event.crate} ${to}`;
+    }
+    if (event.kind === "check") {
+      return `${clock} ${event.crate} ${event.passed ? "passed checks" : `failed checks${event.gate ? `: ${event.gate}` : ""}`}`;
+    }
+    if (event.kind === "machine") {
+      if (event.state === "working") return `${clock} ${event.machine} works on ${event.ticket}`;
+      if (event.state === "waiting") return `${clock} ${event.machine} waits for its limit, resets ${event.reset}`;
+      return `${clock} ${event.machine} is ${event.state}`;
+    }
+    if (event.kind === "limit") {
+      return `${clock} ${event.agent} ${event.state === "start" ? "reached its limit" : "is past its limit"}`;
+    }
+    if (event.kind === "card") {
+      return `${clock} ${event.card} ${event.stage ? `moves to ${event.stage}` : "leaves the field"}`;
+    }
+    return `${clock} nothing works for ${event.minutes} min`;
+  }
+
+  // The floor after the first n events, its readout, and the checks light for a check.
+  function show(n) {
+    step = Math.max(0, Math.min(n, replaying.events.length));
+    const doc = structuredClone(replaying.line);  // replaying.line stays as it came, for ◀
+    const crates = {};
+    for (const c of [...doc.queue, ...doc.merged]) crates[c.ticket] = { ticket: c.ticket, title: c.title, kind: c.kind };
+    for (const m of doc.machines) {
+      if (!m.crate) continue;
+      if (m.crate.ticket) crates[m.crate.ticket] = { ...m.crate };
+      m.started = Date.parse(doc.at) - m.crate.minutes * 60000;
+    }
+    replaying.events.slice(0, step).forEach((event) => apply(doc, event, crates));
+    drawFloor(doc);
+    const readout = document.getElementById("replay-readout");
+    if (step === 0) {
+      const clock = replaying.since.slice(11, 16);  // the server's own clock, not the browser's
+      readout.textContent = `${plural(replaying.events.length, "event", "events")} since ${clock}`;
+      return;
+    }
+    const event = replaying.events[step - 1];
+    readout.textContent = words(event);
+    if (event.kind === "check") {
+      const svg = document.getElementById(window.innerWidth < 640 ? "floor-phone" : "floor");
+      const light = svg.querySelector(".light");
+      if (light) light.className.baseVal = `light ${event.passed ? "flash-green" : "flash-red"}`;
+    }
+  }
+
+  function stop() {
+    clearTimeout(playing);
+    playing = null;
+    document.getElementById("replay-play").textContent = "Play";
+  }
+
+  function tick() {
+    show(step + 1);
+    if (step >= replaying.events.length) return stop();
+    playing = setTimeout(tick, Number(document.getElementById("replay-speed").value));
+  }
+
+  function play() {
+    if (playing) return stop();
+    if (step >= replaying.events.length) show(0);
+    document.getElementById("replay-play").textContent = "Pause";
+    playing = setTimeout(tick, Number(document.getElementById("replay-speed").value));
+  }
 
   async function startReplay() {
     const page = document.querySelector(".page[data-replay]");
     const span = document.getElementById("replay-span").value;  // "replay" or "replayDay"
     const response = await fetch(page.dataset[span], { headers: { Accept: "application/json" } });
     if (!response.ok) return;
+    stop();
     replaying = await response.json();
-    drawFloor(replaying.line);
-    const clock = replaying.since.slice(11, 16);  // the server's own clock, not the browser's
-    const events = plural(replaying.events.length, "event", "events");
-    document.getElementById("replay-readout").textContent = `${events} since ${clock}`;
+    show(0);
     document.getElementById("replay-controls").hidden = false;
   }
 
   function backToLive() {
+    stop();
     replaying = null;
     document.getElementById("replay-controls").hidden = true;
     drawAll(document);
@@ -392,6 +504,9 @@
   });
   document.getElementById("replay-start")?.addEventListener("click", startReplay);
   document.getElementById("replay-live")?.addEventListener("click", backToLive);
+  document.getElementById("replay-play")?.addEventListener("click", play);
+  document.getElementById("replay-prev")?.addEventListener("click", () => { stop(); show(step - 1); });
+  document.getElementById("replay-next")?.addEventListener("click", () => { stop(); show(step + 1); });
 
   drawAll(document);
   document.addEventListener("htmx:load", (event) => drawAll(event.detail.elt));
