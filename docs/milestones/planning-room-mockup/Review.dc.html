@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Review a proposal</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&amp;family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#12161b}
+a{color:#ffc48a;text-decoration:none}a:hover{color:#ffe0bf;text-decoration:underline}
+</style>
+</helmet>
+<div style="background: #12161b; color: #dfe4e8; font: 15px/1.5 Barlow, system-ui, sans-serif; min-height: 100%">
+<div style="max-width: 1280px; margin: 0 auto; padding: 14px 16px 40px; display: flex; flex-direction: column; gap: 14px">
+
+  <a href="Main.dc.html" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">‹ The planning room · card</a>
+
+  <header style="background: #181e25; border: 1px solid #303b47; border-left: 6px solid #ff9640; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+    <span style="font: 600 12px 'JetBrains Mono', monospace; color: #8794a2">Proposed by the lead · 10:31 · from round 1 of "The planning room"</span>
+    <h1 style="margin: 0; font: 700 22px/1.2 'Chakra Petch', sans-serif; letter-spacing: .03em; text-transform: uppercase">Review the plan</h1>
+    <nav aria-label="Proposals" style="display: flex; flex-wrap: wrap; border: 1px solid #303b47; align-self: flex-start">
+      <a href="#" aria-current="page" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #ff9640; padding: 9px 14px; border-right: 1px solid #303b47">ADR 20 · 9 points</a>
+      <a href="#" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 9px 14px; border-right: 1px solid #303b47">F6 plan · 7 tickets</a>
+      <a href="#" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 9px 14px">Mock-up</a>
+    </nav>
+  </header>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
+    <main style="flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+      <p style="margin: 0; color: #c9d3dc">Every key point of the ADR, in plain words. Mark what you'd change; the rest counts as agreed when you send. The full ADR text is one tap away on each point.</p>
+      <sc-for list="{{sections}}" as="s" hint-placeholder-count="3">
+        <section style="display: flex; flex-direction: column; gap: 8px">
+          <h2 style="margin: 6px 0 0; font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">{{s.name}}</h2>
+          <sc-for list="{{s.points}}" as="p" hint-placeholder-count="3">
+            <div style="background: #181e25; border: 1px solid {{p.border}}; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center">
+              <b style="font: 700 13px 'JetBrains Mono', monospace; color: #8794a2; min-width: 26px">{{p.n}}</b>
+              <div style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <b>{{p.title}}</b>
+                <span style="font-size: 14px; color: #c9d3dc">{{p.text}}</span>
+                <span style="font: 12px 'JetBrains Mono', monospace; color: {{p.flagColor}}">{{p.flag}}</span>
+              </div>
+              <div style="display: flex; gap: 6px">
+                <button type="button" aria-pressed="{{p.agreed}}" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: {{p.agreeInk}}; background: {{p.agreeBg}}; border: 1px solid #8ccf62; padding: 0 12px; min-height: 44px">Agree</button>
+                <button type="button" aria-pressed="{{p.changing}}" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: {{p.changeInk}}; background: {{p.changeBg}}; border: 1px solid #f2b10a; padding: 0 12px; min-height: 44px">Change…</button>
+              </div>
+              <sc-if value="{{p.changing}}" hint-placeholder-val="{{false}}">
+                <label style="flex-basis: 100%; display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: #8794a2">What would you change?
+                  <textarea rows="2" style="font: 14px Barlow, sans-serif; color: #dfe4e8; background: #12161b; border: 1px solid #f2b10a; padding: 8px">{{p.comment}}</textarea>
+                </label>
+              </sc-if>
+            </div>
+          </sc-for>
+        </section>
+      </sc-for>
+    </main>
+
+    <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px; position: sticky; top: 12px">
+      <section style="background: #181e25; border: 1px solid #303b47; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Your review</h2>
+        <div style="height: 10px; background: #222b34; position: relative"><span style="position: absolute; inset: 0 auto 0 0; width: 78%; background: #8ccf62"></span><span style="position: absolute; inset: 0 auto 0 78%; width: 11%; background: #f2b10a"></span></div>
+        <span style="font: 12.5px 'JetBrains Mono', monospace; color: #8794a2">7 agreed · 1 to change · 1 not looked at</span>
+        <button type="button" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; border: 0; min-height: 44px">Send 1 change to the lead</button>
+        <button type="button" disabled="disabled" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #5b6876; background: transparent; border: 1px dashed #5b6876; min-height: 44px">Accept ADR 20</button>
+        <span style="font-size: 12.5px; color: #8794a2">Accepting is possible once nothing is marked to change. Then the F6 plan unlocks.</span>
+      </section>
+      <section style="background: #181e25; border: 1px solid #303b47; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+        <h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">What happens next</h2>
+        <ol style="margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px">
+          <li>Your change goes to the lead as the next planner job.</li>
+          <li>The lead revises point 4 and asks you again, only about what changed.</li>
+          <li>You accept the ADR, then approve the F6 plan.</li>
+          <li>The runner queues F6's tickets at its next pick.</li>
+        </ol>
+      </section>
+    </aside>
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const P = (n, title, text, state, flag, comment) => ({
+      n: String(n), title, text, flag: flag || '', comment: comment || '',
+      flagColor: flag && flag.startsWith('⚑') ? '#f2b10a' : '#8794a2',
+      agreed: state === 'agree', changing: state === 'change',
+      border: state === 'agree' ? '#2f4a2a' : state === 'change' ? '#f2b10a' : '#303b47',
+      agreeBg: state === 'agree' ? '#8ccf62' : 'transparent', agreeInk: state === 'agree' ? '#1a1405' : '#8ccf62',
+      changeBg: state === 'change' ? '#f2b10a' : 'transparent', changeInk: state === 'change' ? '#1a1405' : '#f2b10a',
+    });
+    const sections = [
+      { name: 'When planning runs', points: [
+        P(1, 'Planning goes first', 'A planner job runs at the next pick, before every other lead job; it never stops a job midway.', 'agree', '⚑ changes the pick order (ADR 16 item 2)'),
+        P(2, 'Inside the runner', 'The runner does planner jobs like any other; one process, one writer for git. Beside developer jobs once work runs in parallel.', 'agree'),
+        P(3, 'Opus, in your 25%', 'Planning may use the whole 5-hour window; the factory still stops at 75%.', 'agree', '⚑ amends ADR 16 item 1 for planner jobs'),
+      ]},
+      { name: 'The conversation', points: [
+        P(4, 'One thread per card', 'Each card keeps its own conversation, resumed each turn; threads stay small and cheap.', 'change', '', 'And a general thread for ideas without a card yet; it can become a seed.'),
+        P(5, 'Numbered answers with actions', 'Every reply lists points with an answer and a suggested action; you mark only what you’d change.', 'agree'),
+        P(6, 'Plant without Claude', 'Planting an idea creates its seed card at once, even at Claude’s limit.', 'agree'),
+      ]},
+      { name: 'Proposals and approval', points: [
+        P(7, 'The lead only proposes', 'ADRs, mock-ups, milestones and tickets are drafts on a plan branch until you approve each one.', 'agree'),
+        P(8, 'Approving is a request', 'Accept or Approve sends a request; the runner merges the drafts at its next pick (ADR 18).', 'agree'),
+        P(9, 'Notifications', 'A browser notification when a reply or a proposal is ready.', 'open'),
+      ]},
+    ];
+    return { sections };
+  }
+}
+</script>
+</body>
+</html>

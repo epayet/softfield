@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>The planning room</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&amp;family=Chakra+Petch:wght@500;600;700&amp;family=JetBrains+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#12161b}
+a{color:#ffc48a;text-decoration:none}a:hover{color:#ffe0bf;text-decoration:underline}
+textarea::placeholder,input::placeholder{color:#8794a2}
+</style>
+</helmet>
+<div style="background: #12161b; color: #dfe4e8; font: 15px/1.5 Barlow, system-ui, sans-serif; min-height: 100%">
+<div style="max-width: 1360px; margin: 0 auto; padding: 14px 16px 40px; display: flex; flex-direction: column; gap: 14px">
+
+  <header style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px">
+      <h1 style="margin: 0; font: 700 22px/1.1 'Chakra Petch', system-ui, sans-serif; letter-spacing: .04em; text-transform: uppercase">Coucou factory · planning</h1>
+      <p style="margin: 0; color: #8794a2; font-size: 13px">Plant ideas, ask about them, review what the lead proposes. The factory keeps working.</p>
+    </div>
+    <div style="height: 6px; background: repeating-linear-gradient(-45deg, #f2b10a 0 10px, #12161b 10px 20px); opacity: .85"></div>
+    <nav aria-label="Pages" style="display: flex; flex-wrap: wrap; border: 1px solid #303b47; align-self: flex-start">
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Factory</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Board</a>
+      <a href="#" aria-current="page" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; padding: 8px 14px; border-right: 1px solid #303b47">Planning · 3</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px; border-right: 1px solid #303b47">Tickets</a>
+      <a href="#" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #8794a2; padding: 8px 14px">Agents</a>
+    </nav>
+  </header>
+
+  <section aria-label="Can I plan now" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: #303b47; border: 1px solid #303b47">
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 3px">
+      <span style="font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8ccf62">Planning goes first</span>
+      <span>Your next message is answered when <b>f4-04</b> finishes, in about 6 min.</span>
+      <span style="font: 11.5px 'JetBrains Mono', monospace; color: #8794a2">the factory isn't interrupted · keep writing meanwhile</span>
+    </div>
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 5px">
+      <span style="font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #ff9640">The lead · Opus</span>
+      <div style="height: 10px; background: #222b34; position: relative"><span style="position: absolute; inset: 0 auto 0 0; width: 42%; background: #8ccf62"></span><span title="the factory stops here; the rest is yours" style="position: absolute; top: -4px; bottom: -4px; left: 75%; width: 2px; background: #dfe4e8"></span></div>
+      <span style="font: 11.5px 'JetBrains Mono', monospace; color: #8794a2">5-hour window 42% · planning may use up to 100%, the factory stops at 75%</span>
+    </div>
+    <div style="background: #181e25; padding: 10px 14px; display: flex; flex-direction: column; gap: 3px">
+      <span style="font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: #8794a2">The factory now</span>
+      <span>Running <b>f4-04</b> on gpt-oss-120b, attempt 1, 4 min.</span>
+      <a href="#" style="font-size: 13px">Watch the line ›</a>
+    </div>
+  </section>
+
+  <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start">
+
+    <aside aria-label="Your desk" style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+      <form style="background: #181e25; border: 1px solid #c9b48a; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+        <h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase; color: #c9b48a">Plant an idea</h2>
+        <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: #8794a2">Title
+          <input type="text" placeholder="Memory drift on the frame" style="font: 15px Barlow, sans-serif; color: #dfe4e8; background: #12161b; border: 1px solid #303b47; padding: 9px 10px; min-height: 44px; box-sizing: border-box">
+        </label>
+        <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: #8794a2">Your thoughts, as rough as you like
+          <textarea rows="3" placeholder="What it is, why, what worries you…" style="font: 15px Barlow, sans-serif; color: #dfe4e8; background: #12161b; border: 1px solid #303b47; padding: 9px 10px"></textarea>
+        </label>
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+          <button type="button" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #c9b48a; border: 0; padding: 0 14px; min-height: 44px">Plant it</button>
+          <span style="font-size: 12.5px; color: #8794a2">No Claude needed: it becomes a seed card at once.</span>
+        </div>
+      </form>
+
+      <section aria-label="Waiting for you" style="background: #181e25; border: 1px solid #303b47">
+        <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid #303b47; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Your desk</h2>
+        <sc-for list="{{groups}}" as="g" hint-placeholder-count="4">
+          <div style="padding: 10px 14px; border-bottom: 1px solid #222b34; display: flex; flex-direction: column; gap: 6px">
+            <b style="font: 600 11px 'Chakra Petch', sans-serif; letter-spacing: .1em; text-transform: uppercase; color: {{g.color}}">{{g.name}}</b>
+            <sc-for list="{{g.items}}" as="i" hint-placeholder-count="2">
+              <a href="#" style="display: flex; flex-direction: column; padding: 7px 9px; background: {{i.bg}}; border: 1px solid {{i.border}}; color: #dfe4e8; min-height: 44px; box-sizing: border-box">
+                <span style="font-size: 14px">{{i.title}}</span>
+                <span style="font: 11.5px 'JetBrains Mono', monospace; color: #8794a2">{{i.sub}}</span>
+              </a>
+            </sc-for>
+          </div>
+        </sc-for>
+      </section>
+    </aside>
+
+    <main style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+      <div style="background: #181e25; border: 1px solid #303b47; border-left: 6px solid #f2b10a; padding: 12px 16px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; justify-content: space-between">
+        <div style="display: flex; flex-direction: column">
+          <span style="font: 600 12px 'JetBrains Mono', monospace; color: #8794a2">sprouting · P2 · factory · planted 3 Oct 10:05</span>
+          <h2 style="margin: 0; font: 700 21px/1.2 'Chakra Petch', sans-serif; letter-spacing: .03em; text-transform: uppercase">The planning room</h2>
+        </div>
+        <span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">round 2 · 3 turns · ≈$1.40 of planning so far</span>
+      </div>
+
+      <article style="background: #1f2730; border: 1px solid #303b47; padding: 12px 16px; display: flex; flex-direction: column; gap: 6px">
+        <span style="font: 600 12px 'JetBrains Mono', monospace; color: #ffc48a">You · 10:05</span>
+        <p style="margin: 0">My goals with the chat: plan features without interrupting the factory. Today I have to check whether it's busy, whether the lead has credits, whether a finished feature needs talking through. Help me review ADRs questionnaire style. Planning is the highest priority.</p>
+      </article>
+
+      <article style="background: #181e25; border: 1px solid #ff9640; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+        <div style="display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap">
+          <span style="font: 600 12px 'JetBrains Mono', monospace; color: #ff9640">The lead · Opus · 10:19</span>
+          <span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">answered after f4-03 · 2 min</span>
+        </div>
+        <p style="margin: 0">Here's each point with my answer and the action I suggest. Mark only what you'd change.</p>
+        <div style="height: 8px; background: #222b34; position: relative"><span style="position: absolute; inset: 0 auto 0 0; width: 71%; background: #8ccf62"></span></div>
+        <span style="font: 12px 'JetBrains Mono', monospace; color: #8794a2">5 agreed · 1 to change · 1 open</span>
+        <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+          <sc-for list="{{points}}" as="p" hint-placeholder-count="7">
+            <li style="background: #1f2730; border: 1px solid {{p.border}}; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px">
+              <div style="display: flex; gap: 10px; align-items: baseline">
+                <b style="font: 700 13px 'JetBrains Mono', monospace; color: #8794a2; min-width: 22px">{{p.n}}</b>
+                <div style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0">
+                  <b style="font-size: 15px">{{p.title}}</b>
+                  <span style="font-size: 14px; color: #c9d3dc">{{p.answer}}</span>
+                  <span style="font-size: 14px"><span style="color: #ff9640; font-weight: 600">→ </span>{{p.action}}</span>
+                </div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap; padding-left: 32px">
+                <button type="button" aria-pressed="{{p.agreed}}" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: {{p.agreeInk}}; background: {{p.agreeBg}}; border: 1px solid #8ccf62; padding: 0 14px; min-height: 40px">Agree</button>
+                <button type="button" aria-pressed="{{p.changing}}" style="font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: {{p.changeInk}}; background: {{p.changeBg}}; border: 1px solid #f2b10a; padding: 0 14px; min-height: 40px">Change…</button>
+              </div>
+              <sc-if value="{{p.changing}}" hint-placeholder-val="{{false}}">
+                <label style="display: flex; flex-direction: column; gap: 3px; padding-left: 32px; font-size: 13px; color: #8794a2">What would you change?
+                  <textarea rows="2" style="font: 14px Barlow, sans-serif; color: #dfe4e8; background: #12161b; border: 1px solid #f2b10a; padding: 8px">{{p.comment}}</textarea>
+                </label>
+              </sc-if>
+            </li>
+          </sc-for>
+        </ol>
+      </article>
+
+      <form style="background: #181e25; border: 1px solid #303b47; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; position: sticky; bottom: 0">
+        <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #8794a2">Anything else? A question, a new thought
+          <textarea rows="2" placeholder="Ask the lead about this card…" style="font: 15px Barlow, sans-serif; color: #dfe4e8; background: #12161b; border: 1px solid #303b47; padding: 9px 10px"></textarea>
+        </label>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+          <button type="button" style="font: 600 13px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: #1a1405; background: #f2b10a; border: 0; padding: 0 16px; min-height: 44px">Send my answers · 1 change, 1 open</button>
+          <span style="font-size: 13px; color: #8794a2">Next for the lead, ahead of every other lead job · answered in ~6 min · you'll get a notification</span>
+        </div>
+      </form>
+    </main>
+
+    <aside aria-label="Proposals" style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font: 600 14px 'Chakra Petch', sans-serif; letter-spacing: .08em; text-transform: uppercase">Proposals from this card</h2>
+      <sc-for list="{{proposals}}" as="r" hint-placeholder-count="4">
+        <div style="background: #181e25; border: 1px solid #303b47; border-top: 3px solid {{r.color}}; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px">
+          <span style="font: 600 11px 'JetBrains Mono', monospace; color: #8794a2">{{r.kind}}</span>
+          <b style="font-size: 15px">{{r.title}}</b>
+          <span style="font-size: 13px; color: #c9d3dc">{{r.state}}</span>
+          <a href="Review.dc.html" style="align-self: flex-start; font: 600 12px 'Chakra Petch', sans-serif; letter-spacing: .06em; text-transform: uppercase; color: {{r.btnInk}}; background: {{r.btnBg}}; border: 1px solid {{r.color}}; padding: 10px 14px">{{r.button}}</a>
+        </div>
+      </sc-for>
+      <p style="margin: 0; font-size: 12.5px; color: #8794a2">Nothing becomes a ticket until you approve it. Approving sends a request; the runner commits it at its next pick.</p>
+    </aside>
+
+  </div>
+</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":1400}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const item = (title, sub, hot) => ({ title, sub, bg: hot ? '#2a2208' : '#1f2730', border: hot ? '#f2b10a' : '#303b47' });
+    const groups = [
+      { name: 'Your answers wanted', color: '#f2b10a', items: [item('The planning room', 'round 2 · 1 open point', true)] },
+      { name: 'Proposals to review', color: '#ff9640', items: [item('ADR 20: the planning room', '9 key points', true), item('F6 plan: 7 tickets', 'after ADR 20', false)] },
+      { name: 'Finished, to talk through', color: '#8ccf62', items: [item('F4 always on', 'review ready · 17 of 18 merged', false)] },
+      { name: 'Seeds, not asked about yet', color: '#c9b48a', items: [item('Parallel developers', 'planted 2 Oct', false), item('Memory drift', 'planted 29 Sep', false), item('+ 11 more on the board', '', false)] },
+    ];
+    const P = (n, title, answer, action, state, comment) => ({
+      n: String(n), title, answer, action, comment: comment || '',
+      agreed: state === 'agree', changing: state === 'change',
+      border: state === 'agree' ? '#2f4a2a' : state === 'change' ? '#f2b10a' : '#303b47',
+      agreeBg: state === 'agree' ? '#8ccf62' : 'transparent', agreeInk: state === 'agree' ? '#1a1405' : '#8ccf62',
+      changeBg: state === 'change' ? '#f2b10a' : 'transparent', changeInk: state === 'change' ? '#1a1405' : '#f2b10a',
+    });
+    const points = [
+      P(1, 'Planning goes first', 'A planner job is the lead’s highest priority: it runs at the next pick, before lead tickets, reviews and escalations, never mid-job.', 'ADR 20 item 1; the runner’s pick, test-first.', 'agree'),
+      P(2, 'It runs inside the runner', 'One process, as you asked: simpler, and git keeps one writer. In parallel with developers once that exists.', 'ADR 20 item 2.', 'agree'),
+      P(3, 'Opus plans, inside your 25%', 'Planning may use the whole 5-hour window: the factory stops at 75%, you don’t.', 'ADR 20 item 3.', 'agree'),
+      P(4, 'One thread per card', 'Each card keeps its own conversation (claude -p --resume), so a thread stays small and cheap.', 'ADR 20 item 4.', 'change', 'Also a general thread for when I don’t know which card yet; it can become a seed.'),
+      P(5, 'Answers come as numbered points', 'Every lead reply lists points with an answer and an action; you mark only what you’d change.', 'A planner prompt and this page.', 'agree'),
+      P(6, 'The lead only proposes', 'ADRs, mock-ups, milestones and tickets are drafts on a plan branch until you approve each.', 'ADR 20 item 5.', 'agree'),
+      P(7, 'Notifications', 'A browser notification when a reply or a proposal is ready (F5’s notifications).', 'Or also a sound on the desktop?', 'open'),
+    ];
+    const proposals = [
+      { kind: 'ADR · draft', title: 'ADR 20: the planning room', state: '9 key points · from round 1', button: 'Review', color: '#ff9640', btnBg: '#ff9640', btnInk: '#1a1405' },
+      { kind: 'Mock-up', title: 'The planning room screens', state: '3 screens · you’re looking at it', button: 'Open', color: '#8794a2', btnBg: 'transparent', btnInk: '#dfe4e8' },
+      { kind: 'Milestone plan', title: 'F6 the planning room', state: '7 tickets (4 lead, 3 developer) · waits for ADR 20', button: 'Review', color: '#8ccf62', btnBg: 'transparent', btnInk: '#8ccf62' },
+    ];
+    return { groups, points, proposals };
+  }
+}
+</script>
+</body>
+</html>
