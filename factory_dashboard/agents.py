@@ -44,8 +44,9 @@ class Efficiency:
     model: str | None = None
 
 
-# Jobs whose model is NULL or '' (before f2-04, or a harness that didn't say).
-NOT_RECORDED = "not recorded"
+# Human‑readable label for jobs whose model wasn’t recorded (pre‑2 Oct‑2026)
+NOT_RECORDED = "model not recorded"
+NOT_RECORDED_LABEL = f"before 2 Oct ({NOT_RECORDED})"
 
 
 def efficiency(
@@ -87,7 +88,9 @@ def efficiency(
         for r in rows:
             by_model[r["model"] or NOT_RECORDED].append(r)
         if len(by_model) > 1:
-            found.extend(_efficiency(conn, agent, jobs, m) for m, jobs in by_model.items())
+            for m, jobs in by_model.items():
+                model_name = NOT_RECORDED_LABEL if m == NOT_RECORDED else m
+                found.append(_efficiency(conn, agent, jobs, model_name))
     return found
 
 

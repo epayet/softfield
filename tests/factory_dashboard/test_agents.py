@@ -172,7 +172,7 @@ def test_agent_on_two_models_gets_a_row_per_model(models_client):
     sonnet = {r[0]: (r[1], r[-1]) for r in rows[at : at + 4]}
     assert sonnet == {
         SONNET: ("5", "$1.80"),
-        "not recorded": ("2", "$0.50"),
+        "before 2 Oct (model not recorded)": ("2", "$0.50"),
         SONNET_45: ("1", "$0.50"),
         SONNET_46: ("2", "$0.80"),
     }
