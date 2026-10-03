@@ -23,3 +23,12 @@ A should-fix finding (f4-always-on-C228-3) by copilot-auto, standing in for the 
 - what the finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: tests-fail-on-main)
+attempts: 3
+tokens: 719006
+logs: var/runs/20261003-201706/f4-23-fix-the-checks-light-cannot
+```
