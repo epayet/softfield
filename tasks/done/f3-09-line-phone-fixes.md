@@ -37,3 +37,12 @@ attempts: 3
 tokens: 9359
 logs: var/runs/20261003-074205/f3-09-line-phone-fixes
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 217
+gate_failures: []
+tokens: 32718
+```
