@@ -1,7 +1,7 @@
 ---
 id: f3-05-line-panels
 milestone: f3
-depends_on: [f3-01-factory-line, f3-04-clog-today, f4-12-allowance-top, f4-14-keep-selection, f4-16-allowance-mark, f5-10-five-hour-buttons, f5-11-queue-priority, f5-14-factory-look]
+depends_on: [f3-01-factory-line, f3-09-line-phone-fixes, f3-04-clog-today, f4-12-allowance-top, f4-14-keep-selection, f4-16-allowance-mark, f5-10-five-hour-buttons, f5-11-queue-priority, f5-14-factory-look]
 difficulty: 3
 files:
   - factory_dashboard/templates/_partials/live.html
