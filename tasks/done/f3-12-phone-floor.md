@@ -42,3 +42,10 @@ Read `docs/milestones/f3-line-mockup/LinePhone.dc.html` (the picture: its SVG an
 - no two text labels' boxes overlap, and no label overflows its station's box (a browser test over the text elements' bounding boxes)
 - the colours test still passes (no black fills)
 - `uv run runner check-all --task f3-12-phone-floor` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
