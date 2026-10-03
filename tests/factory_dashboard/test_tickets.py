@@ -258,3 +258,17 @@ def test_ticket_agent_work_order_merger_first_then_minutes(
 def test_ticket_agent_work_absent_when_no_jobs(tickets_client):
     html = tickets_client.get("/tickets/f1-12-escalated").text
     assert re.search(r'<section[^>]*\bid="agent-work"', html, re.S) is None
+
+
+def test_later_tickets_panel_shows_ticket_with_title_and_queue_command(later_client):
+    html = later_client.get("/tickets").text
+    later_section = section_raw(html, "later")
+    assert "f1-99-later" in later_section
+    assert "A set-aside ticket." in later_section
+    assert 'href="/tickets/f1-99-later"' in later_section
+    assert "uv run runner queue f1-99-later" in later_section
+
+
+def test_later_tickets_panel_absent_when_no_later_tickets(tickets_client):
+    html = tickets_client.get("/tickets").text
+    assert re.search(r'<section[^>]*\bid="later"', html, re.S) is None

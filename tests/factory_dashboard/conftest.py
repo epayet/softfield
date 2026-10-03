@@ -1686,3 +1686,36 @@ def models_client(db_path: Path) -> TestClient:
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def write_later(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: one ticket with state ``later``
+    for the Set aside panel tests."""
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-99-later",
+        milestone_id=f1,
+        kind="developer",
+        state="later",
+        difficulty=3,
+        title="A set-aside ticket.",
+    )
+
+
+@pytest.fixture
+def later_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus one later ticket."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_later(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")

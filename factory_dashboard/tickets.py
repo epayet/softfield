@@ -78,6 +78,28 @@ class TicketAgentWork:
     merged: bool = False
 
 
+def list_later_tickets(
+    conn: sqlite3.Connection,
+    project: str,
+) -> list[dict[str, str | None]]:
+    """Tickets set aside (state ``later``) for ``project``, ordered by id."""
+    rows = conn.execute(
+        "SELECT t.ticket, t.title "
+        "FROM tickets t "
+        "JOIN projects p ON p.id = t.project_id "
+        "WHERE p.name = ? AND t.state = 'later' "
+        "ORDER BY t.ticket",
+        (project,),
+    ).fetchall()
+    return [
+        {
+            "ticket": row["ticket"],
+            "title": row["title"],
+        }
+        for row in rows
+    ]
+
+
 def list_tickets(
     conn: sqlite3.Connection,
     project: str,
@@ -324,6 +346,7 @@ def tickets_page(
     state: Annotated[str | None, Query()] = None,
 ) -> HTMLResponse:
     tickets = list_tickets(conn, project, milestone=milestone, state=state, now=now)
+    later_tickets = list_later_tickets(conn, project)
     return render(
         request,
         conn,
@@ -332,6 +355,7 @@ def tickets_page(
         {
             "active": "/tickets",
             "tickets": tickets,
+            "later_tickets": later_tickets,
             "milestone_filter": milestone,
             "state_filter": state,
         },

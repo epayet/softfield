@@ -16,6 +16,24 @@
     <button>Show</button>
   </form>
 
+  {% if later_tickets %}
+  <section id="later" class="panel">
+    <h2>Set aside <span class="src">tickets waiting in tasks/later/</span></h2>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Goal</th><th>Queue</th></tr></thead>
+      <tbody>
+        {% for t in later_tickets %}
+        <tr>
+          <td class="id"><a href="/tickets/{{ t.ticket }}">{{ t.ticket }}</a></td>
+          <td>{{ t.title or "–" }}</td>
+          <td><code>uv run runner queue {{ t.ticket }}</code></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </section>
+  {% endif %}
+
   {% if tickets %}
   <div class="scroll"><table>
     <thead><tr><th>ID</th><th>Milestone</th><th>Kind</th><th class="num">Diff</th><th>State</th><th class="num">Attempts</th><th>Last worked</th><th>Merged by</th><th class="num">Lines</th></tr></thead>
