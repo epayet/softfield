@@ -437,6 +437,48 @@ def test_the_probes_stream_gives_two_readings_and_the_same_result(tmp_path, monk
     assert result.model == "claude-haiku-4-5-20251001"  # its only `modelUsage`
 
 
+def test_a_probe_is_one_short_haiku_call_with_no_tools_and_reads_the_windows(tmp_path, monkeypatch):
+    """f4-07: the cheapest fresh reading. The fixture is a real one: Haiku answering "ok"
+    cost $0.018 (API-equivalent) and its stream carried the `rate_limit_event` first."""
+    seen = _fake_stream(monkeypatch, PROBE.read_text(encoding="utf-8"))
+    result = claude.probe(tmp_path, tmp_path / "log", NOW)
+    [cmd] = seen
+    assert cmd[cmd.index("--model") + 1] == "haiku"
+    # No tool granted, and in dontAsk mode every tool not granted is denied.
+    assert "--allowedTools" not in cmd and "Shell:" not in cmd[2]
+    assert cmd[cmd.index("--permission-mode") + 1] == "dontAsk"
+    assert len(cmd[2]) < 100
+    assert [(r.window, r.utilization) for r in result.readings] == [
+        ("five_hour", 0.07),
+        ("seven_day", 0.79),
+    ]
+    assert result.ok and result.cost_usd == pytest.approx(0.0180713)
+
+
+@pytest.mark.parametrize(
+    ("stream", "returncode"),
+    [
+        (
+            _event(
+                status="rejected",
+                rateLimitType="five_hour",
+                resetsAt=1790883600,
+                unifiedWindows={"five_hour": {"utilization": 1.0, "resetsAt": 1790883600}},
+            )
+            + '\n{"type": "result", "is_error": true, "api_error_status": 429, "result": "x"}',
+            1,
+        ),
+        ("Error: getaddrinfo ENOTFOUND api.anthropic.com", 1),
+    ],
+)
+def test_a_probe_never_raises_and_keeps_what_it_read(tmp_path, monkeypatch, stream, returncode):
+    """A refused probe or a passing error is a failed probe, with whatever its stream read."""
+    _fake_stream(monkeypatch, stream, returncode)
+    result = claude.probe(tmp_path, tmp_path / "log", NOW)
+    assert not result.ok
+    assert [r.utilization for r in result.readings] == ([1.0] if "rejected" in stream else [])
+
+
 def _message_from(model: str, parent: str | None = None) -> str:
     message = {"id": f"msg-{model}", "model": model, "usage": {"output_tokens": 1}}
     return json.dumps({"type": "assistant", "message": message, "parent_tool_use_id": parent})

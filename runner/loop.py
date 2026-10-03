@@ -31,7 +31,7 @@ from runner.agents import (
     Reading,
     adapter_for,
 )
-from runner.claude import Progress, backoff_seconds
+from runner.claude import Progress, backoff_seconds, probe
 from runner.config import Config, read_protected
 from runner.gates import (
     BLOCKED_FILE,
@@ -197,6 +197,7 @@ class Session:
     # What the run says it does outside a job, and until when it waits (`set_activity`).
     activity: str | None = None
     waiting_until: datetime | None = None
+    probed: bool = False  # a fresh reading of Claude's windows was taken (f4-07)
 
     @property
     def repo(self) -> Path:
@@ -2798,6 +2799,73 @@ def rested_claude_windows(s: Session, at: datetime) -> list[allowance.Window]:
     return [_rested(w, rows, at) for w in claude_windows(s, at)]
 
 
+PROBE_AGENT = "claude-haiku"  # the probe's model, and its readings' agent (f4-07)
+PROBE_ROLE = "probe"
+STALE_READING = timedelta(minutes=10)
+
+
+def fresh_reading(s: Session) -> None:
+    """Before Claude work, a fresh reading of its windows when the latest is over
+    ``STALE_READING`` old (f4-07): readings are only taken while a Claude job runs, so a new
+    session went by the last one's and once parked a lead ticket at the owner's share of the
+    5-hour window when it had room (the owner, 2026-10-02). At most once per session; a probe
+    that reads nothing leaves the stored reading to decide, and says so."""
+    if s.probed or not lead_work_ready(s):
+        return
+    rows = (_record(s, metrics.latest_readings, f"{CLAUDE}-") or {}).values()
+    if not rows:
+        return  # nothing stored to correct: no window holds Claude back
+    stored = max(_at(row["at"]) for row in rows)
+    at = now()
+    if at - stored < STALE_READING:
+        return
+    s.probed = True
+    log = s.run_dir / f"claude-{PROBE_ROLE}.log"
+    job_id = None
+    if s.run_id is not None:
+        job_id = _record(
+            s,
+            metrics.start_job,
+            s.run_id,
+            ticket_id=None,
+            milestone_id=None,
+            role=PROBE_ROLE,
+            agent=PROBE_AGENT,
+            attempt=1,
+            started=at.isoformat(),
+            log_path=_rel(s, log),
+        )
+    with doing(s, "reading Claude's windows"):
+        result = probe(s.repo, log, at)
+    _record_readings(s, PROBE_AGENT, result.readings)
+    error = "" if result.ok else result.text.strip()[:200]
+    why = "" if result.readings else error or "no rate_limit_event"
+    if job_id is not None:
+        _record(
+            s,
+            metrics.finish_job,
+            job_id,
+            ended=now().isoformat(),
+            outcome="failed" if why else "passed",
+            tokens_in=result.usage.get("input_tokens", 0),
+            tokens_cached=result.usage.get("cache_read_input_tokens", 0),
+            tokens_out=result.usage.get("output_tokens", 0),
+            cost_usd=result.cost_usd,
+            steps=result.num_turns,
+            note=why or None,
+            session_id=result.session_id,
+            model=result.model or None,
+        )
+    if why:
+        s.log(
+            f"[{PROBE_AGENT}] no fresh reading of Claude's windows ({why}):"
+            f" going by the stored one from {stored:%H:%M}"
+        )
+        return
+    read = ", ".join(f"{r.window} {r.utilization:.0%}" for r in result.readings)
+    s.log(f"[{PROBE_AGENT}] fresh reading of Claude's windows: {read}")
+
+
 @dataclass(frozen=True)
 class Hold:
     """Why Claude may not take a support job now, and until when."""
@@ -3161,6 +3229,7 @@ def work_queue(
             set_activity(s, "restarting after a runner change")
             return True
         set_activity(s, PICKING)
+        fresh_reading(s)
         if _resume_support(s, escalate=escalate):
             continue
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)

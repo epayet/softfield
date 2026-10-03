@@ -307,8 +307,7 @@ def run_claude(
         job.permission_mode,
         *(("--model", job.model) if job.model else ()),
         *(("--resume", resume) if resume else ()),
-        "--allowedTools",
-        *job.allowed_tools,
+        *(("--allowedTools", *job.allowed_tools) if job.allowed_tools else ()),
     ]
     started = time.monotonic()
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -364,6 +363,22 @@ def run_claude(
         readings=readings,
         model=stream_model(stdout.splitlines()) or "",
     )
+
+
+# A fresh reading of Claude's windows (f4-07): the cheapest call whose stream carries a
+# `rate_limit_event`. One real Haiku "ok" cost $0.018 API-equivalent, ~21k tokens, mostly
+# Claude Code's own cached prompt (tests/runner/fixtures/probes/claude-stream.jsonl).
+PROBE_JOB = ClaudeJob("probe", "Reply with the single word: ok", (), model="haiku")
+PROBE_TIMEOUT = 120  # seconds
+
+
+def probe(repo: Path, log_path: Path, now: datetime) -> JobResult:
+    """One `PROBE_JOB`. It never raises: a limit or a passing error is a failed result, with
+    whatever its stream read."""
+    try:
+        return run_claude(PROBE_JOB, repo, PROBE_TIMEOUT, log_path, now)
+    except (UsageLimited, TransientError) as exc:
+        return JobResult(ok=False, text=str(exc), duration_s=0.0, readings=exc.readings)
 
 
 class ClaudeAdapter:

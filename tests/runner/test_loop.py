@@ -73,6 +73,16 @@ def _new_command(monkeypatch):
     monkeypatch.setattr(loop, "OPEN_RUNS", [])  # and its runs, which its exit ends
 
 
+REAL_FRESH_READING = loop.fresh_reading
+
+
+@pytest.fixture(autouse=True)
+def _no_probe(monkeypatch):
+    """No fresh reading of Claude's windows (f4-07), unless a test asks for one: the stored
+    readings decide, and no real `claude -p` runs."""
+    monkeypatch.setattr(loop, "fresh_reading", lambda s: None)
+
+
 class Script(list[Callable[[Path, str], object]]):
     """The scripted runs, in order, and the model each call asked for."""
 
@@ -2954,10 +2964,13 @@ FIVE_HOUR_QUESTION = (
 )
 
 
-def _claude_at(repo: Path, five_hour: float, week: float = 0.10) -> None:
-    """Claude's latest readings: the 5-hour window resets at 14:00, the week on Monday."""
+def _claude_at(
+    repo: Path, five_hour: float, week: float = 0.10, age: timedelta = timedelta(minutes=30)
+) -> None:
+    """Claude's latest readings, ``age`` old: the 5-hour window resets at 14:00, the week on
+    Monday."""
     conn = metrics.open_db(_config(repo).metrics_db)
-    at = (THURSDAY - timedelta(minutes=30)).isoformat()
+    at = (THURSDAY - age).isoformat()
     for window, value, resets in (
         ("five_hour", five_hour, FIVE_RESETS),
         ("seven_day", week, MONDAY),
@@ -3354,6 +3367,129 @@ def test_a_fix_ticket_from_a_read_only_finding_stays_a_developer_ticket_in_the_r
     from runner.tasks import preflight
 
     assert preflight(task, repo) == []
+
+
+# --- a fresh reading of Claude's windows at the start of a session (f4-07) ---------------
+
+
+def _fresh_claude(
+    monkeypatch, probe: Callable[[], JobResult]
+) -> tuple[list[ClaudeJob], list[datetime]]:
+    """Headless Claude faked: the probe answers with ``probe()``; a lead ticket implements and
+    takes 20 minutes. Returns the jobs, and when the probes ran."""
+    monkeypatch.setattr(loop, "fresh_reading", REAL_FRESH_READING)
+    jobs: list[ClaudeJob] = []
+    probed: list[datetime] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        jobs.append(job)
+        if job.kind == "probe":
+            probed.append(loop.now())
+            return probe()
+        _lead_writes(repo_, f"lead{len(jobs)}")
+        time.sleep(20 * 60)
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    return jobs, probed
+
+
+def _probe_reads(five_hour: float) -> JobResult:
+    readings = (Reading("five_hour", five_hour, FIVE_RESETS), Reading("seven_day", 0.10, MONDAY))
+    return JobResult(
+        ok=True,
+        text="ok",
+        duration_s=1.2,
+        usage={"input_tokens": 10, "output_tokens": 48, "cache_read_input_tokens": 12413},
+        num_turns=1,
+        cost_usd=0.018,
+        readings=readings,
+        model="claude-haiku-4-5-20251001",
+    )
+
+
+def test_a_fresh_reading_under_the_owners_share_runs_the_lead_ticket_without_asking(
+    repo, fake_clock, owner_answers, monkeypatch
+):
+    """The owner, 2026-10-02: a run began at the owner's share of the 5-hour window, from the
+    last session's reading, when the window had room."""
+    _claude_at(repo, 0.80)
+    _lead_task(repo, "m1-01-lead")
+    _lead_task(repo, "m1-02-lead")
+    _passes(monkeypatch)
+    jobs, probed = _fresh_claude(monkeypatch, lambda: _probe_reads(0.20))
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-01-lead", "done"),
+        ("m1-02-lead", "done"),
+    ]
+    assert owner_answers[1] == [] and _state(repo).parked == {}
+    # Once per session: the second lead ticket, 20 minutes on, goes by the probe's reading.
+    assert [j.kind for j in jobs] == ["probe", "lead-ticket", "lead-ticket"]
+    assert probed == [THURSDAY]
+    assert (jobs[0].model, jobs[0].allowed_tools) == ("haiku", ())
+    probe = next(j for j in _rows(repo, "jobs") if j["role"] == "probe")
+    assert (probe["agent"], probe["outcome"], probe["ticket_id"]) == (
+        "claude-haiku",
+        "passed",
+        None,
+    )
+    assert (probe["cost_usd"], probe["model"]) == (0.018, "claude-haiku-4-5-20251001")
+    fresh = [e for e in _rows(repo, "usage_events") if e["agent"] == "claude-haiku"]
+    assert {(e["window"], e["value"]) for e in fresh} == {("five_hour", 0.2), ("seven_day", 0.1)}
+
+
+def test_no_probe_without_claude_work(repo, fake_model, fake_clock, monkeypatch):
+    _claude_at(repo, 0.80)
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    jobs, _ = _fresh_claude(monkeypatch, lambda: _probe_reads(0.20))
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"]
+    assert jobs == []
+
+
+def test_no_probe_when_the_reading_is_under_ten_minutes_old(
+    repo, fake_clock, owner_answers, monkeypatch
+):
+    _claude_at(repo, 0.80, age=timedelta(minutes=9))
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    owner_answers[0].append("y")
+    jobs, _ = _fresh_claude(monkeypatch, lambda: _probe_reads(0.20))
+    report = _run(repo)
+    assert [j.kind for j in jobs] == ["lead-ticket"]
+    assert len(owner_answers[1]) == 1  # the 80% stood: asked
+    assert [t.result for t in report.tasks] == ["done"]
+
+
+@pytest.mark.parametrize(
+    ("probe", "why"),
+    [
+        (lambda: JobResult(ok=True, text="ok", duration_s=1.0), "no rate_limit_event"),
+        (
+            lambda: JobResult(ok=False, text="Connection error.", duration_s=0.0, transient=True),
+            "Connection error.",
+        ),
+    ],
+)
+def test_a_failed_probe_falls_back_to_the_stored_reading(
+    repo, fake_clock, owner_answers, monkeypatch, capsys, probe, why
+):
+    _claude_at(repo, 0.80)
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    owner_answers[0].append("y")
+    jobs, _ = _fresh_claude(monkeypatch, probe)
+    report = _run(repo)
+    assert [j.kind for j in jobs] == ["probe", "lead-ticket"]
+    out = capsys.readouterr().out
+    assert f"no fresh reading of Claude's windows ({why})" in out
+    assert "the stored one from 11:30" in out
+    assert FIVE_HOUR_QUESTION in out and len(owner_answers[1]) == 1
+    assert [t.result for t in report.tasks] == ["done"]
+    [probe_job] = [j for j in _rows(repo, "jobs") if j["role"] == "probe"]
+    assert probe_job["outcome"] == "failed"
 
 
 def test_a_finding_on_no_known_ticket_gets_no_fix_ticket(repo):
