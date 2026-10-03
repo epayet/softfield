@@ -7,7 +7,7 @@ import sys
 from datetime import date, datetime
 from pathlib import Path
 
-from runner import backfill, bench, checks, copilot, i18n, loop, metrics, owner, report
+from runner import backfill, bench, checks, copilot, i18n, loop, metrics, owner, procs, report
 from runner.config import load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
@@ -48,6 +48,7 @@ def _restart() -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
+    procs.stop_on_sigterm()
     parser = argparse.ArgumentParser(prog="runner", description=__doc__)
     sub = parser.add_subparsers(dest="command")
     run = sub.add_parser("run", help="work through tasks/ready (the default)")
