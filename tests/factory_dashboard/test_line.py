@@ -114,8 +114,34 @@ def test_the_stations_and_belts_are_d11s(line_db):
     ]  # fmt: skip
     assert [s["id"] for s in doc["stations"]] == list(STATIONS)
     assert [b["id"] for b in doc["belts"]] == list(BELTS)
-    assert doc["clog"] is None  # f3-04's
     assert doc["at"] == LINE_NOW.isoformat()
+
+
+def test_the_document_says_what_clogged_the_line_today(line_db):
+    # The run lived 09:00–14:00; jobs ran 09:00–09:40 (the lead), 10:00–10:10 (a checkpoint)
+    # and 13:48 on (Qwen); Claude was refused at 13:30. Nothing failed, nothing for the owner.
+    assert document(line_db)["clog"] == {
+        "limit": 30,
+        "failed": 0,
+        "failures": 0,
+        "idle": [
+            {"agent": LOCAL, "name": "qwen3.6-35b-a3b", "minutes": 50, "share": 0.17},
+            {"agent": GPT_OSS, "name": "gpt-oss-120b", "minutes": 62, "share": 0.21},
+        ],
+        "owner": 0,
+        "live": 300,
+    }
+
+
+def test_the_clog_at_a_past_moment_counts_up_to_it(line_db):
+    conn = connect(line_db)
+    try:
+        doc = live_line(conn, PROJECT, LINE_NOW, at=LINE_NOW - timedelta(hours=4))
+    finally:
+        conn.close()
+    # at 10:00: the run had lived an hour, the lead's 40 min of it; no limit yet
+    assert doc["clog"]["live"] == 60 and doc["clog"]["limit"] == 0
+    assert [i["minutes"] for i in doc["clog"]["idle"]] == [40, 40]
 
 
 def test_the_developers_qwen_machine_works_on_its_crate(line_db):

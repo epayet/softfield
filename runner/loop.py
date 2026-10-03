@@ -516,9 +516,15 @@ def doing(s: Session, activity: str, waiting_until: datetime | None = None) -> I
 WAITING_FOR_CLAUDE = "waiting for Claude"
 
 
-def wait_for_claude(s: Session, seconds: float, resumes: datetime, what: str | None) -> None:
+def wait_for_claude(
+    s: Session, seconds: float, resumes: datetime, what: str | None, limit: bool = True
+) -> None:
     """Sleep through a pause for Claude (a limit, a passing error, nothing to run without
-    it), the run saying so, and for what, until it ends."""
+    it), the run saying so, and for what, until it ends. A wait for a ``limit`` is kept as a
+    ``wait`` usage event, from now to ``resumes``: what clogged the line (f3-04)."""
+    if limit:
+        at = now().isoformat()
+        _record(s, metrics.add_usage_event, RUNNER_AGENT, at, "wait", resets_at=resumes.isoformat())
     waiting = f"{WAITING_FOR_CLAUDE} · {what}" if what else WAITING_FOR_CLAUDE
     with doing(s, f"{waiting} until {resumes:%H:%M}", resumes):
         time.sleep(seconds)
@@ -1141,7 +1147,7 @@ def call_claude(
             at = now()
             resumes = at + timedelta(seconds=pause)
             s.log(console.paused(agent, f"interrupted ({result.text})", resumes, at))
-            wait_for_claude(s, pause, resumes, ticket or subject)
+            wait_for_claude(s, pause, resumes, ticket or subject, limit=False)
             continue
         if (limit := result.refusal) is not None:  # a limit (ADR 15 item 12)
             if not limit.certain:

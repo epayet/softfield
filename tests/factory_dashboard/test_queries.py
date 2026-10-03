@@ -1,9 +1,14 @@
 import sqlite3
+from collections.abc import Iterator
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import pytest
 
 from factory_dashboard.queries import (
     SEED_DOLLARS_PER_LINE,
+    Idle,
+    clog,
     connect,
     eligibility,
     milestone_results,
@@ -42,6 +47,141 @@ def test_run_order_is_pick_next_applied_again_and_again(line_db):
 def test_run_order_of_an_empty_queue(db):
     assert run_order(db, PROJECT) == []
     assert run_order(db, "elsewhere") == []
+
+
+# --- what clogged the line (f3-04) -----------------------------------------------------------
+
+ZONE = timezone(timedelta(hours=2))
+MIDNIGHT = datetime(2026, 10, 3, tzinfo=ZONE)
+NOON = MIDNIGHT + timedelta(hours=12)
+GPT_OSS, NEMOTRON = "ollama-gpt-oss-120b", "ollama-nemotron-3-super"
+
+
+def _clock(hhmm: str) -> str:
+    return f"2026-10-03T{hhmm}:00+02:00"
+
+
+@pytest.fixture
+def clog_db(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    """A day (2026-10-03, +02:00) of one run, 09:00–10:40, with three developer machines:
+    - the lead's ``f6-01-lead`` on Opus 09:00–09:10, parked by a limit that resets at 09:40;
+    - ``f6-02-dev`` on Qwen: failed 09:40–09:52 and 09:52–10:11, passed 10:11–10:20;
+    - GPT-OSS and Nemotron ran nothing today (Nemotron failed a ticket yesterday)."""
+    path = tmp_path / "clog.sqlite"
+    conn = metrics.open_db(path)
+    project = metrics.upsert_project(conn, PROJECT)
+    f6 = metrics.upsert_milestone(conn, project, "f6")
+    run = metrics.upsert_run(
+        conn, project, "20261003-090000", started=_clock("09:00"), ended=_clock("10:40")
+    )
+
+    def job(
+        ticket: int, role: str, agent: str, n: int, span: tuple[str, str], outcome: str,
+        note: str | None = None,
+    ) -> None:  # fmt: skip
+        start, stop = span
+        started = start if "T" in start else _clock(start)
+        job_id = metrics.start_job(
+            conn, run, ticket_id=ticket, milestone_id=f6, role=role, agent=agent, attempt=n,
+            started=started,
+        )  # fmt: skip
+        ended = stop if "T" in stop else _clock(stop)
+        metrics.finish_job(conn, job_id, ended=ended, outcome=outcome, note=note)
+
+    lead = metrics.upsert_ticket(conn, project, "f6-01-lead", milestone_id=f6, kind="lead")
+    job(lead, "lead-ticket", OPUS, 1, ("09:00", "09:10"), outcome="failed", note="parked")
+    metrics.add_usage_event(
+        conn, OPUS, _clock("09:10"), "refusal", window="five_hour", resets_at=_clock("09:40")
+    )
+    dev = metrics.upsert_ticket(conn, project, "f6-02-dev", milestone_id=f6, kind="developer")
+    job(dev, "developer", LOCAL, 1, ("09:40", "09:52"), outcome="failed")
+    job(dev, "developer", LOCAL, 2, ("09:52", "10:11"), outcome="failed")
+    job(dev, "last-attempt", LOCAL, 3, ("10:11", "10:20"), outcome="passed")
+    old = metrics.upsert_ticket(conn, project, "f6-00-old", milestone_id=f6, kind="developer")
+    yesterday = ("2026-10-02T15:00:00+02:00", "2026-10-02T15:30:00+02:00")
+    job(old, "developer", NEMOTRON, 1, yesterday, outcome="failed")
+    conn.close()
+    reading = connect(path)
+    try:
+        yield reading
+    finally:
+        reading.close()
+
+
+def _write(conn: sqlite3.Connection) -> sqlite3.Connection:
+    """A writable connection on the same database as the read-only ``conn``."""
+    [(_, _, file)] = conn.execute("PRAGMA database_list").fetchall()
+    return metrics.open_db(Path(file))
+
+
+def test_clog_counts_the_park_the_failed_attempts_and_the_idle_machines(clog_db):
+    found = clog(clog_db, PROJECT, MIDNIGHT, NOON, machines=[LOCAL, GPT_OSS, NEMOTRON])
+    assert (found.limit, found.failed, found.failures, found.owner) == (30, 31, 2, 0)
+    # The runner lived 100 min; a job ran for 50 of them (09:00–09:10, 09:40–10:20): Qwen sat
+    # idle through the lead's 10, the other two through all 50.
+    assert found.live == 100
+    assert found.idle == (
+        Idle(LOCAL, 10, 0.1),
+        Idle(GPT_OSS, 50, 0.5),
+        Idle(NEMOTRON, 50, 0.5),
+    )
+
+
+def test_clog_finds_the_developer_machines_itself(clog_db):
+    found = clog(clog_db, PROJECT, MIDNIGHT, NOON)
+    assert [i.agent for i in found.idle] == [LOCAL, NEMOTRON]  # those that ran a developer job
+
+
+def test_clog_counts_only_what_lies_after_since_and_before_now(clog_db):
+    found = clog(clog_db, PROJECT, MIDNIGHT, MIDNIGHT + timedelta(hours=9, minutes=55))
+    # at 09:55: the whole park and the first failure; the second attempt hasn't failed yet
+    assert (found.limit, found.failed, found.failures, found.live) == (30, 12, 1, 55)
+    later = clog(clog_db, PROJECT, MIDNIGHT + timedelta(hours=9, minutes=30), NOON)
+    assert (later.limit, later.failed, later.live) == (10, 31, 70)
+
+
+def test_a_wait_for_claude_counts_once_with_the_limit_and_only_while_the_runner_lives(clog_db):
+    writing = _write(clog_db)
+    try:
+        # the runner waited for the reset, a minute past it: the overlap counts once
+        metrics.add_usage_event(
+            writing, "runner", _clock("09:10"), "wait", resets_at=_clock("09:41")
+        )
+        # a hold with no refusal (Claude's reserve), cut short when the run ended at 10:40
+        metrics.add_usage_event(
+            writing, "runner", _clock("10:30"), "wait", resets_at=_clock("11:30")
+        )
+        # a passing error isn't a limit; Ollama's refusal isn't Claude's
+        metrics.add_usage_event(writing, "runner", _clock("10:20"), "transient")
+        metrics.add_usage_event(
+            writing, GPT_OSS, _clock("10:00"), "refusal", resets_at=_clock("10:20")
+        )
+    finally:
+        writing.close()
+    assert clog(clog_db, PROJECT, MIDNIGHT, NOON).limit == 31 + 10
+
+
+def test_clog_counts_the_owners_open_items_while_no_job_ran(clog_db):
+    writing = _write(clog_db)
+    project = writing.execute("SELECT id FROM projects").fetchone()[0]
+    try:
+        # open 10:15–10:30 (a job ran until 10:20), and from 11:00 on, two items at once
+        first = metrics.upsert_owner_item(
+            writing, project, "blocked", "f6-03", created=_clock("10:15")
+        )
+        metrics.resolve_owner_item(writing, first, _clock("10:30"))
+        metrics.upsert_owner_item(writing, project, "signoff", "f6", created=_clock("11:00"))
+        metrics.upsert_owner_item(writing, project, "escalated", "f6-04", created=_clock("11:30"))
+    finally:
+        writing.close()
+    assert clog(clog_db, PROJECT, MIDNIGHT, NOON).owner == 10 + 60
+
+
+def test_a_day_with_no_runs_gives_zeros(db):
+    found = clog(db, PROJECT, MIDNIGHT, NOON, machines=[LOCAL])
+    assert (found.limit, found.failed, found.owner, found.live) == (0, 0, 0, 0)
+    assert found.idle == (Idle(LOCAL, 0, 0.0),)
+    assert clog(db, "elsewhere", MIDNIGHT, NOON).idle == ()
 
 
 def test_milestone_results_count_what_a_person_would(db):

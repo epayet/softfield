@@ -1633,9 +1633,10 @@ def test_a_usage_limit_pause_is_a_refusal_event(repo, monkeypatch):
     _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), done)
     s = loop.open_session(_config(repo))
     loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
-    [event] = _rows(repo, "usage_events")
+    [event, wait] = _rows(repo, "usage_events")  # and the runner's wait for it (f3-04)
     assert (event["agent"], event["kind"]) == ("claude-opus", "refusal")
     assert event["resets_at"] == resets.isoformat()
+    assert (wait["agent"], wait["kind"]) == ("runner", "wait")
 
 
 def _readings(five_hour: float, seven_day: float) -> tuple[Reading, ...]:
@@ -1675,6 +1676,7 @@ def test_a_refusal_names_its_window_and_keeps_the_readings_before_it(repo, monke
         ("refusal", "five_hour"),
         ("reading", "five_hour"),
         ("reading", "seven_day"),
+        ("wait", None),  # the runner's wait for the reset (f3-04)
     }
     assert events["refusal", "five_hour"]["resets_at"] == resets.isoformat()
     assert events["reading", "five_hour"]["value"] == 1.0
@@ -2534,6 +2536,22 @@ def test_a_pause_for_a_limit_or_a_passing_error_shows_on_the_run_until_it_ends(r
         f"waiting for Claude · m1-01-lead until {at:%H:%M}" for at in until
     ]
     assert _activity(repo) == before  # what the run did before the wait
+
+
+def test_a_wait_for_a_limit_is_kept_but_not_a_pause_for_a_passing_error(repo, monkeypatch):
+    """f3-04: ``waiting_until`` is cleared when the wait ends, so the minutes the line lost
+    to Claude's limit are kept as a ``wait`` usage event, from its start to when it resumes."""
+    resets = loop.now() + timedelta(hours=1)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    blip = TransientError("Connection error.", session_id="s1")
+    _limited_then(monkeypatch, UsageLimited(resets, session_id="s1"), blip, done)
+    seen: list[tuple[object, object]] = []
+    monkeypatch.setattr("time.sleep", lambda seconds: seen.append(_activity(repo)))
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead", ticket="m1-01-lead")
+    waits = [e for e in _rows(repo, "usage_events") if e["kind"] == "wait"]
+    assert [(e["agent"], e["resets_at"]) for e in waits] == [("runner", seen[0][1])]
+    assert str(waits[0]["at"]) < str(seen[0][1])
 
 
 def test_the_run_says_what_it_does_between_two_tickets(repo, fake_model, monkeypatch):

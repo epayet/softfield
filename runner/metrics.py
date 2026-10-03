@@ -606,7 +606,8 @@ def add_usage_event(
     value: float | None = None,
     resets_at: str | None = None,
 ) -> int:
-    """A refusal, a reset or a reading (f1-44: a window's share used, 0–1) of ``window``."""
+    """A refusal, a reset or a reading (f1-44: a window's share used, 0–1) of ``window``, or
+    the runner's ``wait`` for Claude's limit until ``resets_at`` (f3-04)."""
     key: dict[str, Value] = {"agent": agent, "at": at, "kind": kind, "window": window}
     conflict = "agent, at, kind, ifnull(\"window\", '')"
     return _upsert(conn, "usage_events", conflict, key, _given(value=value, resets_at=resets_at))

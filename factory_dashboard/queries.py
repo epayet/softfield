@@ -14,7 +14,7 @@ import sqlite3
 from collections import Counter, defaultdict
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from runner.tasks import Task, blocked_ids, milestone_order, pick_next
@@ -571,6 +571,165 @@ def run_order(
         )
         for t in [*picked, *left]
     ]
+
+
+# --- what clogged the line (f3 D11, f3-04) --------------------------------------------------
+
+LIVE = timedelta(minutes=2)  # an unfinished run or job lives until its last heartbeat, plus this
+NOT_ATTEMPTS = ("parked", "interrupted", "refused", "transient")  # notes of jobs that stopped short
+
+type Span = tuple[datetime, datetime]
+
+
+@dataclass(frozen=True)
+class Idle:
+    """A developer machine's minutes without a job of its own while another job ran, and their
+    share of the runner's live time."""
+
+    agent: str
+    minutes: int
+    share: float
+
+
+@dataclass(frozen=True)
+class Clog:
+    """Where the line's time went between ``since`` and ``now``, in minutes (D11)."""
+
+    limit: int  # waiting for Claude's limit, while a runner lived
+    failed: int  # failed developer attempts
+    failures: int  # how many
+    idle: tuple[Idle, ...]  # per developer machine
+    owner: int  # an owner item open while no job ran
+    live: int  # the runner's live time
+
+
+def _time(at: str) -> datetime:
+    moment = datetime.fromisoformat(at)
+    return moment if moment.tzinfo else moment.replace(tzinfo=UTC)
+
+
+def _until(ended: str | None, heartbeat: str | None) -> datetime | None:
+    if ended:
+        return _time(ended)
+    return _time(heartbeat) + LIVE if heartbeat else None
+
+
+def _union(spans: Iterable[Span]) -> list[Span]:
+    merged: list[Span] = []
+    for start, end in sorted(s for s in spans if s[0] < s[1]):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], end))
+        else:
+            merged.append((start, end))
+    return merged
+
+
+def _overlap(a: Sequence[Span], b: Sequence[Span]) -> list[Span]:
+    return _union((max(s, t), min(e, f)) for s, e in a for t, f in b)
+
+
+def _without(a: Sequence[Span], b: Sequence[Span]) -> list[Span]:
+    """``a`` less ``b``; ``b`` is a union."""
+    found = []
+    for start, end in a:
+        cursor = start
+        for s, e in b:
+            if e <= cursor or s >= end:
+                continue
+            if s > cursor:
+                found.append((cursor, s))
+            cursor = max(cursor, e)
+        if cursor < end:
+            found.append((cursor, end))
+    return found
+
+
+def _minutes(spans: Iterable[Span]) -> float:
+    return sum((end - start).total_seconds() for start, end in spans) / 60
+
+
+def clog(
+    conn: sqlite3.Connection,
+    project: str,
+    since: datetime,
+    now: datetime,
+    machines: Sequence[str] | None = None,
+) -> Clog:
+    """What clogged the line between ``since`` and ``now`` (D11 says what each number counts):
+    Claude's limit while a runner lived, failed developer attempts, each developer machine
+    (``machines``; default: the agents that ran a developer job) idle while another job ran,
+    and the owner's open items while no job ran. Only what had happened by ``now`` counts."""
+    window = [(since, now)]
+    runs = conn.execute(
+        "SELECT r.started, r.ended, r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"
+        " WHERE p.name = ? AND r.started IS NOT NULL",
+        (project,),
+    ).fetchall()
+    live = _overlap(
+        _union(
+            (_time(r["started"]), until)
+            for r in runs
+            if (until := _until(r["ended"], r["heartbeat"])) is not None
+        ),
+        window,
+    )
+
+    jobs = conn.execute(
+        "SELECT j.agent, j.role, j.started, j.ended, j.outcome, j.note, r.heartbeat FROM jobs j"
+        " JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
+        " WHERE p.name = ? AND j.started IS NOT NULL",
+        (project,),
+    ).fetchall()
+    spans: dict[str, list[Span]] = defaultdict(list)
+    failed: list[Span] = []
+    for j in jobs:
+        until = _until(j["ended"], j["heartbeat"])
+        if until is None:
+            continue
+        span = (_time(j["started"]), until)
+        spans[j["agent"]].append(span)
+        if (
+            j["role"] in LOCAL_ROLES
+            and j["outcome"] == "failed"
+            and j["note"] not in NOT_ATTEMPTS
+            and until <= now  # it had failed by then
+        ):
+            failed.append(span)
+    lost = [clipped for span in failed if (clipped := _overlap([span], window))]
+    busy = _union(s for own in spans.values() for s in own)
+
+    limits = conn.execute(
+        "SELECT at, resets_at FROM usage_events WHERE resets_at IS NOT NULL"
+        " AND ((kind = 'refusal' AND agent LIKE ?) OR kind = 'wait')",
+        (LEAD_PREFIX + "%",),
+    ).fetchall()
+    limit = _overlap(_union((_time(r["at"]), _time(r["resets_at"])) for r in limits), live)
+
+    items = conn.execute(
+        "SELECT i.created, i.resolved FROM owner_items i JOIN projects p ON p.id = i.project_id"
+        " WHERE p.name = ? AND i.created IS NOT NULL",
+        (project,),
+    ).fetchall()
+    opened = _union(
+        (_time(r["created"]), _time(r["resolved"]) if r["resolved"] else now) for r in items
+    )
+    owner = _without(_overlap(opened, window), busy)
+
+    if machines is None:
+        machines = sorted({j["agent"] for j in jobs if j["role"] in LOCAL_ROLES})
+    alive, working = _minutes(live), _overlap(busy, live)
+    idle = []
+    for agent in machines:
+        minutes = _minutes(_without(working, _union(spans.get(agent, []))))
+        idle.append(Idle(agent, round(minutes), round(minutes / alive, 2) if alive else 0.0))
+    return Clog(
+        limit=round(_minutes(limit)),
+        failed=round(sum(_minutes(part) for part in lost)),
+        failures=len(lost),
+        idle=tuple(idle),
+        owner=round(_minutes(owner)),
+        live=round(alive),
+    )
 
 
 def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:

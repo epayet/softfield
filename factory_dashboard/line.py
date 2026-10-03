@@ -634,7 +634,30 @@ def live_line(
         "merged": merged,
         "field": field,
         "now": {"working": now_working, "next": queue[:3]},
-        "clog": None,  # f3-04: what clogged the line today
+        "clog": _clog(conn, project, machines, midnight, at),
+    }
+
+
+def _clog(
+    conn: sqlite3.Connection,
+    project: str,
+    machines: Sequence[dict[str, Any]],
+    since: datetime,
+    at: datetime,
+) -> dict[str, Any]:
+    """What clogged the line from ``since`` to ``at`` (f3-04), for the floor's developers."""
+    names = {m["id"]: m["name"] for m in machines if m["station"] == "developers"}
+    found = queries.clog(conn, project, since, at, machines=list(names))
+    return {
+        "limit": found.limit,
+        "failed": found.failed,
+        "failures": found.failures,
+        "idle": [
+            {"agent": i.agent, "name": names[i.agent], "minutes": i.minutes, "share": i.share}
+            for i in found.idle
+        ],
+        "owner": found.owner,
+        "live": found.live,
     }
 
 
