@@ -29,3 +29,10 @@ Read `docs/adr/17-always-on-factory.md` item 3, `runner/loop.py` (`TICKET_FOLDER
 - `sync_tickets` records a later ticket with state `later`
 - `runner queue m4-12` moves m4-12 to `tasks/ready/` and commits; an unknown or ambiguous id prints the choices and changes nothing
 - `uv run runner check-all --task f4-09-later-folder` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
