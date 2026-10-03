@@ -23,7 +23,7 @@ Read `docs/milestones/f3.md` D10 (the trips, idle stretches over 40 min) and D11
   - a card changing stage;
   - a limit starting or ending.
 
-  `factory.js` (f3-07) only steps through it.
+  `factory_dashboard/static/factory.js` (f3-07) only steps through it.
 - **`live_line(..., at=None)`** gives the document at any past moment: the same rules, from the jobs and runs whose times cover `at`.
 - **Idle stretches** over 40 min become one event with their real length (D10), so a night replays in minutes.
 - A preset for the owner: "overnight" is from the last time the dashboard was opened (a cookie the page sets, or 20:00 yesterday) until now.

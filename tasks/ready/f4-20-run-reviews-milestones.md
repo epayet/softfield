@@ -26,7 +26,7 @@ Read `docs/adr/17-always-on-factory.md` (item 4: `runner run` is the standing co
   - it has no review yet.
 
   Run it as `run_milestone` does after its queue (same caps, same stop rules), record its verdict, then go back to the queue. One review at a time.
-- **Restarts:** a review that changes runner/ restarts the command like a ticket does. The review's state lives in `state.json` (`review_counts`), so the restarted run carries on with it.
+- **Restarts:** a review that changes runner/ restarts the command like a ticket does. The review's state lives in the runner's state file (`review_counts` in `var/runs/state.json`), so the restarted run carries on with it.
 - `runner milestone <key>` keeps working as it is.
 
 ### Done when
