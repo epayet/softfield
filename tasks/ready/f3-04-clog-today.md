@@ -1,7 +1,7 @@
 ---
 id: f3-04-clog-today
 milestone: f3
-depends_on: [f3-01-factory-line]
+depends_on: [f3-07-replay-controls]
 agent: lead
 difficulty: 5
 files:
