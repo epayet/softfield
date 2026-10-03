@@ -11,6 +11,9 @@
       <span>{{ job.role }}</span>
       <a href="/jobs/{{ job.job }}{{ q }}">job {{ job.job }} ›</a>
     </div>
+    {% if job.title %}
+    <div class="running-title">{{ job.title }}</div>
+    {% endif %}
     <dl class="kv">
       <dt>Elapsed</dt><dd class="mono">{{ job.elapsed | ago }}</dd>
       {% if job.difficulty %}<dt>Difficulty</dt><dd class="mono">{{ job.difficulty }}</dd>{% endif %}
@@ -35,6 +38,9 @@
       <span>Running</span>
       {% endif %}
     </div>
+    {% if run.title %}
+    <div class="running-title">{{ run.title }}</div>
+    {% endif %}
   </div>
   {% else %}
   <p class="sub">Nothing is running.</p>

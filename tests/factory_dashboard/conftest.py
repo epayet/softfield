@@ -198,6 +198,7 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
         kind="developer",
         state="running",
         difficulty=5,
+        title="Running now.",
     )
     job = metrics.start_job(
         conn,

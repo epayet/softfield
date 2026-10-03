@@ -3,7 +3,7 @@ import re
 from datetime import timedelta
 from pathlib import Path
 
-from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER
+from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
 
@@ -47,6 +47,7 @@ def test_a_job_with_a_fresh_heartbeat_is_running_now(client):
     assert "12 min" in running  # elapsed
     assert "42k tokens in · 17 steps" in running
     assert "30 s ago" in running  # the heartbeat
+    assert "Running now." in running  # the ticket's title
     needs = section(html, "needs-you")
     assert "heartbeat" not in needs
     assert "idle" not in needs  # the runner is live, so the queue isn't waiting on it
@@ -96,8 +97,25 @@ def test_a_live_run_between_jobs_shows_its_activity(serve_between):
     assert "Nothing is running" not in running
 
 
-def test_a_waiting_run_names_its_ticket_and_until_when(serve_between):
+def test_a_waiting_run_names_its_ticket_and_until_when(serve_between, db_path):
     """f2-03: "waiting for Claude" between jobs named no ticket."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()["id"]
+        m = metrics.upsert_milestone(conn, proj, "f2")
+        metrics.upsert_ticket(
+            conn,
+            proj,
+            "f2-06-overview-allowances",
+            milestone_id=m,
+            kind="lead",
+            state="ready",
+            title="Overview allowances.",
+        )
+    finally:
+        conn.close()
     html = (
         serve_between(
             activity="waiting for Claude · f2-06-overview-allowances until 01:40",
@@ -108,6 +126,56 @@ def test_a_waiting_run_names_its_ticket_and_until_when(serve_between):
     )
     running = section(html, "running")
     assert "Running: waiting for Claude · f2-06-overview-allowances until 01:40" in running
+    assert "Overview allowances." in running
+
+
+def test_a_checkpoint_job_shows_no_goal_line(client, db_path):
+    """A checkpoint job (no ticket) shows no goal line."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()[0]
+        f1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f1,
+            role="checkpoint",
+            agent=OPUS,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        metrics.update_running_job(conn, job_id, tokens_in=10_000, steps=5)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    running = section(html, "running")
+    assert "checkpoint" in running
+    assert "Nothing is running" not in running
+    # The checkpoint card (job 14) has no title div.
+    # Find "job 14" in the HTML and check the surrounding context for running-title.
+    idx = html.index("job 14")
+    # The card content extends from "job 14" to the next "</div>" at the card level.
+    # Grab a chunk and verify no running-title appears.
+    chunk = html[idx : idx + 500]
+    assert "running-title" not in chunk
+
+
+def test_a_waiting_run_with_unknown_ticket_shows_no_title(serve_between):
+    """A waiting run referencing an unknown ticket shows no title line."""
+    html = (
+        serve_between(
+            activity="waiting for Claude · f9-99-missing-ticket until 02:00",
+            waiting_until="2026-10-02T02:00:00+00:00",
+        )
+        .get("/live")
+        .text
+    )
+    running = section(html, "running")
+    assert "Running: waiting for Claude · f9-99-missing-ticket until 02:00" in running
+    assert "Nothing is running" not in running
 
 
 def test_a_run_ended_by_a_ctrl_c_is_not_running(serve_between, db_path):

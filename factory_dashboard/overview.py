@@ -45,6 +45,7 @@ class Running:
     agent: str
     attempt: int
     ticket: str | None
+    title: str | None
     difficulty: int | None
     milestone: str | None
     run_dir: str
@@ -76,6 +77,7 @@ class LiveRun:
     activity: str | None
     waiting_until: str | None
     reserve: bool
+    title: str | None = None
 
     @property
     def waiting_clock(self) -> str | None:
@@ -85,23 +87,42 @@ class LiveRun:
 def live_runs(conn: sqlite3.Connection, project: str, now: datetime) -> list[LiveRun]:
     """Runs that haven't ended and beat less than ``LIVE`` ago, oldest first."""
     rows = conn.execute(
-        "SELECT r.run_dir, r.heartbeat, r.activity, r.waiting_until, r.reserve FROM runs r"
+        "SELECT r.run_dir, r.heartbeat, r.activity, r.waiting_until, r.reserve,"
+        " p.name AS project_name FROM runs r"
         " JOIN projects p ON p.id = r.project_id"
         " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL ORDER BY r.id",
         (project,),
     ).fetchall()
-    return [
-        LiveRun(r["run_dir"], r["activity"], r["waiting_until"], bool(r["reserve"]))
-        for r in rows
-        if (_age(now, r["heartbeat"]) or LIVE) < LIVE
-    ]
+    found: list[LiveRun] = []
+    for r in rows:
+        age = _age(now, r["heartbeat"])
+        if age is None or age >= LIVE:
+            continue
+        activity = r["activity"]
+        title: str | None = None
+        if activity and " · " in activity:
+            # "waiting for Claude · f2-06-overview-allowances until 01:40"
+            parts = activity.split(" · ")
+            if len(parts) >= 2:
+                ticket_word = parts[1].split()[0]
+                trow = conn.execute(
+                    "SELECT title FROM tickets WHERE ticket = ? AND project_id = "
+                    "(SELECT id FROM projects WHERE name = ?)",
+                    (ticket_word, project),
+                ).fetchone()
+                if trow and trow["title"]:
+                    title = trow["title"]
+        found.append(
+            LiveRun(r["run_dir"], r["activity"], r["waiting_until"], bool(r["reserve"]), title)
+        )
+    return found
 
 
 def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Running]:
     """Every job still ``running``, oldest first, live or not."""
     rows = conn.execute(
         "SELECT j.id, j.role, j.agent, j.attempt, j.started, j.tokens_in, j.steps,"
-        " t.ticket, t.difficulty, m.key AS milestone, r.run_dir, r.heartbeat,"
+        " t.ticket, t.title, t.difficulty, m.key AS milestone, r.run_dir, r.heartbeat,"
         " r.waiting_until, r.reserve"
         " FROM jobs j JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
         " LEFT JOIN tickets t ON t.id = j.ticket_id"
@@ -116,6 +137,7 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
             agent=row["agent"],
             attempt=row["attempt"],
             ticket=row["ticket"],
+            title=row["title"],
             difficulty=row["difficulty"],
             milestone=row["milestone"],
             run_dir=row["run_dir"],
