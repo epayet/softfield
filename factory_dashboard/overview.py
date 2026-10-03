@@ -6,6 +6,7 @@ Top to bottom: Needs you and Running now (one htmx partial at ``/live``), the qu
 verdict, the Claude allowance, savings for the current milestone and the Claude spend chart.
 """
 
+import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -169,20 +170,84 @@ class Queued:
     kind: str | None
     difficulty: int | None
     milestone: str | None
+    waits_for: str | None = None
 
 
-def queue(conn: sqlite3.Connection, project: str) -> list[Queued]:
-    """The tickets waiting in ``tasks/ready/``, in the order milestones run."""
+def queue(
+    conn: sqlite3.Connection,
+    project: str,
+    now: datetime,
+) -> list[Queued]:
+    """Tickets whose dependencies are all done first, then the waiting ones, in
+    the order ``pick_next`` would take them.  Tickets with a running job are excluded."""
     rows = conn.execute(
-        "SELECT t.ticket, t.title, t.kind, t.difficulty, m.key AS milestone FROM tickets t"
-        " JOIN projects p ON p.id = t.project_id LEFT JOIN milestones m ON m.id = t.milestone_id"
+        "SELECT t.ticket, t.title, t.kind, t.difficulty, t.depends_on, m.key AS milestone"
+        " FROM tickets t"
+        " JOIN projects p ON p.id = t.project_id"
+        " LEFT JOIN milestones m ON m.id = t.milestone_id"
         " WHERE p.name = ? AND t.state = 'ready'",
         (project,),
     ).fetchall()
-    found = [
-        Queued(r["ticket"], r["title"], r["kind"], r["difficulty"], r["milestone"]) for r in rows
-    ]
-    return sorted(found, key=lambda q: (milestone_order(q.milestone or "m0"), q.ticket))
+    # Tickets with a running job are excluded.
+    running = {
+        row["ticket"]
+        for row in conn.execute(
+            "SELECT t.ticket FROM jobs j"
+            " JOIN runs r ON r.id = j.run_id"
+            " JOIN projects p ON p.id = r.project_id"
+            " JOIN tickets t ON t.id = j.ticket_id"
+            " WHERE p.name = ? AND j.outcome = 'running'",
+            (project,),
+        ).fetchall()
+    }
+    # Live runs whose activity starts with "waiting for Claude".
+    live = live_runs(conn, project, now)
+    waiting_claude = any(
+        act and act.startswith("waiting for Claude") for act in (r.activity for r in live)
+    )
+    # All ticket states keyed by ticket id for depends_on lookups.
+    all_states = {
+        row["ticket"]: row["state"]
+        for row in conn.execute(
+            "SELECT t.ticket, t.state FROM tickets t"
+            " JOIN projects p ON p.id = t.project_id"
+            " WHERE p.name = ?",
+            (project,),
+        ).fetchall()
+    }
+    done = {tid for tid, st in all_states.items() if st == "done"}
+    found: list[Queued] = []
+    for r in rows:
+        if r["ticket"] in running:
+            continue
+        waits: str | None = None
+        if r["kind"] == "lead" and waiting_claude:
+            waits = "waits for Claude"
+        elif r["depends_on"]:
+            deps = json.loads(r["depends_on"])
+            for dep in deps:
+                if dep not in done:
+                    dep_state = all_states.get(dep, "unknown")
+                    if dep_state == "escalated":
+                        waits = f"waits for {dep}'s escalation"
+                    else:
+                        waits = f"waits for {dep}"
+                    break
+        found.append(
+            Queued(
+                ticket=r["ticket"],
+                title=r["title"],
+                kind=r["kind"],
+                difficulty=r["difficulty"],
+                milestone=r["milestone"],
+                waits_for=waits,
+            )
+        )
+    ready_now = [q for q in found if q.waits_for is None]
+    waiting = [q for q in found if q.waits_for is not None]
+    ready_now.sort(key=lambda q: (milestone_order(q.milestone or "m0"), q.ticket))
+    waiting.sort(key=lambda q: (milestone_order(q.milestone or "m0"), q.ticket))
+    return ready_now + waiting
 
 
 # --- Needs you (D8) -----------------------------------------------------------------------
@@ -391,7 +456,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     """What the ``/live`` partial draws: Needs you, then Running now."""
     jobs = running_jobs(conn, project, now)
     return {
-        "needs": needs_you(conn, project, now, jobs, queue(conn, project)),
+        "needs": needs_you(conn, project, now, jobs, queue(conn, project, now)),
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),
     }
@@ -399,7 +464,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
 
 @router.get("/", response_class=HTMLResponse)
 def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
-    waiting = queue(conn, project)
+    waiting = queue(conn, project, now)
     milestone = current_milestone(conn, project)
     return render(
         request,

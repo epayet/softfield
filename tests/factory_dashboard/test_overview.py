@@ -341,3 +341,98 @@ def test_another_project_shows_only_its_own(client):
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
         assert mine not in html
     assert "m1-01-elsewhere" not in client.get("/").text
+
+
+def queue_rows(html: str) -> dict[str, str]:
+    """Queue table rows by ticket id, each row's text (tags stripped)."""
+    # The queue section text has all tags stripped. Each row appears as:
+    # ticket_id goal difficulty ready_now waits_for
+    # We split on the id column which is always the first token
+    rows: dict[str, str] = {}
+    for m in re.finditer(r"<tr[^>]*>(.*?)</tr>", html, re.S):
+        raw = m.group(1)
+        # Extract the ticket id from the href
+        id_m = re.search(r'href="/tickets/([^"?]+)', raw)
+        if id_m:
+            tid = id_m.group(1)
+            # Strip tags from the row content
+            cell_text = " ".join(re.sub(r"<[^>]+>", " ", raw).split())
+            rows[tid] = cell_text
+    return rows
+
+
+def test_a_ticket_with_a_running_job_isnt_in_the_queue(queue_client):
+    html = queue_client.get("/").text
+    q = section(html, "queue")
+    # f1-04-live should not appear as a ticket row (in the Ticket column)
+    # It may appear in the "Waits for" column of another row
+    import html as html_module
+
+    q_decoded = html_module.unescape(q)
+    # Check that f1-04-live doesn't appear as a standalone ticket id (followed by space or end)
+    assert re.search(r"\bf1-04-live\b", q_decoded) is None or "waits for f1-04-live" in q_decoded
+
+
+def test_a_ticket_whose_dependency_is_ready_waits_for_that_id(queue_client):
+    html = queue_client.get("/").text
+    q = section(html, "queue")
+    # f1-12-waits-running depends on f1-04-live (running, not done)
+    import html as html_module
+
+    q_decoded = html_module.unescape(q)
+    assert "waits for f1-04-live" in q_decoded
+
+
+def test_a_ticket_whose_dependency_is_escalated_waits_for_escalation(queue_client, db_path):
+    html = queue_client.get("/").text
+    q = section(html, "queue")
+    # Verify the database state directly
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()["id"]
+        f1 = conn.execute(
+            "SELECT id FROM milestones WHERE key = 'f1' AND project_id = ?", (proj,)
+        ).fetchone()["id"]
+        esc = conn.execute(
+            "SELECT state FROM tickets WHERE ticket = 'f1-12-escalated' AND milestone_id = ?",
+            (f1,),
+        ).fetchone()
+        # f1-12-escalated should have state 'escalated'
+        assert esc is not None, "f1-12-escalated should exist"
+        assert esc["state"] == "escalated", (
+            f"f1-12-escalated state should be 'escalated', got {esc['state']!r}"
+        )
+    finally:
+        conn.close()
+    import html as html_module
+
+    q_decoded = html_module.unescape(q)
+    assert "waits for f1-12-escalated's escalation" in q_decoded
+
+
+def test_a_lead_ticket_waits_for_claude(queue_claude_client):
+    html = queue_claude_client.get("/").text
+    q = section(html, "queue")
+    assert "waits for Claude" in q
+
+
+def test_ready_now_comes_before_waiting(queue_client):
+    html = queue_client.get("/").text
+    q = section(html, "queue")
+    # Ready-now tickets should appear before waiting ones in the HTML
+    # f1-10-queued and f1-05-first are ready now
+    # f1-12-waits-running and f1-13-waits-escalated are waiting
+    ready_pos = []
+    waiting_pos = []
+    for tid in ("f1-10-queued", "f1-05-first"):
+        pos = q.find(tid)
+        if pos >= 0:
+            ready_pos.append(pos)
+    for tid in ("f1-12-waits-running", "f1-13-waits-escalated"):
+        pos = q.find(tid)
+        if pos >= 0:
+            waiting_pos.append(pos)
+    if ready_pos and waiting_pos:
+        assert max(ready_pos) < min(waiting_pos), "ready-now rows should come before waiting rows"

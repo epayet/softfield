@@ -248,6 +248,142 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
     metrics.finish_job(conn, claude, ended=_at(timedelta(minutes=50)), outcome="passed", **tokens)
 
 
+def write_queue(conn: sqlite3.Connection, waiting_claude: bool = False) -> None:
+    """On top of ``write_fixture``: tickets with various dependency states for queue tests.
+
+    - ``f1-10-queued`` (ready, no deps, ready now)
+    - ``f1-11-waits-done`` (ready, depends on f1-01-first which is done, ready now)
+    - ``f1-12-waits-running`` (ready, depends on f1-04-live which is running, not done)
+    - ``f1-13-waits-escalated`` (ready, depends on f1-12-escalated which is escalated)
+    - ``f1-14-lead`` (lead, no deps, ready now unless waiting_claude)
+    - ``f1-04-live`` (running, should NOT appear in queue)
+    - ``f1-05-first`` and ``f1-06-second`` (ready, no deps, ready now)
+    If ``waiting_claude`` is True, a live run with "waiting for Claude" activity is added.
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
+    metrics.upsert_run(
+        conn,
+        project,
+        "20260930-100000",
+        ended=_at(timedelta(hours=1)),
+        verdict="3 merged, 0 not",
+    )
+
+    # Done tickets (f1-01-first, f1-02-escalated, f1-03-lead already in write_fixture)
+    # f1-12-escalated is already in write_fixture with state='escalated'
+    # f1-04-live is already in write_fixture with state='running'
+
+    # f1-12-escalated: escalated ticket (needed as a dependency target)
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-12-escalated",
+        milestone_id=f1,
+        kind="lead",
+        state="escalated",
+        difficulty=5,
+    )
+
+    # f1-10-queued: ready, no deps
+    metrics.upsert_ticket(
+        conn, project, "f1-10-queued", milestone_id=f1, kind="developer", state="ready"
+    )
+    # f1-11-waits-done: ready, depends on f1-01-first (done)
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-11-waits-done",
+        milestone_id=f1,
+        kind="developer",
+        state="ready",
+        depends_on=["f1-01-first"],
+    )
+    # f1-12-waits-running: ready, depends on f1-04-live (running, not done)
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-12-waits-running",
+        milestone_id=f1,
+        kind="developer",
+        state="ready",
+        depends_on=["f1-04-live"],
+    )
+    # f1-13-waits-escalated: ready, depends on f1-12-escalated (escalated)
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-13-waits-escalated",
+        milestone_id=f1,
+        kind="developer",
+        state="ready",
+        depends_on=["f1-12-escalated"],
+    )
+    # f1-14-lead: lead ticket, no deps
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-14-lead",
+        milestone_id=f1,
+        kind="lead",
+        state="ready",
+    )
+    # f1-05-first and f1-06-second (already in write_fixture)
+    for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
+        metrics.upsert_ticket(
+            conn, project, ticket, milestone_id=f1, kind="developer", state="ready", title=goal
+        )
+
+    # Live run with "waiting for Claude" activity if requested
+    if waiting_claude:
+        live_run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-120000",
+            command="milestone f1",
+            started=_at(timedelta(minutes=5)),
+            heartbeat=_at(timedelta(seconds=10)),
+        )
+        metrics.update_run_activity(
+            conn,
+            live_run,
+            "waiting for Claude · f1-14-lead until 15:00",
+            "2026-10-02T15:00:00+00:00",
+        )
+
+
+@pytest.fixture
+def queue_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_queue``'s rows (no Claude waiting)."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_queue(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def queue_claude_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_queue`` with waiting for Claude."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_queue(conn, waiting_claude=True)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
 def write_between_jobs(
     conn: sqlite3.Connection,
     *,

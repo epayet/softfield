@@ -10,10 +10,10 @@
   {% if queue %}
   <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting. Drain it with <code>{{ drain }}</code></p>
   <div class="scroll"><table>
-    <thead><tr><th>Ticket</th><th>Goal</th><th class="num">Difficulty</th></tr></thead>
+    <thead><tr><th>Ticket</th><th>Goal</th><th class="num">Difficulty</th><th>Ready now</th><th>Waits for</th></tr></thead>
     <tbody>
       {% for t in queue %}
-      <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td class="goal">{{ t.title or "" }}</td><td class="num">{{ t.difficulty or "–" }}</td></tr>
+      <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td class="goal">{{ t.title or "" }}</td><td class="num">{{ t.difficulty or "–" }}</td><td>{{ "✓" if t.waits_for is none else "" }}</td><td>{{ t.waits_for or "" }}</td></tr>
       {% endfor %}
     </tbody>
   </table></div>
