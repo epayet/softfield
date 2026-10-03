@@ -5,18 +5,18 @@ depends_on: [f3-06-replay-data, f3-03-line-motion]
 difficulty: 5
 files:
   - factory_dashboard/static/factory.js
-  - factory_dashboard/templates/overview.html
-  - factory_dashboard/overview.py
+  - factory_dashboard/templates/line.html
+  - factory_dashboard/line.py
 tests:
   - tests/factory_dashboard/test_line.py
 ---
 
 ### Goal
-On the Overview, "Replay overnight" plays what happened since the owner last looked: the floor steps from event to event, with Play, ◀ ▶, a speed and the time, on desktop and phone.
+On the factory line, "Replay overnight" plays what happened since the owner last looked: the floor steps from event to event, with Play, ◀ ▶, a speed and the time, on desktop and phone.
 
 ### Context
 Read the replay controls and the sticky phone bar in `docs/milestones/f1-factory-mockup.html` (the picture: `.replay`, `.play`, the steps and speeds), `factory_dashboard/line.py` (`replay`, f3-06), `factory_dashboard/static/factory.js` (the floor and its motion, f3-01 to f3-03) and the browser tests in `tests/factory_dashboard/test_line.py`.
-- **Data:** a "Replay" button loads `/line/replay?since=…&until=…` (a JSON route in `factory_dashboard/overview.py`, read-only). The default is the "overnight" preset; a picker offers the last 24 h or a run.
+- **Data:** a "Replay" button loads `/line/replay?since=…&until=…` (a JSON route beside `/line`, read-only). The default is the "overnight" preset; a picker offers the last 24 h or a run.
 - **It must look like the line moving** (owner, 2026-10-03), not a list of events: crates travel their trips' belts between stations, belts roll while they carry, machines light up and smoke while they work, the checks light flashes. Reuse the F1 mock-up's motion (`docs/milestones/f1-factory-mockup.html`) and f3-03's classes.
 - **While replaying:**
   - the live refresh pauses;

@@ -1,6 +1,6 @@
 # Milestone F6: the planning room
 
-> **Status: planned** (2026-10-03), on [ADR 20](../adr/20-planning-room.md) (Proposed until the owner accepts it). **State:** ready · **Priority:** 2 · **Area:** factory
+> **Status: planned** (2026-10-03), on [ADR 20](../adr/20-planning-room.md) (Proposed until the owner accepts it). **State:** ready · **Priority:** 3 · **Area:** factory
 > The owner's goal: "do from the system what we did in this long chat, async with a nice UI". Picture: <https://claude.ai/artifact/UNELSzF5iF5RccjVJiWZzx>, sources in `docs/milestones/planning-room-mockup/`, with two changes from the owner: "planning goes first" merges into "The factory now", and every point is agreed by default (only Comment… on what to change or ask).
 > Builds on F5's requests (f5-01, f5-02), cards (f5-04), notifications (f5-12) and the look (f5-14), by its tickets' dependencies.
 

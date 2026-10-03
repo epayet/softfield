@@ -1,6 +1,6 @@
 # Milestone F4: always on
 
-> **Status: planned** (2026-10-02). **State:** building · **Priority:** 1 · **Area:** factory
+> **Status: planned** (2026-10-02). **State:** building · **Priority:** 2 · **Area:** factory
 > From the owner's notes after F2 (`docs/roadmap.md`, "Owner's notes after F2"). The owner's priority 1: the runner works on its own and takes any ready ticket, for a weekend unattended. [ADR 17](../adr/17-always-on-factory.md) must be Accepted before tickets 09, 11, 13, 15 and 18 run; if it isn't, they wait in `tasks/later/`.
 > Numbered F4 because F3 (the factory line) keeps its key: `f3-01` has a half-done branch and a saved session under that id.
 
