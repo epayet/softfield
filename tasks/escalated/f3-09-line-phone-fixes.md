@@ -32,3 +32,12 @@ Read `tasks/done/f3-02-line-phone.md` (what it asked), `docs/milestones/f3-line-
 - crossing 640 px redraws the right floor
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 9359
+logs: var/runs/20261003-074205/f3-09-line-phone-fixes
+```
