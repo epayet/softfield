@@ -24,3 +24,10 @@ Read `runner/local_model.py` (`run_opencode`), `runner/procs.py` (`run_streaming
 - `run_opencode` starts OpenCode with that variable set to 900000, and the rest of the environment kept
 - note 14 no longer asks developers to pass a timeout
 - `uv run runner check-all --task f4-05-opencode-shell-timeout` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
