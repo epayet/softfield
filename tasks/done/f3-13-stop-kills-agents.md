@@ -22,3 +22,10 @@ Read `runner/procs.py` (`run`, `run_streaming`: both start the agent with `start
 - a test starts a sleeping child through `run_streaming`, raises `KeyboardInterrupt` from the tick callback, and finds the child's process gone
 - the same for `run`
 - `uv run runner check-all --task f3-13-stop-kills-agents` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
