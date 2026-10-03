@@ -287,7 +287,8 @@
     const revs = doc.machines.filter((m) => m.station === "reviewers");
     const revsStation = station(svg, "reviewers");
     revs.forEach((m, i) => {
-      machine(revsStation, m, 6 + i * 180, PHONE.rev1.y, 70, PHONE.rev1.h);
+      const x = i === 0 ? PHONE.rev1.x : PHONE.rev2.x;
+      machine(revsStation, m, x, PHONE.rev1.y, 70, PHONE.rev1.h);
     });
 
     // developer bay
@@ -296,8 +297,8 @@
     text(bay, 18, PHONE.bay.y + 20, "DEVELOPER BAY", "head");
     const devs = doc.machines.filter((m) => m.station === "developers");
     devs.forEach((m, i) => {
-      const my = PHONE.bay.y + 30 + i * 100;
-      machine(bay, m, 18 + i * 108, my, 104, 100);
+      const my = PHONE.bay.y + 30;
+      machine(bay, m, 18 + i * 108, my, 104, 120);
     });
 
     // checks
