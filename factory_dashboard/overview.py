@@ -453,18 +453,20 @@ def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] |
 
 
 def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, object]:
-    """What the ``/live`` partial draws: Needs you, then Running now."""
+    """What the ``/live`` partial draws: Needs you, then Running now and the Queue."""
     jobs = running_jobs(conn, project, now)
+    waiting = queue(conn, project, now)
     return {
-        "needs": needs_you(conn, project, now, jobs, queue(conn, project, now)),
+        "needs": needs_you(conn, project, now, jobs, waiting),
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),
+        "queue": waiting,
+        "drain": _drain(waiting[0].milestone or "") if waiting else None,
     }
 
 
 @router.get("/", response_class=HTMLResponse)
 def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
-    waiting = queue(conn, project, now)
     milestone = current_milestone(conn, project)
     return render(
         request,
@@ -474,8 +476,6 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
         {
             "active": "/",
             **_live_context(conn, project, now),
-            "queue": waiting,
-            "drain": _drain(waiting[0].milestone or "") if waiting else None,
             "verdict": last_verdict(conn, project),
             "allowance": agent_allowances(conn, now),
             "milestone": milestone,

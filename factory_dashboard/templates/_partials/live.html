@@ -1,4 +1,4 @@
-{# Needs you, then Running now (D3, D8): swapped in by htmx every 5 s from /live, so it carries its own hx-get. #}
+{# Needs you, then Running now and the Queue (D3, D4, D8): swapped in by htmx every 5 s from /live, so it carries its own hx-get. #}
 <div id="live" hx-get="/live{{ q }}" hx-trigger="every 5s" hx-swap="outerHTML">
 {% if needs %}
 <section id="needs-you" class="panel needs">
@@ -16,5 +16,23 @@
   </ul>
 </section>
 {% endif %}
-{% include "_partials/running.html" %}
+<div class="row">
+  {% include "_partials/running.html" %}
+  <section id="queue" class="panel">
+    <h2>Queue</h2>
+    {% if queue %}
+    <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting. Drain it with <code>{{ drain }}</code></p>
+    <div class="scroll queue-scroll"><table>
+      <thead><tr><th>Ticket</th><th>Goal</th><th class="num">Difficulty</th><th>Ready now</th><th>Waits for</th></tr></thead>
+      <tbody>
+        {% for t in queue %}
+        <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td class="goal">{{ t.title or "" }}</td><td class="num">{{ t.difficulty or "–" }}</td><td>{{ "✓" if t.waits_for is none else "" }}</td><td>{{ t.waits_for or "" }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}
+    <p class="sub">The queue is empty.</p>
+    {% endif %}
+  </section>
+</div>
 </div>
