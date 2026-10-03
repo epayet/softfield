@@ -25,3 +25,10 @@ Read `runner/loop.py` `handle_escalation` (the `outcome == "requeue"` branch), `
 - a repaired ticket is committed and runs; one still broken is blocked, with its problems in the reason
 - a clean requeue is committed as today, with no extra turn
 - `uv run runner check-all --task f4-03-requeue-preflight` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
