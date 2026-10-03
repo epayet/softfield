@@ -39,3 +39,12 @@ attempts: 3
 tokens: 141600
 logs: var/runs/20261003-132503/f3-05-line-panels
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 151897
+logs: var/runs/20261003-132503/f3-05-line-panels-run2
+```
