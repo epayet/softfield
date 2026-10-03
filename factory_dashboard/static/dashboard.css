@@ -66,7 +66,6 @@ h1 { font-size: 20px; margin: 0; text-wrap: balance; }
 .sub { color: var(--ink-2); margin: 2px 0 0; }
 .goal { color: var(--ink-2); max-width: 60ch; }
 .scroll { overflow-x: auto; }
-.queue-scroll { max-height: 60vh; overflow-y: auto; }
 table { border-collapse: collapse; width: 100%; font-size: 13px; }
 th { text-align: left; font-weight: 600; color: var(--muted); font-size: 11.5px; text-transform: uppercase;
   letter-spacing: .05em; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
@@ -99,6 +98,10 @@ tbody tr:hover { background: var(--accent-wash); }
 .running-card { display: grid; gap: 8px; }
 .running-card + .running-card { border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
 .running-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+.next-in-line { display: grid; gap: 4px; border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
+.next-in-line h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
+  margin: 0; font-weight: 600; }
+.next-in-line p { margin: 4px 0 0; }
 .warnline { color: var(--serious-ink); font-size: 13px; }
 .steps { list-style: none; margin: 0; padding: 0; }
 .steps li { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }

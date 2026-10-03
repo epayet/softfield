@@ -3,6 +3,8 @@ import re
 from datetime import timedelta
 from pathlib import Path
 
+from factory_dashboard.overview import queue
+from runner import metrics
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
@@ -29,7 +31,11 @@ def charts(html: str) -> dict[str, object]:
 def test_the_overview_shows_every_panel_in_order(client):
     html = client.get("/").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
-    assert ids == ["needs-you", "running", "queue", "verdict", "allowance", "savings", "spend"]
+    assert ids == ["needs-you", "now", "verdict", "allowance", "savings", "spend"]
+    assert "Next in line" in section(html, "now")
+    assert 'id="running"' not in html and 'id="queue"' not in html
+    live = client.get("/live").text
+    assert 'id="running"' not in live and 'id="queue"' not in live
 
 
 def test_needs_you_lists_open_owner_items_with_their_command(client):
@@ -41,13 +47,13 @@ def test_needs_you_lists_open_owner_items_with_their_command(client):
 
 def test_a_job_with_a_fresh_heartbeat_is_running_now(client):
     html = client.get("/").text
-    running = section(html, "running")
-    assert "f1-04-live" in running
-    assert "attempt 2" in running and LOCAL in running and "developer" in running
-    assert "12 min" in running  # elapsed
-    assert "read 42k tokens · 17 turns" in running
-    assert "30 s ago" in running  # the heartbeat
-    assert "Running now." in running  # the ticket's title
+    now = section(html, "now")
+    assert "f1-04-live" in now
+    assert "attempt 2" in now and LOCAL in now and "developer" in now
+    assert "12 min" in now  # elapsed
+    assert "read 42k tokens · 17 turns" in now
+    assert "30 s ago" in now  # the heartbeat
+    assert "Running now." in now  # the ticket's title
     needs = section(html, "needs-you")
     assert "heartbeat" not in needs
     assert "idle" not in needs  # the runner is live, so the queue isn't waiting on it
@@ -55,7 +61,7 @@ def test_a_job_with_a_fresh_heartbeat_is_running_now(client):
 
 def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
     html = serve(heartbeat_age=timedelta(minutes=3)).get("/").text
-    assert "f1-04-live" not in section(html, "running")
+    assert "f1-04-live" not in section(html, "now")
     needs = section(html, "needs-you")
     assert "heartbeat stopped 3 min ago" in needs and "f1-04-live" in needs
     assert "uv run runner run" in needs  # the standing command (ADR 17), not one milestone
@@ -69,7 +75,7 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
     html = response.text
     assert "<html" not in html
     assert "Should reactions be editable" in section(html, "needs-you")
-    assert "f1-04-live" in section(html, "running")
+    assert "f1-04-live" in section(html, "now")
     # it asks to be fetched again every 5 s, keeping the project
     assert 'hx-get="/live?project=coucou"' in html
     assert 'hx-trigger="every 5s [window.liveIdle()]"' in html
@@ -92,7 +98,7 @@ def test_needs_you_is_absent_when_nothing_needs_the_owner(serve_between):
 
 
 def test_a_live_run_between_jobs_shows_its_activity(serve_between):
-    running = section(serve_between(activity="check-all on main").get("/live").text, "running")
+    running = section(serve_between(activity="check-all on main").get("/live").text, "now")
     assert "Running: check-all on main" in running
     assert "Nothing is running" not in running
 
@@ -124,9 +130,9 @@ def test_a_waiting_run_names_its_ticket_and_until_when(serve_between, db_path):
         .get("/live")
         .text
     )
-    running = section(html, "running")
-    assert "Running: waiting for Claude · f2-06-overview-allowances until 01:40" in running
-    assert "Overview allowances." in running
+    now = section(html, "now")
+    assert "Running: waiting for Claude · f2-06-overview-allowances until 01:40" in now
+    assert "Overview allowances." in now
 
 
 def test_a_checkpoint_job_shows_no_goal_line(client, db_path):
@@ -151,9 +157,9 @@ def test_a_checkpoint_job_shows_no_goal_line(client, db_path):
     finally:
         conn.close()
     html = client.get("/").text
-    running = section(html, "running")
-    assert "checkpoint" in running
-    assert "Nothing is running" not in running
+    now = section(html, "now")
+    assert "checkpoint" in now
+    assert "Nothing is running" not in now
     # The checkpoint card (job 14) has no title div.
     # Find "job 14" in the HTML and check the surrounding context for running-title.
     idx = html.index("job 14")
@@ -173,9 +179,9 @@ def test_a_waiting_run_with_unknown_ticket_shows_no_title(serve_between):
         .get("/live")
         .text
     )
-    running = section(html, "running")
-    assert "Running: waiting for Claude · f9-99-missing-ticket until 02:00" in running
-    assert "Nothing is running" not in running
+    now = section(html, "now")
+    assert "Running: waiting for Claude · f9-99-missing-ticket until 02:00" in now
+    assert "Nothing is running" not in now
 
 
 def test_a_run_ended_by_a_ctrl_c_is_not_running(serve_between, db_path):
@@ -189,14 +195,14 @@ def test_a_run_ended_by_a_ctrl_c_is_not_running(serve_between, db_path):
         metrics.end_run(conn, run, NOW.isoformat(), "interrupted")
     finally:
         conn.close()
-    running = section(client.get("/live").text, "running")
+    running = section(client.get("/live").text, "now")
     assert "Nothing is running" in running
     assert "on Claude's reserve" not in running
 
 
 def test_a_run_on_the_reserve_has_the_pill(serve_between):
     html = serve_between(activity="gates · f1-21", reserve=True).get("/live").text
-    assert "on Claude's reserve" in section(html, "running")
+    assert "on Claude's reserve" in section(html, "now")
 
     def test_claude_job_shows_cached_and_turns(client, db_path):
         """Claude job with cached input should show summed tokens and turns."""
@@ -230,16 +236,18 @@ def test_a_run_on_the_reserve_has_the_pill(serve_between):
             metrics.update_running_job(conn, job, tokens_in=36_000, tokens_cached=970_000, steps=18)
         finally:
             conn.close()
-        running = section(client.get("/").text, "running")
+        running = section(client.get("/").text, "now")
         assert "read 970k tokens · 18 turns" in running
 
 
-def test_the_queue_has_its_tickets_and_the_command_that_drains_it(client):
-    queue = section(client.get("/").text, "queue")
-    assert queue.index("f1-05-first") < queue.index("f1-06-second")
-    assert "Queued first." in queue
-    assert "uv run runner run" in queue
-    assert "f1-01-first" not in queue  # merged
+def test_now_holds_what_works_then_next_in_line_and_the_command_that_drains_it(client):
+    now = section(client.get("/").text, "now")
+    working, next_in_line = now.split("Next in line", 1)
+    assert "f1-04-live" in working and "attempt 2" in working and "Running now." in working
+    assert re.search(r"\b1 f1-05-first Queued first\. · a developer\b", next_in_line)
+    assert next_in_line.index("1 f1-05-first") < next_in_line.index("2 f1-06-second")
+    assert "uv run runner run" in next_in_line
+    assert "f1-01-first" not in next_in_line  # merged
 
 
 def test_the_last_verdict_is_the_milestones_and_the_last_runs(client):
@@ -336,106 +344,52 @@ def test_the_spend_chart_holds_each_milestones_claude_dollars(serve):
 
 def test_another_project_shows_only_its_own(client):
     html = client.get(f"/?project={OTHER}").text
-    assert "m1-01-elsewhere" in section(html, "queue")
-    assert "uv run runner run" in section(html, "queue")
+    assert "m1-01-elsewhere" in section(html, "now")
+    assert "uv run runner run" in section(html, "now")
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
         assert mine not in html
     assert "m1-01-elsewhere" not in client.get("/").text
 
 
-def queue_rows(html: str) -> dict[str, str]:
-    """Queue table rows by ticket id, each row's text (tags stripped)."""
-    # The queue section text has all tags stripped. Each row appears as:
-    # ticket_id goal difficulty ready_now waits_for
-    # We split on the id column which is always the first token
-    rows: dict[str, str] = {}
-    for m in re.finditer(r"<tr[^>]*>(.*?)</tr>", html, re.S):
-        raw = m.group(1)
-        # Extract the ticket id from the href
-        id_m = re.search(r'href="/tickets/([^"?]+)', raw)
-        if id_m:
-            tid = id_m.group(1)
-            # Strip tags from the row content
-            cell_text = " ".join(re.sub(r"<[^>]+>", " ", raw).split())
-            rows[tid] = cell_text
-    return rows
+def waits(db_path: Path) -> dict[str, str | None]:
+    """``queue``'s tickets on the fixture database, in its order, each with its ``waits_for``."""
+    conn = metrics.open_db(db_path)
+    try:
+        return {q.ticket: q.waits_for for q in queue(conn, PROJECT, NOW)}
+    finally:
+        conn.close()
 
 
-def test_a_ticket_with_a_running_job_isnt_in_the_queue(queue_client):
-    html = queue_client.get("/").text
-    q = section(html, "queue")
-    # f1-04-live should not appear as a ticket row (in the Ticket column)
-    # It may appear in the "Waits for" column of another row
-    import html as html_module
-
-    q_decoded = html_module.unescape(q)
-    # Check that f1-04-live doesn't appear as a standalone ticket id (followed by space or end)
-    assert re.search(r"\bf1-04-live\b", q_decoded) is None or "waits for f1-04-live" in q_decoded
+def test_a_ticket_with_a_running_job_isnt_in_the_queue(queue_client, db_path):
+    assert "f1-04-live" not in waits(db_path)
 
 
-def test_a_ticket_whose_dependency_is_ready_waits_for_that_id(queue_client):
-    html = queue_client.get("/").text
-    q = section(html, "queue")
+def test_a_ticket_whose_dependency_is_ready_waits_for_that_id(queue_client, db_path):
     # f1-12-waits-running depends on f1-04-live (running, not done)
-    import html as html_module
-
-    q_decoded = html_module.unescape(q)
-    assert "waits for f1-04-live" in q_decoded
+    assert waits(db_path)["f1-12-waits-running"] == "waits for f1-04-live"
 
 
 def test_a_ticket_whose_dependency_is_escalated_waits_for_escalation(queue_client, db_path):
-    html = queue_client.get("/").text
-    q = section(html, "queue")
-    # Verify the database state directly
-    from runner import metrics
-
-    conn = metrics.open_db(db_path)
-    try:
-        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()["id"]
-        f1 = conn.execute(
-            "SELECT id FROM milestones WHERE key = 'f1' AND project_id = ?", (proj,)
-        ).fetchone()["id"]
-        esc = conn.execute(
-            "SELECT state FROM tickets WHERE ticket = 'f1-12-escalated' AND milestone_id = ?",
-            (f1,),
-        ).fetchone()
-        # f1-12-escalated should have state 'escalated'
-        assert esc is not None, "f1-12-escalated should exist"
-        assert esc["state"] == "escalated", (
-            f"f1-12-escalated state should be 'escalated', got {esc['state']!r}"
-        )
-    finally:
-        conn.close()
-    import html as html_module
-
-    q_decoded = html_module.unescape(q)
-    assert "waits for f1-12-escalated's escalation" in q_decoded
+    assert waits(db_path)["f1-13-waits-escalated"] == "waits for f1-12-escalated's escalation"
 
 
-def test_a_lead_ticket_waits_for_claude(queue_claude_client):
-    html = queue_claude_client.get("/").text
-    q = section(html, "queue")
-    assert "waits for Claude" in q
+def test_a_lead_ticket_waits_for_claude(queue_claude_client, db_path):
+    assert waits(db_path)["f1-14-lead"] == "waits for Claude"
 
 
-def test_ready_now_comes_before_waiting(queue_client):
-    html = queue_client.get("/").text
-    q = section(html, "queue")
-    # Ready-now tickets should appear before waiting ones in the HTML
-    # f1-10-queued and f1-05-first are ready now
-    # f1-12-waits-running and f1-13-waits-escalated are waiting
-    ready_pos = []
-    waiting_pos = []
-    for tid in ("f1-10-queued", "f1-05-first"):
-        pos = q.find(tid)
-        if pos >= 0:
-            ready_pos.append(pos)
-    for tid in ("f1-12-waits-running", "f1-13-waits-escalated"):
-        pos = q.find(tid)
-        if pos >= 0:
-            waiting_pos.append(pos)
-    if ready_pos and waiting_pos:
-        assert max(ready_pos) < min(waiting_pos), "ready-now rows should come before waiting rows"
+def test_ready_now_comes_before_waiting(queue_client, db_path):
+    order = list(waits(db_path))
+    ready = [order.index(t) for t in ("f1-10-queued", "f1-05-first")]
+    waiting = [order.index(t) for t in ("f1-12-waits-running", "f1-13-waits-escalated")]
+    assert max(ready) < min(waiting)
+
+
+def test_next_in_line_is_the_first_three_of_the_run_order(queue_client):
+    now = section(queue_client.get("/").text, "now")
+    rows = now.split("Next in line", 1)[1]
+    numbers = re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)
+    assert [n for n, _ in numbers] == ["1", "2", "3"]  # more than three wait: only three rows
+    assert "4 f1-" not in rows
 
 
 def test_the_live_part_pauses_while_the_owner_scrolls_or_selects(client):

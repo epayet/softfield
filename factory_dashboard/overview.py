@@ -2,8 +2,8 @@
 ``APIRouter``, its own SQL in plain functions that return data, a template extending
 ``base.html``, and a chart's data for ``static/charts.js`` (D5).
 
-Top to bottom: Needs you and Running now (one htmx partial at ``/live``), the queue, the last
-verdict, the Claude allowance, savings for the current milestone and the Claude spend chart.
+Top to bottom: Needs you and Now (one htmx partial at ``/live``), the last verdict, the Claude
+allowance, savings for the current milestone and the Claude spend chart.
 """
 
 import json
@@ -455,7 +455,10 @@ def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] |
 
 
 def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, object]:
-    """What the ``/live`` partial draws: Needs you, then Running now and the Queue."""
+    """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
+    the run order)."""
+    from factory_dashboard.line import live_line  # line.py imports LIVE from here
+
     jobs = running_jobs(conn, project, now)
     waiting = queue(conn, project, now)
     return {
@@ -463,6 +466,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),
         "queue": waiting,
+        "next": live_line(conn, project, now.astimezone())["now"]["next"],
         "drain": _drain(waiting[0].milestone or "") if waiting else None,
     }
 
