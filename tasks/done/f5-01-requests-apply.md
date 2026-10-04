@@ -30,3 +30,10 @@ Read `docs/adr/18-dashboard-writes.md`, D1 and D2 in `docs/milestones/f5-board.m
 - a `five_hour` yes while the runner waits on the question lets the ticket go within one poll
 - requests made while nothing runs are applied by the next `runner` command
 - `uv run runner check-all --task f5-01-requests-apply` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
