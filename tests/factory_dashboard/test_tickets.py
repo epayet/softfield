@@ -102,8 +102,8 @@ def test_filter_by_state_shows_only_matching(tickets_client):
     html = resp.text
     rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
     tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
-    # 1 main ticket + 1 row from the later tickets panel (which now respects the state filter)
-    assert len(tbody_rows) == 2
+    # 1 main ticket; the later panel respects the state filter and is absent
+    assert len(tbody_rows) == 1
     row = tbody_rows[0]
     assert "f1-12-escalated" in row
     assert "escalated" in row
@@ -261,13 +261,23 @@ def test_ticket_agent_work_absent_when_no_jobs(tickets_client):
     assert re.search(r'<section[^>]*\bid="agent-work"', html, re.S) is None
 
 
+def later_row(raw: str, ticket: str) -> dict[str, str]:
+    """The ``data-col`` cells of the ``<tr data-ticket="ticket">`` row in ``raw``."""
+    match = re.search(rf'<tr[^>]*\bdata-ticket="{re.escape(ticket)}"[^>]*>(.*?)</tr>', raw, re.S)
+    assert match, f"no row for {ticket}"
+    cells = re.findall(r'<td[^>]*\bdata-col="([^"]+)"[^>]*>(.*?)</td>', match.group(1), re.S)
+    return {col: text.strip() for col, text in cells}
+
+
 def test_later_tickets_panel_shows_ticket_with_title_and_queue_command(later_client):
     html = later_client.get("/tickets").text
     later_section = section_raw(html, "later")
-    assert "f1-99-later" in later_section
-    assert "A set-aside ticket." in later_section
-    assert 'href="/tickets/f1-99-later"' in later_section
-    assert "uv run runner queue f1-99-later" in later_section
+    row = later_row(later_section, "f1-99-later")
+    id_cell = row["id"]
+    assert 'href="/tickets/f1-99-later"' in id_cell
+    assert "f1-99-later" in id_cell
+    assert row["goal"] == "A set-aside ticket."
+    assert "uv run runner queue f1-99-later" in row["queue"]
 
 
 def test_later_tickets_panel_absent_when_no_later_tickets(tickets_client):

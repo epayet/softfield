@@ -23,10 +23,10 @@
       <thead><tr><th>ID</th><th>Goal</th><th>Queue</th></tr></thead>
       <tbody>
         {% for t in later_tickets %}
-        <tr>
-          <td class="id"><a href="/tickets/{{ t.ticket }}">{{ t.ticket }}</a></td>
-          <td>{{ t.title or "–" }}</td>
-          <td><code>uv run runner queue {{ t.ticket }}</code></td>
+        <tr data-ticket="{{ t.ticket }}">
+          <td class="id" data-col="id"><a href="/tickets/{{ t.ticket }}">{{ t.ticket }}</a></td>
+          <td data-col="goal">{{ t.title or "–" }}</td>
+          <td data-col="queue"><code>uv run runner queue {{ t.ticket }}</code></td>
         </tr>
         {% endfor %}
       </tbody>
