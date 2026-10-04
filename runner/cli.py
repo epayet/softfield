@@ -206,7 +206,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     ratings_cmd = sub.add_parser("ratings", help="each agent's rating now (ADR 15 item 9)")
     ratings_cmd.add_argument(
-        "--replay", action="store_true", help="first seed the local model's from M1–M4"
+        "--replay",
+        action="store_true",
+        help="first recompute every agent's from its estimate under ADR 24",
     )
     ratings_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     report_cmd = sub.add_parser(
@@ -351,13 +353,18 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "ratings":
             conn = metrics.open_db(args.db or cfg.metrics_db)
             try:
+                start = loop.starting_ratings(cfg)
                 if args.replay:
                     project = metrics.upsert_project(conn, repo.name, repo=str(repo))
-                    agent = local_agent(cfg)
-                    start = cfg.agents[agent].rating
-                    changes = loop.replay_ratings(conn, project, agent, start)
-                    print(f"{agent}: {len(changes)} tickets replayed from {start}.")
-                current, _ = loop.standing(conn, loop.starting_ratings(cfg))
+                    print("Replayed under ADR 24:")
+                    for redone in loop.replay_ratings(conn, project, start, loop.now()):
+                        moved = f"→ {redone.after:.2f}" if redone.written else "unchanged"
+                        print(
+                            f"{redone.agent:<28} {redone.before:.2f} {moved},"
+                            f" {redone.games} coding games"
+                        )
+                    print()
+                current, _ = loop.standing(conn, start)
             finally:
                 conn.close()
             for agent, rating in sorted(current.items(), key=lambda item: -item[1]):

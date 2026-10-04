@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from runner import cli, loop, metrics, owner
+from runner.config import load_config
 from runner.milestone import RESTART
 from runner.report import SessionReport
 from runner.state import load_state, save_state
@@ -382,16 +383,34 @@ def test_ratings_replay_twice_gives_the_same_ratings(in_repo, capsys):
             started=f"2026-0{n + 1}-01T10:00:00+00:00",
         )
         metrics.finish_job(conn, job, ended=f"2026-0{n + 1}-01T11:00:00+00:00", outcome=outcome)
+        start = loop.starting_ratings(load_config(in_repo))
+        loop.rate_ticket(conn, project, ticket, start, datetime(2026, n + 1, 2, tzinfo=UTC))
+    for k in range(2):  # the old rules: a penalty per finding on m1-01's code
+        metrics.add_rating_change(
+            conn,
+            "local-qwen3.6-35b-a3b",
+            "coding",
+            2.0,
+            1.0,
+            at=f"2026-03-0{k + 1}T10:00:00+00:00",
+            ticket_id=metrics.upsert_ticket(conn, project, "m1-01-thing"),
+            result=f"finding F{k}",
+        )
     conn.close()
 
     assert cli.main(["ratings", "--replay"]) == 0
     first = capsys.readouterr().out
     assert cli.main(["ratings", "--replay"]) == 0
-    assert capsys.readouterr().out == first
-    assert "local-qwen3.6-35b-a3b: 2 tickets replayed from 5." in first
+    second = capsys.readouterr().out
+    assert first.split("\n\n")[1] == second.split("\n\n")[1]  # the same standings
+    assert "Replayed under ADR 24" in first
+    assert "→" in first and "→" not in second  # the second wrote nothing
     conn = metrics.open_db(db)
-    assert conn.execute("SELECT count(*) FROM rating_changes").fetchone()[0] == 2
+    replayed = conn.execute(
+        "SELECT count(*) FROM rating_changes WHERE result LIKE 'replay ADR 24%'"
+    ).fetchone()[0]
     conn.close()
+    assert replayed > 0
 
 
 @pytest.fixture

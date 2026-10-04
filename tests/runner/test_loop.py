@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import checks, claude, gates, local_model, loop, metrics
+from runner import checks, claude, gates, local_model, loop, metrics, ratings
 from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
 from runner.claude import ClaudeJob, Progress, TransientError, UsageLimited
 from runner.config import Config
@@ -3179,6 +3179,131 @@ def test_an_agent_routes_at_the_floor_until_its_third_game(repo, fake_clock):
     conn.close()
     assert loop.current_ratings(s)["claude-sonnet"] == 1
     assert loop.current_ratings(s)["claude-opus"] == 1  # an estimate of 9, never played
+
+
+# --- the ADR 24 recompute (item 4; f7-02) ----------------------------------------------------
+
+REPLAY_START = {"local": 3.0, "claude-sonnet": 7.0, "new-model": 6.0}
+
+
+def _collapsed(tmp_path: Path) -> tuple[sqlite3.Connection, int]:
+    """Local merges three difficulty-3 tickets first time, Sonnet two; then one review, under
+    the old rules, charges local a point for each of its eight confirmed findings on two
+    tickets (1.0, the floor); a bench before ADR 24 had a new model pass one first time, never
+    rated."""
+    conn = metrics.open_db(tmp_path / "metrics.sqlite")
+    project = metrics.upsert_project(conn, "coucou")
+    milestone = metrics.upsert_milestone(conn, project, "f3")
+    run = metrics.upsert_run(conn, project, "run-1")
+    for n, agent in enumerate(["local"] * 3 + ["claude-sonnet"] * 2):
+        ticket_id = metrics.upsert_ticket(
+            conn, project, f"f3-0{n}", milestone_id=milestone, difficulty=3, merged_by=agent
+        )
+        at = datetime(2026, 10, 1, 10 + n, tzinfo=UTC)
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket_id,
+            milestone_id=milestone,
+            role="developer",
+            agent=agent,
+            attempt=1,
+            started=at.isoformat(),
+        )
+        metrics.finish_job(conn, job, ended=at.isoformat(), outcome="passed")
+        loop.rate_ticket(conn, project, f"f3-0{n}", REPLAY_START, at + timedelta(minutes=30))
+    current, _ = loop.standing(conn, REPLAY_START)
+    for k in range(8):
+        ticket_id = metrics.upsert_ticket(conn, project, f"f3-0{k // 4}")
+        review = f"2026-10-02T18:57:0{k}+00:00"
+        sonnet, local = current["claude-sonnet"], current["local"]
+        current["claude-sonnet"], current["local"] = sonnet + 0.1, max(1.0, local - 1.0)
+        for agent, skill, before, label in (
+            ("claude-sonnet", ratings.REVIEWING, sonnet, f"confirmed F{k}"),
+            ("local", ratings.CODING, local, f"finding F{k}"),
+        ):
+            metrics.add_rating_change(
+                conn,
+                agent,
+                skill,
+                before,
+                current[agent],
+                at=review,
+                ticket_id=ticket_id,
+                result=label,
+            )
+    bench = metrics.upsert_run(conn, project, "bench-1", command="bench")
+    job = metrics.start_job(
+        conn,
+        bench,
+        ticket_id=metrics.upsert_ticket(conn, project, "f3-02"),
+        milestone_id=milestone,
+        role="bench",
+        agent="new-model",
+        attempt=1,
+        started="2026-10-03T09:00:00+00:00",
+    )
+    metrics.finish_job(conn, job, ended="2026-10-03T09:30:00+00:00", outcome="passed")
+    return conn, project
+
+
+def test_the_recompute_replays_a_collapsed_rating_to_its_game_level(tmp_path):
+    conn, project = _collapsed(tmp_path)
+    before, _ = loop.standing(conn, REPLAY_START)
+    assert before["local"] == 1.0
+    history = conn.execute("SELECT * FROM rating_changes ORDER BY id").fetchall()
+
+    replayed = loop.replay_ratings(conn, project, REPLAY_START, datetime(2026, 10, 1, tzinfo=UTC))
+
+    def won(agent: str, ticket: str, skill: str = ratings.CODING, by: float = 1.0) -> ratings.Game:
+        return ratings.Game(agent, skill, ticket, 3, by, "")
+
+    # findings on f3-00 and f3-01 re-play their games a quarter lower, then (ADR 24 item 1)
+    games = [won("local", f"f3-0{n}", by=0.75 if n < 2 else 1.0) for n in range(3)]
+    games += [won("claude-sonnet", f"f3-0{n}") for n in (3, 4)]
+    games += [won("claude-sonnet", f"f3-0{k // 4}", ratings.REVIEWING) for k in range(8)]
+    games.append(won("new-model", "f3-02"))
+    expected = {c.agent: c.after for c in ratings.rate(REPLAY_START, {}, games)}
+    current, _ = loop.standing(conn, REPLAY_START)
+    assert current == pytest.approx(expected)
+    assert current["local"] > 3  # three wins at par, two of them a quarter lower
+    assert [(r.agent, r.before, r.games, r.written) for r in replayed] == [
+        ("local", 1.0, 3, True),
+        ("claude-sonnet", before["claude-sonnet"], 2, True),
+        ("new-model", 6.0, 1, True),
+    ]
+    rows = conn.execute("SELECT * FROM rating_changes ORDER BY id").fetchall()
+    assert [tuple(r) for r in rows[: len(history)]] == [tuple(r) for r in history]  # kept
+    new = rows[len(history) :]
+    assert all(r["result"].startswith("replay ADR 24") for r in new)
+    assert min(r["at"] for r in new) > max(r["at"] for r in history)  # after, though `at` is not
+    assert [r["result"] for r in new if r["agent"] == "local"] == [
+        "replay ADR 24: from 3",
+        f"replay ADR 24: {ratings.MERGED_FIRST}, finding F0",
+        f"replay ADR 24: {ratings.MERGED_FIRST}, finding F4",
+        f"replay ADR 24: {ratings.MERGED_FIRST}",
+    ]
+    # the recompute's rows restart the count: Sonnet's two games don't become four
+    routed = loop.routing_ratings(conn, REPLAY_START)
+    assert routed == {"local": current["local"], "claude-sonnet": 1.0, "new-model": 1.0}
+
+    again = loop.replay_ratings(conn, project, REPLAY_START, datetime(2026, 10, 5, tzinfo=UTC))
+    assert conn.execute("SELECT count(*) FROM rating_changes").fetchone()[0] == len(rows)
+    assert [(r.agent, r.after, r.written) for r in again] == [
+        (r.agent, r.after, False) for r in replayed
+    ]
+    conn.close()
+
+
+def test_the_recompute_leaves_an_unplayed_agent_at_its_estimate(tmp_path):
+    conn = metrics.open_db(tmp_path / "metrics.sqlite")
+    project = metrics.upsert_project(conn, "coucou")
+    replayed = loop.replay_ratings(conn, project, REPLAY_START, datetime(2026, 10, 5, tzinfo=UTC))
+    assert [(r.agent, r.after, r.written) for r in replayed] == [
+        (agent, rating, False) for agent, rating in REPLAY_START.items()
+    ]
+    assert conn.execute("SELECT count(*) FROM rating_changes").fetchone()[0] == 0
+    conn.close()
 
 
 def _routed(repo: Path) -> SessionReport:

@@ -26,3 +26,31 @@
 | 05 | signoff-by-milestone | L | 2 | – | `signoff` and `_ids` read `milestone:` |
 | 06 | bench-isolation | L | 5 | – | a benched OpenCode agent works only in its copy, proven by a canary |
 
+## Replay log
+`uv run runner ratings --replay`, 2026-10-04, on the real metrics database (f7-02).
+- **What it plays:** every rated ticket's game, every judged verdict and every bench run, in time order, from each agent's estimate.
+- **Findings, per ADR 24 item 1:** findings on a merged ticket's code re-play that ticket's game a quarter lower, at the game's own time.
+  - That's 16 of Qwen's 19 merged tickets, and 5 of gpt-oss-120b's 7.
+  - Charging the quarters at the review's time instead, as the first run of the code did, still takes Qwen to 1.00: 16 quarters at the end, with no games after them to correct it.
+- **Benches:** they were never rated before ADR 24, so the replay plays them from their jobs.
+
+| Agent | Before | After | Coding games |
+|---|---|---|---|
+| local-qwen3.6-35b-a3b | 1.00 | **2.52** | 33 |
+| ollama-gpt-oss-120b | 1.00 | 1.00 | 16 |
+| ollama-gemma4-31b | 5.00 | 2.11 | 2 (benches) |
+| ollama-nemotron-3-super | 4.32 | 2.73 | 1 (bench) |
+| claude-opus | 10.00 | 10.00 | 53 |
+| copilot-auto | 8.46 | 8.46 | 0 (reviews only) |
+| ollama-nemotron-3-ultra | 6.00 | 6.00 | 0 |
+| claude-sonnet | 5.67 | 5.67 | 3 |
+| ollama-gpt-oss-20b | 4.00 | 4.00 | 0 |
+| ollama-nemotron-3-nano-30b | 4.00 | 4.00 | 0 |
+
+- **Against ADR 24's Consequences:**
+  - Qwen ends at 2.52, short of ≈3: it lost 14 of its 33 tickets.
+  - **gpt-oss-120b stays at 1.00, not ≈2.** It lost three benches (f1-36, f1-38, f4-25) and six tickets, against seven merges.
+  - The untested Ollama models route at the floor (fewer than 3 games), as expected.
+- **For the owner:** gpt-oss-120b still gets no first attempt.
+- **Rows written:** only for agents whose rating moved. A second run wrote nothing.
+

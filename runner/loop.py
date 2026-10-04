@@ -3,6 +3,7 @@
 import hashlib
 import itertools
 import json
+import math
 import re
 import select
 import sqlite3
@@ -12,7 +13,7 @@ import time
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import partial
 from pathlib import Path
 from typing import Any, Concatenate, NoReturn
@@ -2037,7 +2038,13 @@ def record_findings(
 # Jobs that attempt a ticket; a refused, skipped or parked one isn't an attempt (ADR 14 item 10).
 _ATTEMPT_ROLES = ("developer", "last-attempt", "lead-ticket")
 BENCH = "bench"  # a bench replay's jobs (runner/bench.py): a game each (ADR 24 item 3)
-REPLAYED = ("m1", "m2", "m3", "m4")  # the local model's history before ratings (ADR 14 item 7)
+REPLAY = "replay ADR 24: "  # the recompute's rows (ADR 24 item 4): + the replayed change's label
+REPLAY_FROM = REPLAY + "from "  # + the estimate: where an agent's recompute starts, not a game
+_TICKET_RESULTS = {
+    ratings.MERGED_FIRST: ratings.FIRST,
+    ratings.MERGED_LATER: ratings.LATER,
+    ratings.NOT_MERGED: ratings.LOST,
+}
 
 
 def starting_ratings(cfg: Config) -> dict[str, float]:
@@ -2065,14 +2072,20 @@ def standing(
 
 def routing_ratings(conn: sqlite3.Connection, start: Mapping[str, float]) -> dict[str, float]:
     """Each agent's rating now, at the floor until it has played ``ratings.MIN_GAMES`` coding
-    games (a finding's penalty isn't one). The stored rating, and the Agents page, keep it."""
+    games (a finding's penalty isn't one). The stored rating, and the Agents page, keep it.
+    A recompute starts the count again: its rows replay the games before it."""
     current, _ = standing(conn, start)
+    games: dict[str, int] = {}
     rows = conn.execute(
-        "SELECT agent, count(*) AS games FROM rating_changes WHERE skill = ?"
-        " AND ifnull(result, '') NOT LIKE ? GROUP BY agent",
-        (ratings.CODING, ratings.FINDING_LABEL + "%"),
+        "SELECT agent, ifnull(result, '') AS result FROM rating_changes WHERE skill = ?"
+        " ORDER BY at, id",
+        (ratings.CODING,),
     )
-    games = {row["agent"]: row["games"] for row in rows}
+    for row in rows:
+        if row["result"].startswith(REPLAY_FROM):
+            games[row["agent"]] = 0
+        elif not row["result"].removeprefix(REPLAY).startswith(ratings.FINDING_LABEL):
+            games[row["agent"]] = games.get(row["agent"], 0) + 1
     return {agent: ratings.routing_rating(r, games.get(agent, 0)) for agent, r in current.items()}
 
 
@@ -2221,8 +2234,8 @@ def rate_bench(
         " AND agent = ? ORDER BY started, id",
         (run_id, row["id"], BENCH, agent),
     ).fetchall()
-    outcomes = [job["outcome"] for job in jobs]
-    if not outcomes or any(o in ("running", "interrupted", "refused") for o in outcomes):
+    game = _bench_game(agent, ticket, row["difficulty"], [job["outcome"] for job in jobs])
+    if game is None:
         return
     began = _at(jobs[0]["started"])
     rated = conn.execute(
@@ -2231,40 +2244,140 @@ def rate_bench(
     )
     if any(_at(r["at"]) >= began for r in rated):
         return
-    passed = next((n for n, o in enumerate(outcomes, start=1) if o == "passed"), None)
-    game = ratings.bench_game(agent, ticket, row["difficulty"], passed)
     current, played = standing(conn, start)
     _write_changes(conn, ratings.rate(current, played, [game]), {ticket: row["id"]}, at)
 
 
-def replay_ratings(
-    conn: sqlite3.Connection, project_id: int, agent: str, start: float
-) -> list[ratings.Change]:
-    """Seed ``agent``'s rating from its M1–M4 tickets, from ``start`` in merge order (a
-    ticket's last job), each change at its ticket's merge: a second replay rewrites the same
-    rows."""
+def _bench_game(
+    agent: str, ticket: str, difficulty: float, outcomes: Sequence[str]
+) -> ratings.Game | None:
+    """One bench run's replay of a ticket as a game; none with a refusal, or still running."""
+    if not outcomes or any(o in ("running", "interrupted", "refused") for o in outcomes):
+        return None
+    passed = next((n for n, o in enumerate(outcomes, start=1) if o == "passed"), None)
+    return ratings.bench_game(agent, ticket, difficulty, passed)
+
+
+@dataclass(frozen=True)
+class Replayed:
+    """An agent's rating before and after the ADR 24 recompute."""
+
+    agent: str
+    before: float  # its standing
+    after: float
+    games: int  # its coding games replayed, as routing counts them
+    written: bool  # False: the recompute changed nothing, so wrote nothing
+
+
+def _moment(value: str) -> datetime:
+    at = _at(value)
+    return at if at.tzinfo else at.replace(tzinfo=UTC)  # a backfilled time may have no zone
+
+
+def _recorded_games(
+    conn: sqlite3.Connection, project_id: int
+) -> tuple[list[tuple[datetime, ratings.Game]], dict[str, int]]:
+    """The games the ratings have played, at their times, under ADR 24: each ticket's game and
+    each verdict once, and every bench run's replay from its jobs (benches before ADR 24 were
+    never rated). Findings on a merged ticket's code re-play its game a quarter lower (item 1),
+    at the game's time; a penalty with no game to fold into stays, once per (agent, ticket).
+    Earlier recomputes are left out. Also each ticket's id."""
     rows = conn.execute(
-        "SELECT t.id, t.ticket, t.merged_by, coalesce(t.difficulty_corrected, t.difficulty)"
-        " AS difficulty, max(coalesce(j.ended, j.started)) AS merged_at FROM tickets t"
-        " JOIN milestones m ON m.id = t.milestone_id JOIN jobs j ON j.ticket_id = t.id"
-        " WHERE t.project_id = ? AND m.key IN (SELECT value FROM json_each(?))"
-        " AND coalesce(t.difficulty_corrected, t.difficulty) IS NOT NULL"
-        " GROUP BY t.id HAVING sum(j.agent = ?) > 0 ORDER BY merged_at, t.id",
-        (project_id, json.dumps(REPLAYED), agent),
+        "SELECT r.agent, r.skill, r.at, ifnull(r.result, '') AS result, t.id AS ticket_id,"
+        " t.ticket, coalesce(t.difficulty_corrected, t.difficulty) AS difficulty"
+        " FROM rating_changes r JOIN tickets t ON t.id = r.ticket_id"
+        " WHERE t.project_id = ? AND ifnull(r.result, '') NOT LIKE ? ORDER BY r.at, r.id",
+        (project_id, REPLAY + "%"),
     ).fetchall()
-    games, times, ids = [], {}, {}
-    last: datetime | None = None
+    found: dict[tuple[str, str], str] = {}  # (author, ticket): its first finding's label
     for row in rows:
-        merged = datetime.fromisoformat(row["merged_at"])
-        last = merged if last is None or merged > last else last + timedelta(microseconds=1)
-        times[row["ticket"]], ids[row["ticket"]] = last, row["id"]
-        attempts = _attempts(conn, row["id"], row["merged_by"])
-        ticket = ratings.ticket_games(row["ticket"], row["difficulty"], attempts)
-        games += [game for game in ticket if game.agent == agent]
-    changes = ratings.rate({agent: start}, {}, games)
-    for change in changes:
-        _write_changes(conn, [change], ids, times[change.ticket])
-    return changes
+        if row["result"].startswith(ratings.FINDING_LABEL):
+            found.setdefault((row["agent"], row["ticket"]), row["result"])
+    merged = (ratings.MERGED_FIRST, ratings.MERGED_LATER)
+    folded = {
+        (row["agent"], row["ticket"])
+        for row in rows
+        if row["result"] in merged and row["difficulty"] is not None
+    } & found.keys()
+    games: list[tuple[datetime, ratings.Game]] = []
+    ids: dict[str, int] = {}
+    seen: set[tuple[str, str, str]] = set()
+    for row in rows:
+        agent, ticket, label, difficulty = row["agent"], row["ticket"], row["result"], None
+        if label in _TICKET_RESULTS:
+            once, result, difficulty = "ticket", _TICKET_RESULTS[label], row["difficulty"]
+            if (agent, ticket) in folded:
+                result, label = result + ratings.FINDING, f"{label}, {found[agent, ticket]}"
+        elif label.startswith(ratings.FINDING_LABEL):
+            if (agent, ticket) in folded:
+                continue
+            once, result = "finding", ratings.FINDING  # ADR 24 item 1: one per ticket
+        elif row["skill"] == ratings.REVIEWING and label.split(" ")[0] in ratings.VERDICT_RESULTS:
+            once, result = label, ratings.VERDICT_RESULTS[label.split(" ")[0]]
+            difficulty = row["difficulty"]
+        else:
+            continue  # a bench game is played from its jobs, below
+        if (agent, ticket, once) in seen or (once != "finding" and difficulty is None):
+            continue
+        seen.add((agent, ticket, once))
+        ids[ticket] = row["ticket_id"]
+        game = ratings.Game(agent, row["skill"], ticket, difficulty, result, label)
+        games.append((_moment(row["at"]), game))
+    jobs = conn.execute(
+        "SELECT j.run_id, j.agent, j.outcome, j.started, t.id AS ticket_id, t.ticket,"
+        " coalesce(t.difficulty_corrected, t.difficulty) AS difficulty FROM jobs j"
+        " JOIN tickets t ON t.id = j.ticket_id WHERE j.role = ? AND t.project_id = ?"
+        " AND coalesce(t.difficulty_corrected, t.difficulty) IS NOT NULL"
+        " ORDER BY j.started, j.id",
+        (BENCH, project_id),
+    ).fetchall()
+    benched: dict[tuple[int, str, str], list[sqlite3.Row]] = {}
+    for job in jobs:
+        benched.setdefault((job["run_id"], job["ticket"], job["agent"]), []).append(job)
+    for (_, ticket, agent), group in benched.items():
+        outcomes = [job["outcome"] for job in group]
+        if (replay := _bench_game(agent, ticket, group[0]["difficulty"], outcomes)) is not None:
+            ids[ticket] = group[0]["ticket_id"]
+            games.append((_moment(group[0]["started"]), replay))
+    games.sort(key=lambda timed: timed[0])  # stable: same-moment games keep their order
+    return games, ids
+
+
+def replay_ratings(
+    conn: sqlite3.Connection, project_id: int, start: Mapping[str, float], at: datetime
+) -> list[Replayed]:
+    """Recompute every agent's rating from its estimate in ``start``, re-playing its games in
+    time order under ADR 24 (item 4). An agent it changes gets new rows after every existing
+    one: a ``REPLAY_FROM`` start, then its replayed changes, so the history stays and
+    ``standing`` reads the recompute as current. A second recompute writes nothing new."""
+    timed, ids = _recorded_games(conn, project_id)
+    changes = ratings.rate(start, {}, [game for _, game in timed])
+    current, _ = standing(conn, start)
+    latest = conn.execute("SELECT max(at) FROM rating_changes").fetchone()[0]
+    if latest is not None:
+        at = max(at, _moment(latest) + timedelta(microseconds=1))
+    replayed: list[Replayed] = []
+    rows: list[tuple[str, str, float, float, int | None, str]] = []
+    for agent, estimate in start.items():
+        mine = [change for change in changes if change.agent == agent]
+        after = mine[-1].after if mine else estimate
+        games = sum(
+            c.skill == ratings.CODING and not c.label.startswith(ratings.FINDING_LABEL)
+            for c in mine
+        )
+        written = not math.isclose(after, current[agent], rel_tol=0, abs_tol=1e-9)
+        if written:
+            rows.append((agent, ratings.CODING, current[agent], estimate, None, f"{estimate:g}"))
+            rows += [(c.agent, c.skill, c.before, c.after, ids[c.ticket], c.label) for c in mine]
+        replayed.append(Replayed(agent, current[agent], after, games, written))
+    for (agent, skill, before, after, ticket_id, label), moment in zip(
+        rows, ratings.moments(at, len(rows)), strict=True
+    ):
+        prefix = REPLAY_FROM if ticket_id is None else REPLAY
+        metrics.add_rating_change(
+            conn, agent, skill, before, after, at=moment, ticket_id=ticket_id, result=prefix + label
+        )
+    return replayed
 
 
 def rate_finished(s: Session, ticket: str) -> None:
