@@ -294,6 +294,30 @@ def test_a_failing_agent_would_escalate_without_calling_claude(repo, copies, fak
     assert not fake_agents["fake-a"]
 
 
+def test_each_replay_is_a_rating_game_for_its_agent(repo, copies, fake_agents):
+    """ADR 24 item 3: a new model earns its rating on the bench."""
+    _history(repo)
+    cfg = _config(repo, copies)
+    conn = metrics.open_db(cfg.metrics_db)
+    metrics.upsert_ticket(conn, metrics.upsert_project(conn, repo.name), TICKET, difficulty=5)
+    conn.close()
+    fake_agents["fake-a"].append(_implement)
+    fake_agents["fake-b"].extend([_stray, _stray, _stray])
+    bench.run_bench(cfg, [TICKET], ["fake-a", "fake-b"])
+    conn = sqlite3.connect(cfg.metrics_db)
+    try:
+        changes = conn.execute(
+            "SELECT agent, before, after, result FROM rating_changes ORDER BY at"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert [(agent, result) for agent, _, _, result in changes] == [
+        ("fake-a", "bench passed at the first attempt"),
+        ("fake-b", "bench not passed"),
+    ]
+    assert changes[0][2] > changes[0][1] and changes[1][2] < changes[1][1]
+
+
 def test_a_refusal_stops_the_bench_and_says_who_and_when_it_resets(repo, copies, fake_agents):
     _history(repo)
 

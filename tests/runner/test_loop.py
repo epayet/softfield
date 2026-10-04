@@ -3156,8 +3156,35 @@ def test_a_ticket_set_aside_is_recorded_as_later(repo):
 # --- routing (f1-25, runner/router.py; ADR 15 items 6, 7 and 9) ----------------------------
 
 
+def _proven(repo: Path, **rated: float) -> None:
+    """Each agent (``local_m=5``) rated after three coding games: routing reads the floor (1)
+    for an agent with fewer (ADR 24 item 3)."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    for name, rating in rated.items():
+        for n in range(3):
+            at = (THURSDAY - timedelta(days=3, hours=n)).isoformat()
+            agent = name.replace("_", "-")
+            metrics.add_rating_change(conn, agent, "coding", rating, rating, at=at, result="x")
+    conn.close()
+
+
+def test_an_agent_routes_at_the_floor_until_its_third_game(repo, fake_clock):
+    """ADR 24 item 3: with 2 games it routes as 1, with 3 as its rating."""
+    _proven(repo, claude_sonnet=7)
+    s = loop.open_session(_config(repo))
+    assert loop.current_ratings(s)["claude-sonnet"] == 7
+    conn = metrics.open_db(_config(repo).metrics_db)
+    conn.execute("DELETE FROM rating_changes WHERE id = (SELECT min(id) FROM rating_changes)")
+    conn.commit()
+    conn.close()
+    assert loop.current_ratings(s)["claude-sonnet"] == 1
+    assert loop.current_ratings(s)["claude-opus"] == 1  # an estimate of 9, never played
+
+
 def _routed(repo: Path) -> SessionReport:
-    """A session with Sonnet as a developer after local, and Opus to check Sonnet's merges."""
+    """A session with Sonnet as a developer after local, and Opus to check Sonnet's merges;
+    local proven at 5 and Sonnet at 7."""
+    _proven(repo, local_m=5, claude_sonnet=7)
     roles = {
         **ROLES,
         "developer": ("local-m", "claude-sonnet"),

@@ -805,10 +805,11 @@ def first_agent(s: Session, role: str) -> router.Route:
 
 
 def current_ratings(s: Session) -> dict[str, float]:
-    """Each agent's rating now: its latest change, else its config estimate."""
+    """Each agent's rating as routing reads it (``routing_ratings``); every agent at the floor
+    when the database can't be read: an estimate is never trusted (ADR 24 item 3)."""
     start = starting_ratings(s.cfg)
-    found = _record(s, standing, start)
-    return found[0] if found is not None else start
+    found = _record(s, routing_ratings, start)
+    return found if found is not None else {agent: ratings.LOWEST for agent in start}
 
 
 def _at(value: str) -> datetime:
@@ -2035,6 +2036,7 @@ def record_findings(
 
 # Jobs that attempt a ticket; a refused, skipped or parked one isn't an attempt (ADR 14 item 10).
 _ATTEMPT_ROLES = ("developer", "last-attempt", "lead-ticket")
+BENCH = "bench"  # a bench replay's jobs (runner/bench.py): a game each (ADR 24 item 3)
 REPLAYED = ("m1", "m2", "m3", "m4")  # the local model's history before ratings (ADR 14 item 7)
 
 
@@ -2059,6 +2061,19 @@ def standing(
         if row["ticket"]:
             played.setdefault(row["agent"], set()).add(row["ticket"])
     return current, played
+
+
+def routing_ratings(conn: sqlite3.Connection, start: Mapping[str, float]) -> dict[str, float]:
+    """Each agent's rating now, at the floor until it has played ``ratings.MIN_GAMES`` coding
+    games (a finding's penalty isn't one). The stored rating, and the Agents page, keep it."""
+    current, _ = standing(conn, start)
+    rows = conn.execute(
+        "SELECT agent, count(*) AS games FROM rating_changes WHERE skill = ?"
+        " AND ifnull(result, '') NOT LIKE ? GROUP BY agent",
+        (ratings.CODING, ratings.FINDING_LABEL + "%"),
+    )
+    games = {row["agent"]: row["games"] for row in rows}
+    return {agent: ratings.routing_rating(r, games.get(agent, 0)) for agent, r in current.items()}
 
 
 def _attempts(
@@ -2137,7 +2152,8 @@ def rate_verdicts(
     at: datetime,
 ) -> None:
     """The final review's verdicts on the milestone's findings, each once: a game for the
-    reviewer (``checkpoint`` for a missed one) and a quarter off the author of the code."""
+    reviewer (``checkpoint`` for a missed one), and a quarter off the author of the code once
+    per ticket, whatever later verdicts come (ADR 24 item 1)."""
     rows = conn.execute(
         "SELECT f.key, f.verdict, f.agent, t.id AS ticket_id, t.ticket, t.merged_by,"
         " coalesce(t.difficulty_corrected, t.difficulty) AS difficulty FROM findings f"
@@ -2167,8 +2183,58 @@ def rate_verdicts(
         for row in rows
         if row["key"] not in done
     ]
+    penalised = {
+        ticket
+        for (ticket,) in conn.execute(
+            "SELECT DISTINCT t.ticket FROM rating_changes r"  # noqa: S608
+            f" JOIN tickets t ON t.id = r.ticket_id WHERE r.ticket_id IN ({marks})"
+            " AND r.result LIKE ?",
+            [*ids.values(), ratings.FINDING_LABEL + "%"],
+        )
+    }
+    games = ratings.judged_games(judged, penalised)
     current, played = standing(conn, start)
-    _write_changes(conn, ratings.rate(current, played, ratings.judged_games(judged)), ids, at)
+    _write_changes(conn, ratings.rate(current, played, games), ids, at)
+
+
+def rate_bench(
+    conn: sqlite3.Connection,
+    project_id: int,
+    run_id: int,
+    ticket: str,
+    agent: str,
+    start: Mapping[str, float],
+    at: datetime,
+) -> None:
+    """``agent``'s bench replay of ``ticket`` in bench run ``run_id``, as one coding game, once
+    (ADR 24 item 3). A replay with a refusal (or still running) is no game, and a ticket with
+    no difficulty isn't rated."""
+    row = conn.execute(
+        "SELECT id, coalesce(difficulty_corrected, difficulty) AS difficulty"
+        " FROM tickets WHERE project_id = ? AND ticket = ?",
+        (project_id, ticket),
+    ).fetchone()
+    if row is None or row["difficulty"] is None:
+        return
+    jobs = conn.execute(
+        "SELECT outcome, started FROM jobs WHERE run_id = ? AND ticket_id = ? AND role = ?"
+        " AND agent = ? ORDER BY started, id",
+        (run_id, row["id"], BENCH, agent),
+    ).fetchall()
+    outcomes = [job["outcome"] for job in jobs]
+    if not outcomes or any(o in ("running", "interrupted", "refused") for o in outcomes):
+        return
+    began = _at(jobs[0]["started"])
+    rated = conn.execute(
+        "SELECT at FROM rating_changes WHERE agent = ? AND ticket_id = ? AND result LIKE ?",
+        (agent, row["id"], ratings.BENCH_LABEL + "%"),
+    )
+    if any(_at(r["at"]) >= began for r in rated):
+        return
+    passed = next((n for n, o in enumerate(outcomes, start=1) if o == "passed"), None)
+    game = ratings.bench_game(agent, ticket, row["difficulty"], passed)
+    current, played = standing(conn, start)
+    _write_changes(conn, ratings.rate(current, played, [game]), {ticket: row["id"]}, at)
 
 
 def replay_ratings(

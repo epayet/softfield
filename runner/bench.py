@@ -5,7 +5,8 @@ Each ticket × agent gets a throwaway copy of the repo under `[bench] dir`, deta
 parent of the ticket's merge, with today's workflow files overlaid and the ticket back in
 `tasks/ready/`. The agent gets the usual attempts and gates there, as jobs of role `bench`;
 no Claude, so a failed last attempt is recorded as "would escalate". Nothing reaches main,
-`tasks/` or a branch. The first refusal stops the bench. The logs stay in `var/bench/`.
+`tasks/` or a branch. The first refusal stops the bench. The logs stay in `var/bench/`. Each
+replay that ends without a refusal is a rating game for its agent (ADR 24 item 3).
 
 The copy is a clone with its own `.git`, never a `git worktree`: OpenCode takes its project
 from the git common dir, so in a worktree it edited the main checkout (f2-12). Nor does the
@@ -45,6 +46,7 @@ from runner.gates import NO_CHANGES, GateContext, GateResult, parse_blocked, run
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.local_model import empty_cause, is_local, warmup
 from runner.loop import (
+    BENCH,
     MAIN,
     RUNNER_AGENT,
     RunnerError,
@@ -64,7 +66,9 @@ from runner.loop import (
     _start_heartbeat,
     next_number,
     now,
+    rate_bench,
     record_start,
+    starting_ratings,
     with_progress,
 )
 from runner.report import SessionReport
@@ -72,7 +76,7 @@ from runner.review import Finding, ReviewFileError, parse_checkpoint
 from runner.state import load_state
 from runner.tasks import _FOOTER_BLOCK_RE, Task, parse_task
 
-ROLE = "bench"
+ROLE = BENCH
 # Today's workflow, laid over the old tree so every agent works to the same rules.
 OVERLAY = ("AGENTS.md", "docs/agents", "opencode.json", "workflow")
 WOULD_ESCALATE = "would escalate"
@@ -341,6 +345,9 @@ def run_bench(cfg: Config, tickets: list[str], agent_ids: list[str]) -> BenchRep
             for agent_id in agent_ids:
                 result = bench_one(s, cfg.agents[agent_id], ticket, parent, text)
                 report.results.append(result)
+                if s.project_id is not None and s.run_id is not None:  # a game (ADR 24 item 3)
+                    start = starting_ratings(cfg)
+                    _record(s, rate_bench, s.project_id, s.run_id, ticket, agent_id, start, now())
                 mark = "✔" if result.outcome == "passed" else "✖"
                 s.log(f"{mark} [{agent_id}] {ticket}: {result.outcome} · attempt {result.attempts}")
                 if result.outcome == "refused":

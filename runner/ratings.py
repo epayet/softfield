@@ -1,4 +1,4 @@
-"""Each agent's one rating, from 1 to 10 (ADR 14 items 6–7, ADR 15 item 9).
+"""Each agent's one rating, from 1 to 10 (ADR 14 items 6–7, ADR 15 item 9, ADR 24).
 
 Pure: ratings, results and history are parameters; the runner reads the metrics database and
 writes ``rating_changes`` (``runner.loop``). Coding results and review verdicts move the same
@@ -11,11 +11,16 @@ rating; a change's ``skill`` names which moved it.
 - **K** is 2 over an agent's first 5 tickets (its estimate is provisional) and 1 after.
 - **A ticket:** the attempt that merged scores 1 if it was its agent's first on the ticket, 0.5
   if later; every other agent that attempted it scores 0, once. Never merged: 0 for each.
-- **A confirmed finding on a ticket's code** lowers that ticket's result by 0.25 after the
-  fact: its author's rating moves by −0.25 × K, with nothing expected. The final review's
-  "missed" findings are real problems too, so they count the same.
+- **Findings on a merged ticket's code** lower that ticket's result by 0.25 after the fact,
+  once, however many the final review confirms (or marks missed): its author's rating moves
+  by −0.25 × K, with nothing expected. Elo's step is linear in the result, so this is the
+  ticket's game re-played 0.25 lower (ADR 24 item 1). A ticket not merged has no author.
 - **A judged finding is a reviewer's game** against the reviewed ticket's difficulty:
   confirmed 1, rejected 0, missed 0 (for the reviewer that should have caught it).
+- **A bench replay is a game** like a real one, at the ticket's difficulty: passed at the
+  first attempt 1, later 0.5, never 0 (ADR 24 item 3).
+- **Routing reads the floor** (1) for an agent with fewer than 3 coding games, whatever its
+  estimate; the stored rating stays (ADR 24 item 3).
 """
 
 import math
@@ -32,9 +37,17 @@ PROVISIONAL_TICKETS = 5
 LOWEST, HIGHEST = 1.0, 10.0
 
 FIRST, LATER, LOST = 1.0, 0.5, 0.0
-FINDING = -0.25  # off the ticket's result, per finding the final review confirms on its code
+FINDING = -0.25  # off a merged ticket's result, once, when the final review finds on its code
+FINDING_LABEL = "finding "  # + the first finding's key: the penalty, not a game
 MERGED_FIRST, MERGED_LATER, NOT_MERGED = "merged at the first attempt", "merged later", "not merged"
 TICKET_LABELS = (MERGED_FIRST, MERGED_LATER, NOT_MERGED)
+BENCH_FIRST, BENCH_LATER, BENCH_LOST = (
+    "bench passed at the first attempt",
+    "bench passed later",
+    "bench not passed",
+)
+BENCH_LABEL = "bench "  # every bench game's label starts so: never a real ticket's
+MIN_GAMES = 3  # coding games before routing trusts a rating (ADR 24 item 3)
 VERDICT_RESULTS = {"confirmed": 1.0, "rejected": 0.0, "missed": 0.0}
 ON_THE_CODE = ("confirmed", "missed")  # verdicts that say the ticket's code has a problem
 
@@ -125,10 +138,21 @@ def ticket_games(ticket: str, difficulty: float, attempts: Sequence[Attempt]) ->
     return games
 
 
-def judged_games(findings: Iterable[Judged]) -> list[Game]:
-    """The reviewers' games and the authors' quarter-point findings. A finding with no reviewed
-    difficulty or no reviewer moves no reviewer; one with no author costs no one."""
+def bench_game(agent: str, ticket: str, difficulty: float, passed_at: int | None) -> Game:
+    """A bench replay's game: ``passed_at`` is the attempt that passed, None if none did."""
+    if passed_at is None:
+        result, label = LOST, BENCH_LOST
+    else:
+        result, label = (FIRST, BENCH_FIRST) if passed_at == 1 else (LATER, BENCH_LATER)
+    return Game(agent, CODING, ticket, difficulty, result, label)
+
+
+def judged_games(findings: Iterable[Judged], penalised: Collection[str] = ()) -> list[Game]:
+    """The reviewers' games and each author's quarter, once per ticket: none for a ticket in
+    ``penalised`` (already charged). A finding with no reviewed difficulty or no reviewer moves
+    no reviewer; one with no author costs no one."""
     games = []
+    charged = set(penalised)
     for f in findings:
         if f.verdict not in VERDICT_RESULTS:
             continue
@@ -136,9 +160,16 @@ def judged_games(findings: Iterable[Judged]) -> list[Game]:
             result = VERDICT_RESULTS[f.verdict]
             label = f"{f.verdict} {f.key}"
             games.append(Game(f.reviewer, REVIEWING, f.ticket, f.difficulty, result, label))
-        if f.author is not None and f.verdict in ON_THE_CODE:
-            games.append(Game(f.author, CODING, f.ticket, None, FINDING, f"finding {f.key}"))
+        if f.author is not None and f.verdict in ON_THE_CODE and f.ticket not in charged:
+            charged.add(f.ticket)
+            label = FINDING_LABEL + f.key
+            games.append(Game(f.author, CODING, f.ticket, None, FINDING, label))
     return games
+
+
+def routing_rating(rating: float, games: int) -> float:
+    """The rating routing reads: the floor until ``MIN_GAMES`` coding games are played."""
+    return rating if games >= MIN_GAMES else LOWEST
 
 
 def model_of(agent: Agent) -> str | None:
