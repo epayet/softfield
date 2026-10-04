@@ -1,6 +1,6 @@
 # ADR 24: Ratings that hold: one finding penalty per ticket, and the bench counts
 
-- **Status:** Proposed (drafted by the lead, 2026-10-04)
+- **Status:** Accepted (by the owner, 2026-10-04)
 - **Date:** 2026-10-04
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 14](14-developers-and-agents.md) items 6–7 and [ADR 15](15-allowance-aware-routing.md) item 9 (how ratings move); [ADR 16](16-claude-window-and-named-milestones.md) item 10 (what the bench is for).
