@@ -24,3 +24,10 @@ Read `docs/adr/19-feature-board.md` item 3, D6 in `docs/milestones/f5-board.md`,
 - a bug with `priority: 1` goes before milestone tickets with priority 2
 - equal priorities keep today's order
 - `uv run runner check-all --task f5-06-priority-pick` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
