@@ -28,3 +28,10 @@ Read `docs/adr/18-dashboard-writes.md` items 2 and 3, D1 and D3 in `docs/milesto
 - a POST without the header, or from another origin, gets 403 and writes nothing
 - the status partial shows the result once the request is finished
 - `uv run runner check-all --task f5-02-requests-route` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
