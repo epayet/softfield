@@ -27,3 +27,12 @@ Read `list_later_tickets` and `tickets_page` in `factory_dashboard/tickets.py`, 
 - `test_filter_by_state_shows_only_matching` counts all `<tr` rows of the page body (panel rows included), so a leaking panel fails it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1009
+gate_failures: []
+tokens: 758894
+```
