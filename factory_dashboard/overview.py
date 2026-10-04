@@ -547,13 +547,14 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "spend": spend_chart(conn, project),
         },
     )
-    response.set_cookie(
-        SEEN,
-        local.isoformat(timespec="seconds"),
-        max_age=400 * 24 * 3600,
-        httponly=True,
-        samesite="lax",
-    )
+    if "since" not in request.query_params:  # choosing a span isn't looking again (f3-F3)
+        response.set_cookie(
+            SEEN,
+            local.isoformat(timespec="seconds"),
+            max_age=400 * 24 * 3600,
+            httponly=True,
+            samesite="lax",
+        )
     return response
 
 

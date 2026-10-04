@@ -72,7 +72,6 @@
   const short = (ticket) => ticket.split("-").slice(0, 2).join("-");
   const cut = (words, n) => (words && words.length > n ? `${words.slice(0, n - 1)}…` : words || "");
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-  const esc = (s) => s ? s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
 
   // --- the belts: where each D11 belt runs, and where its words go -------------------------
 
@@ -289,8 +288,8 @@
     add(g, "rect", { x, y, width: w, height: h, class: "unit" });
     add(g, "circle", { cx: mid, cy: y + 30, r: 10, class: "light" });
     text(g, mid, y + 62, "CHECKS", "head", { "text-anchor": "middle" });
-    text(g, mid, y + 80, "ruff · mypy", "dim", { "text-anchor": "middle" });
-    text(g, mid, y + 93, "tests · gates", "dim", { "text-anchor": "middle" });
+    text(g, mid, y + 79, "ruff · mypy", "dim", { "text-anchor": "middle" });
+    text(g, mid, y + 95, "tests · gates", "dim", { "text-anchor": "middle" });  // f5-14's font is taller
   }
 
   function merged(svg, doc, count, x, y, w, h, cols) {
@@ -409,6 +408,9 @@
   const narrow = () => window.innerWidth < 640;
   const shown = () => document.getElementById(narrow() ? "floor-phone" : "floor");
 
+  let shownDoc = null;  // the document the floor last drew, live or replayed: the card's
+  let cardCrate = null;  // the crate the card shows; null: closed. A redraw shows it again
+
   function drawFloor(doc) {
     const svg = document.getElementById("floor");
     const phone = document.getElementById("floor-phone");
@@ -416,6 +418,8 @@
     phone.style.display = narrow() ? "block" : "none";
     if (narrow()) drawPhone(phone, doc);
     else draw(svg, doc);
+    shownDoc = doc;
+    if (cardCrate) showCard(cardCrate);
   }
 
   let drawn = null;  // the live document last drawn, and on which floor; null: draw it again
@@ -594,64 +598,62 @@
   document.getElementById("replay-prev")?.addEventListener("click", () => { stop(); show(step - 1); });
   document.getElementById("replay-next")?.addEventListener("click", () => { stop(); show(step + 1); });
 
-  drawAll(document);
-  document.addEventListener("htmx:load", (event) => drawAll(event.detail.elt));
-
   // --- crate card (f3-19): click a crate to see its details -------------------------------
-
-  let _cardCrate = null;  // the crate key currently shown in the card; survives redraws
-  let _cardDoc = null;    // the doc used to build the card
+  // Built from nodes and text, never HTML: a title, an id or the page's ?project= could hold
+  // markup (f3 review, f3-F1). It reads the document the floor last drew, live or replayed.
 
   function crateInfo(doc, key) {
-    for (const c of doc.queue) if (c.ticket === key) return { ...c, _source: "queue" };
-    for (const m of doc.machines) if (m.crate && (m.crate.ticket === key || (!m.crate.ticket && m.crate.role === key))) return { ...m.crate, _source: "machine", _agent: m.name, _attempt: m.crate.attempt, _minutes: m.crate.minutes };
-    for (const c of doc.merged) if (c.ticket === key) return { ...c, _source: "merged" };
-    for (const c of doc.queue) if (c.ticket === key) return { ...c, _source: "queue" };
-    // Batch crates have ticket=null; fall back to role
-    for (const c of doc.queue) if (!c.ticket && c.role === key) return { ...c, _source: "queue" };
-    for (const c of doc.merged) if (!c.ticket && c.role === key) return { ...c, _source: "merged" };
+    const own = (c) => c.ticket === key || (!c.ticket && c.role === key);  // a batch: its role
+    for (const c of doc.queue) if (own(c)) return { ...c, _source: "queue" };
+    for (const m of doc.machines) if (m.crate && own(m.crate)) return { ...m.crate, _source: "machine", _agent: m.name };
+    for (const c of doc.merged) if (own(c)) return { ...c, _source: "merged" };
     return null;
+  }
+
+  function el(tag, cls, words = null) {
+    const node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (words !== null) node.textContent = String(words);
+    return node;
+  }
+
+  function meta(pairs) {
+    const dl = el("dl", "card-meta");
+    for (const [term, value] of pairs) dl.append(el("dt", "", term), el("dd", "", value));
+    return dl;
   }
 
   function showCard(key) {
     const card = document.getElementById("crate-card");
-    if (!card || !key) return;
-    const info = crateInfo(_cardDoc || (JSON.parse(document.getElementById("factory-line").textContent)), key);
+    if (!card || !key || !shownDoc) return;
+    const info = crateInfo(shownDoc, key);
     if (!info) return;
-    _cardCrate = key;
-    _cardDoc = JSON.parse(document.getElementById("factory-line").textContent);
-    let html = "";
+    cardCrate = key;
+    const parts = [];
     if (info.ticket) {
-      const project = new URLSearchParams(window.location.search).get("project") || "";
-      const link = project ? `/tickets/${info.ticket}?project=${project}` : `/tickets/${info.ticket}`;
-      html += `<a class="card-ticket" href="${link}">${info.ticket}</a>`;
-      if (info.title) html += `<div class="card-title">${esc(info.title)}</div>`;
-      const roles = [];
-      if (info.kind === "lead") roles.push("lead");
-      else if (info.kind === "developer") roles.push("developer");
-      if (roles.length) html += `<dl class="card-meta"><dt>role</dt><dd>${roles.join(", ")}</dd></dl>`;
+      const project = new URLSearchParams(window.location.search).get("project");
+      const link = el("a", "card-ticket", info.ticket);
+      const query = project ? `?${new URLSearchParams({ project })}` : "";
+      link.setAttribute("href", `/tickets/${encodeURIComponent(info.ticket)}${query}`);
+      parts.push(link);
+      if (info.title) parts.push(el("div", "card-title", info.title));
+      if (info.kind === "lead" || info.kind === "developer") parts.push(meta([["role", info.kind]]));
       if (info._source === "machine" && info._agent) {
-        html += `<dl class="card-meta"><dt>agent</dt><dd>${info._agent}</dd>`;
-        html += `<dt>attempt</dt><dd>${info._attempt}</dd>`;
-        html += `<dt>time</dt><dd>${info._minutes} min</dd></dl>`;
+        parts.push(meta([["agent", info._agent], ["attempt", info.attempt], ["time", `${info.minutes} min`]]));
       }
-      if (info.waits && info.waits.length) html += `<div class="card-waits">${esc(info.waits.join(", "))}</div>`;
+      if (info.waits && info.waits.length) parts.push(el("div", "card-waits", info.waits.join(", ")));
     } else {
-      html += `<span class="card-ticket">${info.role || "batch"}</span>`;
-      if (info.title) html += `<div class="card-title">${esc(info.title)}</div>`;
+      parts.push(el("span", "card-ticket", info.role || "batch"));
+      if (info.title) parts.push(el("div", "card-title", info.title));
     }
-    card.innerHTML = html;
+    card.replaceChildren(...parts);
     card.hidden = false;
   }
 
   function hideCard() {
     const card = document.getElementById("crate-card");
     if (card) card.hidden = true;
-    _cardCrate = null;
-  }
-
-  function keepCard() {
-    if (_cardCrate) showCard(_cardCrate);
+    cardCrate = null;
   }
 
   // One listener on the floor wrapper finds the [data-crate] clicked
@@ -671,16 +673,6 @@
     if (crate) { e.preventDefault(); showCard(crate.dataset.crate); }
   });
 
-  // After every redraw, restore the card if it was open
-  const origDrawFloor = drawFloor;
-  drawFloor = function (doc) {
-    origDrawFloor(doc);
-    keepCard();
-  };
-  const origDrawPhone = drawPhone;
-  drawPhone = function (floor, doc) {
-    origDrawPhone(floor, doc);
-    keepCard();
-  };
-
+  drawAll(document);
+  document.addEventListener("htmx:load", (event) => drawAll(event.detail.elt));
 })();

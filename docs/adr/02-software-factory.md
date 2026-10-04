@@ -254,6 +254,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a lead-only milestone is bound by the 5-hour window whatever the routing does. Cloud developers fail fast (minutes, not GPU half-hours), which makes a failure cheap but not useful.
 - **Decisions affected:** none yet. If the next milestone with developer work shows the same gap between passing the gates and meeting the Done when, an ADR should give checkpoints the last merges before the review.
 
+### F3 (2026-10-04): the factory line ([review](../reviews/f3.md))
+
+- **Q1:** 11 escalations, 12 directions, 5 checkpoints for 25 merges. Most escalations were `finish` or `implemented` after Qwen read for 10 minutes without an edit; four were fix tickets whose `files:` held only tests, which no developer can pass (now a pre-flight check).
+- **Q3:** Qwen 2 of 16 first time on the line's SVG and its fixes; Opus finished most of them. gpt-oss-120b 1 of 8: careless edits, failed in a minute.
+- **Q5:** $48.46 of Claude; net savings from delegating −$15.43, the worst so far. Supporting a developer on an SVG ticket cost more than writing it.
+- **Anything else:** the checkpoints caught real gaps (11 findings, all confirmed), but both their fix tickets and the checkpoint after them let a DOM XSS through. The all-tests gate skipped every test file a ready ticket listed, so the line's tests ran in no gate and a regression reached main.
+- **Decisions affected:** [ADR 21](21-gate-every-test-file.md) (Proposed) drops ADR 01 item 1's skip. Drawing work (SVG layout, motion) goes to the lead or to small, picture-backed developer tickets on a lead-written core.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

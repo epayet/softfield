@@ -545,3 +545,24 @@ def test_a_due_review_diffs_from_the_plans_commit(repo, monkeypatch):
     assert git(repo, "rev-parse", "f9-start^{commit}").strip() == plan
     milestone.run_due_review(_config(repo), "f9")  # a tag already there is kept
     assert git(repo, "rev-parse", "f9-start^{commit}").strip() == plan
+
+
+def test_a_replanned_milestones_review_diffs_from_its_first_merge(repo, monkeypatch):
+    """f3 review (f3-F5): F3's doc dated from F1, so its review read all of F2 and F4. The
+    review starts where the milestone's first ticket was merged."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f9.md").write_text(MILESTONE_DOC)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "plan f9, long ago")
+    (repo / "other.txt").write_text("another milestone's work")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f8-01-x: other work\n\nTask: f8-01-x")
+    before = git(repo, "rev-parse", "HEAD").strip()
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    milestone_ticket(repo, "done", "f9-02-b", "f9")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f9-01-a: the first\n\nTask: f9-01-a")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f9-02-b: the second\n\nTask: f9-02-b")
+    monkeypatch.setattr(milestone, "review_milestone", lambda cfg, key, base: "clean")
+    milestone.run_due_review(_config(repo), "f9")
+    assert git(repo, "rev-parse", "f9-start^{commit}").strip() == before

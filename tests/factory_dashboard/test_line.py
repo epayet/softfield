@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from html import unescape
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -1460,7 +1460,51 @@ def test_enter_opens_the_card_and_click_outside_closes_it(page, line_client):
     assert card.is_hidden()
 
 
-# --- allowance rows layout (f4-34) ---------------------------------------------------------------
+def test_the_cards_link_keeps_markup_in_the_project_as_text(page, line_client):
+    """f3 review (f3-F1): the card's link took ``?project=`` from the address as HTML, so a link
+    such as ``/?project="><img onerror=…>`` ran script in the dashboard."""
+    page.clock.install()
+    open_line(page, line_client)
+    hostile = '"><img src=x onerror="window.pwned=1">'
+    page.goto(f"{ORIGIN}/?{urlencode({'project': hostile})}")
+    crate = page.locator("svg#floor [data-queue-crate]").first
+    first = crate.get_attribute("data-queue-crate")
+    crate.click()
+    card = page.locator("#crate-card")
+    assert card.locator("img").count() == 0
+    assert page.evaluate("() => window.pwned") is None
+    href = card.locator("a").get_attribute("href")
+    assert href == f"/tickets/{first}?{urlencode({'project': hostile})}"
+    assert card.locator("a").text_content() == first
+
+
+def test_the_card_reads_the_document_the_floor_drew_last(page, line_client):
+    """f3 review (f3-F2): the card kept the document of the first crate opened, so a crate
+    queued by a later refresh opened nothing, and an open card never moved on."""
+    page.clock.install()
+    first = block(line_client.get("/").text)
+    later_doc = json.loads(json.dumps(first))
+    later_doc["queue"].append(
+        {"ticket": "f9-09-new", "title": "Queued later.", "kind": "lead", "number": 99, "waits": []}
+    )
+    for m in later_doc["machines"]:
+        if m["crate"]:
+            m["crate"]["minutes"] += 5
+    working = next(m for m in first["machines"] if m["crate"])
+    open_line(page, line_client, live=[first, later_doc])
+    page.click(f'svg#floor [data-crate="{working["crate"]["ticket"]}"]')
+    card = page.locator("#crate-card")
+    assert f"{working['crate']['minutes']} min" in (card.text_content() or "")
+    page.evaluate("() => { window.liveIdle = () => true; }")
+    refresh(page)
+    refresh(page)
+    assert f"{working['crate']['minutes'] + 5} min" in (card.text_content() or "")
+    page.keyboard.press("Escape")
+    page.click('svg#floor [data-queue-crate="f9-09-new"]')
+    assert card.locator(".card-title").text_content() == "Queued later."
+
+
+# --- allowance rows layout (f4-34)---------------------------------------------------------------
 
 
 def test_allowance_rows_side_by_side_at_desktop_and_wrap_at_phone(page, allowance_client):

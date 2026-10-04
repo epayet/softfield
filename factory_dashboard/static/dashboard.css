@@ -165,6 +165,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .steps li:last-child { border-bottom: 0; }
 .steps .when { color: var(--muted); font-family: var(--mono); font-size: 12px; }
 .steps .what { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; min-width: 0; }
+.steps li:not(:has(.when)) { grid-template-columns: 1fr; }  /* no "when": the "what" takes the row (f3-F7) */
 .sev { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
 .sev.blocking { color: var(--critical-ink); } .sev.should-fix { color: var(--serious-ink); } .sev.nit { color: var(--muted); }
 .empty { color: var(--ink-2); padding: 18px; text-align: center; border: 1px dashed var(--rule); border-radius: 6px; }

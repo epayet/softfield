@@ -719,6 +719,41 @@ def test_away_counts_what_happened_in_the_span_only(tmp_path):
     assert away.claude_usd == 2.0  # the escalation and the checkpoint, not the 07:00 direction
 
 
+def test_away_counts_failures_and_claude_as_the_rest_of_the_dashboard(tmp_path):
+    """f3 review (f3-F4): an attempt stopped short (Ctrl-C, a park) isn't a failure, as in the
+    clog; a Claude job whose cost wasn't kept costs its tokens priced, as everywhere else."""
+    from factory_dashboard import queries
+
+    path = tmp_path / "away.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        run = metrics.upsert_run(conn, project, "20261002-080000")
+        t = metrics.upsert_ticket(conn, project, "away-x", state="ready")
+        for attempt, role, agent, note, tokens in (
+            (1, "developer", LOCAL, "interrupted", None),
+            (2, "developer", LOCAL, None, None),
+            (1, "direction", OPUS, None, 1_000_000),
+        ):
+            job = metrics.start_job(
+                conn, run, ticket_id=t, milestone_id=None, role=role, agent=agent,
+                attempt=attempt, started="2026-10-02T09:00:00+00:00",
+            )  # fmt: skip
+            metrics.finish_job(
+                conn, job, ended="2026-10-02T09:30:00+00:00", outcome="failed", note=note,
+                tokens_in=tokens,
+            )  # fmt: skip
+    finally:
+        conn.close()
+    conn = queries.connect(path)
+    try:
+        away = queries.away(conn, PROJECT, SINCE, NOW)
+    finally:
+        conn.close()
+    assert away.failed == 1
+    assert round(away.claude_usd, 2) == 4.0  # 1M token-equivalents at $4 per 1M
+
+
 def replay_since(html: str) -> datetime:
     """The ``since`` of the page's replay URL."""
     match = re.search(r'data-replay="([^"]+)"', html)
@@ -752,6 +787,17 @@ def test_the_overview_offers_since_you_last_looked_with_its_time(client):
     assert "since " + f"{looked:%H:%M}" in section(html, "away")
 
 
+def test_choosing_another_span_keeps_when_you_last_looked(client):
+    """f3 review (f3-F3): each span chosen reloads the page, which set the cookie to now, so
+    "since you last looked" lost the night after one choice."""
+    looked = NOW.astimezone() - timedelta(hours=9)
+    client.cookies.set("line_seen", looked.isoformat(timespec="seconds"))
+    hour = client.get("/?" + urlencode({"since": (NOW - timedelta(hours=1)).isoformat()}))
+    assert "line_seen" not in hour.cookies
+    assert f">since you last looked ({looked:%H:%M})</option>" in hour.text
+    assert "line_seen" in client.get("/").cookies  # opening the page plainly is looking
+
+
 def test_the_away_panel_follows_since_and_links_each_merged_ticket(serve, db_path):
     conn = metrics.open_db(db_path)
     try:
@@ -767,6 +813,28 @@ def test_the_away_panel_follows_since_and_links_each_merged_ticket(serve, db_pat
     assert "The away-b title. (merged by claude-opus)" in away
     assert "away-a" not in away and "away-early" not in away  # merged before 10:00
     assert "Nothing happened" not in away
+
+
+def test_each_away_ticket_takes_the_panels_width(page, serve, db_path):
+    """f3 review (f3-F7, f3-22's screenshots): each item sat in the 110 px "when" column of
+    `.steps`, so one night's tickets made the Overview about 10,600 px tall."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+    page.set_viewport_size({"width": 1440, "height": 900})
+    open_overview(page, serve())
+    widths = page.eval_on_selector(
+        "#away",
+        """panel => {
+            const inner = panel.clientWidth - parseFloat(getComputedStyle(panel).paddingLeft)
+                - parseFloat(getComputedStyle(panel).paddingRight);
+            return [...panel.querySelectorAll("li .what")].map(w => w.offsetWidth / inner);
+        }""",
+    )
+    assert len(widths) == 3  # since 20:00 yesterday: away-early too
+    assert all(share >= 0.8 for share in widths), widths
 
 
 def test_the_away_panel_says_when_nothing_happened(client):

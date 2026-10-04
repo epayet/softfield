@@ -777,8 +777,8 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
         return at is not None and since <= _time(at) <= now
 
     jobs = conn.execute(
-        "SELECT j.role, j.agent, j.started, j.ended, j.outcome, j.cost_usd,"
-        " t.ticket, t.title, t.merged_by, t.state FROM jobs j"
+        "SELECT j.role, j.agent, j.started, j.ended, j.outcome, j.note, j.cost_usd, j.tokens_in,"
+        " j.tokens_cached, j.tokens_out, t.ticket, t.title, t.merged_by, t.state FROM jobs j"
         " JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
         " LEFT JOIN tickets t ON t.id = j.ticket_id WHERE p.name = ?",
         (project,),
@@ -809,16 +809,15 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
 
     return Away(
         merged=merged,
-        failed=sum(
-            j["role"] in LOCAL_ROLES and j["outcome"] == "failed" and within(j["ended"])
+        failed=sum(  # as the clog counts them: not an attempt stopped short (f3-F4)
+            j["role"] in LOCAL_ROLES
+            and j["outcome"] == "failed"
+            and j["note"] not in NOT_ATTEMPTS
+            and within(j["ended"])
             for j in jobs
         ),
         escalations=sum(j["role"] == "escalation" and within(j["started"]) for j in jobs),
         blocked=int(blocked),
         needs_you=sum(within(o["created"]) for o in owner),
-        claude_usd=sum(
-            j["cost_usd"] or 0.0
-            for j in jobs
-            if j["agent"].startswith(LEAD_PREFIX) and within(j["started"])
-        ),
+        claude_usd=sum(dollars(j) for j in jobs if within(j["started"])),  # uncosted: its tokens
     )

@@ -439,8 +439,30 @@ def due_reviews(repo: Path, state: State) -> list[str]:
     return due
 
 
+def _done_tickets(repo: Path, milestone: str) -> list[str]:
+    """The ids of the milestone's tickets in done/."""
+    found = []
+    for path in (repo / "tasks" / "done").glob("*.md"):
+        try:
+            meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+        except (TaskError, yaml.YAMLError, UnicodeDecodeError):
+            continue
+        if short_key(milestone_key(meta.get("milestone"))) == short_key(milestone):
+            found.append(path.stem)
+    return found
+
+
 def _plan_commit(git: Git, repo: Path, milestone: str) -> str:
-    """The commit that added the milestone's doc, else HEAD (where `run_milestone` tags)."""
+    """Where the milestone's work starts: the parent of its first ticket's merge (a `Task:`
+    trailer), else the commit that added its doc, else HEAD (where `run_milestone` tags). A
+    replanned milestone's doc can be far older than its work: F3's dated from F1, and its
+    review read all of F2 and F4 (f3-F5)."""
+    tickets = _done_tickets(repo, milestone)
+    if tickets:
+        trailer = "^Task: (" + "|".join(re.escape(t) for t in tickets) + ")$"
+        merges = git.run("log", "-E", f"--grep={trailer}", "--format=%H").split()
+        if merges and git.run("rev-list", "--parents", "-n", "1", merges[-1]).split()[1:]:
+            return f"{merges[-1]}^"
     doc = milestone_file(repo, "milestones", milestone)
     if not doc.is_file():
         return "HEAD"
