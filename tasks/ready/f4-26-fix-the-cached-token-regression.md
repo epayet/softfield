@@ -2,7 +2,8 @@
 id: f4-26-fix-the-cached-token-regression
 milestone: f4-always-on
 difficulty: 2
-depends_on: []
+depends_on:
+- f4-36-fix-reserve-pill-test-deleted
 files:
 - tests/factory_dashboard/test_overview.py
 tests:
