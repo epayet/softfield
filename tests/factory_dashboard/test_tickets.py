@@ -102,7 +102,8 @@ def test_filter_by_state_shows_only_matching(tickets_client):
     html = resp.text
     rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
     tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
-    assert len(tbody_rows) == 1
+    # 1 main ticket + 1 row from the later tickets panel (which now respects the state filter)
+    assert len(tbody_rows) == 2
     row = tbody_rows[0]
     assert "f1-12-escalated" in row
     assert "escalated" in row
@@ -272,3 +273,35 @@ def test_later_tickets_panel_shows_ticket_with_title_and_queue_command(later_cli
 def test_later_tickets_panel_absent_when_no_later_tickets(tickets_client):
     html = tickets_client.get("/tickets").text
     assert re.search(r'<section[^>]*\bid="later"', html, re.S) is None
+
+
+def test_later_tickets_respects_milestone_filter(db_path, later_client):
+    from runner.metrics import open_db
+
+    conn = open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m4 = metrics.upsert_milestone(conn, project, "m4")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "m4-99-later",
+            milestone_id=m4,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="An m4 set-aside ticket.",
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets?milestone=m4").text
+    later_section = section_raw(html, "later")
+    assert "m4-99-later" in later_section
+    assert "f1-99-later" not in later_section
+
+
+def test_later_tickets_respects_state_filter(later_client):
+    html = later_client.get("/tickets?state=done").text
+    later_section = section_raw(html, "later")
+    assert "f1-99-later" not in later_section

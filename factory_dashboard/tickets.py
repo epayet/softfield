@@ -81,15 +81,37 @@ class TicketAgentWork:
 def list_later_tickets(
     conn: sqlite3.Connection,
     project: str,
+    *,
+    milestone: str | None = None,
+    state: str | None = None,
 ) -> list[dict[str, str | None]]:
-    """Tickets set aside (state ``later``) for ``project``, ordered by id."""
+    """Tickets set aside for ``project``, optionally filtered by ``milestone`` and ``state``.
+
+    When no state filter is given the default is ``later``.
+    """
+    conditions = ["p.name = ?"]
+    params: list[object] = [project]
+
+    if milestone:
+        conditions.append("m.key = ?")
+        params.append(milestone)
+
+    if state:
+        conditions.append("t.state = ?")
+        params.append(state)
+    else:
+        conditions.append("t.state = 'later'")
+
+    where = " AND ".join(conditions)
+
     rows = conn.execute(
-        "SELECT t.ticket, t.title "
+        f"SELECT t.ticket, t.title "  # noqa: S608
         "FROM tickets t "
         "JOIN projects p ON p.id = t.project_id "
-        "WHERE p.name = ? AND t.state = 'later' "
-        "ORDER BY t.ticket",
-        (project,),
+        "LEFT JOIN milestones m ON m.id = t.milestone_id "
+        f"WHERE {where} "
+        f"ORDER BY t.ticket",
+        tuple(params),
     ).fetchall()
     return [
         {
@@ -346,7 +368,7 @@ def tickets_page(
     state: Annotated[str | None, Query()] = None,
 ) -> HTMLResponse:
     tickets = list_tickets(conn, project, milestone=milestone, state=state, now=now)
-    later_tickets = list_later_tickets(conn, project)
+    later_tickets = list_later_tickets(conn, project, milestone=milestone, state=state)
     return render(
         request,
         conn,
