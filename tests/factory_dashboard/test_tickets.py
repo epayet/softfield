@@ -294,7 +294,8 @@ def test_later_tickets_panel_shows_ticket_with_title_and_queue_command(later_cli
     later_section = section_raw(html, "later")
     row = later_row(later_section, "f1-99-later")
     id_cell = row["id"]
-    assert 'href="/tickets/f1-99-later"' in id_cell
+    # f4-always-on-F2: the link keeps the project, as the main table's do
+    assert f'href="/tickets/f1-99-later?project={PROJECT}"' in id_cell
     assert "f1-99-later" in id_cell
     assert row["goal"] == "A set-aside ticket."
     assert "uv run runner queue f1-99-later" in row["queue"]
@@ -331,7 +332,7 @@ def test_later_tickets_respects_milestone_filter(db_path, later_client):
     assert "f1-99-later" not in later_section
 
 
-def test_later_tickets_respects_state_filter(later_client):
+def test_later_tickets_ignore_the_state_filter(later_client):
     html = later_client.get("/tickets?state=done").text
     later_section = section_raw(html, "later")
     assert "f1-99-later" in later_section

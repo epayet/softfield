@@ -24,7 +24,7 @@
       <tbody>
         {% for t in later_tickets %}
         <tr data-ticket="{{ t.ticket }}">
-          <td class="id" data-col="id"><a href="/tickets/{{ t.ticket }}">{{ t.ticket }}</a></td>
+          <td class="id" data-col="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td>
           <td data-col="goal">{{ t.title or "–" }}</td>
           <td data-col="queue"><code>uv run runner queue {{ t.ticket }}</code></td>
         </tr>

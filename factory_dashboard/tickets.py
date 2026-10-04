@@ -84,10 +84,8 @@ def list_later_tickets(
     *,
     milestone: str | None = None,
 ) -> list[dict[str, str | None]]:
-    """Tickets set aside for ``project``, optionally filtered by ``milestone`` and ``state``.
-
-    When no state filter is given the default is ``later``.
-    """
+    """Tickets set aside (state ``later``) for ``project``, optionally filtered by
+    ``milestone``. The page's state filter doesn't apply: the panel only ever lists these."""
     conditions = ["p.name = ?"]
     params: list[object] = [project]
 

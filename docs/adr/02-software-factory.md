@@ -262,6 +262,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the checkpoints caught real gaps (11 findings, all confirmed), but both their fix tickets and the checkpoint after them let a DOM XSS through. The all-tests gate skipped every test file a ready ticket listed, so the line's tests ran in no gate and a regression reached main.
 - **Decisions affected:** [ADR 21](21-gate-every-test-file.md) (Proposed) drops ADR 01 item 1's skip. Drawing work (SVG layout, motion) goes to the lead or to small, picture-backed developer tickets on a lead-written core.
 
+### F4 (2026-10-04): always on ([review](../reviews/f4-always-on.md))
+
+- **Q1:** the lead tickets (01, 03, 05, 07, 09, 11, 15, 19, 20, 33) all merged first time with no escalation. The escalations went to fix tickets: three tests-only ones (f4-24, f4-26, f4-36) that no developer could pass, and two whose directions didn't save them (f4-28, f4-29).
+- **Q3:** the runner's own numbers say 10 of 21 first time. The F4 dashboard tickets (02, 04, 06, 08, 10, 17, 18) were small and passed, but the checkpoints found weak or vacuous tests behind five of them (04, 06, 08, 10, 18), and fixing those took 12 fix tickets, some fixing the previous fix.
+- **Q5:** $19.11 of Claude, net savings −$1.69: close to even, unlike F3.
+- **Anything else:** 20 of the checkpoints' 21 findings were real, the Copilot stand-in's 11 included. The stand-in filed its fix tickets under the wrong milestone and with wrong paths, which f4-33 now fixes. A plan change in another milestone (f3-05 dropped the Queue table) silently undid an F4 outcome ("what waits for what"), and no checkpoint could see it.
+- **Decisions affected:** none. The `later/` folder and `runner queue` (ADR 17 item 3) were used for real at once: f3-22's proposals wait there for the owner.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

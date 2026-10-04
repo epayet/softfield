@@ -44,7 +44,7 @@ class Efficiency:
     model: str | None = None
 
 
-# Human‑readable label for jobs whose model wasn’t recorded (pre‑2 Oct‑2026)
+# Jobs whose model is NULL or '': models are recorded since 2026-10-02 (f2-04, f4-17).
 NOT_RECORDED = "model not recorded"
 NOT_RECORDED_LABEL = f"before 2 Oct ({NOT_RECORDED})"
 
@@ -164,7 +164,7 @@ def _efficiency(
         tokens_per_merge=tokens_per_m,
         tokens_per_second=tps,
         escalation_rate=esc_rate,
-        most_failed_gate=most_failed or "\u2013",
+        most_failed_gate=most_failed or "–",
         dollars=sum(dollars(r) for r in rows),
         model=model,
     )
