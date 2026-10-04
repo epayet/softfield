@@ -21,3 +21,10 @@ Read `_ids` and `signoff` in `runner/owner.py`, and `split_frontmatter` and `sho
 ### Done when
 - a ticket with id `f3-…` and `milestone: f5-board` in `ready/` doesn't block F3's sign-off, and does block F5's
 - `uv run runner check-all --task f7-05-signoff-by-milestone` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
