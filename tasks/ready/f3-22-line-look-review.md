@@ -1,7 +1,7 @@
 ---
 id: f3-22-line-look-review
 milestone: f3
-depends_on: [f5-14-factory-look, f3-21-since-you-looked, f4-34-fix-now-first-legend-untested]
+depends_on: [f5-14-factory-look, f3-21-since-you-looked, f4-34-fix-now-first-legend-untested, f4-35-fix-crate-card-untested-unescaped]
 agent: lead
 difficulty: 4
 files:
