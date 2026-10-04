@@ -1,5 +1,8 @@
+import hashlib
 import re
 import sqlite3
+from datetime import timedelta
+from pathlib import Path
 
 import pytest
 import uvicorn
@@ -9,8 +12,13 @@ from fastapi.testclient import TestClient
 from factory_dashboard import app as app_module
 from factory_dashboard.app import HOST, PORT, Db, create_app
 from factory_dashboard.queries import connect
-from runner import cli
-from tests.factory_dashboard.conftest import OTHER, PROJECT
+from runner import cli, metrics
+from tests.browser.conftest import DISPLAY, PHONE, layout_problems
+from tests.factory_dashboard.conftest import NOW, OTHER, PROJECT, write_allowance
+from tests.factory_dashboard.test_overview import open_overview
+
+STATIC = Path(app_module.__file__).parent / "static"
+VENDOR = STATIC / "vendor"
 
 PAGES = [
     "/",
@@ -65,6 +73,227 @@ def test_the_page_loads_its_scripts_and_styles_from_the_app(client):
         assert f'"{path}"' in html
         assert client.get(path).status_code == 200
     assert "https://" not in html  # vendored: no CDN
+
+
+def test_no_page_or_stylesheet_names_a_third_party_host(client):
+    """AGENTS.md rule 7: no CDN at run time, fonts included (f5-14)."""
+    for path in [*PAGES, "/static/dashboard.css"]:
+        text = client.get(path).text
+        assert re.findall(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}", text) == [], path
+        assert "@import" not in text, path
+
+
+FONTS = {  # family -> the weights the mock-ups use (f5-14)
+    "Chakra Petch": ("500", "600", "700"),
+    "Barlow": ("400", "500", "600"),
+    "JetBrains Mono": ("400", "600"),
+}
+
+
+def test_the_fonts_load_from_the_app(client):
+    css = client.get("/static/dashboard.css").text
+    faces = re.findall(r"@font-face\s*\{(.*?)\}", css, re.S)
+    found: dict[tuple[str, str], str] = {}
+    for face in faces:
+        family = re.search(r'font-family:\s*"([^"]+)"', face)
+        weight = re.search(r"font-weight:\s*(\d+)", face)
+        url = re.search(r'src:\s*url\("([^"]+)"\)\s*format\("woff2"\)', face)
+        assert family and weight and url, face
+        assert "font-display: swap" in face
+        found[family[1], weight[1]] = url[1]
+    assert sorted(found) == sorted((f, w) for f, ws in FONTS.items() for w in ws)
+    for path in found.values():
+        assert path.startswith("/static/vendor/fonts/") and path.endswith(".woff2")
+        response = client.get(path)
+        assert response.status_code == 200 and response.content[:4] == b"wOF2"
+    # each family in use: display, body, ids and numbers
+    assert re.search(r'--display:\s*"Chakra Petch"', css)
+    assert re.search(r'--body:\s*"Barlow"', css)
+    assert re.search(r'--mono:\s*"JetBrains Mono"', css)
+
+
+def test_every_vendored_file_is_recorded_with_its_sha256():
+    """README.md's table pins each file (ADR 13); fonts carry their OFL licence beside them."""
+    readme = (VENDOR / "README.md").read_text()
+    recorded = dict(re.findall(r"^\| `([^`]+)` \|.*\| `([0-9a-f]{64})` \|$", readme, re.M))
+    shipped = {
+        p.relative_to(VENDOR).as_posix() for p in VENDOR.rglob("*") if p.suffix in {".js", ".woff2"}
+    }
+    actual = {name: hashlib.sha256((VENDOR / name).read_bytes()).hexdigest() for name in shipped}
+    assert recorded == actual
+    for family in ("chakra-petch", "barlow", "jetbrains-mono"):
+        assert "SIL OPEN FONT LICENSE" in (VENDOR / "fonts" / f"{family}.LICENSE").read_text()
+
+
+def _block(css: str, opener: str) -> dict[str, str]:
+    """The custom properties in the block that starts with ``opener``."""
+    start = css.index(opener)
+    body = css[start : css.index("}", start)]
+    return dict(re.findall(r"(--[\w-]+):\s*([^;]+);", body))
+
+
+def _resolve(tokens: dict[str, str], name: str) -> str:
+    value = tokens[name].strip()
+    ref = re.fullmatch(r"var\((--[\w-]+)\)", value)
+    return _resolve(tokens, ref[1]) if ref else value
+
+
+def _luminance(hex_colour: str) -> float:
+    def channel(c: int) -> float:
+        s = c / 255
+        return s / 12.92 if s <= 0.04045 else ((s + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (int(hex_colour[i : i + 2], 16) for i in (1, 3, 5))
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+
+
+def _contrast(a: str, b: str) -> float:
+    la, lb = sorted((_luminance(a), _luminance(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+MOCKUP = {  # docs/milestones/f1-factory-mockup.html's :root, and the board's area colours
+    "--floor": "#12161b",
+    "--bay": "#181e25",
+    "--plate": "#1f2730",
+    "--rule": "#303b47",
+    "--hazard": "#f2b10a",
+    "--fail": "#ec5458",
+    "--clog": "#ec5458",
+    "--opus": "#ff9640",
+    "--sonnet": "#ffc48a",
+    "--qwen": "#8ccf62",
+    "--oss": "#4fd1a5",
+    "--nemo": "#c3e06a",
+    "--copilot": "#7aa7ff",
+    "--factory": "#f2b10a",
+    "--product": "#4fd1a5",
+}
+
+
+def test_dark_is_the_default_and_light_follows_the_system():
+    css = (STATIC / "dashboard.css").read_text()
+    dark = _block(css, ":root {")
+    light = {**dark, **_block(css, "@media (prefers-color-scheme: light) { :root {")}
+    assert "prefers-color-scheme: dark" not in css
+    assert {name: _resolve(dark, name) for name in MOCKUP} == MOCKUP
+    # light: a pale floor, the same hazard yellow and orange
+    assert _luminance(_resolve(light, "--floor")) > 0.8
+    assert _resolve(light, "--hazard") == "#f2b10a" and _resolve(light, "--opus") == "#ff9640"
+    # the old names follow the new ones, so templates and charts.js keep working
+    for old, new in {"--bg": "--floor", "--surface": "--bay", "--ink": "--fg"}.items():
+        assert dark[old].strip() == f"var({new})"
+    # ink reads at 4.5:1 or better on every plate, in both themes
+    for theme in (dark, light):
+        for ink in ("--ink", "--ink-2", "--muted"):
+            for plate in ("--floor", "--bay", "--plate"):
+                pair = (_resolve(theme, ink), _resolve(theme, plate))
+                assert _contrast(*pair) >= 4.5, (ink, plate, pair)
+
+
+def test_the_top_bar_has_the_mockups_title_hazard_stripe_and_tab_segment(client):
+    html = client.get("/").text
+    header = re.search(r'<header class="bar">(.*?)</header>', html, re.S)
+    assert header
+    assert '<span class="brand">' in header[1]
+    assert '<div class="hazard"' in header[1]
+    assert '<nav class="tabs" aria-label="Pages">' in header[1]
+    css = (STATIC / "dashboard.css").read_text()
+    assert re.search(r"\.brand \{[^}]*var\(--display\)[^}]*text-transform: uppercase", css)
+    # the segment: the current tab is a hazard-yellow plate, as in the mock-up
+    assert re.search(r'nav\.tabs a\[aria-current="page"\] \{[^}]*background: var\(--hazard\)', css)
+    assert re.search(r"\.hazard \{[^}]*repeating-linear-gradient\(-45deg, var\(--hazard\)", css)
+
+
+@pytest.mark.parametrize(
+    ("scheme", "floor"), [("dark", "rgb(18, 22, 27)"), ("light", "rgb(236, 238, 233)")]
+)
+@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
+def test_the_overview_wears_the_factory_look_in_both_themes(
+    page, client, tmp_path, scheme, floor, size
+):
+    """Dark unless the system asks for light, the fonts from the app, nothing overlapping.
+    The screenshot lands in ``tmp_path`` (``--basetemp`` keeps it, for the job's notes)."""
+    page.emulate_media(color_scheme=scheme)
+    page.set_viewport_size(size)
+    open_overview(page, client)
+    page.evaluate("() => document.fonts.ready")
+    assert page.evaluate("() => getComputedStyle(document.body).backgroundColor") == floor
+    for face in ('700 22px "Chakra Petch"', '400 15px "Barlow"', '400 12px "JetBrains Mono"'):
+        assert page.evaluate("f => document.fonts.check(f)", face), face
+    page.screenshot(path=tmp_path / f"overview-{scheme}-{size['width']}.png", full_page=True)
+    # on a phone the replay bar sticks to the bottom and floats over the page by design (f3-07)
+    page.evaluate("() => document.querySelector('.replay')?.setAttribute('data-layout', 'overlay')")
+    assert layout_problems(page) == []
+
+
+def test_templates_use_the_tokens_never_raw_colours():
+    """docs/agents/developer.md: a raw colour skips the light theme (f5-14)."""
+    raw = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(")
+    for template in (STATIC.parent / "templates").rglob("*.html"):
+        html = template.read_text()
+        styles = re.findall(r'style="([^"]*)"', html) + re.findall(
+            r"<style>(.*?)</style>", html, re.S
+        )
+        assert [s for s in styles if raw.search(s)] == [], template.name
+
+
+def _meter_fills(client: TestClient) -> dict[str, str]:
+    panel = re.search(
+        r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>', client.get("/").text, re.S
+    )
+    assert panel
+    return dict(
+        re.findall(
+            r'<div id="allow-([a-z_-]+)">.*?<div class="meter">\s*<span class="([a-z-]+)"',
+            panel[1],
+            re.S,
+        )
+    )
+
+
+def test_an_allowance_meter_says_how_close_it_is(allowance_client):
+    # 5-hour at 80% is past its 75% mark; the week at 20% and Copilot at 2% are under
+    assert _meter_fills(allowance_client) == {
+        "claude-five_hour": "past-mark",
+        "claude-seven_day": "under-mark",
+        "copilot-month": "under-mark",
+        "ollama-ollama": "under-mark",
+    }
+    panel = re.search(r'id="allowance".*?</section>', allowance_client.get("/").text, re.S)
+    assert panel
+    legend = " ".join(re.sub(r"<[^>]+>", " ", panel[0]).split())
+    assert "green: under the mark" in legend
+    assert "yellow: past the mark" in legend
+    assert "red: above 95%" in legend
+    css = (STATIC / "dashboard.css").read_text()
+    assert re.search(r"\.meter > \.under-mark \{[^}]*var\(--good\)", css)
+    assert re.search(r"\.meter > \.past-mark \{[^}]*var\(--hazard\)", css)
+    assert re.search(r"\.meter > \.nearly-out \{[^}]*var\(--fail\)", css)
+
+
+def test_an_allowance_meter_above_95_percent_is_red(db_path):
+    conn = metrics.open_db(db_path)
+    try:
+        write_allowance(conn)
+        conn.execute("DELETE FROM usage_events WHERE agent = 'copilot-auto'")
+        metrics.add_usage_event(
+            conn,
+            "copilot-auto",
+            NOW.isoformat(),
+            "reading",
+            window="month",
+            value=0.96,
+            resets_at=(NOW + timedelta(days=30)).isoformat(),
+        )
+        conn.execute("UPDATE usage_events SET value = 0.97 WHERE \"window\" = 'five_hour'")
+        conn.commit()
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[app_module.get_now] = lambda: NOW
+    fills = _meter_fills(TestClient(app, base_url="http://127.0.0.1:8765"))
+    assert fills["claude-five_hour"] == fills["copilot-month"] == "nearly-out"
 
 
 def test_only_a_loopback_host_is_served(client):
