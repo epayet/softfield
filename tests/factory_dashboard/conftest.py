@@ -249,7 +249,7 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
 
 
 def write_queue(conn: sqlite3.Connection, waiting_claude: bool = False) -> None:
-    """On top of ``write_fixture``: tickets with various dependency states for queue tests.
+    """Tickets with various dependency states for queue tests.
 
     - ``f1-10-queued`` (ready, no deps, ready now)
     - ``f1-11-waits-done`` (ready, depends on f1-01-first which is done, ready now)
@@ -270,10 +270,6 @@ def write_queue(conn: sqlite3.Connection, waiting_claude: bool = False) -> None:
         verdict="3 merged, 0 not",
     )
 
-    # Done tickets (f1-01-first, f1-02-escalated, f1-03-lead already in write_fixture)
-    # f1-12-escalated is already in write_fixture with state='escalated'
-    # f1-04-live is already in write_fixture with state='running'
-
     # f1-12-escalated: escalated ticket (needed as a dependency target)
     metrics.upsert_ticket(
         conn,
@@ -284,6 +280,37 @@ def write_queue(conn: sqlite3.Connection, waiting_claude: bool = False) -> None:
         state="escalated",
         difficulty=5,
     )
+
+    # f1-04-live: running ticket with a running job (should NOT appear in queue)
+    live = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-04-live",
+        milestone_id=f1,
+        kind="developer",
+        state="running",
+        difficulty=5,
+        title="Running now.",
+    )
+    live_run = metrics.upsert_run(
+        conn,
+        project,
+        "20261002-113500",
+        command="milestone f1",
+        started=_at(timedelta(minutes=25)),
+        heartbeat=_at(timedelta(seconds=10)),
+    )
+    job = metrics.start_job(
+        conn,
+        live_run,
+        ticket_id=live,
+        milestone_id=f1,
+        role="developer",
+        agent=LOCAL,
+        attempt=2,
+        started=_at(timedelta(minutes=12)),
+    )
+    metrics.update_running_job(conn, job, tokens_in=42_000, steps=17)
 
     # f1-10-queued: ready, no deps
     metrics.upsert_ticket(
@@ -328,7 +355,7 @@ def write_queue(conn: sqlite3.Connection, waiting_claude: bool = False) -> None:
         kind="lead",
         state="ready",
     )
-    # f1-05-first and f1-06-second (already in write_fixture)
+    # f1-05-first and f1-06-second: ready, no deps
     for ticket, goal in (("f1-06-second", "Queued second."), ("f1-05-first", "Queued first.")):
         metrics.upsert_ticket(
             conn, project, ticket, milestone_id=f1, kind="developer", state="ready", title=goal
