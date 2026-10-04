@@ -1,6 +1,6 @@
 ---
 id: f3-25-allowance-dials
-milestone: f3
+milestone: f9-line-polish
 depends_on: []
 difficulty: 4
 files:

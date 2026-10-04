@@ -2,6 +2,39 @@
 
 A plain-language overview. The rules are in [`workflow.md`](workflow.md) and [`task-format.md`](task-format.md), and the craft of writing tasks is in [`task-writing.md`](task-writing.md).
 
+## The whole flow
+
+```mermaid
+flowchart TD
+  plan["Plan with the owner<br/>milestone doc, ADRs, tickets"] -->|"commit to tasks/ready/"| ready["tasks/ready/"]
+  ready -->|"uv run runner run"| pick{"Pick the next job<br/>support jobs first, then tickets<br/>(lead, then developer)"}
+  pick -->|"developer ticket"| a1["Attempt 1<br/>local Qwen or a cloud developer"]
+  a1 --> gates{"Gates<br/>runner check-all"}
+  gates -->|fail| a2["Attempt 2<br/>+ the gate output"]
+  a2 --> gates
+  gates -->|"fail twice"| dir["Direction (Opus)<br/>a few lines, no code"]
+  dir --> a3["Attempt 3"]
+  a3 --> gates
+  gates -->|"fail 3 times, or BLOCKED.md"| esc["Escalation (Opus)<br/>finish, repair, or do it"]
+  esc -->|"repaired"| ready
+  esc -->|"needs the owner"| adr(["ADR for the owner<br/>uv run runner accept N"])
+  pick -->|"lead ticket"| lead["Lead ticket (Opus)<br/>test-first, protected code, replans"]
+  gates -->|pass| merge["Squash-merge to main"]
+  lead -->|"check-all passes"| merge
+  esc -->|"finished or done"| merge
+  merge -->|"every 2 developer merges"| cp["Checkpoint (Sonnet)<br/>may queue fix tickets"]
+  cp --> ready
+  merge -->|"a milestone's tickets all done"| review["Review (Opus)<br/>up to 3 rounds, fix tickets"]
+  review --> ready
+  review -->|"verdict"| signoff(["Owner: device check<br/>uv run runner signoff KEY"])
+  pick -.->|"Claude past its line"| reserve(["Owner's switches:<br/>the week's reserve, your 25%"])
+```
+
+- **Checkpoints** run after every 2 *developer* merges, counted across all milestones (`checkpoint_every` in `workflow/runner.toml`). Lead-ticket merges don't count.
+- **Reviews** run when every ticket of a milestone is in `done/` (set-aside ones in `later/` don't count), before the runner's next ticket ([ADR 17](adr/17-always-on-factory.md)).
+- **A replan is a lead ticket,** written at planning after a chain of three or more lead tickets that later ones rely on (`docs/agents/lead.md`, "Replans"). The runner never makes one itself.
+- **Owner questions:** ADRs and sign-off. The reserve switches replace the console's y/N once F8 lands ([ADR 22](adr/22-one-visible-queue.md)).
+
 **The idea** ([ADR 07](adr/07-spend-less-frontier.md)): the frontier model is the tech lead and the local models are its developers. The lead designs, decides how the pieces connect, writes short tickets and builds the security-critical parts. The developers write the rest, tests included. Deterministic gates check every change, and the lead reviews once per milestone. Until M3 the lead also wrote a working solution for every task, which cost more than doing the task; that's gone.
 
 ## The queue

@@ -1,7 +1,7 @@
 ---
 id: f6-01-planner-threads
 milestone: f6-planning-room
-depends_on: [f5-01-requests-apply, f5-04-cards]
+depends_on: [f5-01-requests-apply, f5-04-cards, f8-03-support-jobs-queued]
 agent: lead
 difficulty: 7
 files:
