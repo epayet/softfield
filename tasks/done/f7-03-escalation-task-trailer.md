@@ -21,3 +21,10 @@ Read `handle_escalation` and `_finish_branch` in `runner/loop.py` (the commits "
 ### Done when
 - an escalation whose outcome is `implemented` commits with `Task: <id>` and `Agent: claude-headless`; a repaired or requeued one has no `Task:`
 - `uv run runner check-all --task f7-03-escalation-task-trailer` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
