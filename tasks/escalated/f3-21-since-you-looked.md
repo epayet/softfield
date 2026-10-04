@@ -52,3 +52,12 @@ Read `overview` in `factory_dashboard/overview.py` (the replay URLs and the `lin
 - the panel lists each merged ticket as a link, and says "Nothing happened since …" for an empty span
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 3838542
+logs: var/runs/20261003-233946/f3-21-since-you-looked
+```
