@@ -446,10 +446,13 @@ def test_ready_now_comes_before_waiting(queue_client, db_path):
     assert max(ready) < min(waiting)
 
 
-def test_next_in_line_is_the_first_three_of_the_run_order(queue_client):
+def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path):
     now = section(queue_client.get("/").text, "now")
     rows = now.split("Next in line", 1)[1]
     numbers = re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)
+    ids = [t for _, t in numbers]
+    assert ids == list(waits(db_path))[:3]
+    assert "f1-04-live" not in ids
     assert [n for n, _ in numbers] == ["1", "2", "3"]  # more than three wait: only three rows
     assert "4 f1-" not in rows
 
