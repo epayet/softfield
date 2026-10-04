@@ -28,3 +28,10 @@ Read `docs/adr/24-ratings-that-hold.md`, D1–D3 in `docs/milestones/f7-factory-
 - a bench replay that passed first time is a game for its agent; the same agent's real game on that ticket is still played once
 - an agent with 2 rated games routes as 1; with 3, as its rating
 - `uv run runner check-all --task f7-01-ratings-rules` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
