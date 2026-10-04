@@ -1,6 +1,6 @@
 # ADR 22: One visible queue: the runner queues every job before it runs it
 
-- **Status:** Proposed (drafted by the lead, 2026-10-04)
+- **Status:** Accepted (by the owner, 2026-10-04)
 - **Date:** 2026-10-04
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:**
