@@ -35,3 +35,10 @@ Read `docs/adr/17-always-on-factory.md` (item 4: `runner run` is the standing co
 - a milestone already reviewed, or signed off, isn't reviewed again
 - `--dry-run` and the line's document list the due review
 - `uv run runner check-all --task f4-20-run-reviews-milestones` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
