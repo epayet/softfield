@@ -256,6 +256,41 @@ def test_claude_job_shows_cached_and_turns(client, db_path):
     assert "read 1.0M tokens · 18 turns" in running
 
 
+def test_now_leaves_out_a_bench(client, db_path):
+    """Now is for the real runs (owner, 2026-10-04): a bench's replays run beside them."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "bench-20261002-120000",
+            command="bench",
+            started="2026-10-02T12:00:00+00:00",
+            heartbeat="2026-10-02T12:00:30+00:00",
+        )
+        metrics.update_run_activity(conn, run, "bench f1-97-benched attempt 1/3", None)
+        ticket = metrics.upsert_ticket(conn, project, "f1-97-benched", milestone_id=f1)
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="bench",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T12:00:00+00:00",
+        )
+    finally:
+        conn.close()
+    running = section(client.get("/").text, "now")
+    assert "f1-04-live" in running  # the fixture's real run is still there
+    assert "f1-97-benched" not in running and "bench-20261002" not in running
+
+
 def test_cached_only_shown_when_input_null(client, db_path):
     """Claude job with only cached tokens (input null) should show cached count."""
     from runner import metrics

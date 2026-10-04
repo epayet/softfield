@@ -23,6 +23,7 @@ from runner.tasks import milestone_order
 router = APIRouter()
 
 LIVE = timedelta(minutes=2)  # D3: an older heartbeat means the runner stopped
+# Now is for the real runs (owner, 2026-10-04): a bench's runs (command 'bench') are left out.
 # [claude] in workflow/runner.toml: reserve for the lead starts at 70% of the week.
 WEEK_MARK = 0.70
 # [claude] in workflow/runner.toml: reserve for you starts at 75% of the 5-hour window.
@@ -95,7 +96,8 @@ def live_runs(conn: sqlite3.Connection, project: str, now: datetime) -> list[Liv
         "SELECT r.run_dir, r.heartbeat, r.activity, r.waiting_until, r.reserve,"
         " p.name AS project_name FROM runs r"
         " JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL ORDER BY r.id",
+        " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL"
+        " AND coalesce(r.command, '') != 'bench' ORDER BY r.id",
         (project,),
     ).fetchall()
     found: list[LiveRun] = []
@@ -132,7 +134,8 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
         " FROM jobs j JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
         " LEFT JOIN tickets t ON t.id = j.ticket_id"
         " LEFT JOIN milestones m ON m.id = j.milestone_id"
-        " WHERE p.name = ? AND j.outcome = 'running' ORDER BY j.started, j.id",
+        " WHERE p.name = ? AND j.outcome = 'running' AND coalesce(r.command, '') != 'bench'"
+        " ORDER BY j.started, j.id",
         (project,),
     ).fetchall()
     return [

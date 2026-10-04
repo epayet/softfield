@@ -13,6 +13,7 @@ wasn't kept: 500k input tokens.
 ``write_live`` adds what the Overview shows live, at ``NOW``; the ``client`` fixture serves both.
 """
 
+import re
 import sqlite3
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
@@ -1528,11 +1529,19 @@ def write_today(conn: sqlite3.Connection) -> None:
 @pytest.fixture
 def line_db(db_path: Path, tmp_path: Path) -> Path:
     """The fixture plus ``write_line``'s and ``write_today``'s rows, its repo a copy of this
-    repo's runner.toml."""
+    repo's runner.toml with the developers the rows were written for (Qwen and gpt-oss-120b),
+    whoever the real roster has today."""
     repo = tmp_path / "repo"
     (repo / "workflow").mkdir(parents=True)
     toml = Path(__file__).resolve().parents[2] / "workflow" / "runner.toml"
-    (repo / "workflow" / "runner.toml").write_text(toml.read_text(encoding="utf-8"))
+    text = re.sub(
+        r"^developer = .*$",
+        'developer = ["local-qwen3.6-35b-a3b", "ollama-gpt-oss-120b"]',
+        toml.read_text(encoding="utf-8"),
+        count=1,
+        flags=re.M,
+    )
+    (repo / "workflow" / "runner.toml").write_text(text)
     conn = metrics.open_db(db_path)
     try:
         write_line(conn, str(repo))

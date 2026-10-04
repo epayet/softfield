@@ -215,6 +215,22 @@ def test_a_live_run_applies_its_own_requests_not_another_command(in_repo):  # no
     assert (in_repo / "tasks" / "later" / "m4-12-a.md").is_file()
 
 
+def test_a_live_bench_doesnt_hold_the_requests_back(in_repo):  # noqa: F811
+    """A bench runs beside the runner (2026-10-04) and never applies requests."""
+    _later(in_repo, "m4-12-a")
+    asked = _ask(in_repo, "queue", "m4-12-a")
+    conn = metrics.open_db(_db(in_repo))
+    project = metrics.upsert_project(conn, in_repo.name)
+    beat = (datetime.now(UTC) - timedelta(seconds=30)).isoformat()
+    metrics.upsert_run(
+        conn, project, "bench-20261003-120000", command="bench", started=beat, heartbeat=beat
+    )
+    conn.close()
+    cli.main(["accept", "99"])
+    assert (in_repo / "tasks" / "ready" / "m4-12-a.md").is_file()
+    assert _request(in_repo, asked)[1] == "queued m4-12-a"
+
+
 def test_the_checks_never_apply_requests(in_repo):  # noqa: F811
     """check-all runs inside jobs and as the pre-commit hook: a commit there would land on a
     task branch, or in the middle of the owner's own."""

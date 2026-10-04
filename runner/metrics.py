@@ -9,6 +9,7 @@ JSON. An optional argument left as ``None`` keeps the column's current value.
 import json
 import sqlite3
 from collections.abc import Collection, Mapping, Sequence
+from datetime import datetime
 from pathlib import Path
 
 _V1 = """
@@ -502,16 +503,26 @@ def set_job_model(conn: sqlite3.Connection, job_id: int, model: str) -> None:
     _update(conn, "jobs", job_id, {"model": model})
 
 
-def close_abandoned(conn: sqlite3.Connection, project_id: int, run_id: int) -> int:
+def close_abandoned(
+    conn: sqlite3.Connection, project_id: int, run_id: int, alive_after: datetime | None = None
+) -> int:
     """Mark ``interrupted`` every job an earlier run of the project left ``running`` (a Ctrl-C,
-    a crash), ended at that run's last heartbeat, and end those runs. Only one runner works a
-    repo at a time, so a new run means the old ones are gone. Returns how many jobs it closed."""
-    stale = conn.execute(
-        "SELECT j.id, r.id AS run, coalesce(r.heartbeat, j.started) AS at FROM jobs j"
-        " JOIN runs r ON r.id = j.run_id"
+    a crash), ended at that run's last heartbeat, and end those runs. A run whose heartbeat is
+    after ``alive_after`` is still working (a bench beside the runner, 2026-10-04) and is left
+    alone. Returns how many jobs it closed."""
+    rows = conn.execute(
+        "SELECT j.id, r.id AS run, coalesce(r.heartbeat, j.started) AS at, r.heartbeat"
+        " FROM jobs j JOIN runs r ON r.id = j.run_id"
         " WHERE r.project_id = ? AND r.id != ? AND j.outcome = 'running'",
         (project_id, run_id),
     ).fetchall()
+    stale = [
+        (job, run, at)
+        for job, run, at, heartbeat in rows
+        if alive_after is None
+        or heartbeat is None
+        or datetime.fromisoformat(heartbeat) <= alive_after
+    ]
     for job, run, at in stale:
         conn.execute("UPDATE jobs SET outcome = 'interrupted', ended = ? WHERE id = ?", (at, job))
         conn.execute(

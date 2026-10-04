@@ -242,6 +242,16 @@ def test_sign_off_waiting_is_an_item_that_signoff_resolves(repo: Path):
     assert status == "done" and ended
 
 
+def test_signoff_resolves_every_item_of_its_milestone(repo: Path):
+    """2026-10-04: F3's review stopped for ADR 21; the owner accepted it and signed F3 off,
+    and "review-stop f3" still asked for them on the Overview."""
+    _milestone(repo)
+    owner.verdict(repo, "m1", State(), "adr-needed", db=_db(repo))
+    assert ("review-stop", "m1") in _open(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))
+    assert _open(repo) == {}
+
+
 def test_signoff_stores_the_sign_off_sheet_as_signed(repo: Path):
     """The dashboard shows the sheet the owner signed, wherever the review was written."""
     _milestone(repo)

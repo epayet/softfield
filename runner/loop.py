@@ -439,7 +439,8 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
             set_activity(s, PICKING)
             if cut_off_job is not None:
                 _record(s, metrics.end_interrupted, cut_off_job)
-            _record(s, metrics.close_abandoned, s.project_id, s.run_id)
+            # a bench beside the runner keeps its heartbeat fresh: leave it working
+            _record(s, metrics.close_abandoned, s.project_id, s.run_id, now() - LIVE)
             if RESERVE.yes:  # handed on by this command's restart after the owner's yes
                 _record(s, metrics.set_run_reserve, s.run_id)
             _start_heartbeat(s, s.run_id)
@@ -3408,14 +3409,16 @@ LIVE = timedelta(minutes=2)  # f1 D3: an older heartbeat means the runner stoppe
 
 
 def live_run(cfg: Config) -> str | None:
-    """The run of this project whose heartbeat is under ``LIVE`` old, if any."""
+    """The run of this project whose heartbeat is under ``LIVE`` old, if any; a bench isn't
+    one: it never commits here, so the owner's commands and requests needn't wait for it."""
     if not cfg.metrics_db.is_file():
         return None
     conn = metrics.open_db(cfg.metrics_db)
     try:
         rows = conn.execute(
             "SELECT r.run_dir, r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"
-            " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL",
+            " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL"
+            " AND coalesce(r.command, '') != 'bench'",  # a bench works in copies, beside it
             (cfg.repo.name,),
         ).fetchall()
     finally:

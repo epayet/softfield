@@ -316,10 +316,11 @@ def test_a_timeout_is_a_failure_even_on_a_cloud_tag(tmp_path, monkeypatch):
     assert result.timed_out and result.error == FAILURE
 
 
-def test_the_ollama_agents_are_opencode_json_tags_and_only_one_develops():
+def test_the_ollama_agents_are_opencode_json_tags_and_none_develops_for_now():
     """D6: `ollama-<tag>` without `-cloud` or `:cloud`, `:` as `-`, model `ollama/<tag>`;
-    each tag is in opencode.json's `ollama` provider. One of them is a developer, from its F2
-    jobs (f2-09; two were turned on before any bench, ADR 15 item 7), and none has another role."""
+    each tag is in opencode.json's `ollama` provider. None is a developer until a clean bench
+    (owner, 2026-10-04: the 2026-10-04 bench leaked into the main checkout, f7-06), and none
+    has another role."""
     cfg = load_config(REPO)
     ollama = [a for a in cfg.agents.values() if a.model.startswith("ollama/")]
     config = json.loads((REPO / "opencode.json").read_text(encoding="utf-8"))
@@ -332,8 +333,7 @@ def test_the_ollama_agents_are_opencode_json_tags_and_only_one_develops():
         assert agent.harness == "opencode" and not is_local(agent)
         assert 1 <= agent.rating <= 10
     ids = {a.id for a in ollama}
-    developers = {"ollama-gpt-oss-120b"}  # nemotron-3-super left after F2 (f2-09)
-    assert ids & set(cfg.roles["developer"]) == developers
+    assert not ids & set(cfg.roles["developer"])
     others = {i for role, names in cfg.roles.items() if role != "developer" for i in names}
     assert not ids & others
     assert is_local(cfg.agent_for("developer"))

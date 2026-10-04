@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -487,3 +488,16 @@ def test_a_new_run_closes_what_a_stopped_run_left_running(db, ids):
     old = db.execute("SELECT ended, verdict FROM runs WHERE id = ?", (ids["run"],)).fetchone()
     assert tuple(old) == (T1, "interrupted")
     assert metrics.close_abandoned(db, ids["project"], run) == 0
+
+
+def test_a_new_run_leaves_a_live_run_alone(db, ids):
+    """2026-10-04: a bench running beside `runner run` had its jobs marked interrupted when
+    the runner started. A run whose heartbeat is fresh is still working."""
+    bench = _job(db, ids)
+    metrics.update_run_heartbeat(db, ids["run"], T1)
+    run = metrics.upsert_run(db, ids["project"], "20260930-170000", started=T1, heartbeat=T1)
+    fresh_after = datetime.fromisoformat(T1) - timedelta(minutes=2)
+    assert metrics.close_abandoned(db, ids["project"], run, alive_after=fresh_after) == 0
+    assert db.execute("SELECT outcome FROM jobs WHERE id = ?", (bench,)).fetchone()[0] == "running"
+    stale_after = datetime.fromisoformat(T1) + timedelta(minutes=1)
+    assert metrics.close_abandoned(db, ids["project"], run, alive_after=stale_after) == 1

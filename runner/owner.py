@@ -256,7 +256,8 @@ def _signed_off(
         owner_score=score,
         signoff=sheet or None,
     )
-    _resolve(conn, project, lambda kind, subject: (kind, subject) == ("signoff", milestone))
+    # every item about the milestone: its sign-off, and a review stop the owner has settled
+    _resolve(conn, project, lambda kind, subject: short_key(subject) == short_key(milestone))
 
 
 def signoff(

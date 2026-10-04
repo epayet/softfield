@@ -94,7 +94,9 @@ windows = [{ name = "month", capacity = 200 }]  # credits, fractional (f1-18)
 [roles]
 # Sonnet off for now (owner, 2026-10-02; ADR 17 item 1): it took first attempts from the cloud
 # developers and drew on the lead's 5-hour window. f4-13 brings it back as the step-up only.
-developer = ["local-qwen3.6-35b-a3b", "ollama-gpt-oss-120b"]  # Ollama's from its F2 jobs (f2-09)
+# Cloud developers off (owner, 2026-10-04): the Ollama allowance is kept for a clean bench
+# (f7-06 first), whose results decide who comes back.
+developer = ["local-qwen3.6-35b-a3b"]
 last-attempt = ["local-qwen3.6-35b-a3b"]
 direction = ["claude-opus"]
 checkpoint = ["claude-sonnet", "claude-opus"]  # Opus when Sonnet wrote the code

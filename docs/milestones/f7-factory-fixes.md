@@ -8,6 +8,7 @@
 - An escalation that implements a ticket commits with its `Task:` trailer.
 - Stopping the runner stops the gate it was running.
 - `runner signoff` counts a milestone's tickets by their `milestone:`, not their id.
+- A bench never touches the main checkout, so the Ollama bench can run again.
 
 
 ## Decisions
@@ -23,4 +24,5 @@
 | 03 | escalation-task-trailer | L | 2 | – | `implemented` escalations commit with `Task:` |
 | 04 | gates-stop-with-runner | L | 3 | – | the runner's exit kills its running gate's process group |
 | 05 | signoff-by-milestone | L | 2 | – | `signoff` and `_ids` read `milestone:` |
+| 06 | bench-isolation | L | 5 | – | a benched OpenCode agent works only in its copy, proven by a canary |
 
