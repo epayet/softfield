@@ -25,3 +25,10 @@ Read item 4 of `docs/adr/24-ratings-that-hold.md`, `replay_ratings` in `runner/l
 - a test: a fixture history with a collapsed rating replays to the game-level rating, and a second replay adds no rows
 - the replay has run on the real database, and "## Replay log" in `docs/milestones/f7-factory-fixes.md` lists each agent's rating before and after
 - `uv run runner check-all --task f7-02-ratings-replay` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
