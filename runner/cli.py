@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import socket
 import subprocess
 import sys
 from dataclasses import replace
@@ -43,6 +44,18 @@ def _repo() -> Path:
         if (candidate / "workflow" / "runner.toml").is_file():
             return candidate
     raise SystemExit("run this inside the coucou repository")
+
+
+def _lan_address() -> str:
+    """This machine's home-network address, for `runner dashboard --lan` (f5-03): the source
+    address of a UDP socket "connected" to a public IP. A UDP connect only picks the route;
+    it sends nothing."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+            udp.connect(("1.1.1.1", 80))
+            return str(udp.getsockname()[0])
+    except OSError as exc:
+        raise RunnerError(f"no home-network address found ({exc}); give --host instead") from exc
 
 
 def _today() -> date:
@@ -206,10 +219,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     dashboard.add_argument("--port", type=int, default=8765)
     dashboard.add_argument(
-        "--host", default="127.0.0.1", help="the address to listen on, e.g. this machine's LAN IP"
+        "--host", help="the address to listen on (default 127.0.0.1), e.g. this machine's LAN IP"
+    )
+    dashboard.add_argument(
+        "--lan", action="store_true", help="listen on this machine's home-network address"
     )
     dashboard.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     args = parser.parse_args(argv)
+    if getattr(args, "lan", False) and args.host:
+        dashboard.error("--lan finds this machine's address itself: give --lan or --host, not both")
     # A yes to Claude's reserve, handed on by this command's own restart (below); taken out
     # so that nothing this process starts inherits it (ADR 15 item 5).
     _handed_on(loop.RESERVE, os.environ.pop(loop.RESERVE_ENV, None))
@@ -354,10 +372,13 @@ def main(argv: list[str] | None = None) -> int:
                 raise RunnerError(
                     f"no metrics database at {db}; `uv run runner backfill` makes one"
                 )
+            host = _lan_address() if args.lan else args.host or "127.0.0.1"
             from factory_dashboard import app  # FastAPI loads only for this command
 
-            print(f"The factory dashboard: http://{args.host}:{args.port}/ (Ctrl-C stops it)")
-            app.serve(db, repo.name, port=args.port, host=args.host)
+            print(f"The factory dashboard: http://{host}:{args.port}/ (Ctrl-C stops it)")
+            if args.lan:
+                print("Open that address on your phone, on the same Wi-Fi.")
+            app.serve(db, repo.name, port=args.port, host=host)
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")

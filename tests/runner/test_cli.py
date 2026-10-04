@@ -382,6 +382,92 @@ def test_ratings_replay_twice_gives_the_same_ratings(in_repo, capsys):
     conn.close()
 
 
+@pytest.fixture
+def served(in_repo, monkeypatch) -> list[dict[str, object]]:
+    """`runner dashboard` with uvicorn faked: what it would have served, on which host."""
+    from factory_dashboard import app
+
+    metrics.open_db(in_repo / "var" / "factory-metrics.sqlite").close()
+    seen: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        app, "serve", lambda db, project, port, host: seen.append({"host": host, "port": port})
+    )
+    return seen
+
+
+def test_dashboard_lan_serves_on_the_home_network_address_and_prints_it(
+    served, monkeypatch, capsys
+):
+    """f5-03: the owner typed `--host <their LAN IP>` to reach the dashboard from the phone."""
+    monkeypatch.setattr(cli, "_lan_address", lambda: "192.168.1.42")
+    assert cli.main(["dashboard", "--lan"]) == 0
+    assert served == [{"host": "192.168.1.42", "port": 8765}]
+    assert "http://192.168.1.42:8765/" in capsys.readouterr().out
+
+
+def test_dashboard_stays_on_loopback_without_lan(served, monkeypatch):
+    monkeypatch.setattr(cli, "_lan_address", lambda: pytest.fail("looked for the LAN address"))
+    assert cli.main(["dashboard"]) == 0
+    assert cli.main(["dashboard", "--host", "10.0.0.5"]) == 0
+    assert served == [{"host": "127.0.0.1", "port": 8765}, {"host": "10.0.0.5", "port": 8765}]
+
+
+def test_dashboard_refuses_lan_and_host_together(served, capsys):
+    with pytest.raises(SystemExit) as exit_:
+        cli.main(["dashboard", "--lan", "--host", "10.0.0.5"])
+    assert exit_.value.code == 2
+    assert "--lan or --host, not both" in capsys.readouterr().err
+    assert served == []
+
+
+class _FakeUdp:
+    """A UDP socket: `connect` only picks the route, so no packet may leave."""
+
+    def __init__(self, family, kind, fail=False):
+        import socket
+
+        assert (family, kind) == (socket.AF_INET, socket.SOCK_DGRAM)
+        self.fail = fail
+        self.connected: list[tuple[str, int]] = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def connect(self, address):
+        if self.fail:
+            raise OSError("Network is unreachable")
+        self.connected.append(address)
+
+    def getsockname(self):
+        return ("192.168.1.42", 54321)
+
+
+def test_lan_address_is_the_source_of_a_udp_route_that_sends_nothing(monkeypatch):
+    import socket
+
+    made: list[_FakeUdp] = []
+
+    def make(family, kind):
+        made.append(_FakeUdp(family, kind))
+        return made[-1]
+
+    monkeypatch.setattr(socket, "socket", make)
+    assert cli._lan_address() == "192.168.1.42"
+    assert len(made[0].connected) == 1  # and _FakeUdp has no send: nothing was sent
+
+
+def test_dashboard_lan_without_a_network_says_so(served, monkeypatch, capsys):
+    import socket
+
+    monkeypatch.setattr(socket, "socket", lambda f, k: _FakeUdp(f, k, fail=True))
+    assert cli.main(["dashboard", "--lan"]) == 1
+    assert "no home-network address" in capsys.readouterr().err
+    assert served == []
+
+
 def _fake_subprocess(monkeypatch) -> list[list[str]]:
     import subprocess
 
