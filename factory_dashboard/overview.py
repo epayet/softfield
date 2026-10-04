@@ -479,14 +479,17 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
 
     jobs = running_jobs(conn, project, now)
-    waiting = queue(conn, project, now)
+    all_queued = queue(conn, project, now)
+    # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
+    waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
     return {
-        "needs": needs_you(conn, project, now, jobs, waiting),
+        "needs": needs_you(conn, project, now, jobs, all_queued),
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),
-        "queue": waiting,
+        "queue": all_queued,
         "next": live_line(conn, project, now.astimezone())["now"]["next"],
-        "drain": _drain(waiting[0].milestone or "") if waiting else None,
+        "drain": _drain(all_queued[0].milestone or "") if all_queued else None,
+        "waits": waits,
     }
 
 

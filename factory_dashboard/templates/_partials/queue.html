@@ -9,7 +9,7 @@
     <h3>Next in line</h3>
     {% for t in next %}
     {% if t.ticket %}
-    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}</div>
+    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · waits for {{ waits[t.ticket] }}{% endif %}</div>
     {% else %}
     <div class="next-row"><b class="mono">{{ t.number }} {{ t.title }}</b> · a batch</div>
     {% endif %}

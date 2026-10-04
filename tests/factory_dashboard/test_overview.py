@@ -890,6 +890,56 @@ def test_live_queue_matches_root(client):
     assert root_ids.index("f1-05-first") < root_ids.index("f1-06-second")
 
 
+def test_next_in_line_says_why(queue_claude_client, db_path):
+    """f4-39: each Next in line row whose ticket waits says what it waits for."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        f1 = conn.execute(
+            "SELECT id FROM milestones WHERE key = 'f1'",
+        ).fetchone()["id"]
+        proj = conn.execute(
+            "SELECT id FROM projects WHERE name = ?",
+            (PROJECT,),
+        ).fetchone()["id"]
+        for tid in ("f1-05-first", "f1-06-second", "f1-10-queued", "f1-11-waits-done"):
+            metrics.upsert_ticket(conn, proj, tid, milestone_id=f1, state="done")
+    finally:
+        conn.close()
+
+    html = queue_claude_client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    # f1-14-lead: lead ticket, waiting for Claude
+    assert "f1-14-lead" in next_section
+    assert "waits for Claude" in next_section
+    # f1-12-waits-running: depends on f1-04-live (running)
+    assert "f1-12-waits-running" in next_section
+    assert "waits for f1-04-live" in next_section
+    # f1-13-waits-escalated: depends on f1-12-escalated (escalated)
+    assert "f1-13-waits-escalated" in next_section
+    assert "waits for f1-12-escalated's escalation" in next_section
+    # No row carries another ticket's reason
+    for ticket, reason in [
+        ("f1-14-lead", "waits for Claude"),
+        ("f1-12-waits-running", "waits for f1-04-live"),
+        ("f1-13-waits-escalated", "waits for f1-12-escalated's escalation"),
+    ]:
+        rows = next_section.split("next-row")
+        for row in rows:
+            if ticket in row:
+                assert reason in row, f"{ticket} row should show '{reason}'"
+
+
+def test_next_in_line_no_waits_without_claude(queue_client, db_path):
+    """f4-39: with queue_client (no Claude waiting), no Next in line row says 'waits for'."""
+    html = queue_client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    assert "waits for" not in next_section
+
+
 def test_live_queue_updates_between_polls(queue_client, db_path):
     """A ticket added to the database appears in the Queue on the next /live poll."""
     client = queue_client
