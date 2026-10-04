@@ -20,6 +20,7 @@ from runner.config import Config
 from runner.gates import GateResult
 from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTotals
 from runner.report import SessionReport, TaskRecord
+from runner.review import Finding
 from runner.state import load_state, save_state
 from runner.tasks import parse_task
 from tests.runner.conftest import git, write_task
@@ -3716,3 +3717,48 @@ def test_a_finding_on_no_known_ticket_gets_no_fix_ticket(repo):
 
     finding = Finding("1", "blocking", "backlog", "Odd", file="coucou/x.py", ticket="m1-09-gone")
     assert loop.fix_ticket(repo, "m1", finding, "m1-C7-1", "copilot-auto") is None
+
+
+def _finding_on(ticket: str, file: str = "") -> Finding:
+    return Finding("1", "should-fix", "backlog", "PART is never read", file=file, ticket=ticket)
+
+
+@pytest.mark.parametrize(("status", "expected"), [("in progress", "f3"), ("done.", "f4")])
+def test_a_fix_ticket_belongs_to_the_milestone_at_fault(repo, status, expected):
+    """2026-10-03: f4-21 … f4-23 fixed f3-03's findings but were filed under F4, the running
+    checkpoint's milestone. A signed-off milestone takes no more tickets: the running one does."""
+    source = write_task(repo / "tasks" / "done", "f3-03-thing")
+    source.write_text(source.read_text().replace("milestone: 1", "milestone: f3"))
+    write_task(repo / "tasks" / "done", "f3-07-other")
+    write_task(repo / "tasks" / "ready", "f4-12-mine")
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f3.md").write_text(f"# F3\n\n> **Status: {status}**\n")
+    path = loop.fix_ticket(repo, "f4", _finding_on("f3-03-thing"), "f4-C7-1", "copilot-auto")
+    assert path is not None
+    task = parse_task(path, 150)
+    number = "08" if expected == "f3" else "13"
+    assert (task.id, task.milestone) == (f"{expected}-{number}-fix-part-is-never-read", expected)
+
+
+def test_a_fix_ticket_drops_the_repo_name_from_the_findings_path(repo):
+    """2026-10-03: f4-25 … f4-29 named `coucou/factory_dashboard/…`, the repo's own name first."""
+    (repo / "factory_dashboard").mkdir()
+    (repo / "factory_dashboard" / "x.py").write_text("")
+    _source_ticket(repo)
+    finding = _finding_on("m1-01-thing", f"{repo.name}/factory_dashboard/x.py")
+    path = loop.fix_ticket(repo, "m1", finding, "m1-C7-1", "copilot-auto")
+    assert path is not None
+    assert parse_task(path, 150).files == ("factory_dashboard/x.py",)
+
+
+def test_a_fix_ticket_on_a_missing_path_takes_the_tickets_files_and_names_the_path(repo):
+    _source_ticket(repo)
+    finding = _finding_on("m1-01-thing", "factory_dashboard/gone.py")
+    path = loop.fix_ticket(repo, "m1", finding, "m1-C7-1", "copilot-auto")
+    assert path is not None
+    task = parse_task(path, 150)
+    assert task.files == ("coucou/thing.py",)
+    assert '"factory_dashboard/gone.py"' in task.sections["Context"]
+    from runner.tasks import preflight
+
+    assert preflight(task, repo) == []

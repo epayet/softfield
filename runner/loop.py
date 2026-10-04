@@ -2436,11 +2436,25 @@ _FIX_PATH_RE = re.compile(r"[\w-][\w.-]*(?:/[\w-][\w.-]*)*")  # repo-relative, n
 _TICKET_ID_RE = re.compile(r"[\w-]+")
 
 
+def _fix_path(repo: Path, file: str) -> str:
+    """The finding's ``file`` as a path in the repo, or "" when it isn't one. f4-25 … f4-29
+    named `coucou/factory_dashboard/…`: the repo's own name first, then the real path."""
+    if not _FIX_PATH_RE.fullmatch(file):
+        return ""
+    first, _, rest = file.partition("/")
+    if not (repo / file).exists() and first == repo.name and rest:
+        file = rest
+    return file if (repo / file).exists() else ""
+
+
 def fix_ticket(repo: Path, milestone: str, finding: Finding, key: str, by: str) -> Path | None:
     """A developer ticket in tasks/ready/ for a stand-in checkpoint's ``finding`` (``key``),
-    from the ticket at fault in tasks/done/: its tests, its difficulty, and the finding's file
-    (else its files). The finding is untrusted text: it goes in the body, quoted, and only a
-    checked path reaches the frontmatter. None when no done ticket is at fault."""
+    from the ticket at fault in tasks/done/: its milestone (unless signed off: then
+    ``milestone``, the running one), its tests, its difficulty, and the finding's file if it
+    exists (else its files). The finding is untrusted text: it goes in the body, quoted, and
+    only a checked path reaches the frontmatter. None when no done ticket is at fault."""
+    from runner.milestone import signed_off  # runner.milestone imports this module
+
     if not _TICKET_ID_RE.fullmatch(finding.ticket):
         return None
     source_path = repo / "tasks" / "done" / f"{finding.ticket}.md"
@@ -2448,7 +2462,10 @@ def fix_ticket(repo: Path, milestone: str, finding: Finding, key: str, by: str) 
         source = parse_task(source_path, 1)
     except (OSError, ValueError, yaml.YAMLError):
         return None
-    file = finding.file if _FIX_PATH_RE.fullmatch(finding.file) else ""
+    if not signed_off(repo, source.milestone):
+        milestone = source.milestone
+    file = _fix_path(repo, finding.file)
+    missing = finding.file if not file and _FIX_PATH_RE.fullmatch(finding.file) else ""
     short = short_key(milestone)
     numbers = [
         int(found[1])
@@ -2470,6 +2487,8 @@ def fix_ticket(repo: Path, milestone: str, finding: Finding, key: str, by: str) 
     where = (
         f"`{file}`" + (f", line {finding.line}" if finding.line else "") if file else "its files"
     )
+    if missing:  # not in backticks: pre-flight would take it for a path the ticket needs
+        where += f' (the finding named "{missing}", which isn\'t in the repo)'
     quoted = "\n".join(f"> {line}" for line in (finding.detail or summary).splitlines())
     body = (
         f"### Goal\nFix a checkpoint finding on {finding.ticket}: {summary}\n\n"
