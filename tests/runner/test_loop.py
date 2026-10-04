@@ -335,6 +335,21 @@ def test_dry_run_names_a_milestone_waiting_for_a_sign_off(repo, capsys):
     assert "-> m3-01-free: runnable" in out
 
 
+def test_dry_run_picks_by_card_priority_and_prints_each(repo, capsys):
+    """f5 D6: m3's card at priority 1 goes before m1's ticket (no card: 100)."""
+    _milestone_doc(repo, "m3", "> **State:** ready · **Priority:** 1")
+    _add_task(repo, "m1-01-thing")
+    path = write_task(repo / "tasks" / "ready", "m3-01-first")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 3\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    out = _dry_run(repo, capsys)
+    assert "-> m3-01-first: runnable, priority 1" in out
+    assert "   m1-01-thing: runnable, priority 100" in out
+    assert out.index("m3-01-first") < out.index("m1-01-thing")
+    assert "next: m3-01-first" in out
+
+
 def test_a_signed_off_milestone_releases_the_tickets_waiting_for_it(repo, capsys):
     _waiting_milestones(repo)
     (repo / "docs" / "milestones" / "m1-first.md").write_text(

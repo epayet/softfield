@@ -71,6 +71,7 @@ from runner.report import ClaudeRunRecord, SessionReport, TaskRecord
 from runner.review import Finding, ReviewFileError, parse_checkpoint
 from runner.state import State, load_state, save_state
 from runner.tasks import (
+    BUGS,
     LATER,
     STOPPED,
     Task,
@@ -83,16 +84,18 @@ from runner.tasks import (
     find_ticket,
     held_ids,
     load_dir,
+    milestone_file,
     milestone_key,
-    milestone_order,
     parse_sections,
     parse_task,
     pick_next,
     preflight,
+    run_order,
     short_key,
     split_frontmatter,
     stopped_ids,
     task_ids,
+    task_priority,
     ticket_area,
     ticket_prefix,
 )
@@ -3262,18 +3265,19 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
     """Parked tickets whose reset has passed go first; while Claude is limited, only work that
     needs no Claude: developer tickets, which local takes. At Claude's reserve or the owner's
     share of its 5-hour window, developer tickets go before lead ones, so a question comes
-    only when nothing else can run (ADR 15 item 5, ADR 16 item 3)."""
+    only when nothing else can run (ADR 15 item 5, ADR 16 item 3). Each by priority (f5 D6)."""
     at = now()
+    cards = _cards(s.repo, ready)
     held = {t.id for t in ready if t.id in s.state.parked}
     due = [t for t in ready if t.id in held and _due(s.state.parked[t.id], at)]
-    if (task := pick_next(due, done, paused)) is not None:
+    if (task := pick_next(due, done, paused, cards)) is not None:
         return task
     limited = bool(_limits_ahead(s, at, five_hour=False))
     free = [t for t in ready if t.id not in held and not (limited and t.agent != "developer")]
-    task = pick_next(free, done, paused)
+    task = pick_next(free, done, paused, cards)
     if task is None or task.agent != "lead" or not _waits_for_the_owner(s, at):
         return task
-    developers = pick_next([t for t in free if t.agent != "lead"], done, paused)
+    developers = pick_next([t for t in free if t.agent != "lead"], done, paused, cards)
     return developers or task
 
 
@@ -3429,9 +3433,10 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         done = task_ids(tasks / "done")
         paused = blocked_ids(ready, stopped_ids(tasks))
         held = _held(cfg.repo, ready)
-        nxt = pick_next(ready, done, paused | held.keys())
+        cards = _cards(cfg.repo, ready)
+        nxt = pick_next(ready, done, paused | held.keys(), cards)
         reviews = due_reviews(cfg.repo, load_state(cfg.runs_dir / "state.json"))
-        _print_plan(ready, done, paused, nxt, cfg.repo, held, reviews)
+        _print_plan(ready, done, paused, nxt, cfg.repo, held, reviews, cards)
         return None
     s = open_session(cfg)
     restart = work_queue(s, escalate=escalate, once=once, reviews=True)
@@ -3519,6 +3524,19 @@ def _held(repo: Path, ready: list[Task]) -> dict[str, str]:
     return held_ids(ready, waits_for(repo, (t.milestone for t in ready)))
 
 
+def _cards(repo: Path, ready: list[Task]) -> dict[str, int]:
+    """Short key -> the priority on its milestone doc's card (f5 D4), for the ready tickets'
+    milestones that have a doc."""
+    from runner.milestone import card  # runner.milestone imports this module
+
+    found = {}
+    for key in {t.milestone for t in ready if t.milestone != BUGS}:
+        doc = milestone_file(repo, "milestones", key)
+        if doc.is_file():
+            found[short_key(key)] = card(key, doc.read_text(encoding="utf-8")).priority
+    return found
+
+
 def _waits_text(held: dict[str, str]) -> str:
     return ", ".join(
         f"{task_id} waits for {key}'s sign-off" for task_id, key in sorted(held.items())
@@ -3533,15 +3551,17 @@ def _print_plan(
     repo: Path,
     held: dict[str, str],
     reviews: Sequence[str] = (),
+    cards: Mapping[str, int] | None = None,
 ) -> None:
-    """What would run next, and each ready task's pre-flight problems (docs/task-writing.md).
-    A due review goes before any ticket (f4-20)."""
+    """What would run next, and each ready task's priority and pre-flight problems
+    (docs/task-writing.md), in run order (f5 D6). A due review goes before any ticket (f4-20)."""
     print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
     names = [f"review {short_key(key).upper()}" for key in reviews]
     for n, name in enumerate(names):
         print(f"{'->' if n == 0 else '  '} {name}: due")
     nxt = None if names else nxt
-    for task in sorted(ready, key=lambda t: (milestone_order(t.milestone), t.id)):
+    cards = cards or {}
+    for task in sorted(ready, key=lambda t: run_order(t, cards)):
         waiting = [d for d in task.depends_on if d not in done]
         if task.id in paused:
             status = "paused"
@@ -3550,7 +3570,7 @@ def _print_plan(
         else:
             status = "waiting on " + ", ".join(waiting) if waiting else "runnable"
         marker = "->" if nxt and task.id == nxt.id else "  "
-        print(f"{marker} {task.id}: {status}")
+        print(f"{marker} {task.id}: {status}, priority {task_priority(task, cards)}")
         for problem in preflight(task, repo):
             print(f"     pre-flight: {problem}")
     print(f"next: {next(iter(names), None) or (nxt.id if nxt else 'nothing')}")

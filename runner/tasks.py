@@ -37,7 +37,8 @@ _KEY_RE = re.compile(r"([a-z]+)(0|[1-9]\d*)(-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?")
 BUGS = "bugs"
 _BUG_ID_RE = re.compile(r"bug-\d{2,}-[a-z0-9]+(?:-[a-z0-9]+)*")
 AREAS = ("factory", "product")  # ADR 19 item 2b
-BUG_PRIORITY = 50  # f5 D5: a bug's default; a milestone's card defaults to 100
+BUG_PRIORITY = 50  # f5 D5: a bug's default
+DEFAULT_PRIORITY = 100  # f5 D4: a milestone card's default, so a ticket's with neither
 
 
 def milestone_key(value: object) -> str:
@@ -65,7 +66,7 @@ def ticket_prefix(key: str) -> str:
 
 
 def _key_parts(key: str) -> tuple[str, int]:
-    if key == BUGS:  # before every milestone, for now; f5 D6 picks by priority first
+    if key == BUGS:  # before every milestone at equal priorities (f5 D6)
         return BUGS, 0
     match = _KEY_RE.fullmatch(key)
     if match is None:
@@ -357,11 +358,31 @@ def held_ids(ready: Iterable[Task], waits: Mapping[str, str]) -> dict[str, str]:
     return {t.id: waits[short_key(t.milestone)] for t in ready if short_key(t.milestone) in waits}
 
 
-def pick_next(ready: Iterable[Task], done: set[str], paused: set[str]) -> Task | None:
+def task_priority(task: Task, cards: Mapping[str, int]) -> int:
+    """A ticket's own ``priority:``, else its milestone card's (``cards`` maps a short key to
+    it), else 100. Lower goes first (ADR 19 item 3)."""
+    if task.priority is not None:
+        return task.priority
+    return cards.get(short_key(task.milestone), DEFAULT_PRIORITY)
+
+
+def run_order(task: Task, cards: Mapping[str, int]) -> tuple[int, tuple[str, int], str]:
+    """f5 D6: priority, then milestone order, then id."""
+    return task_priority(task, cards), milestone_order(task.milestone), task.id
+
+
+def pick_next(
+    ready: Iterable[Task],
+    done: set[str],
+    paused: set[str],
+    cards: Mapping[str, int] | None = None,
+) -> Task | None:
+    """The runnable ticket that goes first: dependencies, pauses and holds (in ``paused``)
+    filter before the order."""
     candidates = [
         t for t in ready if t.id not in paused and all(dep in done for dep in t.depends_on)
     ]
-    return min(candidates, key=lambda t: (milestone_order(t.milestone), t.id), default=None)
+    return min(candidates, key=lambda t: run_order(t, cards or {}), default=None)
 
 
 TESTS_ONLY = (

@@ -4,6 +4,7 @@ import pytest
 
 from runner.tasks import (
     AREA_MISSING,
+    DEFAULT_PRIORITY,
     STOPPED,
     TESTS_ONLY,
     Task,
@@ -25,6 +26,7 @@ from runner.tasks import (
     preflight,
     short_key,
     task_ids,
+    task_priority,
     ticket_prefix,
 )
 from tests.runner.conftest import write_task
@@ -393,7 +395,7 @@ def test_a_bug_ticket_belongs_to_the_standing_bugs_key(repo):
 def test_bugs_is_a_key_of_its_own(tmp_path):
     assert milestone_key("bugs") == "bugs" and short_key("bugs") == "bugs"
     assert full_key(tmp_path, "bugs") == "bugs"
-    assert milestone_order("bugs") < milestone_order("f1")  # a bug before a milestone, for now
+    assert milestone_order("bugs") < milestone_order("f1")  # at equal priorities, a bug first
     assert ticket_prefix("bugs") == "bug" and ticket_prefix("f3-factory-line") == "f3"
 
 
@@ -463,6 +465,55 @@ def test_pick_next_orders_milestones_by_number(tmp_path):
     ready = [parse_task(p, 150) for p in sorted(tmp_path.glob("*.md"))]
     first = pick_next(ready, done=set(), paused=set())
     assert first is not None and first.id == "m9-01-early"
+
+
+def _in(directory: Path, task_id: str, milestone: str, extra: str = "", deps: str = "[]") -> Task:
+    path = write_task(directory, task_id, deps)
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {milestone}\n{extra}"))
+    return parse_task(path, 150)
+
+
+def test_pick_next_goes_by_the_milestone_card_priority_first(tmp_path):
+    """f5 D6: a ticket in a priority-1 milestone goes before one in an earlier milestone at 5."""
+    ready = [_in(tmp_path, "f1-01-early", "f1"), _in(tmp_path, "f2-01-late", "f2")]
+    picked = pick_next(ready, done=set(), paused=set(), cards={"f1": 5, "f2": 1})
+    assert picked is not None and picked.id == "f2-01-late"
+    assert [task_priority(t, {"f1": 5, "f2": 1}) for t in ready] == [5, 1]
+
+
+def test_a_bug_at_priority_1_goes_before_milestone_tickets_at_2(tmp_path):
+    ready = [
+        _in(tmp_path, "f1-01-a", "f1"),
+        _in(tmp_path, "m1-01-b", "1", "priority: 2\n"),
+        _in(tmp_path, "bug-01-x", "bugs", "area: factory\npriority: 1\n"),
+    ]
+    picked = pick_next(ready, done=set(), paused=set(), cards={"f1": 2})
+    assert picked is not None and picked.id == "bug-01-x"
+
+
+def test_a_ticket_priority_wins_over_its_card_and_no_card_is_100(tmp_path):
+    ticket = _in(tmp_path, "f1-01-a", "f1", "priority: 7\n")
+    assert task_priority(ticket, {"f1": 3}) == 7
+    assert task_priority(_in(tmp_path, "f1-02-b", "f1"), {}) == DEFAULT_PRIORITY == 100
+    assert task_priority(_in(tmp_path, "bug-01-x", "bugs", "area: factory\n"), {}) == 50
+
+
+def test_equal_priorities_keep_milestone_then_id_order(tmp_path):
+    ready = [_in(tmp_path, "f2-01-a", "f2"), _in(tmp_path, "f1-02-c", "f1")]
+    ready.append(_in(tmp_path, "f1-01-b", "f1"))
+    picked = pick_next(ready, done=set(), paused=set(), cards={"f1": 3, "f2": 3})
+    assert picked is not None and picked.id == "f1-01-b"
+
+
+def test_dependencies_and_pauses_still_come_before_priority(tmp_path):
+    first = _in(tmp_path, "f2-01-a", "f2")
+    waiting = _in(tmp_path, "f2-02-b", "f2", deps="[f2-01-a]")
+    other = _in(tmp_path, "f1-01-c", "f1")
+    cards = {"f1": 9, "f2": 1}
+    picked = pick_next([waiting, other], done=set(), paused=set(), cards=cards)
+    assert picked is not None and picked.id == "f1-01-c"
+    picked = pick_next([first, other], done=set(), paused={"f2-01-a"}, cards=cards)
+    assert picked is not None and picked.id == "f1-01-c"
 
 
 def _created_before(task: Task, queued: dict[str, Task]) -> set[str]:
