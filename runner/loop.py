@@ -2868,10 +2868,13 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     notes = logs / "escalation.md"
     if notes.is_file():
         s.report.notes.append(f"Escalation {task.id} ({outcome}): " + notes.read_text().strip())
+    # Only an implemented ticket merges here, so only its commit is found by `Task:`
+    task_trailer = {"task": task.id} if outcome == "implemented" else {}
     s.git.commit_all(
         with_trailers(
             f"escalation {task.id}: {outcome or 'no decision'} (by Claude)",
             agent=CLAUDE_HEADLESS_AGENT,
+            **task_trailer,
         )
     )
     if problems:

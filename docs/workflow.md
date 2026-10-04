@@ -121,7 +121,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 |---|---|---|
 | Local model (merges and task-branch WIP) | `Coucou local model` | `Agent: local-model`, plus `Task:`, `Model:`, `Attempts:` on merges |
 | Runner bookkeeping | `Coucou runner` | `Agent: runner` |
-| Headless Claude (lead tickets, directions, checkpoints, escalations, reviews) | owner | `Agent: claude-headless` (plus `Task:` on a lead ticket's merge, and `Developer:`, `Task:`, `Model:` on a finished branch's merge) |
+| Headless Claude (lead tickets, directions, checkpoints, escalations, reviews) | owner | `Agent: claude-headless` (plus `Task:` on a lead ticket's merge and an `implemented` escalation's commit, and `Developer:`, `Task:`, `Model:` on a finished branch's merge) |
 | Interactive Claude | owner | `Co-Authored-By: Claude …` |
 | Owner (including `runner signoff`, `accept`, `reject`) | owner | none |
 

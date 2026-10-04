@@ -1272,6 +1272,26 @@ def test_a_requeued_ticket_keeps_its_escalated_footer(repo, fake_model, fake_lea
     assert done.index("result: escalated") < done.index("result: done")
 
 
+@pytest.mark.parametrize("outcome", ["implemented", "requeue"])
+def test_only_an_implemented_escalation_commits_with_the_task_trailer(
+    repo, fake_model, fake_lead, monkeypatch, outcome
+):
+    """f4-24's escalation implemented it with only `Agent:`, so the bench couldn't find it."""
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+
+    def decide(job, repo_):
+        logs = repo_ / job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
+        (logs / "decision.json").write_text(f'{{"outcome": "{outcome}"}}')
+
+    script.extend([lambda job, repo_: None, decide])
+    _passes(monkeypatch)
+    loop.run_session(_config(repo), once=True, dry_run=False, escalate=True)
+    body = git(repo, "log", "-1", "--format=%B", f"--grep=^escalation m1-01-thing: {outcome}")
+    assert "Agent: claude-headless" in body
+    assert ("Task: m1-01-thing" in body) == (outcome == "implemented")
+
+
 def test_a_decision_for_the_owner_is_recorded(repo, fake_model, fake_lead):
     _escalate_on_protected(repo, fake_model)
     script, _ = fake_lead
