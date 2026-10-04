@@ -79,7 +79,9 @@ The order between them is spread across `work_queue`, `_resume_support`, `lead_w
   - The runner is protected code, so all of it is lead work.
 - **Risk:** a bug in the picker stalls or reorders the factory. Mitigation: `--dry-run` prints the picker's choice and reasons; the first tickets keep the existing order exactly (a test replays F4's session logs' order), and only then add the new kinds' rows.
 
+## Settled with the owner (2026-10-04)
+- **Two switches,** one per window: you may want one on and the other off.
+- **A due review keeps today's place:** it runs as soon as its milestone is done, before other milestones' tickets.
+
 ## Open questions
-1. **One switch or two?** The questions are separate today, and a yes to one doesn't answer the other. Two switches keep that. One "use the reserves" switch is simpler if you'd always flip both together.
-2. **The kind order.** It puts a due checkpoint before the next ticket, as today. Should a review wait until no ticket of another milestone is ready? Today it doesn't wait.
-3. **F5's order:** f5-06 (priority pick) and f5-18 (pause) still make sense as written and are kept: they become parts of the picker. Only f5-10 changes.
+1. **F5's order:** f5-06 (priority pick) and f5-18 (pause) still make sense as written and are kept: they become parts of the picker. Only f5-10 changes.
