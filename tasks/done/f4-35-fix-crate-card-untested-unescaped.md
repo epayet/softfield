@@ -28,3 +28,12 @@ Read `showCard` in `factory_dashboard/static/factory.js` and the "crate card (f3
 - a browser test: Enter on a focused crate opens the card, and a click outside the crates closes it
 - the listed `tests:` pass, and fail without the behaviour they check
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5729
+gate_failures: ['task-tests', 'stopped']
+tokens: 5081233
+```
