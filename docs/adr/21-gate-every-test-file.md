@@ -1,6 +1,6 @@
 # ADR 21: Every test file on main is gated, whatever the queue holds
 
-- **Status:** Proposed (drafted by the F3 review, 2026-10-04)
+- **Status:** Accepted (by the owner, 2026-10-04)
 - **Date:** 2026-10-04
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Supersedes:** [ADR 01](01-calibration-fixes.md) item 1 (`all-tests` ignores other queued tasks' skeleton tests)
