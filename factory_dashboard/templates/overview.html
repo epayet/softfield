@@ -80,8 +80,9 @@
 <div class="panel replay" id="replay">
   <button type="button" class="play" id="replay-start">Replay</button>
   <select id="replay-span" aria-label="Replay which stretch">
-    <option value="replay" selected>overnight</option>
-    <option value="replayDay">last 24 h</option>
+    {% for choice in choices %}
+    <option value="{{ choice.url }}"{% if choice.selected %} selected{% endif %}>{{ choice.label }}</option>
+    {% endfor %}
   </select>
   <div class="replay-controls" id="replay-controls" hidden>
     <button type="button" class="play" id="replay-play">Play</button>
@@ -96,6 +97,8 @@
     <button type="button" id="replay-live">Back to live</button>
   </div>
 </div>
+
+{% include "_partials/away.html" %}
 
 <section id="savings" class="panel">
   <h2>Savings from delegating{% if milestone %}, {{ milestone.key | upper }}{% endif %} <span class="src">API-equivalent dollars</span></h2>

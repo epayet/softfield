@@ -13,6 +13,7 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current.
 - Factory line: the data and every rule in Python, `factory_dashboard/line.py` (`live_line`, a JSON block in the page; `line.py` imports from `overview.py`, so `overview.py` imports `live_line` inside `_live_context`, never at the top); the drawing only in `factory_dashboard/static/factory.js` (hand-written SVG) → `tests/factory_dashboard/test_line.py` (tests on the JSON, plus one browser test: the page from `TestClient`, `/static/` from disk with `page.route`)
 - A live part's 5 s refresh in a browser: `open_overview` and the two tests after it in `tests/factory_dashboard/test_overview.py` (`/` and `/live` rendered on every request, the database changed between polls, waits longer than 5 s)
 - A panel drawn from the line document, with numbers you choose: `with_clog` and the four tests after it in `tests/factory_dashboard/test_overview.py` (monkeypatch `factory_dashboard.line.live_line` to call the real one and then set one key; the rule lives in a small function in `overview.py`, not in `line.py`)
+- Counting what happened in a span of time: `queries.away` → `write_away` and the test after it in `tests/factory_dashboard/test_overview.py` (times are parsed with `_time` and compared as moments, never as ISO strings in SQL: the runner writes its own offset; the fixture is its own database in `tmp_path`, and each job has its own attempt)
 
 ## Notes
 1. French says `vous` and sounds warm and plain: "Réessayez un peu plus tard", never "Veuillez réessayer".

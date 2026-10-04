@@ -1,0 +1,24 @@
+{# While you were away (f3-21): what the factory did in the chosen span (the replay bar's), at
+   page load only. Blocked counts the tickets blocked now. #}
+<section id="away" class="panel">
+  <h2>While you were away <span class="src">since {{ since.strftime("%H:%M") }}</span></h2>
+  {% if away.merged or away.failed or away.escalations or away.needs_you or away.claude_usd %}
+  <p class="sub">
+    {{ away.merged | length }} merged, {{ away.failed }} failed attempt{{ "" if away.failed == 1 else "s" }}, {{ away.escalations }} escalation{{ "" if away.escalations == 1 else "s" }}, {{ away.needs_you }} new for you, {{ away.blocked }} blocked now, {{ "$%.2f" | format(away.claude_usd) }} on Claude
+  </p>
+  {% if away.merged %}
+  <ul class="steps">
+    {% for t in away.merged %}
+    <li>
+      <span class="what">
+        <a class="mono" href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a>
+        {{ t.title or "" }}{% if t.merged_by %} (merged by {{ t.merged_by }}){% endif %}
+      </span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% else %}
+  <p class="sub">Nothing happened since {{ since.strftime("%H:%M") }}.</p>
+  {% endif %}
+</section>

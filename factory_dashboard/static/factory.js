@@ -555,9 +555,9 @@
   }
 
   async function startReplay() {
+    // the chosen span's replay: choosing another reloads the page with its ?since= (f3-21)
     const page = document.querySelector(".page[data-replay]");
-    const span = document.getElementById("replay-span").value;  // "replay" or "replayDay"
-    const response = await fetch(page.dataset[span], { headers: { Accept: "application/json" } });
+    const response = await fetch(page.dataset.replay, { headers: { Accept: "application/json" } });
     if (!response.ok) return;
     stop();
     replaying = await response.json();
@@ -584,6 +584,7 @@
   });
   addEventListener("resize", () => drawAll(document));  // a phone turned: the other floor
   document.getElementById("replay-start")?.addEventListener("click", startReplay);
+  document.getElementById("replay-span")?.addEventListener("change", (e) => { location.href = e.target.value; });
   document.getElementById("replay-live")?.addEventListener("click", backToLive);
   document.getElementById("replay-play")?.addEventListener("click", play);
   document.getElementById("replay-prev")?.addEventListener("click", () => { stop(); show(step - 1); });

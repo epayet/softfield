@@ -498,10 +498,32 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
     line = live_line(conn, project, local)
     milestone = current_milestone(conn, project)
 
-    def url(since: datetime) -> str:
+    def url(path: str, since: datetime) -> str:
         from urllib.parse import urlencode
 
-        return "/line/replay?" + urlencode({"project": project, "since": since.isoformat()})
+        return path + "?" + urlencode({"project": project, "since": since.isoformat()})
+
+    # f3-21: the span the panel and the replay show, from ?since= (an option chosen), else
+    # since the owner last looked (the cookie, read before it is set again below)
+    looked = overnight(local, request.cookies.get(SEEN))
+    try:
+        since = datetime.fromisoformat(request.query_params["since"]).astimezone(local.tzinfo)
+    except (KeyError, ValueError):
+        since = looked
+    if since >= local:
+        since = looked
+    spans = [
+        (f"since you last looked ({looked:%H:%M})", looked),
+        ("the last hour", local - timedelta(hours=1)),
+        ("today", local.replace(hour=0, minute=0, second=0, microsecond=0)),
+        ("the last 24 h", local - timedelta(days=1)),
+    ]
+    if since not in [start for _, start in spans]:
+        spans.append((f"since {since:%H:%M}", since))  # an option chosen on an earlier load
+    choices = [
+        {"label": label, "url": url("/", start), "selected": start == since}
+        for label, start in spans
+    ]
 
     response = render(
         request,
@@ -512,8 +534,11 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "active": "/",
             "line": line,
             "clog_biggest": biggest_clog(line["clog"]) if line["clog"] else None,
-            "replay": url(overnight(local, request.cookies.get(SEEN))),
-            "replay_day": url(local - timedelta(days=1)),
+            "replay": url("/line/replay", since),
+            "replay_day": url("/line/replay", local - timedelta(days=1)),
+            "away": queries.away(conn, project, since, local),
+            "since": since,
+            "choices": choices,
             **_live_context(conn, project, now),
             "verdict": last_verdict(conn, project),
             "allowance": agent_allowances(conn, now),

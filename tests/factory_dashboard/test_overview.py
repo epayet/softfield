@@ -1,12 +1,14 @@
 import json
 import re
-from datetime import timedelta
+import sqlite3
+from datetime import UTC, datetime, timedelta
 from html import unescape
 from pathlib import Path
+from urllib.parse import parse_qs, urlencode, urlsplit
 
 from factory_dashboard.overview import queue
 from runner import metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT
+from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, SONNET
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
 
@@ -33,7 +35,8 @@ def test_the_overview_shows_every_panel_in_order(client):
     html = client.get("/").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
     assert ids == [
-        "needs-you", "now", "allowance", "line-live", "clog", "verdict", "savings", "spend",
+        "needs-you", "now", "allowance", "line-live", "clog", "verdict", "away", "savings",
+        "spend",
     ]  # fmt: skip
     assert "Next in line" in section(html, "now")
     assert 'id="running"' not in html and 'id="queue"' not in html
@@ -549,3 +552,141 @@ def test_now_keeps_refreshing_after_the_first_refresh(page, serve_between, db_pa
         running(title)
         now.get_by_text(title).wait_for(timeout=REFRESH)
     assert "The first title." not in now.inner_text()
+
+
+# --- away (f3-21) --------------------------------------------------------------------------------
+
+
+SINCE = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+
+
+def write_away(conn: sqlite3.Connection) -> None:
+    """Between ``SINCE`` and ``NOW`` (08:00 to 12:00 UTC): ``away-b`` merged at 10:30 (by Opus,
+    after an escalation), ``away-a`` at 09:20 (after one failed attempt); ``away-c`` blocked
+    after a last attempt failed at 11:10 (written at +02:00); a Sonnet checkpoint ($0.50) and
+    an owner item. Before it: ``away-early`` merged at 07:30, a failed attempt at 05:10, a
+    direction ($4) and an owner item; after it, a failed attempt at 12:30."""
+    project = metrics.upsert_project(conn, PROJECT)
+    m = metrics.upsert_milestone(conn, project, "f1")
+    run = metrics.upsert_run(conn, project, "20261002-040000", started="2026-10-02T04:00:00+00:00")
+
+    def ticket(name: str, state: str, merged_by: str | None = None) -> int:
+        title = f"The {name} title."
+        return metrics.upsert_ticket(
+            conn, project, name, milestone_id=m, title=title, state=state, merged_by=merged_by
+        )
+
+    def job(
+        ticket_id: int | None, role: str, agent: str, attempt: int, started: str, ended: str,
+        outcome: str, cost: float | None = None,
+    ) -> None:  # fmt: skip
+        found = metrics.start_job(
+            conn, run, ticket_id=ticket_id, milestone_id=m, role=role, agent=agent,
+            attempt=attempt, started=f"2026-10-02T{started}",
+        )  # fmt: skip
+        metrics.finish_job(conn, found, ended=f"2026-10-02T{ended}", outcome=outcome, cost_usd=cost)
+
+    early, a = ticket("away-early", "done", LOCAL), ticket("away-a", "done", LOCAL)
+    b, c = ticket("away-b", "done", OPUS), ticket("away-c", "blocked")
+    job(early, "developer", LOCAL, 1, "07:00:00+00:00", "07:30:00+00:00", "passed")
+    job(a, "developer", LOCAL, 1, "08:30:00+00:00", "09:10:00+00:00", "failed")
+    job(a, "developer", LOCAL, 2, "09:10:00+00:00", "09:20:00+00:00", "passed")
+    job(b, "developer", LOCAL, 1, "05:00:00+00:00", "05:10:00+00:00", "failed")
+    job(b, "escalation", OPUS, 1, "10:00:00+00:00", "10:30:00+00:00", "passed", 1.5)
+    job(c, "direction", OPUS, 1, "07:00:00+00:00", "07:10:00+00:00", "passed", 4.0)
+    job(c, "last-attempt", LOCAL, 1, "12:40:00+02:00", "13:10:00+02:00", "failed")
+    job(c, "developer", LOCAL, 2, "12:10:00+00:00", "12:30:00+00:00", "failed")
+    job(None, "checkpoint", SONNET, 1, "11:00:00+00:00", "11:05:00+00:00", "passed", 0.5)
+    metrics.upsert_owner_item(
+        conn, project, "escalation", "away-c", created="2026-10-02T11:15:00+00:00"
+    )
+    metrics.upsert_owner_item(conn, project, "adr", "old", created="2026-10-02T06:00:00+00:00")
+
+
+def test_away_counts_what_happened_in_the_span_only(tmp_path):
+    from factory_dashboard import queries
+
+    path = tmp_path / "away.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+    conn = queries.connect(path)
+    try:
+        away = queries.away(conn, PROJECT, SINCE, NOW)
+    finally:
+        conn.close()
+    assert [(t.ticket, t.title, t.merged_by) for t in away.merged] == [
+        ("away-b", "The away-b title.", OPUS),
+        ("away-a", "The away-a title.", LOCAL),
+    ]  # latest first; away-early merged before the span
+    assert away.failed == 2  # away-a's first attempt and away-c's last, not 05:10 or 12:30
+    assert away.escalations == 1
+    assert away.blocked == 1
+    assert away.needs_you == 1
+    assert away.claude_usd == 2.0  # the escalation and the checkpoint, not the 07:00 direction
+
+
+def replay_since(html: str) -> datetime:
+    """The ``since`` of the page's replay URL."""
+    match = re.search(r'data-replay="([^"]+)"', html)
+    assert match
+    return datetime.fromisoformat(parse_qs(urlsplit(unescape(match.group(1))).query)["since"][0])
+
+
+def chosen(html: str) -> str:
+    """The replay bar's selected option."""
+    bar = re.search(r'<select id="replay-span".*?</select>', html, re.S)
+    assert bar
+    match = re.search(r"<option [^>]*selected>([^<]+)</option>", bar.group(0))
+    assert match
+    return match.group(1)
+
+
+def test_the_overview_offers_since_you_last_looked_with_its_time(client):
+    local = NOW.astimezone()
+    evening = (local - timedelta(days=1)).replace(hour=20, minute=0, second=0, microsecond=0)
+    html = client.get("/").text
+    assert chosen(html) == "since you last looked (20:00)"  # no cookie yet: 20:00 yesterday
+    assert replay_since(html) == evening
+    assert "overnight" not in html.lower()
+    for other in ("the last hour", "today", "the last 24 h"):
+        assert f">{other}</option>" in html
+    looked = local - timedelta(hours=2, minutes=15)
+    client.cookies.set("line_seen", looked.isoformat(timespec="seconds"))
+    html = client.get("/").text
+    assert chosen(html) == f"since you last looked ({looked:%H:%M})"
+    assert replay_since(html) == looked.replace(microsecond=0)
+    assert "since " + f"{looked:%H:%M}" in section(html, "away")
+
+
+def test_the_away_panel_follows_since_and_links_each_merged_ticket(serve, db_path):
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 10, 0, tzinfo=UTC)
+    html = serve().get("/?" + urlencode({"since": since.isoformat()})).text
+    assert replay_since(html) == since  # Replay plays the chosen span
+    assert chosen(html) == f"since {since.astimezone():%H:%M}"
+    assert re.search(r'href="/tickets/away-b\?project=[^"]+">away-b</a>', html)
+    away = section(html, "away")
+    assert "The away-b title. (merged by claude-opus)" in away
+    assert "away-a" not in away and "away-early" not in away  # merged before 10:00
+    assert "Nothing happened" not in away
+
+
+def test_the_away_panel_says_when_nothing_happened(client):
+    since = NOW - timedelta(seconds=1)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    assert section(html, "away").endswith(f"Nothing happened since {since.astimezone():%H:%M}.")
+
+
+def test_choosing_a_span_reloads_the_overview_for_it(page, client):
+    open_overview(page, client)
+    with page.expect_navigation():
+        page.select_option("#replay-span", label="the last hour")
+    since = parse_qs(urlsplit(page.url).query)["since"][0]
+    assert datetime.fromisoformat(since) == NOW - timedelta(hours=1)

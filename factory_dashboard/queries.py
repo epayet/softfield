@@ -740,3 +740,85 @@ def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:
         if results is not None:
             found.append(Trend(results, savings(conn, project, m["key"])))
     return found
+
+
+# --- away (f3-21) --------------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class AwayTicket:
+    """A ticket that reached ``done`` in the span: its name (``/tickets/<ticket>``), title and
+    who merged it."""
+
+    ticket: str
+    title: str | None
+    merged_by: str | None
+
+
+@dataclass(frozen=True)
+class Away:
+    """What happened since ``since``: merged tickets, failed jobs, escalations,
+    blocked tickets, owner items created, and Claude spend."""
+
+    merged: tuple[AwayTicket, ...]
+    failed: int
+    escalations: int
+    blocked: int
+    needs_you: int
+    claude_usd: float
+
+
+def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime) -> Away:
+    """Tickets that reached ``done`` in the span (latest first), failed developer jobs,
+    escalations started, blocked tickets, owner items created, and Claude spend (f3-21)."""
+
+    # times are compared as moments, not strings: the runner writes its own local offset
+    def within(at: str | None) -> bool:
+        return at is not None and since <= _time(at) <= now
+
+    jobs = conn.execute(
+        "SELECT j.role, j.agent, j.started, j.ended, j.outcome, j.cost_usd,"
+        " t.ticket, t.title, t.merged_by, t.state FROM jobs j"
+        " JOIN runs r ON r.id = j.run_id JOIN projects p ON p.id = r.project_id"
+        " LEFT JOIN tickets t ON t.id = j.ticket_id WHERE p.name = ?",
+        (project,),
+    ).fetchall()
+
+    last: dict[str, tuple[datetime, sqlite3.Row]] = {}  # a done ticket's last ended job
+    for j in jobs:
+        if j["state"] == "done" and j["ended"]:
+            at = _time(j["ended"])
+            if j["ticket"] not in last or at > last[j["ticket"]][0]:
+                last[j["ticket"]] = (at, j)
+    merged = tuple(
+        AwayTicket(j["ticket"], j["title"], j["merged_by"])
+        for at, j in sorted(last.values(), key=lambda found: found[0], reverse=True)
+        if since <= at <= now
+    )
+
+    owner = conn.execute(
+        "SELECT o.created FROM owner_items o JOIN projects p ON p.id = o.project_id"
+        " WHERE p.name = ?",
+        (project,),
+    ).fetchall()
+    blocked = conn.execute(
+        "SELECT COUNT(*) FROM tickets t JOIN projects p ON p.id = t.project_id"
+        " WHERE p.name = ? AND t.state = 'blocked'",
+        (project,),
+    ).fetchone()[0]
+
+    return Away(
+        merged=merged,
+        failed=sum(
+            j["role"] in LOCAL_ROLES and j["outcome"] == "failed" and within(j["ended"])
+            for j in jobs
+        ),
+        escalations=sum(j["role"] == "escalation" and within(j["started"]) for j in jobs),
+        blocked=int(blocked),
+        needs_you=sum(within(o["created"]) for o in owner),
+        claude_usd=sum(
+            j["cost_usd"] or 0.0
+            for j in jobs
+            if j["agent"].startswith(LEAD_PREFIX) and within(j["started"])
+        ),
+    )
