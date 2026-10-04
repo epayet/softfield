@@ -426,17 +426,29 @@ def test_a_ticket_with_a_running_job_isnt_in_the_queue(queue_client, db_path):
     assert "f1-04-live" not in waits(db_path)
 
 
+# Each reason on its own ticket and on no other: the whole queue, not one key.
+WAITS = {
+    "f1-10-queued": None,
+    "f1-11-waits-done": None,
+    "f1-12-waits-running": "waits for f1-04-live",
+    "f1-13-waits-escalated": "waits for f1-12-escalated's escalation",
+    "f1-14-lead": None,
+    "f1-05-first": None,
+    "f1-06-second": None,
+}
+
+
 def test_a_ticket_whose_dependency_is_ready_waits_for_that_id(queue_client, db_path):
     # f1-12-waits-running depends on f1-04-live (running, not done)
-    assert waits(db_path)["f1-12-waits-running"] == "waits for f1-04-live"
+    assert waits(db_path) == WAITS
 
 
 def test_a_ticket_whose_dependency_is_escalated_waits_for_escalation(queue_client, db_path):
-    assert waits(db_path)["f1-13-waits-escalated"] == "waits for f1-12-escalated's escalation"
+    assert waits(db_path) == WAITS
 
 
 def test_a_lead_ticket_waits_for_claude(queue_claude_client, db_path):
-    assert waits(db_path)["f1-14-lead"] == "waits for Claude"
+    assert waits(db_path) == WAITS | {"f1-14-lead": "waits for Claude"}
 
 
 def test_ready_now_comes_before_waiting(queue_client, db_path):
