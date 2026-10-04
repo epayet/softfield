@@ -28,3 +28,12 @@ One check still reads the page loosely: `test_next_in_line_is_the_first_three_of
 - only `tests/factory_dashboard/test_overview.py` changes
 - the listed `tests:` pass
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: tests-fail-on-main)
+attempts: 3
+tokens: 765022
+logs: var/runs/20261003-233946/f4-28-fix-the-running-ticket-assertion
+```
