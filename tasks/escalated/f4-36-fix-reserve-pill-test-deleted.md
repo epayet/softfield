@@ -25,3 +25,12 @@ The merge of `tasks/done/f4-25-fix-cached-tokens-are-hidden.md` replaced, in `te
 - a collected, top-level test shows "read 970k tokens · 18 turns" for tokens_in=36_000, tokens_cached=970_000, steps=18, next to the cached-only test
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: no-changes)
+attempts: 3
+tokens: 76478
+logs: var/runs/20261003-233946/f4-36-fix-reserve-pill-test-deleted
+```
