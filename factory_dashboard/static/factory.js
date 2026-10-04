@@ -72,6 +72,7 @@
   const short = (ticket) => ticket.split("-").slice(0, 2).join("-");
   const cut = (words, n) => (words && words.length > n ? `${words.slice(0, n - 1)}…` : words || "");
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const esc = (s) => s ? s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : "";
 
   // --- the belts: where each D11 belt runs, and where its words go -------------------------
 
@@ -600,9 +601,11 @@
 
   function crateInfo(doc, key) {
     for (const c of doc.queue) if (c.ticket === key) return { ...c, _source: "queue" };
-    for (const m of doc.machines) if (m.crate && m.crate.ticket === key) return { ...m.crate, _source: "machine", _agent: m.name, _attempt: m.crate.attempt, _minutes: m.crate.minutes };
+    for (const m of doc.machines) if (m.crate && (m.crate.ticket === key || (!m.crate.ticket && m.crate.role === key))) return { ...m.crate, _source: "machine", _agent: m.name, _attempt: m.crate.attempt, _minutes: m.crate.minutes };
     for (const c of doc.merged) if (c.ticket === key) return { ...c, _source: "merged" };
     for (const c of doc.queue) if (c.ticket === key) return { ...c, _source: "queue" };
+    // Batch crates have ticket=null; fall back to role
+    for (const c of doc.merged) if (!c.ticket && c.role === key) return { ...c, _source: "merged" };
     return null;
   }
 
@@ -618,7 +621,7 @@
       const project = new URLSearchParams(window.location.search).get("project") || "";
       const link = project ? `/tickets/${info.ticket}?project=${project}` : `/tickets/${info.ticket}`;
       html += `<a class="card-ticket" href="${link}">${info.ticket}</a>`;
-      if (info.title) html += `<div class="card-title">${info.title}</div>`;
+      if (info.title) html += `<div class="card-title">${esc(info.title)}</div>`;
       const roles = [];
       if (info.kind === "lead") roles.push("lead");
       else if (info.kind === "developer") roles.push("developer");
@@ -628,10 +631,10 @@
         html += `<dt>attempt</dt><dd>${info._attempt}</dd>`;
         html += `<dt>time</dt><dd>${info._minutes} min</dd></dl>`;
       }
-      if (info.waits && info.waits.length) html += `<div class="card-waits">${info.waits.join(", ")}</div>`;
+      if (info.waits && info.waits.length) html += `<div class="card-waits">${esc(info.waits.join(", "))}</div>`;
     } else {
       html += `<span class="card-ticket">${info.role || "batch"}</span>`;
-      if (info.title) html += `<div class="card-title">${info.title}</div>`;
+      if (info.title) html += `<div class="card-title">${esc(info.title)}</div>`;
     }
     card.innerHTML = html;
     card.hidden = false;

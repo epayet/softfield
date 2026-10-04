@@ -1270,6 +1270,136 @@ def test_the_card_stays_open_across_a_live_refresh(page, line_client):
     assert first in card_href
 
 
+def test_the_card_shows_the_title_as_text_with_html_characters(page, line_client):
+    """f3-19: a title such as `Fix <b>x</b> & y` is rendered as markup, not shown as written."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    doc["queue"].append(
+        {
+            "ticket": "fX-00-escape",
+            "title": "Fix <b>x</b> & y",
+            "kind": "developer",
+            "number": 99,
+            "waits": [],
+        }
+    )
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  const cur = JSON.parse(el.textContent); "
+        "  const newQueue = [...cur.queue]; "
+        "  newQueue.push(doc.queue[doc.queue.length - 1]); "
+        "  el.textContent = JSON.stringify({ ...cur, queue: newQueue }); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    page.wait_for_selector("svg#floor [data-queue-crate='fX-00-escape']")
+    page.click("svg#floor [data-queue-crate='fX-00-escape']")
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    title_text = card.locator(".card-title").text_content()
+    assert "<b>x</b> & y" in title_text
+    assert "Fix " in title_text
+    page.keyboard.press("Escape")
+
+
+def test_a_queued_crate_that_waits_shows_what_it_waits_for(page, line_client):
+    """A queued crate that waits shows what it waits for in the card."""
+    page.clock.install()
+    open_line(page, line_client)
+    page.wait_for_selector("svg#floor [data-queue-crate]")
+    crate = page.locator("svg#floor [data-queue-crate='f5-04-after']")
+    crate.click()
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    waits = card.locator(".card-waits").text_content()
+    assert waits is not None and "f5-03-next" in waits
+
+
+def test_a_crate_on_a_machine_shows_agent_attempt_and_minutes(page, line_client):
+    """A crate on a machine shows its agent, attempt and minutes."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    # Find the working machine and modify its crate
+    for m in doc["machines"]:
+        if m["state"] == "working" and m.get("crate"):
+            m["crate"]["ticket"] = "fM-01-mine"
+            m["crate"]["title"] = "Machine crate."
+            m["crate"]["kind"] = "developer"
+            m["crate"]["role"] = "developer"
+            m["crate"]["attempt"] = 3
+            m["crate"]["minutes"] = 42
+            m["name"] = "Opus"
+            break
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    page.wait_for_selector('svg#floor [data-crate="fM-01-mine"]')
+    page.click('svg#floor [data-crate="fM-01-mine"]')
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    card_text = card.text_content() or ""
+    assert "Opus" in card_text
+    assert "3" in card_text
+    assert "42" in card_text
+    page.keyboard.press("Escape")
+
+
+def test_a_batch_crate_shows_its_role_and_has_no_link(page, line_client):
+    """A batch crate shows its role and has no link."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    # Set the machine's crate to have no ticket (batch)
+    for m in doc["machines"]:
+        if m["state"] == "working" and m.get("crate"):
+            m["crate"]["ticket"] = None
+            m["crate"]["role"] = "reviewer"
+            m["crate"]["title"] = "Batch review."
+            m["crate"]["kind"] = "checkpoint"
+            break
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    # When ticket is null, data-crate is set to role
+    page.wait_for_selector('svg#floor [data-crate="reviewer"]')
+    page.click('svg#floor [data-crate="reviewer"]')
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    assert card.locator("a").count() == 0
+    card_text = card.text_content() or ""
+    assert "reviewer" in card_text
+    page.keyboard.press("Escape")
+
+
+def test_enter_opens_the_card_and_click_outside_closes_it(page, line_client):
+    """Enter on a focused crate opens the card, and a click outside the crates closes it."""
+    page.clock.install()
+    open_line(page, line_client)
+    page.wait_for_selector("svg#floor [data-queue-crate]")
+    crate = page.locator("svg#floor [data-queue-crate]").first
+    crate.focus()
+    crate.press("Enter")
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    assert card.locator("a").count() >= 1
+    page.mouse.click(0, 0)
+    assert card.is_hidden()
+
+
 # --- allowance rows layout (f4-34) ---------------------------------------------------------------
 
 
