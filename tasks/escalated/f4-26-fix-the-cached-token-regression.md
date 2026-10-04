@@ -24,3 +24,12 @@ A should-fix finding (f4-always-on-C231-2) by copilot-auto, standing in for the 
 - what the finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: pre-flight failed
+attempts: 0
+tokens: 0
+logs: var/runs/20261004-113521/f4-26-fix-the-cached-token-regression
+```
