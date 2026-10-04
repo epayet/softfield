@@ -34,3 +34,10 @@ Read `factory_dashboard/static/dashboard.css` (its tokens and the dark override)
 - the fonts load from `/static/vendor/fonts/`, and no page names a third-party host
 - the existing dashboard tests still pass
 - `uv run runner check-all --task f5-14-factory-look` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
