@@ -83,3 +83,13 @@ def test_docs_and_tasks_only_commits_skip_the_hook():
     assert checks.hook_can_skip(["docs/adr/12-x.md", "tasks/ready/m5-01-x.md"])
     assert not checks.hook_can_skip(["docs/a.md", "runner/loop.py"])
     assert not checks.hook_can_skip([])
+
+
+def test_the_hook_reads_the_commits_index_before_anything_clears_it():
+    """`git commit -a` stages into a temporary index named by GIT_INDEX_FILE. The hook once
+    unset it first, saw nothing staged and ran every check on a docs-only commit; the
+    command clears it itself, once it has read what is staged."""
+    hook = Path(__file__).parents[2] / "workflow" / "hooks" / "pre-commit"
+    code = [line for line in hook.read_text().splitlines() if not line.startswith("#")]
+    assert not [line for line in code if "GIT_INDEX_FILE" in line]
+    assert code[-1] == "exec uv run runner check-all --hook"
