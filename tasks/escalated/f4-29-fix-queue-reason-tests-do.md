@@ -25,3 +25,12 @@ Change only these three tests: each compares the whole `waits(db_path)` dict for
 - changing any one expected reason to another ticket makes a test fail (try it once, then restore)
 - the listed `tests:` pass
 - all gates pass (`uv run runner check-all --fix --task f4-29-fix-queue-reason-tests-do`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: tests-fail-on-main)
+attempts: 3
+tokens: 1574568
+logs: var/runs/20261003-233946/f4-29-fix-queue-reason-tests-do
+```
