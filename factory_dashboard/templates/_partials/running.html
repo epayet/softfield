@@ -46,15 +46,5 @@
   <p class="sub">Nothing is running.</p>
   {% endfor %}
   {% endfor %}
-  <div class="next-in-line">
-    <h3>Next in line</h3>
-    {% for t in next %}
-    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}</div>
-    {% else %}
-    <p class="sub">The queue is empty.</p>
-    {% endfor %}
-    {% if queue %}
-    <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting. Drain it with <code>{{ drain }}</code></p>
-    {% endif %}
-  </div>
+
 </section>

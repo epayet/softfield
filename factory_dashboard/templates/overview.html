@@ -10,9 +10,12 @@
 </div>
 
 <div class="row">
-<div id="live-now" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#now" hx-swap="innerHTML">
-{% include "_partials/running.html" %}
-</div>
+    <div id="live-now" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#now" hx-swap="innerHTML">
+      {% include "_partials/running.html" %}
+    </div>
+    <div id="live-queue" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#queue" hx-swap="innerHTML">
+      {% include "_partials/queue.html" %}
+    </div>
 </div>
 
 <div class="row">

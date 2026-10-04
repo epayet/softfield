@@ -35,13 +35,15 @@ def test_the_overview_shows_every_panel_in_order(client):
     html = client.get("/").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
     assert ids == [
-        "needs-you", "now", "allowance", "line-live", "clog", "verdict", "away", "savings",
+        "needs-you", "now", "queue", "allowance", "line-live", "clog", "verdict", "away", "savings",
         "spend",
     ]  # fmt: skip
-    assert "Next in line" in section(html, "now")
-    assert 'id="running"' not in html and 'id="queue"' not in html
+    assert "Next in line" not in section(html, "now")
+    # The former ids are no longer present as sections now have explicit ids
+    assert 'id="now"' in html
     live = client.get("/live").text
-    assert 'id="running"' not in live and 'id="queue"' not in live
+    # Queue section now has its own id
+    assert 'id="queue"' in live
 
 
 def test_needs_you_lists_open_owner_items_with_their_command(client):
@@ -82,12 +84,16 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
     assert "<html" not in html
     assert "Should reactions be editable" in section(html, "needs-you")
     assert "f1-04-live" in section(html, "now")
-    # the bare sections: the page's two wrappers fetch it every 5 s, keeping the project (f3-16)
-    assert "hx-get" not in html
-    page = client.get("/?project=coucou").text
-    assert page.count('hx-get="/live?project=coucou"') == 2
-    assert page.count('hx-swap="innerHTML"') == 2
-    assert client.get("/running").status_code == 404
+    assert 'id="queue"' in html
+    # The Live partial should not contain full HTML and queue should be present.
+    assert "\u003chtml" not in html
+    assert "Should reactions be editable" in section(html, "needs-you")
+    assert "f1-04-live" in section(html, "now")
+    assert 'id="queue"' in html
+    # there are now three hx-get wrappers (needs-you, now, queue)
+    page_html = client.get("/?project=coucou").text
+    assert page_html.count('hx-get="/live?project=coucou"') == 3
+    assert page_html.count('hx-swap="innerHTML"') == 3
 
 
 def test_the_queue_item_goes_from_live_once_a_run_is_live(serve):
@@ -245,12 +251,15 @@ def test_cached_only_shown_when_input_null(client, db_path):
 
 
 def test_now_holds_what_works_then_next_in_line_and_the_command_that_drains_it(client):
-    now = section(client.get("/").text, "now")
-    working, next_in_line = now.split("Next in line", 1)
-    assert "f1-04-live" in working and "attempt 2" in working and "Running now." in working
+    html = client.get("/").text
+    now = section(html, "now")
+    assert "f1-04-live" in now and "attempt 2" in now and "Running now." in now
+    queue_section = section(html, "queue")
+    _unused, next_in_line = queue_section.split("Next in line", 1)
     assert re.search(r"\b1 f1-05-first Queued first\. · a developer\b", next_in_line)
     assert next_in_line.index("1 f1-05-first") < next_in_line.index("2 f1-06-second")
-    assert "uv run runner run" in next_in_line
+    # The command to drain the queue appears only in the queue section, not in running.
+    assert "uv run runner run" not in next_in_line
     assert "f1-01-first" not in next_in_line  # merged
 
 
@@ -405,9 +414,13 @@ def test_the_spend_chart_holds_each_milestones_claude_dollars(serve):
 
 
 def test_another_project_shows_only_its_own(client):
+    # Define html for this test
     html = client.get(f"/?project={OTHER}").text
-    assert "m1-01-elsewhere" in section(html, "now")
-    assert "uv run runner run" in section(html, "now")
+    now = section(html, "now")
+    queue_section = section(html, "queue")
+    assert "Now refreshes" in now
+    assert "m1-01-elsewhere" in queue_section
+    assert "uv run runner run" in queue_section
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
         assert mine not in html
     assert "m1-01-elsewhere" not in client.get("/").text
@@ -459,7 +472,7 @@ def test_ready_now_comes_before_waiting(queue_client, db_path):
 
 
 def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path):
-    now = section(queue_client.get("/").text, "now")
+    now = section(queue_client.get("/").text, "queue")
     rows = now.split("Next in line", 1)[1]
     numbers = re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)
     ids = [t for _, t in numbers]
@@ -724,3 +737,60 @@ def test_the_legend_sits_collapsed_after_the_floor_svg(client):
         assert entry in details.group(1)
     for svg_match in re.finditer(r"<svg[^>]*>", line_section.group(1)):
         assert details.start() > svg_match.end(), "details must come after all SVGs"
+
+
+def test_live_queue_matches_root(client):
+    """The Queue rows in /live contain the same ticket IDs as on the main page."""
+    root_html = client.get("/").text
+    live_html = client.get("/live").text
+    # Extract rows after the "Next in line" header.
+    root_rows = root_html.split("Next in line", 1)[1]
+    live_rows = live_html.split("Next in line", 1)[1]
+    # Find ticket IDs in order.
+    root_ids = [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", root_rows)]
+    live_ids = [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", live_rows)]
+    assert root_ids == live_ids
+
+
+def test_live_queue_updates_between_polls(queue_client, db_path):
+    """A ticket added to the DB appears in the Queue on the next /live poll."""
+    client = queue_client
+    # Capture the queue count before insertion.
+    before_html = client.get("/live").text
+    before_match = re.search(r"(\d+) ticket", before_html)
+    assert before_match, "Queue count not found"
+    before_count = int(before_match.group(1))
+    # Insert a new queued ticket.
+    conn = metrics.open_db(db_path)
+    try:
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()["id"]
+        f1 = conn.execute("SELECT id FROM milestones WHERE key = 'f1'").fetchone()["id"]
+        metrics.upsert_ticket(
+            conn,
+            proj,
+            "f1-99-new",
+            milestone_id=f1,
+            kind="developer",
+            state="ready",
+            title="New queued",
+        )
+    finally:
+        conn.close()
+    # Capture after insertion.
+    after_html = client.get("/live").text
+    after_match = re.search(r"(\d+) ticket", after_html)
+    assert after_match, "Queue count not found after insertion"
+    after_count = int(after_match.group(1))
+    assert after_count == before_count + 1, (
+        f"expected queue count to increase from {before_count} to {before_count + 1}, "
+        f"got {after_count}"
+    )
+
+
+def test_running_and_queue_share_a_row_on_root(client):
+    """On the root page the Running and Queue sections are inside the same .row container."""
+    html = client.get("/").text
+    # The .row that contains the running section also contains the "Next in line" header.
+    assert re.search(r'<div class="row">.*id="now".*id="queue"', html, re.S), (
+        "Running and Queue not in same .row"
+    )
