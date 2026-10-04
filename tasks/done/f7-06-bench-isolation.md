@@ -24,3 +24,10 @@ Read `runner/bench.py` (its docstring: f2-12 moved benches from worktrees to clo
 - a test: a replay whose agent writes a file outside its copy stops the bench, names the file, and records the replay as void
 - a probe with a real `opencode run` in a copy edits only the copy (its result noted in `docs/milestones/f7-factory-fixes.md`)
 - `uv run runner check-all --task f7-06-bench-isolation` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
