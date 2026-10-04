@@ -27,3 +27,12 @@ A should-fix finding (f4-always-on-C292-2) by copilot-auto, standing in for the 
 - `test_later_tickets_panel_shows_ticket_with_title_and_queue_command` finds the `f1-99-later` row by `data-ticket` and asserts each cell's content by `data-col`: the id cell holds the link `href="/tickets/f1-99-later"` with text `f1-99-later`, the goal cell is `A set-aside ticket.`, the queue cell holds `uv run runner queue f1-99-later`
 - the listed `tests:` pass, and fail without the template change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2014
+gate_failures: ['tests-fail-on-main', 'stopped']
+tokens: 591007
+```
