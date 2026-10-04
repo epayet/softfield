@@ -26,3 +26,12 @@ Read `queue` and `_live_context` in `factory_dashboard/overview.py`, `factory_da
 - with `queue_client`, no Next in line row says "waits for"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 1553
+gate_failures: ['stopped', 'stopped']
+tokens: 876742
+```
