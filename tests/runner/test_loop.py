@@ -871,6 +871,71 @@ def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fa
     assert "Checkpoint: Sound. Tightened m1-03." in report.notes
 
 
+def _add_bug(repo: Path, task_id: str, area: str = "factory") -> None:
+    path = write_task(repo / "tasks" / "ready", task_id)
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: bugs\narea: {area}\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", f"add {task_id}")
+
+
+def test_bug_tickets_run_under_runner_run_and_a_checkpoint_counts_them(repo, fake_model, fake_lead):
+    """ADR 19 item 2: a bug is done when it merges. Its merges count towards a checkpoint like
+    any developer merge, and no review of `bugs` ever stops the queue."""
+    _add_bug(repo, "bug-01-thing")
+    _add_bug(repo, "bug-02-other", area="product")
+    script, jobs = fake_lead
+
+    def change(n: int):
+        def run(repo, prompt):
+            (repo / "coucou" / f"part{n}.py").write_text(f"PART = {n}\n")
+
+        return run
+
+    def review(job, repo_):
+        out = job.prompt.split("Write ", 1)[1].split(":", 1)[0]
+        (repo_ / out).parent.mkdir(parents=True, exist_ok=True)
+        (repo_ / out).write_text("Sound.")
+
+    fake_model.extend([change(1), change(2)])
+    script.append(review)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("bug-01-thing", "done"),
+        ("bug-02-other", "done"),
+    ]
+    assert report.review is None
+    assert [j.kind for j in jobs] == ["checkpoint"]
+    assert "bug-01-thing" in jobs[0].prompt and "bug-02-other" in jobs[0].prompt
+    tickets = {row["ticket"]: row for row in _rows(repo, "tickets")}
+    assert (tickets["bug-01-thing"]["area"], tickets["bug-02-other"]["area"]) == (
+        "factory",
+        "product",
+    )
+    [bugs] = [
+        m for m in _rows(repo, "milestones") if m["id"] == tickets["bug-01-thing"]["milestone_id"]
+    ]
+    assert bugs["key"] == "bugs"
+
+
+def test_a_ticket_without_an_area_records_none(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    _run(repo)
+    assert [row["area"] for row in _rows(repo, "tickets")] == [None]
+
+
+def test_a_bug_without_an_area_escalates_at_preflight(repo, fake_model):
+    path = write_task(repo / "tasks" / "ready", "bug-01-thing")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: bugs\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a bug")
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["preflight"]
+    assert report.tasks[0].attempts == 0  # the model was never called
+    message = git(repo, "log", "-1", "--format=%B", "--grep=^runner: escalate")
+    assert "a bug ticket needs `area:`" in message
+
+
 def _checkpoint_writes(text: str) -> Callable[[ClaudeJob, Path], None]:
     """A checkpoint that writes its note and ``text`` as its findings file."""
 
@@ -3858,6 +3923,30 @@ def test_a_fix_ticket_belongs_to_the_milestone_at_fault(repo, status, expected):
     task = parse_task(path, 150)
     number = "08" if expected == "f3" else "13"
     assert (task.id, task.milestone) == (f"{expected}-{number}-fix-part-is-never-read", expected)
+
+
+def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
+    """A bug's fix is a bug too (`bug-<nn>-…`, `milestone: bugs`), whatever milestone's
+    checkpoint found it: bugs are never signed off."""
+    source = write_task(repo / "tasks" / "done", "bug-03-thing")
+    source.write_text(
+        source.read_text().replace(
+            "milestone: 1\n", "milestone: bugs\narea: product\npriority: 7\n"
+        )
+    )
+    write_task(repo / "tasks" / "ready", "f4-12-mine")
+    path = loop.fix_ticket(repo, "f4", _finding_on("bug-03-thing"), "f4-C7-1", "copilot-auto")
+    assert path is not None
+    task = parse_task(path, 150)
+    assert (task.id, task.milestone, task.area, task.priority) == (
+        "bug-04-fix-part-is-never-read",
+        "bugs",
+        "product",
+        7,
+    )
+    from runner.tasks import preflight
+
+    assert preflight(task, repo) == []
 
 
 def test_a_fix_ticket_drops_the_repo_name_from_the_findings_path(repo):

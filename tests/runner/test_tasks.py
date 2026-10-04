@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from runner.tasks import (
+    AREA_MISSING,
     STOPPED,
     TESTS_ONLY,
     Task,
@@ -24,6 +25,7 @@ from runner.tasks import (
     preflight,
     short_key,
     task_ids,
+    ticket_prefix,
 )
 from tests.runner.conftest import write_task
 
@@ -368,6 +370,88 @@ def test_the_command_takes_either_form(tmp_path):
     assert milestone_arg(tmp_path, "f3") == "f3-assembly"
     with pytest.raises(TaskError):
         milestone_arg(tmp_path, "F3")
+
+
+def _bug(directory: Path, task_id: str = "bug-01-x", extra: str = "area: factory\n") -> Path:
+    path = write_task(directory, task_id)
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: bugs\n{extra}"))
+    return path
+
+
+def test_a_bug_ticket_belongs_to_the_standing_bugs_key(repo):
+    """ADR 19 item 2: `bug-<nn>-<slug>`, `milestone: bugs`, with its area and priority 50."""
+    task = parse_task(_bug(repo / "tasks" / "ready"), 150)
+    assert (task.id, task.milestone, task.priority, task.area) == (
+        "bug-01-x",
+        "bugs",
+        50,
+        "factory",
+    )
+    assert preflight(task, repo) == []
+
+
+def test_bugs_is_a_key_of_its_own(tmp_path):
+    assert milestone_key("bugs") == "bugs" and short_key("bugs") == "bugs"
+    assert full_key(tmp_path, "bugs") == "bugs"
+    assert milestone_order("bugs") < milestone_order("f1")  # a bug before a milestone, for now
+    assert ticket_prefix("bugs") == "bug" and ticket_prefix("f3-factory-line") == "f3"
+
+
+@pytest.mark.parametrize("given", ["bug", "Bugs", "bugs-x", "BUGS"])
+def test_only_bugs_itself_is_the_bugs_key(given):
+    with pytest.raises(TaskError):
+        milestone_key(given)
+
+
+def test_no_milestone_command_takes_bugs(tmp_path):
+    """Bugs are never planned, reviewed or signed off: `runner milestone|review|signoff bugs`."""
+    with pytest.raises(TaskError, match="bugs is no milestone: its tickets run under `runner run`"):
+        milestone_arg(tmp_path, "bugs")
+
+
+@pytest.mark.parametrize(
+    ("task_id", "milestone"),
+    [("bug-01-x", "1"), ("m1-01-x", "bugs"), ("bug-1-x", "bugs"), ("bug-01", "bugs")],
+)
+def test_a_bug_id_and_the_bugs_key_go_together(tmp_path, task_id, milestone):
+    path = write_task(tmp_path, task_id)
+    path.write_text(
+        path.read_text().replace("milestone: 1\n", f"milestone: {milestone}\narea: product\n")
+    )
+    with pytest.raises(TaskError, match="bug-<nn>-<slug>"):
+        parse_task(path, 150)
+
+
+def test_a_bug_without_an_area_fails_preflight(repo):
+    task = parse_task(_bug(repo / "tasks" / "ready", extra=""), 150)
+    assert task.area is None
+    assert preflight(task, repo) == [AREA_MISSING]
+
+
+@pytest.mark.parametrize("value", ["both", "Factory", "1", "null"])
+def test_an_area_is_factory_or_product(tmp_path, value):
+    with pytest.raises(TaskError, match="'area' must be factory or product"):
+        parse_task(_bug(tmp_path, extra=f"area: {value}\n"), 150)
+
+
+def test_any_ticket_may_carry_a_priority_and_only_a_bug_has_a_default(tmp_path):
+    """ADR 19 item 3: lower first. A milestone ticket without one takes its card's (f5 D6)."""
+    path = write_task(tmp_path, "m1-01-thing")
+    task = parse_task(path, 150)
+    assert (task.priority, task.area) == (None, None)
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\npriority: 3\n"))
+    assert parse_task(path, 150).priority == 3
+    assert parse_task(_bug(tmp_path, extra="area: product\npriority: 0\n"), 150).priority == 0
+
+
+@pytest.mark.parametrize("value", ["-1", "high", "2.5", "true", "null", '"3"'])
+def test_a_priority_is_a_whole_number_from_0(tmp_path, value):
+    path = write_task(tmp_path, "m1-01-thing")
+    path.write_text(
+        path.read_text().replace("milestone: 1\n", f"milestone: 1\npriority: {value}\n")
+    )
+    with pytest.raises(TaskError, match="'priority' must be a whole number from 0"):
+        parse_task(path, 150)
 
 
 def test_pick_next_orders_milestones_by_number(tmp_path):

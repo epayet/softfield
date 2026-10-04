@@ -32,17 +32,23 @@ class TaskError(ValueError):
 # may carry a slug, `f3-factory-line` (ADR 16 item 6); its short form `f3` prefixes its ticket
 # ids. A slug starts with a letter, so a ticket id is never a key.
 _KEY_RE = re.compile(r"([a-z]+)(0|[1-9]\d*)(-[a-z][a-z0-9]*(?:-[a-z0-9]+)*)?")
+# ADR 19 item 2: bug tickets, `bug-<nn>-<slug>`, belong to this standing key, outside the
+# milestones: never planned, reviewed or signed off; done when they merge.
+BUGS = "bugs"
+_BUG_ID_RE = re.compile(r"bug-\d{2,}-[a-z0-9]+(?:-[a-z0-9]+)*")
+AREAS = ("factory", "product")  # ADR 19 item 2b
+BUG_PRIORITY = 50  # f5 D5: a bug's default; a milestone's card defaults to 100
 
 
 def milestone_key(value: object) -> str:
-    """``4``, ``"4"`` and ``"m4"`` are ``"m4"``; ``"f1"`` and ``"f3-factory-line"`` are
-    themselves."""
+    """``4``, ``"4"`` and ``"m4"`` are ``"m4"``; ``"f1"``, ``"f3-factory-line"`` and
+    ``"bugs"`` are themselves."""
     if isinstance(value, bool):
         raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
     text = str(value)
     if text.isascii() and text.isdigit() and (text == "0" or not text.startswith("0")):
         return f"m{text}"
-    if isinstance(value, str) and _KEY_RE.fullmatch(text):
+    if isinstance(value, str) and (text == BUGS or _KEY_RE.fullmatch(text)):
         return text
     raise TaskError(f"'milestone' must be a number or a key like f1, not {value!r}")
 
@@ -52,7 +58,15 @@ def command_arg(milestone: str) -> str:
     return milestone[1:] if milestone.startswith("m") and milestone[1:].isdigit() else milestone
 
 
+def ticket_prefix(key: str) -> str:
+    """What a milestone's ticket ids start with: ``f3`` for ``f3-factory-line``, ``bug`` for
+    ``bugs``."""
+    return "bug" if key == BUGS else short_key(key)
+
+
 def _key_parts(key: str) -> tuple[str, int]:
+    if key == BUGS:  # before every milestone, for now; f5 D6 picks by priority first
+        return BUGS, 0
     match = _KEY_RE.fullmatch(key)
     if match is None:
         raise TaskError(f"not a milestone key: {key!r}")
@@ -60,7 +74,9 @@ def _key_parts(key: str) -> tuple[str, int]:
 
 
 def short_key(key: str) -> str:
-    """``f3`` for ``f3-factory-line``: its tickets' prefix, ``f3-01-…``."""
+    """``f3`` for ``f3-factory-line``: its tickets' prefix, ``f3-01-…``. ``bugs`` is itself."""
+    if key == BUGS:
+        return key
     prefix, number = _key_parts(key)
     return f"{prefix}{number}"
 
@@ -71,6 +87,8 @@ def _named(key: str) -> bool:
 
 def next_milestone_key(key: str) -> str:
     """The next milestone's short key: ``f4`` after ``f3`` or ``f3-factory-line``."""
+    if key == BUGS:
+        raise TaskError("bugs has no next milestone")
     prefix, number = _key_parts(key)
     return f"{prefix}{number + 1}"
 
@@ -113,6 +131,8 @@ def milestone_arg(repo: Path, value: object) -> str:
     """A command's milestone in either form (``f3``, ``f3-factory-line``, ``4``) as its full
     key, from its doc or its tickets."""
     key = milestone_key(value)
+    if key == BUGS:  # `runner milestone|review|signoff|…` (ADR 19 item 2)
+        raise TaskError(f"{BUGS} is no milestone: its tickets run under `runner run`")
     return key if _named(key) else named_keys(repo).get(key, key)
 
 
@@ -138,6 +158,8 @@ class Task:
     commands: tuple[str, ...] = ()  # a lead ticket's extra Bash prefixes (f1's probes)
     difficulty: int | None = None  # 1 to 10, set at plan time (ADR 14 item 5)
     difficulty_corrected: int | None = None  # set by the lead at review when it was off
+    priority: int | None = None  # lower first (ADR 19 item 3); a bug's defaults to 50
+    area: str | None = None  # factory or product (ADR 19 item 2b); required on a bug
 
     @property
     def goal(self) -> str:
@@ -217,12 +239,35 @@ def difficulty(meta: dict[str, Any], key: str) -> int | None:
     return value
 
 
+def _priority(meta: dict[str, Any], milestone: str) -> int | None:
+    """``priority``: absent (a bug's is 50; a milestone ticket's comes from its card) or a
+    whole number from 0, lower first."""
+    if "priority" not in meta:
+        return BUG_PRIORITY if milestone == BUGS else None
+    value = meta["priority"]
+    if type(value) is not int or value < 0:
+        raise TaskError(f"'priority' must be a whole number from 0, not {value!r}")
+    return value
+
+
+def ticket_area(meta: dict[str, Any]) -> str | None:
+    """``area``: absent, or factory or product. A bug without one fails pre-flight."""
+    if "area" not in meta:
+        return None
+    if meta["area"] not in AREAS:
+        raise TaskError(f"'area' must be factory or product, not {meta['area']!r}")
+    return str(meta["area"])
+
+
 def parse_task(path: Path, default_max_diff: int) -> Task:
     meta, body = split_frontmatter(path.read_text(encoding="utf-8"))
     task_id = meta.get("id")
     if not isinstance(task_id, str) or task_id != path.stem:
         raise TaskError(f"'id' must match the file name ({path.stem})")
     milestone = milestone_key(meta.get("milestone"))
+    bug_id = task_id.startswith("bug-")
+    if bug_id != (milestone == BUGS) or (bug_id and not _BUG_ID_RE.fullmatch(task_id)):
+        raise TaskError(f"a bug ticket is bug-<nn>-<slug> with 'milestone: {BUGS}', and only it")
     if path.parent.parent.name == "tasks":  # tasks/<folder>/<id>.md: its repo has the docs
         milestone = full_key(path.parent.parent.parent, milestone)
     sections = parse_sections(body)
@@ -251,6 +296,8 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
         commands=_commands(meta, agent),
         difficulty=difficulty(meta, "difficulty"),
         difficulty_corrected=difficulty(meta, "difficulty_corrected"),
+        priority=_priority(meta, milestone),
+        area=ticket_area(meta),
     )
 
 
@@ -321,6 +368,7 @@ TESTS_ONLY = (
     "`files:` lists only tests, so no test can fail on main's code (the tests-fail-on-main"
     " gate): the lead does it"
 )
+AREA_MISSING = "a bug ticket needs `area:` (factory or product), ADR 19 item 2b"
 
 
 def preflight(task: Task, repo: Path) -> list[str]:
@@ -333,6 +381,8 @@ def preflight(task: Task, repo: Path) -> list[str]:
     problems = []
     if task.files and all(f.startswith("tests/") for f in task.files):
         problems.append(TESTS_ONLY)
+    if task.milestone == BUGS and task.area is None:
+        problems.append(AREA_MISSING)
     paths = set(_PATH_RE.findall(text))
     for rel in sorted(paths):
         if not (repo / rel).exists() and rel not in (*task.files, *task.tests):  # may be new

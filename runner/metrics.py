@@ -200,8 +200,13 @@ ALTER TABLE milestones ADD COLUMN priority INTEGER;
 ALTER TABLE milestones ADD COLUMN area TEXT;
 """
 
+# f5 D5 (ADR 19 items 2 and 2b): a ticket's own area, which a bug ticket must give.
+_V7 = """
+ALTER TABLE tickets ADD COLUMN area TEXT;
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -393,6 +398,7 @@ def upsert_ticket(
     merged_by: str | None = None,
     commit: str | None = None,
     lines_changed: int | None = None,
+    area: str | None = None,
 ) -> int:
     values = _given(
         milestone_id=milestone_id,
@@ -407,6 +413,7 @@ def upsert_ticket(
         merged_by=merged_by,
         commit=commit,
         lines_changed=lines_changed,
+        area=area,
     )
     key: dict[str, Value] = {"project_id": project_id, "ticket": ticket}
     return _upsert(conn, "tickets", "project_id, ticket", key, values)

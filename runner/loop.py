@@ -93,6 +93,8 @@ from runner.tasks import (
     split_frontmatter,
     stopped_ids,
     task_ids,
+    ticket_area,
+    ticket_prefix,
 )
 from runner.usage import claude_tokens, transcripts_dir
 
@@ -582,6 +584,7 @@ def record_ticket(
         milestone = milestone_key(meta.get("milestone"))
         estimate = difficulty(meta, "difficulty")
         corrected = difficulty(meta, "difficulty_corrected")
+        area = ticket_area(meta)
     except Exception:
         return
     goal = parse_sections(body).get("Goal", "").strip()
@@ -603,6 +606,7 @@ def record_ticket(
         merged_by=merged_by,
         commit=commit,
         lines_changed=s.git.commit_size(commit) if commit else None,
+        area=area,
     )
 
 
@@ -2495,15 +2499,18 @@ def fix_ticket(repo: Path, milestone: str, finding: Finding, key: str, by: str) 
         milestone = source.milestone
     file = _fix_path(repo, finding.file)
     missing = finding.file if not file and _FIX_PATH_RE.fullmatch(finding.file) else ""
-    short = short_key(milestone)
+    prefix = ticket_prefix(milestone)  # a bug's fix is a bug (never signed off)
     numbers = [
         int(found[1])
         for path in (repo / "tasks").glob("*/*.md")
-        if (found := re.match(rf"{re.escape(short)}-(\d+)-", path.stem))
+        if (found := re.match(rf"{re.escape(prefix)}-(\d+)-", path.stem))
     ]
     words = re.findall(r"[a-z0-9]+", finding.summary.lower())[:4]
-    task_id = f"{short}-{max(numbers, default=0) + 1:02d}-fix" + "".join(f"-{w}" for w in words)
+    task_id = f"{prefix}-{max(numbers, default=0) + 1:02d}-fix" + "".join(f"-{w}" for w in words)
     meta: dict[str, Any] = {"id": task_id, "milestone": milestone}
+    if milestone == source.milestone:  # its card and place in the queue (ADR 19)
+        meta |= {"area": source.area} if source.area else {}
+        meta |= {"priority": source.priority} if source.priority is not None else {}
     if source.difficulty is not None:
         meta["difficulty"] = source.difficulty
     meta |= {

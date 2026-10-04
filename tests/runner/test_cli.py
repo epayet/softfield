@@ -38,6 +38,18 @@ def test_an_owner_command_that_refuses_exits_1(in_repo, capsys):
     assert "ADR 99 not found" in capsys.readouterr().err
 
 
+@pytest.mark.parametrize(
+    "argv", [["milestone", "bugs"], ["signoff", "bugs"], ["review", "--milestone", "bugs"]]
+)
+def test_the_milestone_commands_refuse_bugs(in_repo, monkeypatch, capsys, argv):
+    """ADR 19 item 2: bug tickets run under `runner run`, with no plan, review or sign-off."""
+    for name in ("run_milestone", "review_milestone"):
+        monkeypatch.setattr(cli, name, lambda *a: pytest.fail("a milestone command ran"))
+    monkeypatch.setattr(owner, "signoff", lambda *a, **k: pytest.fail("bugs signed off"))
+    assert cli.main(argv) == 1
+    assert "bugs is no milestone: its tickets run under `runner run`" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(("arg", "key"), [("4", "m4"), ("f1", "f1")])
 def test_milestone_takes_a_number_or_a_key(in_repo, monkeypatch, arg, key):
     seen: list[tuple[str, str]] = []

@@ -66,7 +66,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -175,9 +175,31 @@ def test_a_version_5_database_keeps_its_milestones_and_gains_empty_cards(tmp_pat
     old.close()
 
     conn = metrics.open_db(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
     row = conn.execute("SELECT key, title, state, priority, area FROM milestones").fetchone()
     assert tuple(row) == ("f4", "Always on", None, None, None)
+    conn.close()
+
+
+def test_a_version_6_database_keeps_its_tickets_and_gains_an_empty_area(tmp_path):
+    """f5 D5: a bug ticket's area (factory or product); earlier tickets have none."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    steps = "\n".join(metrics.MIGRATIONS[:6])
+    old.executescript(f"BEGIN;\n{steps}\nPRAGMA user_version = 6;\nCOMMIT;")
+    old.execute("INSERT INTO projects (name) VALUES ('coucou')")
+    old.execute("INSERT INTO tickets (project_id, ticket) VALUES (1, 'f4-01-a')")
+    old.close()
+
+    conn = metrics.open_db(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    row = conn.execute("SELECT ticket, area FROM tickets").fetchone()
+    assert tuple(row) == ("f4-01-a", None)
+    project = conn.execute("SELECT id FROM projects").fetchone()[0]
+    metrics.upsert_ticket(conn, project, "bug-01-x", area="product")
+    metrics.upsert_ticket(conn, project, "bug-01-x", state="done")
+    area = conn.execute("SELECT area FROM tickets WHERE ticket = 'bug-01-x'").fetchone()[0]
+    assert area == "product"
     conn.close()
 
 

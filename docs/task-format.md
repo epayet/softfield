@@ -21,6 +21,9 @@ agent: lead                         # optional: `lead` for the lead's own ticket
 commands: [ollama list, gh api]     # optional, lead tickets only: extra Bash prefixes for its
                                     # headless job (never git, the owner's commands or the loop)
 difficulty_corrected: 7             # optional: set by the lead at review when `difficulty` was off
+priority: 3                         # optional: a whole number from 0, lower first (ADR 19 item 3);
+                                    # a bug's is 50 if missing, a milestone ticket's is its card's
+area: factory                       # factory or product (ADR 19 item 2b); required on a bug
 ---
 ```
 
@@ -41,6 +44,14 @@ A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` (
   - **Area:** factory or product; missing, it follows the key's series (`f` factory, `m` product).
 
   Every runner command syncs each doc in `docs/milestones/` to the database at its start, so an idea with no tickets yet is a card too.
+
+### Bug tickets
+A bug lives outside the milestones ([ADR 19](adr/19-feature-board.md) item 2; [`docs/milestones/bugs.md`](milestones/bugs.md)):
+- **Id and key:** `bug-<nn>-<slug>` (`bug-07-queue-order`) with `milestone: bugs`, a standing key. Only a bug uses either.
+- **`area:`** factory or product, required: without it the bug fails pre-flight and goes to the lead.
+- **`priority:`** optional, 50 if missing (a milestone's card is 100 if it gives none).
+- **Done when it merges:** `runner run` takes bugs like any ready ticket, and checkpoints count their merges. There is no plan, review or sign-off: `runner milestone bugs`, `runner review --milestone bugs` and `runner signoff bugs` refuse.
+- A stand-in checkpoint's fix of a bug is a bug too, with its area and priority.
 
 ## Body
 

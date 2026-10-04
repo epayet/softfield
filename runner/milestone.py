@@ -46,6 +46,7 @@ from runner.review import (
 )
 from runner.state import State, save_state
 from runner.tasks import (
+    BUGS,
     STOPPED,
     TaskError,
     full_key,
@@ -437,7 +438,6 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
 
 # --- the reviews `runner run` starts (f4-20) -----------------------------------------------
 
-BUGS = "bugs"  # ADR 19: bug tickets' milestone, with no review or sign-off
 # A ticket in one of these isn't built yet; one set aside in later/ isn't part of the build.
 _BUILDING = ("ready", *STOPPED)
 
