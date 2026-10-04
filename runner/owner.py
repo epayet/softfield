@@ -13,11 +13,23 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 
+import yaml
+
 from runner import metrics
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.milestone import WAITS, footer_fields, signoff_sections
 from runner.state import State
-from runner.tasks import STOPPED, blocked_ids, command_arg, load_dir, milestone_file, short_key
+from runner.tasks import (
+    STOPPED,
+    TaskError,
+    blocked_ids,
+    command_arg,
+    load_dir,
+    milestone_file,
+    milestone_key,
+    short_key,
+    split_frontmatter,
+)
 
 # Review stops that need the owner, not another run (docs/workflow.md, review loop).
 OWNER_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone")
@@ -33,6 +45,21 @@ class OwnerError(RuntimeError):
 
 def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
     return sorted(p.stem for p in (repo / "tasks" / folder).glob(f"{short_key(milestone)}-*.md"))
+
+
+def _counted_ids(repo: Path, folder: str, milestone: str) -> list[str]:
+    """The tickets in ``folder`` whose ``milestone:`` is ``milestone``, in either key form: a
+    re-homed ticket keeps its old id. One whose frontmatter won't parse counts by its id."""
+    ids = []
+    for path in sorted((repo / "tasks" / folder).glob("*.md")):
+        try:
+            meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+            key = short_key(milestone_key(meta["milestone"]))
+        except (TaskError, KeyError, yaml.YAMLError):
+            key = path.stem.split("-", 1)[0]
+        if key == short_key(milestone):
+            ids.append(path.stem)
+    return ids
 
 
 def _needs_owner(stop: str) -> bool:
@@ -273,7 +300,7 @@ def signoff(
     optional ``score`` (1-10, ADR 14 item 14) is how the result felt on the devices."""
     if score is not None and not 1 <= score <= 10:
         raise OwnerError(f"a score is 1 to 10, not {score}")
-    left = [f"{t} ({f})" for f in _UNFINISHED for t in _ids(repo, f, milestone)]
+    left = [f"{t} ({f})" for f in _UNFINISHED for t in _counted_ids(repo, f, milestone)]
     if left and not force:
         raise OwnerError(
             "work is left: " + ", ".join(left) + ". Finish it, or sign off with --force."

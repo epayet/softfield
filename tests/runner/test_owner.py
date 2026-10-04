@@ -86,6 +86,35 @@ def test_signoff_refuses_while_work_is_left(repo: Path):
     assert git(repo, "tag").split() == ["m1-done"]
 
 
+def _in_milestone(path: Path, milestone: str) -> Path:
+    text = path.read_text(encoding="utf-8")
+    path.write_text(text.replace("milestone: 1\n", f"milestone: {milestone}\n", 1))
+    return path
+
+
+def test_signoff_counts_a_ticket_for_the_milestone_its_frontmatter_names(repo: Path):
+    """f3-08-field-cards moved to F5 keeps its id: it blocks F5's sign-off, not F3's."""
+    for key in ("f3-factory-line", "f5"):
+        (repo / "docs" / "milestones").mkdir(parents=True, exist_ok=True)
+        (repo / "docs" / "milestones" / f"{key}.md").write_text(
+            f"# {key}\n\n> **Status: in review** (2026-10-04).\n"
+        )
+    _in_milestone(write_task(repo / "tasks" / "ready", "f3-08-field-cards"), "f5-board")
+    _in_milestone(write_task(repo / "tasks" / "blocked", "f9-01-rehomed"), "f3")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "docs")
+    with pytest.raises(owner.OwnerError, match="f9-01-rehomed") as raised:
+        owner.signoff(repo, "f3-factory-line", TODAY)
+    assert "f3-08-field-cards" not in str(raised.value)
+    with pytest.raises(owner.OwnerError, match=r"f3-08-field-cards \(ready\)"):
+        owner.signoff(repo, "f5", TODAY)
+    (repo / "tasks" / "blocked" / "f9-01-rehomed.md").unlink()
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "re-homed")
+    owner.signoff(repo, "f3-factory-line", TODAY)
+    assert git(repo, "tag").split() == ["f3-factory-line-done"]
+
+
 def test_accept_and_reject_set_an_adrs_status(repo: Path):
     adr = repo / "docs" / "adr" / "14-photos.md"
     adr.parent.mkdir(parents=True)
@@ -355,7 +384,7 @@ def test_a_factory_milestone_uses_its_key_everywhere(repo: Path):
 def test_a_named_milestone_finds_its_short_tickets_and_its_docs(repo: Path):
     """ADR 16 item 6: f3-factory-line's tickets are f3-01-…; its docs use the full key."""
     write_task(repo / "tasks" / "escalated", "f30-02-other")  # f30's, not f3's
-    blocked = write_task(repo / "tasks" / "blocked", "f3-02-report")
+    blocked = _in_milestone(write_task(repo / "tasks" / "blocked", "f3-02-report"), "f3")
     append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
     state = State(parked={"f3-03-wait": {"kind": "reserve", "text": "f3-03 waits"}})
     code, text = owner.verdict(repo, "f3-factory-line", state, "clean")
