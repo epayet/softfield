@@ -61,3 +61,9 @@ attempts: 3
 tokens: 3838542
 logs: var/runs/20261003-233946/f3-21-since-you-looked
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
