@@ -19,14 +19,21 @@ _live: set[subprocess.Popen[str]] = set()
 _live_lock = threading.Lock()
 
 
-def _stop(proc: subprocess.Popen[str]) -> None:
-    """SIGTERM the whole group, give it ``GRACE`` seconds, then SIGKILL what's left."""
-    with contextlib.suppress(ProcessLookupError):
-        os.killpg(proc.pid, signal.SIGTERM)
-    with contextlib.suppress(subprocess.TimeoutExpired):
-        proc.wait(timeout=GRACE)
+def _kill(proc: subprocess.Popen[str]) -> None:
     with contextlib.suppress(ProcessLookupError):
         os.killpg(proc.pid, signal.SIGKILL)
+
+
+def _stop(proc: subprocess.Popen[str]) -> None:
+    """SIGTERM the whole group, give it ``GRACE`` seconds, then SIGKILL what's left. A second
+    Ctrl-C during the grace cuts it short, not the SIGKILL (f7-04)."""
+    try:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGTERM)
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            proc.wait(timeout=GRACE)
+    finally:
+        _kill(proc)
     proc.wait()
 
 
@@ -57,8 +64,12 @@ def stop_all() -> None:
     (`loop.with_progress`), which a Ctrl-C in the main thread never interrupts."""
     with _live_lock:
         procs = list(_live)
-    for proc in procs:
-        _stop(proc)
+    try:
+        for proc in procs:
+            _stop(proc)
+    finally:
+        for proc in procs:
+            _kill(proc)
 
 
 atexit.register(stop_all)
@@ -69,8 +80,12 @@ def _exit_on_sigterm(signum: int, frame: FrameType | None) -> None:
 
 
 def stop_on_sigterm() -> None:
-    """Make SIGTERM to the runner unwind like Ctrl-C, so its children are stopped too."""
+    """Make SIGTERM and SIGHUP to the runner unwind like Ctrl-C, so its children are stopped
+    too. SIGHUP's default killed the runner without unwinding: a closed terminal left a gate's
+    pytest running for 16 hours (2026-10-04). Under `nohup` it stays ignored."""
     signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    if signal.getsignal(signal.SIGHUP) is not signal.SIG_IGN:
+        signal.signal(signal.SIGHUP, _exit_on_sigterm)
 
 
 def run_bounded(
@@ -93,8 +108,7 @@ def run_bounded(
         try:
             out, err = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
-            with contextlib.suppress(ProcessLookupError):
-                os.killpg(proc.pid, signal.SIGKILL)
+            _kill(proc)
             out, err = proc.communicate()
             return None, out, err
     return proc.returncode, out, err

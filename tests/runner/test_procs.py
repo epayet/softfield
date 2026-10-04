@@ -99,6 +99,69 @@ def test_ctrl_c_during_run_bounded_kills_the_command(tmp_path: Path):
     assert _gone(pidfile)
 
 
+def test_a_second_ctrl_c_during_the_grace_still_kills_the_group(tmp_path: Path):
+    """f7-04: a command that ignores SIGTERM gets its SIGKILL even when the owner presses
+    Ctrl-C again while the runner waits out its grace."""
+    pidfile = tmp_path / "child.pid"
+    cmd = ["sh", "-c", f"trap '' TERM; sleep 60 & echo $! > {pidfile}; wait"]
+    interrupts: list[int] = []
+
+    def interrupt(signum: int, frame: object) -> None:
+        interrupts.append(1)
+        if len(interrupts) <= 2:
+            raise KeyboardInterrupt
+
+    old = signal.signal(signal.SIGALRM, interrupt)
+    signal.setitimer(signal.ITIMER_REAL, 0.5, 0.5)
+    try:
+        with pytest.raises(KeyboardInterrupt):
+            run_bounded(cmd, tmp_path, timeout=60)
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        signal.signal(signal.SIGALRM, old)
+    assert len(interrupts) >= 2
+    assert _gone(pidfile)
+
+
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGHUP])
+def test_a_signal_to_the_runner_kills_its_gate(tmp_path: Path, signum: int):
+    """2026-10-04: a gate's pytest ran on for 16 hours after the runner stopped. A closed
+    terminal sends SIGHUP, which killed the runner without unwinding."""
+    pidfile = tmp_path / "child.pid"
+
+    def signal_when_started() -> None:
+        deadline = time.monotonic() + 5
+        while not (pidfile.exists() and pidfile.read_text().strip()):
+            if time.monotonic() > deadline:
+                return
+            time.sleep(0.05)
+        os.kill(os.getpid(), signum)
+
+    old = {s: signal.getsignal(s) for s in (signal.SIGTERM, signal.SIGHUP)}
+    stop_on_sigterm()
+    sender = threading.Thread(target=signal_when_started, daemon=True)
+    try:
+        sender.start()
+        with pytest.raises(SystemExit):
+            run_bounded(_sleeper(pidfile), tmp_path, timeout=60)
+    finally:
+        sender.join(5)
+        for s, handler in old.items():
+            signal.signal(s, handler)
+    assert _gone(pidfile)
+
+
+def test_a_runner_under_nohup_keeps_ignoring_sighup():
+    old_term = signal.getsignal(signal.SIGTERM)
+    old = signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    try:
+        stop_on_sigterm()
+        assert signal.getsignal(signal.SIGHUP) is signal.SIG_IGN
+    finally:
+        signal.signal(signal.SIGHUP, old)
+        signal.signal(signal.SIGTERM, old_term)
+
+
 def test_sigterm_to_the_runner_kills_the_agent(tmp_path: Path):
     pidfile = tmp_path / "child.pid"
 
