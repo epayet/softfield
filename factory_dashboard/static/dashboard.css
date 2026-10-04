@@ -12,6 +12,7 @@
   --accent: #1f5d8c;      /* links, current tab */
   --accent-wash: #e3edf5;
   --good: #0ca30c; --warn: #fab219; --serious: #ec835a; --critical: #d03b3b;
+  --roller: #f2b10a;      /* the floor's yellow rollers and lights (f3 mock-up) */
   --good-ink: #0a6e0a; --warn-ink: #8a5d00; --serious-ink: #a4461f; --critical-ink: #b02d2d;
   --a1: #2a78d6; --a2: #eb6834; --a3: #1baf7a; --a4: #eda100; --a7: #4a3aa7;
   --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(0,0,0,.06) 5px 7px);
@@ -183,6 +184,18 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor .machine.stand-in .unit, .floor .machine.off .unit { stroke-dasharray: 6 4; }
 .floor .machine.off, .floor .machine.waiting { --c: var(--muted); }
 .floor .plate { fill: var(--c); }
+.floor .plate.local { fill: var(--ink); }  /* the f1 mock-up's plates: solid LOCAL, outlined CLOUD */
+.floor .plate.cloud { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+.floor text.ptext { font: 700 8px var(--sans); letter-spacing: .06em; }
+.floor text.ptext.local { fill: var(--surface); }
+.floor text.ptext.cloud { fill: var(--ink); }
+.floor .led { fill: var(--roller); }  /* lit and still under reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .floor .led { animation: led .45s steps(1) infinite; }
+  .floor .led + .led { animation-delay: .15s; }
+  .floor .led + .led + .led { animation-delay: .3s; }
+  @keyframes led { 0% { opacity: 1; } 33.3%, 100% { opacity: .15; } }
+}
 .floor .smoke { fill: var(--c); opacity: .3; transform-box: fill-box; transform-origin: center; } /* puffs grow in place, not from the floor's corner */
 .floor .crate { stroke: var(--ink); stroke-width: 1.2; }
 .floor .crate.lead { fill: var(--a2); } .floor .crate.developer { fill: var(--a3); }
@@ -191,7 +204,8 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor .belt .bed { fill: none; stroke: var(--grid); stroke-width: 18; }
 .floor .belt .rollers { fill: none; stroke: var(--rule); stroke-width: 12; stroke-dasharray: 2 7; }
 .floor .belt.back .rollers { stroke: var(--critical); opacity: .35; }
-.floor .belt.carrying .rollers { stroke: var(--warn); opacity: 1; }
+.floor .belt.today .rollers { stroke: var(--roller); opacity: .55; }  /* work went this way today */
+.floor .belt.carrying .rollers { stroke: var(--roller); opacity: 1; }
 .floor .belt.carrying text { fill: var(--ink); }
 .floor .light { fill: var(--good); }
 .floor [data-station="ripe"] { --c: var(--warn-ink); }

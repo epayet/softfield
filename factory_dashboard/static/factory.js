@@ -97,7 +97,7 @@
   function belt(svg, b, belts = BELTS) {
     const where = belts[b.id];
     if (!where) return;
-    const cls = ["belt", where.back ? "back" : "", b.carrying ? "carrying" : "", b.carrying ? "moving" : ""].join(" ").trim();
+    const cls = ["belt", where.back ? "back" : "", b.today > 0 ? "today" : "", b.carrying ? "carrying" : "", b.carrying ? "moving" : ""].join(" ").trim();
     const g = add(svg, "g", { class: cls, "data-belt": b.id });
     add(g, "title", {}, b.label);
     const width = where.thin ? 10 : 13;
@@ -232,8 +232,15 @@
       line = y + 88;
     } else {
       text(g, left, line, cut(m.name.toUpperCase(), Math.floor((w - 16) / 8.5)), "head");
-      text(g, left, line + 16, cut(`${m.where.toUpperCase()}${rated}`, Math.floor((w - 16) / 6.5)), "dim");
+      // its plate: solid for the local GPU, outlined for a cloud, sized to its words
+      const wh = m.where === "local GPU" ? "local" : "cloud";
+      const words = cut(`${m.where.toUpperCase()}${m.rating !== null ? rated : " · not rated yet"}`, Math.floor((w - 24) / 4.6));
+      add(g, "rect", { x: left, y: line + 7, width: Math.min(w - 20, words.length * 5 + 12), height: 14, class: `plate ${wh}` });
+      text(g, left + 6, line + 17.5, words, `ptext ${wh}`);
       line += 42;
+    }
+    if (m.state === "working") {  // three lights under the chimney, blinking in turn
+      for (let k = 0; k < 3; k++) add(g, "rect", { x: x + w - 38 + k * 9, y: y + 6, width: 6, height: 4, class: "led" });
     }
     if (m.state === "working" && m.crate) {
       const c = m.crate;

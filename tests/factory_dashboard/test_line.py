@@ -881,6 +881,75 @@ def test_working_machine_has_smoke_idle_does_not(page, line_client):
             assert not has_smoke, f"{mid} is {m['state']} but has smoke"
 
 
+# --- machines and belts (f3-20) ----------------------------------------------------------------
+
+
+# Playwright can't send back live objects (getAnimations, getComputedStyle): ask in the page.
+PLAYING = "els => els.map(e => e.getAnimations().map(a => a.playState).join(' '))"
+LOOKS = "e => ((s) => [s.stroke, s.strokeDasharray, s.opacity])(getComputedStyle(e))"
+STYLE = "els => els.map(e => getComputedStyle(e)[{!r}])"
+ROLLER = "rgb(242, 177, 10)"  # the mock-up's #f2b10a
+
+
+def test_local_and_cloud_machine_plates_differ(page, line_client):
+    """Owner, 2026-10-03: "The cloud vs local label was clear, ... the rating of the model was
+    clear." A solid LOCAL plate, an outlined CLOUD one, each with its rating."""
+    doc = open_line(page, line_client)
+    shop = [m for m in doc["machines"] if m["station"] in ("developers", "reviewers")]
+    local = next(m for m in shop if m["where"] == "local GPU")
+    cloud = next(m for m in shop if m["where"] != "local GPU")
+    for m, kind in ((local, "local"), (cloud, "cloud")):
+        plate = page.locator(f'svg#floor [data-machine="{m["id"]}"] rect.plate')
+        assert plate.get_attribute("class") == f"plate {kind}"
+        words = page.locator(f'svg#floor [data-machine="{m["id"]}"] text.ptext').text_content()
+        rated = "not rated yet" if m["rating"] is None else f"rated {m['rating']}"
+        assert words == f"{m['where'].upper()} · {rated}"
+    looks = [
+        page.locator(f'svg#floor [data-machine="{m["id"]}"] rect.plate').evaluate(
+            "e => getComputedStyle(e).fill"
+        )
+        for m in (local, cloud)
+    ]
+    assert looks[0] != looks[1]
+
+
+def test_a_working_machine_blinks_three_lights_and_an_idle_one_none(page, line_client):
+    doc = open_line(page, line_client)
+    working = next(m for m in doc["machines"] if m["state"] == "working")
+    idle = next(m for m in doc["machines"] if m["state"] == "idle")
+    lights = f'svg#floor [data-machine="{working["id"]}"] .led'
+    assert page.eval_on_selector_all(lights, PLAYING) == ["running"] * 3
+    delays = page.eval_on_selector_all(lights, STYLE.format("animationDelay"))
+    assert delays == ["0s", "0.15s", "0.3s"]
+    assert page.locator(f'svg#floor [data-machine="{idle["id"]}"] .led').count() == 0
+
+
+def test_under_reduced_motion_the_lights_stay_lit_and_still(page, line_client):
+    page.emulate_media(reduced_motion="reduce")
+    open_line(page, line_client)
+    assert page.eval_on_selector_all("svg#floor .led", PLAYING) == [""] * 3
+    assert page.eval_on_selector_all("svg#floor .led", STYLE.format("opacity")) == ["1"] * 3
+
+
+def test_belts_roll_yellow_where_work_went_today(page, line_client):
+    """Owner, 2026-10-03: "I like the yellow dotted lines." Still and dimmer where work went
+    today, marching where it goes now, grey where nothing went."""
+    doc = open_line(page, line_client)
+    found = {b["id"]: b for b in doc["belts"]}
+    went = next(i for i, b in found.items() if b["today"] and not b["carrying"])
+    quiet = next(i for i, b in found.items() if not b["today"] and not b["carrying"])
+
+    def rollers(belt: str) -> str:
+        return f'svg#floor [data-belt="{belt}"] .rollers'
+
+    stroke, dashes, opacity = page.locator(rollers(went)).evaluate(LOOKS)
+    assert (stroke, dashes) == (ROLLER, "2px, 7px") and float(opacity) < 1
+    assert page.eval_on_selector_all(rollers(went), PLAYING) == [""]
+    assert page.locator(rollers("queue→developers")).evaluate(LOOKS)[::2] == [ROLLER, "1"]
+    assert page.eval_on_selector_all(rollers("queue→developers"), PLAYING) == ["running"]
+    assert page.locator(rollers(quiet)).evaluate(LOOKS)[0] != ROLLER
+
+
 # --- refreshing in place (f3-17) -------------------------------------------------------------
 
 MARK = """() => {
