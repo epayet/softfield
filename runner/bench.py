@@ -97,9 +97,15 @@ def bench_dir(cfg: Config) -> Path:
     return cfg.repo / "var" / "bench"
 
 
-def merge_commit(git: Git, ticket: str) -> str:
-    """The ticket's merge on main: the latest commit with its ``Task:`` trailer."""
+def merge_commit(git: Git, ticket: str, recorded: str | None = None) -> str:
+    """The ticket's merge on main: the latest commit with its ``Task:`` trailer, else the
+    commit its metrics row ``recorded`` (an escalation that implemented it has no trailer,
+    f4-24)."""
     found = git.run("log", "-1", "--format=%H", f"--grep=^Task: {ticket}$", MAIN).strip()
+    if not found and recorded:
+        found = git.run(
+            "rev-parse", "--verify", "--quiet", f"{recorded}^{{commit}}", check=False
+        ).strip()
     if not found:
         raise RunnerError(f"no merge of {ticket} on {MAIN} (a commit with `Task: {ticket}`)")
     return found
@@ -473,7 +479,8 @@ def checkpoints(
     ).fetchall()
     ordered = sorted(rows, key=lambda r: (_at(r["started"]), r["id"]))
     merged = conn.execute(
-        "SELECT t.id, t.ticket, max(coalesce(j.ended, j.started)) AS at FROM tickets t"
+        'SELECT t.id, t.ticket, t."commit", max(coalesce(j.ended, j.started)) AS at'
+        " FROM tickets t"
         " JOIN projects p ON p.id = t.project_id JOIN jobs j ON j.ticket_id = t.id"
         " WHERE p.name = ? AND t.kind = 'developer' AND t.\"commit\" IS NOT NULL"
         " AND j.role != ? GROUP BY t.id HAVING at IS NOT NULL",
@@ -489,11 +496,12 @@ def checkpoints(
             t for t in merged if (after is None or after < _at(t["at"])) and _at(t["at"]) <= until
         ]
         named = conn.execute(
-            "SELECT t.id, t.ticket, '' AS at FROM findings f JOIN tickets t ON t.id = f.ticket_id"
+            "SELECT t.id, t.ticket, t.\"commit\", '' AS at FROM findings f"
+            " JOIN tickets t ON t.id = f.ticket_id"
             " WHERE f.job_id = ?",
             (row["id"],),
         ).fetchall()
-        tickets = {t["id"]: t["ticket"] for t in [*reviewed, *named]}
+        tickets = {t["id"]: (t["ticket"], t["commit"]) for t in [*reviewed, *named]}
         if not tickets:
             continue
         found.append(
@@ -501,7 +509,7 @@ def checkpoints(
                 job=row["id"],
                 milestone=milestone,
                 agent=row["agent"],
-                merges=tuple(f"{t} {merge_commit(git, t)}" for t in tickets.values()),
+                merges=tuple(f"{t} {merge_commit(git, t, c)}" for t, c in tickets.values()),
                 known=_known(conn, row["id"], list(tickets)),
             )
         )

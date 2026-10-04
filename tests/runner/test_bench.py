@@ -59,9 +59,10 @@ def _config(repo: Path, copies: Path) -> Config:
     )
 
 
-def _history(repo: Path) -> str:
+def _history(repo: Path, trailer: bool = True) -> str:
     """A ticket merged like the runner merges one, then today's workflow files changed after.
-    Returns the merge's parent."""
+    Without ``trailer``, merged as an escalation that implemented it (no `Task:`). Returns the
+    merge's parent."""
     (repo / "AGENTS.md").write_text("old rules\n")
     (repo / "docs" / "agents").mkdir(parents=True)
     (repo / "docs" / "agents" / "developer.md").write_text("old notes\n")
@@ -70,7 +71,14 @@ def _history(repo: Path) -> str:
     git(repo, "commit", "-q", "-m", f"add {TICKET}")
     parent = git(repo, "rev-parse", "HEAD").strip()
     (repo / "coucou" / "thing.py").write_text("def thing() -> int:\n    return 42\n")
-    git(repo, "commit", "-q", "-am", with_trailers(f"{TICKET}: done", task=TICKET))
+    message = f"escalation {TICKET}: implemented (by Claude)"
+    git(
+        repo,
+        "commit",
+        "-q",
+        "-am",
+        with_trailers(f"{TICKET}: done", task=TICKET) if trailer else message,
+    )
     git(repo, "mv", f"tasks/ready/{TICKET}.md", f"tasks/done/{TICKET}.md")
     append_footer(repo / "tasks" / "done" / f"{TICKET}.md", {"result": "done", "attempts": 1})
     git(repo, "commit", "-q", "-am", f"runner: {TICKET} done")
@@ -336,17 +344,18 @@ def _metrics(repo: Path) -> sqlite3.Connection:
     return metrics.open_db(repo / "var" / "factory-metrics.sqlite")
 
 
-def _checkpointed(repo: Path) -> int:
+def _checkpointed(repo: Path, trailer: bool = True) -> int:
     """`_history`'s merge, reviewed by a checkpoint with two known findings: a should-fix in
     coucou/thing.py and a blocking one in the test. Returns the checkpoint's job."""
-    _history(repo)
+    _history(repo, trailer)
+    merge = git(repo, "rev-parse", "HEAD~2").strip()
     conn = _metrics(repo)
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
         m1 = metrics.upsert_milestone(conn, project, "m1")
         run = metrics.upsert_run(conn, project, "20260930-100000", command="run")
         ticket = metrics.upsert_ticket(
-            conn, project, TICKET, milestone_id=m1, kind="developer", commit="abc", difficulty=3
+            conn, project, TICKET, milestone_id=m1, kind="developer", commit=merge, difficulty=3
         )
         for role, ticket_id, agent, started in (
             ("developer", ticket, "fake-a", "2026-09-30T10:00:00+02:00"),
@@ -430,6 +439,15 @@ def test_a_review_replay_scores_a_hit_a_miss_and_lists_the_new_finding(repo, cop
     assert "nobody saw this" in listed.read_text()
     assert _snapshot(repo) == before
     assert not list(copies.iterdir())
+
+
+def test_a_review_replay_finds_a_merge_without_its_task_trailer(repo, copies, fake_agents):
+    # f4-24: an escalation that implemented the ticket committed no `Task:` trailer; the
+    # ticket's recorded commit stands in for it
+    checkpoint = _checkpointed(repo, trailer=False)
+    fake_agents["fake-a"].append(_answer(ANSWER))
+    [result] = bench.run_review_bench(_config(repo, copies), ["m1"], ["fake-a"]).reviews
+    assert (result.checkpoint, result.outcome) == (checkpoint, "passed")
 
 
 def test_later_findings_on_the_tickets_are_known_but_rejected_ones_are_not(
