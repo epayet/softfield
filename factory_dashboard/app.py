@@ -2,7 +2,9 @@
 database, served at 127.0.0.1 by ``uv run runner dashboard`` (or at ``--host``, a LAN address).
 
 - It restarts itself when its code changes, and each page polls ``/version`` to offer a refresh.
-- One read-only connection per request (``Db``): the dashboard never writes.
+- One read-only connection per request (``Db``). The one write is ``POST /requests``
+  (``requests.py``, ADR 18 item 2): a request row for the runner, on its own connection
+  (``writable``), opened in that route only.
 - Every page takes ``?project=`` (``Project``) and keeps it in its links (``q`` in templates).
 - A page is a module with an ``APIRouter``, included in ``create_app``; it renders a template
   extending ``templates/base.html`` with ``render``. ``overview.py`` is the worked example.
@@ -63,6 +65,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
         milestones,
         overview,
         projects,
+        requests,
         runs,
         tickets,
         timeline,
@@ -85,6 +88,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.include_router(runs.router)
     app.include_router(agents.router)
     app.include_router(bench.router)
+    app.include_router(requests.router)
 
     @app.get("/version", response_class=HTMLResponse)
     def version(seen: str = "") -> str:
@@ -151,6 +155,15 @@ def get_db(request: Request) -> Iterator[sqlite3.Connection]:
         yield conn
     finally:
         conn.close()
+
+
+def writable(request: Request) -> sqlite3.Connection:
+    """The database for writing (``mode=rw``: it makes no file), in autocommit as the runner
+    opens it. Only ``POST /requests`` opens it, after its guard, and closes it."""
+    path: Path = request.app.state.db
+    return sqlite3.connect(
+        f"{path.resolve().as_uri()}?mode=rw", uri=True, isolation_level=None, timeout=10
+    )
 
 
 def get_project(request: Request, project: str | None = None) -> str:

@@ -1,0 +1,7 @@
+{# A request the owner made (f5 D3): "Asked" while the runner has yet to do it, polling its
+   status every 5 s in its own place; once done, the runner's result, and no more polling. #}
+{% if asked.done %}
+<p class="request done" role="status">{{ asked.result }}</p>
+{% else %}
+<p class="request" role="status" hx-get="/requests/{{ asked.id }}" hx-trigger="every 5s" hx-swap="outerHTML">Asked: the runner will do it.</p>
+{% endif %}

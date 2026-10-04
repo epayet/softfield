@@ -21,6 +21,8 @@ coucou/static/coucou/js/display.js
 # Vendored third-party code: pinned copies (ADR 11 item 1)
 coucou/static/coucou/vendor/**
 factory_dashboard/static/vendor/**
+# The dashboard's one write and its same-origin guard (ADR 18 items 2 and 3)
+factory_dashboard/requests.py
 # Admin templates for devices (the claim flow)
 coucou/templates/admin/**
 
@@ -105,6 +107,7 @@ tests/browser/test_me_sw.py
 tests/e2e/**
 # `runner report`'s numbers (f1 D1): the dashboard's queries may change, not what they count
 tests/runner/test_report.py
+tests/factory_dashboard/test_requests.py
 
 # The lead's instructions, and the developers' notes it curates (ADR 07 items 6 and 14)
 docs/agents/**
