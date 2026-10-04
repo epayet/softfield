@@ -29,3 +29,10 @@ Read `fix_ticket` and its caller in `runner/loop.py` (the stand-in checkpoint), 
 - a test: a finding naming a missing path gives the at-fault ticket's files, and the Context names the missing path
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
