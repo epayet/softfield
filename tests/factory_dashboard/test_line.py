@@ -1268,3 +1268,50 @@ def test_the_card_stays_open_across_a_live_refresh(page, line_client):
     card_href = card.locator("a").get_attribute("href")
     assert card_href is not None
     assert first in card_href
+
+
+# --- allowance rows layout (f4-34) ---------------------------------------------------------------
+
+
+def test_allowance_rows_side_by_side_at_desktop_and_wrap_at_phone(page, allowance_client):
+    """f4-34: the allowance rows sit side by side where there is room,
+    and each row's label and percent are visible at both desktop and phone."""
+    ORIGIN = "http://127.0.0.1:8765"
+    ROWS = "#allowance .allow > div"
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = allowance_client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+
+    # Desktop: rows side by side.
+    page.set_viewport_size({"width": 1360, "height": 900})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector(ROWS)
+    boxes = page.eval_on_selector_all(ROWS, "els => els.map(e => e.getBoundingClientRect())")
+    assert len(boxes) >= 2
+    for i in range(len(boxes) - 1):
+        assert abs(boxes[i]["y"] - boxes[i + 1]["y"]) < 4
+
+    # Phone: rows wrap vertically.
+    page.set_viewport_size({"width": 390, "height": 1200})
+    page.reload()
+    page.wait_for_selector(ROWS)
+    boxes = page.eval_on_selector_all(ROWS, "els => els.map(e => e.getBoundingClientRect())")
+    assert len(boxes) >= 2
+    for i in range(len(boxes) - 1):
+        assert boxes[i + 1]["y"] > boxes[i]["y"]
+
+    # Labels and percentages visible at both sizes.
+    for row in page.locator(ROWS).all():
+        assert row.is_visible()
+        text = row.text_content()
+        assert text is not None and len(text) > 0

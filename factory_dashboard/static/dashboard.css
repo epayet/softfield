@@ -94,6 +94,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .meter > span { position: absolute; inset: 0 auto 0 0; background: var(--c, var(--a2)); border-radius: 5px; }
 .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--warn-ink); border-radius: 1px; }
 .allow { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+.allow > div { min-width: 180px; }
 .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
 .allow .line small { color: var(--muted); }
 .running-card { display: grid; gap: 8px; }

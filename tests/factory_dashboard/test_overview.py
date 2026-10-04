@@ -690,3 +690,25 @@ def test_choosing_a_span_reloads_the_overview_for_it(page, client):
         page.select_option("#replay-span", label="the last hour")
     since = parse_qs(urlsplit(page.url).query)["since"][0]
     assert datetime.fromisoformat(since) == NOW - timedelta(hours=1)
+
+
+def test_the_legend_sits_collapsed_after_the_floor_svg(client):
+    """f4-34: the floor's legend is inside a <details> without open,
+    placed after the floor's svgs, and not anywhere before them."""
+    html = client.get("/").text
+    line_section = re.search(r'<section[^>]*\bid="line-live"[^>]*>(.*?)</section>', html, re.S)
+    assert line_section, "no line-live section"
+    details = re.search(r"<details[^>]*>(.*?)</details>", line_section.group(1), re.S)
+    assert details, "no legend details"
+    assert "open" not in details.group(0).lower()
+    assert "How to read the floor" in details.group(0)
+    entries = [
+        "lead ticket",
+        "developer ticket",
+        "belt carrying now",
+        "numbers on belts: how many went that way today",
+    ]
+    for entry in entries:
+        assert entry in details.group(1)
+    for svg_match in re.finditer(r"<svg[^>]*>", line_section.group(1)):
+        assert details.start() > svg_match.end(), "details must come after all SVGs"
