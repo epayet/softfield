@@ -23,3 +23,12 @@ f4-10-queue-live moved the Queue into `factory_dashboard/templates/_partials/liv
 - a test: on `/`, `#running` and `#queue` are inside one `.row`
 - the listed `tests:` pass, and each new test fails if the Queue is taken out of `_partials/live.html` (check by hand)
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 3782
+gate_failures: ['tests-fail-on-main', 'tests-fail-on-main']
+tokens: 184892
+```
