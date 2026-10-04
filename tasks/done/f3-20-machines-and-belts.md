@@ -48,3 +48,9 @@ attempts: 3
 tokens: 2789717
 logs: var/runs/20261003-233946/f3-20-machines-and-belts
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
