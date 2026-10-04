@@ -34,3 +34,12 @@ Read `factory_dashboard/static/factory.js`: `queue`, `machine` and `merged` draw
 - a browser test: the card stays open across a live refresh
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1949
+gate_failures: []
+tokens: 1872228
+```
