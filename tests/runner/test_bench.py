@@ -275,6 +275,92 @@ def test_an_opencode_agent_edits_its_copy_never_the_main_checkout(
     assert not list(copies.iterdir())  # removed afterwards
 
 
+# Resolves its directory the way the real OpenCode does: from $PWD, over its own cwd (f7-06's
+# probe). The runner started from the main checkout passed on a $PWD naming it. Python, not
+# sh: a shell resets $PWD to its real cwd.
+FAKE_OPENCODE_PWD = """\
+#!/usr/bin/env python3
+import os
+from pathlib import Path
+
+print("directory: " + os.environ["PWD"])
+Path(os.environ["PWD"], "coucou", "opencode_was_here.py").write_text("X = 1\\n")
+"""
+
+
+def test_an_opencode_agent_started_from_the_main_checkout_still_edits_its_copy(
+    repo, copies, tmp_path_factory, monkeypatch
+):
+    _history(repo)
+    bin_dir = tmp_path_factory.mktemp("bin")
+    fake = bin_dir / "opencode"
+    fake.write_text(FAKE_OPENCODE_PWD)
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PWD", str(repo))  # `uv run runner bench` typed in the main checkout
+    monkeypatch.setattr(loop, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
+    file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
+    monkeypatch.setattr(gates, "GATES", file_gates)
+    cfg = replace(_config(repo, copies), opencode_timeout=60)
+    before = _snapshot(repo)
+    report = bench.run_bench(cfg, [TICKET], ["ollama-x"])
+    assert _snapshot(repo) == before
+    assert not (repo / "coucou" / "opencode_was_here.py").exists()
+    assert report.stopped is None
+    [result] = report.results
+    assert (result.outcome, result.attempts) == ("passed", 1)  # the edit landed in the copy
+    [log] = (repo / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
+    directory = Path(log.read_text().split("directory: ")[1].splitlines()[0])
+    assert directory.is_relative_to(copies)
+
+
+def test_a_replay_that_changes_the_main_checkout_is_void_and_stops_the_bench(
+    repo, copies, fake_agents
+):
+    """The canary (f7-06): a leak is the bench's fault, not the agent's, so it's no game."""
+    _history(repo)
+    cfg = _config(repo, copies)
+    conn = metrics.open_db(cfg.metrics_db)
+    metrics.upsert_ticket(conn, metrics.upsert_project(conn, repo.name), TICKET, difficulty=5)
+    conn.close()
+
+    def leak(work: Path, spec: JobSpec) -> None:
+        _implement(work, spec)
+        (repo / "coucou" / "leaked.py").write_text("X = 1\n")  # outside its copy
+
+    fake_agents["fake-a"].append(leak)
+    fake_agents["fake-b"].append(_implement)
+    report = bench.run_bench(cfg, [TICKET], ["fake-a", "fake-b"])
+    assert report.stopped is not None
+    assert "fake-a" in report.stopped and "coucou/leaked.py" in report.stopped
+    [result] = report.results
+    assert (result.agent, result.outcome) == ("fake-a", "void")
+    assert "coucou/leaked.py" in result.note
+    assert fake_agents["fake-b"] == [_implement]  # never ran
+    jobs = _jobs(repo)
+    assert [(j["agent"], j["outcome"]) for j in jobs] == [("fake-a", "void")]
+    assert "coucou/leaked.py" in jobs[0]["note"]
+    conn = sqlite3.connect(cfg.metrics_db)
+    try:
+        assert conn.execute("SELECT count(*) FROM rating_changes").fetchone()[0] == 0
+    finally:
+        conn.close()
+    assert (repo / "coucou" / "leaked.py").exists()  # left for the owner to look at
+    assert not list(copies.iterdir())
+    # nor does `runner ratings --replay` play it later
+    assert loop._bench_game("fake-a", TICKET, 5, ["void"]) is None
+    assert loop._bench_game("fake-a", TICKET, 5, ["failed"]) is not None
+
+
+def test_a_change_already_in_the_main_checkout_is_no_leak(repo, copies, fake_agents):
+    _history(repo)
+    (repo / "notes.txt").write_text("the owner's own work\n")
+    fake_agents["fake-a"].append(_implement)
+    report = bench.run_bench(_config(repo, copies), [TICKET], ["fake-a"])
+    assert report.stopped is None
+    assert [r.outcome for r in report.results] == ["passed"]
+
+
 def test_a_bench_dir_inside_the_repo_is_refused(repo, fake_agents):
     _history(repo)
     with pytest.raises(loop.RunnerError, match=r"\[bench\] dir"):

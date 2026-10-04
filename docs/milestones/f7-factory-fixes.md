@@ -54,3 +54,13 @@
 - **For the owner:** gpt-oss-120b still gets no first attempt.
 - **Rows written:** only for agents whose rating moved. A second run wrote nothing.
 
+## Bench isolation probe
+f7-06, 2026-10-05: a real `opencode run` (`ollama/gpt-oss:20b-cloud`) in a bench copy made by `make_copy`, asked to write a file by a relative path.
+- **The cause was `PWD`.** OpenCode takes its directory from `PWD` over its real cwd. The runner, started in the main checkout, passed its own `PWD` on.
+  - With `PWD` naming the main checkout, the write landed in the main checkout, not the copy.
+  - With `PWD` naming the copy, it landed in the copy.
+  - So neither the clone (f2-12) nor the new root commit (f4-19) could have helped.
+- **The fix:** `runner/procs.py`'s `run_streaming` sets `PWD` to the cwd it starts a job in. Re-probed through `run_opencode` from the main checkout: the file landed only in the copy, and the main checkout's status didn't change.
+- **The canary:** `runner bench` compares the main checkout's `git status --porcelain` before and after each replay. A change stops the bench, names the files, and voids the replay: its jobs get outcome `void`, and it's no rating game.
+- **For the owner:** every OpenCode bench before this fix probably ran in the main checkout. That includes 2026-10-04's (f4-25: gemma4, gpt-oss-120b, nemotron-3-super), and those runs feed the replay log above. Suggested fix: a ticket that sets those bench jobs to `void`, then reruns `runner ratings --replay`.
+

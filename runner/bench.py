@@ -15,6 +15,17 @@ directory per project, so a plain clone was given the main checkout too (f4-19).
 history is a new root commit holding the tree at the parent, then the base commit the gates
 diff against.
 
+Neither was the cause on 2026-10-04, when the agents still read, wrote and ran pytest in the
+main checkout: OpenCode takes its directory from ``PWD`` over its real cwd, and the runner,
+started in the main checkout, passed its own on (f7-06's probe, a real `opencode run` in a
+copy: with ``PWD`` the main checkout, a relative write landed there; with ``PWD`` the copy,
+in the copy). `procs.run_streaming` now sets ``PWD`` to the cwd it starts a job in.
+
+The canary: `git status --porcelain` of the main checkout before and after each replay. Any
+change stops the bench with the files named, and the replay is void: its jobs' outcome, no
+rating game. A runner working in the main checkout beside the bench would trip it too, and
+a change to a file already dirty before the replay goes unseen.
+
 `runner bench --review` replays past checkpoints instead (ADR 16 item 10): each checkpoint ×
 agent reviews the checkpoint's merges, read-only, in a copy at the last of them. Its findings
 are scored against the known ones (the checkpoint's, and later ones on the same tickets that
@@ -80,15 +91,16 @@ ROLE = BENCH
 # Today's workflow, laid over the old tree so every agent works to the same rules.
 OVERLAY = ("AGENTS.md", "docs/agents", "opencode.json", "workflow")
 WOULD_ESCALATE = "would escalate"
+VOID = "void"
 
 
 @dataclass(frozen=True)
 class BenchResult:
     ticket: str
     agent: str
-    outcome: str  # "passed", "would escalate" or "refused"
+    outcome: str  # "passed", "would escalate", "refused" or "void"
     attempts: int
-    note: str = ""  # a refusal's reset
+    note: str = ""  # a refusal's reset, or the files a void replay changed
 
 
 @dataclass
@@ -185,6 +197,27 @@ def remove_copy(work: Path) -> None:
     shutil.rmtree(work, ignore_errors=True)
 
 
+def main_status(cfg: Config) -> set[str]:
+    """The main checkout's `git status --porcelain` lines, each untracked file on its own."""
+    return set(Git(cfg.repo).run("status", "--porcelain", "--untracked-files=all").splitlines())
+
+
+def leaked(cfg: Config, before: set[str]) -> list[str]:
+    """The files whose status in the main checkout changed since ``before``."""
+    return sorted({line[3:] for line in main_status(cfg) ^ before})
+
+
+def void_replay(
+    conn: sqlite3.Connection, project_id: int, run_id: int, ticket: str, agent: str, note: str
+) -> None:
+    """The replay's jobs, void: the bench's fault, not the agent's."""
+    conn.execute(
+        "UPDATE jobs SET outcome = ?, note = ? WHERE run_id = ? AND role = ? AND agent = ?"
+        " AND ticket_id IN (SELECT id FROM tickets WHERE project_id = ? AND ticket = ?)",
+        (VOID, note, run_id, ROLE, agent, project_id, ticket),
+    )
+
+
 def _open(cfg: Config) -> Session:
     """A session recorded as a `bench` run; its logs in `var/bench/`. state.json is only read."""
     started = now()
@@ -263,15 +296,23 @@ def _attempt(
 
 
 def bench_one(s: Session, agent: Agent, ticket: str, parent: str, text: str) -> BenchResult:
-    """One agent on one ticket, in its own copy, removed afterwards."""
+    """One agent on one ticket, in its own copy, removed afterwards; void if the main
+    checkout changed meanwhile."""
     work = s.cfg.bench_copies / f"{s.run_dir.name}-{ticket}-{agent.id}"
     logs = s.run_dir / f"{ticket}-{agent.id}"
     logs.mkdir(parents=True, exist_ok=True)
+    before = main_status(s.cfg)
     try:
         base = make_copy(s.cfg, work, parent, ticket, text)
-        return _attempts(s, agent, work, base, logs, ticket)
+        result = _attempts(s, agent, work, base, logs, ticket)
     finally:
         remove_copy(work)
+    if files := leaked(s.cfg, before):
+        note = f"void: changed the main checkout ({', '.join(files)})"
+        if s.project_id is not None and s.run_id is not None:
+            _record(s, void_replay, s.project_id, s.run_id, ticket, agent.id, note)
+        return BenchResult(ticket, agent.id, VOID, result.attempts, note)
+    return result
 
 
 def _attempts(
@@ -345,6 +386,12 @@ def run_bench(cfg: Config, tickets: list[str], agent_ids: list[str]) -> BenchRep
             for agent_id in agent_ids:
                 result = bench_one(s, cfg.agents[agent_id], ticket, parent, text)
                 report.results.append(result)
+                if result.outcome == VOID:
+                    report.stopped = (
+                        f"{agent_id}'s replay of {ticket} is {result.note}: the bench stops here"
+                    )
+                    s.log(f"⏸ [{agent_id}] {report.stopped}")
+                    return report
                 if s.project_id is not None and s.run_id is not None:  # a game (ADR 24 item 3)
                     start = starting_ratings(cfg)
                     _record(s, rate_bench, s.project_id, s.run_id, ticket, agent_id, start, now())

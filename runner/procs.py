@@ -133,7 +133,11 @@ def run_streaming(
     OpenCode and Claude Code start shell commands of their own (pytest, ruff…). Killing only
     the harness would leave a hung child running after the job. Returns (stderr, exit code or
     None).
+
+    ``PWD`` is set to ``cwd``: OpenCode takes its directory from ``PWD`` over its real cwd, so
+    a bench copy started from the main checkout edited the main checkout (f7-06's probe).
     """
+    env = {**(os.environ if env is None else env), "PWD": str(cwd.absolute())}
     with out_path.open("w", encoding="utf-8") as out, tempfile.TemporaryFile("w+") as err:
         proc = subprocess.Popen(
             cmd,

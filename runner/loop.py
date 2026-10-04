@@ -2251,8 +2251,9 @@ def rate_bench(
 def _bench_game(
     agent: str, ticket: str, difficulty: float, outcomes: Sequence[str]
 ) -> ratings.Game | None:
-    """One bench run's replay of a ticket as a game; none with a refusal, or still running."""
-    if not outcomes or any(o in ("running", "interrupted", "refused") for o in outcomes):
+    """One bench run's replay of a ticket as a game; none with a refusal, still running, or
+    void (it changed the main checkout, f7-06)."""
+    if not outcomes or any(o in ("running", "interrupted", "refused", "void") for o in outcomes):
         return None
     passed = next((n for n, o in enumerate(outcomes, start=1) if o == "passed"), None)
     return ratings.bench_game(agent, ticket, difficulty, passed)
