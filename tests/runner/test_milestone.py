@@ -7,7 +7,10 @@ import pytest
 from runner import claude, metrics, milestone, owner
 from runner.agents import JobResult
 from runner.gates import GateResult
+from runner.loop import close_session, open_session
 from runner.milestone import (
+    Card,
+    card,
     footer_fields,
     milestone_after,
     milestone_doc,
@@ -144,6 +147,57 @@ def test_the_milestone_doc_parts():
         "done_when": "- A photo shows.\n- Tests pass.",
     }
     assert milestone_doc("# Factory 1\n") == {"title": "Factory 1"}
+
+
+CARD_DOC = """\
+# Milestone F5: the board
+
+> **Status: planned** (2026-10-02).
+> **State:** needs sign-off · **Priority:** 2 · **Area:** product
+
+## Outcome
+- **State:** idea · **Priority:** 9 (a mention below the header doesn't count)
+"""
+
+
+def test_a_card_reads_its_header_line():
+    """f5 D4: a milestone doc's header holds its card."""
+    assert card("f5-board", CARD_DOC) == Card("needs sign-off", 2, "product")
+    building = "# F5\n\n> **State:** building · **Priority:** 2 · **Area:** factory\n"
+    assert card("f5", building) == Card("building", 2, "factory")
+
+
+def test_a_card_without_its_line_is_derived():
+    """No state: done once signed off, else building; no priority: 100; no area: the key's
+    series."""
+    assert card("f2", "# F2\n\n> **Status: done.** Signed off.\n") == Card("done", 100, "factory")
+    assert card("m4", MILESTONE_DOC) == Card("building", 100, "product")
+    assert card("f6", "# F6\n> **Priority:** 7\n") == Card("building", 7, "factory")
+    unknown = "# F7\n> **State:** someday · **Area:** garden\n"
+    assert card("f7", unknown) == Card("building", 100, "factory")
+
+
+def test_every_milestone_doc_gets_its_card_at_session_start(repo):
+    """f5 D4: an idea with no tickets yet is a card on the board too, as a ticket is in the
+    queue (`sync_tickets`)."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    idea = "# Milestone F9: a garden\n\n> **State:** idea · **Priority:** 3\n"
+    (repo / "docs" / "milestones" / "f9-garden.md").write_text(idea)
+    (repo / "docs" / "milestones" / "m1.md").write_text(MILESTONE_DOC)
+    (repo / "docs" / "milestones" / "notes.md").write_text("# Not a milestone\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "an idea")
+    close_session(open_session(_config(repo)))
+    rows = {r["key"]: r for r in _rows(repo, "milestones")}
+    assert set(rows) == {"f9-garden", "m1"}
+    garden = rows["f9-garden"]
+    assert (garden["title"], garden["state"], garden["priority"]) == ("a garden", "idea", 3)
+    assert garden["area"] == "factory"
+    assert (rows["m1"]["state"], rows["m1"]["priority"], rows["m1"]["area"]) == (
+        "building",
+        100,
+        "product",
+    )
 
 
 def test_the_sign_off_sections_leave_a_missing_heading_out():

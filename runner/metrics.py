@@ -193,8 +193,15 @@ CREATE TABLE owner_requests (
 );
 """
 
+# f5 D4 (ADR 19 items 1 and 2b): a milestone's card, from its doc's header line, for the board.
+_V6 = """
+ALTER TABLE milestones ADD COLUMN state TEXT;
+ALTER TABLE milestones ADD COLUMN priority INTEGER;
+ALTER TABLE milestones ADD COLUMN area TEXT;
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -290,6 +297,9 @@ def upsert_milestone(
     outcome: str | None = None,
     done_when: str | None = None,
     signoff: Mapping[str, object] | None = None,
+    state: str | None = None,
+    priority: int | None = None,
+    area: str | None = None,
 ) -> int:
     values = _given(
         title=title,
@@ -303,6 +313,9 @@ def upsert_milestone(
         outcome=outcome,
         done_when=done_when,
         signoff=signoff,
+        state=state,
+        priority=priority,
+        area=area,
     )
     return _upsert(
         conn, "milestones", "project_id, key", {"project_id": project_id, "key": key}, values

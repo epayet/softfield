@@ -74,6 +74,7 @@ from runner.tasks import (
     LATER,
     STOPPED,
     Task,
+    TaskError,
     append_footer,
     blocked_ids,
     carry_footers,
@@ -445,6 +446,7 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
                 _record(s, metrics.set_run_reserve, s.run_id)
             _start_heartbeat(s, s.run_id)
         sync_tickets(s)
+        sync_cards(s)
 
 
 def _start_heartbeat(s: Session, run_id: int) -> None:
@@ -491,6 +493,32 @@ def sync_tickets(s: Session) -> None:
     if s.project_id is not None:
         ready = {path.stem for path in s.tasks_dir("ready").glob("*.md")}
         _record(s, metrics.remove_missing_tickets, s.project_id, ready)
+
+
+def sync_cards(s: Session) -> None:
+    """Every milestone doc's card (f5 D4) and title, as ``sync_tickets`` does for tickets: an
+    idea with no tickets yet is on the board too. A doc not named by a key is left out."""
+    from runner.milestone import card, milestone_doc  # runner.milestone imports this module
+
+    if s.project_id is None:
+        return
+    for path in sorted((s.repo / "docs" / "milestones").glob("*.md")):
+        try:
+            key = milestone_key(path.stem)
+            text = path.read_text(encoding="utf-8")
+        except (TaskError, OSError, UnicodeDecodeError):
+            continue
+        found = card(key, text)
+        _record(
+            s,
+            metrics.upsert_milestone,
+            s.project_id,
+            key,
+            title=milestone_doc(text).get("title"),
+            state=found.state,
+            priority=found.priority,
+            area=found.area,
+        )
 
 
 PICKING = "picking the next ticket"

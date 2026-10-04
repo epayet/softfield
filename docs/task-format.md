@@ -35,6 +35,12 @@ A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` (
 - **Frontmatter and commands take either form:** `uv run runner milestone f3` and `uv run runner milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `docs/milestones/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
 - **Tags use the key as resolved:** `f3-factory-line-start` and `f3-factory-line-done`.
 - **A milestone can wait for another's sign-off** ([ADR 17](adr/17-always-on-factory.md) item 4): a line `> **After:** f3-factory-line signed off` in its doc's header (above the first `##`) keeps its tickets from being picked until that milestone's doc says "Status: done" (what `runner signoff` writes; the `<key>-done` tag also counts). `--dry-run` and the verdict say "waits for f3-factory-line's sign-off", and `runner run` goes on with the other milestones. With no `After:` line, milestones are independent.
+- **A milestone doc is a card** ([ADR 19](adr/19-feature-board.md) items 1 and 2b): a line `> **State:** building · **Priority:** 2 · **Area:** factory` in its header. Any part may be left out:
+  - **State:** idea, planning, ready, building, needs sign-off or done. Missing, it is done once the doc says "Status: done", else building.
+  - **Priority:** an integer, lower first; 100 if missing.
+  - **Area:** factory or product; missing, it follows the key's series (`f` factory, `m` product).
+
+  Every runner command syncs each doc in `docs/milestones/` to the database at its start, so an idea with no tickets yet is a card too.
 
 ## Body
 

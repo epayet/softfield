@@ -210,11 +210,50 @@ _AFTER_RE = re.compile(
 _STATUS_RE = re.compile(r"^>\s*\*\*Status:\s*(.+?)\.?\*\*", re.MULTILINE)
 
 
+def _header(text: str) -> str:
+    """A milestone doc's header: the text above its first ``## `` section."""
+    return re.split(r"^## ", text, maxsplit=1, flags=re.M)[0]
+
+
 def milestone_after(text: str) -> str | None:
     """The milestone a milestone doc waits for (``After: <key> signed off``), if any. Only
-    its header counts: the text above its first ``## `` section."""
-    match = _AFTER_RE.search(re.split(r"^## ", text, maxsplit=1, flags=re.M)[0])
+    its header counts."""
+    match = _AFTER_RE.search(_header(text))
     return match.group(1) if match else None
+
+
+# f5 D4 (ADR 19 items 1 and 2b): `> **State:** building · **Priority:** 2 · **Area:** factory`.
+CARD_STATES = ("idea", "planning", "ready", "building", "needs sign-off", "done")
+DEFAULT_PRIORITY = 100
+_CARD_STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*([^·*\n]+)")
+_CARD_PRIORITY_RE = re.compile(r"\*\*Priority:\*\*[ \t]*(\d+)\b")
+_CARD_AREA_RE = re.compile(r"\*\*Area:\*\*[ \t]*(factory|product)\b")
+
+
+@dataclass(frozen=True)
+class Card:
+    state: str
+    priority: int
+    area: str
+
+
+def card(key: str, text: str) -> Card:
+    """A milestone doc's card, from its header. A missing (or unknown) state is derived: done
+    once its doc says "Status: done", else building. A missing priority is 100; a missing area
+    is the key's series: ``f`` factory, ``m`` product."""
+    header = _header(text)
+    state = _CARD_STATE_RE.search(header)
+    priority = _CARD_PRIORITY_RE.search(header)
+    area = _CARD_AREA_RE.search(header)
+    named = state.group(1).strip() if state else ""
+    if named not in CARD_STATES:
+        status = _STATUS_RE.search(text)
+        named = "done" if status and status.group(1).strip() == "done" else "building"
+    return Card(
+        state=named,
+        priority=int(priority.group(1)) if priority else DEFAULT_PRIORITY,
+        area=area.group(1) if area else ("factory" if key.startswith("f") else "product"),
+    )
 
 
 def signed_off(repo: Path, key: str) -> bool:
