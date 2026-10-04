@@ -1,6 +1,6 @@
 ---
 id: f3-31-replay-bar-when-replaying
-milestone: f3
+milestone: f9-line-polish
 depends_on: []
 difficulty: 2
 files:

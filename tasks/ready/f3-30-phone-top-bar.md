@@ -1,6 +1,6 @@
 ---
 id: f3-30-phone-top-bar
-milestone: f3
+milestone: f9-line-polish
 depends_on: []
 difficulty: 3
 files:

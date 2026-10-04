@@ -34,6 +34,7 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
 
     The aim is "a management system, not a dashboard": lots of work planned ahead, run with little supervision, watched live from a phone on the home Wi-Fi.
   - **Planning sessions:** first capture every idea the owner raises in `docs/roadmap.md`, so none is lost. Then go through them all: for each, answer it **and suggest an action** (a ticket, an ADR item, the roadmap, nothing). The owner only says what they disagree with.
+  - **Product work is on hold** (owner, 2026-10-04): don't propose product milestones until the owner asks; the factory comes first for now.
   - **Reviewing an ADR with the owner** (owner, 2026-10-04; the planning room will do the same in its UI):
     1. **Key points, numbered:**
        - first, the problem in 1–3 lines, with the evidence (numbers, tickets);

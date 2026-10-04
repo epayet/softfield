@@ -1,7 +1,7 @@
 # Milestone F9: line polish
 
 > **Status: planned** (2026-10-04, with the owner). **State:** ready · **Priority:** 5 · **Area:** factory
-> The owner's notes from using the line on 2026-10-04, plus three of f3-22's proposals they confirmed (f3-25, f3-28, f3-29, re-homed here with their ids). Developer tickets, each a small change on the lead-written line (F3's lesson: no SVG geometry for developers); 01 is the lead's.
+> The owner's notes from using the line on 2026-10-04, plus five of f3-22's proposals they confirmed (f3-25, f3-28, f3-29, f3-30, f3-31, re-homed here with their ids). Developer tickets, each a small change on the lead-written line (F3's lesson: no SVG geometry for developers); 01 is the lead's.
 
 ## Outcome
 - The floor shows when the line is clogged, and on what (a limit, the owner, a parked job).
@@ -24,4 +24,6 @@
 | 05 | later-kind-column | D | 2 | f5-09 | the Set aside table: Kind instead of the queue command |
 | f3-25 | allowance-dials | D | 4 | – | (re-homed) phone allowances as dials |
 | f3-28 | floor-words | D | 2 | – | (re-homed) bare one-decimal ratings, no "rated" |
-| f3-29 | machine-today | D | 4 | – | (re-homed) idle machines say what they did today |
+| f3-29 | machine-today | D | 4 | – | (re-homed) idle machines say what they did today, and look idle |
+| f3-30 | phone-top-bar | D | 3 | – | (re-homed) the phone's top bar in two short lines |
+| f3-31 | replay-bar-when-replaying | D | 2 | – | (re-homed) the phone's replay bar sticks only while replaying |
