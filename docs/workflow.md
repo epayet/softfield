@@ -48,7 +48,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    9. `ruff check` + `ruff format --check` (Python files only; Markdown is excluded, [ADR 01](adr/01-calibration-fixes.md))
    10. `mypy`
    11. the task's `tests:`
-   12. all unit, integration, runner and browser tests ([ADR 06](adr/06-sse-and-browser-tests.md): ES modules in headless Chromium), skipping the `tests:` files of *other* tasks still in `ready/`, `escalated/` or `blocked/`, whose skeleton tests fail until they're done ([ADR 01](adr/01-calibration-fixes.md))
+   12. all unit, integration, runner and browser tests ([ADR 06](adr/06-sse-and-browser-tests.md): ES modules in headless Chromium), and the dashboard's: every test file on main, whatever the queue holds ([ADR 21](adr/21-gate-every-test-file.md))
    13. `tests-fail-on-main`: the test files the task added or changed fail against main's code (with every other changed file put back as it is on main), so they test the change ([ADR 07](adr/07-spend-less-frontier.md))
 
    `files:` is a pointer, not a gate: the session report lists files changed outside `files:` and `tests:`, and every existing test the developer changed, for the review.

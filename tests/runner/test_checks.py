@@ -41,7 +41,8 @@ def test_fix_formats_before_checking(repo: Path, monkeypatch):
     assert calls[1] == ["uv", "run", "ruff", "check", "--fix", "."]
 
 
-def test_other_queued_tasks_tests_are_skipped_but_not_the_tasks_own(repo: Path, monkeypatch):
+def test_other_queued_tasks_tests_run_too(repo: Path, monkeypatch):
+    """ADR 21: every test file on main is checked, whatever the queue holds."""
     write_task(repo / "tasks" / "ready", "m1-01-mine")
     other = write_task(repo / "tasks" / "ready", "m1-02-other")
     other.write_text(other.read_text().replace("tests/unit/test_thing.py", "tests/unit/test_x.py"))
@@ -49,8 +50,7 @@ def test_other_queued_tasks_tests_are_skipped_but_not_the_tasks_own(repo: Path, 
     monkeypatch.setattr(checks, "_exec", _fake_exec({}, calls))
     monkeypatch.setattr(checks, "_i18n_problems", lambda repo, timeout: [])
     checks.check_all(repo, 60, task_id="m1-01-mine")
-    assert "--ignore=tests/unit/test_x.py" in calls[-1]
-    assert "--ignore=tests/unit/test_thing.py" not in calls[-1]
+    assert not [arg for arg in calls[-1] if arg.startswith("--ignore")]
 
 
 def test_a_tasks_own_tests_run_even_when_another_queued_task_lists_them(repo: Path, monkeypatch):

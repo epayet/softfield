@@ -104,7 +104,8 @@ def test_parse_blocked():
     assert parse_blocked("# BLOCKED\nCATEGORY: vibes\nCATEGORY: needs-info") is None
 
 
-def test_all_tests_skips_other_queued_tasks_tests(repo: Path, monkeypatch):
+def test_all_tests_runs_every_test_file_whatever_the_queue_holds(repo: Path, monkeypatch):
+    """ADR 21: another queued ticket's test files are on main, so they are gated too."""
     current = write_task(repo / "tasks" / "ready", "m1-01-current")
     other = write_task(repo / "tasks" / "ready", "m1-02-other")
     other.write_text(other.read_text().replace("test_thing.py", "test_other.py"))
@@ -117,8 +118,7 @@ def test_all_tests_skips_other_queued_tasks_tests(repo: Path, monkeypatch):
     monkeypatch.setattr(gates, "_command", fake_command)
     ctx = GateContext(repo, Git(repo), parse_task(current, 150), "main", (), 60)
     assert gate_all_tests(ctx).ok
-    assert "--ignore=tests/unit/test_other.py" in calls[0]
-    assert "--ignore=tests/unit/test_thing.py" not in calls[0]
+    assert not [arg for arg in calls[0] if arg.startswith("--ignore")]
 
 
 def test_added_skips_finds_ways_to_silence_a_test():

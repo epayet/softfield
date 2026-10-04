@@ -29,3 +29,10 @@ Read `docs/adr/21-gate-every-test-file.md`, then `runner/tasks.py` (`queued_test
 - with a ticket in `ready/` listing an existing test file, the all-tests gate's and `check-all`'s pytest commands carry no `--ignore=`
 - `queued_tests` no longer exists (`grep -rn queued_tests runner tests` finds nothing)
 - `uv run runner check-all --task f5-00-gate-every-test-file` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```

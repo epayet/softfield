@@ -11,7 +11,6 @@ from pathlib import Path
 from runner import i18n
 from runner.gates import layout_problems
 from runner.procs import run_bounded
-from runner.tasks import queued_tests
 
 TEST_DIRS = (
     "tests/unit",
@@ -58,12 +57,11 @@ def _command(repo: Path, name: str, args: list[str], timeout: int) -> Check:
 def check_all(
     repo: Path, timeout: int, *, task_id: str | None = None, fix: bool = False
 ) -> list[Check]:
-    """Run every check. ``fix`` formats first; ``task_id`` keeps that task's own tests in
-    while skipping the other queued tasks' tests, as the all-tests gate does."""
+    """Run every check, every test file on main included (ADR 21). ``fix`` formats first;
+    ``task_id`` names the task, whose checks are the same as any other's."""
     if fix:
         _exec(repo, ["uv", "run", "ruff", "format", "."], timeout)
         _exec(repo, ["uv", "run", "ruff", "check", "--fix", "."], timeout)
-    skipped = sorted(queued_tests(repo / "tasks", task_id or ""))
     translations = _i18n_problems(repo, timeout)
     layout = layout_problems(repo)
     return [
@@ -83,7 +81,6 @@ def check_all(
                 "-p",
                 "no:cacheprovider",
                 *TEST_DIRS,
-                *(f"--ignore={path}" for path in skipped),
             ],
             timeout,
         ),

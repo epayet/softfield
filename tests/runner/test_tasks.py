@@ -22,7 +22,6 @@ from runner.tasks import (
     parse_task,
     pick_next,
     preflight,
-    queued_tests,
     short_key,
     task_ids,
 )
@@ -160,52 +159,6 @@ def test_footer(tmp_path):
     assert path.read_text().endswith("# --- runner ---\nresult: done\nattempts: 2\n```\n")
 
 
-def test_queued_tests_are_the_other_queued_tasks_tests(tmp_path: Path):
-    tasks = tmp_path / "tasks"
-    write_task(tasks / "ready", "m1-01-current")
-    other = write_task(tasks / "ready", "m1-02-other")
-    other.write_text(other.read_text().replace("test_thing.py", "test_other.py"))
-    escalated = write_task(tasks / "escalated", "m1-03-stuck")
-    escalated.write_text(escalated.read_text().replace("test_thing.py", "test_stuck.py"))
-    done = write_task(tasks / "done", "m1-00-old")
-    done.write_text(done.read_text().replace("test_thing.py", "test_old.py"))
-    assert queued_tests(tasks, "m1-01-current") == {
-        "tests/unit/test_other.py",
-        "tests/unit/test_stuck.py",
-    }
-
-
-def test_queued_tests_skip_only_developer_tickets_and_never_the_tickets_own(tmp_path: Path):
-    """f1-33: lead tickets write their tests in their own job, so theirs are never skeletons,
-    and a file the current ticket lists runs even when a queued developer ticket lists it."""
-    tasks = tmp_path / "tasks"
-    current = write_task(tasks / "ready", "m1-01-current")
-    current.write_text(
-        current.read_text().replace(
-            "  - tests/unit/test_thing.py", "  - tests/unit/test_thing.py\n  - tests/unit/test_x.py"
-        )
-    )
-    lead = write_task(tasks / "ready", "m1-02-lead")
-    lead.write_text(
-        lead.read_text()
-        .replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
-        .replace("test_thing.py", "test_lead.py")
-    )
-    dev = write_task(tasks / "blocked", "m1-03-dev")
-    dev.write_text(
-        dev.read_text().replace(
-            "  - tests/unit/test_thing.py", "  - tests/unit/test_dev.py\n  - tests/unit/test_x.py"
-        )
-    )
-    assert queued_tests(tasks, "m1-01-current") == {"tests/unit/test_dev.py"}
-    # A lead's check-all (no current ticket) still runs every lead ticket's tests.
-    assert queued_tests(tasks, "") == {
-        "tests/unit/test_thing.py",
-        "tests/unit/test_dev.py",
-        "tests/unit/test_x.py",
-    }
-
-
 def test_a_ticket_says_who_works_it(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
     assert parse_task(path, 150).agent == "developer"
@@ -222,18 +175,6 @@ def test_a_developer_ticket_parses_as_developer_and_junior_is_a_synonym(tmp_path
     path = write_task(tmp_path, "m1-01-thing")
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\n" + line))
     assert parse_task(path, 150).agent == "developer"
-
-
-def test_an_old_junior_tickets_tests_are_skipped_like_a_developers(tmp_path):
-    tasks = tmp_path / "tasks"
-    write_task(tasks / "ready", "m1-01-current")
-    old = write_task(tasks / "ready", "m1-02-old")
-    old.write_text(
-        old.read_text()
-        .replace("milestone: 1\n", "milestone: 1\nagent: junior\n")
-        .replace("test_thing.py", "test_old.py")
-    )
-    assert queued_tests(tasks, "m1-01-current") == {"tests/unit/test_old.py"}
 
 
 def test_a_lead_ticket_may_name_extra_commands(tmp_path):
