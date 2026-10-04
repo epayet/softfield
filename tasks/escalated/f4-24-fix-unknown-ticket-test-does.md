@@ -23,3 +23,12 @@ A should-fix finding (f4-always-on-C228-4) by copilot-auto, standing in for the 
 - what the finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: false-assumption
+attempts: 3
+tokens: 351187
+logs: var/runs/20261003-233946/f4-24-fix-unknown-ticket-test-does
+```
