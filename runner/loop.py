@@ -2748,12 +2748,31 @@ CLAUDE = "claude"
 LEAD_COST = 0.0
 
 
-def read_answer(timeout: float) -> str | None:
-    """A line the owner types within ``timeout`` seconds; None with no terminal or no answer."""
-    if not sys.stdin.isatty():
-        return None
-    ready, _, _ = select.select([sys.stdin], [], [], timeout)
-    return sys.stdin.readline().strip() if ready else None
+REQUEST_POLL_S = 5.0  # how often a waiting question checks the dashboard's answer (f5 D2)
+
+
+def read_answer(timeout: float, poll: Callable[[], str | None] | None = None) -> str | None:
+    """A line the owner types within ``timeout`` seconds; None with no terminal or no answer.
+    With ``poll`` (the dashboard's answer, f5 D2), it is asked at once and every
+    ``REQUEST_POLL_S`` seconds, and its answer counts as typed, terminal or not."""
+    terminal = sys.stdin.isatty()
+    if poll is None:
+        if not terminal:
+            return None
+        ready, _, _ = select.select([sys.stdin], [], [], timeout)
+        return sys.stdin.readline().strip() if ready else None
+    deadline = clock() + timeout
+    while True:
+        if (answer := poll()) is not None:
+            return answer
+        left = deadline - clock()
+        if left <= 0:
+            return None
+        wait = min(REQUEST_POLL_S, left)
+        if not terminal:
+            time.sleep(wait)
+        elif select.select([sys.stdin], [], [], wait)[0]:
+            return sys.stdin.readline().strip()
 
 
 def _resets(entry: dict[str, Any]) -> datetime:
@@ -3090,7 +3109,8 @@ def _ask_five_hour(s: Session, used: str, resets: datetime) -> bool:
         " kept for you. Use it for this run? [y/N]"
     )
     with doing(s, "asking you about Claude's 5-hour window"):
-        answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
+        wait = max(60.0, (resets - at).total_seconds() + 60)
+        answer = read_answer(wait, poll=partial(_five_hour_requested, s))
     if answer is not None and answer.lower() in ("y", "yes"):
         FIVE_HOUR.yes = True
         s.log(f"✔ [{RUNNER_AGENT}] Claude's 5-hour window is used for the rest of this run")
@@ -3099,6 +3119,16 @@ def _ask_five_hour(s: Session, used: str, resets: datetime) -> bool:
     if answer is not None or _at_five_hour(s, now()) is not None:
         FIVE_HOUR.no = True  # no, or no answer: the rest waits for the resets unasked
     return False
+
+
+def _five_hour_requested(s: Session) -> str | None:
+    """The owner's yes or no to the 5-hour question from the dashboard, if one is open (f5
+    D2); taking it finishes the request."""
+    from runner.requests import take_five_hour  # runner.requests imports this module
+
+    if s.project_id is None:
+        return None
+    return _record(s, take_five_hour, s.project_id, now())
 
 
 def _five_hour_granted(s: Session) -> None:
@@ -3249,6 +3279,26 @@ def _due_review(s: Session) -> str | None:
     return due
 
 
+def apply_owner_requests(s: Session) -> None:
+    """The owner's requests from the dashboard (f5 D2), at each pick: the run is git's one
+    writer, so it applies them itself, as their console commands would. A yes to the 5-hour
+    window frees what waited for it, as a typed yes does. Best effort, like every write."""
+    from runner.requests import apply_requests  # runner.requests imports this module
+
+    granted = FIVE_HOUR.yes
+    try:
+        lines = apply_requests(s.repo, s.cfg.metrics_db, now())
+    except Exception as exc:
+        _metrics_failed(s, exc)
+        return
+    for line in lines:
+        s.log(f"[{RUNNER_AGENT}] the owner's request: {line}")
+    if lines:
+        sync_tickets(s)  # a queued ticket shows in the queue at once
+    if FIVE_HOUR.yes and not granted:
+        _five_hour_granted(s)
+
+
 def work_queue(
     s: Session,
     *,
@@ -3277,6 +3327,7 @@ def work_queue(
             set_activity(s, "restarting after a runner change")
             return True
         set_activity(s, PICKING)
+        apply_owner_requests(s)
         fresh_reading(s)
         if _resume_support(s, escalate=escalate):
             continue
@@ -3364,12 +3415,18 @@ def queue_ticket(cfg: Config, wanted: str) -> str:
     Refused while a run is live: the runner commits on the same branch."""
     if (run := live_run(cfg)) is not None:
         raise RunnerError(f"run {run} is running; queue {wanted} once it has stopped")
-    tasks = cfg.repo / "tasks"
+    return move_to_ready(cfg.repo, wanted)
+
+
+def move_to_ready(repo: Path, wanted: str) -> str:
+    """`queue_ticket`'s move and commit, for a caller that is git's one writer: the command
+    once no run is live, or the run itself applying the owner's request (f5 D2)."""
+    tasks = repo / "tasks"
     src = find_ticket(tasks, LATER, wanted)
     dst = tasks / "ready" / src.name
-    git = Git(cfg.repo)
+    git = Git(repo)
     git.move(src, dst)
-    paths = (src.relative_to(cfg.repo).as_posix(), dst.relative_to(cfg.repo).as_posix())
+    paths = (src.relative_to(repo).as_posix(), dst.relative_to(repo).as_posix())
     git.run("commit", "-q", "--no-verify", "-m", f"queue {src.stem} (by the owner)", "--", *paths)
     return src.stem
 

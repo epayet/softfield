@@ -2482,7 +2482,7 @@ def owner_answers(monkeypatch) -> tuple[list[str | None], list[float]]:
     answers: list[str | None] = []
     waits: list[float] = []
 
-    def read_answer(timeout: float) -> str | None:
+    def read_answer(timeout: float, poll=None) -> str | None:
         waits.append(timeout)
         return answers.pop(0)
 
@@ -2552,7 +2552,7 @@ def test_a_question_left_unanswered_till_the_week_resets_runs_the_lead_ticket(
     script.append(_lead_implements)
     _passes(monkeypatch)
 
-    def read_answer(timeout: float) -> str | None:
+    def read_answer(timeout: float, poll=None) -> str | None:
         fake_clock[0] += timedelta(seconds=timeout)  # nobody answered
         return None
 
@@ -2637,6 +2637,80 @@ def test_support_roles_use_the_reserve_without_asking(
 def test_without_a_terminal_there_is_no_answer(monkeypatch):
     monkeypatch.setattr("sys.stdin", io.StringIO("y\n"))  # piped, not typed by the owner
     assert loop.read_answer(600) is None
+
+
+@pytest.fixture
+def ticking(monkeypatch) -> list[float]:
+    """Each sleep, in order; `clock` moves on by it."""
+    slept: list[float] = []
+    at = [0.0]
+
+    def sleep(seconds: float) -> None:
+        slept.append(seconds)
+        at[0] += seconds
+
+    monkeypatch.setattr("time.sleep", sleep)
+    monkeypatch.setattr(loop, "clock", lambda: at[0])
+    return slept
+
+
+def test_an_answer_from_the_dashboard_lands_within_one_poll(monkeypatch, ticking):
+    """f5 D2: with no terminal (a run under nohup), the phone is the owner's only way in."""
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    answers = iter([None, None, "yes"])
+    assert loop.read_answer(600, poll=lambda: next(answers)) == "yes"
+    assert ticking == [loop.REQUEST_POLL_S, loop.REQUEST_POLL_S]  # asked at once, then each poll
+
+
+def test_a_poll_with_no_answer_gives_up_at_the_timeout(monkeypatch, ticking):
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))
+    polls: list[float] = []
+    assert loop.read_answer(12, poll=lambda: polls.append(loop.clock())) is None
+    assert ticking == [5.0, 5.0, 2.0] and polls == [0.0, 5.0, 10.0, 12.0]
+
+
+class _Terminal(io.StringIO):
+    def isatty(self) -> bool:
+        return True
+
+
+@pytest.mark.parametrize(("typed", "expected"), [(True, "y"), (False, "no")])
+def test_at_a_terminal_a_typed_answer_and_the_dashboards_both_count(monkeypatch, typed, expected):
+    monkeypatch.setattr("sys.stdin", _Terminal("y\n"))
+    waits: list[float] = []
+
+    def select(read, write, error, timeout):
+        waits.append(timeout)
+        return (read if typed else [], [], [])
+
+    monkeypatch.setattr("select.select", select)
+    answers = iter([None, "no"])
+    assert loop.read_answer(600, poll=lambda: next(answers)) == expected
+    assert waits == [loop.REQUEST_POLL_S]  # the terminal waits no longer than one poll
+
+
+def _ask_from_the_dashboard(repo: Path, kind: str, subject=None, value=None) -> int:
+    """The dashboard's write (f5 D1): a request row for the run's project."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        return metrics.add_request(conn, project, kind, subject, value, loop.now().isoformat())
+    finally:
+        conn.close()
+
+
+def test_a_queue_request_made_during_a_run_is_applied_at_the_next_pick(repo, fake_model):
+    write_task(repo / "tasks" / "later", "m1-01-thing")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "set aside")
+    asked = _ask_from_the_dashboard(repo, "queue", "m1-01-thing")
+    fake_model.append(_implement)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
+    [request] = [r for r in _rows(repo, "owner_requests") if r["id"] == asked]
+    assert request["done"] is not None and request["result"] == "queued m1-01-thing"
+    subjects = git(repo, "log", "--format=%s").splitlines()
+    assert "queue m1-01-thing (by the owner)" in subjects
 
 
 def test_a_restart_tries_a_ticket_parked_for_a_limit_again_at_once(
@@ -2796,7 +2870,7 @@ def test_the_run_says_when_it_asks_the_owner(
     _passes(monkeypatch)
     seen: list[object] = []
 
-    def read_answer(timeout: float) -> str | None:
+    def read_answer(timeout: float, poll=None) -> str | None:
         seen.append(_activity(repo)[0])
         return "y"
 
@@ -3298,6 +3372,52 @@ def test_a_yes_to_the_5_hour_question_lets_the_lead_ticket_go_at_once(
     assert loop.FIVE_HOUR.yes and not loop.RESERVE.yes
     [item] = _rows(repo, "owner_items")
     assert item["kind"] == "five-hour" and item["resolved"] is not None
+
+
+def test_a_yes_from_the_dashboard_while_the_question_waits_lets_the_ticket_go(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch, ticking, capsys
+):
+    """f5 D2: the owner answers on the phone; the question takes it within one poll."""
+    _claude_at(repo, 0.80)
+    _lead_task(repo, "m1-01-lead")
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    monkeypatch.setattr("sys.stdin", io.StringIO(""))  # no terminal: a run under nohup
+    asked: list[int] = []
+    real_sleep = time.sleep  # the `ticking` one
+
+    def phone(seconds: float) -> None:
+        if not asked:  # the question has waited one poll: the owner taps Yes
+            asked.append(_ask_from_the_dashboard(repo, "five_hour", value="yes"))
+        real_sleep(seconds)
+
+    monkeypatch.setattr("time.sleep", phone)
+    report = _run(repo)
+    assert FIVE_HOUR_QUESTION in capsys.readouterr().out
+    assert ticking == [loop.REQUEST_POLL_S]  # one poll, then the yes
+    assert [j.kind for j in jobs] == ["lead-ticket"] and fake_clock[0] == THURSDAY
+    assert [t.result for t in report.tasks] == ["done"]
+    assert loop.FIVE_HOUR.yes
+    [request] = _rows(repo, "owner_requests")
+    assert request["id"] == asked[0] and request["done"] is not None
+    assert "yes" in str(request["result"])
+    [item] = _rows(repo, "owner_items")  # its Needs-you item is answered
+    assert item["kind"] == "five-hour" and item["resolved"] is not None
+
+
+def test_a_yes_from_the_dashboard_before_the_pick_needs_no_question(
+    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+):
+    _claude_at(repo, 0.80)
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    _ask_from_the_dashboard(repo, "five_hour", value="yes")
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done"]
+    assert owner_answers[1] == [] and loop.FIVE_HOUR.yes  # never asked
 
 
 def test_a_yes_to_the_5_hour_question_runs_the_parked_escalation_before_the_asking_ticket(

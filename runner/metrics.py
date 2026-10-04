@@ -177,8 +177,23 @@ _V4 = """
 ALTER TABLE jobs ADD COLUMN model TEXT;
 """
 
+# f5 D1 (ADR 18 item 2): the owner's requests from the dashboard, its only write. The runner
+# applies each with the code of its console command and finishes it once, with its result.
+_V5 = """
+CREATE TABLE owner_requests (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    kind TEXT NOT NULL,
+    subject TEXT,
+    value TEXT,
+    created TEXT NOT NULL,
+    done TEXT,
+    result TEXT
+);
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -250,6 +265,12 @@ def upsert_project(
 # A milestone's status while `runner run` is about to review it (f4-20): the line's queue
 # shows it until its first round starts and the status becomes "review".
 REVIEW_DUE = "review due"
+
+
+def find_project(conn: sqlite3.Connection, name: str) -> int | None:
+    """The project's id, without making one: a read leaves no row behind."""
+    row = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()
+    return None if row is None else int(row[0])
 
 
 def upsert_milestone(
@@ -675,3 +696,38 @@ def open_owner_items(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.
         "SELECT * FROM owner_items WHERE project_id = ? AND resolved IS NULL ORDER BY id",
         (project_id,),
     ).fetchall()
+
+
+def add_request(
+    conn: sqlite3.Connection,
+    project_id: int,
+    kind: str,
+    subject: str | None,
+    value: str | None,
+    created: str,
+) -> int:
+    """A request from the owner (f5 D1): ``signoff`` a milestone key, ``five_hour`` yes or no,
+    ``queue`` a ticket id. Each is a new row: asking twice is two requests."""
+    row = conn.execute(
+        "INSERT INTO owner_requests (project_id, kind, subject, value, created)"
+        " VALUES (?, ?, ?, ?, ?) RETURNING id",
+        (project_id, kind, subject, value, created),
+    ).fetchone()
+    return int(row[0])
+
+
+def open_requests(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.Row]:
+    """The project's requests not yet finished, oldest first."""
+    return conn.execute(
+        "SELECT * FROM owner_requests WHERE project_id = ? AND done IS NULL ORDER BY id",
+        (project_id,),
+    ).fetchall()
+
+
+def finish_request(conn: sqlite3.Connection, request_id: int, done: str, result: str) -> bool:
+    """Finish a request with what came of it; False if it was finished already (once only)."""
+    cursor = conn.execute(
+        "UPDATE owner_requests SET done = ?, result = ? WHERE id = ? AND done IS NULL",
+        (done, result, request_id),
+    )
+    return cursor.rowcount == 1

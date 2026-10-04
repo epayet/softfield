@@ -4,10 +4,23 @@ import argparse
 import os
 import subprocess
 import sys
+from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
 
-from runner import backfill, bench, checks, copilot, i18n, loop, metrics, owner, procs, report
+from runner import (
+    backfill,
+    bench,
+    checks,
+    copilot,
+    i18n,
+    loop,
+    metrics,
+    owner,
+    procs,
+    report,
+    requests,
+)
 from runner.config import Config, load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
@@ -58,6 +71,28 @@ def _review(cfg: Config, repo: Path, key: str) -> None:
     _, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
     owner.record_verdict(repo, text)
     print("\n" + text, end="", flush=True)
+
+
+# The checks never apply the owner's requests: they run inside jobs, on task branches, and as
+# the pre-commit hook, in the middle of someone else's commit.
+_NO_REQUESTS = ("check-all", "check-layout", "check-i18n")
+
+
+def _apply_requests(cfg: Config, db: Path) -> None:
+    """The owner's requests from the dashboard made while nothing ran (f5 D2): the next
+    command applies them first. A live run applies its own, at its next pick."""
+    try:
+        if loop.live_run(replace(cfg, metrics_db=db)) is not None:
+            return
+        lines = requests.apply_requests(cfg.repo, db, loop.now())
+    except Exception as exc:
+        print(
+            f"runner: the owner's requests weren't read ({type(exc).__name__}: {exc})",
+            file=sys.stderr,
+        )
+        return
+    for line in lines:
+        print(f"runner: the owner's request: {line}", flush=True)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -154,6 +189,8 @@ def main(argv: list[str] | None = None) -> int:
 
     repo = _repo()
     cfg = load_config(repo)
+    if args.command not in _NO_REQUESTS and not getattr(args, "dry_run", False):
+        _apply_requests(cfg, getattr(args, "db", None) or cfg.metrics_db)
     try:
         if args.command in (None, "run"):
             while True:

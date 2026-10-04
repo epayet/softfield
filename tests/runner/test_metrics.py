@@ -17,6 +17,7 @@ TABLES = {
     "rating_changes",
     "usage_events",
     "owner_items",
+    "owner_requests",
 }
 T0 = "2026-09-30T15:23:11+02:00"
 T1 = "2026-09-30T15:40:00+02:00"
@@ -64,7 +65,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 5 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -140,10 +141,56 @@ def test_a_version_3_database_keeps_its_jobs_and_gains_an_empty_model(tmp_path):
     old.close()
 
     conn = metrics.open_db(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
     row = conn.execute("SELECT agent, log_path, model FROM jobs").fetchone()
     assert tuple(row) == ("claude-opus", "var/runs/r1/claude-review-f1.log", None)
     conn.close()
+
+
+def test_a_version_4_database_keeps_its_items_and_gains_an_empty_request_table(tmp_path):
+    """f5 D1: the owner's requests from the dashboard get a table of their own."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    steps = "\n".join(metrics.MIGRATIONS[:4])
+    old.executescript(f"BEGIN;\n{steps}\nPRAGMA user_version = 4;\nCOMMIT;")
+    old.execute("INSERT INTO projects (name) VALUES ('coucou')")
+    old.execute("INSERT INTO owner_items (project_id, kind, subject) VALUES (1, 'signoff', 'f4')")
+    old.close()
+
+    conn = metrics.open_db(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert _count(conn, "owner_items") == 1 and _count(conn, "owner_requests") == 0
+    conn.close()
+
+
+def test_a_request_is_open_until_finished_once_with_its_result(db, ids):
+    """f5 D1: the dashboard adds a row; the runner finishes it with what came of it."""
+    project = ids["project"]
+    other = metrics.upsert_project(db, "elsewhere")
+    first = metrics.add_request(db, project, "signoff", "f4-always-on", None, T0)
+    second = metrics.add_request(db, project, "five_hour", None, "yes", T1)
+    metrics.add_request(db, other, "queue", "x1-01-thing", None, T0)
+    assert first != second
+    rows = metrics.open_requests(db, project)
+    assert [(r["id"], r["kind"], r["subject"], r["value"]) for r in rows] == [
+        (first, "signoff", "f4-always-on", None),
+        (second, "five_hour", None, "yes"),
+    ]
+    assert [r["created"] for r in rows] == [T0, T1]
+    assert all(r["done"] is None and r["result"] is None for r in rows)
+
+    assert metrics.finish_request(db, first, T1, "signed off f4-always-on")
+    assert [r["id"] for r in metrics.open_requests(db, project)] == [second]
+    # Finished once: a second finish changes nothing and says so.
+    assert not metrics.finish_request(db, first, "2026-10-01T00:00:00+02:00", "again")
+    row = db.execute("SELECT done, result FROM owner_requests WHERE id = ?", (first,)).fetchone()
+    assert tuple(row) == (T1, "signed off f4-always-on")
+
+
+def test_a_project_is_found_by_name_without_being_made(db, ids):
+    assert metrics.find_project(db, "coucou") == ids["project"]
+    assert metrics.find_project(db, "nowhere") is None
+    assert _count(db, "projects") == 1
 
 
 def test_a_job_records_the_model_it_ran_on(db, ids):
