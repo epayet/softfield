@@ -34,6 +34,17 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
 
     The aim is "a management system, not a dashboard": lots of work planned ahead, run with little supervision, watched live from a phone on the home Wi-Fi.
   - **Planning sessions:** first capture every idea the owner raises in `docs/roadmap.md`, so none is lost. Then go through them all: for each, answer it **and suggest an action** (a ticket, an ADR item, the roadmap, nothing). The owner only says what they disagree with.
+  - **Reviewing an ADR with the owner** (owner, 2026-10-04; the planning room will do the same in its UI):
+    1. **Key points, numbered:**
+       - first, the problem in 1–3 lines, with the evidence (numbers, tickets);
+       - then each decision as one plain line: what changes, and what it replaces;
+       - then the cost and the risk;
+       - then what doesn't change.
+    2. **The open questions,** each with your recommendation and the alternatives as choices. The owner answers only those; every other point counts as agreed.
+    3. **Fold the answers into the ADR** ("Settled with the owner") before asking for approval.
+    4. **End with the exact approval command** (`uv run runner accept N`). When the owner says "you can accept it", run it.
+    - **Explain on request:** when the owner asks what a point means, re-explain it in plain words with a concrete example. Don't repeat the ADR's own wording.
+  - **Every problem comes with a suggested fix** (owner, 2026-10-04): an issue, a finding, a gap in the data or a bug you report always carries your proposed fix (a ticket, an ADR item, a config change, or a direct fix), for the owner to approve or discuss. Never report a problem alone.
   - **Mock-ups before UI tickets:** for a new view, iterate a mock-up on real data with the owner (an artifact) until they're happy, then keep it as the picture the tickets point at.
 
 ## Authority
