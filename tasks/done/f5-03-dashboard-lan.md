@@ -22,3 +22,10 @@ Read `runner/cli.py` (the `dashboard` command, `--host`) and `factory_dashboard/
 - `--lan` serves on the address found (the finder faked in the test) and prints it
 - `--lan --host x` exits with a clear message
 - `uv run runner check-all --task f5-03-dashboard-lan` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
