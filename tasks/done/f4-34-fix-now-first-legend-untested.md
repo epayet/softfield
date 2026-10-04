@@ -24,3 +24,12 @@ The merge of `tasks/done/f3-18-now-first.md` changed only the section order in `
 - a browser test (see `tests/factory_dashboard/test_line.py` for how) opens `/` at desktop width and at a phone width and checks that the allowance rows sit side by side where there is room, and that each row's label and percent are visible
 - the listed `tests:` pass, and fail without the behaviour they check
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2085
+gate_failures: []
+tokens: 2233801
+```
