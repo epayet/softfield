@@ -238,6 +238,31 @@ def test_the_queue_is_in_run_order_and_now_names_the_next_three(line_db):
     assert [c["ticket"] for c in doc["merged"]] == ["f9-02-overnight", "f9-03-lead"]
 
 
+def test_a_due_review_heads_the_queue_as_a_batch_crate(line_db):
+    """f4-20 (the owner, 2026-10-03: "a task scheduled like the others"): `runner run` takes
+    a due review before the next ticket."""
+    conn = metrics.open_db(line_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(conn, project, "f8", status=metrics.REVIEW_DUE)
+    finally:
+        conn.close()
+    doc = document(line_db)
+    review: dict[str, Any] = {
+        "ticket": None,
+        "role": "review",
+        "title": "review F8",
+        "kind": "batch",
+        "milestone": "f8",
+        "number": 1,
+        "waits": [],
+    }
+    assert doc["queue"][0] == review
+    assert [c["number"] for c in doc["queue"]] == [1, 2, 3, 4, 5]
+    assert doc["now"]["next"][0] == review
+    assert {s["id"]: s["count"] for s in doc["stations"]}["queue"] == 5
+
+
 def test_a_project_whose_repo_cant_be_read_falls_back_to_its_jobs(line_db):
     conn = metrics.open_db(line_db)
     try:
@@ -1383,6 +1408,41 @@ def test_a_batch_crate_shows_its_role_and_has_no_link(page, line_client):
     card_text = card.text_content() or ""
     assert "reviewer" in card_text
     page.keyboard.press("Escape")
+
+
+def test_a_queued_review_is_a_batch_crate_with_its_milestone(page, line_client):
+    """f4-20: a due review waits in the queue like a ticket, as a batch crate."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    review: dict[str, Any] = {
+        "ticket": None,
+        "role": "review",
+        "title": "review F8",
+        "kind": "batch",
+        "milestone": "f8",
+        "waits": [],
+    }
+    doc["queue"] = [review, *doc["queue"]]
+    for n, crate in enumerate(doc["queue"], start=1):
+        crate["number"] = n
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    crate = page.locator('svg#floor [data-queue-crate="review"]')
+    crate.wait_for()
+    assert crate.locator("rect").get_attribute("class") == "crate batch"
+    assert crate.locator("title").text_content() == "1 review F8"
+    crate.click()
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    assert card.locator("a").count() == 0
+    assert "review F8" in (card.text_content() or "")
 
 
 def test_enter_opens_the_card_and_click_outside_closes_it(page, line_client):

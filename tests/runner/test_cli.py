@@ -9,6 +9,7 @@ import pytest
 from runner import cli, loop, metrics, owner
 from runner.milestone import RESTART
 from runner.report import SessionReport
+from runner.state import load_state, save_state
 from tests.runner.conftest import git, write_task
 
 
@@ -156,6 +157,68 @@ def test_runner_run_without_a_runner_change_just_ends(in_repo, monkeypatch):
     )
     monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
     assert cli.main(["run"]) == 0
+
+
+def test_runner_run_reviews_a_finished_milestone_then_goes_on(in_repo, monkeypatch, capsys):
+    """f4-20: F9's last ticket merges while F10 still has tickets. The run reviews F9 as
+    `runner milestone` would, records its verdict, then runs F10's next ticket."""
+    from tests.runner.test_loop import _config, _merge_any, _two_milestones
+
+    _two_milestones(in_repo)
+    cfg = _config(in_repo)
+    events: list[str] = []
+    ran: list[str] = []
+    merge = _merge_any(in_repo, ran)
+
+    def run_task(s, task):
+        events.append(task.id)
+        return merge(s, task)
+
+    def review(cfg_, key):
+        events.append(f"review {key}")
+        state = load_state(cfg_.runs_dir / "state.json")
+        state.review_stop[key] = "clean"  # as review_milestone records its stop
+        save_state(state, cfg_.runs_dir / "state.json")
+        return "clean"
+
+    record = owner.record_verdict
+
+    def record_verdict(repo, text):
+        events.append("verdict")
+        return record(repo, text)
+
+    monkeypatch.setattr(cli, "load_config", lambda repo: cfg)
+    monkeypatch.setattr(loop, "fresh_reading", lambda s: None)
+    monkeypatch.setattr(loop, "run_task", run_task)
+    monkeypatch.setattr(cli, "run_due_review", review)
+    monkeypatch.setattr(owner, "record_verdict", record_verdict)
+    monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
+    assert cli.main(["run"]) == 0
+    assert events == [
+        "f9-02-last", "review f9", "verdict", "f10-01-next", "review f10", "verdict"
+    ]  # fmt: skip
+    assert "✅ READY FOR SIGN-OFF" in capsys.readouterr().out
+    reports = sorted((in_repo / "docs" / "sessions").glob("*.md"))
+    assert any("## Verdict" in r.read_text() for r in reports)
+    assert git(in_repo, "status", "--porcelain") == ""
+
+
+def test_a_review_that_changes_the_runner_restarts_runner_run(in_repo, monkeypatch):
+    from tests.runner.test_loop import _config
+
+    reviews = iter(["f9", None])
+    monkeypatch.setattr(cli, "load_config", lambda repo: _config(in_repo))
+
+    def run_session(cfg, *, once, dry_run, escalate):
+        return SessionReport(started=datetime.now(UTC), review=next(reviews))
+
+    monkeypatch.setattr(cli, "run_session", run_session)
+    monkeypatch.setattr(cli, "run_due_review", lambda cfg, key: RESTART)
+    monkeypatch.setattr(owner, "verdict", lambda *a, **kw: pytest.fail("a verdict mid-review"))
+    monkeypatch.setattr(os, "execve", lambda *a: (_ for _ in ()).throw(Restarted()))
+    monkeypatch.setattr(sys, "argv", ["runner", "run"])
+    with pytest.raises(Restarted):
+        cli.main(["run"])
 
 
 def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):

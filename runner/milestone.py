@@ -8,6 +8,8 @@ from datetime import datetime
 from functools import partial
 from pathlib import Path
 
+import yaml
+
 from runner import console, metrics, prompts
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
 from runner.config import Config
@@ -42,14 +44,20 @@ from runner.review import (
     stop_reason,
     update_seen,
 )
-from runner.state import save_state
+from runner.state import State, save_state
 from runner.tasks import (
+    STOPPED,
+    TaskError,
     full_key,
     held_ids,
     load_dir,
     milestone_file,
+    milestone_key,
+    milestone_order,
+    named_keys,
     next_milestone_key,
     short_key,
+    split_frontmatter,
 )
 from runner.usage import claude_tokens, transcripts_dir, work_summary
 
@@ -388,6 +396,69 @@ def run_milestone(cfg: Config, milestone: str, base: str) -> str:
     return review_milestone(cfg, milestone, base)
 
 
+# --- the reviews `runner run` starts (f4-20) -----------------------------------------------
+
+BUGS = "bugs"  # ADR 19: bug tickets' milestone, with no review or sign-off
+# A ticket in one of these isn't built yet; one set aside in later/ isn't part of the build.
+_BUILDING = ("ready", *STOPPED)
+
+
+def _ticket_milestones(repo: Path, folder: str) -> set[str]:
+    """The short keys of the milestones with a ticket in ``tasks/<folder>``; ``bugs``, and a
+    ticket that doesn't parse, are left out."""
+    found = set()
+    for path in (repo / "tasks" / folder).glob("*.md"):
+        try:
+            meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
+            if meta.get("milestone") != BUGS:
+                found.add(short_key(milestone_key(meta.get("milestone"))))
+        except (TaskError, yaml.YAMLError, UnicodeDecodeError):
+            continue
+    return found
+
+
+def _reviewed(repo: Path, state: State, key: str) -> bool:
+    """Whether ``key`` has its review: the loop recorded its stop (a restart's carries on), or
+    a report was written outside the runner, with no rounds of its own in state.json."""
+    stop = state.review_stop.get(key)
+    if stop is not None:
+        return stop != RESTART
+    return key not in state.review_counts and milestone_file(repo, "reviews", key).is_file()
+
+
+def due_reviews(repo: Path, state: State) -> list[str]:
+    """The milestones whose review `runner run` starts, in milestone order, by full key: every
+    ticket in done/, not signed off, and no review yet."""
+    names = named_keys(repo)
+    building = set().union(*(_ticket_milestones(repo, folder) for folder in _BUILDING))
+    due = []
+    for short in sorted(_ticket_milestones(repo, "done") - building, key=milestone_order):
+        key = names.get(short, short)
+        if not _reviewed(repo, state, key) and not signed_off(repo, key):
+            due.append(key)
+    return due
+
+
+def _plan_commit(git: Git, repo: Path, milestone: str) -> str:
+    """The commit that added the milestone's doc, else HEAD (where `run_milestone` tags)."""
+    doc = milestone_file(repo, "milestones", milestone)
+    if not doc.is_file():
+        return "HEAD"
+    path = doc.relative_to(repo).as_posix()
+    added = git.run("log", "--follow", "--diff-filter=A", "--format=%H", "--", path).split()
+    return added[-1] if added else "HEAD"
+
+
+def run_due_review(cfg: Config, milestone: str) -> str:
+    """A review `runner run` found due, as `run_milestone` runs it after its queue, from
+    ``<key>-start``. No plan session tagged it (F3, F4): the plan's commit is tagged."""
+    base = f"{milestone}-start"
+    git = Git(cfg.repo)
+    if not git.run("tag", "--list", base).strip():
+        git.run("tag", base, _plan_commit(git, cfg.repo, milestone))
+    return review_milestone(cfg, milestone, base)
+
+
 def review_milestone(cfg: Config, milestone: str, base: str) -> str:
     """Run review rounds until a stop rule fires. Returns the stop reason."""
     s = open_session(cfg, f"review {milestone}")
@@ -433,6 +504,8 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
         )
         since = s.git.head()
         wait_for_room(s, "the review")  # nothing else runs: it waits rather than parks
+        if s.project_id is not None:  # under way: off the line's queue (f4-20)
+            _record(s, metrics.upsert_milestone, s.project_id, milestone, status="review")
         call_claude(s, job, milestone, f"{milestone}-review-r{round_no}")
         try:
             round_ = parse_review(out)

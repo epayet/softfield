@@ -8,7 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 
 from runner import backfill, bench, checks, copilot, i18n, loop, metrics, owner, procs, report
-from runner.config import load_config
+from runner.config import Config, load_config
 from runner.gates import layout_problems
 from runner.gitops import Git
 from runner.loop import RunnerError, local_agent, run_session
@@ -17,6 +17,7 @@ from runner.milestone import (
     milestone_metrics,
     milestone_summary,
     review_milestone,
+    run_due_review,
     run_milestone,
 )
 from runner.state import load_state
@@ -47,11 +48,25 @@ def _restart() -> None:
     os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
 
 
+def _review(cfg: Config, repo: Path, key: str) -> None:
+    """A review `runner run` found due (f4-20), and its verdict, as `runner milestone` gives
+    them. A review that changes runner/ restarts the command; state.json keeps its rounds."""
+    stop = run_due_review(cfg, key)
+    if stop == RESTART:
+        _restart()
+    state = load_state(cfg.runs_dir / "state.json")
+    _, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
+    owner.record_verdict(repo, text)
+    print("\n" + text, end="", flush=True)
+
+
 def main(argv: list[str] | None = None) -> int:
     procs.stop_on_sigterm()
     parser = argparse.ArgumentParser(prog="runner", description=__doc__)
     sub = parser.add_subparsers(dest="command")
-    run = sub.add_parser("run", help="work through tasks/ready (the default)")
+    run = sub.add_parser(
+        "run", help="work through tasks/ready, reviewing each milestone it finishes (the default)"
+    )
     run.add_argument("--once", action="store_true", help="stop after one task")
     run.add_argument("--dry-run", action="store_true", help="show what would run next")
     run.add_argument("--no-escalate", action="store_true", help="don't call Claude on escalations")
@@ -141,14 +156,18 @@ def main(argv: list[str] | None = None) -> int:
     cfg = load_config(repo)
     try:
         if args.command in (None, "run"):
-            session = run_session(
-                cfg,
-                once=getattr(args, "once", False),
-                dry_run=getattr(args, "dry_run", False),
-                escalate=not getattr(args, "no_escalate", False),
-            )
-            if session is not None and session.restart:
-                _restart()  # `runner run` is the standing command (ADR 17): it carries on
+            while True:
+                session = run_session(
+                    cfg,
+                    once=getattr(args, "once", False),
+                    dry_run=getattr(args, "dry_run", False),
+                    escalate=not getattr(args, "no_escalate", False),
+                )
+                if session is not None and session.restart:
+                    _restart()  # `runner run` is the standing command (ADR 17): it carries on
+                if session is None or session.review is None:
+                    break
+                _review(cfg, repo, session.review)  # then back to the queue (f4-20)
         elif args.command == "milestone":
             key = milestone_arg(repo, args.number)
             owner.rerun_started(repo, key, db=cfg.metrics_db)

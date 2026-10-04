@@ -25,7 +25,7 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
    The verdict is also appended to the session report. When an escalation changes `runner/`, the command restarts itself.
 3. **Sign-off** (the owner): the real-device check, then `uv run runner signoff N` (marks the milestone doc and review done, tags `mN-done`; refuses while tickets are left, unless `--force`). An optional `--score 1-10` records how the result felt on the devices (ADR 14 item 14). ADRs: `uv run runner accept N` / `uv run runner reject N`. Only the owner runs these; headless jobs can't.
 
-`uv run runner run` still works through `tasks/ready/` alone (no review), and `uv run runner review --milestone N` runs only the review loop.
+`uv run runner run`, the standing command (ADR 17), works through every milestone's tickets in `tasks/ready/`. When a milestone has every ticket in `done/` (one set aside in `later/` doesn't count), isn't signed off and has no review yet, the run reviews it before its next ticket, as step 2 does, and records the verdict. Then it goes back to the queue. It waits for a parked checkpoint or escalation first. With no `<key>-start` tag, the review tags the commit that added the milestone's doc. The line's queue, Now's "Next in line" and `--dry-run` show the due review as "review F3". `uv run runner review --milestone N` runs only the review loop.
 
 ## Per-task loop
 

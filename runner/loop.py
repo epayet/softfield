@@ -9,7 +9,7 @@ import sqlite3
 import sys
 import threading
 import time
-from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
@@ -3216,8 +3216,27 @@ RESTART_NOTE = (
 )
 
 
+def _due_review(s: Session) -> str | None:
+    """The first milestone whose review is due (f4-20), marked so for the line's queue. None
+    while a checkpoint or an escalation is parked: as under `runner milestone`, the review
+    waits for its reset."""
+    from runner.milestone import due_reviews  # runner.milestone imports this module
+
+    if any(entry["kind"] in SUPPORT for entry in s.state.parked.values()):
+        return None
+    due = next(iter(due_reviews(s.repo, s.state)), None)
+    if due is not None and s.project_id is not None:
+        _record(s, metrics.upsert_milestone, s.project_id, due, status=metrics.REVIEW_DUE)
+    return due
+
+
 def work_queue(
-    s: Session, *, milestone: str | None = None, escalate: bool = True, once: bool = False
+    s: Session,
+    *,
+    milestone: str | None = None,
+    escalate: bool = True,
+    once: bool = False,
+    reviews: bool = False,
 ) -> bool:
     """Work through tasks/ready (one milestone's, if given): tasks, directions, checkpoints
     and escalations. Returns True if Claude (a lead ticket or an escalation) changed the
@@ -3226,6 +3245,9 @@ def work_queue(
     A ticket parked for a Claude limit goes first once its reset has passed (a parked
     checkpoint or escalation before it); until then only developer tickets run, and with none
     left the queue sleeps until the earliest reset.
+
+    With ``reviews`` (`runner run`, f4-20), a milestone whose tickets are all done stops the
+    queue before its next ticket: ``s.report.review`` names it, for the command to review.
     """
     code = _runner_code(s.repo)
     while True:
@@ -3239,6 +3261,10 @@ def work_queue(
         fresh_reading(s)
         if _resume_support(s, escalate=escalate):
             continue
+        if reviews and (due := _due_review(s)) is not None:
+            s.log(f"[runner] {short_key(due).upper()}'s tickets are all done: its review is next.")
+            s.report.review = due
+            return False
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
         if milestone is not None:  # either form of the key (ADR 16 item 6)
             ready = [t for t in ready if short_key(t.milestone) == short_key(milestone)]
@@ -3269,18 +3295,23 @@ def work_queue(
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
+    """`runner run`: the queue, until it is empty or a milestone's review is due (f4-20)."""
     if dry_run:
-        # Reads tasks/ only: any branch, any tree, and no run folder or row (f1-33).
+        from runner.milestone import due_reviews  # runner.milestone imports this module
+
+        # Reads tasks/ and state.json only: any branch, any tree, and no run folder or row
+        # (f1-33).
         tasks = cfg.repo / "tasks"
         ready = load_dir(tasks / "ready", cfg.default_max_diff)
         done = task_ids(tasks / "done")
         paused = blocked_ids(ready, stopped_ids(tasks))
         held = _held(cfg.repo, ready)
         nxt = pick_next(ready, done, paused | held.keys())
-        _print_plan(ready, done, paused, nxt, cfg.repo, held)
+        reviews = due_reviews(cfg.repo, load_state(cfg.runs_dir / "state.json"))
+        _print_plan(ready, done, paused, nxt, cfg.repo, held, reviews)
         return None
     s = open_session(cfg)
-    restart = work_queue(s, escalate=escalate, once=once)
+    restart = work_queue(s, escalate=escalate, once=once, reviews=True)
     report = close_session(s)
     report.restart = restart
     return report
@@ -3370,9 +3401,15 @@ def _print_plan(
     nxt: Task | None,
     repo: Path,
     held: dict[str, str],
+    reviews: Sequence[str] = (),
 ) -> None:
-    """What would run next, and each ready task's pre-flight problems (docs/task-writing.md)."""
+    """What would run next, and each ready task's pre-flight problems (docs/task-writing.md).
+    A due review goes before any ticket (f4-20)."""
     print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
+    names = [f"review {short_key(key).upper()}" for key in reviews]
+    for n, name in enumerate(names):
+        print(f"{'->' if n == 0 else '  '} {name}: due")
+    nxt = None if names else nxt
     for task in sorted(ready, key=lambda t: (milestone_order(t.milestone), t.id)):
         waiting = [d for d in task.depends_on if d not in done]
         if task.id in paused:
@@ -3385,7 +3422,7 @@ def _print_plan(
         print(f"{marker} {task.id}: {status}")
         for problem in preflight(task, repo):
             print(f"     pre-flight: {problem}")
-    print(f"next: {nxt.id if nxt else 'nothing'}")
+    print(f"next: {next(iter(names), None) or (nxt.id if nxt else 'nothing')}")
 
 
 # ADR 00 and docs/testing.md: end-to-end runs in Chromium and WebKit.

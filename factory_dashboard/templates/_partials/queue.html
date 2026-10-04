@@ -8,7 +8,11 @@
   <div class="next-in-line">
     <h3>Next in line</h3>
     {% for t in next %}
+    {% if t.ticket %}
     <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}</div>
+    {% else %}
+    <div class="next-row"><b class="mono">{{ t.number }} {{ t.title }}</b> · a batch</div>
+    {% endif %}
     {% endfor %}
   </div>
 </section>

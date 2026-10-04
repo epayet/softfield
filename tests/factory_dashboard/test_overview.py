@@ -512,6 +512,21 @@ def test_ready_now_comes_before_waiting(queue_client, db_path):
     assert max(ready) < min(waiting)
 
 
+def test_next_in_line_names_a_due_review_first(client, db_path):
+    """f4-20: the review `runner run` takes next, as a batch, with no ticket page."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()
+        metrics.upsert_milestone(conn, project["id"], "f1", status=metrics.REVIEW_DUE)
+    finally:
+        conn.close()
+    html = client.get("/").text
+    rows = section(html, "queue").split("Next in line", 1)[1]
+    assert re.search(r"\b1 review F1 · a batch\b", rows)
+    assert "/tickets/None" not in html and 'href="/tickets/"' not in html
+    assert "2 f1-05-first" in rows
+
+
 def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path):
     now = section(queue_client.get("/").text, "queue")
     rows = now.split("Next in line", 1)[1]

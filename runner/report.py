@@ -67,6 +67,7 @@ class SessionReport:
     notes: list[str] = field(default_factory=list)
     narrative: str = ""
     restart: bool = False  # Claude changed runner/: the command carries on in a new process
+    review: str | None = None  # the milestone `runner run` stopped its queue to review (f4-20)
 
 
 def _minutes(seconds: float) -> str:

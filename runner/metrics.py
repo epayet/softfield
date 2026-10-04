@@ -247,6 +247,11 @@ def upsert_project(
     )
 
 
+# A milestone's status while `runner run` is about to review it (f4-20): the line's queue
+# shows it until its first round starts and the status becomes "review".
+REVIEW_DUE = "review due"
+
+
 def upsert_milestone(
     conn: sqlite3.Connection,
     project_id: int,

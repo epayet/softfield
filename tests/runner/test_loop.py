@@ -365,6 +365,82 @@ def test_the_queue_goes_on_with_other_milestones_while_one_waits(repo, monkeypat
     assert "Waiting: m2-01-held waits for m1-first's sign-off" in s.report.notes
 
 
+def _two_milestones(repo: Path) -> None:
+    """F9's last ticket is ready, F10 has one too (f4-20)."""
+    for folder, task_id in (
+        ("done", "f9-01-first"),
+        ("ready", "f9-02-last"),
+        ("ready", "f10-01-next"),
+    ):
+        path = write_task(repo / "tasks" / folder, task_id)
+        key = task_id.split("-")[0]
+        path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+
+
+def _merge_any(repo: Path, ran: list[str]) -> Callable[[loop.Session, object], TaskRecord]:
+    def run_task(s, task):
+        ran.append(task.id)
+        git(repo, "mv", f"tasks/ready/{task.path.name}", f"tasks/done/{task.path.name}")
+        git(repo, "commit", "-q", "-m", f"{task.id} done")
+        return TaskRecord(id=task.id, milestone=task.milestone, result="done")
+
+    return run_task
+
+
+def test_the_queue_stops_for_a_milestone_whose_tickets_are_all_done(repo, monkeypatch):
+    """f4-20: `runner run` never started a review; F4 would have ended with none."""
+    _two_milestones(repo)
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+    s = loop.open_session(_config(repo))
+    assert loop.work_queue(s, reviews=True) is False
+    assert ran == ["f9-02-last"]
+    assert s.report.review == "f9"
+    loop.close_session(s)
+    conn = metrics.open_db(_config(repo).metrics_db)
+    try:
+        status = conn.execute("SELECT status FROM milestones WHERE key = 'f9'").fetchone()[0]
+    finally:
+        conn.close()
+    assert status == metrics.REVIEW_DUE  # the line's queue shows it (f4-20)
+
+
+def test_a_milestone_queue_starts_no_review_of_its_own(repo, monkeypatch):
+    _two_milestones(repo)
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+    s = loop.open_session(_config(repo), None)
+    assert loop.work_queue(s) is False
+    assert ran == ["f9-02-last", "f10-01-next"]
+    assert s.report.review is None
+
+
+def test_dry_run_lists_a_due_review_first(repo, capsys):
+    _two_milestones(repo)
+    git(repo, "mv", "tasks/ready/f9-02-last.md", "tasks/done/f9-02-last.md")
+    git(repo, "commit", "-q", "-m", "f9 done")
+    out = _dry_run(repo, capsys)
+    assert "-> review F9: due" in out
+    assert "   f10-01-next: runnable" in out
+    assert "next: review F9" in out
+
+
+def test_dry_run_lists_no_review_once_its_done(repo, capsys):
+    _two_milestones(repo)
+    git(repo, "mv", "tasks/ready/f9-02-last.md", "tasks/done/f9-02-last.md")
+    git(repo, "commit", "-q", "-m", "f9 done")
+    cfg = _config(repo)
+    save_state(
+        replace(load_state(cfg.runs_dir / "state.json"), review_stop={"f9": "clean"}),
+        cfg.runs_dir / "state.json",
+    )
+    out = _dry_run(repo, capsys)
+    assert "review" not in out
+    assert "-> f10-01-next: runnable" in out
+
+
 def test_blocked_escalates_immediately(repo, fake_model):
     _add_task(repo, "m1-01-thing")
 

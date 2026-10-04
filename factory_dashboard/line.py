@@ -35,8 +35,9 @@ from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.jobs import _failed_gate
 from factory_dashboard.overview import LIVE
+from runner import metrics
 from runner.config import Config, load_config
-from runner.tasks import milestone_order
+from runner.tasks import milestone_order, short_key
 
 router = APIRouter()
 
@@ -540,6 +541,29 @@ def _tickets(conn: sqlite3.Connection, project: str) -> dict[str, sqlite3.Row]:
     }
 
 
+def _due_reviews(conn: sqlite3.Connection, project: str) -> list[dict[str, Any]]:
+    """The reviews `runner run` takes before its next ticket (f4-20), as batch crates."""
+    keys = [
+        r["key"]
+        for r in conn.execute(
+            "SELECT m.key FROM milestones m JOIN projects p ON p.id = m.project_id"
+            " WHERE p.name = ? AND m.status = ?",
+            (project, metrics.REVIEW_DUE),
+        )
+    ]
+    return [
+        {
+            "ticket": None,
+            "role": "review",
+            "title": f"review {short_key(key).upper()}",
+            "kind": "batch",
+            "milestone": key,
+            "waits": [],
+        }
+        for key in sorted(keys, key=milestone_order)
+    ]
+
+
 def live_line(
     conn: sqlite3.Connection, project: str, now: datetime, at: datetime | None = None
 ) -> dict[str, Any]:
@@ -577,16 +601,19 @@ def live_line(
         for t in today
         if t.to == "merged" and t.crate in tickets
     ]
-    queue = [
+    tickets_next = [
         {
             "ticket": u.ticket,
             "title": u.title,
             "kind": _kind(u.kind),
             "milestone": u.milestone,
-            "number": n,
             "waits": list(u.waits),
         }
-        for n, u in enumerate(queries.run_order(conn, project, states), start=1)
+        for u in queries.run_order(conn, project, states)
+    ]
+    queue = [
+        {**crate, "number": n}
+        for n, crate in enumerate([*_due_reviews(conn, project), *tickets_next], start=1)
     ]
 
     counts: dict[str, int | None] = {belt: sum(belt in t.belts for t in today) for belt in BELTS}

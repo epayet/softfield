@@ -188,9 +188,12 @@
     doc.queue.slice(0, fit.most).forEach((crate, i) => {
       const col = i % fit.cols, row = Math.floor(i / fit.cols);
       const cx = left + col * fit.pitch, cy = y + h - fit.bottom - row * fit.rise;
-      const c = add(g, "g", { "data-queue-crate": crate.ticket, "data-crate": crate.ticket,
+      // A due review (f4-20) is a batch crate: no ticket, its role names it
+      const key = crate.ticket || crate.role;
+      const c = add(g, "g", { "data-queue-crate": key, "data-crate": key,
         tabindex: "0", role: "button" });
-      add(c, "title", {}, `${crate.number} ${crate.ticket}: ${crate.title || ""}${crate.waits.length ? ` (after ${crate.waits.join(", ")})` : ""}`);
+      const what = crate.ticket ? `${crate.ticket}: ${crate.title || ""}` : crate.title;
+      add(c, "title", {}, `${crate.number} ${what}${crate.waits.length ? ` (after ${crate.waits.join(", ")})` : ""}`);
       add(c, "rect", { x: cx, y: cy, width: fit.width, height: 20, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
       text(c, cx + fit.width / 2, cy + 14, String(crate.number), "on", { "text-anchor": "middle" });
     });
@@ -605,6 +608,7 @@
     for (const c of doc.merged) if (c.ticket === key) return { ...c, _source: "merged" };
     for (const c of doc.queue) if (c.ticket === key) return { ...c, _source: "queue" };
     // Batch crates have ticket=null; fall back to role
+    for (const c of doc.queue) if (!c.ticket && c.role === key) return { ...c, _source: "queue" };
     for (const c of doc.merged) if (!c.ticket && c.role === key) return { ...c, _source: "merged" };
     return null;
   }

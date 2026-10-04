@@ -477,3 +477,71 @@ def test_the_verdict_says_what_a_waiting_milestone_waits_for(repo, monkeypatch):
     code, text = owner.verdict(repo, "m1", State(), stop)
     assert code == 2
     assert "  • m1 waits for m0-base's sign-off: m1-01-a\n" in text
+
+
+# --- the reviews `runner run` starts (f4-20) -----------------------------------------------
+
+
+def milestone_ticket(repo, folder: str, task_id: str, key: str) -> None:
+    path = write_task(repo / "tasks" / folder, task_id)
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n"))
+
+
+def test_a_milestone_whose_tickets_are_all_done_is_due_for_review(repo):
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    milestone_ticket(repo, "done", "f9-02-b", "f9")
+    milestone_ticket(repo, "later", "f9-03-aside", "f9")  # set aside: not part of the build
+    milestone_ticket(repo, "done", "f10-01-c", "f10")
+    milestone_ticket(repo, "ready", "f10-02-d", "f10")
+    milestone_ticket(repo, "done", "f11-01-e", "f11")
+    milestone_ticket(repo, "escalated", "f11-02-f", "f11")
+    milestone_ticket(repo, "done", "bug-01-g", "bugs")  # ADR 19: no review, no sign-off
+    assert milestone.due_reviews(repo, State()) == ["f9"]
+
+
+def test_a_due_review_goes_by_the_milestones_full_key(repo):
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f9-always-on.md").write_text(MILESTONE_DOC)
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    assert milestone.due_reviews(repo, State()) == ["f9-always-on"]
+
+
+def test_a_reviewed_or_signed_off_milestone_isnt_due_again(repo):
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    assert milestone.due_reviews(repo, State(review_stop={"f9": "clean"})) == []
+    # A review a restart cut short carries on, from the rounds in state.json.
+    restarted = State(review_counts={"f9": [2]}, review_stop={"f9": milestone.RESTART})
+    assert milestone.due_reviews(repo, restarted) == ["f9"]
+    reviews = repo / "docs" / "reviews"
+    reviews.mkdir(parents=True)
+    (reviews / "f9.md").write_text(REVIEW_DOC)  # reviewed interactively
+    assert milestone.due_reviews(repo, State()) == []
+    assert milestone.due_reviews(repo, State(review_counts={"f9": [3]})) == ["f9"]  # a Ctrl-C
+    (reviews / "f9.md").unlink()
+    git(repo, "tag", "f9-done")
+    assert milestone.due_reviews(repo, State()) == []
+
+
+def test_a_due_review_diffs_from_the_plans_commit(repo, monkeypatch):
+    """No plan session tagged F3's or F4's start: the review tags the commit that added the
+    milestone's doc, where `runner milestone` would have tagged its first run."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f9.md").write_text(MILESTONE_DOC)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "plan f9")
+    plan = git(repo, "rev-parse", "HEAD").strip()
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f9-01-a merged")
+    seen: list[tuple[str, str]] = []
+
+    def review(cfg, key, base):
+        seen.append((key, base))
+        return "clean"
+
+    monkeypatch.setattr(milestone, "review_milestone", review)
+    assert milestone.run_due_review(_config(repo), "f9") == "clean"
+    assert seen == [("f9", "f9-start")]
+    assert git(repo, "rev-parse", "f9-start^{commit}").strip() == plan
+    milestone.run_due_review(_config(repo), "f9")  # a tag already there is kept
+    assert git(repo, "rev-parse", "f9-start^{commit}").strip() == plan
