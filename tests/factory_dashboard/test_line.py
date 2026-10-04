@@ -1135,3 +1135,67 @@ def test_a_failed_check_flashes_the_phone_floors_light(page, night_db):
         page.click("#replay-next")
     assert page.locator("svg#floor-phone .light.flash-red").count() == 1
     assert page.locator("svg#floor .light.flash-red").count() == 0
+
+
+# --- crate card (f3-19) --------------------------------------------------------------------
+
+
+def test_clicking_a_queued_crate_shows_the_card_with_ticket_id_and_title(page, line_client):
+    """A click on a queued crate opens the card showing its ticket id linking to /tickets/<id>
+    and its title; Escape hides it."""
+    page.clock.install()
+    open_line(page, line_client)
+    page.wait_for_selector("svg#floor [data-queue-crate]")
+    queue_crates = page.eval_on_selector_all(
+        "svg#floor [data-queue-crate]", "els => els.map(e => e.dataset.queueCrate)"
+    )
+    first = queue_crates[0]
+    page.click(f'svg#floor [data-queue-crate="{first}"]')
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    card_href = card.locator("a").get_attribute("href")
+    assert card_href is not None
+    assert card_href.startswith("/tickets/")
+    assert first in card_href
+    assert first in card.text_content() or first in (card.locator("a").text_content() or "")
+    page.keyboard.press("Escape")
+    assert card.is_hidden()
+
+
+def test_tapping_a_crate_on_the_phone_floor_shows_the_card(page, line_client):
+    """At 390 px wide, tapping a crate on the phone floor shows the card."""
+    page.clock.install()
+    open_line(page, line_client, PHONE)
+    page.wait_for_selector("svg#floor-phone [data-queue-crate]")
+    phone_crates = page.eval_on_selector_all(
+        "svg#floor-phone [data-queue-crate]", "els => els.map(e => e.dataset.queueCrate)"
+    )
+    first = phone_crates[0]
+    page.dispatch_event(f'svg#floor-phone [data-queue-crate="{first}"]', "click")
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    card_href = card.locator("a").get_attribute("href")
+    assert card_href is not None
+    assert card_href.startswith("/tickets/")
+    assert first in card_href
+
+
+def test_the_card_stays_open_across_a_live_refresh(page, line_client):
+    """A refresh that redraws the floor leaves an open card open."""
+    page.clock.install()
+    doc = block(line_client.get("/").text)
+    open_line(page, line_client, live=[doc])
+    page.wait_for_selector("svg#floor [data-queue-crate]")
+    queue_crates = page.eval_on_selector_all(
+        "svg#floor [data-queue-crate]", "els => els.map(e => e.dataset.queueCrate)"
+    )
+    first = queue_crates[0]
+    page.click(f'svg#floor [data-queue-crate="{first}"]')
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    page.evaluate("() => { window.liveIdle = () => true; }")
+    refresh(page)
+    assert not card.is_hidden()
+    card_href = card.locator("a").get_attribute("href")
+    assert card_href is not None
+    assert first in card_href

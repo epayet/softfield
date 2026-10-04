@@ -187,7 +187,8 @@
     doc.queue.slice(0, fit.most).forEach((crate, i) => {
       const col = i % fit.cols, row = Math.floor(i / fit.cols);
       const cx = left + col * fit.pitch, cy = y + h - fit.bottom - row * fit.rise;
-      const c = add(g, "g", { "data-queue-crate": crate.ticket });
+      const c = add(g, "g", { "data-queue-crate": crate.ticket, "data-crate": crate.ticket,
+        tabindex: "0", role: "button" });
       add(c, "title", {}, `${crate.number} ${crate.ticket}: ${crate.title || ""}${crate.waits.length ? ` (after ${crate.waits.join(", ")})` : ""}`);
       add(c, "rect", { x: cx, y: cy, width: fit.width, height: 20, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
       text(c, cx + fit.width / 2, cy + 14, String(crate.number), "on", { "text-anchor": "middle" });
@@ -236,7 +237,8 @@
     }
     if (m.state === "working" && m.crate) {
       const c = m.crate;
-      const crate = add(g, "g", { "data-crate": c.ticket || c.role });
+      const crate = add(g, "g", { "data-crate": c.ticket || c.role,
+        tabindex: "0", role: "button" });
       add(crate, "title", {}, `${c.ticket || c.role}: ${c.title || ""}`);
       add(crate, "rect", { x: left, y: line - 14, width: 44, height: 22, class: `crate ${c.kind}` });
       text(crate, left + 22, line + 1, c.ticket ? short(c.ticket) : "batch", "on", { "text-anchor": "middle" });
@@ -582,4 +584,88 @@
 
   drawAll(document);
   document.addEventListener("htmx:load", (event) => drawAll(event.detail.elt));
+
+  // --- crate card (f3-19): click a crate to see its details -------------------------------
+
+  let _cardCrate = null;  // the crate key currently shown in the card; survives redraws
+  let _cardDoc = null;    // the doc used to build the card
+
+  function crateInfo(doc, key) {
+    for (const c of doc.queue) if (c.ticket === key) return { ...c, _source: "queue" };
+    for (const m of doc.machines) if (m.crate && m.crate.ticket === key) return { ...m.crate, _source: "machine", _agent: m.name, _attempt: m.crate.attempt, _minutes: m.crate.minutes };
+    for (const c of doc.merged) if (c.ticket === key) return { ...c, _source: "merged" };
+    for (const c of doc.queue) if (c.ticket === key) return { ...c, _source: "queue" };
+    return null;
+  }
+
+  function showCard(key) {
+    const card = document.getElementById("crate-card");
+    if (!card || !key) return;
+    const info = crateInfo(_cardDoc || (JSON.parse(document.getElementById("factory-line").textContent)), key);
+    if (!info) return;
+    _cardCrate = key;
+    _cardDoc = JSON.parse(document.getElementById("factory-line").textContent);
+    let html = "";
+    if (info.ticket) {
+      const project = new URLSearchParams(window.location.search).get("project") || "";
+      const link = project ? `/tickets/${info.ticket}?project=${project}` : `/tickets/${info.ticket}`;
+      html += `<a class="card-ticket" href="${link}">${info.ticket}</a>`;
+      if (info.title) html += `<div class="card-title">${info.title}</div>`;
+      const roles = [];
+      if (info.kind === "lead") roles.push("lead");
+      else if (info.kind === "developer") roles.push("developer");
+      if (roles.length) html += `<dl class="card-meta"><dt>role</dt><dd>${roles.join(", ")}</dd></dl>`;
+      if (info._source === "machine" && info._agent) {
+        html += `<dl class="card-meta"><dt>agent</dt><dd>${info._agent}</dd>`;
+        html += `<dt>attempt</dt><dd>${info._attempt}</dd>`;
+        html += `<dt>time</dt><dd>${info._minutes} min</dd></dl>`;
+      }
+      if (info.waits && info.waits.length) html += `<div class="card-waits">${info.waits.join(", ")}</div>`;
+    } else {
+      html += `<span class="card-ticket">${info.role || "batch"}</span>`;
+      if (info.title) html += `<div class="card-title">${info.title}</div>`;
+    }
+    card.innerHTML = html;
+    card.hidden = false;
+  }
+
+  function hideCard() {
+    const card = document.getElementById("crate-card");
+    if (card) card.hidden = true;
+    _cardCrate = null;
+  }
+
+  function keepCard() {
+    if (_cardCrate) showCard(_cardCrate);
+  }
+
+  // One listener on the floor wrapper finds the [data-crate] clicked
+  document.addEventListener("click", (e) => {
+    const crate = e.target.closest("[data-crate]");
+    if (crate) { showCard(crate.dataset.crate); return; }
+    const card = document.getElementById("crate-card");
+    if (card && !card.hidden && !card.contains(e.target) && !e.target.closest("[data-crate]")) hideCard();
+  });
+
+  // Keyboard: Enter opens, Escape closes
+  document.addEventListener("keydown", (e) => {
+    const card = document.getElementById("crate-card");
+    if (e.key === "Escape" && card && !card.hidden) { hideCard(); return; }
+    if (e.key !== "Enter") return;
+    const crate = e.target.closest("[data-crate]");
+    if (crate) { e.preventDefault(); showCard(crate.dataset.crate); }
+  });
+
+  // After every redraw, restore the card if it was open
+  const origDrawFloor = drawFloor;
+  drawFloor = function (doc) {
+    origDrawFloor(doc);
+    keepCard();
+  };
+  const origDrawPhone = drawPhone;
+  drawPhone = function (floor, doc) {
+    origDrawPhone(floor, doc);
+    keepCard();
+  };
+
 })();

@@ -216,3 +216,16 @@ tbody tr:hover { background: var(--accent-wash); }
 .new-version { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent);
   border-radius: 4px; background: var(--accent-wash); color: var(--ink); }
 
+/* Crate detail card (f3-19): shown under the floor when a crate is clicked */
+#crate-card { margin: 8px auto 0; padding: 10px 14px; border: 1px solid var(--rule);
+  border-radius: 6px; background: var(--surface); max-width: 420px; min-width: 220px;
+  font-size: 13px; color: var(--ink); }
+#crate-card[hidden] { display: none; }
+#crate-card .card-ticket { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+#crate-card .card-title { color: var(--ink-2); margin: 2px 0 6px; }
+#crate-card .card-meta { color: var(--muted); font-size: 12px; }
+#crate-card .card-meta dt { color: var(--muted); } #crate-card .card-meta dd { margin: 0;
+  color: var(--ink-2); font-size: 12px; }
+#crate-card .card-waits { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
+#crate-card .card-waits::before { content: "after "; color: var(--muted); }
+
