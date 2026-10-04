@@ -13,7 +13,7 @@ from factory_dashboard import queries
 from runner import bench, gates, loop, metrics
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.config import Config
-from runner.gitops import with_trailers
+from runner.gitops import Git, with_trailers
 from runner.review import Finding
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
@@ -182,7 +182,7 @@ def test_the_copy_starts_at_the_merges_parent_with_todays_workflow(repo, copies,
     seen: dict[str, str] = {}
 
     def look(work: Path, spec: JobSpec) -> None:
-        seen["parent"] = git(work, "rev-parse", "HEAD~1").strip()
+        seen["tree"] = git(work, "rev-parse", "HEAD~1^{tree}").strip()
         seen["thing"] = (work / "coucou" / "thing.py").read_text()
         seen["agents"] = (work / "AGENTS.md").read_text()
         seen["notes"] = (work / "docs" / "agents" / "developer.md").read_text()
@@ -197,12 +197,36 @@ def test_the_copy_starts_at_the_merges_parent_with_todays_workflow(repo, copies,
 
     fake_agents["fake-a"].append(look)
     bench.run_bench(_config(repo, copies), [TICKET], ["fake-a"])
-    assert seen["parent"] == parent
+    assert seen["tree"] == git(repo, "rev-parse", f"{parent}^{{tree}}").strip()
     assert "raise NotImplementedError" in seen["thing"]
     assert (seen["agents"], seen["notes"]) == ("today's rules\n", "today's notes\n")
     assert "Make the thing work." in seen["ticket"] and "# --- runner ---" not in seen["ticket"]
     assert seen["branch"] == "HEAD"  # detached: no branch of the repo moves
     assert seen["remotes"] == ""  # no remote leads back to the repo
+
+
+def test_a_copy_has_its_own_root_commit_and_the_gates_diff_against_its_base(repo, copies):
+    """OpenCode keys a project by the repo's root commit (`rev-list --max-parents=0 --all`):
+    a copy sharing it was given the main checkout as its directory (f4-19)."""
+    parent = _history(repo)
+    git(repo, "tag", "v1", parent)  # no ref of the repo's may survive in the copy
+    work = copies / "copy"
+    base = bench.make_copy(_config(repo, copies), work, parent, TICKET, "the ticket\n")
+    repo_roots = set(git(repo, "rev-list", "--max-parents=0", "--all").split())
+    [root] = git(work, "rev-list", "--max-parents=0", "--all").split()
+    assert root not in repo_roots
+    other = copies / "other"  # the next agent on the same ticket, within the same second
+    bench.make_copy(_config(repo, copies), other, parent, TICKET, "the ticket\n")
+    assert git(other, "rev-list", "--max-parents=0", "HEAD").split() != [root]
+    assert git(work, "rev-list", "--count", "--all").strip() == "2"  # the root, then the base
+    assert git(work, "rev-parse", f"{root}^{{tree}}") == git(
+        repo, "rev-parse", f"{parent}^{{tree}}"
+    )
+    _implement(work, None)  # type: ignore[arg-type]
+    work_git = Git(work)
+    work_git.commit_all("attempt 1")
+    assert work_git.changed_files(base) == ["coucou/thing.py"]
+    assert work_git.diff_size(base) > 0
 
 
 # Resolves its project the way OpenCode does: the worktree, then the repository it belongs

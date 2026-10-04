@@ -8,7 +8,11 @@ no Claude, so a failed last attempt is recorded as "would escalate". Nothing rea
 `tasks/` or a branch. The first refusal stops the bench. The logs stay in `var/bench/`.
 
 The copy is a clone with its own `.git`, never a `git worktree`: OpenCode takes its project
-from the git common dir, so in a worktree it edited the main checkout (f2-12).
+from the git common dir, so in a worktree it edited the main checkout (f2-12). Nor does the
+copy keep the repo's history: OpenCode also keys a project by its root commit and keeps one
+directory per project, so a plain clone was given the main checkout too (f4-19). The copy's
+history is a new root commit holding the tree at the parent, then the base commit the gates
+diff against.
 
 `runner bench --review` replays past checkpoints instead (ADR 16 item 10): each checkpoint ×
 agent reviews the checkpoint's merges, read-only, in a copy at the last of them. Its findings
@@ -129,8 +133,9 @@ def _check_outside_repo(cfg: Config) -> None:
 
 
 def _clone(cfg: Config, work: Path, at: str, tickets: dict[str, str], message: str) -> str:
-    """A clone detached at ``at``, with today's workflow and ``tickets`` (path: text) written,
-    committed so the gates see only the agent's changes. Returns that base commit."""
+    """A clone holding ``at``'s tree under a root commit of its own, with today's workflow and
+    ``tickets`` (path: text) written, committed so the gates see only the agent's changes.
+    Returns that base commit."""
     work.parent.mkdir(parents=True, exist_ok=True)
     Git(work.parent).run("clone", "-q", "--local", "--no-checkout", str(cfg.repo), str(work))
     git = Git(work)
@@ -139,6 +144,14 @@ def _clone(cfg: Config, work: Path, at: str, tickets: dict[str, str], message: s
         if value := Git(cfg.repo).run("config", key, check=False).strip():
             git.run("config", key, value)
     git.run("checkout", "-q", "--detach", at)
+    # A new root holding `at`'s tree, and no ref left to the repo's history: OpenCode keys a
+    # project by its root commit, and gave a copy sharing the repo's the main checkout (f4-19).
+    # The copy's name makes the root its own, even beside a copy of the same `at`.
+    title = f"bench: {work.name}, the tree of {at[:9]}"
+    root = git.run("commit-tree", "-m", title, f"{at}^{{tree}}")
+    git.run("checkout", "-q", "--detach", root.strip())
+    for ref in git.run("for-each-ref", "--format=%(refname)").split():
+        git.run("update-ref", "-d", ref)
     _overlay(cfg.repo, work)
     for rel, text in tickets.items():
         (work / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -152,7 +165,7 @@ def _clone(cfg: Config, work: Path, at: str, tickets: dict[str, str], message: s
 
 
 def make_copy(cfg: Config, work: Path, parent: str, ticket: str, text: str) -> str:
-    """A clone detached at ``parent``, with today's workflow and the ticket in ready/.
+    """A clone of ``parent``'s tree, with today's workflow and the ticket in ready/.
     Returns its base commit."""
     ready = {f"tasks/ready/{ticket}.md": text}
     return _clone(cfg, work, parent, ready, f"bench: {ticket} from {parent[:9]}")
