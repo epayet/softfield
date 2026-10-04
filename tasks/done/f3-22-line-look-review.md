@@ -28,3 +28,10 @@ Read `docs/milestones/f3.md` (D11 and "Owner's notes, 2026-10-03"), the tickets 
 - the section is in `docs/milestones/f3.md`, with a line for each proposed ticket
 - each proposed ticket is in `tasks/later/` and passes pre-flight (`uv run pytest -q tests/runner/test_tasks.py`)
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
