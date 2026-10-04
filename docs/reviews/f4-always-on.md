@@ -1,6 +1,6 @@
 # F4 review: always on
 
-- **Status:** in review (round 1 of 3)
+- **Status:** done, signed off by the owner on 2026-10-04.
 - **Reviewed:** `git diff f4-always-on-start..main`, 2026-10-04, by the lead (headless). The diff also holds F3, which ran interleaved and has its own review ([f3.md](f3.md)). This review read F4's tickets (01–20, 33), their fix tickets (22–38, including the F3 ones filed under F4), and how F3's changes touched F4's outcome.
 
 ## Sign-off sheet
