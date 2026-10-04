@@ -189,6 +189,7 @@ def test_a_waiting_run_with_unknown_ticket_shows_no_title(serve_between):
     now = section(html, "now")
     assert "Running: waiting for Claude · f9-99-missing-ticket until 02:00" in now
     assert "Nothing is running" not in now
+    assert "running-title" not in html
 
 
 def test_a_run_ended_by_a_ctrl_c_is_not_running(serve_between, db_path):

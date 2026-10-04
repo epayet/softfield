@@ -102,6 +102,10 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 - **Score the ticket with the rubric, not by feel.** f3-07 (replay controls) was written as difficulty 5; the rubric gives 10 (markup, CSS, a stepping state, a timer and the htmx pause interlocked; seven files to read; four dependencies; UI; timing). Qwen re-planned it for 10 minutes three times without one edit, and a direction saying "edit early" didn't change that. Split it into the bar (f3-07) and the stepping (f3-11).
 - **Point into a long file by line numbers, not by "near `id=…`".** The split f3-07 still sent Qwen to "the `.replay` bar in `docs/milestones/f1-factory-mockup.html` (near `id="replay"`)": OpenCode's grep fails on that file ("Ripgrep JSON record exceeded 65536 bytes": line 382 is its embedded data, over 64 KB on one line) and shell `grep` is denied, so Qwen paged through 1,100 lines hunting for it in each attempt and never edited. For a file over ~300 lines, give the lines (`f1-factory-mockup.html` lines 286–289 and 327–332) or quote the few lines that matter in Context.
 
+## Lessons from F4
+
+- **A test-only fix can't go to a developer.** The `tests-fail-on-main` gate puts back main's code and needs the changed test to fail there; when `files:` holds only tests and main already behaves (a finding like "the test doesn't assert X"), no correct test can fail, so the ticket burns three attempts and an escalation (f4-23, f4-24). Fix such a finding yourself, or name the code file the test is meant to catch.
+
 ## Open questions
 
 - Outcome vs dictation: no visible difference in M2 (4 tasks). Keep sampling both.
