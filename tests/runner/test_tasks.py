@@ -4,6 +4,7 @@ import pytest
 
 from runner.tasks import (
     STOPPED,
+    TESTS_ONLY,
     Task,
     TaskError,
     append_footer,
@@ -141,6 +142,16 @@ def test_preflight_allows_new_files_and_unwritten_tests(repo):
     (repo / "tests" / "unit" / "test_thing.py").unlink()
     assert "referenced path does not exist: coucou/thing.py" not in preflight(task, repo)
     assert not any("test_thing" in p for p in preflight(task, repo))
+
+
+def test_preflight_sends_a_tests_only_ticket_to_the_lead(repo):
+    """f4-36: a ticket that changes only tests can't pass tests-fail-on-main, so it escalates
+    before any attempt rather than after three and a direction."""
+    path = write_task(repo / "tasks" / "ready", "m1-01-thing")
+    path.write_text(path.read_text().replace("- coucou/thing.py\n", "- tests/unit/test_thing.py\n"))
+    task = parse_task(path, 150)
+    assert task.files == ("tests/unit/test_thing.py",)
+    assert preflight(task, repo) == [TESTS_ONLY]
 
 
 def test_footer(tmp_path):
@@ -463,6 +474,7 @@ def test_queued_tickets_name_only_what_exists_or_an_earlier_ticket_creates():
         created = _created_before(task, queued)
         for problem in preflight(task, repo):
             path = problem.removeprefix("referenced path does not exist: ")
-            if path not in created:
+            # A tests-only ticket may wait here: pre-flight hands it to the lead when it runs.
+            if problem != TESTS_ONLY and path not in created:
                 problems.append(f"{task.id}: {problem}")
     assert problems == []

@@ -337,13 +337,22 @@ def pick_next(ready: Iterable[Task], done: set[str], paused: set[str]) -> Task |
     return min(candidates, key=lambda t: (milestone_order(t.milestone), t.id), default=None)
 
 
+TESTS_ONLY = (
+    "`files:` lists only tests, so no test can fail on main's code (the tests-fail-on-main"
+    " gate): the lead does it"
+)
+
+
 def preflight(task: Task, repo: Path) -> list[str]:
-    """Problems with the task's Context/Pattern references. Empty means OK.
+    """Problems with the task's files and Context/Pattern references. Empty means OK.
 
     The ``tests:`` files may not exist yet: developers write their own (ADR 07 item 4).
+    A ticket that changes only tests escalates before any attempt (f4-23, f4-28, f4-36).
     """
     text = task.sections["Context"] + "\n" + task.sections.get("Pattern to follow", "")
     problems = []
+    if task.files and all(f.startswith("tests/") for f in task.files):
+        problems.append(TESTS_ONLY)
     paths = set(_PATH_RE.findall(text))
     for rel in sorted(paths):
         if not (repo / rel).exists() and rel not in (*task.files, *task.tests):  # may be new
