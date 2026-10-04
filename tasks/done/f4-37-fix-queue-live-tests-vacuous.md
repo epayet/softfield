@@ -34,3 +34,12 @@ Read `tasks/done/f4-30-queue-live-tests.md` and its merge (`git show ee5522fa49d
 - an empty queue shows "The queue is empty." once
 - the listed `tests:` pass, and each new or changed test fails if the Queue is taken out of `_partials/live.html`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2205
+gate_failures: []
+tokens: 2260419
+```
