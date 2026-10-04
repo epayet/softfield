@@ -22,3 +22,10 @@ Read `run_bounded` in `runner/procs.py`. Test-first.
 - a test: interrupting a `run_bounded` call (a `KeyboardInterrupt` raised while it waits) leaves no process of its group running
 - a timeout still kills the whole group, as before
 - `uv run runner check-all --task f7-04-gates-stop-with-runner` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
