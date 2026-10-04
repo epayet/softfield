@@ -5,7 +5,7 @@ import os
 import subprocess
 import sys
 from dataclasses import replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from runner import (
@@ -49,15 +49,38 @@ def _today() -> date:
     return datetime.now().astimezone().date()
 
 
+RESTARTED_ENV = "COUCOU_RUNNER_RESTARTED"  # set by `_restart` for the process it starts
+
+
+def _handed_on(answer: loop.ReserveAnswer, value: str | None) -> None:
+    """A yes the restart handed on: "1" for the whole command, else the time it ends."""
+    if value == "1":
+        answer.yes = True
+    elif value:
+        answer.grant_until(datetime.fromisoformat(value))
+
+
+def _use_reserve(which: str | None) -> None:
+    """`runner run --use-reserve [week|five-hour]`: yes to the reserve questions, ahead, for
+    ``USE_RESERVE_HOURS`` (owner, 2026-10-04); then the runner asks again."""
+    until = loop.now() + timedelta(hours=loop.USE_RESERVE_HOURS)
+    if which in ("both", "week"):
+        loop.RESERVE.grant_until(until)
+    if which in ("both", "five-hour"):
+        loop.FIVE_HOUR.grant_until(until)
+    if which is not None:
+        print(f"runner: Claude's reserve may be used until {until:%a %H:%M}.", flush=True)
+
+
 def _restart() -> None:
     """Carry on in a fresh process: Claude changed runner/, and Python keeps the old modules."""
     print("runner: the runner's code changed; restarting.", flush=True)
     argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
     env = dict(os.environ)
-    if loop.RESERVE.yes:  # the owner's yes lasts for the whole command
-        env[loop.RESERVE_ENV] = "1"
-    if loop.FIVE_HOUR.yes:
-        env[loop.FIVE_HOUR_ENV] = "1"
+    env[RESTARTED_ENV] = "1"  # so `--use-reserve` doesn't start its 24 hours again
+    for answer, name in ((loop.RESERVE, loop.RESERVE_ENV), (loop.FIVE_HOUR, loop.FIVE_HOUR_ENV)):
+        if answer.yes:  # the owner's yes lasts for the whole command, or until its end
+            env[name] = answer.until.isoformat() if answer.until else "1"
     os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
 
 
@@ -105,6 +128,13 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--once", action="store_true", help="stop after one task")
     run.add_argument("--dry-run", action="store_true", help="show what would run next")
     run.add_argument("--no-escalate", action="store_true", help="don't call Claude on escalations")
+    run.add_argument(
+        "--use-reserve",
+        nargs="?",
+        const="both",
+        choices=("both", "week", "five-hour"),
+        help="say yes ahead to using Claude's reserve (both, or one window) for 24 hours",
+    )
     milestone = sub.add_parser(
         "milestone", help="run a whole milestone: tickets, review, then a verdict (ADR 12)"
     )
@@ -182,10 +212,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     # A yes to Claude's reserve, handed on by this command's own restart (below); taken out
     # so that nothing this process starts inherits it (ADR 15 item 5).
-    if os.environ.pop(loop.RESERVE_ENV, None) == "1":
-        loop.RESERVE.yes = True
-    if os.environ.pop(loop.FIVE_HOUR_ENV, None) == "1":  # the 5-hour question's, its own
-        loop.FIVE_HOUR.yes = True
+    _handed_on(loop.RESERVE, os.environ.pop(loop.RESERVE_ENV, None))
+    _handed_on(loop.FIVE_HOUR, os.environ.pop(loop.FIVE_HOUR_ENV, None))  # its own question
+    restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
+    if not restarted:  # a restart keeps the first deadline, or its lapse
+        _use_reserve(getattr(args, "use_reserve", None))
 
     repo = _repo()
     cfg = load_config(repo)

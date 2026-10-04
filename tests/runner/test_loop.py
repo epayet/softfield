@@ -2882,7 +2882,7 @@ def test_the_run_says_when_it_asks_the_owner(
 def test_a_ctrl_c_leaves_no_run_alive_or_on_the_reserve(repo, fake_model, monkeypatch):
     """f2-03: after a Ctrl-C, run 20261002-055804 kept ended NULL and reserve 1, so the page
     said "on Claude's reserve" until the heartbeat went stale."""
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(yes=True))
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(granted=True))
     _add_task(repo, "m1-01-thing")
 
     def ctrl_c(repo_: Path, prompt: str) -> None:
@@ -3042,7 +3042,7 @@ def test_a_yes_to_the_reserve_clears_its_item_at_once_and_marks_the_run(
 
 
 def test_a_restart_after_a_yes_marks_its_run_on_the_reserve(repo, monkeypatch):
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(yes=True))
+    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(granted=True))
     loop.open_session(_config(repo))
     assert [run["reserve"] for run in _rows(repo, "runs")] == [1]
 
@@ -3882,3 +3882,19 @@ def test_a_fix_ticket_on_a_missing_path_takes_the_tickets_files_and_names_the_pa
     from runner.tasks import preflight
 
     assert preflight(task, repo) == []
+
+
+def test_a_yes_granted_until_a_time_lapses_then_and_the_question_is_asked_again(monkeypatch):
+    """`runner run --use-reserve` (owner, 2026-10-04): a yes for 24 hours, then ask again."""
+    at = datetime(2026, 10, 4, 22, 0, tzinfo=UTC)
+    monkeypatch.setattr(loop, "now", lambda: at)
+    answer = loop.ReserveAnswer()
+    answer.grant_until(at + timedelta(hours=24))
+    assert answer.yes and not answer.no
+    monkeypatch.setattr(loop, "now", lambda: at + timedelta(hours=23, minutes=59))
+    assert answer.yes
+    monkeypatch.setattr(loop, "now", lambda: at + timedelta(hours=24))
+    assert not answer.yes and not answer.no  # unanswered again: the runner asks
+    answer.yes = True  # a typed yes still lasts for the whole command
+    monkeypatch.setattr(loop, "now", lambda: at + timedelta(days=5))
+    assert answer.yes

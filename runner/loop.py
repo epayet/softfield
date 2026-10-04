@@ -2729,14 +2729,31 @@ def _finish_branch(
 class ReserveAnswer:
     """The owner's answer to the reserve question, for the running command only (the owner,
     2026-10-01): kept in memory, never in state.json. cli's self-restart hands a yes on
-    through ``RESERVE_ENV``; a new command asks again."""
+    through ``RESERVE_ENV``; a new command asks again. A yes given ahead with
+    `runner run --use-reserve` lasts ``until`` (24 hours, owner 2026-10-04), then the question
+    is unanswered again."""
 
-    yes: bool = False
+    granted: bool = False
     no: bool = False  # no answer, or no: later lead tickets wait without asking again
+    until: datetime | None = None  # a granted yes lapses then; None: for the whole command
+
+    @property
+    def yes(self) -> bool:
+        if self.granted and self.until is not None and now() >= self.until:
+            self.granted, self.until = False, None
+        return self.granted
+
+    @yes.setter
+    def yes(self, value: bool) -> None:
+        self.granted, self.until = value, None
+
+    def grant_until(self, until: datetime) -> None:
+        self.granted, self.no, self.until = True, False, until
 
 
 RESERVE = ReserveAnswer()
-RESERVE_ENV = "COUCOU_RUNNER_RESERVE_YES"  # set only by cli's restart after a yes
+RESERVE_ENV = "COUCOU_RUNNER_RESERVE_YES"  # set only by cli's restart: "1", or the yes's end
+USE_RESERVE_HOURS = 24  # `runner run --use-reserve` (owner, 2026-10-04)
 # The 5-hour question's answer, its own (ADR 16 item 3): a yes to one doesn't answer the other.
 FIVE_HOUR = ReserveAnswer()
 FIVE_HOUR_ENV = "COUCOU_RUNNER_FIVE_HOUR_YES"
