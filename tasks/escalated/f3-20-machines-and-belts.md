@@ -39,3 +39,12 @@ Read the markup and CSS. These are not pages to open.
 - a browser test: a belt with today's trips but not carrying has the yellow rollers and no animation; a carrying belt has them animated
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 2789717
+logs: var/runs/20261003-233946/f3-20-machines-and-belts
+```
