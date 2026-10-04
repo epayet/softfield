@@ -31,3 +31,10 @@ Read `docs/adr/19-feature-board.md` item 2, D5 in `docs/milestones/f5-board.md`,
 - a ticket with `priority: 3` is parsed; a missing one defaults as above
 - a bug without `area:` fails pre-flight
 - `uv run runner check-all --task f5-05-bug-tickets` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
