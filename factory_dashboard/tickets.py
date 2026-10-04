@@ -83,7 +83,6 @@ def list_later_tickets(
     project: str,
     *,
     milestone: str | None = None,
-    state: str | None = None,
 ) -> list[dict[str, str | None]]:
     """Tickets set aside for ``project``, optionally filtered by ``milestone`` and ``state``.
 
@@ -96,11 +95,7 @@ def list_later_tickets(
         conditions.append("m.key = ?")
         params.append(milestone)
 
-    if state:
-        conditions.append("t.state = ?")
-        params.append(state)
-    else:
-        conditions.append("t.state = 'later'")
+    conditions.append("t.state = 'later'")
 
     where = " AND ".join(conditions)
 
@@ -368,7 +363,7 @@ def tickets_page(
     state: Annotated[str | None, Query()] = None,
 ) -> HTMLResponse:
     tickets = list_tickets(conn, project, milestone=milestone, state=state, now=now)
-    later_tickets = list_later_tickets(conn, project, milestone=milestone, state=state)
+    later_tickets = list_later_tickets(conn, project, milestone=milestone)
     return render(
         request,
         conn,

@@ -97,16 +97,36 @@ def test_list_puts_unworked_tickets_last_newest_row_first(tickets_client):
     ]
 
 
-def test_filter_by_state_shows_only_matching(tickets_client):
+def test_filter_by_state_shows_only_matching(db_path, tickets_client):
+    from runner.metrics import open_db
+
+    conn = open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-99-later",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=3,
+            title="A set-aside ticket.",
+        )
+    finally:
+        conn.close()
+
     resp = tickets_client.get("/tickets?state=escalated")
     html = resp.text
-    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S)
     tbody_rows = [r for r in rows if "<td" in r and "<th" not in r]
-    # 1 main ticket; the later panel respects the state filter and is absent
-    assert len(tbody_rows) == 1
-    row = tbody_rows[0]
-    assert "f1-12-escalated" in row
-    assert "escalated" in row
+    # 1 main ticket + 1 later panel row
+    assert len(tbody_rows) == 2
+    # The later panel row comes first in the page; the main table row contains the escalated ticket
+    main_rows = [r for r in tbody_rows if "f1-12-escalated" in r]
+    assert len(main_rows) == 1
+    assert "escalated" in main_rows[0]
 
 
 def test_ticket_detail_shows_goal_and_done_when(tickets_client):
@@ -314,4 +334,30 @@ def test_later_tickets_respects_milestone_filter(db_path, later_client):
 def test_later_tickets_respects_state_filter(later_client):
     html = later_client.get("/tickets?state=done").text
     later_section = section_raw(html, "later")
-    assert "f1-99-later" not in later_section
+    assert "f1-99-later" in later_section
+
+
+def test_non_later_state_filter_does_not_leak_to_later_section(db_path, tickets_client):
+    from runner.metrics import open_db
+
+    conn = open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-99-later",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=3,
+            title="A set-aside ticket.",
+        )
+    finally:
+        conn.close()
+
+    resp = tickets_client.get("/tickets?state=escalated")
+    html = resp.text
+    later_section = section_raw(html, "later")
+    assert "f1-12-escalated" not in later_section
