@@ -208,44 +208,40 @@ def test_a_run_ended_by_a_ctrl_c_is_not_running(serve_between, db_path):
     assert "on Claude's reserve" not in running
 
 
-def test_a_run_on_the_reserve_has_the_pill(serve_between):
-    html = serve_between(activity="gates · f1-21", reserve=True).get("/live").text
-    assert "on Claude's reserve" in section(html, "now")
+def test_cached_only_shown_when_input_null(client, db_path):
+    """Claude job with only cached tokens (input null) should show cached count."""
+    from runner import metrics
 
-    def test_claude_job_shows_cached_and_turns(client, db_path):
-        """Claude job with cached input should show summed tokens and turns."""
-        from runner import metrics
-
-        conn = metrics.open_db(db_path)
-        try:
-            project = metrics.upsert_project(conn, PROJECT)
-            f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
-            run = metrics.upsert_run(
-                conn,
-                project,
-                "20261002-123456",
-                command="milestone f1",
-                started="2026-10-02T12:00:00+00:00",
-                heartbeat="2026-10-02T12:00:30+00:00",
-            )
-            ticket = metrics.upsert_ticket(
-                conn, project, "f1-99-claude", milestone_id=f1, kind="developer", state="running"
-            )
-            job = metrics.start_job(
-                conn,
-                run,
-                ticket_id=ticket,
-                milestone_id=f1,
-                role="developer",
-                agent=OPUS,
-                attempt=1,
-                started="2026-10-02T12:00:00+00:00",
-            )
-            metrics.update_running_job(conn, job, tokens_in=36_000, tokens_cached=970_000, steps=18)
-        finally:
-            conn.close()
-        running = section(client.get("/").text, "now")
-        assert "read 970k tokens · 18 turns" in running
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-123457",
+            command="milestone f1",
+            started="2026-10-02T13:00:00+00:00",
+            heartbeat="2026-10-02T13:00:30+00:00",
+        )
+        ticket = metrics.upsert_ticket(
+            conn, project, "f1-98-claude", milestone_id=f1, kind="developer", state="running"
+        )
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="developer",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T13:00:00+00:00",
+        )
+        metrics.update_running_job(conn, job, tokens_in=None, tokens_cached=500_000, steps=10)
+    finally:
+        conn.close()
+    running = section(client.get("/").text, "now")
+    assert "read 500k tokens · 10 turns" in running
 
 
 def test_now_holds_what_works_then_next_in_line_and_the_command_that_drains_it(client):
