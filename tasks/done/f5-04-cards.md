@@ -27,3 +27,10 @@ Read `docs/adr/19-feature-board.md` items 1 and 3, D4 in `docs/milestones/f5-boa
 - `card()` reads "**State:** building · **Priority:** 2 · **Area:** factory", derives `done` from "Status: done", defaults the priority to 100, and the area to factory for `f…` keys and product for `m…` keys
 - an idea doc with no tickets gets a milestones row with its state and priority
 - `uv run runner check-all --task f5-04-cards` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
