@@ -27,3 +27,10 @@ Read `runner/bench.py` (`_clone`, its module docstring on f2-12) and `tests/runn
 - a bench copy has its own root commit, and the gates still compute the attempt's diff in it
 - a real OpenCode session started in a copy records the copy as its directory (checked once by hand, written in the job's notes)
 - `uv run runner check-all --task f4-19-bench-own-project` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
