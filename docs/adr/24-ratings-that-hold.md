@@ -31,6 +31,6 @@
 - Findings still lower an author's rating, but one bad ticket costs one ticket's worth.
 - The router stays as it is. Only its inputs become sane.
 
-## Open questions
-1. Should the floor for an agent with fewer than 3 games be 1, or its estimate minus 2 (a cautious guess)?
-2. Should checkpoint findings later *rejected* by the review give the author anything back? Today they cost nothing, so no.
+## Settled with the owner (2026-10-04)
+- An agent with fewer than 3 games starts at the floor (1), not its estimate.
+- A checkpoint finding the review rejects gives the author nothing back: it never cost them anything.
