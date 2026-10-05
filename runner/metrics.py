@@ -205,8 +205,24 @@ _V7 = """
 ALTER TABLE tickets ADD COLUMN area TEXT;
 """
 
+# f8 D1 (ADR 22 item 1): every support job is queued before it runs. ``kind`` is checkpoint,
+# review, direction, escalation or planner; ``subject`` a ticket id or milestone key.
+_V8 = """
+CREATE TABLE work_queue (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    kind TEXT NOT NULL,
+    subject TEXT,
+    reason TEXT,
+    created TEXT NOT NULL,
+    not_before TEXT,
+    started_job INTEGER REFERENCES jobs(id),
+    done TEXT
+);
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -760,5 +776,40 @@ def finish_request(conn: sqlite3.Connection, request_id: int, done: str, result:
     cursor = conn.execute(
         "UPDATE owner_requests SET done = ?, result = ? WHERE id = ? AND done IS NULL",
         (done, result, request_id),
+    )
+    return cursor.rowcount == 1
+
+
+def queue_job(
+    conn: sqlite3.Connection,
+    project_id: int,
+    kind: str,
+    subject: str | None,
+    reason: str,
+    created: str,
+    not_before: str | None = None,
+) -> int:
+    """Queue a support job (f8 D1); it waits until ``not_before`` when one is given. Each
+    call is a new row: the trigger, not this function, decides whether one is due."""
+    row = conn.execute(
+        "INSERT INTO work_queue (project_id, kind, subject, reason, created, not_before)"
+        " VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+        (project_id, kind, subject, reason, created, not_before),
+    ).fetchone()
+    return int(row[0])
+
+
+def open_jobs(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.Row]:
+    """The project's queued jobs not yet done, oldest first (the order queued on a tie)."""
+    return conn.execute(
+        "SELECT * FROM work_queue WHERE project_id = ? AND done IS NULL ORDER BY created, id",
+        (project_id,),
+    ).fetchall()
+
+
+def finish_queued(conn: sqlite3.Connection, queue_id: int, done: str) -> bool:
+    """Mark a queued job done; False if it was done already (once only)."""
+    cursor = conn.execute(
+        "UPDATE work_queue SET done = ? WHERE id = ? AND done IS NULL", (done, queue_id)
     )
     return cursor.rowcount == 1

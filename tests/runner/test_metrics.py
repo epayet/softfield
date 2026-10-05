@@ -19,6 +19,7 @@ TABLES = {
     "usage_events",
     "owner_items",
     "owner_requests",
+    "work_queue",
 }
 T0 = "2026-09-30T15:23:11+02:00"
 T1 = "2026-09-30T15:40:00+02:00"
@@ -66,7 +67,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 8 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -192,7 +193,7 @@ def test_a_version_6_database_keeps_its_tickets_and_gains_an_empty_area(tmp_path
     old.close()
 
     conn = metrics.open_db(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 7
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
     row = conn.execute("SELECT ticket, area FROM tickets").fetchone()
     assert tuple(row) == ("f4-01-a", None)
     project = conn.execute("SELECT id FROM projects").fetchone()[0]
@@ -201,6 +202,75 @@ def test_a_version_6_database_keeps_its_tickets_and_gains_an_empty_area(tmp_path
     area = conn.execute("SELECT area FROM tickets WHERE ticket = 'bug-01-x'").fetchone()[0]
     assert area == "product"
     conn.close()
+
+
+@pytest.mark.parametrize("version", [5, 7])
+def test_an_older_database_keeps_its_requests_and_gains_an_empty_work_queue(tmp_path, version):
+    """f8 D1: the queue arrives empty beside what the database already holds."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    steps = "\n".join(metrics.MIGRATIONS[:version])
+    old.executescript(f"BEGIN;\n{steps}\nPRAGMA user_version = {version};\nCOMMIT;")
+    old.execute("INSERT INTO projects (name) VALUES ('coucou')")
+    old.execute(
+        "INSERT INTO owner_requests (project_id, kind, subject, created)"
+        " VALUES (1, 'signoff', 'f7', ?)",
+        (T0,),
+    )
+    old.close()
+
+    conn = metrics.open_db(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
+    assert _count(conn, "owner_requests") == 1 and _count(conn, "work_queue") == 0
+    columns = [row[1] for row in conn.execute("PRAGMA table_info(work_queue)")]
+    assert columns == [
+        "id",
+        "project_id",
+        "kind",
+        "subject",
+        "reason",
+        "created",
+        "not_before",
+        "started_job",
+        "done",
+    ]
+    conn.close()
+
+
+def test_a_queued_job_is_open_oldest_first_until_finished_once(db, ids):
+    """f8 D1: triggers queue rows; the project's open ones come back in the order queued."""
+    project = ids["project"]
+    other = metrics.upsert_project(db, "elsewhere")
+    later = "2026-09-30T18:00:00+02:00"
+    review = metrics.queue_job(db, project, "review", "f1", "4 merges since the last", T1)
+    checkpoint = metrics.queue_job(
+        db, project, "checkpoint", "f1-02-a", "2 developer merges", T0, not_before=later
+    )
+    metrics.queue_job(db, other, "review", "x1", "elsewhere's review", T0)
+    assert review != checkpoint
+
+    rows = metrics.open_jobs(db, project)
+    assert [
+        (r["id"], r["kind"], r["subject"], r["reason"], r["created"], r["not_before"]) for r in rows
+    ] == [
+        (checkpoint, "checkpoint", "f1-02-a", "2 developer merges", T0, later),
+        (review, "review", "f1", "4 merges since the last", T1, None),
+    ]
+    assert all(r["done"] is None and r["started_job"] is None for r in rows)
+
+    assert metrics.finish_queued(db, checkpoint, T1)
+    assert [r["id"] for r in metrics.open_jobs(db, project)] == [review]
+    # Finished once: a second finish changes nothing and says so.
+    assert not metrics.finish_queued(db, checkpoint, later)
+    done = db.execute("SELECT done FROM work_queue WHERE id = ?", (checkpoint,)).fetchone()[0]
+    assert done == T1
+
+
+def test_jobs_queued_at_the_same_time_stay_in_the_order_queued(db, ids):
+    project = ids["project"]
+    first = metrics.queue_job(db, project, "escalation", "f1-03-b", "blocked twice", T0)
+    second = metrics.queue_job(db, project, "direction", "f1-04-c", "gates failed", T0)
+    assert [r["id"] for r in metrics.open_jobs(db, project)] == [first, second]
 
 
 def test_a_milestone_keeps_its_card(db, ids):
