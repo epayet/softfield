@@ -23,3 +23,10 @@ Read `docs/adr/22-one-visible-queue.md` (items 2 and 6), D2 in `docs/milestones/
 - a test per rule above, and one with every kind queued that returns them in D2's order
 - a queued row with `not_before` in the future is skipped, and the dry run says until when
 - `uv run runner check-all --task f8-02-dispatch` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
