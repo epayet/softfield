@@ -22,3 +22,12 @@ Read the light-mode tokens and the `.floor` rules in `factory_dashboard/static/d
 - the same test in dark mode still passes with today's colours
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2896
+gate_failures: []
+tokens: 3831491
+```
