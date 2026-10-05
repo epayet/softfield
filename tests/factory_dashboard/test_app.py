@@ -205,6 +205,50 @@ def test_the_top_bar_has_the_mockups_title_hazard_stripe_and_tab_segment(client)
     assert re.search(r"\.hazard \{[^}]*repeating-linear-gradient\(-45deg, var\(--hazard\)", css)
 
 
+@pytest.mark.parametrize("scheme", ["dark", "light"])
+def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme):
+    """f3-30: under 640 px the bar is two short lines, tabs scroll sideways, current tab visible."""
+    page.emulate_media(color_scheme=scheme)
+    page.set_viewport_size(PHONE)
+    open_overview(page, client)
+    page.evaluate("() => document.fonts.ready")
+    header = page.locator("header.bar")
+    height = header.evaluate("el => el.getBoundingClientRect().height")
+    assert height <= 110, f"header {height}px > 110px"
+    tabs = page.locator("nav.tabs")
+    assert tabs.evaluate("el => el.scrollWidth > el.clientWidth"), "tabs not scrollable"
+    assert page.evaluate(
+        "() => document.documentElement.clientWidth === document.documentElement.scrollWidth"
+    ), "page scrolls sideways"
+    active = page.locator("nav.tabs a[aria-current='page']")
+    if active.count() > 0:
+        active.evaluate("el => el.scrollIntoView({inline: 'center', block: 'nearest'})")
+        page.wait_for_timeout(100)
+        container_bcr = tabs.evaluate("el => el.getBoundingClientRect()")
+        tab_bcr = active.evaluate("el => el.getBoundingClientRect()")
+        assert tab_bcr["left"] >= container_bcr["left"] - 1
+        assert tab_bcr["right"] <= container_bcr["right"] + 1
+    page.screenshot(path=tmp_path / f"phone-top-bar-{scheme}.png", full_page=False)
+    page.evaluate("() => document.querySelector('.replay')?.setAttribute('data-layout', 'overlay')")
+    assert layout_problems(page) == []
+
+
+def test_desktop_bar_unchanged_at_1440(client):
+    """f3-30: at 1440 px the bar is as today (host visible, tabs fit without scrolling)."""
+    html = client.get("/").text
+    assert re.search(r'<span class="brand">.*?<small>', html, re.S), (
+        "host address hidden on desktop"
+    )
+    assert re.search(r'<nav class="tabs"[^>]*>.*?href="/\?', html, re.S)
+    assert re.search(r'href="/milestones\?', html)
+    assert re.search(r'href="/tickets\?', html)
+    assert re.search(r'href="/jobs\?', html)
+    assert re.search(r'href="/runs\?', html)
+    assert re.search(r'href="/timeline\?', html)
+    assert re.search(r'href="/agents\?', html)
+    assert re.search(r'href="/bench\?', html)
+
+
 @pytest.mark.parametrize(
     ("scheme", "floor"), [("dark", "rgb(18, 22, 27)"), ("light", "rgb(236, 238, 233)")]
 )

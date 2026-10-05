@@ -14,6 +14,11 @@
   let lastScroll = 0;
   addEventListener("scroll", () => { lastScroll = Date.now(); }, { capture: true, passive: true });
   window.liveIdle = () => Date.now() - lastScroll > 10000 && !String(getSelection());
+  // Scroll the active tab into view on phone (f3-30)
+  document.addEventListener("DOMContentLoaded", () => {
+    const tab = document.querySelector("nav.tabs a[aria-current='page']");
+    if (tab) tab.scrollIntoView({ inline: "center", block: "nearest" });
+  });
 </script>
 </head>
 <body>

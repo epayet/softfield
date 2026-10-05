@@ -213,6 +213,18 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor-wrap { overflow-x: auto; }
 .line-narrow { display: none; }
 @media (max-width: 639px) { .floor-wrap { display: none; } .line-narrow { display: block; } }
+
+/* Phone top bar (f3-30): title + filter one line, host hidden, tabs scroll sideways */
+@media (max-width: 639px) {
+  header.bar { padding-top: 2px; padding-bottom: 2px; row-gap: 2px; }
+  .bar-top { flex-direction: column; gap: 2px; padding: 4px; }
+  .brand small { display: none; }
+  .hazard { margin-top: -2px; height: 4px; }
+  nav.tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; border-top: 0; width: 100%; }
+  nav.tabs a { min-width: 0; white-space: nowrap; }
+  nav.tabs::-webkit-scrollbar { display: none; }
+}
 .floor { display: block; width: 100%; min-width: 1100px; height: auto; background: var(--bg);
   font-family: var(--mono); font-size: 11px; }
 .floor.floor-phone { min-width: 0; } /* the portrait floor shares .floor's colours */
