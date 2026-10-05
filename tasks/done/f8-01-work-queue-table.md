@@ -20,3 +20,10 @@ Read `docs/adr/22-one-visible-queue.md` item 1, D1 in `docs/milestones/f8-one-qu
 - a fresh database and one at `_V5` both migrate to the table
 - `open_jobs` returns the project's rows that aren't done, oldest first, with their `not_before`
 - `uv run runner check-all --task f8-01-work-queue-table` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
