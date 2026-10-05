@@ -240,6 +240,9 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor .machine .unit { stroke-width: 2.5; }
 .floor .machine.stand-in .unit, .floor .machine.off .unit { stroke-dasharray: 6 4; }
 .floor .machine.off, .floor .machine.waiting { --c: var(--muted); }
+.floor .machine.idle { --c: var(--muted); opacity: 0.55; }
+.floor-phone .machine.off, .floor-phone .machine.waiting { --c: var(--muted); }
+.floor-phone .machine.idle { --c: var(--muted); opacity: 0.55; }
 .floor .plate { fill: var(--c); }
 .floor .plate.local { fill: var(--ink); }  /* the f1 mock-up's plates: solid LOCAL, outlined CLOUD */
 .floor .plate.cloud { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }

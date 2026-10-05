@@ -237,6 +237,34 @@ def test_claude_waits_for_its_limit_until_the_reset(line_db):
     assert (later[OPUS]["state"], later[OPUS]["reset"]) == ("idle", None)
 
 
+def test_machines_say_how_many_trips_they_merged_today(line_db):
+    """Each idle machine gains merged_today: the number of today's trips (since local midnight,
+    up to at) that end at merged and whose job ran on that machine's agent."""
+    doc = document(line_db)
+    m = machines(doc)
+    # LOCAL (Qwen) merged f9-02-overnight at 00:20 today
+    assert m[LOCAL]["merged_today"] == 1
+    # OPUS merged f9-03-lead at 09:40 today
+    assert m[OPUS]["merged_today"] == 1
+    # GPT_OSS has no merges today
+    assert m[GPT_OSS]["merged_today"] == 0
+
+
+def test_idle_lead_says_which_lead_ticket_it_takes_next(line_db):
+    """The idle lead shows next: <ticket> for the first crate of the queue that is a lead ticket."""
+    doc = document(line_db)
+    # f5-04-after is a lead ticket in the queue
+    queue_tickets = [c["ticket"] for c in doc["queue"]]
+    assert "f5-04-after" in queue_tickets
+    # Find the first lead ticket in the queue
+    lead_ticket = None
+    for c in doc["queue"]:
+        if c["kind"] == "lead":
+            lead_ticket = c["ticket"]
+            break
+    assert lead_ticket == "f5-04-after"
+
+
 def test_the_field_rows_ripe_and_stash_match_the_milestones(line_db):
     doc = document(line_db)
     field = doc["field"]
@@ -932,6 +960,76 @@ def test_working_machine_has_smoke_idle_does_not(page, line_client):
             assert has_smoke, f"{mid} is working but has no smoke"
         else:
             assert not has_smoke, f"{mid} is {m['state']} but has smoke"
+
+
+def test_idle_machine_has_idle_class_and_working_does_not(page, line_client):
+    """An idle machine's group has the class idle; a working one does not."""
+    open_line(page, line_client)
+    doc = open_line(page, line_client)
+    machines = {m["id"]: m for m in doc["machines"]}
+    for mid, m in machines.items():
+        cls = page.locator(f'svg#floor [data-machine="{mid}"]').get_attribute("class")
+        assert cls is not None
+        classes = cls.split()
+        if m["state"] == "idle":
+            assert "idle" in classes, f"{mid} is idle but has no idle class"
+        else:
+            assert "idle" not in classes, f"{mid} is {m['state']} but has idle class"
+
+
+def test_idle_machine_with_merges_says_merged_today(page, line_client):
+    """An idle machine with merges today shows "N merged today" under idle."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    # Find an idle machine and give it merges today
+    idle_machine = None
+    for m in doc["machines"]:
+        if m["state"] == "idle":
+            idle_machine = m
+            break
+    assert idle_machine is not None
+    idle_machine["merged_today"] = 3
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    text_content = page.locator(
+        f'svg#floor [data-machine="{idle_machine["id"]}"] text'
+    ).all_text_contents()
+    assert any("merged today" in t for t in text_content)
+
+
+def test_idle_lead_says_next_ticket(page, line_client):
+    """The idle lead shows next: <ticket> for the first lead ticket in the queue."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    # Find the lead machine and give it a next_ticket
+    lead_machine = None
+    for m in doc["machines"]:
+        if m["station"] == "lead":
+            lead_machine = m
+            break
+    assert lead_machine is not None
+    lead_machine["state"] = "idle"
+    lead_machine["next_ticket"] = "fX-01-next"
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    text_content = page.locator(
+        f'svg#floor [data-machine="{lead_machine["id"]}"] text'
+    ).all_text_contents()
+    assert any("next: fX-01" in t for t in text_content)
 
 
 # --- machines and belts (f3-20) ----------------------------------------------------------------

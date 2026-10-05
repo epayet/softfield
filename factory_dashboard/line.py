@@ -418,6 +418,8 @@ def _machines(
     jobs: Sequence[Job],
     working: dict[str, dict[str, Any]],
     now: datetime,
+    merged_by: dict[str, int] | None = None,
+    next_lead: str | None = None,
 ) -> list[dict[str, Any]]:
     """One machine per agent a role names in the config (or, without one, a job used), on the
     station its roles give it: the lead first, then the reviewers, then the developers."""
@@ -462,6 +464,7 @@ def _machines(
         else:
             state = "idle"
         lost = ever.get(agent, set()) - own if config is not None else set()
+        merged_today = (merged_by or {}).get(agent, 0)
         found.append(
             {
                 "id": agent,
@@ -476,6 +479,8 @@ def _machines(
                 "reset": reset.astimezone(now.tzinfo).strftime("%H:%M") if reset else None,
                 "stand_in": agent in stand_ins,
                 "off": sorted(r for r in lost if _station([r])),
+                "merged_today": merged_today,
+                "next_ticket": next_lead,
             }
         )
     return sorted(found, key=lambda m: MACHINE_STATIONS.index(m["station"]))
@@ -638,7 +643,19 @@ def live_line(
     )
 
     config = _config(conn, project)
-    machines = _machines(conn, config, jobs, working, at)
+    merged_by: dict[str, int] = {}
+    for t in today:
+        if t.to == "merged" and t.job is not None:
+            for j in jobs:
+                if j.id == t.job:
+                    merged_by[j.agent] = merged_by.get(j.agent, 0) + 1
+                    break
+    next_lead: str | None = None
+    for q in queue:
+        if q["kind"] == "lead":
+            next_lead = q["ticket"]
+            break
+    machines = _machines(conn, config, jobs, working, at, merged_by=merged_by, next_lead=next_lead)
     count = {
         "seeds": field["seeds"],
         "planting": field["planting"],

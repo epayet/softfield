@@ -213,7 +213,7 @@
   };
 
   function machine(svg, m, x, y, w, h) {
-    const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : "", m.state === "working" ? "on" : ""].join(" ").trim();
+    const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : "", m.state === "working" ? "on" : "", m.state === "idle" ? "idle" : ""].join(" ").trim();
     const g = add(svg, "g", { class: cls, "data-machine": m.id });
     add(g, "title", {}, `${m.name} · ${m.where} · ${m.state}${m.rating !== "" ? ` · rated ${m.rating}` : ""}`);
     const tall = Math.round(30 * m.scale);
@@ -257,6 +257,14 @@
     } else if (m.state === "waiting") {
       text(g, left, line, "limit reached", "name");
       text(g, left, line + 16, `resets ${m.reset}`, "dim");
+    } else if (m.state === "idle") {
+      if (m.station === "lead" && m.next_ticket) {
+        text(g, left, line, `next: ${short(m.next_ticket)}`, "dim");
+      } else if (m.merged_today && m.merged_today > 0) {
+        text(g, left, line, `${m.merged_today} merged today`, "dim");
+      } else {
+        text(g, left, line, m.stand_in ? "standing by" : "idle", "dim");
+      }
     } else {
       text(g, left, line, m.state === "off" ? "off: no role" : m.stand_in ? "standing by" : "idle", "dim");
     }
