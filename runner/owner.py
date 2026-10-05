@@ -43,23 +43,22 @@ class OwnerError(RuntimeError):
     pass
 
 
-def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
-    return sorted(p.stem for p in (repo / "tasks" / folder).glob(f"{short_key(milestone)}-*.md"))
-
-
-def _counted_ids(repo: Path, folder: str, milestone: str) -> list[str]:
-    """The tickets in ``folder`` whose ``milestone:`` is ``milestone``, in either key form: a
-    re-homed ticket keeps its old id. One whose frontmatter won't parse counts by its id."""
-    ids = []
-    for path in sorted((repo / "tasks" / folder).glob("*.md")):
+def _milestone_of(repo: Path, task_id: str) -> str:
+    """The short key of the milestone a ticket's ``milestone:`` names: a re-homed ticket keeps
+    its old id. One with no file, or whose frontmatter won't parse, counts by its id."""
+    for path in sorted((repo / "tasks").glob(f"*/{task_id}.md")):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
-            key = short_key(milestone_key(meta["milestone"]))
+            return short_key(milestone_key(meta["milestone"]))
         except (TaskError, KeyError, yaml.YAMLError):
-            key = path.stem.split("-", 1)[0]
-        if key == short_key(milestone):
-            ids.append(path.stem)
-    return ids
+            break
+    return task_id.split("-", 1)[0]
+
+
+def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
+    """The tickets in ``folder`` that count for ``milestone`` (``_milestone_of``)."""
+    paths = sorted((repo / "tasks" / folder).glob("*.md"))
+    return [p.stem for p in paths if _milestone_of(repo, p.stem) == short_key(milestone)]
 
 
 def _needs_owner(stop: str) -> bool:
@@ -83,13 +82,13 @@ _RERUN_KINDS = {
 }
 
 
-def _reserve_waits(state: State, milestone: str) -> list[tuple[str, str]]:
+def _reserve_waits(repo: Path, state: State, milestone: str) -> list[tuple[str, str]]:
     """The milestone's tickets parked at Claude's reserve with no answer (ADR 15 item 5), with
     what the loop told the owner; a rerun asks again."""
     return sorted(
         (task_id, str(entry.get("text") or f"{task_id} waits for Claude's reserve"))
         for task_id, entry in state.parked.items()
-        if entry.get("kind") == "reserve" and task_id.startswith(f"{short_key(milestone)}-")
+        if entry.get("kind") == "reserve" and _milestone_of(repo, task_id) == short_key(milestone)
     )
 
 
@@ -119,7 +118,7 @@ def owner_items(repo: Path, milestone: str, state: State, review_stop: str) -> l
         path = repo / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         items.append(OwnerItem("blocked", task_id, f"{task_id} blocked: {reason}", rerun))
-    for task_id, text in _reserve_waits(state, milestone):
+    for task_id, text in _reserve_waits(repo, state, milestone):
         items.append(OwnerItem("reserve", task_id, text, rerun))
     if _needs_owner(review_stop):
         items.append(OwnerItem("review-stop", milestone, review_stop, rerun))
@@ -148,21 +147,27 @@ def _write(repo: Path, db: Path | None, write: Callable[[sqlite3.Connection, int
         )
 
 
-def _cleared_by_rerun(milestone: str) -> Callable[[str, str], bool]:
-    """Whether an item is one of ``milestone``'s that a rerun of it clears."""
-
-    prefix = f"{short_key(milestone)}-"
+def _cleared_by_rerun(repo: Path, milestone: str) -> Callable[[str, str], bool]:
+    """Whether an item is one of ``milestone``'s that a rerun of it clears: a ticket's, by the
+    milestone it counts for (``_milestone_of``)."""
 
     def wanted(kind: str, subject: str) -> bool:
         if kind not in _RERUN_KINDS:
             return False
-        return subject.startswith(prefix) if _RERUN_KINDS[kind] else subject == milestone
+        if _RERUN_KINDS[kind]:
+            return _milestone_of(repo, subject) == short_key(milestone)
+        return subject == milestone
 
     return wanted
 
 
 def _record_items(
-    milestone: str, said: str, items: list[OwnerItem], conn: sqlite3.Connection, project: int
+    repo: Path,
+    milestone: str,
+    said: str,
+    items: list[OwnerItem],
+    conn: sqlite3.Connection,
+    project: int,
 ) -> None:
     """The verdict's items open; this milestone's earlier ones a rerun cleared, resolved."""
     at = _now()
@@ -172,7 +177,7 @@ def _record_items(
             conn, project, item.kind, item.subject, text=item.text, command=item.command, created=at
         )
     current = {(item.kind, item.subject) for item in items}
-    cleared = _cleared_by_rerun(milestone)
+    cleared = _cleared_by_rerun(repo, milestone)
     _resolve(
         conn,
         project,
@@ -190,7 +195,9 @@ def _resolve(conn: sqlite3.Connection, project: int, wanted: Callable[[str, str]
 def rerun_started(repo: Path, milestone: str, db: Path | None = None) -> None:
     """``runner milestone <key>`` is starting: the milestone's items a rerun answers are
     resolved now, not at its verdict (f1 D8, amended); the verdict reopens what still applies."""
-    _write(repo, db, lambda conn, project: _resolve(conn, project, _cleared_by_rerun(milestone)))
+    _write(
+        repo, db, lambda conn, project: _resolve(conn, project, _cleared_by_rerun(repo, milestone))
+    )
 
 
 def verdict(
@@ -217,7 +224,7 @@ def verdict(
         path = repo / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         needs.append(f"  • {task_id} blocked: {reason}")
-    needs += [f"  • {text}" for _, text in _reserve_waits(state, milestone)]
+    needs += [f"  • {text}" for _, text in _reserve_waits(repo, state, milestone)]
     if review_stop.startswith(WAITS):  # another milestone's sign-off (ADR 17 item 4)
         needs.append(f"  • {milestone} {review_stop}")
     elif _needs_owner(review_stop):
@@ -229,7 +236,7 @@ def verdict(
         _write(
             repo,
             db,
-            lambda conn, project: _record_items(milestone, "needs you", items, conn, project),
+            lambda conn, project: _record_items(repo, milestone, "needs you", items, conn, project),
         )
         return 2, "\n".join(lines) + "\n"
     review = milestone_file(repo, "reviews", milestone)
@@ -243,7 +250,11 @@ def verdict(
     lines += ["", f"  Then: {signoff_command}"]
     text = f"Test on your devices:\n{steps}" if steps else f"Review: {review.relative_to(repo)}"
     items.append(OwnerItem("signoff", milestone, text, signoff_command))
-    _write(repo, db, lambda conn, project: _record_items(milestone, "ready", items, conn, project))
+    _write(
+        repo,
+        db,
+        lambda conn, project: _record_items(repo, milestone, "ready", items, conn, project),
+    )
     return 0, "\n".join(lines) + "\n"
 
 
@@ -300,7 +311,7 @@ def signoff(
     optional ``score`` (1-10, ADR 14 item 14) is how the result felt on the devices."""
     if score is not None and not 1 <= score <= 10:
         raise OwnerError(f"a score is 1 to 10, not {score}")
-    left = [f"{t} ({f})" for f in _UNFINISHED for t in _counted_ids(repo, f, milestone)]
+    left = [f"{t} ({f})" for f in _UNFINISHED for t in _ids(repo, f, milestone)]
     if left and not force:
         raise OwnerError(
             "work is left: " + ", ".join(left) + ". Finish it, or sign off with --force."

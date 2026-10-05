@@ -207,7 +207,7 @@ def test_a_rerun_resolves_the_milestones_rerun_items_at_once(repo: Path):
     restarted before reaching one (2026-10-01)."""
     state = _needs_you(repo)
     state.parked = _reserve().parked
-    write_task(repo / "tasks" / "escalated", "m2-01-later")
+    _in_milestone(write_task(repo / "tasks" / "escalated", "m2-01-later"), "2")
     owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
     owner.verdict(repo, "m2", State(), "clean", db=_db(repo))
     assert ("reserve", "m1-03-lead") in _open(repo)
@@ -358,7 +358,7 @@ def test_a_database_that_cant_be_opened_leaves_the_owners_commands_working(repo:
 def test_a_factory_milestone_uses_its_key_everywhere(repo: Path):
     """f1's tickets, docs, commands and tag are named f1, not m1 (the f1 plan)."""
     write_task(repo / "tasks" / "escalated", "m1-02-photos")  # another milestone's: not f1's
-    blocked = write_task(repo / "tasks" / "blocked", "f1-02-report")
+    blocked = _in_milestone(write_task(repo / "tasks" / "blocked", "f1-02-report"), "f1")
     append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
     code, text = owner.verdict(repo, "f1", State(), "clean")
     assert code == 2 and "f1-02-report blocked" in text and "m1-02-photos" not in text
@@ -414,10 +414,24 @@ def test_a_named_milestone_finds_its_short_tickets_and_its_docs(repo: Path):
     assert git(repo, "tag").split() == ["f3-factory-line-done"]
 
 
-def test_a_rerun_of_a_named_milestone_clears_its_short_tickets_items():
-    cleared = owner._cleared_by_rerun("f3-factory-line")
+def test_a_rerun_of_a_named_milestone_clears_its_short_tickets_items(repo: Path):
+    cleared = owner._cleared_by_rerun(repo, "f3-factory-line")
     assert cleared("blocked", "f3-02-report") and cleared("review-stop", "f3-factory-line")
     assert not cleared("blocked", "f30-02-other") and not cleared("review-stop", "f3")
+
+
+def test_the_verdict_lists_a_rehomed_ticket_under_the_milestone_it_names(repo: Path):
+    """f7 review: f3-25 re-homed to F9 keeps its id, so F9's verdict and rerun own it."""
+    blocked = _in_milestone(write_task(repo / "tasks" / "blocked", "f3-25-rehomed"), "f9")
+    append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
+    _in_milestone(write_task(repo / "tasks" / "ready", "f3-26-waits"), "f9")
+    state = State(parked={"f3-26-waits": {"kind": "reserve", "text": "f3-26 waits"}})
+    _, text = owner.verdict(repo, "f3-factory-line", state, "clean")
+    assert "f3-25" not in text and "f3-26" not in text
+    code, text = owner.verdict(repo, "f9", state, "clean")
+    assert code == 2 and "f3-25-rehomed blocked" in text and "f3-26 waits" in text
+    assert owner._cleared_by_rerun(repo, "f9")("blocked", "f3-25-rehomed")
+    assert not owner._cleared_by_rerun(repo, "f3")("blocked", "f3-25-rehomed")
 
 
 def test_a_named_milestone_keeps_its_short_key_docs(repo: Path):

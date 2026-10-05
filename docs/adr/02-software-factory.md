@@ -270,6 +270,13 @@ _(to fill in at the M3 review)_
 - **Anything else:** 20 of the checkpoints' 21 findings were real, the Copilot stand-in's 11 included. The stand-in filed its fix tickets under the wrong milestone and with wrong paths, which f4-33 now fixes. A plan change in another milestone (f3-05 dropped the Queue table) silently undid an F4 outcome ("what waits for what"), and no checkpoint could see it.
 - **Decisions affected:** none. The `later/` folder and `runner queue` (ADR 17 item 3) were used for real at once: f3-22's proposals wait there for the owner.
 
+### F7 (2026-10-05): factory fixes ([review](../reviews/f7-factory-fixes.md))
+
+- **Q1:** no escalation, direction or checkpoint. Six lead tickets merged first time in six short runs over ≈1.5 h, each ending with "the runner needs a fresh process".
+- **Q3:** no developer work: every ticket was runner code (protected).
+- **Anything else:** measure before you fix. f7-06's probe ran a real `opencode run` and found the cause in `PWD`, which two earlier fixes (f2-12's clone, f4-19's root commit) had guessed wrong. The same probe showed that every earlier OpenCode bench was invalid, and those benches feed ADR 24's recompute. So a ratings fix built on bench data has to check how that data was made. The review routed it to f7-07.
+- **Decisions affected:** none. ADR 24 holds. Its expected ratings (Qwen ≈3, gpt-oss-120b ≈2) wait for f7-07's recompute without the void benches.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
