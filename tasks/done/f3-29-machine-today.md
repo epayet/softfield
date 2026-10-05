@@ -29,3 +29,12 @@ Read `live_line`, `_machines`, the `Trip` and `Job` dataclasses in `factory_dash
 - the phone label test still passes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2637
+gate_failures: []
+tokens: 3524176
+```
