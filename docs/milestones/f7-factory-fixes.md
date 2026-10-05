@@ -64,3 +64,18 @@ f7-06, 2026-10-05: a real `opencode run` (`ollama/gpt-oss:20b-cloud`) in a bench
 - **The canary:** `runner bench` compares the main checkout's `git status --porcelain` before and after each replay. A change stops the bench, names the files, and voids the replay: its jobs get outcome `void`, and it's no rating game.
 - **For the owner:** every OpenCode bench before this fix probably ran in the main checkout. That includes 2026-10-04's (f4-25: gemma4, gpt-oss-120b, nemotron-3-super), and those runs feed the replay log above. Suggested fix: a ticket that sets those bench jobs to `void`, then reruns `runner ratings --replay`.
 
+## Void benches
+`uv run runner ratings --void-benches-before 2026-10-05T00:59:54+01:00 --replay`, 2026-10-05, on the real metrics database (f7-07). It voided 19 OpenCode ticket-bench jobs, then recomputed.
+
+| Agent | Jobs voided | Before | After | Coding games after |
+|---|---|---|---|---|
+| ollama-gpt-oss-120b | 9 (its three lost benches, 3 attempts each) | 1.00 | **1.43** | 13 |
+| ollama-gemma4-31b | 6 | 2.11 | **5.00** (its estimate) | 0 |
+| ollama-nemotron-3-super | 2 | 2.73 | 2.73 | 1 |
+| ollama-nemotron-3-ultra | 2 | 6.00 | 6.00 | 0 |
+
+No other agent moved, and none has a game left from a void bench.
+- **gpt-oss-120b ends at 1.43, not ≈2.** Without the benches it still lost six tickets against seven merges, five of those merges with findings.
+- **nemotron-3-super's game is f2-07,** the real ticket it blocked on twice, not a bench: its benches were interrupted, so never games. The replay log's "1 (bench)" above was wrong. It stays at 2.73.
+- **Every Ollama model now routes at the floor** (fewer than 3 games), except gpt-oss-120b at 1.43. Suggested next step, as the review says: a clean Ollama bench on 3–4 small finished tickets, the first valid bench games.
+

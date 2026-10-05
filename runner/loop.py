@@ -2259,6 +2259,29 @@ def _bench_game(
     return ratings.bench_game(agent, ticket, difficulty, passed)
 
 
+def void_benches_before(
+    conn: sqlite3.Connection, project_id: int, agents: Mapping[str, Agent], cut_off: datetime
+) -> dict[str, int]:
+    """Void the OpenCode agents' ticket replays that started before ``cut_off``: until f7-06's
+    fix they worked in the main checkout, so their gates said nothing about them (f7-07). Each
+    agent's count of jobs voided; review benches, other harnesses and later jobs stay."""
+    opencode = {a.id for a in agents.values() if a.harness == "opencode"}
+    jobs = conn.execute(
+        "SELECT j.id, j.agent, j.started FROM jobs j JOIN tickets t ON t.id = j.ticket_id"
+        " WHERE j.role = ? AND t.project_id = ? AND j.outcome != 'void'",
+        (BENCH, project_id),
+    ).fetchall()
+    voided: dict[str, int] = {}
+    for job in jobs:
+        if job["agent"] in opencode and _moment(job["started"]) < cut_off:
+            conn.execute(
+                "UPDATE jobs SET outcome = 'void', note = ? WHERE id = ?",
+                (f"void: benched in the main checkout, before {cut_off.isoformat()}", job["id"]),
+            )
+            voided[job["agent"]] = voided.get(job["agent"], 0) + 1
+    return voided
+
+
 @dataclass(frozen=True)
 class Replayed:
     """An agent's rating before and after the ADR 24 recompute."""

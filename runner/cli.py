@@ -210,6 +210,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="first recompute every agent's from its estimate under ADR 24",
     )
+    ratings_cmd.add_argument(
+        "--void-benches-before",
+        type=datetime.fromisoformat,
+        metavar="ISO_TIME",
+        help="first void the OpenCode agents' ticket benches started before then (f7-07)",
+    )
     ratings_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     report_cmd = sub.add_parser(
         "report", help="write a milestone's numbers into docs/reviews/<key>.md"
@@ -354,8 +360,16 @@ def main(argv: list[str] | None = None) -> int:
             conn = metrics.open_db(args.db or cfg.metrics_db)
             try:
                 start = loop.starting_ratings(cfg)
+                project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+                if (cut_off := args.void_benches_before) is not None:
+                    if cut_off.tzinfo is None:
+                        raise RunnerError(f"--void-benches-before {cut_off}: give its time zone")
+                    voided = loop.void_benches_before(conn, project, cfg.agents, cut_off)
+                    print(f"Voided {sum(voided.values())} bench jobs before {cut_off}:")
+                    for agent, count in sorted(voided.items()):
+                        print(f"{agent:<28} {count}")
+                    print()
                 if args.replay:
-                    project = metrics.upsert_project(conn, repo.name, repo=str(repo))
                     print("Replayed under ADR 24:")
                     for redone in loop.replay_ratings(conn, project, start, loop.now()):
                         moved = f"→ {redone.after:.2f}" if redone.written else "unchanged"

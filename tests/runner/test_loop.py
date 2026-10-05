@@ -3326,6 +3326,70 @@ def test_the_recompute_leaves_an_unplayed_agent_at_its_estimate(tmp_path):
     conn.close()
 
 
+VOID_START = {"local-m": 5.0, "claude-sonnet": 7.0}
+CUT_OFF = datetime.fromisoformat("2026-10-05T00:59:54+01:00")  # f7-06's fix (a91d5b5)
+
+
+def test_benches_before_the_cut_off_void_only_opencodes_ticket_replays(tmp_path):
+    """f7-07: OpenCode benched in the main checkout until f7-06's fix, so its replays before
+    then are void; Claude's, a review bench's (no ticket) and later ones are kept."""
+    conn = metrics.open_db(tmp_path / "metrics.sqlite")
+    project = metrics.upsert_project(conn, "coucou")
+    milestone = metrics.upsert_milestone(conn, project, "f3")
+    ticket = metrics.upsert_ticket(conn, project, "f3-01", milestone_id=milestone, difficulty=3)
+    jobs: dict[str, int] = {}
+    for name, agent, ticket_id, started, outcome in (
+        # 23:00Z is before the cut-off; 00:30Z is after it, though earlier as text
+        ("leaked", "local-m", ticket, "2026-10-04T23:00:00+00:00", "failed"),
+        ("leaked-again", "local-m", ticket, "2026-10-04T23:30:00+00:00", "failed"),
+        ("already", "local-m", ticket, "2026-10-04T22:00:00+00:00", "void"),
+        ("clean", "local-m", ticket, "2026-10-05T00:30:00+00:00", "passed"),
+        ("claude", "claude-sonnet", ticket, "2026-10-04T23:00:00+00:00", "failed"),
+        ("review", "local-m", None, "2026-10-04T23:00:00+00:00", "passed"),
+    ):
+        run = metrics.upsert_run(conn, project, f"bench-{name}", command="bench")
+        jobs[name] = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket_id,
+            milestone_id=milestone,
+            role="bench",
+            agent=agent,
+            attempt=1,
+            started=started,
+        )
+        metrics.finish_job(conn, jobs[name], ended=started, outcome=outcome)
+    agents = {a.id: a for a in AGENTS}
+
+    voided = loop.void_benches_before(conn, project, agents, CUT_OFF)
+
+    assert voided == {"local-m": 2}
+    outcomes = {
+        name: conn.execute("SELECT outcome FROM jobs WHERE id = ?", (job,)).fetchone()[0]
+        for name, job in jobs.items()
+    }
+    assert outcomes == {
+        "leaked": "void",
+        "leaked-again": "void",
+        "already": "void",
+        "clean": "passed",
+        "claude": "failed",
+        "review": "passed",
+    }
+    assert loop.void_benches_before(conn, project, agents, CUT_OFF) == {}  # nothing left
+
+    loop.replay_ratings(conn, project, VOID_START, CUT_OFF)
+    games = [
+        ratings.bench_game("claude-sonnet", "f3-01", 3, None),
+        ratings.bench_game("local-m", "f3-01", 3, 1),  # its only game: the clean pass
+    ]
+    expected = {c.agent: c.after for c in ratings.rate(VOID_START, {}, games)}
+    current, _ = loop.standing(conn, VOID_START)
+    assert current == pytest.approx(expected)
+    assert current["local-m"] > VOID_START["local-m"]  # the leaked losses no longer count
+    conn.close()
+
+
 def _routed(repo: Path) -> SessionReport:
     """A session with Sonnet as a developer after local, and Opus to check Sonnet's merges;
     local proven at 5 and Sonnet at 7."""
