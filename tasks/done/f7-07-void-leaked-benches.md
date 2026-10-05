@@ -27,3 +27,10 @@ Read "## Bench isolation probe" and "## Replay log" in `docs/milestones/f7-facto
 - a test: with OpenCode bench jobs before and after the cut-off and a Claude bench job before it, only the OpenCode ones before it are void, and a recompute then rates the agent without them
 - `uv run runner ratings --void-benches-before 2026-10-05T00:59:54+01:00 --replay` has run on the real database. A short "## Void benches" section in `docs/milestones/f7-factory-fixes.md` lists the jobs voided by agent, and each agent's rating before and after.
 - `uv run runner check-all --task f7-07-void-leaked-benches` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
