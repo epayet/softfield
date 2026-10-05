@@ -27,3 +27,12 @@ Read `factory_dashboard/templates/base.html` (the top bar) and the top bar rules
 - a browser test at 1440 px: the bar is as today (the host address shows, the tabs fit without scrolling)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2486
+gate_failures: []
+tokens: 1838653
+```
