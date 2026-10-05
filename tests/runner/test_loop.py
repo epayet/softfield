@@ -438,9 +438,51 @@ def test_dry_run_lists_a_due_review_first(repo, capsys):
     git(repo, "mv", "tasks/ready/f9-02-last.md", "tasks/done/f9-02-last.md")
     git(repo, "commit", "-q", "-m", "f9 done")
     out = _dry_run(repo, capsys)
-    assert "-> review F9: due" in out
-    assert "   f10-01-next: runnable" in out
+    assert "-> review F9: runnable, F9's tickets are all done" in out
+    assert "   f10-01-next: runnable, priority 100, developer ticket" in out
     assert "next: review F9" in out
+
+
+def test_dry_run_prints_the_pickers_list_with_reasons_and_until_when(repo, capsys):
+    """f8-02: queued jobs (f8 D1) and tickets in `dispatch.plan`'s order; a row whose
+    `not_before` is ahead is skipped, and says until when."""
+    _add_task(repo, "m1-01-thing")
+    cfg = _config(repo)
+    at = loop.now()
+    later = at + timedelta(hours=3)
+    conn = metrics.open_db(cfg.metrics_db)
+    try:
+        project = metrics.upsert_project(conn, repo.name)
+        for kind, subject, reason, not_before in (
+            ("checkpoint", "m1", "after m1-01 and m1-02 merged", None),
+            ("escalation", "m1-03", "m1-03: tests still failing", later.isoformat()),
+        ):
+            metrics.queue_job(conn, project, kind, subject, reason, at.isoformat(), not_before)
+    finally:
+        conn.close()
+    out = _dry_run(repo, capsys)
+    until = later.astimezone(at.tzinfo)
+    assert (
+        f"   escalation m1-03: waits until {until:%a} {until.day} {until:%b %H:%M},"
+        " m1-03: tests still failing"
+    ) in out
+    assert "-> checkpoint m1: runnable, after m1-01 and m1-02 merged" in out
+    assert "   m1-01-thing: runnable, priority 100, developer ticket" in out
+    assert out.index("escalation m1-03") < out.index("checkpoint m1") < out.index("m1-01-thing")
+    assert "next: checkpoint m1" in out
+
+
+def test_dry_run_lists_a_parked_escalation_first_once_its_reset_has_passed(repo, capsys):
+    """Today's order (ADR 22, Risk): `_resume_support` before any ticket."""
+    _add_task(repo, "m1-01-thing")
+    cfg = _config(repo)
+    state = load_state(cfg.runs_dir / "state.json")
+    past = (loop.now() - timedelta(minutes=5)).isoformat()
+    state.parked["escalation:m1-00-old"] = {"kind": "escalation", "resets_at": past}
+    save_state(state, cfg.runs_dir / "state.json")
+    out = _dry_run(repo, capsys)
+    assert "-> escalation m1-00-old: runnable, parked for a Claude limit" in out
+    assert "   m1-01-thing: runnable" in out
 
 
 def test_dry_run_lists_no_review_once_its_done(repo, capsys):

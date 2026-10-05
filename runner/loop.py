@@ -20,7 +20,17 @@ from typing import Any, Concatenate, NoReturn
 
 import yaml
 
-from runner import allowance, checks, console, messages, metrics, prompts, ratings, router
+from runner import (
+    allowance,
+    checks,
+    console,
+    dispatch,
+    messages,
+    metrics,
+    prompts,
+    ratings,
+    router,
+)
 from runner.agents import (
     ANY,
     CHECK_COMMANDS,
@@ -3079,8 +3089,13 @@ def _read_windows(s: Session, prefix: str, at: datetime) -> list[allowance.Windo
     """The windows of the agents named ``prefix…`` from their latest readings (f1-44):
     capacity 1, usage the share read. A window whose reset has passed since is left out: its
     reading is stale."""
+    return _windows_from(_record(s, metrics.latest_readings, prefix) or {}, at)
+
+
+def _windows_from(readings: Mapping[str, sqlite3.Row], at: datetime) -> list[allowance.Window]:
+    """`_read_windows` from ``metrics.latest_readings``' rows."""
     windows = []
-    for name, row in (_record(s, metrics.latest_readings, prefix) or {}).items():
+    for name, row in readings.items():
         if name not in allowance.NAMED or row["value"] is None or not row["resets_at"]:
             continue
         resets = datetime.fromisoformat(row["resets_at"])
@@ -3096,8 +3111,12 @@ def _read_windows(s: Session, prefix: str, at: datetime) -> list[allowance.Windo
 def claude_windows(s: Session, at: datetime) -> list[allowance.Window]:
     """Claude's windows from its latest readings, each with what it keeps back: the week's
     reserve for the lead's support roles, the 5-hour window's share for the owner (ADR 16)."""
-    kept = {"seven_day": s.cfg.claude_reserve, "five_hour": s.cfg.five_hour_reserve}
-    return [replace(w, reserve=kept.get(w.name, 0.0)) for w in _read_windows(s, "claude-", at)]
+    return _kept_back(s.cfg, _read_windows(s, "claude-", at))
+
+
+def _kept_back(cfg: Config, windows: Iterable[allowance.Window]) -> list[allowance.Window]:
+    kept = {"seven_day": cfg.claude_reserve, "five_hour": cfg.five_hour_reserve}
+    return [replace(w, reserve=kept.get(w.name, 0.0)) for w in windows]
 
 
 def rested_claude_windows(s: Session, at: datetime) -> list[allowance.Window]:
@@ -3630,19 +3649,7 @@ def work_queue(
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
     """`runner run`: the queue, until it is empty or a milestone's review is due (f4-20)."""
     if dry_run:
-        from runner.milestone import due_reviews  # runner.milestone imports this module
-
-        # Reads tasks/ and state.json only: any branch, any tree, and no run folder or row
-        # (f1-33).
-        tasks = cfg.repo / "tasks"
-        ready = load_dir(tasks / "ready", cfg.default_max_diff)
-        done = task_ids(tasks / "done")
-        paused = blocked_ids(ready, stopped_ids(tasks))
-        held = _held(cfg.repo, ready)
-        cards = _cards(cfg.repo, ready)
-        nxt = pick_next(ready, done, paused | held.keys(), cards)
-        reviews = due_reviews(cfg.repo, load_state(cfg.runs_dir / "state.json"))
-        _print_plan(ready, done, paused, nxt, cfg.repo, held, reviews, cards)
+        dry_run_plan(cfg)
         return None
     s = open_session(cfg)
     restart = work_queue(s, escalate=escalate, once=once, reviews=True)
@@ -3749,37 +3756,143 @@ def _waits_text(held: dict[str, str]) -> str:
     )
 
 
-def _print_plan(
+PARKED_REASON = "parked for a Claude limit"
+
+
+def dry_run_plan(cfg: Config) -> None:
+    """`runner run --dry-run` (f8-02): `dispatch.plan`'s list, each job with what it waits for
+    and why it is there, and each ticket's pre-flight problems (docs/task-writing.md). Reads
+    tasks/, state.json and the metrics database if there is one: any branch, any tree, and no
+    run folder or row (f1-33). Until f8-03 queues them, a due review and a parked checkpoint
+    or escalation are read from where they are kept today."""
+    from runner.milestone import due_reviews  # runner.milestone imports this module
+
+    at = now()
+    tasks = cfg.repo / "tasks"
+    ready = load_dir(tasks / "ready", cfg.default_max_diff)
+    done = task_ids(tasks / "done")
+    paused = blocked_ids(ready, stopped_ids(tasks))
+    state = load_state(cfg.runs_dir / "state.json")
+    queued, readings = _stored_queue(cfg)
+    queued += [
+        dispatch.Queued(
+            dispatch.REVIEW, key, f"{short_key(key).upper()}'s tickets are all done", at.isoformat()
+        )
+        for key in due_reviews(cfg.repo, state)
+    ]
+    queued += _parked_support(state.parked, at)
+    tickets = _dispatch_tickets(cfg.repo, ready, done, paused, state.parked, at)
+    windows = dispatch.Windows(
+        _kept_back(cfg, _windows_from(readings, at)),
+        _limited_until(state.parked, at),
+        {
+            *(("seven_day",) if RESERVE.yes else ()),
+            *(("five_hour",) if FIVE_HOUR.yes else ()),
+        },
+    )
+    _print_plan(dispatch.plan(queued, tickets, windows, at), ready, done, paused, cfg.repo)
+
+
+def _stored_queue(cfg: Config) -> tuple[list[dispatch.Queued], dict[str, sqlite3.Row]]:
+    """The project's open ``work_queue`` rows and Claude's latest readings; none without a
+    metrics database, and a read makes none."""
+    if not cfg.metrics_db.is_file():
+        return [], {}
+    conn = metrics.open_db(cfg.metrics_db)
+    try:
+        project = metrics.find_project(conn, cfg.repo.name)
+        rows = [] if project is None else metrics.open_jobs(conn, project)
+        readings = metrics.latest_readings(conn, f"{CLAUDE}-")
+    finally:
+        conn.close()
+    return [dispatch.Queued.from_row(row) for row in rows], readings
+
+
+def _parked_support(parked: Mapping[str, dict[str, Any]], at: datetime) -> list[dispatch.Queued]:
+    """Checkpoints and escalations parked in state.json, as the queue rows f8-03 makes them."""
+    return [
+        dispatch.Queued(
+            entry["kind"],
+            key.partition(":")[2] or entry["kind"],
+            PARKED_REASON,
+            entry.get("resets_at") or at.isoformat(),
+            None if entry.get(RETRY) else entry.get("resets_at"),
+        )
+        for key, entry in parked.items()
+        if entry["kind"] in SUPPORT
+    ]
+
+
+def _dispatch_tickets(
+    repo: Path,
     ready: list[Task],
     done: set[str],
     paused: set[str],
-    nxt: Task | None,
-    repo: Path,
-    held: dict[str, str],
-    reviews: Sequence[str] = (),
-    cards: Mapping[str, int] | None = None,
-) -> None:
-    """What would run next, and each ready task's priority and pre-flight problems
-    (docs/task-writing.md), in run order (f5 D6). A due review goes before any ticket (f4-20)."""
-    print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
-    names = [f"review {short_key(key).upper()}" for key in reviews]
-    for n, name in enumerate(names):
-        print(f"{'->' if n == 0 else '  '} {name}: due")
-    nxt = None if names else nxt
-    cards = cards or {}
+    parked: Mapping[str, dict[str, Any]],
+    at: datetime,
+) -> list[dispatch.Ticket]:
+    """The ready tickets in run order (f5 D6), each with what it waits for, as `_next_task`
+    sees them: a ticket parked at the reserve waits for the owner, one parked for a limit
+    until its reset."""
+    held = _held(repo, ready)
+    cards = _cards(repo, ready)
+    protected = tuple(read_protected(repo))
+    tickets = []
     for task in sorted(ready, key=lambda t: run_order(t, cards)):
         waiting = [d for d in task.depends_on if d not in done]
+        entry = parked.get(task.id)
+        waits, not_before = None, None
         if task.id in paused:
-            status = "paused"
+            waits = "paused"
         elif task.id in held:
-            status = f"waits for {held[task.id]}'s sign-off"
-        else:
-            status = "waiting on " + ", ".join(waiting) if waiting else "runnable"
-        marker = "->" if nxt and task.id == nxt.id else "  "
-        print(f"{marker} {task.id}: {status}, priority {task_priority(task, cards)}")
-        for problem in preflight(task, repo):
-            print(f"     pre-flight: {problem}")
-    print(f"next: {next(iter(names), None) or (nxt.id if nxt else 'nothing')}")
+            waits = f"waits for {held[task.id]}'s sign-off"
+        elif waiting:
+            waits = "waiting on " + ", ".join(waiting)
+        elif entry is not None and entry["kind"] == "reserve":
+            waits = "waits for you: Claude's reserve"
+        if entry is not None and entry["kind"] != "reserve":
+            not_before = at if entry.get(RETRY) else _resets(entry)
+        lead = router.lead_only(task.agent, task.files, protected)
+        tickets.append(
+            dispatch.Ticket(task.id, lead, task_priority(task, cards), waits, not_before)
+        )
+    return tickets
+
+
+def _limited_until(parked: Mapping[str, dict[str, Any]], at: datetime) -> datetime | None:
+    """`claude_hold`'s limit: the first reset ahead of a job parked for one, the owner's
+    share of the 5-hour window left out."""
+    ahead = [
+        _resets(entry)
+        for entry in parked.values()
+        if entry["kind"] != "reserve" and not entry.get(FIVE_HOUR_HELD) and not _due(entry, at)
+    ]
+    return min(ahead, default=None)
+
+
+def _job_name(job: dispatch.Pick) -> str:
+    if job.kind == dispatch.TICKET:
+        return job.subject
+    if job.kind == dispatch.REVIEW:
+        return f"review {short_key(job.subject).upper()}"
+    return f"{job.kind} {job.subject}"
+
+
+def _print_plan(
+    lines: list[dispatch.Line], ready: list[Task], done: set[str], paused: set[str], repo: Path
+) -> None:
+    """Each job in the order it would run, the next one marked, and each ticket's pre-flight
+    problems."""
+    print(f"ready: {len(ready)}  done: {len(done)}  paused: {len(paused)}")
+    tasks = {t.id: t for t in ready}
+    picked = next((line for line in lines if line.waits is None), None)
+    for line in lines:
+        marker = "->" if line is picked else "  "
+        print(f"{marker} {_job_name(line.pick)}: {line.waits or 'runnable'}, {line.pick.reason}")
+        if line.pick.kind == dispatch.TICKET:
+            for problem in preflight(tasks[line.pick.subject], repo):
+                print(f"     pre-flight: {problem}")
+    print(f"next: {_job_name(picked.pick) if picked else 'nothing'}")
 
 
 # ADR 00 and docs/testing.md: end-to-end runs in Chromium and WebKit.
