@@ -28,3 +28,12 @@ Read `_machines` and `_field` in `factory_dashboard/line.py`, `rows` and `machin
 - a browser test: a planted row with a null title reads its key alone, without "·"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2294
+gate_failures: []
+tokens: 2082608
+```
