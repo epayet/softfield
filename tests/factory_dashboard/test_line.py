@@ -949,6 +949,57 @@ def test_css_motion_query_targets_floor_phone_for_belt_and_smoke_animations():
         pytest.fail(".floor-phone not found in prefers-reduced-motion: no-preference block")
 
 
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_planted_row_bar_and_words_pass_3_to_1_contrast_in_light_and_dark(
+    page, line_client, scheme
+):
+    """The bar fill and its dim words each differ from what is behind them by at least 3:1.
+
+    Light mode: the bar fill gets a darker yellow and the rows' words a stronger ink.
+    Dark mode: today's colours stay unchanged.
+    """
+    page.emulate_media(color_scheme=scheme)
+    open_line(page, line_client)
+
+    ratio = """(bg, fg) => {
+        function lum(c) {
+            const s = c.map(v => v / 255);
+            return s.some(v => v > 0.04045)
+                ? 0.2126 * Math.pow((s[0] + 0.055) / 1.055, 2.4)
+                + 0.7152 * Math.pow((s[1] + 0.055) / 1.055, 2.4)
+                + 0.0722 * Math.pow((s[2] + 0.055) / 1.055, 2.4)
+                : 1.05 * (0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2]) - 0.05;
+        }
+        const l1 = lum(bg), l2 = lum(fg);
+        return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }"""
+
+    bg_rgb = page.locator("svg#floor .bar-bg").nth(0).evaluate("e => getComputedStyle(e).fill")
+    fg_rgb = page.locator("svg#floor .bar-fill").nth(0).evaluate("e => getComputedStyle(e).fill")
+    bar_fill = page.evaluate(
+        f"""({ratio})("""
+        f"""('{bg_rgb}'.match(/\\d+/g).map(Number)), """
+        f"""('{fg_rgb}'.match(/\\d+/g).map(Number)))"""
+    )
+    assert bar_fill >= 3.0, f"bar fill contrast is {bar_fill:.2f}:1, need 3:1"
+
+    if scheme == "dark":
+        assert fg_rgb == "rgb(242, 177, 10)", f"dark mode bar fill changed: {fg_rgb}"
+
+    dim = page.locator("svg#floor text.dim").first
+    assert dim.count() > 0, "no dim text found"
+    dim_fg = dim.evaluate("e => getComputedStyle(e).fill")
+    dim_bg = page.evaluate(
+        "() => { const v = getComputedStyle("
+        "document.documentElement).getPropertyValue('--floor').trim();"
+        " return v.startsWith('#') ? [parseInt(v.slice(1,3),16),"
+        " parseInt(v.slice(3,5),16), parseInt(v.slice(5,7),16)]"
+        " : v.match(/\\d+/g).map(Number); }"
+    )
+    dim_ratio = page.evaluate(f"""({ratio})({dim_bg}, '{dim_fg}'.match(/\\d+/g).map(Number))""")
+    assert dim_ratio >= 3.0, f"dim text contrast is {dim_ratio:.2f}:1, need 3:1"
+
+
 def test_working_machine_has_smoke_idle_does_not(page, line_client):
     open_line(page, line_client)
     doc = open_line(page, line_client)
