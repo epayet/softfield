@@ -197,7 +197,35 @@ def test_sonnet_off_the_developers_is_a_reviewer_and_copilot_a_stand_in(line_db)
     assert found[SONNET]["stand_in"] is False
     assert (found[COPILOT]["station"], found[COPILOT]["stand_in"]) == ("reviewers", True)
     assert found[GPT_OSS]["state"] == "idle"
-    assert (found[OPUS]["name"], found[OPUS]["rating"]) == ("Opus", 9)
+    assert (found[OPUS]["name"], found[OPUS]["rating"]) == ("Opus", "9")
+
+
+def test_rating_rounds_to_one_decimal_and_displays_cleanly(line_db):
+    """The document's rating is rounded to one decimal: 3.4770 → 3.5, 10 → 10."""
+    conn = metrics.open_db(line_db)
+    try:
+        metrics.add_rating_change(
+            conn,
+            LOCAL,
+            "coding",
+            3.0,
+            3.4770,
+            at="2026-09-30T11:00:00+02:00",
+        )
+        metrics.add_rating_change(
+            conn,
+            SONNET,
+            "reviewing",
+            5.0,
+            10.0,
+            at="2026-09-30T12:00:00+02:00",
+        )
+    finally:
+        conn.close()
+    doc = document(line_db)
+    m = machines(doc)
+    assert m[LOCAL]["rating"] == "3.5"
+    assert m[SONNET]["rating"] == "10"
 
 
 def test_claude_waits_for_its_limit_until_the_reset(line_db):
@@ -927,7 +955,7 @@ def test_local_and_cloud_machine_plates_differ(page, line_client):
         plate = page.locator(f'svg#floor [data-machine="{m["id"]}"] rect.plate')
         assert plate.get_attribute("class") == f"plate {kind}"
         words = page.locator(f'svg#floor [data-machine="{m["id"]}"] text.ptext').text_content()
-        rated = "not rated yet" if m["rating"] is None else f"rated {m['rating']}"
+        rated = "not rated yet" if m["rating"] == "" else m["rating"]
         assert words == f"{m['where'].upper()} · {rated}"
     looks = [
         page.locator(f'svg#floor [data-machine="{m["id"]}"] rect.plate').evaluate(
@@ -936,6 +964,29 @@ def test_local_and_cloud_machine_plates_differ(page, line_client):
         for m in (local, cloud)
     ]
     assert looks[0] != looks[1]
+
+
+def test_a_planted_row_with_null_title_says_its_key_alone(page, line_client):
+    """A row whose title is null (the live runner never writes it) shows just its key,
+    without " · "."""
+    page.clock.install()
+    doc = open_line(page, line_client)
+    doc["field"]["rows"][0]["title"] = None
+    page.evaluate(
+        "(d) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  const cur = JSON.parse(el.textContent); "
+        "  cur.field = { ...cur.field, rows: d.field.rows }; "
+        "  el.textContent = JSON.stringify(cur); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    first_row = page.locator('svg#floor [data-row="f1"]')
+    name = first_row.locator("text").first.text_content()
+    assert name is not None
+    assert name.startswith("F1")
+    assert " · " not in name
 
 
 def test_a_working_machine_blinks_three_lights_and_an_idle_one_none(page, line_client):

@@ -153,7 +153,7 @@
       const top = y + 54 + n * step, sx = x + 20, left = x + 40;
       const r = add(g, "g", { "data-row": row.key });
       add(r, "path", { class: "sprout", d: `M${sx} ${top + 14} v-22 M${sx} ${top + 2} c-8 0-11-4-11-9 8 0 11 4 11 9 M${sx} ${top - 2} c0-7 3-10 10-10 0 7-3 10-10 10` });
-      text(r, left, top - 2, cut(`${row.key.toUpperCase()} · ${row.title || ""}`, Math.floor((w - 50) / 7.2)), "name");
+       text(r, left, top - 2, cut(row.title ? `${row.key.toUpperCase()} · ${row.title}` : row.key.toUpperCase(), Math.floor((w - 50) / 7.2)), "name");
       add(r, "rect", { x: left, y: top + 6, width: bar, height: 7, class: "bar-bg" });
       add(r, "rect", { x: left, y: top + 6, width: row.total ? (bar * row.done) / row.total : 0, height: 7, class: "bar-fill" });
       const running = row.running ? ` · ${row.running} running` : "";
@@ -215,7 +215,7 @@
   function machine(svg, m, x, y, w, h) {
     const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : "", m.state === "working" ? "on" : ""].join(" ").trim();
     const g = add(svg, "g", { class: cls, "data-machine": m.id });
-    add(g, "title", {}, `${m.name} · ${m.where} · ${m.state}${m.rating !== null ? ` · rated ${m.rating}` : ""}`);
+    add(g, "title", {}, `${m.name} · ${m.where} · ${m.state}${m.rating !== "" ? ` · rated ${m.rating}` : ""}`);
     const tall = Math.round(30 * m.scale);
     if (m.station !== "reviewers") {
       add(g, "rect", { x: x + w - 34, y: y - tall, width: 18, height: tall, class: "unit" });
@@ -227,7 +227,7 @@
     add(g, "rect", { x, y, width: w, height: h, class: "unit" });
     const left = x + 10;
     let line = y + 20;
-    const rated = m.rating !== null ? ` · rated ${m.rating}` : "";
+    const rated = m.rating !== "" ? ` · ${m.rating}` : "";
     if (m.station === "lead") {
       text(g, left + 5, y + 25, "THE LEAD", "head big");
       add(g, "rect", { x: left + 5, y: y + 38, width: w - 30, height: 28, class: "plate" });
@@ -237,7 +237,7 @@
       text(g, left, line, cut(m.name.toUpperCase(), Math.floor((w - 16) / 8.5)), "head");
       // its plate: solid for the local GPU, outlined for a cloud, sized to its words
       const wh = m.where === "local GPU" ? "local" : "cloud";
-      const words = cut(`${m.where.toUpperCase()}${m.rating !== null ? rated : " · not rated yet"}`, Math.floor((w - 24) / 4.6));
+      const words = cut(`${m.where.toUpperCase()}${m.rating !== "" ? rated : " · not rated yet"}`, Math.floor((w - 24) / 4.6));
       add(g, "rect", { x: left, y: line + 7, width: Math.min(w - 20, words.length * 5 + 12), height: 14, class: `plate ${wh}` });
       text(g, left + 6, line + 17.5, words, `ptext ${wh}`);
       line += 42;

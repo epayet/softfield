@@ -365,6 +365,16 @@ def _scale(rating: float | None) -> float:
     return round(0.8 + 0.04 * rating, 2) if rating is not None else 1.0
 
 
+def _display_rating(rating: float | None) -> str:
+    """The rating as it appears on a plate: rounded to one decimal, no trailing zero."""
+    if rating is None:
+        return ""
+    r = round(rating, 1)
+    if r == int(r):
+        return str(int(r))
+    return f"{r:g}"
+
+
 def _name(agent: str) -> str:
     if agent.startswith(queries.LEAD_PREFIX):
         return agent.removeprefix(queries.LEAD_PREFIX).capitalize()
@@ -459,7 +469,7 @@ def _machines(
                 "name": _name(agent),
                 "where": _where(agent, local),
                 "local": local,
-                "rating": rating,
+                "rating": _display_rating(rating),
                 "scale": _scale(rating),
                 "state": state,
                 "crate": working[agent]["crate"] if agent in working else None,
