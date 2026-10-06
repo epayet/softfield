@@ -32,6 +32,7 @@ class Finding:
     line: int | None = None
     detail: str = ""
     ticket: str = ""  # the ticket whose work it is about
+    kind: str = "code"  # a checkpoint's: "test" when the code is right and its test weak (f8-09)
 
     @property
     def actionable(self) -> bool:
@@ -76,6 +77,7 @@ def _finding(raw: dict[str, Any], finding_id: str) -> Finding:
         line=_line(raw.get("line"), finding_id),
         detail=str(raw.get("detail") or ""),
         ticket=str(raw.get("ticket") or ""),
+        kind="test" if raw.get("kind") == "test" else "code",
     )
     if finding.severity not in SEVERITIES or finding.route not in ROUTES:
         raise ReviewFileError(f"bad severity/route in finding {finding.id}")

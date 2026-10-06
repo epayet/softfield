@@ -7,6 +7,7 @@ from runner.tasks import (
     DEFAULT_PRIORITY,
     STOPPED,
     TESTS_ONLY,
+    TESTS_ONLY_CODE,
     Task,
     TaskError,
     append_footer,
@@ -155,6 +156,34 @@ def test_preflight_sends_a_tests_only_ticket_to_the_lead(repo):
     task = parse_task(path, 150)
     assert task.files == ("tests/unit/test_thing.py",)
     assert preflight(task, repo) == [TESTS_ONLY]
+
+
+def _tests_only(repo: Path, files: str) -> Task:
+    path = write_task(repo / "tasks" / "ready", "m1-01-thing")
+    text = path.read_text().replace("- coucou/thing.py\n", files)
+    path.write_text(text.replace("milestone: 1\n", "milestone: 1\ntests_only: true\n"))
+    return parse_task(path, 150)
+
+
+def test_a_test_only_ticket_passes_preflight_for_a_developer(repo):
+    """f8-09: a stand-in's weak-test finding is a developer's test-only ticket, not a lead job
+    (f9-06 … f9-12 each waited for Claude over one assertion)."""
+    task = _tests_only(repo, "- tests/unit/test_thing.py\n")
+    assert task.tests_only and task.agent == "developer"
+    assert preflight(task, repo) == []
+    assert not parse_task(write_task(repo / "tasks" / "done", "m1-02-other"), 150).tests_only
+
+
+def test_a_test_only_ticket_lists_only_tests(repo):
+    task = _tests_only(repo, "- tests/unit/test_thing.py\n  - coucou/thing.py\n")
+    assert preflight(task, repo) == [TESTS_ONLY_CODE]
+
+
+def test_tests_only_is_true_or_false(repo):
+    path = _tests_only(repo, "- tests/unit/test_thing.py\n").path
+    path.write_text(path.read_text().replace("tests_only: true", "tests_only: yes please"))
+    with pytest.raises(TaskError, match="tests_only"):
+        parse_task(path, 150)
 
 
 def test_footer(tmp_path):

@@ -2884,9 +2884,9 @@ def _read_only_review(
 def stand_in_checkpoint(s: Session, milestone: str, merged: list[str], hold: "Hold") -> bool:
     """A checkpoint Claude can't take, done read-only by the first agent `[roles]
     checkpoint-stand-in` lists that may (its month a cap, not a pace). It is acted on as
-    Claude's would be: each finding that isn't a nit becomes a fix ticket (`fix_ticket`),
-    routed "local"; its merges then wait for Claude's re-check (f8-08). False when none may,
-    or its job failed: the merges stay unchecked."""
+    Claude's would be: each finding that isn't a nit goes in a fix ticket (`fix_tickets`, one
+    per ticket at fault and kind of fix), routed "local"; its merges then wait for Claude's
+    re-check (f8-08). False when none may, or its job failed: the merges stay unchecked."""
     agents = [s.cfg.agents[agent_id] for agent_id in s.cfg.roles.get(STAND_IN, ())]
     if not agents:
         return False
@@ -2915,15 +2915,9 @@ def stand_in_checkpoint(s: Session, milestone: str, merged: list[str], hold: "Ho
         return False
     s.state.interrupted.pop(job_key(CHECKPOINT, CHECKPOINT), None)  # Claude's run is superseded
     prefix = f"{milestone}-C{job_id}-"
-    acted, written = [], []
-    for finding in findings:
-        path = None
-        if finding.actionable:
-            path = fix_ticket(s.repo, milestone, finding, prefix + finding.id, agent.id)
-        if path is not None:
-            written.append(path)
-            finding = replace(finding, route="local")
-        acted.append(finding)
+    filed = fix_tickets(s.repo, milestone, {prefix + f.id: f for f in findings}, agent.id)
+    written = list(dict.fromkeys(filed.values()))
+    acted = [replace(f, route="local") if prefix + f.id in filed else f for f in findings]
     if job_id is not None:
         record_findings(s, milestone, acted, agent.id, prefix)
     # Its merges wait for Claude's re-check (f8-08), with what it filed: checked ids only
@@ -2964,32 +2958,58 @@ def _fix_path(repo: Path, file: str) -> str:
     return file if (repo / file).exists() else ""
 
 
-def fix_ticket(repo: Path, milestone: str, finding: Finding, key: str, by: str) -> Path | None:
-    """A developer ticket in tasks/ready/ for a stand-in checkpoint's ``finding`` (``key``),
-    from the ticket at fault in tasks/done/: its milestone (unless signed off: then
-    ``milestone``, the running one), its tests, its difficulty, and the finding's file if it
-    exists (else its files). The finding is untrusted text: it goes in the body, quoted, and
-    only a checked path reaches the frontmatter. None when no done ticket is at fault."""
+def fix_tickets(
+    repo: Path, milestone: str, findings: Mapping[str, Finding], by: str
+) -> dict[str, Path]:
+    """The fix tickets for a stand-in checkpoint's ``findings`` (by key) that aren't nits: one
+    per ticket at fault and kind of fix, with all of its findings (f8-09: Copilot's two
+    checkpoints filed seven, five about one weak assertion each). Each filed key's ticket."""
+    groups: dict[tuple[str, str], dict[str, Finding]] = {}
+    for key, finding in findings.items():
+        if finding.actionable:
+            groups.setdefault((finding.ticket, finding.kind), {})[key] = finding
+    filed: dict[str, Path] = {}
+    for group in groups.values():
+        if (path := fix_ticket(repo, milestone, group, by)) is not None:
+            filed |= dict.fromkeys(group, path)
+    return filed
+
+
+def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: str) -> Path | None:
+    """A developer ticket in tasks/ready/ for a stand-in checkpoint's ``findings`` (by key), on
+    one ticket at fault and of one kind, from that ticket in tasks/done/: its milestone (unless
+    signed off: then ``milestone``, the running one), its tests, its difficulty, and the
+    findings' files that exist (else its files). A `test` kind is `tests_only`: tests in
+    `files:`, which pass on main. The findings are untrusted text: they go in the body,
+    quoted, and only checked paths reach the frontmatter. None when no done ticket is at
+    fault."""
     from runner.milestone import signed_off  # runner.milestone imports this module
 
-    if not _TICKET_ID_RE.fullmatch(finding.ticket):
+    first = next(iter(findings.values()))
+    tests_only = first.kind == "test"
+    if not _TICKET_ID_RE.fullmatch(first.ticket):
         return None
-    source_path = repo / "tasks" / "done" / f"{finding.ticket}.md"
+    source_path = repo / "tasks" / "done" / f"{first.ticket}.md"
     try:
         source = parse_task(source_path, 1)
     except (OSError, ValueError, yaml.YAMLError):
         return None
     if not signed_off(repo, source.milestone):
         milestone = source.milestone
-    file = _fix_path(repo, finding.file)
-    missing = finding.file if not file and _FIX_PATH_RE.fullmatch(finding.file) else ""
+    places = {key: _fix_path(repo, f.file) for key, f in findings.items()}
+    named = [p for p in places.values() if p and (p.startswith("tests/") or not tests_only)]
+    files = list(dict.fromkeys(named))
+    tests = list(source.tests)
+    if tests_only:
+        files = files or [t for t in source.tests if t.startswith("tests/")] or tests
+        tests = list(dict.fromkeys([*(f for f in files if is_test_file(f)), *tests]))
     prefix = ticket_prefix(milestone)  # a bug's fix is a bug (never signed off)
     numbers = [
         int(found[1])
         for path in (repo / "tasks").glob("*/*.md")
         if (found := re.match(rf"{re.escape(prefix)}-(\d+)-", path.stem))
     ]
-    words = re.findall(r"[a-z0-9]+", finding.summary.lower())[:4]
+    words = re.findall(r"[a-z0-9]+", first.summary.lower())[:4]
     task_id = f"{prefix}-{max(numbers, default=0) + 1:02d}-fix" + "".join(f"-{w}" for w in words)
     meta: dict[str, Any] = {"id": task_id, "milestone": milestone}
     if milestone == source.milestone:  # its card and place in the queue (ADR 19)
@@ -2999,25 +3019,51 @@ def fix_ticket(repo: Path, milestone: str, finding: Finding, key: str, by: str) 
         meta["difficulty"] = source.difficulty
     meta |= {
         "depends_on": [],
-        "files": [file] if file else list(source.files),
-        "tests": list(source.tests),
-        "finding": key,
+        "files": files or list(source.files),
+        "tests": tests,
+        "finding": ", ".join(findings),
     }
-    summary = " ".join(finding.summary.split())
-    where = (
-        f"`{file}`" + (f", line {finding.line}" if finding.line else "") if file else "its files"
-    )
-    if missing:  # not in backticks: pre-flight would take it for a path the ticket needs
-        where += f' (the finding named "{missing}", which isn\'t in the repo)'
-    quoted = "\n".join(f"> {line}" for line in (finding.detail or summary).splitlines())
+    if tests_only:
+        meta["tests_only"] = True
+    summaries = {key: " ".join(f.summary.split()) for key, f in findings.items()}
+    places_text, quotes = [], []
+    for key, finding in findings.items():
+        file = places[key]
+        where = f"`{file}`" + (f", line {finding.line}" if finding.line else "") if file else ""
+        where = where or ("its tests" if tests_only else "its files")
+        if not file and _FIX_PATH_RE.fullmatch(finding.file):  # unquoted: pre-flight would
+            where += f' (the finding named "{finding.file}", which isn\'t in the repo)'  # want it
+        places_text.append(f"- {key}, {finding.severity}: in {where}.")
+        detail = finding.detail or summaries[key]
+        quotes.append(
+            f"{key}: {summaries[key]}\n" + "\n".join(f"> {x}" for x in detail.splitlines())
+        )
+    count = "a checkpoint finding" if len(findings) == 1 else f"{len(findings)} checkpoint findings"
+    on = f"{first.ticket}'s tests" if tests_only else first.ticket
+    if tests_only:
+        kind = (
+            " It found the code right and its tests weak: change only tests. They pass on"
+            " main's code, as they should."
+        )
+        done = (
+            "- each finding above no longer holds: the tests it names check content, and would"
+            " fail if the code were wrong\n- the listed `tests:` pass, with no change outside"
+            " `tests/`\n- all gates pass\n"
+        )
+    else:
+        kind = ""
+        done = (
+            "- what each finding describes no longer holds, and a test shows it\n"
+            "- the listed `tests:` pass, and fail without the change\n- all gates pass\n"
+        )
     body = (
-        f"### Goal\nFix a checkpoint finding on {finding.ticket}: {summary}\n\n"
-        f"### Context\nA {finding.severity} finding ({key}) by {by}, standing in for the lead at"
-        f" a checkpoint, on the merge of `tasks/done/{finding.ticket}.md`: in {where}. What it"
-        " found is under Finding.\n\n"
-        f"### Finding\n{quoted}\n\n"
-        "### Done when\n- what the finding describes no longer holds, and a test shows it\n"
-        "- the listed `tests:` pass, and fail without the change\n- all gates pass\n"
+        f"### Goal\nFix {count} on {on}: {'; '.join(summaries.values())}\n\n"
+        f"### Context\nBy {by}, standing in for the lead at a checkpoint, on the merge of"
+        f" `tasks/done/{first.ticket}.md`.{kind} What it found is under Finding:\n"
+        + "\n".join(places_text)
+        + "\n\n### Finding\n"
+        + "\n\n".join(quotes)
+        + f"\n\n### Done when\n{done}"
     )
     frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)
     path = repo / "tasks" / "ready" / f"{task_id}.md"

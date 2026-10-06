@@ -24,6 +24,7 @@ difficulty_corrected: 7             # optional: set by the lead at review when `
 priority: 3                         # optional: a whole number from 0, lower first (ADR 19 item 3);
                                     # a bug's is 50 if missing, a milestone ticket's is its card's
 area: factory                       # factory or product (ADR 19 item 2b); required on a bug
+tests_only: true                    # optional: a weak test's fix; see "Test-only tickets"
 ---
 ```
 
@@ -52,6 +53,12 @@ A bug lives outside the milestones ([ADR 19](adr/19-feature-board.md) item 2; [`
 - **`priority:`** optional, 50 if missing (a milestone's card is 100 if it gives none).
 - **Done when it merges:** `runner run` takes bugs like any ready ticket, and checkpoints count their merges. There is no plan, review or sign-off: `runner milestone bugs`, `runner review --milestone bugs` and `runner signoff bugs` refuse.
 - A stand-in checkpoint's fix of a bug is a bug too, with its area and priority.
+
+### Test-only tickets
+`tests_only: true` marks a fix where the code is right and a test is weak (f8-09). Its `files:` are only tests, and it changes nothing outside `tests/`.
+- **Pre-flight lets it through** to a developer; without the field, a ticket whose `files:` are only tests goes to the lead, and with it, a code file in `files:` fails pre-flight.
+- **`tests-fail-on-main` is skipped:** its tests pass on main's code, as they should. The gate fails it instead if it changed a file outside `tests/`.
+- What checks the tests is review: a stand-in checkpoint files these tickets (one per merged ticket and kind of fix, `code` or `test`), and Claude's re-check of the stand-in's work (f8-08) reads them.
 
 ## Body
 

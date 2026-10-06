@@ -127,6 +127,15 @@ def test_a_checkpoints_findings_are_numbered_in_order(tmp_path):
     assert (second.id, second.route, second.ticket) == ("2", "local", "m1-09")
 
 
+def test_a_checkpoint_finding_says_its_kind_of_fix(tmp_path):
+    """f8-09: `test` when the code is right and its test weak; anything else is `code`."""
+    path = tmp_path / "checkpoint-3.json"
+    raw = {"severity": "should-fix", "summary": "s"}
+    kinds = [{**raw, "kind": "test"}, {**raw, "kind": "code"}, raw, {**raw, "kind": "tests"}]
+    path.write_text(json.dumps({"findings": kinds}))
+    assert [f.kind for f in parse_checkpoint(path)] == ["test", "code", "code", "code"]
+
+
 @pytest.mark.parametrize("text", ["not json", '{"findings": [{"severity": "meh"}]}', "[]"])
 def test_a_malformed_checkpoint_file_is_an_error(tmp_path, text):
     path = tmp_path / "checkpoint-1.json"

@@ -161,6 +161,7 @@ class Task:
     difficulty_corrected: int | None = None  # set by the lead at review when it was off
     priority: int | None = None  # lower first (ADR 19 item 3); a bug's defaults to 50
     area: str | None = None  # factory or product (ADR 19 item 2b); required on a bug
+    tests_only: bool = False  # a weak test's fix: its tests pass on main (f8-09)
 
     @property
     def goal(self) -> str:
@@ -283,6 +284,9 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
     agent = _AGENT_SYNONYMS.get(agent, agent) if isinstance(agent, str) else agent
     if agent not in AGENTS:
         raise TaskError(f"'agent' must be one of {', '.join(AGENTS)}")
+    tests_only = meta.get("tests_only", False)
+    if not isinstance(tests_only, bool):
+        raise TaskError(f"'tests_only' must be true or false, not {tests_only!r}")
     return Task(
         id=task_id,
         milestone=milestone,
@@ -299,6 +303,7 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
         difficulty_corrected=difficulty(meta, "difficulty_corrected"),
         priority=_priority(meta, milestone),
         area=ticket_area(meta),
+        tests_only=tests_only,
     )
 
 
@@ -387,8 +392,9 @@ def pick_next(
 
 TESTS_ONLY = (
     "`files:` lists only tests, so no test can fail on main's code (the tests-fail-on-main"
-    " gate): the lead does it"
+    " gate): the lead does it, unless it says `tests_only: true`"
 )
+TESTS_ONLY_CODE = "a `tests_only` ticket lists only tests in `files:`"
 AREA_MISSING = "a bug ticket needs `area:` (factory or product), ADR 19 item 2b"
 
 
@@ -396,11 +402,15 @@ def preflight(task: Task, repo: Path) -> list[str]:
     """Problems with the task's files and Context/Pattern references. Empty means OK.
 
     The ``tests:`` files may not exist yet: developers write their own (ADR 07 item 4).
-    A ticket that changes only tests escalates before any attempt (f4-23, f4-28, f4-36).
+    A ticket that changes only tests escalates before any attempt (f4-23, f4-28, f4-36),
+    unless it says so: a weak test's fix, whose tests pass on main (f8-09).
     """
     text = task.sections["Context"] + "\n" + task.sections.get("Pattern to follow", "")
     problems = []
-    if task.files and all(f.startswith("tests/") for f in task.files):
+    only_tests = all(f.startswith("tests/") for f in task.files)
+    if task.tests_only and not only_tests:
+        problems.append(TESTS_ONLY_CODE)
+    elif task.files and only_tests and not task.tests_only:
         problems.append(TESTS_ONLY)
     if task.milestone == BUGS and task.area is None:
         problems.append(AREA_MISSING)

@@ -360,9 +360,17 @@ def gate_tests_fail_on_main(ctx: GateContext) -> GateResult:
 
     Puts back main's version of every changed file outside tests/, runs the changed test
     files, then resets the branch. Tests that pass without the task's code don't test it.
+    A `tests_only` ticket strengthens tests of code that is right, so they pass on main: it
+    may change nothing else, and Claude's re-check of a stand-in's work judges them (f8-09).
     """
     name = "tests-fail-on-main"
     changed = ctx.git.changed_files(ctx.base)
+    if ctx.task.tests_only:
+        others = outside_allowed((f for f in changed if not f.startswith("tests/")), ())
+        if others:
+            undo = "a tests-only ticket changes only tests: undo your changes to "
+            return GateResult(name, False, undo + ", ".join(others))
+        return GateResult(name, True, "a tests-only ticket: its tests pass on main's code")
     tests = sorted(f for f in changed if is_test_file(f))
     if not tests:
         return GateResult(name, True, "no test files changed")

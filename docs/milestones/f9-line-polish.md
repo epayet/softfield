@@ -27,7 +27,7 @@
 | f3-29 | machine-today | D | 4 | – | (re-homed) idle machines say what they did today, and look idle |
 | f3-30 | phone-top-bar | D | 3 | – | (re-homed) the phone's top bar in two short lines |
 | f3-31 | replay-bar-when-replaying | D | 2 | – | (re-homed) the phone's replay bar sticks only while replaying |
-| 08–09 | (stand-in fixes) | D | – | – | Copilot's code findings on f3-30 and f3-29; its test-only findings 06, 07, 10–12 wait in `tasks/later/` for f8-09 |
+| 08–09 | (stand-in fixes) | D | – | – | Copilot's code findings on f3-30 and f3-29; its test-only findings wait in `tasks/later/`: f8-09 made 06, 07, 10 and 11 `tests_only` developer tickets (11 holds 12's finding too, so 12 goes) |
 | 13 | home-without-clog-and-verdict | D | 2 | – | the Overview drops the clog and Last verdict panels (owner, 2026-10-06) |
 | 14 | away-span-in-place | D | 4 | – | choosing a stretch redraws While you were away without a reload |
 | 15 | away-who-did-it | D | 3 | – | each ticket while away: who did it, and in how many attempts |

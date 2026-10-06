@@ -228,12 +228,19 @@ tickets. Read each ticket's file, then the files it changed and their tests.
 {merges}
 
 Look for bugs, tests that check presence instead of content, and anything masked instead of
-fixed. Change nothing. Each finding that isn't a nit becomes a fix ticket for a developer:
-say plainly what is wrong and why, in the file at fault. Answer with only this JSON, one
-entry per problem (an empty list if none):
-{{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
-  "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
-  "route": "backlog", "ticket": "<the merged ticket at fault>"}}]}}
+fixed. Change nothing. Skip nits: a local developer fixes each finding, from what you write.
+Give each its kind of fix:
+- "code": the code is wrong. Name the code file at fault, and quote in "detail" the line
+  of the merged ticket (its Goal or Done when) that the code breaks.
+- "test": the code is right, but a test is weak. Name the test file, and say what the test
+  must check that it doesn't.
+Write one entry per merged ticket and kind, every problem of that kind in its "detail".
+"file" is a path from the repo's root, as in this example. Answer with only this JSON (an
+empty list if none):
+{{"findings": [{{"severity": "blocking" | "should-fix", "kind": "code" | "test",
+  "file": "factory_dashboard/queries.py", "line": 12 | null, "summary": "one line",
+  "detail": "what is wrong and why", "route": "backlog",
+  "ticket": "<the merged ticket at fault>"}}]}}
 """
 
 REVIEW = """\

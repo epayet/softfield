@@ -104,7 +104,7 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 
 ## Lessons from F4
 
-- **A test-only fix can't go to a developer.** The `tests-fail-on-main` gate puts back main's code and needs the changed test to fail there; when `files:` holds only tests and main already behaves (a finding like "the test doesn't assert X"), no correct test can fail, so the ticket burns three attempts and an escalation (f4-23, f4-24, f4-28). Fix such a finding yourself, or name the code file the test is meant to catch.
+- **A test-only fix can't go to a developer.** The `tests-fail-on-main` gate puts back main's code and needs the changed test to fail there; when `files:` holds only tests and main already behaves (a finding like "the test doesn't assert X"), no correct test can fail, so the ticket burns three attempts and an escalation (f4-23, f4-24, f4-28). Since f8-09, mark such a ticket `tests_only: true` ([`docs/task-format.md`](task-format.md)): the gate is skipped and a developer can do it; spell out in Done when what each assertion must reject.
 
 ## Open questions
 

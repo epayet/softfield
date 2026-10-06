@@ -4169,7 +4169,7 @@ def test_a_fix_ticket_from_a_read_only_finding_stays_a_developer_ticket_in_the_r
         detail=raw["detail"],
         ticket="m1-01-thing",
     )
-    path = loop.fix_ticket(repo, "m1", finding, "m1-C7-1", "copilot-auto")
+    path = loop.fix_ticket(repo, "m1", {"m1-C7-1": finding}, "copilot-auto")
     assert path is not None and path.parent == repo / "tasks" / "ready"
     task = parse_task(path, 150)
     assert (task.agent, task.finding, task.milestone, task.depends_on) == (
@@ -4308,7 +4308,7 @@ def test_a_finding_on_no_known_ticket_gets_no_fix_ticket(repo):
     from runner.review import Finding
 
     finding = Finding("1", "blocking", "backlog", "Odd", file="coucou/x.py", ticket="m1-09-gone")
-    assert loop.fix_ticket(repo, "m1", finding, "m1-C7-1", "copilot-auto") is None
+    assert loop.fix_ticket(repo, "m1", {"m1-C7-1": finding}, "copilot-auto") is None
 
 
 def _finding_on(ticket: str, file: str = "") -> Finding:
@@ -4325,7 +4325,7 @@ def test_a_fix_ticket_belongs_to_the_milestone_at_fault(repo, status, expected):
     write_task(repo / "tasks" / "ready", "f4-12-mine")
     (repo / "docs" / "milestones").mkdir(parents=True)
     (repo / "docs" / "milestones" / "f3.md").write_text(f"# F3\n\n> **Status: {status}**\n")
-    path = loop.fix_ticket(repo, "f4", _finding_on("f3-03-thing"), "f4-C7-1", "copilot-auto")
+    path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("f3-03-thing")}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
     number = "08" if expected == "f3" else "13"
@@ -4342,7 +4342,7 @@ def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
         )
     )
     write_task(repo / "tasks" / "ready", "f4-12-mine")
-    path = loop.fix_ticket(repo, "f4", _finding_on("bug-03-thing"), "f4-C7-1", "copilot-auto")
+    path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("bug-03-thing")}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
     assert (task.id, task.milestone, task.area, task.priority) == (
@@ -4362,7 +4362,7 @@ def test_a_fix_ticket_drops_the_repo_name_from_the_findings_path(repo):
     (repo / "factory_dashboard" / "x.py").write_text("")
     _source_ticket(repo)
     finding = _finding_on("m1-01-thing", f"{repo.name}/factory_dashboard/x.py")
-    path = loop.fix_ticket(repo, "m1", finding, "m1-C7-1", "copilot-auto")
+    path = loop.fix_ticket(repo, "m1", {"m1-C7-1": finding}, "copilot-auto")
     assert path is not None
     assert parse_task(path, 150).files == ("factory_dashboard/x.py",)
 
@@ -4370,7 +4370,7 @@ def test_a_fix_ticket_drops_the_repo_name_from_the_findings_path(repo):
 def test_a_fix_ticket_on_a_missing_path_takes_the_tickets_files_and_names_the_path(repo):
     _source_ticket(repo)
     finding = _finding_on("m1-01-thing", "factory_dashboard/gone.py")
-    path = loop.fix_ticket(repo, "m1", finding, "m1-C7-1", "copilot-auto")
+    path = loop.fix_ticket(repo, "m1", {"m1-C7-1": finding}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
     assert task.files == ("coucou/thing.py",)
@@ -4378,3 +4378,76 @@ def test_a_fix_ticket_on_a_missing_path_takes_the_tickets_files_and_names_the_pa
     from runner.tasks import preflight
 
     assert preflight(task, repo) == []
+
+
+def _kind_finding(n: int, kind: str, file: str, summary: str) -> Finding:
+    detail = f"Detail {n}: {summary.lower()}."
+    return Finding(
+        str(n),
+        "should-fix",
+        "backlog",
+        summary,
+        file=file,
+        detail=detail,
+        ticket="m1-01-thing",
+        kind=kind,
+    )
+
+
+def test_three_weak_tests_and_one_bug_on_one_ticket_give_two_tickets(repo):
+    """f8-09: Copilot's two checkpoints filed seven tickets, five about one weak assertion
+    each. One ticket per merged ticket and kind of fix, every finding quoted in it."""
+    from runner.tasks import preflight
+
+    _source_ticket(repo)
+    test = "tests/unit/test_thing.py"
+    findings = {
+        "m1-C7-1": _kind_finding(1, "test", test, "Checks presence"),
+        "m1-C7-2": _kind_finding(2, "code", "coucou/thing.py", "Raises"),
+        "m1-C7-3": _kind_finding(3, "test", test, "Never checks the count"),
+        "m1-C7-4": _kind_finding(4, "test", "", "Mocks the page"),
+        "m1-C7-5": replace(_kind_finding(5, "test", test, "A nit"), severity="nit"),
+    }
+    paths = loop.fix_tickets(repo, "m1", findings, "copilot-auto")
+    assert set(paths) == {"m1-C7-1", "m1-C7-2", "m1-C7-3", "m1-C7-4"}  # never the nit
+    tests_path, code_path = paths["m1-C7-1"], paths["m1-C7-2"]
+    assert paths["m1-C7-3"] == paths["m1-C7-4"] == tests_path != code_path
+    assert sorted(p.name for p in (repo / "tasks" / "ready").glob("*.md")) == sorted(
+        [tests_path.name, code_path.name]
+    )
+    tests = parse_task(tests_path, 150)
+    assert (tests.tests_only, tests.agent, tests.files) == (True, "developer", (test,))
+    assert tests.tests == (test,)
+    assert tests.finding == "m1-C7-1, m1-C7-3, m1-C7-4"
+    for n in (1, 3, 4):
+        assert f"> Detail {n}:" in tests.sections["Finding"]
+    assert "Detail 2" not in tests.sections["Finding"] and "A nit" not in tests_path.read_text()
+    assert "fail without the change" not in tests.sections["Done when"]
+    assert preflight(tests, repo) == []
+    code = parse_task(code_path, 150)
+    assert (code.tests_only, code.files, code.finding) == (False, ("coucou/thing.py",), "m1-C7-2")
+    assert "> Detail 2:" in code.sections["Finding"]
+    assert "fail without the change" in code.sections["Done when"]
+    assert preflight(code, repo) == []
+
+
+def test_a_test_finding_on_a_code_file_takes_the_tickets_tests(repo):
+    """A test-only ticket's `files:` are tests, whatever path the finding named."""
+    _source_ticket(repo)
+    finding = _kind_finding(1, "test", "coucou/thing.py", "Weak")
+    path = loop.fix_ticket(repo, "m1", {"m1-C7-1": finding}, "copilot-auto")
+    assert path is not None
+    task = parse_task(path, 150)
+    assert (task.tests_only, task.files) == (True, ("tests/unit/test_thing.py",))
+
+
+def test_the_stand_in_prompt_asks_for_the_kind_of_fix_with_a_real_example_path():
+    """f4-25 … 29 copied the example `coucou/x.py` as a prefix: it is a real path now."""
+    from runner import prompts
+
+    prompt = prompts.CHECKPOINT_STAND_IN
+    assert '"kind": "code" | "test"' in prompt
+    assert "coucou/x.py" not in prompt
+    [example] = re.findall(r'"file": "([^"]+)"', prompt)
+    assert (Path(__file__).parents[2] / example).is_file()
+    assert "one entry per merged ticket and kind" in prompt

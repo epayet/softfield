@@ -1,3 +1,4 @@
+from dataclasses import replace
 from pathlib import Path
 
 from runner import gates
@@ -211,6 +212,38 @@ def test_tests_that_pass_without_the_change_fail_the_gate(repo: Path, monkeypatc
     assert not result.ok
     assert "pass without your code change" in result.output
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+
+
+def _tests_only(ctx: GateContext) -> GateContext:
+    return replace(ctx, task=replace(ctx.task, tests_only=True))
+
+
+def test_a_test_only_ticket_merges_with_tests_that_pass_on_main(repo: Path, monkeypatch):
+    """f8-09: a test-only ticket strengthens tests of code that is right, so they pass on main;
+    f8-08's re-check by Claude is what checks them."""
+    test = "def test_thing():\n    assert thing() == 42\n"
+    ctx = _tests_only(_branch_with(repo, {"tests/unit/test_thing.py": test}))
+    _fake_pytest(monkeypatch, 0, {})
+    result = gate_tests_fail_on_main(ctx)
+    assert result.ok, result.output
+    assert "tests-only" in result.output
+
+
+def test_a_test_only_ticket_may_not_change_code(repo: Path, monkeypatch):
+    """Its tests aren't checked against main, so a code change would merge unchecked."""
+    ctx = _tests_only(
+        _branch_with(
+            repo,
+            {
+                "coucou/thing.py": "def thing() -> int:\n    return 42\n",
+                "tests/unit/test_thing.py": "def test_thing():\n    assert True\n",
+            },
+        )
+    )
+    _fake_pytest(monkeypatch, 1, {})
+    result = gate_tests_fail_on_main(ctx)
+    assert not result.ok
+    assert "coucou/thing.py" in result.output
 
 
 def test_no_changed_tests_means_the_lead_wrote_them(repo: Path, monkeypatch):
