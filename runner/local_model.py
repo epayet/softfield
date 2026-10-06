@@ -17,6 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from runner import sandbox
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.claude import usage_limit_reset
 
@@ -222,11 +223,14 @@ def run_opencode(
     log_path: Path,
     on_progress: Callable[[TokenTotals], None] | None = None,
     clock: Callable[[], float] = time.monotonic,
+    writable: tuple[Path, ...] = (),
 ) -> OpencodeRun:
     """One attempt. Its stream goes into ``log_path`` line by line; every ``LIVE_EVERY``
     seconds ``on_progress`` gets the tokens so far (f1 D3), and an attempt found ``stuck``
     is stopped (f2-05). Its reasoning isn't in the stream: OpenCode's database has it."""
     cmd = ["opencode", "run", "--format", "json", "-m", model, "--title", title, prompt]
+    if writable:  # a bench copy: writes anywhere else fail (2026-10-06)
+        cmd = sandbox.wrap(cmd, writable)
     started = time.monotonic()
     begun = clock()
     stopped = ""
@@ -315,7 +319,14 @@ class OpencodeAdapter:
     ) -> JobResult:
         title = spec.title or spec.role
         run = run_opencode(
-            repo, agent.model, title, spec.prompt, spec.timeout, log_path, on_progress=on_progress
+            repo,
+            agent.model,
+            title,
+            spec.prompt,
+            spec.timeout,
+            log_path,
+            on_progress=on_progress,
+            writable=spec.writable,
         )
         refusal, transient = classify(run, is_local(agent), now)
         tokens, facts = run.tokens, run.facts

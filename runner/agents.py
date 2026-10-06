@@ -48,6 +48,9 @@ class JobSpec:
     commands: tuple[str, ...] = ()  # command prefixes it may run
     resume: str | None = None  # a session to carry on, where the harness keeps them
     title: str = ""  # the session's name, where the harness shows one
+    # Sandboxed: it may write only under these folders (runner/sandbox.py; the bench's copy).
+    # OpenCode only for now; empty: no sandbox.
+    writable: tuple[Path, ...] = ()
 
     @property
     def read_only(self) -> bool:

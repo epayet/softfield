@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from factory_dashboard import queries
-from runner import bench, gates, loop, metrics
+from runner import bench, gates, loop, metrics, sandbox
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.config import Config
 from runner.gitops import Git, with_trailers
@@ -642,3 +642,76 @@ def test_unknown_tickets_and_agents_fail_before_anything_runs(repo, copies, fake
     with pytest.raises(loop.RunnerError, match="m1-99-none"):
         bench.run_bench(_config(repo, copies), ["m1-99-none"], ["fake-a"])
     assert not (repo / "var" / "factory-metrics.sqlite").exists()
+
+
+# Writes into the main checkout by its absolute path, as the 2026-10-04 bench's agents did,
+# and says what happened. Then implements the ticket in its copy.
+FAKE_OPENCODE_LEAK = """\
+#!/usr/bin/env python3
+import os
+from pathlib import Path
+
+try:
+    Path({main!r}, "coucou", "leaked.py").write_text("X = 1\\n")
+    print("leak: written")
+except OSError as exc:  # PermissionError in the sandbox
+    print("leak: denied" if isinstance(exc, PermissionError) else "leak: no such folder")
+Path(os.environ["PWD"], "coucou", "thing.py").write_text("X = 2\\n")
+"""
+
+
+def _sandboxed_bench(repo, copies, tmp_path_factory, monkeypatch, script: str):
+    bin_dir = tmp_path_factory.mktemp("bin")
+    fake = bin_dir / "opencode"
+    fake.write_text(script)
+    fake.chmod(0o755)
+    monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
+    # The test's main checkout is under /tmp, which the sandbox lets tools write
+    monkeypatch.setattr(sandbox, "TOOL_DIRS", (Path("/dev"),))
+    monkeypatch.setattr(loop, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
+    file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
+    monkeypatch.setattr(gates, "GATES", file_gates)
+    return replace(_config(repo, copies), opencode_timeout=60)
+
+
+@pytest.mark.skipif(not sandbox.available(), reason="no Landlock on this kernel")
+def test_an_opencode_agent_cannot_write_the_main_checkout(
+    repo, copies, tmp_path_factory, monkeypatch
+):
+    _history(repo)
+    cfg = _sandboxed_bench(
+        repo, copies, tmp_path_factory, monkeypatch, FAKE_OPENCODE_LEAK.format(main=str(repo))
+    )
+    before = _snapshot(repo)
+    report = bench.run_bench(cfg, [TICKET], ["ollama-x"])
+    assert _snapshot(repo) == before
+    assert not (repo / "coucou" / "leaked.py").exists()
+    [log] = (repo / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
+    assert "leak: denied" in log.read_text()
+    assert report.stopped is None
+    [result] = report.results
+    assert (result.outcome, result.attempts) == ("passed", 1)
+
+
+@pytest.mark.skipif(not sandbox.available(), reason="no Landlock on this kernel")
+def test_others_working_in_the_main_checkout_dont_void_a_sandboxed_replay(
+    repo, copies, tmp_path_factory, monkeypatch
+):
+    """2026-10-06: the lead committed in the main checkout during the bench, and the canary
+    voided gpt-oss-120b's replay; the runner beside it would have too."""
+    _history(repo)
+    cfg = _sandboxed_bench(
+        repo, copies, tmp_path_factory, monkeypatch, FAKE_OPENCODE_LEAK.format(main="/nowhere")
+    )
+    make_copy = bench.make_copy
+
+    def owner_works_meanwhile(*args, **kwargs):
+        base = make_copy(*args, **kwargs)
+        (repo / "notes.txt").write_text("the owner's own work\n")
+        return base
+
+    monkeypatch.setattr(bench, "make_copy", owner_works_meanwhile)
+    report = bench.run_bench(cfg, [TICKET], ["ollama-x"])
+    assert report.stopped is None
+    [result] = report.results
+    assert (result.outcome, result.attempts) == ("passed", 1)

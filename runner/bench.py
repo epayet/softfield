@@ -21,10 +21,16 @@ started in the main checkout, passed its own on (f7-06's probe, a real `opencode
 copy: with ``PWD`` the main checkout, a relative write landed there; with ``PWD`` the copy,
 in the copy). `procs.run_streaming` now sets ``PWD`` to the cwd it starts a job in.
 
-The canary: `git status --porcelain` of the main checkout before and after each replay. Any
-change stops the bench with the files named, and the replay is void: its jobs' outcome, no
-rating game. A runner working in the main checkout beside the bench would trip it too, and
-a change to a file already dirty before the replay goes unseen.
+The sandbox (2026-10-06): an OpenCode agent runs under Landlock (`runner/sandbox.py`), so a
+write outside its copy and its tools' caches fails. Nothing to check afterwards, so the bench
+runs beside the runner and the owner's own work: the canary below voided a replay whenever
+anyone else changed the main checkout, five benches in a row.
+
+The canary, for an agent the sandbox doesn't cover (another harness): `git status
+--porcelain` of the main checkout before and after each replay. Any change stops the bench
+with the files named, and the replay is void: its jobs' outcome, no rating game. A runner
+working in the main checkout beside the bench trips it too, and a change to a file already
+dirty before the replay goes unseen.
 
 `runner bench --review` replays past checkpoints instead (ADR 16 item 10): each checkpoint ×
 agent reviews the checkpoint's merges, read-only, in a copy at the last of them. Its findings
@@ -43,7 +49,7 @@ from functools import partial
 from pathlib import Path
 
 from factory_dashboard.queries import connect, review_note
-from runner import console, metrics, prompts
+from runner import console, metrics, prompts, sandbox
 from runner.agents import (
     CHECK_COMMANDS,
     GIT_READ_COMMANDS,
@@ -287,6 +293,7 @@ def _attempt(
         edit=("**",),
         commands=CHECK_COMMANDS if opencode else (*CHECK_COMMANDS, *GIT_READ_COMMANDS),
         title=f"bench {task.id} attempt {attempt}",
+        writable=(work,) if sandboxed(agent) else (),
     )
     run = with_progress(
         partial(adapter_for(agent.harness).run, agent, spec, work, log, now()),
@@ -295,19 +302,25 @@ def _attempt(
     return run, job_id
 
 
+def sandboxed(agent: Agent) -> bool:
+    """Whether the agent runs in the sandbox, which only OpenCode's adapter applies."""
+    return agent.harness == "opencode"
+
+
 def bench_one(s: Session, agent: Agent, ticket: str, parent: str, text: str) -> BenchResult:
-    """One agent on one ticket, in its own copy, removed afterwards; void if the main
-    checkout changed meanwhile."""
+    """One agent on one ticket, in its own copy, removed afterwards. Unless it's sandboxed,
+    void if the main checkout changed meanwhile."""
     work = s.cfg.bench_copies / f"{s.run_dir.name}-{ticket}-{agent.id}"
     logs = s.run_dir / f"{ticket}-{agent.id}"
     logs.mkdir(parents=True, exist_ok=True)
-    before = main_status(s.cfg)
+    canary = not sandboxed(agent)
+    before = main_status(s.cfg) if canary else set()
     try:
         base = make_copy(s.cfg, work, parent, ticket, text)
         result = _attempts(s, agent, work, base, logs, ticket)
     finally:
         remove_copy(work)
-    if files := leaked(s.cfg, before):
+    if canary and (files := leaked(s.cfg, before)):
         note = f"void: changed the main checkout ({', '.join(files)})"
         if s.project_id is not None and s.run_id is not None:
             _record(s, void_replay, s.project_id, s.run_id, ticket, agent.id, note)
@@ -375,6 +388,8 @@ def run_bench(cfg: Config, tickets: list[str], agent_ids: list[str]) -> BenchRep
     if unknown := [a for a in agent_ids if a not in cfg.agents]:
         raise RunnerError(f"no such agent in workflow/runner.toml: {', '.join(unknown)}")
     _check_outside_repo(cfg)
+    if any(sandboxed(cfg.agents[a]) for a in agent_ids) and not sandbox.available():
+        raise RunnerError(f"the bench's sandbox needs Landlock ABI {sandbox.MIN_ABI}+ (Linux 6.2+)")
     git = Git(cfg.repo)
     plan = [(t, merge_commit(git, t) + "^", _ticket_text(cfg, t)) for t in tickets]
     parents = [(t, git.run("rev-parse", parent).strip(), text) for t, parent, text in plan]
