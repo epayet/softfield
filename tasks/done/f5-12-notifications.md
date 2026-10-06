@@ -26,3 +26,10 @@ Read `docs/adr/18-dashboard-writes.md` item 4, `factory_dashboard/templates/base
 - the live partial carries the item ids and the all-done flag (asserted from its HTML)
 - `notify.js` notifies once per new item and once on all done (checked by hand at review, on desktop and phone)
 - `uv run runner check-all --task f5-12-notifications` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
