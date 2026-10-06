@@ -72,6 +72,7 @@
   const short = (ticket) => ticket.split("-").slice(0, 2).join("-");
   const cut = (words, n) => (words && words.length > n ? `${words.slice(0, n - 1)}…` : words || "");
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const make_link = (svg, href) => add(svg, "a", { href, tabindex: "0", role: "link" });
 
   // --- the belts: where each D11 belt runs, and where its words go -------------------------
 
@@ -121,7 +122,11 @@
 
   // The seeds' hopper, `w` wide at its top; its words go under it, or `inside` its top.
   function seeds(svg, doc, count, x, y, w, inside = false) {
-    const g = station(svg, "seeds");
+    const project = new URLSearchParams(window.location.search).get("project");
+    const query = project ? `?${new URLSearchParams({ project })}` : "";
+    const link = make_link(svg, `/tickets${query}#later`);
+    add(link, "title", {}, "Set aside tickets");
+    const g = station(link, "seeds");
     const h = 106, mid = x + w / 2;
     add(g, "path", { d: `M${x} ${y} L${x + w} ${y} L${x + w - 18} ${y + h} L${x + 18} ${y + h} Z`, class: "unit" });
     const spots = [[-15, 80], [3, 88], [19, 78], [-5, 66], [13, 60], [-23, 66], [27, 64], [5, 50]];
@@ -151,9 +156,13 @@
     const bar = w - 64;
     doc.field.rows.slice(0, 4).forEach((row, n) => {
       const top = y + 54 + n * step, sx = x + 20, left = x + 40;
-      const r = add(g, "g", { "data-row": row.key });
-      add(r, "path", { class: "sprout", d: `M${sx} ${top + 14} v-22 M${sx} ${top + 2} c-8 0-11-4-11-9 8 0 11 4 11 9 M${sx} ${top - 2} c0-7 3-10 10-10 0 7-3 10-10 10` });
-       text(r, left, top - 2, cut(row.title ? `${row.key.toUpperCase()} · ${row.title}` : row.key.toUpperCase(), Math.floor((w - 50) / 7.2)), "name");
+      const project = new URLSearchParams(window.location.search).get("project");
+      const query = project ? `?${new URLSearchParams({ project })}` : "";
+      const link = make_link(svg, `/milestones/${row.key}${query}`);
+      add(link, "title", {}, `Go to ${row.key.toUpperCase()} milestone`);
+      const r = add(link, "g", { "data-row": row.key });
+      add(r, "path", { class: "sprout", d: `M${sx} ${top + 14} v-22 M${sx} ${top + 2} c-8 0-11-4-11-9 8 0 11 4 11 9 M${sx} ${top - 2} c0-7 3-10 10-10 0 7-10-10 10 ` });
+      text(r, left, top - 2, cut(row.title ? `${row.key.toUpperCase()} · ${row.title}` : row.key.toUpperCase(), Math.floor((w - 50) / 7.2)), "name");
       add(r, "rect", { x: left, y: top + 6, width: bar, height: 7, class: "bar-bg" });
       add(r, "rect", { x: left, y: top + 6, width: row.total ? (bar * row.done) / row.total : 0, height: 7, class: "bar-fill" });
       const running = row.running ? ` · ${row.running} running` : "";

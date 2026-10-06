@@ -683,11 +683,13 @@ def open_line(
     client: TestClient,
     size: dict[str, int] | None = None,
     live: list[dict[str, Any]] | None = None,
+    query: str = "",
 ) -> dict[str, Any]:
     """``/`` as the dashboard renders it, opened in Chromium with ``/static/`` from disk and
     ``/line/replay`` and ``/line/live`` from ``client``; or ``/line/live`` answers ``live``'s
-    documents in turn, the last one again. Returns its document."""
-    html = client.get("/").text
+    documents in turn, the last one again. Returns its document.``query`` is appended to the
+    initial ``page.goto`` so that ``window.location.search`` contains it when factory.js runs."""
+    html = client.get(f"/?{query}").text
 
     def serve(route) -> None:
         url = route.request.url.removeprefix(ORIGIN)
@@ -712,7 +714,7 @@ def open_line(
     page.set_default_timeout(5000)
     page.set_viewport_size(size or {"width": 1360, "height": 900})
     page.route(f"{ORIGIN}/**", serve)
-    page.goto(ORIGIN + "/")
+    page.goto(ORIGIN + "/" + ("?" + query if query else ""))
     page.evaluate(
         """() => {
             window.refreshes = 0;
@@ -1713,6 +1715,27 @@ def test_the_card_reads_the_document_the_floor_drew_last(page, line_client):
     page.keyboard.press("Escape")
     page.click('svg#floor [data-queue-crate="f9-09-new"]')
     assert card.locator(".card-title").text_content() == "Queued later."
+
+
+def test_planted_row_links_to_milestone_and_seeds_to_set_aside_tickets(page, line_client):
+    """Tapping a planted row opens its milestone's page, and tapping the seeds opens the Set aside
+    tickets. Both keep the page's ``?project=`` query, as the crate card's link does."""
+    page.clock.install()
+    open_line(page, line_client, query="project=coucou")
+    page.wait_for_selector("svg#floor [data-row]")
+    row_group = page.locator("svg#floor [data-row]").first
+    first_row_key = row_group.get_attribute("data-row")
+    assert first_row_key is not None
+    # Click the row and check navigation to the milestone page
+    with page.expect_navigation():
+        page.click(f'svg#floor [data-row="{first_row_key}"]')
+    assert page.url.endswith(f"/milestones/{first_row_key}?project=coucou")
+    # Re-open the line page and click the seeds
+    open_line(page, line_client, query="project=coucou")
+    page.wait_for_selector("svg#floor [data-station='seeds']")
+    with page.expect_navigation():
+        page.click('svg#floor a[href*="/tickets"]')
+    assert page.url == "http://127.0.0.1:8765/tickets?project=coucou#later"
 
 
 # --- allowance rows layout (f4-34)---------------------------------------------------------------
