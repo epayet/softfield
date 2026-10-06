@@ -22,7 +22,7 @@ from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTo
 from runner.report import SessionReport, TaskRecord
 from runner.review import Finding
 from runner.state import load_state, save_state
-from runner.tasks import parse_task
+from runner.tasks import load_dir, parse_task
 from tests.runner.conftest import git, write_task
 
 
@@ -2597,10 +2597,11 @@ def test_a_ticket_that_needs_a_direction_while_claude_is_limited_waits_parked(
     monkeypatch.setattr(claude, "run_claude", run_claude)
     fake_model.extend([_stray, _stray, follow])
     report = _run(repo)
-    # The direction waited for the reset rather than letting attempt 3 go undirected.
-    assert kinds == [("lead-ticket", False), ("lead-ticket", True), ("direction", True)]
+    # The direction waited for the reset rather than letting attempt 3 go undirected; once
+    # queued, it goes before the lead ticket (ADR 22 item 2: direction › lead ticket).
+    assert kinds == [("lead-ticket", False), ("direction", True), ("lead-ticket", True)]
     results = [(t.id, t.result, t.attempts) for t in report.tasks]
-    assert results == [("m1-01-lead", "done", 1), ("m1-02-thing", "done", 3)]
+    assert results == [("m1-02-thing", "done", 3), ("m1-01-lead", "done", 1)]
     assert _state(repo).parked == {}
     assert _state(repo).directions == {"m1-02-thing": 1}
 
@@ -3940,6 +3941,187 @@ def test_an_escalation_refused_by_a_limit_parks_and_free_tickets_go_on(
     state = _state(repo)
     assert state.parked == {} and state.escalations == {"m1-01-thing": 1}
     assert git(repo, "status", "--porcelain") == ""
+
+
+# --- support jobs are queued before they run (ADR 22 item 1, f8-03) --------------------------
+
+
+def _queue(repo: Path) -> list[dict[str, object]]:
+    """The queued support jobs; a milestone whose tickets are all done queues its review too."""
+    return [row for row in _rows(repo, "work_queue") if row["kind"] != "review"]
+
+
+def _job_of(repo: Path, row: dict[str, object]) -> dict[str, object]:
+    return next(j for j in _rows(repo, "jobs") if j["id"] == row["started_job"])
+
+
+def test_a_checkpoint_is_queued_with_its_merges_and_finished_with_its_job(
+    repo, fake_model, fake_lead
+):
+    _two_merges(repo, fake_model)
+    script, _ = fake_lead
+    script.append(lambda job, repo_: None)
+    _run(repo)
+    [row] = _queue(repo)
+    assert (row["kind"], row["subject"]) == ("checkpoint", "m1")
+    assert row["reason"] == "after m1-01-thing and m1-02-thing merged"
+    assert row["done"] is not None and row["not_before"] is None
+    job = _job_of(repo, row)
+    assert (job["role"], job["outcome"]) == ("checkpoint", "passed")
+    assert _state(repo).queued == {}  # nothing kept for a job that is done
+
+
+def test_a_direction_and_an_escalation_are_queued_with_their_reasons(repo, fake_model, fake_lead):
+    _escalate_on_protected(repo, fake_model)
+    script, jobs = fake_lead
+    script.extend([lambda job, repo_: None, lambda job, repo_: None])
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert [j.kind for j in jobs] == ["direction", "escalation"]
+    direction, escalation = _queue(repo)
+    assert (direction["kind"], direction["subject"]) == ("direction", "m1-01-thing")
+    assert direction["reason"] == "m1-01-thing failed: protected-paths, then protected-paths"
+    assert (escalation["kind"], escalation["subject"]) == ("escalation", "m1-01-thing")
+    assert escalation["reason"] == "m1-01-thing: gates failed 3x (last: protected-paths)"
+    for row, role in ((direction, "direction"), (escalation, "escalation")):
+        assert row["done"] is not None
+        assert _job_of(repo, row)["role"] == role
+    # The direction's job ran before the ticket's last attempt, which the row doesn't name
+    attempts = [int(str(j["id"])) for j in _rows(repo, "jobs") if j["role"] == "developer"]
+    directed, escalated = int(str(direction["started_job"])), int(str(escalation["started_job"]))
+    assert len(attempts) == 3
+    assert attempts[1] < directed < attempts[2] < escalated
+
+
+def test_no_escalation_is_queued_when_the_command_doesnt_escalate(repo, fake_model, fake_lead):
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+    script.append(lambda job, repo_: None)
+    _run(repo)
+    assert [r["kind"] for r in _queue(repo)] == ["direction"]
+
+
+def test_a_ticket_waits_behind_its_own_queued_direction(repo, fake_model, fake_lead):
+    """ADR 22 item 1: the ticket's last attempt comes after its direction, never before."""
+    _escalate_on_protected(repo, fake_model)
+    s = loop.open_session(_config(repo))
+    loop.enqueue(s, "direction", "m1-01-thing", "m1-01-thing failed: protected-paths")
+    ready = load_dir(s.tasks_dir("ready"), 150)
+    assert loop.waiting_rows(s, ready) == {"m1-01-thing": "waits for its direction"}
+    loop.close_session(s)
+
+
+def test_a_due_review_is_queued_with_its_reason(repo, monkeypatch):
+    _two_milestones(repo)
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+    s = loop.open_session(_config(repo))
+    assert loop.work_queue(s, reviews=True) is False
+    assert loop.work_queue(s, reviews=True) is False  # still due: one row, not two
+    loop.close_session(s)
+    [row] = _rows(repo, "work_queue")
+    assert (row["kind"], row["subject"], row["reason"]) == (
+        "review",
+        "f9",
+        "F9's tickets are all done",
+    )
+    assert row["done"] is None  # the review loop finishes it
+
+
+def test_a_parked_checkpoint_survives_a_restart_as_a_row_and_runs_after_its_reset(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """f8 D3: parking sets the row's `not_before`; a new command finds it there."""
+    _two_merges(repo, fake_model)
+    resets = THURSDAY + timedelta(hours=1)
+    events: list[tuple[object, ...]] = []
+
+    def limited(job, repo_, timeout, log_path, now, resume=None):
+        events.append((job.kind, resume, loop.now() >= resets))
+        if loop.now() < resets:
+            raise UsageLimited(resets, session_id="s1")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=2, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", limited)
+    s = loop.open_session(_config(repo))
+    loop.work_queue(s, once=True)  # m1-01
+    loop.work_queue(s, once=True)  # m1-02, then its checkpoint parks
+    loop.close_session(s)
+    [row] = _queue(repo)
+    assert (row["kind"], row["not_before"], row["done"]) == ("checkpoint", resets.isoformat(), None)
+    assert _state(repo).parked == {}  # the row holds it, not state.json
+    _run(repo)  # a new command: tried at once, parked again, then run after the reset
+    assert events == [
+        ("checkpoint", None, False),
+        ("checkpoint", "s1", False),
+        ("checkpoint", "s1", True),
+    ]
+    [row] = _queue(repo)
+    assert row["done"] is not None
+    assert _job_of(repo, row)["outcome"] == "passed"
+    assert _state(repo).unchecked == [] and _state(repo).queued == {}
+
+
+def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_clock):
+    """f8 D3: a state.json from before f8-03 keeps its parked checkpoint, escalation and
+    direction as queue rows; a ticket parked for a limit stays where it is."""
+    write_task(repo / "tasks" / "escalated", "m1-09-stuck")
+    _add_task(repo, "m1-02-thing")
+    later = (THURSDAY + timedelta(hours=1)).isoformat()
+    state_path = _config(repo).runs_dir / "state.json"
+    state = load_state(state_path)
+    state.unchecked = ["m1-07-a abc local-m", "m1-08-b def local-m"]
+    state.parked = {
+        "checkpoint:checkpoint": {
+            "kind": "checkpoint",
+            "branch": "",
+            "session_id": "",
+            "resets_at": later,
+            "milestone": "m1",
+            "out": "var/runs/x/checkpoint-1.md",
+        },
+        "escalation:m1-09-stuck": {
+            "kind": "escalation",
+            "branch": "",
+            "session_id": "",
+            "resets_at": later,
+            "milestone": "m1",
+            "logs": "var/runs/x/m1-09-stuck",
+            "reason": "gates failed 3x (last: tests)",
+        },
+        "m1-02-thing": {
+            "kind": "direction",
+            "branch": "task/m1-02-thing",
+            "session_id": "",
+            "resets_at": later,
+            "logs": "var/runs/x/m1-02-thing",
+            "gate": "tests",
+            "output": "1 failed",
+            "gate_failures": ["ruff", "tests"],
+            "timeouts": [False, False],
+        },
+        "m1-05-lead": {"kind": "lead-ticket", "branch": "", "session_id": "", "resets_at": later},
+    }
+    save_state(state, state_path)
+    for _ in range(2):  # a second start adds nothing
+        loop.close_session(loop.open_session(_config(repo)))
+    rows = {(r["kind"], r["subject"]): r for r in _queue(repo)}
+    assert set(rows) == {
+        ("checkpoint", "m1"),
+        ("escalation", "m1-09-stuck"),
+        ("direction", "m1-02-thing"),
+    }
+    assert rows["checkpoint", "m1"]["reason"] == "after m1-07-a and m1-08-b merged"
+    assert rows["escalation", "m1-09-stuck"]["reason"] == (
+        "m1-09-stuck: gates failed 3x (last: tests)"
+    )
+    assert rows["direction", "m1-02-thing"]["reason"] == "m1-02-thing failed: ruff, then tests"
+    # A restart tries them at once, as it did a parked entry (2026-10-01)
+    assert all(r["not_before"] is None and r["done"] is None for r in rows.values())
+    after = _state(repo)
+    assert set(after.parked) == {"m1-05-lead"}
+    assert after.queued["escalation:m1-09-stuck"]["logs"] == "var/runs/x/m1-09-stuck"
+    assert after.queued["direction:m1-02-thing"]["gate_failures"] == ["ruff", "tests"]
+    assert after.queued["checkpoint:m1"]["out"] == "var/runs/x/checkpoint-1.md"
 
 
 def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_are_acted_on(

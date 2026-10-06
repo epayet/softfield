@@ -18,6 +18,7 @@ from runner.gitops import Git, GitError, with_trailers
 from runner.loop import (
     CLAUDE_HEADLESS_AGENT,
     MAIN,
+    REVIEW,
     RUNNER_AGENT,
     RunnerError,
     Session,
@@ -25,10 +26,13 @@ from runner.loop import (
     call_claude,
     clock,
     close_session,
+    enqueue,
+    finish_row,
     now,
     open_session,
     rate_verdicts,
     record_findings,
+    review_reason,
     run_e2e,
     runner_commit,
     starting_ratings,
@@ -521,8 +525,11 @@ def run_due_review(cfg: Config, milestone: str) -> str:
 
 
 def review_milestone(cfg: Config, milestone: str, base: str) -> str:
-    """Run review rounds until a stop rule fires. Returns the stop reason."""
+    """Run review rounds until a stop rule fires. Returns the stop reason. The review is a
+    queued job (ADR 22 item 1): `runner run` queued it, else it is queued here, and its row
+    is done with its last round's job once the loop stops (a restart's carries on)."""
     s = open_session(cfg, f"review {milestone}")
+    s.running_row = row = enqueue(s, REVIEW, milestone, review_reason(milestone))
     rounds = s.state.review_counts.setdefault(milestone, [])
     seen = s.state.finding_seen
     since = base
@@ -596,8 +603,10 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
         stop = s.state.review_stop.get(milestone, "review rounds used up")
     s.state.review_stop[milestone] = stop
     save_state(s.state, s.state_path)
+    s.running_row = None
     if stop != RESTART:  # a restarted review goes on judging
         _rate_verdicts(s, milestone)
+        finish_row(s, row)
     _write_metrics(s, milestone, base, rounds, stop)
     _record_review(s, milestone, len(rounds))
     close_session(s)

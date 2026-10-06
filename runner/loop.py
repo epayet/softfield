@@ -219,6 +219,11 @@ class Session:
     activity: str | None = None
     waiting_until: datetime | None = None
     probed: bool = False  # a fresh reading of Claude's windows was taken (f4-07)
+    # Queue rows the metrics database couldn't take (f8 D1): this session runs them still.
+    unqueued: dict[int, dispatch.Queued] = field(default_factory=dict)
+    running_row: dispatch.Queued | None = None  # the queued job running now: its job's row
+    # A ticket's record while it waits behind its queued direction, for its last attempt.
+    waiting: dict[str, TaskRecord] = field(default_factory=dict)
 
     @property
     def repo(self) -> Path:
@@ -251,6 +256,7 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
         del state.parked[key]
     # A ticket parked for a limit is tried again at once: the owner may have reset the
     # allowance before restarting (2026-10-01). Still limited, it parks on Claude's new reset.
+    # A parked support job is a queue row, tried again the same way (`_queue_parked`).
     # Its stored reset stays Claude's: a start that never reached the ticket had written its
     # own time over it (f1-22's said 23:00 for Claude's 01:40, f1-51).
     at = now()
@@ -270,6 +276,8 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     )
     if command is not None:
         _start_run(s, command, cut_off.get("job_id") if cut_off else None)
+        if s.project_id is not None:
+            _queue_parked(s, at)
     if recovered:
         s.log(recovered)
         s.report.notes.append(recovered)
@@ -667,14 +675,15 @@ def record_start(
 ) -> int | None:
     """Write a job as running (f1 D3), with why its agent was chosen, and beat the run's
     heartbeat. The page shows the job while it runs; the run's activity stays, for when it
-    ends (f2-03). Returns the job's id."""
+    ends (f2-03). A job of the queued job running now (its role is the row's kind) is the
+    row's job. Returns the job's id."""
     if s.run_id is None or s.project_id is None:
         return None
     at = now().isoformat()
     milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
     ticket_id = _record(s, metrics.upsert_ticket, s.project_id, ticket) if ticket else None
     _record(s, metrics.update_run_heartbeat, s.run_id, at)
-    return _record(
+    job_id = _record(
         s,
         metrics.start_job,
         s.run_id,
@@ -688,6 +697,10 @@ def record_start(
         context_limit=context_limit,
         log_path=log_path,
     )
+    row = s.running_row
+    if job_id is not None and row is not None and row.kind == role and row.id and row.id > 0:
+        _record(s, _set_started, row.id, job_id)
+    return job_id
 
 
 def live_update(s: Session, job_id: int | None, tokens: TokenTotals) -> None:
@@ -908,9 +921,9 @@ def route_developer(
 
 
 def lead_work_ready(s: Session) -> bool:
-    """Lead work waits (ADR 16 item 2): a lead ticket whose dependencies are done, a parked
+    """Lead work waits (ADR 16 item 2): a lead ticket whose dependencies are done, a queued
     direction, escalation or checkpoint, or a checkpoint due."""
-    if any(e["kind"] in (*SUPPORT, "direction") for e in s.state.parked.values()):
+    if any(row.kind in (*SUPPORT, DIRECTION) for row in open_rows(s)):
         return True
     if len(s.state.unchecked) >= s.cfg.checkpoint_every:
         return True
@@ -960,14 +973,12 @@ class Parked(Exception):
         self.five_hour = five_hour
 
 
-# Support jobs that park in the queue rather than sleep in it (ADR 16 item 4), keyed by
-# `job_key` in state.json's `parked`; a ticket's own jobs are keyed by its id.
+# Support jobs that park in the queue rather than sleep in it (ADR 16 item 4): their queue
+# row waits (f8 D3). A ticket's own jobs park in state.json's `parked`, keyed by its id.
 SUPPORT = ("checkpoint", "escalation")
+DIRECTION, ESCALATION, REVIEW = dispatch.DIRECTION, dispatch.ESCALATION, dispatch.REVIEW
+QUEUED = (*SUPPORT, DIRECTION)  # the support jobs a ticket's run queues
 FIVE_HOUR_HELD = "five_hour"  # a parked entry's flag: held by the owner's 25%, not a limit
-
-
-def parked_key(role: str, name: str) -> str:
-    return job_key(role, name) if role in SUPPORT else name
 
 
 def _park(
@@ -997,12 +1008,11 @@ def _park(
         s.git.checkout(MAIN)
     entry = {"session_id": session or "", "branch": kept}
     s.state.interrupted[job_key(job.role, name)] = {**entry, "cause": "limit"}
-    s.state.parked[parked_key(job.role, name)] = {
-        "kind": job.role,
-        **entry,
-        "resets_at": resets.isoformat(),
-        **(extra or {}),
-    }
+    if job.role in QUEUED:
+        subject = milestone if job.role == CHECKPOINT else name
+        park_row(s, job.role, subject, resets, **(extra or {}))
+    else:
+        s.state.parked[name] = {"kind": job.role, **entry, "resets_at": resets.isoformat()}
     s.state.in_flight = None
     s.state.count_run(milestone)
     save_state(s.state, s.state_path)
@@ -1024,6 +1034,159 @@ def _park(
     s.log(console.paused(agent, f"Claude usage limit, {name} parked", resets, at))
     s.report.notes.append(f"Parked {name} ({job.role}) for a Claude usage limit.")
     raise Parked(resets)
+
+
+# --- the work queue (ADR 22 item 1, f8 D1 and D3) -------------------------------------------
+
+
+def open_rows(s: Session) -> list[dispatch.Queued]:
+    """The queued jobs not yet done, oldest first, then any the database couldn't take."""
+    rows = []
+    if s.project_id is not None:
+        found = _record(s, metrics.open_jobs, s.project_id) or []
+        rows = [dispatch.Queued.from_row(row) for row in found]
+    return [*rows, *s.unqueued.values()]
+
+
+def find_row(s: Session, kind: str, subject: str | None = None) -> dispatch.Queued | None:
+    """The open row of ``kind`` about ``subject`` (any, with None)."""
+    return next((q for q in open_rows(s) if q.kind == kind and subject in (None, q.subject)), None)
+
+
+def _row_of(s: Session, kind: str, subject: str) -> dispatch.Queued | None:
+    """A support job's open row: one checkpoint reviews every merge, whatever its subject."""
+    return find_row(s, kind, None if kind == CHECKPOINT else subject)
+
+
+def row_key(row: dispatch.Queued) -> str:
+    """What keys a queued job's needs in ``State.queued``."""
+    return job_key(row.kind, row.subject)
+
+
+def _row_name(row: dispatch.Queued) -> str:
+    return row.kind if row.kind == CHECKPOINT else f"{row.kind} of {row.subject}"
+
+
+def _set_not_before(conn: sqlite3.Connection, row_id: int, not_before: str | None) -> None:
+    conn.execute("UPDATE work_queue SET not_before = ? WHERE id = ?", (not_before, row_id))
+
+
+def _set_started(conn: sqlite3.Connection, row_id: int, job_id: int) -> None:
+    """The row's job: its latest of the row's kind (a parked one's resume replaces it)."""
+    conn.execute("UPDATE work_queue SET started_job = ? WHERE id = ?", (job_id, row_id))
+
+
+def enqueue(s: Session, kind: str, subject: str, reason: str, /, **needs: Any) -> dispatch.Queued:
+    """Queue a support job with its reason (ADR 22 item 1), and what it ``needs`` to start in
+    ``State.queued``. The trigger decides when one is due; one already open (of the kind
+    about the subject, or any checkpoint) is kept as it is."""
+    if (found := _row_of(s, kind, subject)) is not None:
+        return found
+    at = now().isoformat()
+    row_id = None
+    if s.project_id is not None:
+        row_id = _record(s, metrics.queue_job, s.project_id, kind, subject, reason, at)
+    row = dispatch.Queued(kind, subject, reason, at, None, row_id)
+    if row_id is None:  # the run goes on without the database: this session runs it still
+        row = replace(row, id=min(s.unqueued, default=0) - 1)
+        s.unqueued[row.id or 0] = row
+    if needs:
+        s.state.queued[row_key(row)] = dict(needs)
+        save_state(s.state, s.state_path)
+    return row
+
+
+def _set_row(s: Session, row: dispatch.Queued, not_before: datetime | None) -> None:
+    stamp = not_before.isoformat() if not_before else None
+    if (row.id or 0) < 0:
+        s.unqueued[row.id or 0] = replace(row, not_before=stamp)
+    elif row.id is not None:
+        _record(s, _set_not_before, row.id, stamp)
+
+
+def park_row(
+    s: Session, kind: str, subject: str, until: datetime, five_hour: bool = False, /, **needs: Any
+) -> None:
+    """Park a support job until ``until`` (f8 D3): its row waits, with what it needs to start
+    again. ``five_hour``: only the owner's share of the 5-hour window holds it."""
+    row = _row_of(s, kind, subject) or enqueue(s, kind, subject, PARKED_REASON)
+    _set_row(s, row, until)
+    entry = s.state.queued.setdefault(row_key(row), {})
+    entry.update(needs)
+    entry.pop(RETRY, None)
+    entry.pop(FIVE_HOUR_HELD, None)
+    if five_hour:
+        entry[FIVE_HOUR_HELD] = True
+    save_state(s.state, s.state_path)
+
+
+def _unpark_row(s: Session, row: dispatch.Queued) -> None:
+    """A parked row runs at once: a restart, or the owner's yes, may have freed Claude."""
+    _set_row(s, row, None)
+    s.state.queued.setdefault(row_key(row), {})[RETRY] = True
+    save_state(s.state, s.state_path)
+
+
+def _row_waits(s: Session, kind: str, subject: str) -> bool:
+    """Whether a support job's row is parked until a time still ahead."""
+    row = _row_of(s, kind, subject)
+    return row is not None and row.not_before is not None and _at(row.not_before) > now()
+
+
+def finish_row(s: Session, row: dispatch.Queued) -> None:
+    """Mark a queued job done and drop what it kept."""
+    if (row.id or 0) < 0:
+        s.unqueued.pop(row.id or 0, None)
+    elif row.id is not None:
+        _record(s, metrics.finish_queued, row.id, now().isoformat())
+    s.state.queued.pop(row_key(row), None)
+    save_state(s.state, s.state_path)
+
+
+def _merges(merged: Sequence[str]) -> str:
+    names = [m.split()[0] for m in merged]
+    return names[0] if len(names) < 2 else ", ".join(names[:-1]) + f" and {names[-1]}"
+
+
+def _direction_reason(task_id: str, failures: Sequence[str]) -> str:
+    return f"{task_id} failed: {', then '.join(failures) or 'its attempts'}"
+
+
+def _queue_parked(s: Session, at: datetime) -> None:
+    """At start (f8 D3): the support jobs an older state.json parked become queue rows, once;
+    then every parked row is tried again at once, as a parked ticket is (2026-10-01)."""
+    for key, entry in list(s.state.parked.items()):
+        kind = entry["kind"]
+        if kind not in QUEUED:
+            continue
+        del s.state.parked[key]
+        dropped = ("kind", "resets_at", "branch", "session_id", RETRY, FIVE_HOUR_HELD)
+        needs = {k: v for k, v in entry.items() if k not in dropped}
+        if kind == CHECKPOINT:
+            subject = str(entry.get("milestone") or CHECKPOINT)
+            reason = f"after {_merges(s.state.unchecked)} merged"
+        elif kind == ESCALATION:
+            subject = key.partition(":")[2]
+            reason = f"{subject}: {entry.get('reason', 'escalated')}"
+        else:
+            subject = key
+            reason = _direction_reason(key, entry.get("gate_failures") or [])
+        enqueue(s, kind, subject, reason, **needs)
+    save_state(s.state, s.state_path)
+    for row in open_rows(s):
+        if row.not_before is not None and _at(row.not_before) > at:
+            _unpark_row(s, row)
+
+
+def waiting_rows(s: Session, ready: Iterable[Task]) -> dict[str, str]:
+    """Ready tickets that wait behind their own queued direction or escalation (ADR 22
+    item 1), with why."""
+    ids = {t.id for t in ready}
+    return {
+        row.subject: f"waits for its {row.kind}"
+        for row in open_rows(s)
+        if row.kind in (DIRECTION, ESCALATION) and row.subject in ids
+    }
 
 
 def _record_readings(s: Session, agent: str, readings: tuple[Reading, ...]) -> None:
@@ -1475,47 +1638,74 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
     return task, direction
 
 
+def _direction_needs(
+    s: Session,
+    rec: TaskRecord,
+    logs: Path,
+    timeouts: list[bool],
+    last: GateResult | None,
+    reset: str,
+) -> dict[str, Any]:
+    """What a queued direction and the last attempt after it read of the attempts so far,
+    and why that attempt starts from main, if it does (`prompts.RESET`)."""
+    return {
+        "logs": _rel(s, logs),
+        "gate": last.name if last else "",
+        "output": last.output if last else "",
+        "gate_failures": list(rec.gate_failures),
+        "timeouts": list(timeouts),
+        "reset": reset,
+    }
+
+
+def _wait_for_direction(s: Session, task: Task, rec: TaskRecord) -> None:
+    """The ticket waits behind its queued direction (ADR 22 item 1): back on main, its last
+    attempt not run, its record kept for when it goes on."""
+    s.git.checkout(MAIN)
+    rec.attempts -= 1  # the last attempt hasn't run
+    rec.result = "parked"
+    s.waiting[task.id] = rec
+
+
+def _queue_direction(
+    s: Session,
+    task: Task,
+    rec: TaskRecord,
+    logs: Path,
+    timeouts: list[bool],
+    last: GateResult | None,
+    reset: str,
+) -> None:
+    """Before the last attempt (ADR 12 item 6): queue the lead's direction, which the loop
+    runs next, and the ticket's last attempt after it. Its thinking so far is saved now."""
+    _save_thinking(rec, logs, s.repo)
+    needs = _direction_needs(s, rec, logs, timeouts, last, reset)
+    enqueue(s, DIRECTION, task.id, _direction_reason(task.id, rec.gate_failures), **needs)
+    _wait_for_direction(s, task, rec)
+
+
 def _park_direction(
     s: Session,
     task: Task,
     rec: TaskRecord,
     parked: Parked,
-    branch: str,
     logs: Path,
     timeouts: list[bool],
     last: GateResult | None,
+    reset: str,
 ) -> None:
     """Hold a developer ticket at its direction until Claude's reset, with what its attempts
     left for the direction and the last attempt to read."""
-    if task.id not in s.state.parked:  # parked before its direction ran: Claude was limited
+    if not _row_waits(s, DIRECTION, task.id):  # parked before it ran: Claude was limited
         s.log(
             console.paused(
                 RUNNER_AGENT, f"{task.id} waits for its direction", parked.resets_at, now()
             )
         )
         s.report.notes.append(f"Parked {task.id}: its direction waits for Claude's reset.")
-    entry = s.state.parked.setdefault(
-        task.id,
-        {
-            "kind": "direction",
-            "branch": branch,
-            "session_id": "",
-            "resets_at": parked.resets_at.isoformat(),
-        },
-    )
-    if parked.five_hour:
-        entry[FIVE_HOUR_HELD] = True
-    entry.update(
-        logs=_rel(s, logs),
-        gate=last.name if last else "",
-        output=last.output if last else "",
-        gate_failures=rec.gate_failures,
-        timeouts=timeouts,
-    )
-    save_state(s.state, s.state_path)
-    s.git.checkout(MAIN)
-    rec.attempts -= 1  # the last attempt hasn't run
-    rec.result = "parked"
+    needs = _direction_needs(s, rec, logs, timeouts, last, reset)
+    park_row(s, DIRECTION, task.id, parked.resets_at, parked.five_hour, **needs)
+    _wait_for_direction(s, task, rec)
 
 
 def _finish_escalation(
@@ -1682,19 +1872,22 @@ def _develop(
     raise AssertionError("unreachable: itertools.count never ends")
 
 
-def run_task(s: Session, task: Task) -> TaskRecord:
-    """One ticket. Its result is "parked" when it waits for Claude: a limit, the reserve, or
-    its turn behind the support work a yes to the 5-hour question freed."""
-    rec = TaskRecord(id=task.id, milestone=task.milestone)
+def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None) -> TaskRecord:
+    """One ticket. Its result is "parked" when it waits for Claude (a limit, the reserve, or
+    its turn behind the support work a yes to the 5-hour question freed) or behind its queued
+    direction. ``directing`` is that direction's needs: the run that gives it, then the last
+    attempt."""
+    kept = s.waiting.pop(task.id, None) if directing is not None else None
+    rec = kept or TaskRecord(id=task.id, milestone=task.milestone)
     held = s.state.parked.pop(task.id, None)
     if held is not None:
         save_state(s.state, s.state_path)
         if held["kind"] == FIVE_HOUR_KIND:  # it waited out the reset: nothing left to answer
             _resolve_item(s, FIVE_HOUR_KIND, task.id)
-    # A direction parked for a limit goes on in the logs of the attempts it reads.
-    directing = held if held is not None and held["kind"] == "direction" else None
+    # The direction goes on in the logs of the attempts it reads.
     logs = rec.logs = s.repo / directing["logs"] if directing else _logs_dir(s.run_dir, task.id)
-    s.ticket_started = clock()
+    if kept is None:
+        s.ticket_started = clock()
     s.log("")
     s.log(console.ticket_header(task.id, task.agent, task.difficulty))
     s.log(task.goal)
@@ -1732,28 +1925,36 @@ def run_task(s: Session, task: Task) -> TaskRecord:
         timeouts = [bool(t) for t in directing["timeouts"]]
         rec.gate_failures = [str(g) for g in directing["gate_failures"]]
         rec.attempts, rec.timeouts = len(timeouts), sum(timeouts)
+        if kept is None:  # a new process: the next attempt's thinking keeps its number
+            rec.sessions = [""] * rec.attempts
     # A requeued ticket continues the branch its escalation kept (ADR 15 item 7).
     resumed = not rec.attempts and _has_branch(s.git, branch)
     _start_attempt(s, branch, "")
     earlier = s.git.changed_files(MAIN) if resumed and s.git.current_branch() == branch else []
-    direction = pending = ""
+    direction = ""
+    pending = str(directing.get("reset") or "") if directing is not None else ""
     failed_agent: str | None = None  # who failed the attempt before, for a step up
     for attempt in range(rec.attempts + 1, s.cfg.max_attempts + 1):
         rec.attempts = attempt
         reset, pending = pending, ""
-        if (
+        if attempt == s.cfg.max_attempts and directing is not None:
+            try:
+                task, direction = give_direction(s, task, rec, logs)
+            except Parked as parked:
+                _park_direction(s, task, rec, parked, logs, timeouts, last, reset)
+                return rec
+            if (row := find_row(s, DIRECTION, task.id)) is not None:
+                finish_row(s, row)  # its job is done; the last attempt isn't the row's
+            direction, unusable = split_reset(direction)
+            reset = "direction" if unusable else reset
+        elif (
             attempt == s.cfg.max_attempts
             and attempt > 1
             and s.state.directions.get(task.id, 0) < s.cfg.directions_per_task
             and needs_direction(rec.gate_failures, timeouts)
         ):
-            try:
-                task, direction = give_direction(s, task, rec, logs)
-            except Parked as parked:
-                _park_direction(s, task, rec, parked, branch, logs, timeouts, last)
-                return rec
-            direction, unusable = split_reset(direction)
-            reset = "direction" if unusable else reset
+            _queue_direction(s, task, rec, logs, timeouts, last, reset)
+            return rec
         if reset or s.git.current_branch() != branch:  # a reset, or back from a repair on main
             reset = _start_attempt(s, branch, reset)
         what = f"attempt {attempt}/{s.cfg.max_attempts}"
@@ -1997,13 +2198,14 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
 
 def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     """After a developer merge (``_merge`` lists it as unchecked): every ``checkpoint_every``
-    of them, run a checkpoint. One already parked runs after its reset, on every merge since."""
+    of them, queue a checkpoint. One already queued runs on every merge since."""
     if rec.result != "done" or task.agent != "developer":
         return
-    if parked_key(CHECKPOINT, CHECKPOINT) in s.state.parked:
+    if find_row(s, CHECKPOINT) is not None:
         return
     if len(s.state.unchecked) >= s.cfg.checkpoint_every:
-        checkpoint(s, task.milestone)
+        reason = f"after {_merges(s.state.unchecked)} merged"
+        enqueue(s, CHECKPOINT, task.milestone, reason, milestone=task.milestone)
 
 
 def _ticket_id(conn: sqlite3.Connection, project_id: int, ticket: str) -> int | None:
@@ -2438,7 +2640,7 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
     merged = list(s.state.unchecked)
     if (hold := claude_hold(s, now())) is not None:
         if not stand_in_checkpoint(s, milestone, merged, hold):
-            _park_support(s, CHECKPOINT, CHECKPOINT, hold, milestone=milestone)
+            _park_support(s, CHECKPOINT, milestone, hold, milestone=milestone)
         return
     out = out or s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
     findings_out = out.with_suffix(".json")
@@ -3066,17 +3268,29 @@ def _limits_ahead(
 
 
 def _parked_ahead(
-    s: Session, at: datetime, tickets: Collection[str] | None = None, *, five_hour: bool = True
+    s: Session,
+    at: datetime,
+    tickets: Collection[str] | None = None,
+    *,
+    five_hour: bool = True,
+    rows: Sequence[dispatch.Queued] | None = None,
 ) -> list[tuple[datetime, str]]:
-    """`_limits_ahead`'s resets, each with the parked key it is for."""
-    return [
-        (_resets(entry), key)
+    """`_limits_ahead`'s resets, each with what it is for: the parked tickets (``tickets``,
+    if given) and the parked support jobs (``rows``, else every open one)."""
+    found = [
+        (_resets(entry), _parked_name(key))
         for key, entry in s.state.parked.items()
         if entry["kind"] != "reserve"
         and (five_hour or not entry.get(FIVE_HOUR_HELD))
         and (tickets is None or key in tickets)
         and not _due(entry, at)
     ]
+    for row in open_rows(s) if rows is None else rows:
+        if row.kind not in QUEUED or row.not_before is None or _at(row.not_before) <= at:
+            continue
+        if five_hour or not s.state.queued.get(row_key(row), {}).get(FIVE_HOUR_HELD):
+            found.append((_at(row.not_before), _row_name(row)))
+    return found
 
 
 def _parked_name(key: str) -> str:
@@ -3227,44 +3441,57 @@ def claude_hold(s: Session, at: datetime) -> Hold | None:
     return Hold(max(until, at + timedelta(minutes=1)), fit.reason, five_hour)
 
 
-def _park_support(s: Session, role: str, name: str, hold: Hold, **resume: str) -> None:
-    """Park a checkpoint or an escalation Claude can't take now (ADR 16 item 4): it goes
-    first once ``hold`` ends, and the queue goes on meanwhile. ``resume`` is what it needs to
-    start again; one parked already keeps its entry (and its session, if it had one)."""
-    key = parked_key(role, name)
-    what = role if name == role else f"{role} of {name}"
-    if key not in s.state.parked:
-        entry: dict[str, Any] = {"kind": role, "branch": "", "session_id": "", **resume}
-        entry["resets_at"] = hold.until.isoformat()
-        if hold.five_hour:
-            entry[FIVE_HOUR_HELD] = True
-        s.state.parked[key] = entry
-        save_state(s.state, s.state_path)
-        s.report.notes.append(f"Parked the {what}: {hold.reason}.")
+def _park_support(s: Session, role: str, name: str, hold: Hold, /, **resume: str) -> None:
+    """Park a checkpoint or an escalation Claude can't take now (ADR 16 item 4): its row waits
+    until ``hold`` ends (f8 D3), and the queue goes on meanwhile. ``resume`` is what it needs
+    to start again; its session, if it had one, stays in ``interrupted``."""
+    what = role if role == CHECKPOINT else f"{role} of {name}"
+    park_row(s, role, name, hold.until, hold.five_hour, **resume)
+    s.report.notes.append(f"Parked the {what}: {hold.reason}.")
     s.log(console.paused(RUNNER_AGENT, f"the {what} waits for Claude", hold.until, now()))
 
 
-def _resume_support(s: Session, *, escalate: bool) -> bool:
-    """Run the first parked checkpoint or escalation whose reset has passed, before any ticket
-    (ADR 16 item 4). True when one ran (it may have parked again)."""
-    at = now()
-    for key, entry in list(s.state.parked.items()):
-        kind = entry["kind"]
-        if kind not in SUPPORT or not _due(entry, at) or (kind != CHECKPOINT and not escalate):
-            continue
-        del s.state.parked[key]
-        save_state(s.state, s.state_path)
-        if kind == CHECKPOINT:
+def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:
+    """Run a queued support job (ADR 22). Its row is done when the job ends, unless it parked
+    again (its row then waits for the reset); one whose subject is gone is done at once."""
+    needs = dict(s.state.queued.get(row_key(row), {}))
+    before, s.running_row = s.running_row, row
+    try:
+        if row.kind == CHECKPOINT:
             if s.state.unchecked:
-                out = s.repo / entry["out"] if entry.get("out") else None
-                checkpoint(s, str(entry["milestone"]), out)
-            return True
-        escalated = s.tasks_dir("escalated") / f"{key.split(':', 1)[1]}.md"
-        if escalated.is_file():
-            task = parse_task(escalated, s.cfg.default_max_diff)
-            handle_escalation(s, task, s.repo / str(entry["logs"]), str(entry["reason"]))
-        return True
-    return False
+                out = s.repo / needs["out"] if needs.get("out") else None
+                checkpoint(s, str(needs.get("milestone") or row.subject), out)
+        elif row.kind == ESCALATION:
+            escalated = s.tasks_dir("escalated") / f"{row.subject}.md"
+            if escalated.is_file():
+                task = parse_task(escalated, s.cfg.default_max_diff)
+                logs = s.repo / needs["logs"] if needs.get("logs") else s.run_dir / task.id
+                with doing(s, f"escalation of {task.id}"):
+                    handle_escalation(s, task, logs, str(needs.get("reason") or row.reason))
+        elif row.kind == DIRECTION:
+            path = s.tasks_dir("ready") / f"{row.subject}.md"
+            if path.is_file() and needs.get("logs"):
+                task = parse_task(path, s.cfg.default_max_diff)
+                with doing(s, task.id):
+                    rec = run_task(s, task, directing=needs)
+                after_ticket(s, task, rec, escalate=escalate)
+    finally:
+        s.running_row = before
+    if not _row_waits(s, row.kind, row.subject):
+        finish_row(s, row)
+
+
+def after_ticket(s: Session, task: Task, rec: TaskRecord, *, escalate: bool) -> None:
+    """What a ticket's run triggers: its report line, a checkpoint due, an escalation."""
+    if rec.result != "parked":  # a parked ticket is reported when it runs
+        s.report.tasks.append(rec)
+    note_merge(s, task, rec)
+    if rec.result in ("escalated", "blocked", "preflight") and escalate:
+        logs = rec.logs or s.run_dir / task.id
+        _save_thinking(rec, logs, s.repo)
+        reason = rec.note or rec.result
+        needs = {"milestone": task.milestone, "logs": _rel(s, logs), "reason": reason}
+        enqueue(s, ESCALATION, task.id, f"{task.id}: {reason}", **needs)
 
 
 def wait_for_room(s: Session, what: str) -> None:
@@ -3419,12 +3646,20 @@ def _five_hour_granted(s: Session) -> None:
         if entry.get(FIVE_HOUR_HELD):
             entry[RETRY] = True
     save_state(s.state, s.state_path)
+    for row in open_rows(s):
+        if s.state.queued.get(row_key(row), {}).get(FIVE_HOUR_HELD):
+            _unpark_row(s, row)
 
 
 def _support_goes_first(s: Session, task: Task) -> bool:
     """After a yes: whether checkpoints or escalations it freed go before the ticket that
     asked (f4-01). That ticket isn't parked or counted: it stays in ready/ for the next pick."""
-    if not any(e["kind"] in SUPPORT and e.get(RETRY) for e in s.state.parked.values()):
+    freed = (
+        row.kind in SUPPORT and row.not_before is None and s.state.queued[row_key(row)].get(RETRY)
+        for row in open_rows(s)
+        if row_key(row) in s.state.queued
+    )
+    if not any(freed):
         return False
     record_ticket(s, task.path)  # back to its folder's state, no longer running
     s.log(f"[{RUNNER_AGENT}] {task.id} waits its turn: the work parked for the window goes first")
@@ -3506,16 +3741,15 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
     return developers or task
 
 
-def _wait_for_reset(s: Session, ready: list[Task]) -> bool:
-    """With nothing runnable left, sleep until the earliest reset a parked ticket, checkpoint
-    or escalation waits for. False when none does: a ticket parked at the reserve waits for
-    the owner, not the week."""
+def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queued]) -> bool:
+    """With nothing runnable left, sleep until the earliest reset a parked ticket or queued
+    job (of ``rows``) waits for. False when none does: a ticket parked at the reserve waits
+    for the owner, not the week."""
     at = now()
-    support = {k for k, entry in s.state.parked.items() if entry["kind"] in SUPPORT}
-    ahead = _parked_ahead(s, at, {t.id for t in ready} | support)
+    ahead = _parked_ahead(s, at, {t.id for t in ready}, rows=rows)
     if not ahead:
         return False
-    first, key = min(ahead)  # the parked ticket that resumes first is what the wait is for
+    first, name = min(ahead)  # the parked job that resumes first is what the wait is for
     wait = max(60.0, (first - at).total_seconds() + 60)
     resumes = at + timedelta(seconds=wait)
     s.state.paused_until = resumes.isoformat()
@@ -3524,7 +3758,7 @@ def _wait_for_reset(s: Session, ready: list[Task]) -> bool:
     s.report.notes.append(
         f"Paused {wait / 60:.0f} min for a Claude usage limit, with nothing to run."
     )
-    wait_for_claude(s, wait, resumes, _parked_name(key))
+    wait_for_claude(s, wait, resumes, name)
     s.state.paused_until = None
     save_state(s.state, s.state_path)
     return True
@@ -3547,18 +3781,26 @@ RESTART_NOTE = (
 )
 
 
-def _due_review(s: Session) -> str | None:
-    """The first milestone whose review is due (f4-20), marked so for the line's queue. None
-    while a checkpoint or an escalation is parked: as under `runner milestone`, the review
-    waits for its reset."""
+def review_reason(key: str) -> str:
+    return f"{short_key(key).upper()}'s tickets are all done"
+
+
+def _queue_due_review(s: Session) -> None:
+    """Queue the first milestone whose review is due (f4-20), marked so for the line's queue;
+    a queued review no longer due (signed off, reviewed) is done. None is queued while a
+    checkpoint or an escalation is: as under `runner milestone`, the review waits for it."""
     from runner.milestone import due_reviews  # runner.milestone imports this module
 
-    if any(entry["kind"] in SUPPORT for entry in s.state.parked.values()):
-        return None
-    due = next(iter(due_reviews(s.repo, s.state)), None)
-    if due is not None and s.project_id is not None:
-        _record(s, metrics.upsert_milestone, s.project_id, due, status=metrics.REVIEW_DUE)
-    return due
+    due = due_reviews(s.repo, s.state)
+    rows = open_rows(s)
+    for row in rows:
+        if row.kind == REVIEW and row.subject not in due:
+            finish_row(s, row)
+    if not due or any(row.kind in SUPPORT for row in rows):
+        return
+    if s.project_id is not None:
+        _record(s, metrics.upsert_milestone, s.project_id, due[0], status=metrics.REVIEW_DUE)
+    enqueue(s, REVIEW, due[0], review_reason(due[0]))
 
 
 def apply_owner_requests(s: Session) -> None:
@@ -3589,18 +3831,24 @@ def work_queue(
     once: bool = False,
     reviews: bool = False,
 ) -> bool:
-    """Work through tasks/ready (one milestone's, if given): tasks, directions, checkpoints
-    and escalations. Returns True if Claude (a lead ticket or an escalation) changed the
-    runner, which needs a restart.
+    """Work through tasks/ready (one milestone's, if given) and the queued jobs their runs
+    trigger: directions, checkpoints and escalations (ADR 22). Each turn runs what
+    `dispatch.pick` returns; the next ticket is `_next_task`'s. Returns True if Claude (a lead
+    ticket or an escalation) changed the runner, which needs a restart.
 
-    A ticket parked for a Claude limit goes first once its reset has passed (a parked
-    checkpoint or escalation before it); until then only developer tickets run, and with none
-    left the queue sleeps until the earliest reset.
+    A queued job goes before any ticket, a parked one once its reset has passed; a ticket
+    parked for a Claude limit goes first among tickets once its reset has passed. Until then
+    only developer tickets run, and with none left the queue sleeps until the earliest reset.
+    Claude's windows are checked by each job as it starts (a stand-in, a park), so the pick
+    is given none.
 
-    With ``reviews`` (`runner run`, f4-20), a milestone whose tickets are all done stops the
-    queue before its next ticket: ``s.report.review`` names it, for the command to review.
+    With ``reviews`` (`runner run`, f4-20), a milestone whose tickets are all done queues its
+    review, which stops the queue before its next ticket: ``s.report.review`` names it, for
+    the command to review. Without ``escalate``, no escalation is queued or run. With
+    ``once``, it stops after one ticket and the jobs that ticket queued.
     """
     code = _runner_code(s.repo)
+    ran = False  # a ticket ran, for ``once``
     while True:
         if _runner_code(s.repo) != code:
             # m4-07: Python keeps the old modules, so a runner fix made by an escalation
@@ -3611,39 +3859,66 @@ def work_queue(
         set_activity(s, PICKING)
         apply_owner_requests(s)
         fresh_reading(s)
-        if _resume_support(s, escalate=escalate):
-            continue
-        if reviews and (due := _due_review(s)) is not None:
-            s.log(f"[runner] {short_key(due).upper()}'s tickets are all done: its review is next.")
-            s.report.review = due
-            return False
+        if reviews:
+            _queue_due_review(s)
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
         if milestone is not None:  # either form of the key (ADR 16 item 6)
             ready = [t for t in ready if short_key(t.milestone) == short_key(milestone)]
         done = task_ids(s.tasks_dir("done"))
         paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
         held = _held(s.repo, ready)
-        task = _next_task(s, ready, done, paused | held.keys())
-        if task is None:
-            if _wait_for_reset(s, ready):
+        rows = _runnable_rows(s, ready, escalate=escalate, reviews=reviews)
+        behind = waiting_rows(s, ready)
+        task = _next_task(s, ready, done, paused | held.keys() | behind.keys())
+        tickets = [] if task is None else [_dispatch_ticket(s, task, ready)]
+        job = dispatch.pick(rows, tickets, dispatch.Windows(), now())
+        if once and ran and (job is None or job.kind == dispatch.TICKET):
+            return False
+        if job is None:
+            if _wait_for_reset(s, ready, rows):
                 continue
             if paused:
                 s.report.notes.append("Paused (dependency escalated): " + ", ".join(sorted(paused)))
             if held:
                 s.report.notes.append("Waiting: " + _waits_text(held))
             return False
+        if job.kind == REVIEW:
+            s.log(f"[runner] {review_reason(job.subject)}: its review is next.")
+            s.report.review = job.subject
+            return False
+        if job.kind != dispatch.TICKET or task is None:  # a ticket: the one it was given
+            row = next(r for r in rows if (r.kind, r.subject) == (job.kind, job.subject))
+            run_queued(s, row, escalate=escalate)
+            continue
         with doing(s, task.id):
             rec = run_task(s, task)
-        if rec.result != "parked":  # a parked ticket is reported when it runs
-            s.report.tasks.append(rec)
-        note_merge(s, task, rec)
-        if rec.result in ("escalated", "blocked", "preflight") and escalate:
-            logs = rec.logs or s.run_dir / task.id
-            _save_thinking(rec, logs, s.repo)
-            with doing(s, f"escalation of {task.id}"):
-                handle_escalation(s, task, logs, rec.note or rec.result)
-        if once:
-            return False
+        after_ticket(s, task, rec, escalate=escalate)
+        ran = True
+
+
+def _runnable_rows(
+    s: Session, ready: Sequence[Task], *, escalate: bool, reviews: bool
+) -> list[dispatch.Queued]:
+    """The queued jobs this command runs: escalations only with ``escalate``, reviews only
+    with ``reviews`` and while no checkpoint or escalation is queued, and a direction only
+    for a ticket of its queue (one whose ticket left ready/ is run, to be done)."""
+    rows = open_rows(s)
+    support = any(row.kind in SUPPORT for row in rows)
+    mine = {t.id for t in ready}
+    gone = {row.subject for row in rows} - {p.stem for p in s.tasks_dir("ready").glob("*.md")}
+    return [
+        row
+        for row in rows
+        if (row.kind != ESCALATION or escalate)
+        and (row.kind != REVIEW or (reviews and not support))
+        and (row.kind != DIRECTION or row.subject in mine | gone)
+    ]
+
+
+def _dispatch_ticket(s: Session, task: Task, ready: list[Task]) -> dispatch.Ticket:
+    """The ticket `_next_task` chose, as the pick sees it."""
+    lead = router.lead_only(task.agent, task.files, tuple(read_protected(s.repo)))
+    return dispatch.Ticket(task.id, lead, task_priority(task, _cards(s.repo, ready)))
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
@@ -3763,8 +4038,8 @@ def dry_run_plan(cfg: Config) -> None:
     """`runner run --dry-run` (f8-02): `dispatch.plan`'s list, each job with what it waits for
     and why it is there, and each ticket's pre-flight problems (docs/task-writing.md). Reads
     tasks/, state.json and the metrics database if there is one: any branch, any tree, and no
-    run folder or row (f1-33). Until f8-03 queues them, a due review and a parked checkpoint
-    or escalation are read from where they are kept today."""
+    run folder or row (f1-33). A due review not queued yet is listed as the run would queue
+    it, and a support job an older state.json parked as the row the run makes of it."""
     from runner.milestone import due_reviews  # runner.milestone imports this module
 
     at = now()
@@ -3774,14 +4049,15 @@ def dry_run_plan(cfg: Config) -> None:
     paused = blocked_ids(ready, stopped_ids(tasks))
     state = load_state(cfg.runs_dir / "state.json")
     queued, readings = _stored_queue(cfg)
-    queued += [
-        dispatch.Queued(
-            dispatch.REVIEW, key, f"{short_key(key).upper()}'s tickets are all done", at.isoformat()
-        )
-        for key in due_reviews(cfg.repo, state)
-    ]
     queued += _parked_support(state.parked, at)
-    tickets = _dispatch_tickets(cfg.repo, ready, done, paused, state.parked, at)
+    if not any(q.kind in SUPPORT for q in queued):
+        reviewing = {q.subject for q in queued if q.kind == REVIEW}
+        due = [key for key in due_reviews(cfg.repo, state) if key not in reviewing]
+        queued += [dispatch.Queued(REVIEW, key, review_reason(key), at.isoformat()) for key in due]
+    behind = {
+        q.subject: f"waits for its {q.kind}" for q in queued if q.kind in (DIRECTION, ESCALATION)
+    }
+    tickets = _dispatch_tickets(cfg.repo, ready, done, paused, state.parked, at, behind)
     windows = dispatch.Windows(
         _kept_back(cfg, _windows_from(readings, at)),
         _limited_until(state.parked, at),
@@ -3809,17 +4085,18 @@ def _stored_queue(cfg: Config) -> tuple[list[dispatch.Queued], dict[str, sqlite3
 
 
 def _parked_support(parked: Mapping[str, dict[str, Any]], at: datetime) -> list[dispatch.Queued]:
-    """Checkpoints and escalations parked in state.json, as the queue rows f8-03 makes them."""
+    """Support jobs an older state.json parked, as queue rows (`_queue_parked` makes them at
+    the next start)."""
     return [
         dispatch.Queued(
             entry["kind"],
-            key.partition(":")[2] or entry["kind"],
+            key if entry["kind"] == DIRECTION else key.partition(":")[2] or entry["kind"],
             PARKED_REASON,
             entry.get("resets_at") or at.isoformat(),
             None if entry.get(RETRY) else entry.get("resets_at"),
         )
         for key, entry in parked.items()
-        if entry["kind"] in SUPPORT
+        if entry["kind"] in QUEUED
     ]
 
 
@@ -3830,10 +4107,12 @@ def _dispatch_tickets(
     paused: set[str],
     parked: Mapping[str, dict[str, Any]],
     at: datetime,
+    behind: Mapping[str, str] | None = None,
 ) -> list[dispatch.Ticket]:
     """The ready tickets in run order (f5 D6), each with what it waits for, as `_next_task`
     sees them: a ticket parked at the reserve waits for the owner, one parked for a limit
-    until its reset."""
+    until its reset, one ``behind`` its queued direction or escalation for it."""
+    behind = behind or {}
     held = _held(repo, ready)
     cards = _cards(repo, ready)
     protected = tuple(read_protected(repo))
@@ -3846,6 +4125,8 @@ def _dispatch_tickets(
             waits = "paused"
         elif task.id in held:
             waits = f"waits for {held[task.id]}'s sign-off"
+        elif task.id in behind:
+            waits = behind[task.id]
         elif waiting:
             waits = "waiting on " + ", ".join(waiting)
         elif entry is not None and entry["kind"] == "reserve":

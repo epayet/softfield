@@ -27,8 +27,14 @@ class State:
     timed_out: dict[str, int] = field(default_factory=dict)  # task id -> attempts cut off
     # task id -> {"kind", "branch", "session_id", "resets_at", …}: a ticket parked while Claude
     # is limited (its job's kind, resumed first after the reset) or at its reserve ("reserve",
-    # with the owner's "text"; asked again by the next command). ADR 15 items 5 and 10.
+    # with the owner's "text"; asked again by the next command). ADR 15 items 5 and 10. A
+    # support job parks as its queue row's `not_before` instead (f8 D3); an older file's
+    # support entries become rows at the next start.
     parked: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # "kind:subject" -> what a queued support job needs to start or resume (f8 D3): a
+    # checkpoint's milestone and note, an escalation's logs and reason, a direction's attempts
+    # so far. Dropped when its row is done.
+    queued: dict[str, dict[str, Any]] = field(default_factory=dict)
 
     def runs_used(self, milestone: str) -> int:
         return self.headless_runs.get(milestone, 0)
