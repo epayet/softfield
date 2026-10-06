@@ -168,21 +168,25 @@ def test_turning_a_switch_on_again_starts_its_24_hours_again(repo):
     assert state.switches == {"week": NOW.isoformat()}
 
 
-@pytest.mark.parametrize(("value", "on"), [("yes", True), ("no", False)])
-def test_the_dashboards_5_hour_answer_sets_the_5_hour_switch(repo, value, on):
-    """The Yes and No buttons stay until f8-06 turns them into the switch: they set it."""
-    state = State(switches={} if on else {"five_hour": NOW.isoformat()})
-    _ask(repo, "five_hour", value=value)
-    [line] = _apply(repo, state)
-    assert line.startswith(f"five_hour {value}: ")
-    assert loop.switch_on(state, "five_hour", NOW) is on
-    assert not loop.switch_on(state, "week", NOW)
+def test_an_old_5_hour_answer_is_an_unknown_request_and_sets_no_switch(repo):
+    """f8-10: the reserve switches replace f5-10's Yes and No; one still open is finished."""
+    asked = _ask(repo, "five_hour", value="yes")
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.find_project(conn, repo.name)
+        assert project is not None
+        assert requests.take_switches(conn, project, State(), NOW) == []  # not a switch now
+    finally:
+        conn.close()
+    state = State()
+    assert _apply(repo, state) == ["five_hour yes: unknown request: five_hour"]
+    assert _request(repo, asked) == (NOW.isoformat(), "unknown request: five_hour")
+    assert state.switches == {}
 
 
 @pytest.mark.parametrize(
     ("kind", "subject", "value", "error"),
     [
-        ("five_hour", None, "maybe", "a 5-hour answer is yes or no, not 'maybe'"),
         ("reserve", "month", "on", "a reserve switch is week or five_hour, not 'month'"),
         ("reserve", "week", "yes", "a reserve switch is turned on or off, not 'yes'"),
         ("reboot", "now", None, "unknown request: reboot"),

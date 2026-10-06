@@ -18,14 +18,12 @@ from runner.tasks import TaskError, milestone_arg
 
 SIGNOFF = "signoff"  # subject: the milestone key
 RESERVE = "reserve"  # subject: week or five_hour; value: on or off (f8 D4)
-FIVE_HOUR = "five_hour"  # value: yes or no; the 5-hour switch, until f8-06's switches
 QUEUE = "queue"  # subject: the ticket id
-_ANSWERS = {"yes": "on", "no": "off"}
 _SWITCHED = ("on", "off")
 
 
 def _what(row: sqlite3.Row) -> str:
-    """A request in a console line: ``signoff f4-always-on``, ``five_hour yes``."""
+    """A request in a console line: ``signoff f4-always-on``, ``reserve week``."""
     return " ".join(str(part) for part in (row["kind"], row["subject"] or row["value"]) if part)
 
 
@@ -52,15 +50,6 @@ def _switch(
         if lapsed or waiting:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
     return f"Claude's reserve: {loop.set_switch(state, name, on, now)}"
-
-
-def _five_hour(
-    conn: sqlite3.Connection, project_id: int, state: State, now: datetime, value: object
-) -> str:
-    """The dashboard's Yes or No to the 5-hour window: the 5-hour switch on or off."""
-    if value not in _ANSWERS:
-        return f"a 5-hour answer is yes or no, not {value!r}"
-    return _switch(conn, project_id, state, now, loop.FIVE_HOUR, _ANSWERS[str(value)])
 
 
 def _waits(repo: Path, kind: str) -> str | None:
@@ -99,8 +88,6 @@ def _apply(
             return f"queued {loop.move_to_ready(repo, str(subject))}"
         if kind == RESERVE:
             return _switch(conn, project_id, state, now, subject, value)
-        if kind == FIVE_HOUR:
-            return _five_hour(conn, project_id, state, now, value)
     except (owner.OwnerError, loop.RunnerError, TaskError) as exc:
         return str(exc)
     except Exception as exc:
@@ -159,17 +146,13 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
 def take_switches(
     conn: sqlite3.Connection, project_id: int, state: State, now: datetime
 ) -> list[str]:
-    """The open switch requests (``reserve``, the dashboard's 5-hour answer) applied to
-    ``state`` and finished, for a wait that sleeps for the owner's 25%; the others wait for
-    the pick, which may commit."""
+    """The open switch requests (``reserve``) applied to ``state`` and finished, for a wait
+    that sleeps for the owner's 25%; the others wait for the pick, which may commit."""
     lines = []
     for row in metrics.open_requests(conn, project_id):
-        if row["kind"] == RESERVE:
-            result = _switch(conn, project_id, state, now, row["subject"], row["value"])
-        elif row["kind"] == FIVE_HOUR:
-            result = _five_hour(conn, project_id, state, now, row["value"])
-        else:
+        if row["kind"] != RESERVE:
             continue
+        result = _switch(conn, project_id, state, now, row["subject"], row["value"])
         if metrics.finish_request(conn, row["id"], now.isoformat(), result):
             lines.append(f"{_what(row)}: {result}")
     return lines

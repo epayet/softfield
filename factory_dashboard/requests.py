@@ -19,11 +19,11 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, templates, writable
 from runner import metrics
-from runner.requests import FIVE_HOUR, QUEUE, SIGNOFF
+from runner.requests import QUEUE, RESERVE, SIGNOFF
 
 router = APIRouter()
 
-KINDS = (SIGNOFF, FIVE_HOUR, QUEUE)
+KINDS = (SIGNOFF, RESERVE, QUEUE)
 
 
 def from_the_dashboard(request: Request) -> bool:

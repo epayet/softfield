@@ -56,10 +56,10 @@ def test_a_post_from_the_dashboards_page_writes_one_row_and_answers_asked(client
 
 
 def test_each_kind_keeps_its_subject_or_value(client, db_path):
-    for body in ("kind=five_hour&value=yes", "kind=queue&subject=f5-09-queue-button"):
+    for body in ("kind=reserve&subject=week&value=on", "kind=queue&subject=f5-09-queue-button"):
         assert _post(client, body, HTMX).status_code == 200
     assert [(r["kind"], r["subject"], r["value"]) for r in _rows(db_path)] == [
-        ("five_hour", None, "yes"),
+        ("reserve", "week", "on"),
         ("queue", "f5-09-queue-button", None),
     ]
 
@@ -92,8 +92,11 @@ def test_the_project_is_the_one_asked_for(client, db_path):
         {"HX-Request": "false", "Origin": SAME},
     ],
 )
-def test_a_post_not_from_the_dashboards_page_gets_403_and_writes_nothing(client, db_path, headers):
-    response = _post(client, "kind=signoff&subject=f1", headers)
+@pytest.mark.parametrize("body", ["kind=signoff&subject=f1", "kind=reserve&subject=week&value=on"])
+def test_a_post_not_from_the_dashboards_page_gets_403_and_writes_nothing(
+    client, db_path, headers, body
+):
+    response = _post(client, body, headers)
     assert response.status_code == 403
     assert _rows(db_path) == []
 
@@ -109,6 +112,7 @@ def test_a_refused_post_never_opens_the_database_for_writing(client, monkeypatch
     ("body", "status"),
     [
         ("kind=rm&subject=f1", 400),  # not a request the runner knows
+        ("kind=five_hour&value=yes", 400),  # f5-10's Yes and No, replaced by the switches
         ("subject=f1", 400),
         ("kind=signoff&subject=f1&project=nowhere", 404),  # the dashboard makes no project
     ],
@@ -147,7 +151,7 @@ def test_the_status_of_an_unknown_request_is_404(client):
 
 
 def test_reading_a_status_writes_nothing_and_needs_no_guard(client, db_path):
-    _post(client, "kind=five_hour&value=no", HTMX)
+    _post(client, "kind=reserve&subject=five_hour&value=off", HTMX)
     before = _rows(db_path)
     assert client.get(f"/requests/{before[0]['id']}").status_code == 200
     assert _rows(db_path) == before
