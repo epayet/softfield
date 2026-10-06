@@ -145,7 +145,7 @@ def timeline_page(
     if current:
         default_milestone = current["key"]
 
-    filter_milestone = milestone or default_milestone
+    filter_milestone = milestone if milestone is not None else default_milestone
 
     data = timeline_data(conn, project, milestone=filter_milestone, run=run, now=now)
 

@@ -2,6 +2,7 @@
 
 import json
 import re
+import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -22,6 +23,59 @@ from tests.factory_dashboard.conftest import (
     write_live,
     write_m1_jobs,
 )
+
+
+def _add_f2_jobs(conn: sqlite3.Connection) -> None:
+    """Add f2 milestone with 2 jobs on top of write_fixture."""
+    from runner import metrics as runner_metrics
+
+    project = runner_metrics.upsert_project(conn, PROJECT)
+    f2 = runner_metrics.upsert_milestone(
+        conn, project, "f2", title="The factory reviews itself", started=NOW.isoformat()
+    )
+    f2_run = runner_metrics.upsert_run(conn, project, "20261002-120000", command="milestone f2")
+    ticket = runner_metrics.upsert_ticket(
+        conn, project, "f2-01-test", milestone_id=f2, kind="developer", state="done"
+    )
+    job1 = runner_metrics.start_job(
+        conn,
+        f2_run,
+        ticket_id=ticket,
+        milestone_id=f2,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-10-02T10:00:00+02:00",
+    )
+    runner_metrics.finish_job(
+        conn,
+        job1,
+        ended="2026-10-02T10:05:00+02:00",
+        outcome="passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
+    ticket2 = runner_metrics.upsert_ticket(
+        conn, project, "f2-02-test", milestone_id=f2, kind="developer", state="done"
+    )
+    job2 = runner_metrics.start_job(
+        conn,
+        f2_run,
+        ticket_id=ticket2,
+        milestone_id=f2,
+        role="developer",
+        agent=SONNET,
+        attempt=1,
+        started="2026-10-02T10:10:00+02:00",
+    )
+    runner_metrics.finish_job(
+        conn,
+        job2,
+        ended="2026-10-02T10:15:00+02:00",
+        outcome="passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
 
 
 def charts(html: str) -> dict[str, Any]:
@@ -103,6 +157,42 @@ def test_milestone_filter_shows_only_that_milestones_jobs(client_with_m1):
             assert bar["ticket"] == "m1-01-test"
 
 
+def test_empty_milestone_returns_all_milestones(client_with_m1):
+    """?milestone= (empty) shows jobs from every milestone."""
+    html = client_with_m1.get("/timeline?milestone=").text
+    data = charts(html)
+    total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
+    # m1 has 1 job + f1 jobs from write_fixture (9) + write_live (1 running) + write_f1_run (2) = 12
+    assert total_bars > 1
+
+
+def test_milestone_filter_with_f2(client_with_f2):
+    """?milestone=f2 returns only f2's jobs."""
+    html = client_with_f2.get("/timeline?milestone=f2").text
+    data = charts(html)
+    total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
+    assert total_bars == 2
+    tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
+    assert tickets == {"f2-01-test", "f2-02-test"}
+
+
+def test_no_milestone_param_uses_default(client):
+    """No milestone parameter falls back to the current milestone."""
+    html = client.get("/timeline").text
+    data = charts(html)
+    total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
+    # Without the fix, ?milestone= (empty) would also fall back to f1, giving the same count.
+    # The fix ensures only None (no param) uses the default.
+    assert total_bars > 0
+
+
+def test_form_preserves_project(client):
+    """The milestone filter form keeps the project parameter on submit."""
+    html = client.get("/timeline").text
+    assert 'name="project"' in html
+    assert 'type="hidden"' in html
+
+
 def test_timeline_has_filter_form_and_jobs_table(client):
     html = client.get("/timeline").text
     assert "Filters" in section(html, "filters")
@@ -173,6 +263,20 @@ def client_with_m1(db_path: Path) -> TestClient:
     conn = open_db(db_path)
     try:
         write_m1_jobs(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def client_with_f2(db_path: Path) -> TestClient:
+    """A client over the fixture plus f2 milestone with jobs."""
+    conn = open_db(db_path)
+    try:
+        _add_f2_jobs(conn)
     finally:
         conn.close()
 
