@@ -25,3 +25,12 @@ Read `factory_dashboard/templates/overview.html` (a `<div class="spacer" style="
 - before any replay and after "Back to live", `#replay` is not sticky
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2286
+gate_failures: ['stopped', 'stopped']
+tokens: 1153833
+```
