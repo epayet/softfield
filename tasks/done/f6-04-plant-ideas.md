@@ -25,3 +25,10 @@ Read `docs/adr/20-planning-room.md` item 8, D5 in `docs/milestones/f6-planning-r
 - a `plant` request makes `docs/milestones/f7-<slug>.md` (if F6 is the highest factory key) with the owner's words, and the board sees an idea card
 - it works while Claude is parked at a limit
 - `uv run runner check-all --task f6-04-plant-ideas` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
