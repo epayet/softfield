@@ -22,3 +22,12 @@ Read `rows`, `seeds` and `showCard` in `factory_dashboard/static/factory.js` (a 
 - a browser test: clicking a planted row lands on that milestone's page, and clicking the seeds lands on `/tickets` at the Set aside panel, both with `?project=` kept
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2486
+gate_failures: ['stopped']
+tokens: 1312635
+```
