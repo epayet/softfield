@@ -287,9 +287,20 @@ def _meter_fills(client: TestClient) -> dict[str, str]:
         r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>', client.get("/").text, re.S
     )
     assert panel
-    return dict(
+    # Desktop: read from meter span class
+    fills = dict(
         re.findall(
             r'<div id="allow-([a-z_-]+)">.*?<div class="meter">\s*<span class="([a-z-]+)"',
+            panel[1],
+            re.S,
+        )
+    )
+    if fills:
+        return fills
+    # Mobile: read from dial SVG class
+    return dict(
+        re.findall(
+            r'<div id="allow-([a-z_-]+)">.*?<svg[^>]*class="[^"]*\bdial\b([^"]*)"',
             panel[1],
             re.S,
         )

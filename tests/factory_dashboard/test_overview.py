@@ -411,10 +411,12 @@ def allowance_rows(html: str) -> dict[str, str]:
     """The allowance panel's rows by their id (``claude-five_hour``…), each row's own text."""
     panel = re.search(r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>', html, re.S)
     assert panel, "no allowance section"
-    parts = re.split(r'<div id="allow-([a-z_-]+)">', panel.group(1))[1:]
+    # Strip SVG elements so their text doesn't leak into row text.
+    text = re.sub(r"<svg[^>]*>.*?</svg>", "", panel.group(1), flags=re.S)
+    parts = re.split(r'<div id="allow-([a-z_-]+)">', text)[1:]
     return {
-        key: " ".join(re.sub(r"<[^>]+>", " ", text).split())
-        for key, text in zip(parts[::2], parts[1::2], strict=True)
+        key: " ".join(re.sub(r"<[^>]+>", " ", text_part).split())
+        for key, text_part in zip(parts[::2], parts[1::2], strict=True)
     }
 
 
@@ -1042,3 +1044,133 @@ def test_running_and_queue_share_a_row_on_root(client):
             pos = next_close
     row_content = html[row_start : pos + 7]
     assert 'id="queue"' in row_content, "Queue not in same .row as Running"
+
+
+# --- allowance dials on phone (f3-25) -----------------------------------------------------------
+
+
+def test_allowance_dials_share_one_row_at_phone(page, allowance_client):
+    """f3-25: on phone the four windows share one row (same top, within 4 px)
+    and #allowance is at most 160 px tall."""
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = allowance_client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+    page.set_viewport_size({"width": 390, "height": 1200})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#allowance .allow > div")
+
+    boxes = page.eval_on_selector_all(
+        "#allowance .allow > div",
+        "els => els.map(e => e.getBoundingClientRect())",
+    )
+    assert len(boxes) >= 2
+    for i in range(len(boxes) - 1):
+        assert abs(boxes[i]["y"] - boxes[i + 1]["y"]) < 4, "dial rows not aligned: " + str(
+            [b["y"] for b in boxes]
+        )
+    allow_height = page.eval_on_selector(
+        "#allowance",
+        "el => el.offsetHeight",
+    )
+    assert allow_height <= 160, "#allowance is " + str(allow_height) + " px tall (max 160)"
+
+
+def test_allowance_bars_drawn_at_desktop(page, allowance_client):
+    """f3-25: at 1440 px the bars are drawn (not dials)."""
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = allowance_client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve)
+    page.set_viewport_size({"width": 1440, "height": 900})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#allowance .meter")
+
+    meters = page.locator("#allowance .meter").all()
+    assert len(meters) >= 2
+    for meter in meters:
+        assert meter.is_visible()
+
+
+def test_dial_fill_class_follows_bar_rule(allowance_client):
+    """Each dial's fill colour class follows the same rule as the bar's."""
+    panel = re.search(
+        r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>',
+        allowance_client.get("/").text,
+        re.S,
+    )
+    assert panel
+    rows = re.findall(
+        r'<div id="allow-([a-z_-]+)">.*?</div>\s*</div>\s*</div>',
+        panel.group(1),
+        re.S,
+    )
+    # Check that dial classes match meter classes for each row
+    for row in rows:
+        dial_match = re.search(r'class="[^"]*\bdial\b([^"]*)"', row)
+        meter_match = re.search(r'<span class="([a-z-]+)"', row)
+        if dial_match and meter_match:
+            dial_class = dial_match.group(1).strip()
+            meter_class = meter_match.group(1)
+            assert dial_class == meter_class, (
+                f"dial class '{dial_class}' != meter class '{meter_class}'"
+            )
+
+
+def test_no_data_yet_has_empty_ring(page, serve, db_path):
+    """'no data yet' shows an empty ring (no fill)."""
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute("DELETE FROM usage_events WHERE kind = 'reading'")
+        conn.commit()
+    finally:
+        conn.close()
+
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve_route(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = serve().get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve_route)
+    page.set_viewport_size({"width": 390, "height": 1200})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#allowance .allow > div")
+
+    # Check that at least one dial has stroke-dasharray starting with "0 "
+    dials = page.locator("#allowance .dial").all()
+    assert len(dials) >= 2
+    found_empty = False
+    for dial in dials:
+        inner = dial.inner_html()
+        if 'stroke-dasharray="0 100"' in inner:
+            found_empty = True
+            break
+    assert found_empty, "no dial with empty ring found"

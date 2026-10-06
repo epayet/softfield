@@ -1703,9 +1703,9 @@ def test_the_card_reads_the_document_the_floor_drew_last(page, line_client):
 # --- allowance rows layout (f4-34)---------------------------------------------------------------
 
 
-def test_allowance_rows_side_by_side_at_desktop_and_wrap_at_phone(page, allowance_client):
-    """f4-34: the allowance rows sit side by side where there is room,
-    and each row's label and percent are visible at both desktop and phone."""
+def test_allowance_rows_side_by_side_at_desktop_and_in_one_row_at_phone(page, allowance_client):
+    """f3-25: on phone the four windows share one row of dials;
+    on desktop the bars are drawn as today."""
     ORIGIN = "http://127.0.0.1:8765"
     ROWS = "#allowance .allow > div"
 
@@ -1722,8 +1722,8 @@ def test_allowance_rows_side_by_side_at_desktop_and_wrap_at_phone(page, allowanc
 
     page.route(f"{ORIGIN}/**", serve)
 
-    # Desktop: rows side by side.
-    page.set_viewport_size({"width": 1360, "height": 900})
+    # Desktop: rows side by side (bars layout).
+    page.set_viewport_size({"width": 1440, "height": 900})
     page.goto(ORIGIN + "/")
     page.wait_for_selector(ROWS)
     boxes = page.eval_on_selector_all(ROWS, "els => els.map(e => e.getBoundingClientRect())")
@@ -1731,14 +1731,14 @@ def test_allowance_rows_side_by_side_at_desktop_and_wrap_at_phone(page, allowanc
     for i in range(len(boxes) - 1):
         assert abs(boxes[i]["y"] - boxes[i + 1]["y"]) < 4
 
-    # Phone: rows wrap vertically.
+    # Phone: rows share one row (dials layout, within 4 px).
     page.set_viewport_size({"width": 390, "height": 1200})
     page.reload()
     page.wait_for_selector(ROWS)
     boxes = page.eval_on_selector_all(ROWS, "els => els.map(e => e.getBoundingClientRect())")
     assert len(boxes) >= 2
     for i in range(len(boxes) - 1):
-        assert boxes[i + 1]["y"] > boxes[i]["y"]
+        assert abs(boxes[i]["y"] - boxes[i + 1]["y"]) < 4
 
     # Labels and percentages visible at both sizes.
     for row in page.locator(ROWS).all():
