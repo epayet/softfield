@@ -23,3 +23,10 @@ Read `docs/agents/lead.md` ("Replans"), D1–D4 in `docs/milestones/f8-one-queue
 ### Done when
 - every fact in those four tickets matches the code, and `uv run pytest -q tests/runner/test_tasks.py` passes
 - the replan log lists each change
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
