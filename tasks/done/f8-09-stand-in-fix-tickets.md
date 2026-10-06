@@ -29,3 +29,10 @@ Read `CHECKPOINT_STAND_IN` in `runner/prompts.py`, `stand_in_checkpoint` and `fi
 - three test findings and one code finding on one merged ticket give two tickets, the test one test-only
 - a test-only ticket passes pre-flight and merges with tests that pass on main; any other ticket still needs them to fail
 - `uv run runner check-all --task f8-09-stand-in-fix-tickets` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
