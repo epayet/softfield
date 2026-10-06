@@ -1,6 +1,6 @@
 # Milestone F7: factory fixes from 2026-10-04
 
-> **Status: planned** (2026-10-04, with the owner). **State:** ready · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-06. Base: git tag `f7-factory-fixes-start`. Report: [`docs/reviews/f7-factory-fixes.md`](../reviews/f7-factory-fixes.md).
 > From the 2026-10-04 session: [ADR 24](../adr/24-ratings-that-hold.md) (ratings that hold, Accepted) and three runner bugs found while reviewing F3 and F4. Small and urgent: until 01–02 land, gpt-oss-120b gets no first attempt (rated 1).
 
 ## Outcome

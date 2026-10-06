@@ -1,6 +1,6 @@
 # F7 review: factory fixes
 
-- **Status:** review round 2 done, 2026-10-05; every blocking and should-fix finding resolved. Waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-06.
 - **Reviewed:** `git diff f7-factory-fixes-start..main`, 2026-10-05, by the lead (headless). Round 1: the six tickets f7-01…06, their tests, and the two logs in the milestone doc. Round 2: f7-07, its test and its "Void benches" log.
 
 ## Sign-off sheet
