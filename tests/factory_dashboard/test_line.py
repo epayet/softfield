@@ -1301,9 +1301,24 @@ def test_on_a_phone_the_replay_bar_sticks_to_the_bottom_with_44_px_controls(page
     open_line(page, night_client(night_db), size)
     bar = page.locator("#replay")
     assert bar.evaluate("e => getComputedStyle(e).position") != "sticky"
+    # no element on the page has a 200vh inline height
+    no_200vh = page.evaluate("""
+        () => {
+            const els = document.querySelectorAll('[style*="200vh"]');
+            return els.length;
+        }
+    """)
+    assert no_200vh == 0
+    # make the page taller than the 844 px screen so sticky can stick
+    page.evaluate("document.body.style.height = '400vh'")
+    page.evaluate("window.scrollTo(0, 0)")
+    assert bar.evaluate("e => getComputedStyle(e).position") != "sticky"
     page.click("#replay-start")
     page.wait_for_selector("#replay-live", state="visible")
     assert bar.evaluate("e => getComputedStyle(e).position") == "sticky"
+    box = bar.bounding_box()
+    assert box is not None
+    assert abs(box["y"] + box["height"] - size["height"]) <= 1
     controls = page.locator("#replay button, #replay select")
     assert controls.count() == 7  # Replay, its stretch, Play, ◀, ▶, the speed, Back to live
     for n in range(controls.count()):

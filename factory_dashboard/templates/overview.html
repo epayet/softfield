@@ -103,6 +103,27 @@
   {% if not verdict.milestone and not verdict.run_dir %}<p class="sub">No verdict yet.</p>{% endif %}
 </section>
 
+{% include "_partials/away.html" %}
+
+<section id="savings" class="panel">
+  <h2>Savings from delegating{% if milestone %}, {{ milestone.key | upper }}{% endif %} <span class="src">API-equivalent dollars</span></h2>
+  {% if savings and savings.tickets %}
+  <div class="stats money">
+    <div class="stat"><b>{{ savings.doing_itself | usd }}</b><span>what Claude would have spent writing the developers' {{ "{:,}".format(savings.lines) }} lines itself (≈{{ savings.doing_itself_tokens | tokens }} token-equivalents)</span></div>
+    <div class="stat"><b>{{ savings.supporting | usd }}</b><span>what it spent supporting them: tickets, directions, escalations, a share of reviews and checkpoints (≈{{ savings.supporting_tokens | tokens }})</span></div>
+    <div class="stat"><b>{{ savings.net | usd }}</b><span>net, on {{ savings.tickets }} delegated ticket{{ "s" if savings.tickets != 1 }}</span></div>
+  </div>
+  {% else %}
+  <p class="sub">No delegated tickets yet.</p>
+  {% endif %}
+</section>
+
+<section id="spend" class="panel">
+  <h2>Claude per milestone <span class="src">API-equivalent dollars</span></h2>
+  <div class="chart" data-chart="spend"></div>
+  <script type="application/json">{{ spend | tojson }}</script>
+</section>
+
 {# The replay bar: outside #line-live, which htmx replaces whole every 5 s. #}
 <div class="panel replay" id="replay">
   <button type="button" class="play" id="replay-start">Replay</button>
@@ -124,29 +145,6 @@
     <button type="button" id="replay-live">Back to live</button>
   </div>
 </div>
-
-<div class="spacer" style="height: 200vh;"></div>
-
-{% include "_partials/away.html" %}
-
-<section id="savings" class="panel">
-  <h2>Savings from delegating{% if milestone %}, {{ milestone.key | upper }}{% endif %} <span class="src">API-equivalent dollars</span></h2>
-  {% if savings and savings.tickets %}
-  <div class="stats money">
-    <div class="stat"><b>{{ savings.doing_itself | usd }}</b><span>what Claude would have spent writing the developers' {{ "{:,}".format(savings.lines) }} lines itself (≈{{ savings.doing_itself_tokens | tokens }} token-equivalents)</span></div>
-    <div class="stat"><b>{{ savings.supporting | usd }}</b><span>what it spent supporting them: tickets, directions, escalations, a share of reviews and checkpoints (≈{{ savings.supporting_tokens | tokens }})</span></div>
-    <div class="stat"><b>{{ savings.net | usd }}</b><span>net, on {{ savings.tickets }} delegated ticket{{ "s" if savings.tickets != 1 }}</span></div>
-  </div>
-  {% else %}
-  <p class="sub">No delegated tickets yet.</p>
-  {% endif %}
-</section>
-
-<section id="spend" class="panel">
-  <h2>Claude per milestone <span class="src">API-equivalent dollars</span></h2>
-  <div class="chart" data-chart="spend"></div>
-  <script type="application/json">{{ spend | tojson }}</script>
-</section>
 
 </div>
 <script src="/static/factory.js" defer></script>
