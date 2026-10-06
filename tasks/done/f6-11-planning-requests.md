@@ -26,3 +26,10 @@ Read D1, D4 and the Replan section in `docs/milestones/f6-planning-room.md`, `fa
 - each of the five kinds posted from the dashboard's own page writes one row; a foreign `Origin` still gets 403 for them
 - `draft` returns a file only on the plan branch while it exists, main's after, and None for `runner/x.py`, `docs/../x` and a thread like `../x`
 - `uv run runner check-all --task f6-11-planning-requests` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
