@@ -39,3 +39,10 @@ Read `docs/adr/20-planning-room.md` (items 1–5), D1–D3 in `docs/milestones/f
 - a reply's points and proposals are stored; a reply with a broken block is stored as text with a note
 - at 80% of the 5-hour window a planner job still runs; a lead ticket parks
 - `uv run runner check-all --task f6-01-planner-threads` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
