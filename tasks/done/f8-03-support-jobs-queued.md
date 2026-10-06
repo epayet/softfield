@@ -26,3 +26,10 @@ Read `docs/adr/22-one-visible-queue.md`, D1–D3 in `docs/milestones/f8-one-queu
 - a parked checkpoint survives a restart as a row and runs after its reset
 - the existing loop tests still pass (the order of what runs is unchanged)
 - `uv run runner check-all --task f8-03-support-jobs-queued` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
