@@ -446,3 +446,20 @@ def test_a_named_milestone_keeps_its_short_key_docs(repo: Path):
     assert code == 0 and "Review: docs/reviews/f2.md" in text
     owner.signoff(repo, "f2-cloud-first", TODAY)
     assert "Signed off" in (repo / "docs" / "milestones" / "f2.md").read_text()
+
+
+def test_signoff_leaves_another_milestones_ticket_item_alone(repo: Path):
+    """2026-10-06: F7's sign-off met "reserve f8-03-support-jobs-queued", read the ticket id
+    as a milestone key, and the failure rolled back F7's done row."""
+    _milestone(repo)
+    _in_milestone(write_task(repo / "tasks" / "ready", "m2-01-lead"), "2")
+    owner.verdict(repo, "m2", _reserve(), "tickets paused: m2-01-lead", db=_db(repo))
+    assert ("reserve", "m2-01-lead") in _open(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))
+    assert set(_open(repo)) == {("reserve", "m2-01-lead"), ("review-stop", "m2")}  # m2's
+    conn = sqlite3.connect(_db(repo))
+    try:
+        (status,) = conn.execute("SELECT status FROM milestones WHERE key = 'm1'").fetchone()
+    finally:
+        conn.close()
+    assert status == "done"

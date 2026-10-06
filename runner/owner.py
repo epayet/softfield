@@ -278,6 +278,9 @@ def _replace_line(path: Path, pattern: re.Pattern[str], line: str) -> None:
     path.write_text(pattern.sub(line, text, count=1), encoding="utf-8")
 
 
+_MILESTONE_KINDS = ("signoff", "review-stop")  # items whose subject is a milestone key
+
+
 def _signed_off(
     milestone: str,
     score: int | None,
@@ -294,8 +297,15 @@ def _signed_off(
         owner_score=score,
         signoff=sheet or None,
     )
-    # every item about the milestone: its sign-off, and a review stop the owner has settled
-    _resolve(conn, project, lambda kind, subject: short_key(subject) == short_key(milestone))
+    # every item about the milestone: its sign-off, and a review stop the owner has settled.
+    # Other kinds name a ticket, not a milestone key (f8-03's reserve item broke F7's, f7-F2).
+    _resolve(
+        conn,
+        project,
+        lambda kind, subject: (
+            kind in _MILESTONE_KINDS and short_key(subject) == short_key(milestone)
+        ),
+    )
 
 
 def signoff(
