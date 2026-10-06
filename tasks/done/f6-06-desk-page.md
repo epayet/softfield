@@ -48,3 +48,9 @@ attempts: 3
 tokens: 5032263
 logs: var/runs/20261006-205704/f6-06-desk-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
