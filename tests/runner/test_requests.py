@@ -235,10 +235,26 @@ def test_turning_a_switch_on_answers_the_items_that_wait_for_it(repo, switch, an
         ("reserve", "five_hour"),
     ):
         _item(repo, kind, subject)
+    parked = State(parked={"m1-01-lead": {"kind": "reserve"}, "m1-02-lead": {"kind": "five-hour"}})
     _ask(repo, "reserve", switch, "on")
-    _apply(repo)
+    _apply(repo, parked)
     resolved = {(kind, subject) for kind, subject, _, open_ in _items(repo) if not open_}
     assert resolved == answered
+
+
+def test_a_tickets_wait_item_goes_once_the_ticket_is_no_longer_parked(repo):
+    """A ticket's reserve item stayed in Needs you a day after the ticket merged (f8-03,
+    2026-10-06): an item about a ticket that no longer waits for it is answered."""
+    for kind, subject in (
+        ("reserve", "m1-01-lead"),
+        ("five-hour", "m1-02-lead"),
+        ("reserve", "m1-03-lead"),
+        ("reserve", "week"),
+    ):
+        _item(repo, kind, subject)
+    _apply(repo, State(parked={"m1-03-lead": {"kind": "reserve"}}))
+    still = {(kind, subject) for kind, subject, _, open_ in _items(repo) if open_}
+    assert still == {("reserve", "m1-03-lead"), ("reserve", "week")}
 
 
 def test_another_projects_requests_are_left_alone(repo):

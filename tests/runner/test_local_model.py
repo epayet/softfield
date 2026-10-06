@@ -277,6 +277,15 @@ def test_an_unrecognised_error_from_a_cloud_tag_is_a_possible_limit(tmp_path, mo
     assert result.usage["input_tokens"] == 100  # what it spent still counts
 
 
+def test_a_harness_that_never_started_is_a_failure_not_a_limit(tmp_path, monkeypatch):
+    """No stream at all: OpenCode never ran, so the model refused nothing. The bench's
+    sandbox launcher once failed to start, and gemma was recorded as refusing (2026-10-06)."""
+    missing = "python3: can't open file '/repo/runner/sandbox.py': [Errno 2] No such file"
+    _fake_stream(monkeypatch, [], stderr=missing, code=2)
+    result = _run(CLOUD, tmp_path)
+    assert (result.error, result.refusal) == (FAILURE, None)
+
+
 def test_the_same_error_on_the_local_model_is_a_failure(tmp_path, monkeypatch):
     _fake_stream(monkeypatch, [_step(100, 1)], stderr=UNRECOGNISED, code=1)
     result = _run(LOCAL, tmp_path)

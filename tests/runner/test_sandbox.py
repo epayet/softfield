@@ -64,3 +64,12 @@ def test_the_sandbox_starts_from_a_folder_with_another_runner_package(tmp_path, 
     monkeypatch.chdir(tmp_path)
     done = _run(["sh", "-c", "echo ran"], [tmp_path], monkeypatch)
     assert (done.returncode, done.stdout) == (0, "ran\n"), done.stderr
+
+
+def test_the_launcher_does_not_need_sandbox_py_on_disk(tmp_path, monkeypatch):
+    """The runner checks out older task branches in the main checkout, some without
+    runner/sandbox.py: a bench beside it found no file to start (2026-10-06, gemma)."""
+    cmd = sandbox.wrap(["true"], [tmp_path])
+    assert not any(arg.endswith("sandbox.py") for arg in cmd)
+    done = _run(["sh", "-c", "echo ran"], [tmp_path], monkeypatch)
+    assert (done.returncode, done.stdout) == (0, "ran\n"), done.stderr

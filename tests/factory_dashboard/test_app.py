@@ -22,6 +22,7 @@ VENDOR = STATIC / "vendor"
 
 PAGES = [
     "/",
+    "/planning",
     "/milestones",
     "/tickets",
     "/jobs",
@@ -29,7 +30,6 @@ PAGES = [
     "/timeline",
     "/agents",
     "/bench",
-    "/planning",
 ]
 
 
@@ -218,6 +218,12 @@ def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme
     assert height <= 110, f"header {height}px > 110px"
     tabs = page.locator("nav.tabs")
     assert tabs.evaluate("el => el.scrollWidth > el.clientWidth"), "tabs not scrollable"
+    # Each tab keeps its word's width: shrunk, they overlapped (the owner, 2026-10-06)
+    squeezed = page.evaluate(
+        """() => [...document.querySelectorAll('nav.tabs a')]
+            .filter((a) => a.scrollWidth > a.clientWidth + 1).map((a) => a.textContent)"""
+    )
+    assert squeezed == [], f"tabs narrower than their words: {squeezed}"
     assert page.evaluate(
         "() => document.documentElement.clientWidth === document.documentElement.scrollWidth"
     ), "page scrolls sideways"

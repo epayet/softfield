@@ -415,6 +415,17 @@ def _lapse(conn: sqlite3.Connection, project_id: int, state: State, now: datetim
     return lines
 
 
+def _settle_waits(conn: sqlite3.Connection, project_id: int, state: State, now: datetime) -> None:
+    """A ticket's reserve or 5-hour item answered once the ticket no longer waits for it: it
+    ran, merged or went back (f8-03's stayed a day after it merged, 2026-10-06)."""
+    for row in metrics.open_owner_items(conn, project_id):
+        kind, subject = row["kind"], row["subject"]
+        if kind not in (loop.RESERVE_KIND, loop.FIVE_HOUR_KIND) or subject in loop.SWITCHES:
+            continue
+        if (state.parked.get(subject) or {}).get("kind") != kind:
+            metrics.resolve_owner_item(conn, row["id"], now.isoformat())
+
+
 def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[str]:
     """Apply the project's open requests, oldest first, after turning off the switches whose
     24 hours are over: one line per request done or left to wait, and per switch turned off.
@@ -428,6 +439,7 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
         if project is None:
             return []
         lines = _lapse(conn, project, state, now)
+        _settle_waits(conn, project, state, now)
         for row in metrics.open_requests(conn, project):
             if (why := _waits(repo, row["kind"])) is not None:
                 lines.append(f"{_what(row)}: {why}")

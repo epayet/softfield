@@ -9,7 +9,7 @@ can run beside anything. Reads stay open everywhere: the agent reads its tools a
 Landlock is the kernel's unprivileged sandbox (Linux 5.13+). bubblewrap would need user
 namespaces, which Ubuntu 24.04's AppArmor denies to an unprivileged user.
 
-``python runner/sandbox.py --write DIR [--write DIR …] -- CMD …`` restricts itself, then
+``python -c <this file's source> --write DIR [--write DIR …] -- CMD …`` restricts itself, then
 execs ``CMD``: the rules hold for it and every process it starts. A launcher rather than a
 ``preexec_fn``, which isn't safe in the runner's threaded process.
 """
@@ -113,8 +113,14 @@ def wrap(cmd: Sequence[str], writable: Iterable[Path]) -> list[str]:
     """``cmd`` run under the sandbox, writing only under ``writable`` and ``TOOL_DIRS``."""
     dirs = [*writable, *TOOL_DIRS]
     flags = [arg for path in dirs for arg in ("--write", str(path))]
-    # By path, not `-m runner.sandbox`: started in a copy, `-m` would import the copy's runner
-    return [sys.executable, str(Path(__file__).resolve()), *flags, "--", *cmd]
+    # The source read at import, not a path or `-m runner.sandbox`: started in a copy, `-m`
+    # imports the copy's runner, and the main checkout's file goes when the runner checks
+    # out a branch older than it (2026-10-06)
+    return [sys.executable, "-c", _SOURCE, *flags, "--", *cmd]
+
+
+# Read at import, by the runner; a launched copy runs as `-c`, with no file
+_SOURCE = Path(__file__).read_text(encoding="utf-8") if "__file__" in globals() else ""
 
 
 def main(argv: Sequence[str]) -> None:

@@ -290,7 +290,8 @@ def classify(run: OpencodeRun, local: bool, now: datetime) -> tuple[Refusal | No
     before. No Ollama refusal has been seen (f1-18), so a cloud error that names a limit is
     one, a passing one is transient, and any other is a possible limit with no reset, which
     the allowance cools down (ADR 15 item 2) rather than counting as a failed attempt.
-    A timeout, or an attempt stopped stuck, is a failure everywhere.
+    A timeout, or an attempt stopped stuck, is a failure everywhere, and so is a run with no
+    stream at all: OpenCode never started, so no model refused (the bench's launcher, 2026-10-06).
     """
     text = "\n".join(t for t in (run.errors, run.stderr.strip()) if t)
     if local or run.exit_code is None or (run.exit_code == 0 and not run.errors):
@@ -300,6 +301,8 @@ def classify(run: OpencodeRun, local: bool, now: datetime) -> tuple[Refusal | No
         return Refusal(None, resets_at), False
     if TRANSIENT_RE.search(text):
         return None, True
+    if not (run.facts.session_id or run.tokens.steps or run.errors):
+        return None, False
     return Refusal(None, None, certain=False), False
 
 
