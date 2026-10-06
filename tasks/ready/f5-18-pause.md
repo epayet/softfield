@@ -3,6 +3,7 @@ id: f5-18-pause
 milestone: f5-board
 depends_on: [f5-01-requests-apply, f5-02-requests-route, f8-03-support-jobs-queued, f8-04-reserve-switches]
 agent: lead
+priority: 1
 difficulty: 5
 files:
   - runner/requests.py

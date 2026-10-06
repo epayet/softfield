@@ -1,6 +1,6 @@
 # Milestone F6: the planning room
 
-> **Status: planned** (2026-10-03), on [ADR 20](../adr/20-planning-room.md) (Proposed until the owner accepts it). **State:** ready · **Priority:** 3 · **Area:** factory
+> **Status: planned** (2026-10-03), on [ADR 20](../adr/20-planning-room.md) (Proposed until the owner accepts it). **State:** building · **Priority:** 1 · **Area:** factory
 > The owner's goal: "do from the system what we did in this long chat, async with a nice UI". Picture: <https://claude.ai/artifact/UNELSzF5iF5RccjVJiWZzx>, sources in `docs/milestones/planning-room-mockup/`, with two changes from the owner: "planning goes first" merges into "The factory now", and every point is agreed by default (only Comment… on what to change or ask).
 > Builds on F5's requests (f5-01, f5-02), cards (f5-04), notifications (f5-12) and the look (f5-14), by its tickets' dependencies.
 
@@ -61,6 +61,10 @@
 | 08 | proposal-review | D | 5 | 06 | A proposal's key points, Send back / Accept ADR / Approve plan, mock-ups in a sandbox |
 | 09 | needs-you-desk | D | 3 | 06 | Needs you and "Planning · N" from the desk |
 | 10 | planning-phone | D | 4 | 07, 08 | One point at a time, the Send button pinned at the bottom |
+| 12 | merge-duplicates | L | 6 | 08 | The planner spots duplicate cards and threads and proposes a `merge`; approval closes one and keeps talking in the other (owner, 2026-10-06) |
+| 13 | replan-edits-ready | L | 6 | 12, f5-18 | A `replan` changes its milestone's ready tickets, applied on approval while paused: the "Later" item, brought forward (owner, 2026-10-06) |
+
+**Priority 1 (owner, 2026-10-06):** steering and planning from this room comes first, so the owner stops the factory less often to plan in a terminal. f5-12 (notifications, for 09) and f5-18 (pause, for 13) carry `priority: 1` too.
 
 Later: parallel planner jobs beside developers (with parallel developers); a live, streaming reply; a preview of the work ahead; a `replan` that edits ready tickets under f5-18's pause (suggested: a lead ticket once f5-18 is done, letting a `replan`'s branch carry edits to its milestone's `tasks/ready/` tickets that `approve_plan` applies while paused).
 

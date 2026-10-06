@@ -33,6 +33,8 @@ For whichever frontier model leads: Claude today, possibly another tomorrow ([AD
     7. faster, parallel workers.
 
     The aim is "a management system, not a dashboard": lots of work planned ahead, run with little supervision, watched live from a phone on the home Wi-Fi.
+  - **Steering from the planning room comes first** (owner, 2026-10-06): the owner wants to plan and redirect work from `/planning` rather than stop the runner for a terminal chat, so F6 and what it needs (f5-12, f5-18, f6-12, f6-13) go before other factory work. Each terminal session with notes should leave the room able to take that kind of session next time.
+  - **The owner's note sessions** (2026-10-06): they paste many short notes at once. Check each against the ready tickets and milestone docs first (several were already planned), and answer from the code, not the plan: two of the first answers that night were wrong until the code was read: the dashed crates mean "waits", not "developer", and Planting showed 0 because it was hard-coded, not because no thread existed.
   - **Planning sessions:** first capture every idea the owner raises in `docs/roadmap.md`, so none is lost. Then go through them all: for each, answer it **and suggest an action** (a ticket, an ADR item, the roadmap, nothing). The owner only says what they disagree with.
   - **Product work is on hold** (owner, 2026-10-04): don't propose product milestones until the owner asks; the factory comes first for now.
   - **Reviewing an ADR with the owner** (owner, 2026-10-04; the planning room will do the same in its UI):

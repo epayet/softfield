@@ -24,7 +24,7 @@ Read the board mock-up (`docs/milestones/f5-board-mockup/Main.dc.html`, `docs/mi
   - "Growing cards feed the factory floor ›" links to `/`.
 - **Phone (under 640 px):** stacked sections in the mock-up's order: ripe, growing, planted and sprouting, seeds, harvested. Every tap target is at least 44 px.
 - A milestone card links to `/milestones/<key>`, a bug card to `/tickets/<id>`.
-- Add "Board" to the top bar's tabs in `factory_dashboard/templates/base.html`, after the factory's own tab.
+- Add "Board" to the top bar's tabs in `factory_dashboard/templates/base.html`, right after Planning (the owner, 2026-10-06: Overview, Planning, Board, …). The Milestones tab stays until f5-17's card page carries a milestone's details; f5-17 removes it.
 
 ### Done when
 - `/board` lists each card in its stage's column, asserted within that column

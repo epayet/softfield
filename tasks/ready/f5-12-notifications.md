@@ -3,6 +3,7 @@ id: f5-12-notifications
 milestone: f5-board
 depends_on: []
 agent: lead
+priority: 1
 difficulty: 4
 files:
   - factory_dashboard/static/notify.js

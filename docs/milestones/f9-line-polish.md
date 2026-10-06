@@ -1,6 +1,6 @@
 # Milestone F9: line polish
 
-> **Status: planned** (2026-10-04, with the owner). **State:** ready · **Priority:** 5 · **Area:** factory
+> **Status: planned** (2026-10-04, with the owner). **State:** building · **Priority:** 4 · **Area:** factory
 > The owner's notes from using the line on 2026-10-04, plus five of f3-22's proposals they confirmed (f3-25, f3-28, f3-29, f3-30, f3-31, re-homed here with their ids). Developer tickets, each a small change on the lead-written line (F3's lesson: no SVG geometry for developers); 01 is the lead's.
 
 ## Outcome
@@ -32,3 +32,13 @@
 | 14 | away-span-in-place | D | 4 | – | choosing a stretch redraws While you were away without a reload |
 | 15 | away-who-did-it | D | 3 | – | each ticket while away: who did it, and in how many attempts |
 | 16 | no-ollama-allowance | D | 2 | – | the allowance panel drops the Ollama row (no data, ever) |
+| 17 | phone-allowance-bars | D | 3 | – | rewritten (owner, 2026-10-06): phone allowances back to bars, green to red; the dials and their colour fix go |
+| 21 | milestones-in-order | D | 3 | – | Milestones: in progress, then not started by priority, then done, latest first |
+| 22 | floor-words | D | 4 | – | belt counts say "today", Planting says what it is, a blue developer bay, the faded crates in the legend, no refresh note, savings "so far" |
+| 23 | floor-taps | D | 3 | 22 | merged crates, the lead's next ticket, stash tiles (short keys), Planting and ripe lines open what they name |
+| 24 | tap-sheet | D | 3 | 23 | on a phone the crate card is a bottom sheet with Close |
+| 25 | seeds-and-planting | D | 4 | 24 | Planting counts cards in talks (it was a hard-coded 0); the seeds open the sheet listing set-aside tickets |
+| 26 | replay-under-floor | D | 2 | 13 | the replay bar right after the floor |
+| 27 | phone-rows-compact | L | 4 | 25 | the phone's planted rows: 3 compact rows and "Show all N" |
+
+**The owner's notes of 2026-10-06** (from using the line on the phone) are 17 and 21–27. Crates moving along the belts went to [F10](f10-crates.md).
