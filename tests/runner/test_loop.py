@@ -3340,7 +3340,7 @@ def test_a_cloud_developers_refusal_reruns_the_same_attempt_on_local(
     repo, fake_model, fake_clock, monkeypatch
 ):
     """ADR 14 item 10: a refusal doesn't count; local never refuses, so work never stops."""
-    _readings_at(repo, 0.20)  # under Thursday's pace line of 28%: Sonnet first
+    _readings_at(repo, 0.20)  # under Thursday's pace line of 38%: Sonnet first
     _add_task(repo, "m1-01-thing")
     resets = THURSDAY + timedelta(hours=3)
     kinds: list[str] = []
@@ -3365,7 +3365,7 @@ def test_a_cloud_developers_refusal_reruns_the_same_attempt_on_local(
     # Each row says why its agent was chosen.
     assert refused["routing_reason"] == (
         "claude-sonnet (rated 7) covers difficulty ?, the best permitted:"
-        " claude-sonnet: week 20% used, under its pace line of 28%"
+        " claude-sonnet: week 20% used, under its pace line of 38%"
     )
     assert passed["routing_reason"] == "local-m, the floor: claude-sonnet refused this attempt"
     [event] = [e for e in _rows(repo, "usage_events") if e["kind"] == "refusal"]
@@ -3374,7 +3374,7 @@ def test_a_cloud_developers_refusal_reruns_the_same_attempt_on_local(
 
 
 def test_local_takes_the_ticket_when_claudes_pace_is_spent(repo, fake_model, fake_clock):
-    _readings_at(repo, 0.31)
+    _readings_at(repo, 0.41)
     _add_task(repo, "m1-01-thing")
     fake_model.append(_implement)
     [task] = _routed(repo).tasks
@@ -3382,7 +3382,7 @@ def test_local_takes_the_ticket_when_claudes_pace_is_spent(repo, fake_model, fak
     [job] = _rows(repo, "jobs")
     assert (job["agent"], job["routing_reason"]) == (
         "local-m",
-        "local-m, the floor: claude-sonnet: week 31% used, over its pace line of 28%",
+        "local-m, the floor: claude-sonnet: week 41% used, over its pace line of 38%",
     )
 
 
@@ -3430,7 +3430,7 @@ def test_a_failed_attempt_steps_up_to_sonnet_which_builds_on_the_branch(
     )
     assert second["routing_reason"] == (
         "step up from local-m (rated 5) to claude-sonnet (rated 7):"
-        " claude-sonnet: week 20% used, under its pace line of 28%"
+        " claude-sonnet: week 20% used, under its pace line of 38%"
     )
     [ticket] = _rows(repo, "tickets")
     assert ticket["merged_by"] == "claude-sonnet"

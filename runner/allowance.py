@@ -24,6 +24,7 @@ from datetime import datetime, timedelta
 from typing import NamedTuple
 
 SWEEP = 0.1  # the last tenth of a fixed window
+MARGIN = 1 / 7  # the pace line runs a day of the week ahead (ADR 25)
 COOLDOWN = timedelta(hours=1)  # after a refusal with no reset given
 EPS = 1e-9
 
@@ -199,7 +200,7 @@ def _check(
         if not window.measured and not window.reserve:
             return True, headroom, f"{used}, in its sweep, past its learned capacity until refused"
         return False, headroom, f"{used}, in its sweep, over {share / capacity:.0%}"
-    line = share * elapsed
+    line = share * min(1.0, elapsed + MARGIN)
     ok = need <= line + EPS
     return (
         ok,

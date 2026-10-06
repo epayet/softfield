@@ -10,7 +10,8 @@ HOUR = timedelta(hours=1)
 DAY = timedelta(days=1)
 WEEK = timedelta(days=7)
 
-# Claude's week as in test_allowance: Thursday is 3/7 in, so the pace line is 0.7 × 3/7 = 30%.
+# Claude's week as in test_allowance: Thursday is 3/7 in, plus a day's margin (ADR 25), so
+# the pace line is 0.7 × 4/7 = 40%.
 WEEK_RESET = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
 WEEK_START = WEEK_RESET - WEEK
 THURSDAY = WEEK_START + 3 * DAY
@@ -79,15 +80,15 @@ def developer(
             5,
             SONNET,
             "claude-sonnet (rated 7) covers difficulty 5, the best permitted:"
-            " claude-sonnet: week 20% used, under its pace line of 30%",
+            " claude-sonnet: week 20% used, under its pace line of 40%",
         ),
-        # Its pace spent: 31% used, past Thursday's line of 30%.
+        # Its pace spent: 41% used, past Thursday's line of 40%.
         (
-            {SONNET.id: claude(0.31)},
+            {SONNET.id: claude(0.41)},
             THURSDAY,
             5,
             LOCAL,
-            "local-qwen, the floor: claude-sonnet: week 31% used, over its pace line of 30%",
+            "local-qwen, the floor: claude-sonnet: week 41% used, over its pace line of 40%",
         ),
         # The sweep takes an ordinary ticket a spread week would refuse.
         (
@@ -155,7 +156,7 @@ def test_a_read_only_harness_never_develops():
             {SONNET.id: claude(0.1), OPUS.id: claude(0.1)},
             SONNET,
             "step up from local-qwen (rated 5) to claude-sonnet (rated 7):"
-            " claude-sonnet: week 10% used, under its pace line of 30%",
+            " claude-sonnet: week 10% used, under its pace line of 40%",
         ),
         # Sonnet (7) failed: Opus (9) is 2 above it.
         (
@@ -163,12 +164,12 @@ def test_a_read_only_harness_never_develops():
             {SONNET.id: claude(0.1), OPUS.id: claude(0.1)},
             OPUS,
             "step up from claude-sonnet (rated 7) to claude-opus (rated 9):"
-            " claude-opus: week 10% used, under its pace line of 30%",
+            " claude-opus: week 10% used, under its pace line of 40%",
         ),
         # Sonnet over its pace: no step up, local retries.
         (
             LOCAL,
-            {SONNET.id: claude(0.31), OPUS.id: claude(0.31)},
+            {SONNET.id: claude(0.41), OPUS.id: claude(0.41)},
             LOCAL,
             "local-qwen again: no permitted agent rated 7 or more",
         ),
@@ -185,7 +186,7 @@ def test_one_point_above_is_no_step_up():
 
 
 def test_a_failed_cloud_agent_no_longer_permitted_hands_back_to_the_first_pick():
-    windows = {SONNET.id: claude(0.31)}
+    windows = {SONNET.id: claude(0.41)}
     picked = developer(DEVELOPERS, windows, attempt=2, failed=SONNET.id)
     assert picked.agent == LOCAL
     assert picked.reason.startswith("claude-sonnet may not retry: ")
@@ -211,7 +212,7 @@ def test_with_lead_work_ready_a_developer_ticket_never_goes_to_claude():
             0.4,
             SONNET,
             "claude-sonnet (rated 7) covers difficulty 5, the best permitted:"
-            " claude-sonnet: week 10% used, under its pace line of 30%",
+            " claude-sonnet: week 10% used, under its pace line of 40%",
         ),
         (
             0.5,

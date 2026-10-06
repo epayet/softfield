@@ -25,7 +25,7 @@ MONTH = timedelta(days=30)
 # Claude's week in the 2026-10-01 probe: Monday 28 September to Monday 5 October, 16:00 UTC.
 WEEK_RESET = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
 WEEK_START = WEEK_RESET - WEEK
-THURSDAY = WEEK_START + 3 * DAY  # 3/7 of the week: the pace line is 0.7 × 3/7 = 30%
+THURSDAY = WEEK_START + 3 * DAY  # 3/7 of the week, plus a day's margin: 0.7 × 4/7 = 40% (ADR 25)
 
 
 def claude_week(used, reserve=0.3):
@@ -41,23 +41,31 @@ def claude_five_hour(used, now, reserve=0.0):
 @pytest.mark.parametrize(
     ("now", "used", "cost", "ok", "reason"),
     [
-        (THURSDAY, 0.20, 0.02, True, "claude-sonnet: week 20% used, under its pace line of 30%"),
-        (THURSDAY, 0.29, 0.02, False, "claude-sonnet: week 29% used, over its pace line of 30%"),
-        # Monday evening: little of the week has gone, so little may be spent.
+        (THURSDAY, 0.30, 0.02, True, "claude-sonnet: week 30% used, under its pace line of 40%"),
+        (THURSDAY, 0.39, 0.02, False, "claude-sonnet: week 39% used, over its pace line of 40%"),
+        # Monday evening: half a day gone plus the day's margin, 0.7 × 3/14 = 15%.
         (
             WEEK_START + 12 * HOUR,
-            0.04,
+            0.14,
             0.02,
             False,
-            "claude-sonnet: week 4% used, over its pace line of 5%",
+            "claude-sonnet: week 14% used, over its pace line of 15%",
         ),
-        # 17 h before the reset is just outside the sweep; spread refuses what the sweep allows.
+        # A busy first day (2026-10-06): 18% used 26 h in passes under the margin (ADR 25).
+        (
+            WEEK_START + 26 * HOUR,
+            0.18,
+            0.02,
+            True,
+            "claude-sonnet: week 18% used, under its pace line of 21%",
+        ),
+        # The margin never lifts the line past the share: the reserve stays.
         (
             WEEK_RESET - 17 * HOUR,
-            0.66,
+            0.69,
             0.02,
             False,
-            "claude-sonnet: week 66% used, over its pace line of 63%",
+            "claude-sonnet: week 69% used, over its pace line of 70%",
         ),
         (
             WEEK_RESET - 16 * HOUR,
@@ -98,7 +106,7 @@ def test_every_window_must_agree_and_the_tightest_gives_the_reason():
     week = claude_week(0.10)
     assert answer("claude-sonnet", [claude_five_hour(0.50, THURSDAY), week], 0.02, THURSDAY) == (
         True,
-        "claude-sonnet: week 10% used, under its pace line of 30%",
+        "claude-sonnet: week 10% used, under its pace line of 40%",
     )
     assert answer("claude-sonnet", [week, claude_five_hour(0.99, THURSDAY)], 0.02, THURSDAY) == (
         False,
@@ -137,14 +145,15 @@ def test_a_refusal_sets_the_capacity_at_its_usage_and_cools_down_until_the_reset
 
 def test_a_learned_capacity_paces_the_next_window():
     last_month = Refusal(at=MONTH_START - 3 * DAY, used=30, resets_at=MONTH_START)
-    learned = learn(copilot_month(16), [last_month], MID_MONTH)
+    learned = learn(copilot_month(20), [last_month], MID_MONTH)
     assert learned.cooldown_until is None
-    # Half the month: the line is 15 of the learned 30, where the seed's 50 gave 25.
+    # Half the month plus the margin (ADR 25), with no reserve:
+    # (0.5 + 1/7) of the learned 30 is 19.3, where the seed's 50 gave 32.
     assert answer("copilot-auto", [learned], 1, MID_MONTH) == (
         False,
-        "copilot-auto: month 53% used, over its pace line of 50%",
+        "copilot-auto: month 67% used, over its pace line of 64%",
     )
-    assert answer("copilot-auto", [copilot_month(16)], 1, MID_MONTH).ok
+    assert answer("copilot-auto", [copilot_month(20)], 1, MID_MONTH).ok
 
 
 def test_the_sweep_may_pass_a_learned_capacity():
@@ -238,7 +247,7 @@ def test_each_windows_reserve_is_used_only_when_named():
     week_only = answer("claude-opus", windows, 0.0, THURSDAY, use_reserve={"seven_day"})
     assert week_only == (False, "claude-opus: 5-hour window 80% used, over its cap of 75%")
     five_only = answer("claude-opus", windows, 0.0, THURSDAY, use_reserve={"five_hour"})
-    assert five_only == (False, "claude-opus: week 79% used, over its pace line of 30%")
+    assert five_only == (False, "claude-opus: week 79% used, over its pace line of 40%")
     both = answer("claude-opus", windows, 0.0, THURSDAY, use_reserve={"seven_day", "five_hour"})
     assert both.ok
     assert answer("claude-opus", windows, 0.0, THURSDAY, use_reserve=True).ok
@@ -291,7 +300,7 @@ def test_the_probe_refuses_a_developer_job_on_thursday_and_allows_a_review():
     assert {w.name: w.used for w in windows} == {"five_hour": 0.07, "seven_day": 0.79}
     assert {w.name: w.resets_at for w in windows}["seven_day"] == WEEK_RESET
     developer = answer("claude-sonnet", windows, 0.03, now)
-    assert developer == (False, "claude-sonnet: week 79% used, over its pace line of 28%")
+    assert developer == (False, "claude-sonnet: week 79% used, over its pace line of 38%")
     assert reserve_only("claude-sonnet", windows, 0.03, now)
     assert answer("claude-opus", windows, 0.02, now, use_reserve=True).ok
 
