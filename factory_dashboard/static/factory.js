@@ -579,12 +579,14 @@
     replaying = await response.json();
     show(0);
     document.getElementById("replay-controls").hidden = false;
+    document.getElementById("replay").classList.add("replaying");
   }
 
   function backToLive() {
     stop();
     replaying = null;
     document.getElementById("replay-controls").hidden = true;
+    document.getElementById("replay").classList.remove("replaying");
     drawn = null;  // the floor shows the replay's
     drawAll(document);
   }

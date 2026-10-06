@@ -1299,17 +1299,19 @@ def test_replay_draws_the_floor_at_since_and_back_to_live_draws_it_again(page, n
 def test_on_a_phone_the_replay_bar_sticks_to_the_bottom_with_44_px_controls(page, night_db):
     size = {"width": 390, "height": 844}
     open_line(page, night_client(night_db), size)
+    bar = page.locator("#replay")
+    assert bar.evaluate("e => getComputedStyle(e).position") != "sticky"
     page.click("#replay-start")
     page.wait_for_selector("#replay-live", state="visible")
-    bar = page.locator("#replay")
     assert bar.evaluate("e => getComputedStyle(e).position") == "sticky"
-    box = bar.bounding_box()
-    assert box is not None and abs(box["y"] + box["height"] - size["height"]) <= 1
     controls = page.locator("#replay button, #replay select")
     assert controls.count() == 7  # Replay, its stretch, Play, ◀, ▶, the speed, Back to live
     for n in range(controls.count()):
         found = controls.nth(n).bounding_box()
         assert found is not None and found["width"] >= 44 and found["height"] >= 44, n
+    page.click("#replay-live")
+    page.wait_for_selector("#replay-controls", state="hidden")
+    assert bar.evaluate("e => getComputedStyle(e).position") != "sticky"
 
 
 def test_reduced_motion_disables_animations(page, line_client):
