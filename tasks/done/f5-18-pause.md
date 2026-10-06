@@ -44,3 +44,10 @@ Read `docs/milestones/f5-board.md` (D1–D3), item 5 of `docs/adr/22-one-visible
 - a test: the buttons post the right kinds, and Now shows the paused line
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
