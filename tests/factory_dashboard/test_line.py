@@ -962,13 +962,10 @@ def test_planted_row_bar_and_words_pass_3_to_1_contrast_in_light_and_dark(
     open_line(page, line_client)
 
     ratio = """(bg, fg) => {
-        function lum(c) {
-            const s = c.map(v => v / 255);
-            return s.some(v => v > 0.04045)
-                ? 0.2126 * Math.pow((s[0] + 0.055) / 1.055, 2.4)
-                + 0.7152 * Math.pow((s[1] + 0.055) / 1.055, 2.4)
-                + 0.0722 * Math.pow((s[2] + 0.055) / 1.055, 2.4)
-                : 1.05 * (0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2]) - 0.05;
+        function lum(c) {  // WCAG relative luminance, channel by channel
+            const [r, g, b] = c.map(v => v / 255)
+                .map(v => v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+            return 0.2126 * r + 0.7152 * g + 0.0722 * b;
         }
         const l1 = lum(bg), l2 = lum(fg);
         return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
@@ -989,14 +986,11 @@ def test_planted_row_bar_and_words_pass_3_to_1_contrast_in_light_and_dark(
     dim = page.locator("svg#floor text.dim").first
     assert dim.count() > 0, "no dim text found"
     dim_fg = dim.evaluate("e => getComputedStyle(e).fill")
-    dim_bg = page.evaluate(
-        "() => { const v = getComputedStyle("
-        "document.documentElement).getPropertyValue('--floor').trim();"
-        " return v.startsWith('#') ? [parseInt(v.slice(1,3),16),"
-        " parseInt(v.slice(3,5),16), parseInt(v.slice(5,7),16)]"
-        " : v.match(/\\d+/g).map(Number); }"
+    # the rows' words sit on the field's plot
+    plot = page.locator("svg#floor .field-plot").first.evaluate("e => getComputedStyle(e).fill")
+    dim_ratio = page.evaluate(
+        f"""({ratio})('{plot}'.match(/\\d+/g).map(Number), '{dim_fg}'.match(/\\d+/g).map(Number))"""
     )
-    dim_ratio = page.evaluate(f"""({ratio})({dim_bg}, '{dim_fg}'.match(/\\d+/g).map(Number))""")
     assert dim_ratio >= 3.0, f"dim text contrast is {dim_ratio:.2f}:1, need 3:1"
 
 
