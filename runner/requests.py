@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from runner import loop, metrics, owner, planner
+from runner import loop, metrics, milestone, owner, planner
 from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
 from runner.tasks import (
@@ -35,8 +35,10 @@ PLAN_MESSAGE = planner.PLAN_MESSAGE  # subject: the thread; value: {text, commen
 SEND_BACK = "send_back"  # subject: <thread>/<proposal id>; value: {text, comments}
 ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
 APPROVE_PLAN = "approve_plan"  # subject: the card
+PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
-_COMMITS = (SIGNOFF, QUEUE, *_APPROVALS)
+_COMMITS = (SIGNOFF, QUEUE, PLANT, *_APPROVALS)
+_PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
 _PLAIN = ("100644", "100755", "000000")  # a draft's mode: a file, or none (deleted)
@@ -44,7 +46,10 @@ _MAX_DIFF = 1000  # parse_task needs one; pre-flight doesn't read it
 
 
 def _what(row: sqlite3.Row) -> str:
-    """A request in a console line: ``signoff f4-always-on``, ``reserve week``."""
+    """A request in a console line: ``signoff f4-always-on``, ``reserve week``; an idea's
+    ``plant`` alone, its words being the owner's to read on the card."""
+    if row["kind"] == PLANT and not row["subject"]:
+        return PLANT
     return " ".join(str(part) for part in (row["kind"], row["subject"] or row["value"]) if part)
 
 
@@ -262,6 +267,76 @@ def _accept_adr(repo: Path, db: Path, now: datetime, subject: object, value: obj
     return f"accepted {draft}"
 
 
+# --- planting: a seed card without Claude (ADR 20 item 8, f6 D5) -----------------------------
+
+
+def _seed(conn: sqlite3.Connection, project_id: int, subject: str) -> tuple[str, str, str]:
+    """An approved seed of the general thread's: its title, its key points as thoughts, and
+    a note saying where it came from."""
+    thread, wanted = planner.proposal_of(subject)
+    if thread != planner.GENERAL:
+        raise planner.PlannerError(
+            f"only the general thread's seeds are planted, not {planner.thread_name(thread)}'s"
+        )
+    proposal = (
+        metrics.find_proposal(conn, project_id, thread, wanted)
+        if _PROPOSAL_ID_RE.fullmatch(wanted)
+        else None
+    )
+    if proposal is None:
+        raise planner.PlannerError(f"the general thread has no proposal {wanted}")
+    kind = str(proposal.get("kind"))
+    if kind != planner.SEED:
+        article = "an" if kind[:1] in "aeiou" else "a"
+        raise planner.PlannerError(f"proposal {wanted} is {article} {kind}, not a seed")
+    title, thoughts = planner.seed_words(proposal)
+    return title, thoughts, f"from the general thread's {wanted}"
+
+
+def _plant(
+    repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime, row: sqlite3.Row
+) -> str:
+    """Write the idea's seed card and commit it alone (f6 D5): the next free key in its
+    area's series, the slug from its title, the owner's words under Notes. No Claude, so it
+    goes on at a limit. The board has the card at once."""
+    subject, value = row["subject"], row["value"]
+    if subject:
+        title, thoughts, source = _seed(conn, project_id, str(subject))
+        area = planner.seed_area(value)
+    else:
+        title, thoughts, area = planner.planting(value)
+        source = ""
+    name = planner.slug(title)
+    if (taken := planner.card_named(repo, name)) is not None:
+        return f"{name} is a card already: {taken}"
+    key = planner.next_key(repo, area)
+    full = f"{key}-{name}"
+    note = " ".join(filter(None, [f"Planted by the owner on {now.date().isoformat()}", source]))
+    doc = planner.seed_card(key, title, thoughts, area, note + ".")
+    found = milestone.card(full, doc)
+    if (found.state, found.area) != (planner.IDEA, area) or milestone.milestone_after(doc):
+        return f"an idea's title can't set its card: {title!r}"
+    if milestone.milestone_doc(doc).get("title") != title:
+        return f"an idea's title can't set its card: {title!r}"
+    path = repo / "docs" / "milestones" / f"{full}.md"
+    rel = path.relative_to(repo).as_posix()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(doc, encoding="utf-8")
+    git = Git(repo)
+    try:
+        git.run("add", "--", rel)
+        message = with_trailers(f"{key.upper()} planted by the owner", agent="runner")
+        git.run("commit", "-q", "--no-verify", "-m", message, "--author", RUNNER_AUTHOR, "--", rel)
+    except GitError:
+        git.run("reset", "-q", "--", rel, check=False)
+        path.unlink(missing_ok=True)
+        raise
+    metrics.upsert_milestone(
+        conn, project_id, full, title=title, state=found.state, priority=found.priority, area=area
+    )
+    return f"planted {rel}"
+
+
 def _waits(repo: Path, kind: str) -> str | None:
     """Why a request that commits must wait, if it must: a queue commits on the branch it is
     on, and a sign-off or an approval commits the whole tree, so none goes anywhere but a main
@@ -308,6 +383,8 @@ def _apply(
             return _approve_plan(repo, subject)
         if kind == ACCEPT_ADR:
             return _accept_adr(repo, db, now, subject, value)
+        if kind == PLANT:
+            return _plant(repo, conn, project_id, now, row)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:

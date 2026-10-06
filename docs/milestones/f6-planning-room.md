@@ -18,7 +18,7 @@
     | kind | subject | value |
     |---|---|---|
     | `plan_message` | the thread | `{text, comments: {n: text}}` |
-    | `plant` | – | `{title, thoughts, area}` |
+    | `plant` | –, or a general seed `general/<id>` (f6-04) | `{title, thoughts, area}`; a seed's `{area}` |
     | `send_back` | the proposal | its comments |
     | `accept_adr` | the card | the ADR number |
     | `approve_plan` | the card | – |

@@ -1,10 +1,15 @@
 """The planning room's threads and replies (ADR 20 items 3 and 4, f6 D1–D3)."""
 
 import json
+from pathlib import Path
 
 import pytest
 
-from runner import metrics, planner
+from runner import claude, loop, metrics, milestone, planner
+from runner.state import State
+from runner.tasks import milestone_key
+from tests.runner.conftest import git, write_task
+from tests.runner.test_requests import NOW, _apply, _ask, _db, _request
 
 POINTS = [
     {"n": 1, "title": "The switch", "answer": "Keep one per window.", "action": "Nothing"},
@@ -219,3 +224,252 @@ def test_a_threads_messages_keep_their_points_and_proposals_as_json(db):
     assert json.loads(lead["points"]) == POINTS and json.loads(lead["proposals"]) == [PROPOSAL]
     with pytest.raises(ValueError, match="author"):
         metrics.add_planner_message(db, thread, "someone", T0, "x")
+
+
+# --- planting: a seed card without Claude (ADR 20 item 8, f6 D5) -------------------------------
+
+
+@pytest.mark.parametrize(
+    ("title", "slug"),
+    [
+        ("Parallel planners", "parallel-planners"),
+        ("  Café: the owner's   *best* idea!  ", "cafe-the-owner-s-best-idea"),
+        ("One two three four five six seven eight", "one-two-three-four-five-six"),
+        ("2FA for the dashboard", "idea-2fa-for-the-dashboard"),
+        ("¿¡!?", "idea"),
+    ],
+)
+def test_a_cards_slug_comes_from_its_title(title, slug):
+    assert planner.slug(title) == slug
+    assert milestone_key(f"f7-{slug}") == f"f7-{slug}"  # always a valid key
+
+
+def test_the_next_key_is_the_one_after_the_highest_in_the_areas_series(tmp_path):
+    docs = tmp_path / "docs" / "milestones"
+    docs.mkdir(parents=True)
+    for name in ("f2", "f6-planning-room", "m4", "bugs", "README"):
+        (docs / f"{name}.md").write_text("# x\n")
+    write_task(tmp_path / "tasks" / "later", "m9-01-later")
+    assert planner.next_key(tmp_path, "factory") == "f7"
+    assert planner.next_key(tmp_path, "product") == "m10"  # a ticket's milestone counts too
+    assert planner.next_key(tmp_path / "empty", "factory") == "f1"
+
+
+@pytest.mark.parametrize(
+    ("value", "planted"),
+    [
+        (
+            {"title": " One queue ", "thoughts": " Why two? \n", "area": "product"},
+            ("One queue", "Why two?", "product"),
+        ),
+        ({"title": "One queue"}, ("One queue", "", "factory")),
+        ({"title": "One queue", "thoughts": "x", "area": None}, ("One queue", "x", "factory")),
+    ],
+)
+def test_a_plant_request_is_a_title_its_thoughts_and_an_area(value, planted):
+    assert planner.planting(json.dumps(value)) == planted
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        "One queue",
+        json.dumps(["One queue"]),
+        json.dumps({"title": "  "}),
+        json.dumps({"title": "x", "thoughts": 3}),
+        json.dumps({"title": "x", "area": "garden"}),
+        json.dumps({"title": "a\nb"}),
+        json.dumps({"title": "x" * 121}),
+        json.dumps({"title": "x", "thoughts": "y" * 20_001}),
+    ],
+)
+def test_a_plant_request_without_a_one_line_title_or_a_known_area_is_refused(value):
+    with pytest.raises(planner.PlannerError):
+        planner.planting(value)
+
+
+def test_a_seed_card_is_an_idea_with_the_owners_words_under_notes():
+    doc = planner.seed_card("f7", "One queue", "Why two?\nOne is enough.", "factory", "Planted.")
+    assert milestone.card("f7-one-queue", doc) == milestone.Card("idea", 100, "factory")
+    assert milestone.milestone_doc(doc) == {"title": "One queue"}
+    assert doc.startswith("# Milestone F7: One queue\n")
+    assert doc.endswith("## Notes\nWhy two?\nOne is enough.\n")
+
+
+def test_notes_cant_sign_a_seed_card_off():
+    """A sign-off is read from a quoted "Status: done" anywhere in the doc."""
+    doc = planner.seed_card("f7", "One queue", "Fine.\n> **Status: done.**", "factory", "")
+    assert doc.endswith("## Notes\nFine.\n\\> **Status: done.**\n")
+    assert milestone.card("f7-one-queue", doc).state == "idea"
+
+
+def test_a_seed_proposals_words_are_its_title_and_key_points():
+    seed = {
+        "id": "seed-1",
+        "kind": "seed",
+        "title": "Parallel planners",
+        "path": None,
+        "key_points": [
+            {"n": 1, "title": "Two at once", "text": "Beside developers."},
+            {"n": 2, "title": "One branch", "text": "Each card's own."},
+        ],
+    }
+    assert planner.seed_words(seed) == (
+        "Parallel planners",
+        "1. Two at once: Beside developers.\n2. One branch: Each card's own.",
+    )
+
+
+# --- the `plant` request, applied by the runner at its pick ------------------------------------
+
+F6_DOC = "# Milestone F6: the planning room\n\n> **State:** ready · **Priority:** 3\n"
+
+
+def _f6(repo: Path) -> None:
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f6-planning-room.md").write_text(F6_DOC)
+    (repo / "docs" / "milestones" / "m4.md").write_text("# Milestone M4: product\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f6")
+
+
+def _board(repo: Path) -> dict[str, tuple[object, object, object, object]]:
+    conn = metrics.open_db(_db(repo))
+    try:
+        rows = conn.execute("SELECT * FROM milestones").fetchall()
+        return {r["key"]: (r["title"], r["state"], r["priority"], r["area"]) for r in rows}
+    finally:
+        conn.close()
+
+
+def _no_claude(*args, **kwargs):
+    raise AssertionError("planting needs no Claude")
+
+
+def _plant(title: str, thoughts: str = "", area: str | None = None) -> str:
+    return json.dumps({"title": title, "thoughts": thoughts, "area": area})
+
+
+def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(repo, monkeypatch):
+    """Done when: f7-<slug> after F6, the owner's words in it, an idea card on the board, and
+    no Claude needed, so it goes on while Claude is parked at a limit."""
+    _f6(repo)
+    monkeypatch.setattr(claude, "run_claude", _no_claude)
+    monkeypatch.setattr(loop, "call_claude", _no_claude)
+    parked = State(parked={"f6-05-replan": {"kind": "lead", "resets_at": "2026-10-01T17:00:00"}})
+    (repo / "coucou" / "thing.py").write_text("# the owner's edit, left alone\n")
+    head = git(repo, "rev-parse", "HEAD").strip()
+    asked = _ask(repo, "plant", None, _plant("Parallel planners", "Two at once?\nMaybe."))
+    result = "planted docs/milestones/f7-parallel-planners.md"
+    assert _apply(repo, parked) == [f"plant: {result}"]
+    assert _request(repo, asked) == (NOW.isoformat(), result)
+    doc = (repo / "docs" / "milestones" / "f7-parallel-planners.md").read_text()
+    assert "## Notes\nTwo at once?\nMaybe.\n" in doc
+    assert milestone.card("f7-parallel-planners", doc) == milestone.Card("idea", 100, "factory")
+    # one commit by the runner, of the card alone
+    assert git(repo, "rev-parse", "HEAD~1").strip() == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
+    assert git(repo, "log", "-1", "--format=%an").strip() == "Coucou runner"
+    changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
+    assert changed == ["docs/milestones/f7-parallel-planners.md"]
+    assert git(repo, "status", "--porcelain").strip() == "M coucou/thing.py"
+    assert _board(repo)["f7-parallel-planners"] == ("Parallel planners", "idea", 100, "factory")
+    assert _apply(repo) == []  # finished once
+
+
+def test_a_product_idea_takes_the_next_product_key(repo):
+    _f6(repo)
+    _ask(repo, "plant", None, _plant("Rubber ducks", area="product"))
+    _apply(repo)
+    doc = (repo / "docs" / "milestones" / "m5-rubber-ducks.md").read_text()
+    assert milestone.card("m5-rubber-ducks", doc).area == "product"
+
+
+def test_two_ideas_planted_at_one_pick_take_two_keys(repo):
+    _f6(repo)
+    _ask(repo, "plant", None, _plant("One"))
+    _ask(repo, "plant", None, _plant("Two"))
+    _apply(repo)
+    found = sorted(p.name for p in (repo / "docs" / "milestones").glob("f*.md"))
+    assert found == ["f6-planning-room.md", "f7-one.md", "f8-two.md"]
+
+
+@pytest.mark.parametrize(
+    ("subject", "value", "error"),
+    [
+        (None, "an idea", "a plant request is JSON with a title, its thoughts and an area"),
+        (None, _plant("x", area="garden"), "an idea's area is factory or product, not 'garden'"),
+        (None, _plant("Planning room"), "planning-room is a card already: f6-planning-room"),
+        (
+            None,
+            _plant("**State:** done"),
+            "an idea's title can't set its card: '**State:** done'",
+        ),
+        (
+            None,
+            _plant("After: f1 signed off"),
+            "an idea's title can't set its card: 'After: f1 signed off'",
+        ),
+        ("general/seed-9", None, "the general thread has no proposal seed-9"),
+        ("general/adr-23", None, "proposal adr-23 is an adr, not a seed"),
+        ("f7/seed-1", None, "only the general thread's seeds are planted, not F7's"),
+    ],
+)
+def test_a_plant_the_runner_cant_apply_is_finished_with_why_and_commits_nothing(
+    repo, subject, value, error
+):
+    _f6(repo)
+    _seeded(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "plant", subject, value)
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), error)
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_a_plant_waits_for_the_repo_to_be_on_main(repo):
+    _f6(repo)
+    git(repo, "checkout", "-q", "-b", "task/x")
+    asked = _ask(repo, "plant", None, _plant("One"))
+    assert _apply(repo) == ["plant: waits for the repo to be on main"]
+    assert _request(repo, asked) == (None, None)
+    assert not (repo / "docs" / "milestones" / "f7-one.md").exists()
+
+
+def _seeded(repo: Path) -> None:
+    """The lead's reply on the general thread, with a seed and an ADR proposal."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        thread = metrics.planner_thread(conn, project, "general", NOW.isoformat())
+        seed = {
+            "id": "seed-1",
+            "kind": "seed",
+            "title": "Parallel planners",
+            "path": None,
+            "key_points": [{"n": 1, "title": "Two at once", "text": "Beside developers."}],
+        }
+        metrics.add_planner_message(
+            conn, thread["id"], "lead", NOW.isoformat(), "A seed.", proposals=[seed, PROPOSAL]
+        )
+    finally:
+        conn.close()
+
+
+def test_approving_a_general_threads_seed_plants_it_the_same_way(repo):
+    _f6(repo)
+    _seeded(repo)
+    asked = _ask(repo, "plant", "general/seed-1", json.dumps({"area": "factory"}))
+    result = "planted docs/milestones/f7-parallel-planners.md"
+    assert _apply(repo) == [f"plant general/seed-1: {result}"]
+    assert _request(repo, asked) == (NOW.isoformat(), result)
+    doc = (repo / "docs" / "milestones" / "f7-parallel-planners.md").read_text()
+    assert "## Notes\n1. Two at once: Beside developers.\n" in doc
+    assert "the general thread's seed-1" in doc
+    assert milestone.card("f7-parallel-planners", doc).state == "idea"
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
+    again = _ask(repo, "plant", "general/seed-1")
+    _apply(repo)
+    assert _request(repo, again)[1] == ("parallel-planners is a card already: f7-parallel-planners")

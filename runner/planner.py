@@ -8,12 +8,22 @@ The lead's reply ends with a fenced ``json`` block (D2), checked here before it 
 
 import json
 import re
+import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from runner import prompts
-from runner.tasks import BUGS, TaskError, milestone_key, short_key
+from runner.tasks import (
+    AREAS,
+    BUGS,
+    DEFAULT_PRIORITY,
+    TaskError,
+    milestone_key,
+    milestone_order,
+    short_key,
+)
 
 PLANNER = "planner"  # the role, and the queued job's kind (`dispatch.PLANNER`)
 DRAFTS = ("docs/**", "tasks/later/**")  # what a card's planner job may edit (f6 D4)
@@ -162,6 +172,120 @@ def ready_card(doc: str) -> str:
         return _STATE_RE.sub(f"**State:** {READY}", header, count=1) + body
     title, _, rest = doc.partition("\n")
     return f"{title}\n\n> **State:** {READY}\n{rest}"
+
+
+# --- planting: a seed card, written by the runner without Claude (ADR 20 item 8, f6 D5) -------
+
+IDEA = "idea"  # a planted card's state (f5 D4)
+SEED = "seed"  # the proposal kind a general thread's idea comes as
+SERIES = {"factory": "f", "product": "m"}  # an area's keys (ADR 19 item 2b)
+_PLANT_VALUE = "a plant request is JSON with a title, its thoughts and an area"
+_MAX_TITLE = 120
+_MAX_THOUGHTS = 20_000
+_SLUG_WORDS = 6
+_TICKET_KEY_RE = re.compile(r"([a-z]+\d+)-\d")  # a ticket id's milestone, `f6` of `f6-04-…`
+
+
+def slug(title: str) -> str:
+    """A card's slug from its title: its first words, lowercase ASCII, starting with a letter
+    as a key's slug must (``idea-2fa-…``); ``idea`` when no word is left."""
+    plain = unicodedata.normalize("NFKD", title).encode("ascii", "ignore").decode().lower()
+    words = re.findall(r"[a-z0-9]+", plain)[:_SLUG_WORDS]
+    if not words or not words[0][0].isalpha():
+        words = [IDEA, *words]
+    return "-".join(words)
+
+
+def next_key(repo: Path, area: str) -> str:
+    """The next free short key in the area's series: one past the highest a milestone doc or a
+    ticket uses (``f7`` after ``f6-planning-room``)."""
+    prefix = SERIES[area]
+    keys = [path.stem for path in (repo / "docs" / "milestones").glob("*.md")]
+    for path in (repo / "tasks").glob("*/*.md"):
+        if found := _TICKET_KEY_RE.match(path.stem):
+            keys.append(found[1])
+    highest = 0
+    for key in keys:
+        try:
+            series, number = milestone_order(milestone_key(key))
+        except TaskError:  # bugs, a README
+            continue
+        if series == prefix:
+            highest = max(highest, number)
+    return f"{prefix}{highest + 1}"
+
+
+def card_named(repo: Path, name: str) -> str | None:
+    """The milestone doc whose slug is ``name``, in any series, if there is one."""
+    for path in sorted((repo / "docs" / "milestones").glob(f"*-{name}.md")):
+        if path.stem.partition("-")[2] == name:
+            return path.stem
+    return None
+
+
+def _words(title: object, thoughts: object) -> tuple[str, str]:
+    """An idea's title, on one line, and its thoughts, both trimmed and within bounds."""
+    if not isinstance(title, str) or not title.strip() or len(title.strip().splitlines()) > 1:
+        raise PlannerError("an idea has a title, on one line")
+    if not isinstance(thoughts, str):
+        raise PlannerError(_PLANT_VALUE)
+    if len(title.strip()) > _MAX_TITLE:
+        raise PlannerError(f"an idea's title is at most {_MAX_TITLE} characters")
+    if len(thoughts.strip()) > _MAX_THOUGHTS:
+        raise PlannerError(f"an idea's thoughts are at most {_MAX_THOUGHTS} characters")
+    return title.strip(), thoughts.strip()
+
+
+def _area(data: Mapping[str, Any]) -> str:
+    area = data.get("area")
+    if area in (None, ""):
+        return "factory"  # product work is on hold (the owner, 2026-10-04)
+    if area not in AREAS:
+        raise PlannerError(f"an idea's area is {' or '.join(AREAS)}, not {area!r}")
+    return str(area)
+
+
+def _plant_data(value: object) -> dict[str, Any]:
+    try:
+        data = json.loads(value) if isinstance(value, str) else None
+    except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
+        raise PlannerError(_PLANT_VALUE)
+    return data
+
+
+def planting(value: object) -> tuple[str, str, str]:
+    """A ``plant`` request's value (f6 D1): the idea's title, its thoughts and its area
+    (factory unless given)."""
+    data = _plant_data(value)
+    title, thoughts = _words(data.get("title"), data.get("thoughts") or "")
+    return title, thoughts, _area(data)
+
+
+def seed_words(proposal: Mapping[str, Any]) -> tuple[str, str]:
+    """A ``seed`` proposal's title, and its key points as the card's thoughts."""
+    key_points = proposal.get("key_points")
+    lines = [
+        f"{point.get('n')}. {point.get('title')}: {point.get('text')}"
+        for point in (key_points if isinstance(key_points, list) else [])
+        if isinstance(point, dict)
+    ]
+    return _words(proposal.get("title"), "\n".join(lines))
+
+
+def seed_area(value: object) -> str:
+    """The area an approved seed is planted in: the request's, if it gives one, else factory."""
+    return "factory" if value in (None, "") else _area(_plant_data(value))
+
+
+def seed_card(key: str, title: str, thoughts: str, area: str, note: str) -> str:
+    """A planted card's milestone doc: an idea at the default priority, the owner's words
+    under Notes. A quoted line in them is escaped: a sign-off is read from one anywhere."""
+    notes = re.sub(r"^>", r"\\>", thoughts, flags=re.MULTILINE) or "(none)"
+    header = f"> **State:** {IDEA} · **Priority:** {DEFAULT_PRIORITY} · **Area:** {area}"
+    said = f"\n> {note}" if note else ""
+    return f"# Milestone {key.upper()}: {title}\n\n{header}{said}\n\n## Notes\n{notes}\n"
 
 
 def prompt(thread: str, text: str, comments: Mapping[int, str]) -> str:
