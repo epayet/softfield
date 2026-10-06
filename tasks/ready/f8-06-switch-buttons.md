@@ -1,7 +1,7 @@
 ---
 id: f8-06-switch-buttons
 milestone: f8-one-queue
-depends_on: [f8-05-replan, f3-25-allowance-dials]
+depends_on: [f8-05-replan, f3-25-allowance-dials, f9-17-fix-dial-colours-and-reset]
 difficulty: 4
 files:
   - factory_dashboard/overview.py
