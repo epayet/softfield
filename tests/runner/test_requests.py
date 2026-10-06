@@ -1,22 +1,19 @@
 """The owner's requests from the dashboard (ADR 18 item 2, f5 D2): applied as the console
 commands would, each finished once with its result."""
 
+import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 
 from runner import cli, loop, metrics, requests
+from runner.state import State, load_state, save_state
 from tests.runner.conftest import git, write_task
 from tests.runner.test_cli import in_repo  # noqa: F401 - a fixture
 from tests.runner.test_owner import _milestone
 
 NOW = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
-
-
-@pytest.fixture(autouse=True)
-def _new_command(monkeypatch):
-    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
 
 
 def _db(repo: Path) -> Path:
@@ -44,8 +41,30 @@ def _request(repo: Path, request_id: int) -> tuple[object, object]:
         conn.close()
 
 
-def _apply(repo: Path) -> list[str]:
-    return requests.apply_requests(repo, _db(repo), NOW)
+def _apply(repo: Path, state: State | None = None, at: datetime = NOW) -> list[str]:
+    return requests.apply_requests(repo, _db(repo), at, State() if state is None else state)
+
+
+def _items(repo: Path) -> list[tuple[object, object, object, object]]:
+    """The owner items: kind, subject, command, and whether they are still open."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        rows = conn.execute("SELECT * FROM owner_items ORDER BY id").fetchall()
+        return [(r["kind"], r["subject"], r["command"], r["resolved"] is None) for r in rows]
+    finally:
+        conn.close()
+
+
+def _item(repo: Path, kind: str, subject: str) -> None:
+    """A Needs-you item a parked ticket raised (`at_reserve`, `at_five_hour`)."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.upsert_owner_item(
+            conn, project, kind, subject, text="waits", command="x", created=NOW.isoformat()
+        )
+    finally:
+        conn.close()
 
 
 def _later(repo: Path, *ids: str) -> None:
@@ -124,34 +143,97 @@ def test_a_queue_request_for_a_missing_ticket_is_finished_with_the_error(repo):
     assert _apply(repo) == []
 
 
-@pytest.mark.parametrize(("value", "yes", "no"), [("yes", True, False), ("no", False, True)])
-def test_a_five_hour_answer_with_no_question_waiting_holds_for_the_command(repo, value, yes, no):
-    asked = _ask(repo, "five_hour", value=value)
-    [line] = _apply(repo)
-    assert (loop.FIVE_HOUR.yes, loop.FIVE_HOUR.no) == (yes, no)
+@pytest.mark.parametrize("switch", ["week", "five_hour"])
+def test_a_reserve_request_turns_its_switch_on_for_24_hours_and_off(repo, switch):
+    """ADR 22 item 4, f8 D4: the switch is kept in state.json, with the time it went on."""
+    state = State()
+    asked = _ask(repo, "reserve", switch, "on")
+    [line] = _apply(repo, state)
+    assert line.startswith(f"reserve {switch}: ") and "on until Fri 12:00" in line
+    assert state.switches == {switch: NOW.isoformat()}
+    assert _request(repo, asked) == (NOW.isoformat(), line.split(": ", 1)[1])
+    assert loop.switch_on(state, switch, NOW + timedelta(hours=23, minutes=59))
+    assert not loop.switch_on(state, switch, NOW + timedelta(hours=24))
+    other = {"week": "five_hour", "five_hour": "week"}[switch]
+    assert not loop.switch_on(state, other, NOW)  # one switch per window
+    _ask(repo, "reserve", switch, "off")
+    [line] = _apply(repo, state)
+    assert line.endswith("is off") and state.switches == {}
+
+
+def test_turning_a_switch_on_again_starts_its_24_hours_again(repo):
+    state = State(switches={"week": (NOW - timedelta(hours=20)).isoformat()})
+    _ask(repo, "reserve", "week", "on")
+    _apply(repo, state)
+    assert state.switches == {"week": NOW.isoformat()}
+
+
+@pytest.mark.parametrize(("value", "on"), [("yes", True), ("no", False)])
+def test_the_dashboards_5_hour_answer_sets_the_5_hour_switch(repo, value, on):
+    """The Yes and No buttons stay until f8-06 turns them into the switch: they set it."""
+    state = State(switches={} if on else {"five_hour": NOW.isoformat()})
+    _ask(repo, "five_hour", value=value)
+    [line] = _apply(repo, state)
     assert line.startswith(f"five_hour {value}: ")
-    assert _request(repo, asked)[0] == NOW.isoformat()
-
-
-def test_a_later_five_hour_answer_overrides_an_earlier_one(repo):
-    _ask(repo, "five_hour", value="no")
-    _ask(repo, "five_hour", value="yes")
-    _apply(repo)
-    assert loop.FIVE_HOUR.yes and not loop.FIVE_HOUR.no
+    assert loop.switch_on(state, "five_hour", NOW) is on
+    assert not loop.switch_on(state, "week", NOW)
 
 
 @pytest.mark.parametrize(
     ("kind", "subject", "value", "error"),
     [
         ("five_hour", None, "maybe", "a 5-hour answer is yes or no, not 'maybe'"),
+        ("reserve", "month", "on", "a reserve switch is week or five_hour, not 'month'"),
+        ("reserve", "week", "yes", "a reserve switch is turned on or off, not 'yes'"),
         ("reboot", "now", None, "unknown request: reboot"),
     ],
 )
 def test_a_request_the_runner_cant_read_is_finished_with_why(repo, kind, subject, value, error):
     asked = _ask(repo, kind, subject, value)
-    _apply(repo)
+    state = State()
+    _apply(repo, state)
     assert _request(repo, asked) == (NOW.isoformat(), error)
-    assert not loop.FIVE_HOUR.yes and not loop.FIVE_HOUR.no
+    assert state.switches == {}
+
+
+def test_a_switch_on_for_24_hours_reads_off_and_asks_to_be_turned_on_again(repo):
+    """The owner, 2026-10-04: on lasts 24 hours, then a Needs-you item asks again."""
+    _ask(repo, "queue", "m4-12-none")  # the project, and a request that isn't a switch
+    state = State(
+        switches={"week": (NOW - timedelta(hours=24)).isoformat(), "five_hour": NOW.isoformat()}
+    )
+    assert not loop.switch_on(state, "week", NOW)
+    lines = _apply(repo, state)
+    assert "Claude's reserve: the week's switch went off after 24 hours" in lines[0]
+    assert state.switches == {"five_hour": NOW.isoformat()}  # the other one stays on
+    assert _items(repo) == [("reserve", "week", "uv run runner reserve week on", True)]
+    _apply(repo, state)
+    assert len(_items(repo)) == 1  # raised once
+    _ask(repo, "reserve", "week", "on")
+    _apply(repo, state)
+    assert _items(repo) == [("reserve", "week", "uv run runner reserve week on", False)]
+
+
+@pytest.mark.parametrize(
+    ("switch", "answered"),
+    [
+        ("week", {("reserve", "m1-01-lead"), ("reserve", "week")}),
+        ("five_hour", {("five-hour", "m1-02-lead"), ("reserve", "five_hour")}),
+    ],
+)
+def test_turning_a_switch_on_answers_the_items_that_wait_for_it(repo, switch, answered):
+    """ADR 22 item 4: each ticket's item names the switch that lets it run."""
+    for kind, subject in (
+        ("reserve", "m1-01-lead"),
+        ("reserve", "week"),
+        ("five-hour", "m1-02-lead"),
+        ("reserve", "five_hour"),
+    ):
+        _item(repo, kind, subject)
+    _ask(repo, "reserve", switch, "on")
+    _apply(repo)
+    resolved = {(kind, subject) for kind, subject, _, open_ in _items(repo) if not open_}
+    assert resolved == answered
 
 
 def test_another_projects_requests_are_left_alone(repo):
@@ -170,21 +252,105 @@ def test_without_a_database_there_is_nothing_to_apply_and_none_is_made(repo):
     assert not _db(repo).exists()
 
 
-def test_a_five_hour_answer_is_taken_once_for_a_waiting_question(repo):
-    asked = _ask(repo, "five_hour", value="yes")
-    _ask(repo, "queue", "m4-12-a")  # not an answer: left for the next pick
+def test_a_wait_takes_only_the_switches_and_leaves_the_rest_for_the_pick(repo):
+    """While the run sleeps for the owner's 25% it takes the switches alone: a queue or a
+    sign-off commits, and waits for the pick."""
+    asked = _ask(repo, "reserve", "five_hour", "on")
+    _ask(repo, "queue", "m4-12-a")
     conn = metrics.open_db(_db(repo))
     project = metrics.find_project(conn, repo.name)
     assert project is not None
+    state = State()
     try:
-        assert requests.take_five_hour(conn, project, NOW) == "yes"
-        assert requests.take_five_hour(conn, project, NOW) is None
+        [line] = requests.take_switches(conn, project, state, NOW)
+        assert requests.take_switches(conn, project, state, NOW) == []
         assert [r["kind"] for r in metrics.open_requests(conn, project)] == ["queue"]
     finally:
         conn.close()
-    done, result = _request(repo, asked)
-    assert done == NOW.isoformat() and "yes" in str(result)
-    assert not loop.FIVE_HOUR.yes  # the question that waited sets it, not the take
+    assert _request(repo, asked) == (NOW.isoformat(), line.split(": ", 1)[1])
+    assert loop.switch_on(state, "five_hour", NOW)
+
+
+# --- `runner reserve` and `runner run --use-reserve` (ADR 22 item 4, f8 D4) ------------------
+
+
+@pytest.fixture
+def at_now(monkeypatch):
+    monkeypatch.setattr(loop, "now", lambda: NOW)
+
+
+def _switches(repo: Path) -> dict[str, str]:
+    return load_state(repo / "var" / "runs" / "state.json").switches
+
+
+def test_runner_reserve_records_the_same_as_the_request(in_repo, at_now, capsys):  # noqa: F811
+    _ask(in_repo, "reserve", "week", "on")
+    assert cli.main(["accept", "99"]) == 1  # any command applies the dashboard's request
+    by_request = _switches(in_repo)
+    (in_repo / "var" / "runs" / "state.json").unlink()
+    assert cli.main(["reserve", "week", "on"]) == 0
+    assert _switches(in_repo) == by_request == {"week": NOW.isoformat()}
+    assert "on until Fri 12:00" in capsys.readouterr().out
+    assert cli.main(["reserve", "five-hour", "on"]) == 0
+    assert cli.main(["reserve", "week", "off"]) == 0
+    assert _switches(in_repo) == {"five_hour": NOW.isoformat()}
+
+
+def test_runner_reserve_during_a_live_run_leaves_it_to_the_run(in_repo, at_now, capsys):  # noqa: F811
+    """The run is state.json's writer while it lives: it takes the switch at its next pick."""
+    conn = metrics.open_db(_db(in_repo))
+    project = metrics.upsert_project(conn, in_repo.name)
+    beat = (NOW - timedelta(seconds=30)).isoformat()
+    metrics.upsert_run(conn, project, "20261001-115900", started=beat, heartbeat=beat)
+    conn.close()
+    assert cli.main(["reserve", "five-hour", "on"]) == 0
+    assert _switches(in_repo) == {}
+    conn = metrics.open_db(_db(in_repo))
+    [row] = metrics.open_requests(conn, project)
+    conn.close()
+    assert (row["kind"], row["subject"], row["value"]) == ("reserve", "five_hour", "on")
+    assert "the run turns it on at its next pick" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("flag", "expected"),
+    [
+        (["--use-reserve"], {"week", "five_hour"}),
+        (["--use-reserve", "week"], {"week"}),
+        (["--use-reserve", "five-hour"], {"five_hour"}),
+        ([], set()),
+    ],
+)
+def test_use_reserve_turns_the_switches_on_for_24_hours(
+    in_repo,  # noqa: F811
+    at_now,
+    monkeypatch,
+    flag,
+    expected,
+):
+    seen: list[set[str]] = []
+
+    def run_session(cfg, *, once, dry_run, escalate):
+        state = load_state(cfg.runs_dir / "state.json")
+        seen.append({s for s in ("week", "five_hour") if loop.switch_on(state, s, NOW)})
+        return None
+
+    monkeypatch.setattr(cli, "run_session", run_session)
+    assert cli.main(["run", *flag]) == 0
+    assert seen == [expected]
+    assert set(_switches(in_repo)) == expected
+    assert all(on == NOW.isoformat() for on in _switches(in_repo).values())
+
+
+def test_a_restart_doesnt_turn_the_switches_on_again(in_repo, at_now, monkeypatch):  # noqa: F811
+    """A restart runs the same arguments: `--use-reserve` keeps its first 24 hours."""
+    state_path = in_repo / "var" / "runs" / "state.json"
+    save_state(State(switches={"week": (NOW - timedelta(hours=10)).isoformat()}), state_path)
+    monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: None)
+    monkeypatch.setenv(cli.RESTARTED_ENV, "1")
+    assert cli.main(["run", "--use-reserve"]) == 0
+    assert load_state(state_path).switches == {"week": (NOW - timedelta(hours=10)).isoformat()}
+    assert cli.RESTARTED_ENV not in os.environ
 
 
 # --- at the start of every command (f5 D2) --------------------------------------------------

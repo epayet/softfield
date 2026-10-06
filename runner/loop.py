@@ -5,9 +5,7 @@ import itertools
 import json
 import math
 import re
-import select
 import sqlite3
-import sys
 import threading
 import time
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
@@ -90,7 +88,6 @@ from runner.tasks import (
     append_footer,
     blocked_ids,
     carry_footers,
-    command_arg,
     difficulty,
     find_ticket,
     held_ids,
@@ -249,9 +246,9 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     state = load_state(state_path)
     cut_off = state.in_flight
     recovered = _recover(git, state, state_path) if cut_off is not None else ""
-    # A ticket parked at the reserve is asked about again by the next command (ADR 15 item 5);
-    # a later session of the same command goes by its answer, in `RESERVE`.
-    asked = [k for k, entry in state.parked.items() if entry.get("kind") == "reserve"]
+    # A ticket parked at the reserve goes by the week's switch again at the next command
+    # (ADR 15 item 5, ADR 22 item 4).
+    asked = [k for k, entry in state.parked.items() if entry.get("kind") == RESERVE_KIND]
     for key in asked:
         del state.parked[key]
     # A ticket parked for a limit is tried again at once: the owner may have reset the
@@ -466,7 +463,7 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
                 _record(s, metrics.end_interrupted, cut_off_job)
             # a bench beside the runner keeps its heartbeat fresh: leave it working
             _record(s, metrics.close_abandoned, s.project_id, s.run_id, now() - LIVE)
-            if RESERVE.yes:  # handed on by this command's restart after the owner's yes
+            if switch_on(s.state, WEEK, now()):  # the owner lets this run use the reserve
                 _record(s, metrics.set_run_reserve, s.run_id)
             _start_heartbeat(s, s.run_id)
         sync_tickets(s)
@@ -575,17 +572,28 @@ WAITING_FOR_CLAUDE = "waiting for Claude"
 
 
 def wait_for_claude(
-    s: Session, seconds: float, resumes: datetime, what: str | None, limit: bool = True
+    s: Session,
+    seconds: float,
+    resumes: datetime,
+    what: str | None,
+    limit: bool = True,
+    until: Callable[[], bool] | None = None,
 ) -> None:
     """Sleep through a pause for Claude (a limit, a passing error, nothing to run without
     it), the run saying so, and for what, until it ends. A wait for a ``limit`` is kept as a
-    ``wait`` usage event, from now to ``resumes``: what clogged the line (f3-04)."""
+    ``wait`` usage event, from now to ``resumes``: what clogged the line (f3-04). With
+    ``until``, it is asked at once and every ``SWITCH_POLL_S`` seconds, and ends the wait."""
     if limit:
         at = now().isoformat()
         _record(s, metrics.add_usage_event, RUNNER_AGENT, at, "wait", resets_at=resumes.isoformat())
     waiting = f"{WAITING_FOR_CLAUDE} · {what}" if what else WAITING_FOR_CLAUDE
     with doing(s, f"{waiting} until {resumes:%H:%M}", resumes):
-        time.sleep(seconds)
+        if until is None:
+            time.sleep(seconds)
+            return
+        ends = now() + timedelta(seconds=seconds)
+        while (left := (ends - now()).total_seconds()) > 0 and not until():
+            time.sleep(min(SWITCH_POLL_S, left))
 
 
 def record_ticket(
@@ -3182,71 +3190,58 @@ def _finish_branch(
 # --- parking and the reserve (ADR 15 items 4, 5 and 10) --------------------------------
 
 
-@dataclass
-class ReserveAnswer:
-    """The owner's answer to the reserve question, for the running command only (the owner,
-    2026-10-01): kept in memory, never in state.json. cli's self-restart hands a yes on
-    through ``RESERVE_ENV``; a new command asks again. A yes given ahead with
-    `runner run --use-reserve` lasts ``until`` (24 hours, owner 2026-10-04), then the question
-    is unanswered again."""
-
-    granted: bool = False
-    no: bool = False  # no answer, or no: later lead tickets wait without asking again
-    until: datetime | None = None  # a granted yes lapses then; None: for the whole command
-
-    @property
-    def yes(self) -> bool:
-        if self.granted and self.until is not None and now() >= self.until:
-            self.granted, self.until = False, None
-        return self.granted
-
-    @yes.setter
-    def yes(self, value: bool) -> None:
-        self.granted, self.until = value, None
-
-    def grant_until(self, until: datetime) -> None:
-        self.granted, self.no, self.until = True, False, until
-
-
-RESERVE = ReserveAnswer()
-RESERVE_ENV = "COUCOU_RUNNER_RESERVE_YES"  # set only by cli's restart: "1", or the yes's end
-USE_RESERVE_HOURS = 24  # `runner run --use-reserve` (owner, 2026-10-04)
-# The 5-hour question's answer, its own (ADR 16 item 3): a yes to one doesn't answer the other.
-FIVE_HOUR = ReserveAnswer()
-FIVE_HOUR_ENV = "COUCOU_RUNNER_FIVE_HOUR_YES"
+# The owner's two switches (ADR 22 item 4, f8 D4), one per window (ADR 16 item 3), in
+# state.json: off (the default) parks a lead ticket at the window's reserve, on lets it run.
+# The console asks nothing.
+WEEK = "week"
+FIVE_HOUR = "five_hour"
+SWITCHES = {
+    WEEK: "Let the factory use the week's reserve",
+    FIVE_HOUR: "Let the factory use your 25% of the 5-hour window",
+}
+USE_RESERVE_HOURS = 24  # on lasts this long, then turns itself off (owner, 2026-10-04)
+SWITCH_POLL_S = 60.0  # how often a wait for the owner's 25% checks for the switch (f5 D2)
 FIVE_HOUR_KIND = "five-hour"  # a lead ticket parked for the owner's 25%, and its owner item
+RESERVE_KIND = "reserve"  # a lead ticket parked at the week's reserve, a lapsed switch's item
 RETRY = "retry"  # a parked entry's flag: a restart tries it again before its reset
 CLAUDE = "claude"
-# Where Claude's week stands now decides the question: a lead ticket's share of the week
+# Where Claude's week stands now decides the park: a lead ticket's share of the week
 # isn't learned yet, so its expected cost is left at 0.
 LEAD_COST = 0.0
 
 
-REQUEST_POLL_S = 5.0  # how often a waiting question checks the dashboard's answer (f5 D2)
+def _switch_ends(state: State, switch: str) -> datetime | None:
+    since = state.switches.get(switch)
+    return None if since is None else _at(since) + timedelta(hours=USE_RESERVE_HOURS)
 
 
-def read_answer(timeout: float, poll: Callable[[], str | None] | None = None) -> str | None:
-    """A line the owner types within ``timeout`` seconds; None with no terminal or no answer.
-    With ``poll`` (the dashboard's answer, f5 D2), it is asked at once and every
-    ``REQUEST_POLL_S`` seconds, and its answer counts as typed, terminal or not."""
-    terminal = sys.stdin.isatty()
-    if poll is None:
-        if not terminal:
-            return None
-        ready, _, _ = select.select([sys.stdin], [], [], timeout)
-        return sys.stdin.readline().strip() if ready else None
-    deadline = clock() + timeout
-    while True:
-        if (answer := poll()) is not None:
-            return answer
-        left = deadline - clock()
-        if left <= 0:
-            return None
-        wait = min(REQUEST_POLL_S, left)
-        if not terminal:
-            time.sleep(wait)
-        elif select.select([sys.stdin], [], [], wait)[0]:
-            return sys.stdin.readline().strip()
+def switch_on(state: State, switch: str, at: datetime) -> bool:
+    """Whether ``switch`` is on at ``at``: turned on less than 24 hours before."""
+    ends = _switch_ends(state, switch)
+    return ends is not None and at < ends
+
+
+def set_switch(state: State, switch: str, on: bool, at: datetime) -> str:
+    """Turn ``switch`` on for 24 hours from ``at`` (again, if it was on), or off; in words."""
+    if not on:
+        state.switches.pop(switch, None)
+        return f"“{SWITCHES[switch]}” is off"
+    state.switches[switch] = at.isoformat()
+    ends = at + timedelta(hours=USE_RESERVE_HOURS)
+    return f"“{SWITCHES[switch]}” is on until {ends:%a %H:%M}"
+
+
+def lapse_switches(state: State, at: datetime) -> list[str]:
+    """The switches whose 24 hours are over, turned off: the runner asks again for each."""
+    lapsed = [s for s in SWITCHES if s in state.switches and not switch_on(state, s, at)]
+    for switch in lapsed:
+        del state.switches[switch]
+    return lapsed
+
+
+def switch_command(switch: str) -> str:
+    """The console command that turns ``switch`` on (`runner reserve`)."""
+    return f"uv run runner reserve {switch.replace('_', '-')} on"
 
 
 def _resets(entry: dict[str, Any]) -> datetime:
@@ -3412,18 +3407,19 @@ class Hold:
 
     until: datetime
     reason: str
-    five_hour: bool  # only the owner's share of the 5-hour window holds it: a yes lifts it
+    five_hour: bool  # only the owner's share of the 5-hour window holds it: its switch lifts it
 
 
 def claude_hold(s: Session, at: datetime) -> Hold | None:
     """Whether a support job (a direction, a checkpoint, an escalation, a review) must wait
     for Claude (ADR 16 item 4): a job parked for a limit, a refusal still resting a window, or
-    the owner's share of the 5-hour window with no yes. The week's reserve is theirs to use
-    (ADR 15 item 4)."""
+    the owner's share of the 5-hour window with its switch off. The week's reserve is theirs
+    to use (ADR 15 item 4)."""
     if ahead := _limits_ahead(s, at, five_hour=False):
         return Hold(max(min(ahead), at + timedelta(minutes=1)), "Claude is limited", False)
     windows = rested_claude_windows(s, at)
-    kept = {"seven_day", *(("five_hour",) if FIVE_HOUR.yes else ())}
+    five_on = switch_on(s.state, FIVE_HOUR, at)
+    kept = {"seven_day", *(("five_hour",) if five_on else ())}
     fit = allowance.answer(CLAUDE, windows, LEAD_COST, at, use_reserve=kept)
     if fit.ok:
         return None
@@ -3435,9 +3431,7 @@ def claude_hold(s: Session, at: datetime) -> Hold | None:
     until = min(
         (e for e in ends if e is not None), default=at + timedelta(seconds=s.cfg.backoff_min)
     )
-    five_hour = not FIVE_HOUR.yes and allowance.reserve_only(
-        CLAUDE, windows, LEAD_COST, at, "five_hour"
-    )
+    five_hour = not five_on and allowance.reserve_only(CLAUDE, windows, LEAD_COST, at, "five_hour")
     return Hold(max(until, at + timedelta(minutes=1)), fit.reason, five_hour)
 
 
@@ -3496,17 +3490,15 @@ def after_ticket(s: Session, task: Task, rec: TaskRecord, *, escalate: bool) -> 
 
 def wait_for_room(s: Session, what: str) -> None:
     """Before a support job nothing else waits behind (the review): while Claude can't take
-    it, ask the 5-hour question once if only the owner's share holds it, else wait for the
-    reset (ADR 16 items 3 and 4)."""
+    it, wait for the reset (ADR 16 items 3 and 4). When only the owner's share holds it, the
+    5-hour switch turned on meanwhile ends the wait."""
     while (hold := claude_hold(s, now())) is not None:
-        if hold.five_hour and not FIVE_HOUR.no and (found := _at_five_hour(s, now())):
-            _ask_five_hour(s, *found)
-            continue
         at = now()
         wait = max(60.0, (hold.until - at).total_seconds() + 60)
         resumes = at + timedelta(seconds=wait)
         s.log(console.paused(RUNNER_AGENT, f"{what} waits for Claude ({hold.reason})", resumes, at))
-        wait_for_claude(s, wait, resumes, what)
+        until = partial(_five_hour_switched, s) if hold.five_hour else None
+        wait_for_claude(s, wait, resumes, what, until=until)
 
 
 def _at_the_reserve(s: Session, at: datetime) -> tuple[str, datetime] | None:
@@ -3536,43 +3528,30 @@ def _resolve_item(s: Session, kind: str, subject: str) -> None:
         _record(s, _resolve_items, s.project_id, kind, subject)
 
 
-def _reserve_granted(s: Session, task_id: str) -> None:
-    """The owner said yes: the ticket's reserve item is answered now, not at the verdict, and
-    the run is on the reserve (f1 D3 and D8, amended)."""
-    _resolve_item(s, "reserve", task_id)
+def _week_switched_on(s: Session) -> None:
+    """The owner turned the week's switch on: the tickets parked at the reserve go now, and
+    the run is on the reserve (f1 D3 and D8, amended). `runner.requests` answered the items."""
+    for entry in s.state.parked.values():
+        if entry["kind"] == RESERVE_KIND:
+            entry[RETRY] = True
+    save_state(s.state, s.state_path)
     if s.run_id is not None:
         _record(s, metrics.set_run_reserve, s.run_id)
 
 
 def at_reserve(s: Session, task: Task) -> bool:
-    """Before a lead ticket: whether it waits for Claude's reserve (ADR 15 item 5). The owner
-    is asked once per command, and only when nothing else can run (`_next_task`), so the
-    question waits for an answer until the week resets (the owner, 2026-10-01). With no yes,
-    the ticket is parked and becomes an owner item. Support roles never ask: they may always
-    use the reserve."""
+    """Before a lead ticket: whether it waits for Claude's reserve (ADR 15 item 5): with the
+    week's switch off, the ticket parks and becomes a Needs-you item naming the switch (ADR
+    22 item 4); it goes once the switch is on. It parks only when nothing else can run
+    (`_next_task`). Support roles may always use the reserve."""
     at = now()
-    found = None if RESERVE.yes else _at_the_reserve(s, at)
+    found = None if switch_on(s.state, WEEK, at) else _at_the_reserve(s, at)
     if found is None:
         return False
     where, resets = found
-    if not RESERVE.no:
-        s.log(
-            f"? [{RUNNER_AGENT}] Claude is at its reserve ({where})."
-            " Use it for the rest of this run? [y/N]"
-        )
-        with doing(s, "asking you about Claude's reserve"):
-            answer = read_answer(max(60.0, (resets - at).total_seconds() + 60))
-        if answer is not None and answer.lower() in ("y", "yes"):
-            RESERVE.yes = True
-            s.log(f"✔ [{RUNNER_AGENT}] Claude's reserve is used for the rest of this run")
-            _reserve_granted(s, task.id)
-            return False
-        if answer is None and _at_the_reserve(s, now()) is None:
-            return False  # the week reset while it waited: no reserve to ask about
-        RESERVE.no = True
-    text = f"{task.id} waits for Claude's reserve ({where}): rerun and answer y to use it"
+    text = f"{task.id} waits for Claude's reserve ({where}): turn on “{SWITCHES[WEEK]}” to run it"
     s.state.parked[task.id] = {
-        "kind": "reserve",
+        "kind": RESERVE_KIND,
         "branch": "",
         "session_id": "",
         "resets_at": resets.isoformat(),
@@ -3584,15 +3563,15 @@ def at_reserve(s: Session, task: Task) -> bool:
             s,
             metrics.upsert_owner_item,
             s.project_id,
-            "reserve",
+            RESERVE_KIND,
             task.id,
             text=text,
-            command=f"uv run runner milestone {command_arg(task.milestone)}",
+            command="uv run runner run --use-reserve week",
             created=at.isoformat(),
         )
     s.report.notes.append(text)
     reason = f"Claude is at its reserve ({where})"
-    s.log(console.stopped(task.id, "parked", reason, "asks you", waiting_behind(s, task.id)))
+    s.log(console.stopped(task.id, "parked", reason, "waits for you", waiting_behind(s, task.id)))
     return True
 
 
@@ -3608,40 +3587,26 @@ def _at_five_hour(s: Session, at: datetime) -> tuple[str, datetime] | None:
     return f"{five.used:.0%}", five.resets_at.astimezone(at.tzinfo)
 
 
-def _ask_five_hour(s: Session, used: str, resets: datetime) -> bool:
-    """The 5-hour question (ADR 16 item 3), waiting for an answer until the window resets: it
-    is asked only when nothing else can run. True on a yes, which lasts for the command."""
+def _five_hour_switched(s: Session) -> bool:
+    """While the run waits for the owner's 25%: whether the 5-hour switch is on now, taking
+    the dashboard's switches alone (f5 D2); the other requests wait for the pick."""
+    from runner.requests import take_switches  # runner.requests imports this module
+
     at = now()
-    s.log(
-        f"? [{RUNNER_AGENT}] Claude's 5-hour window is at {used} (resets {resets:%H:%M}),"
-        " kept for you. Use it for this run? [y/N]"
-    )
-    with doing(s, "asking you about Claude's 5-hour window"):
-        wait = max(60.0, (resets - at).total_seconds() + 60)
-        answer = read_answer(wait, poll=partial(_five_hour_requested, s))
-    if answer is not None and answer.lower() in ("y", "yes"):
-        FIVE_HOUR.yes = True
-        s.log(f"✔ [{RUNNER_AGENT}] Claude's 5-hour window is used for the rest of this run")
-        _five_hour_granted(s)
-        return True
-    if answer is not None or _at_five_hour(s, now()) is not None:
-        FIVE_HOUR.no = True  # no, or no answer: the rest waits for the resets unasked
-    return False
+    if s.project_id is not None and not switch_on(s.state, FIVE_HOUR, at):
+        for line in _record(s, take_switches, s.project_id, s.state, at) or []:
+            s.log(f"[{RUNNER_AGENT}] the owner's request: {line}")
+        save_state(s.state, s.state_path)
+        if switch_on(s.state, FIVE_HOUR, at):
+            _five_hour_switched_on(s)
+        if switch_on(s.state, WEEK, at):
+            _week_switched_on(s)
+    return switch_on(s.state, FIVE_HOUR, at)
 
 
-def _five_hour_requested(s: Session) -> str | None:
-    """The owner's yes or no to the 5-hour question from the dashboard, if one is open (f5
-    D2); taking it finishes the request."""
-    from runner.requests import take_five_hour  # runner.requests imports this module
-
-    if s.project_id is None:
-        return None
-    return _record(s, take_five_hour, s.project_id, now())
-
-
-def _five_hour_granted(s: Session) -> None:
-    """The owner said yes: the 5-hour items are answered, and what waited for it goes now."""
-    _resolve_item(s, FIVE_HOUR_KIND, "")
+def _five_hour_switched_on(s: Session) -> None:
+    """The owner turned the 5-hour switch on: what waited for it goes now. `runner.requests`
+    answered the items."""
     for entry in s.state.parked.values():
         if entry.get(FIVE_HOUR_HELD):
             entry[RETRY] = True
@@ -3651,38 +3616,22 @@ def _five_hour_granted(s: Session) -> None:
             _unpark_row(s, row)
 
 
-def _support_goes_first(s: Session, task: Task) -> bool:
-    """After a yes: whether checkpoints or escalations it freed go before the ticket that
-    asked (f4-01). That ticket isn't parked or counted: it stays in ready/ for the next pick."""
-    freed = (
-        row.kind in SUPPORT and row.not_before is None and s.state.queued[row_key(row)].get(RETRY)
-        for row in open_rows(s)
-        if row_key(row) in s.state.queued
-    )
-    if not any(freed):
-        return False
-    record_ticket(s, task.path)  # back to its folder's state, no longer running
-    s.log(f"[{RUNNER_AGENT}] {task.id} waits its turn: the work parked for the window goes first")
-    return True
-
-
 def at_five_hour(s: Session, task: Task) -> bool:
     """Before a lead ticket: whether it waits for the owner's share of Claude's 5-hour window
-    (ADR 16 items 1 and 3). The owner is asked once per command, only when nothing else can
-    run (`_next_task`), with its own question and its own yes. With no yes, the ticket parks
-    until the window resets and then goes on by itself; meanwhile it is a Needs-you item. A
-    yes that frees parked support work lets that go first (`_support_goes_first`)."""
+    (ADR 16 items 1 and 3). With the 5-hour switch off (ADR 22 item 4), the ticket parks
+    until the window resets and then goes on by itself; meanwhile it is a Needs-you item
+    naming the switch, and the switch turned on lets it go at once. It parks only when
+    nothing else can run (`_next_task`)."""
     at = now()
-    found = None if FIVE_HOUR.yes else _at_five_hour(s, at)
+    found = None if switch_on(s.state, FIVE_HOUR, at) else _at_five_hour(s, at)
     if found is None:
         return False
     used, resets = found
     text = (
         f"{task.id} waits for Claude's 5-hour window ({used} used, kept for you):"
-        f" it goes on after {resets:%H:%M}, or at once if you answer y to the runner"
+        f" it goes on after {resets:%H:%M}, or at once if you turn on “{SWITCHES[FIVE_HOUR]}”"
     )
     if s.project_id is not None:
-        command = f"uv run runner milestone {command_arg(task.milestone)}"
         _record(
             s,
             metrics.upsert_owner_item,
@@ -3690,14 +3639,9 @@ def at_five_hour(s: Session, task: Task) -> bool:
             FIVE_HOUR_KIND,
             task.id,
             text=text,
-            command=command,
+            command=switch_command(FIVE_HOUR),
             created=at.isoformat(),
         )
-    if not FIVE_HOUR.no and _ask_five_hour(s, used, resets):
-        return _support_goes_first(s, task)
-    if _at_five_hour(s, now()) is None:  # the window reset while it waited
-        _resolve_item(s, FIVE_HOUR_KIND, task.id)
-        return False
     s.state.parked[task.id] = {
         "kind": FIVE_HOUR_KIND,
         "branch": "",
@@ -3715,17 +3659,18 @@ def at_five_hour(s: Session, task: Task) -> bool:
 
 
 def _waits_for_the_owner(s: Session, at: datetime) -> bool:
-    """A lead ticket would stop at a question (the week's or the 5-hour window's)."""
-    week = not (RESERVE.yes or RESERVE.no) and _at_the_reserve(s, at) is not None
-    five = not (FIVE_HOUR.yes or FIVE_HOUR.no) and _at_five_hour(s, at) is not None
+    """A lead ticket would park for a switch that is off (the week's or the 5-hour's)."""
+    week = not switch_on(s.state, WEEK, at) and _at_the_reserve(s, at) is not None
+    five = not switch_on(s.state, FIVE_HOUR, at) and _at_five_hour(s, at) is not None
     return week or five
 
 
 def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) -> Task | None:
     """Parked tickets whose reset has passed go first; while Claude is limited, only work that
     needs no Claude: developer tickets, which local takes. At Claude's reserve or the owner's
-    share of its 5-hour window, developer tickets go before lead ones, so a question comes
-    only when nothing else can run (ADR 15 item 5, ADR 16 item 3). Each by priority (f5 D6)."""
+    share of its 5-hour window with its switch off, developer tickets go before lead ones, so
+    a lead ticket parks only when nothing else can run (ADR 15 item 5, ADR 16 item 3). Each by
+    priority (f5 D6)."""
     at = now()
     cards = _cards(s.repo, ready)
     held = {t.id for t in ready if t.id in s.state.parked}
@@ -3744,11 +3689,14 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
 def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queued]) -> bool:
     """With nothing runnable left, sleep until the earliest reset a parked ticket or queued
     job (of ``rows``) waits for. False when none does: a ticket parked at the reserve waits
-    for the owner, not the week."""
+    for the owner, not the week. While work waits for the owner's 25%, the 5-hour switch
+    turned on ends the sleep."""
     at = now()
-    ahead = _parked_ahead(s, at, {t.id for t in ready}, rows=rows)
+    tickets = {t.id for t in ready}
+    ahead = _parked_ahead(s, at, tickets, rows=rows)
     if not ahead:
         return False
+    held = len(ahead) > len(_parked_ahead(s, at, tickets, five_hour=False, rows=rows))
     first, name = min(ahead)  # the parked job that resumes first is what the wait is for
     wait = max(60.0, (first - at).total_seconds() + 60)
     resumes = at + timedelta(seconds=wait)
@@ -3758,7 +3706,7 @@ def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queue
     s.report.notes.append(
         f"Paused {wait / 60:.0f} min for a Claude usage limit, with nothing to run."
     )
-    wait_for_claude(s, wait, resumes, name)
+    wait_for_claude(s, wait, resumes, name, until=partial(_five_hour_switched, s) if held else None)
     s.state.paused_until = None
     save_state(s.state, s.state_path)
     return True
@@ -3805,22 +3753,27 @@ def _queue_due_review(s: Session) -> None:
 
 def apply_owner_requests(s: Session) -> None:
     """The owner's requests from the dashboard (f5 D2), at each pick: the run is git's one
-    writer, so it applies them itself, as their console commands would. A yes to the 5-hour
-    window frees what waited for it, as a typed yes does. Best effort, like every write."""
+    writer, so it applies them itself, as their console commands would, and turns off the
+    switches whose 24 hours are over. A switch turned on frees what waited for it. Best
+    effort, like every write."""
     from runner.requests import apply_requests  # runner.requests imports this module
 
-    granted = FIVE_HOUR.yes
+    at = now()
+    was_on = {switch: switch_on(s.state, switch, at) for switch in SWITCHES}
     try:
-        lines = apply_requests(s.repo, s.cfg.metrics_db, now())
+        lines = apply_requests(s.repo, s.cfg.metrics_db, at, s.state)
     except Exception as exc:
         _metrics_failed(s, exc)
         return
     for line in lines:
         s.log(f"[{RUNNER_AGENT}] the owner's request: {line}")
     if lines:
+        save_state(s.state, s.state_path)
         sync_tickets(s)  # a queued ticket shows in the queue at once
-    if FIVE_HOUR.yes and not granted:
-        _five_hour_granted(s)
+    if switch_on(s.state, WEEK, at) and not was_on[WEEK]:
+        _week_switched_on(s)
+    if switch_on(s.state, FIVE_HOUR, at) and not was_on[FIVE_HOUR]:
+        _five_hour_switched_on(s)
 
 
 def work_queue(
@@ -4062,8 +4015,8 @@ def dry_run_plan(cfg: Config) -> None:
         _kept_back(cfg, _windows_from(readings, at)),
         _limited_until(state.parked, at),
         {
-            *(("seven_day",) if RESERVE.yes else ()),
-            *(("five_hour",) if FIVE_HOUR.yes else ()),
+            *(("seven_day",) if switch_on(state, WEEK, at) else ()),
+            *(("five_hour",) if switch_on(state, FIVE_HOUR, at) else ()),
         },
     )
     _print_plan(dispatch.plan(queued, tickets, windows, at), ready, done, paused, cfg.repo)

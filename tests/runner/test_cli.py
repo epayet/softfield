@@ -89,15 +89,19 @@ class Restarted(Exception):
     pass
 
 
-def test_a_yes_to_the_reserve_survives_the_self_restart_but_not_a_new_command(in_repo, monkeypatch):
-    """The owner, 2026-10-01: a yes lasts for the running command only, restarts included."""
-    seen: list[bool] = []
+def test_a_restart_hands_no_reserve_answer_on_the_switches_outlive_it(in_repo, monkeypatch):
+    """ADR 22 item 4: the switches are in state.json, so a restart needs no environment for
+    them, and nothing it starts inherits one."""
     envs: list[dict[str, str]] = []
+    seen: list[bool] = []
+    state_path = in_repo / "var" / "runs" / "state.json"
 
     def run(cfg, key, base):
-        seen.append(loop.RESERVE.yes)
+        seen.append(loop.switch_on(load_state(state_path), "week", loop.now()))
         if len(seen) == 1:
-            loop.RESERVE.yes = True  # the owner answered y, then a lead ticket changed runner/
+            state = load_state(state_path)
+            state.switches["week"] = loop.now().isoformat()  # the owner turned it on
+            save_state(state, state_path)
             return RESTART
         return "clean"
 
@@ -109,34 +113,13 @@ def test_a_yes_to_the_reserve_survives_the_self_restart_but_not_a_new_command(in
     monkeypatch.setattr(os, "execve", execve)
     monkeypatch.setattr(owner, "verdict", lambda repo, k, state, stop, db: (0, "V\n"))
     monkeypatch.setattr(owner, "record_verdict", lambda repo, text: None)
-    monkeypatch.delenv(loop.RESERVE_ENV, raising=False)
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
     with pytest.raises(Restarted):
         cli.main(["milestone", "1"])
-    # The restarted process: its modules fresh, the environment the restart gave it.
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    monkeypatch.setenv(loop.RESERVE_ENV, envs[0][loop.RESERVE_ENV])
-    assert cli.main(["milestone", "1"]) == 0
-    assert loop.RESERVE_ENV not in os.environ  # its children don't inherit the yes
-    # The owner's next command, after a Ctrl-C.
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    assert cli.main(["milestone", "1"]) == 0
-    assert seen == [False, True, False]
-
-
-def test_a_restart_without_a_yes_passes_none_on(in_repo, monkeypatch):
-    envs: list[dict[str, str]] = []
-
-    def execve(path, args, env):
-        envs.append(dict(env))
-        raise Restarted
-
-    monkeypatch.setattr(cli, "run_milestone", lambda cfg, key, base: RESTART)
-    monkeypatch.setattr(os, "execve", execve)
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    with pytest.raises(Restarted):
-        cli.main(["milestone", "1"])
-    assert loop.RESERVE_ENV not in envs[0]
+    assert not [name for name in envs[0] if name.startswith("COUCOU_RUNNER_") and "YES" in name]
+    monkeypatch.setenv(cli.RESTARTED_ENV, envs[0][cli.RESTARTED_ENV])
+    assert cli.main(["milestone", "1"]) == 0  # the restarted process
+    assert cli.main(["milestone", "1"]) == 0  # the owner's next command
+    assert seen == [False, True, True]
 
 
 def test_runner_run_restarts_itself_after_a_runner_change(in_repo, monkeypatch):
@@ -151,17 +134,15 @@ def test_runner_run_restarts_itself_after_a_runner_change(in_repo, monkeypatch):
         raise Restarted
 
     def run_session(cfg, *, once, dry_run, escalate):
-        loop.FIVE_HOUR.yes = True  # the owner answered y before the change
         return SessionReport(started=datetime.now(UTC), restart=True)
 
     monkeypatch.setattr(cli, "run_session", run_session)
     monkeypatch.setattr(os, "execve", execve)
-    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
     monkeypatch.setattr(sys, "argv", ["runner", "run"])
     with pytest.raises(Restarted):
         cli.main(["run"])
     assert argvs[0][-1] == "run"
-    assert envs[0][loop.FIVE_HOUR_ENV] == "1"
+    assert envs[0][cli.RESTARTED_ENV] == "1"
 
 
 def test_runner_run_without_a_runner_change_just_ends(in_repo, monkeypatch):
@@ -532,69 +513,3 @@ def test_github_get_refuses_a_write(in_repo, monkeypatch, capsys):
     assert ran == []
     assert cli.main(["github-get", "/user"]) == 0
     assert ran == [["gh", "api", "--method", "GET", "/user"]]
-
-
-def _session_seeing(seen: list[tuple[bool, bool]], restart: bool = False):
-    def run_session(cfg, *, once, dry_run, escalate):
-        seen.append((loop.RESERVE.yes, loop.FIVE_HOUR.yes))
-        return SessionReport(started=datetime.now(UTC), restart=restart)
-
-    return run_session
-
-
-def test_use_reserve_says_yes_to_both_questions_for_24_hours(in_repo, monkeypatch):
-    at = datetime(2026, 10, 4, 22, 0, tzinfo=UTC)
-    monkeypatch.setattr(loop, "now", lambda: at)
-    seen: list[tuple[bool, bool]] = []
-    monkeypatch.setattr(cli, "run_session", _session_seeing(seen))
-    for flag, expected in (
-        (["--use-reserve"], (True, True)),
-        (["--use-reserve", "week"], (True, False)),
-        (["--use-reserve", "five-hour"], (False, True)),
-        ([], (False, False)),
-    ):
-        monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-        monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
-        assert cli.main(["run", *flag]) == 0
-        assert seen[-1] == expected
-        if flag:
-            granted = loop.RESERVE if expected[0] else loop.FIVE_HOUR
-            assert granted.until == at + timedelta(hours=24)
-
-
-def test_a_restart_keeps_the_use_reserve_deadline_instead_of_starting_a_new_one(
-    in_repo, monkeypatch
-):
-    at = datetime(2026, 10, 4, 22, 0, tzinfo=UTC)
-    monkeypatch.setattr(loop, "now", lambda: at)
-    envs: list[dict[str, str]] = []
-
-    def execve(path, args, env):
-        envs.append(dict(env))
-        raise Restarted
-
-    seen: list[tuple[bool, bool]] = []
-    monkeypatch.setattr(os, "execve", execve)
-    monkeypatch.setattr(cli, "run_session", _session_seeing(seen, restart=True))
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
-    monkeypatch.setattr(sys, "argv", ["runner", "run", "--use-reserve"])
-    with pytest.raises(Restarted):
-        cli.main(["run", "--use-reserve"])
-    # Ten hours later a runner change restarts the command, with the same arguments.
-    monkeypatch.setattr(loop, "now", lambda: at + timedelta(hours=10))
-    for name in (loop.RESERVE_ENV, loop.FIVE_HOUR_ENV, cli.RESTARTED_ENV):
-        monkeypatch.setenv(name, envs[0][name])
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
-    monkeypatch.setattr(cli, "run_session", _session_seeing(seen))
-    assert cli.main(["run", "--use-reserve"]) == 0
-    assert loop.RESERVE.until == at + timedelta(hours=24)  # not 34 hours from the start
-    assert cli.RESTARTED_ENV not in os.environ
-    # Past the deadline, a restart's --use-reserve doesn't grant it again.
-    monkeypatch.setattr(loop, "now", lambda: at + timedelta(hours=25))
-    monkeypatch.setenv(cli.RESTARTED_ENV, "1")
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
-    assert cli.main(["run", "--use-reserve"]) == 0
-    assert seen[-1] == (False, False)

@@ -35,6 +35,9 @@ class State:
     # checkpoint's milestone and note, an escalation's logs and reason, a direction's attempts
     # so far. Dropped when its row is done.
     queued: dict[str, dict[str, Any]] = field(default_factory=dict)
+    # The owner's reserve switches (ADR 22 item 4, f8 D4): "week" or "five_hour" -> when it
+    # was turned on. Off is absent; on lasts 24 hours (`loop.switch_on`).
+    switches: dict[str, str] = field(default_factory=dict)
 
     def runs_used(self, milestone: str) -> int:
         return self.headless_runs.get(milestone, 0)

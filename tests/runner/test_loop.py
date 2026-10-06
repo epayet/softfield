@@ -1,6 +1,5 @@
 """The whole task loop on a real temporary git repo, with the model and command gates faked."""
 
-import io
 import json
 import re
 import sqlite3
@@ -68,10 +67,8 @@ ROLES = {
 
 @pytest.fixture(autouse=True)
 def _new_command(monkeypatch):
-    """The owner's answers last for one command: each test is a new one."""
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
-    monkeypatch.setattr(loop, "OPEN_RUNS", [])  # and its runs, which its exit ends
+    """Each test is a new command, with the runs its exit ends."""
+    monkeypatch.setattr(loop, "OPEN_RUNS", [])
 
 
 REAL_FRESH_READING = loop.fresh_reading
@@ -2619,101 +2616,59 @@ def _readings_at(repo: Path, week_used: float) -> None:
     conn.close()
 
 
+class _Terminal:
+    """The owner at the keyboard, ready to type y: the runner must never read it."""
+
+    def isatty(self) -> bool:
+        return True
+
+    def readline(self, *args: object) -> str:
+        pytest.fail("the runner read the console")
+
+    def read(self, *args: object) -> str:
+        pytest.fail("the runner read the console")
+
+
 @pytest.fixture
-def owner_answers(monkeypatch) -> tuple[list[str | None], list[float]]:
-    """The owner's answers at the console, in order; and the wait each question allowed."""
-    answers: list[str | None] = []
-    waits: list[float] = []
-
-    def read_answer(timeout: float, poll=None) -> str | None:
-        waits.append(timeout)
-        return answers.pop(0)
-
-    monkeypatch.setattr(loop, "read_answer", read_answer)
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())  # a new command
-    monkeypatch.setattr(loop, "FIVE_HOUR", loop.ReserveAnswer())
-    return answers, waits
+def at_the_keyboard(monkeypatch) -> None:
+    """ADR 22 item 4: no command asks y/N, so nothing reads the console or waits on it."""
+    monkeypatch.setattr("sys.stdin", _Terminal())
+    monkeypatch.setattr("select.select", lambda *a: pytest.fail("the runner waited on stdin"))
 
 
-QUESTION = (
-    "Claude is at its reserve (21% of the week left, resets Mon 5 Oct 16:00)."
-    " Use it for the rest of this run? [y/N]"
-)
+def _switch_on(repo: Path, *switches: str, at: datetime = THURSDAY) -> None:
+    """The owner turned ``switches`` on at ``at`` (`runner reserve … on`, f8 D4)."""
+    path = _config(repo).runs_dir / "state.json"
+    state = load_state(path)
+    state.switches.update({switch: at.isoformat() for switch in switches})
+    save_state(state, path)
 
 
-def test_a_lead_ticket_at_the_reserve_asks_and_a_yes_lasts_for_the_run(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch, capsys
+def test_with_the_week_switch_on_a_lead_ticket_at_the_reserve_runs(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
     _readings_at(repo, 0.79)
+    _switch_on(repo, "week")
     _lead_task(repo, "m1-01-lead")
     _lead_task(repo, "m1-02-lead")
     script, _ = fake_lead
     script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
     _passes(monkeypatch)
-    answers, waits = owner_answers
-    answers.append("y")
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done", "done"]
-    # Asked once, and it waits for the owner until the week resets (the owner, 2026-10-01).
-    assert waits == [(MONDAY - THURSDAY).total_seconds() + 60]
-    assert QUESTION in capsys.readouterr().out
-    assert loop.RESERVE.yes
+    assert "[y/N]" not in capsys.readouterr().out and fake_clock[0] == THURSDAY
+    assert _rows(repo, "owner_items") == []
 
 
-def test_at_the_reserve_work_without_the_lead_runs_before_the_question(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+def test_with_the_week_switch_off_a_lead_ticket_at_the_reserve_parks_for_the_owner(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
-    """2026-10-01: f1-47 asked first and the owner's late yes was lost while f1-48 could run."""
-    _readings_at(repo, 0.79)
-    _lead_task(repo, "m1-01-lead")
-    _add_task(repo, "m1-02-thing")
-    script, _ = fake_lead
-    script.append(lambda job, repo_: _lead_writes(repo_, "lead"))
-    _passes(monkeypatch)
-    answers, waits = owner_answers
-    answers.append("y")
-
-    def local(repo_: Path, prompt: str) -> None:
-        assert waits == []  # not asked yet
-        _implement(repo_, prompt)
-
-    fake_model.append(local)
-    report = _run(repo)
-    assert [(t.id, t.result) for t in report.tasks] == [
-        ("m1-02-thing", "done"),
-        ("m1-01-lead", "done"),
-    ]
-    assert len(waits) == 1
-
-
-def test_a_question_left_unanswered_till_the_week_resets_runs_the_lead_ticket(
-    repo, fake_model, fake_lead, fake_clock, monkeypatch
-):
-    _readings_at(repo, 0.79)
-    _lead_task(repo, "m1-01-lead")
-    script, _ = fake_lead
-    script.append(_lead_implements)
-    _passes(monkeypatch)
-
-    def read_answer(timeout: float, poll=None) -> str | None:
-        fake_clock[0] += timedelta(seconds=timeout)  # nobody answered
-        return None
-
-    monkeypatch.setattr(loop, "read_answer", read_answer)
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())
-    report = _run(repo)
-    assert [t.result for t in report.tasks] == ["done"]
-    assert fake_clock[0] > MONDAY and _state(repo).parked == {}
-
-
-def test_no_answer_at_the_reserve_parks_the_lead_ticket_for_the_owner(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
-):
+    """2026-10-01: f1-47 asked first and the owner's late yes was lost while f1-48 could run;
+    work without the lead still goes first."""
     _readings_at(repo, 0.79)
     _lead_task(repo, "m1-01-lead")
     _add_task(repo, "m1-02-thing")
     _, jobs = fake_lead
-    owner_answers[0].append(None)
     fake_model.append(_implement)
     report = _run(repo)
     assert jobs == []  # the reserve wasn't touched
@@ -2722,36 +2677,67 @@ def test_no_answer_at_the_reserve_parks_the_lead_ticket_for_the_owner(
     assert _state(repo).parked["m1-01-lead"]["kind"] == "reserve"
     [item] = _rows(repo, "owner_items")
     assert (item["kind"], item["subject"]) == ("reserve", "m1-01-lead")
-    assert item["command"] == "uv run runner milestone 1" and item["resolved"] is None
+    assert item["command"] == "uv run runner run --use-reserve week" and item["resolved"] is None
     assert "21% of the week left" in str(item["text"])
-    assert not loop.RESERVE.yes
+    assert "Let the factory use the week's reserve" in str(item["text"])  # the switch to turn on
+    assert "[y/N]" not in capsys.readouterr().out
     assert fake_clock[0] == THURSDAY  # it didn't sleep till Monday for the owner
 
 
-def test_no_answer_holds_for_the_run_and_the_next_command_asks_again(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+def test_a_switch_turned_on_after_the_park_runs_the_ticket_at_the_next_command(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
+    """2026-10-01: Needs-you kept "waits for Claude's reserve" after the owner's yes."""
     _readings_at(repo, 0.79)
     _lead_task(repo, "m1-01-lead")
     _lead_task(repo, "m1-02-lead")
     script, jobs = fake_lead
-    script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
+    items: list[dict[str, object]] = []
+    reserves: list[object] = []
+
+    def lead(job: ClaudeJob, repo_: Path) -> None:
+        items.extend(_rows(repo, "owner_items"))
+        reserves.extend(run["reserve"] for run in _rows(repo, "runs"))
+        _lead_implements(job, repo_)
+
+    script.extend([lead, lambda job, repo_: _lead_writes(repo_, "second")])
     _passes(monkeypatch)
-    answers, waits = owner_answers
-    answers.extend([None, "y"])
     _run(repo)
-    assert jobs == [] and len(waits) == 1  # the second lead ticket wasn't asked about again
-    assert set(_state(repo).parked) == {"m1-01-lead", "m1-02-lead"}
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())  # a new process
-    report = _run(repo)  # as its owner item says: rerun the command
-    assert len(waits) == 2
+    assert jobs == [] and set(_state(repo).parked) == {"m1-01-lead", "m1-02-lead"}
+    _earlier_run(repo)
+    _ask_from_the_dashboard(repo, "reserve", "week", "on")
+    report = _run(repo)
     assert [t.result for t in report.tasks] == ["done", "done"]
     assert _state(repo).parked == {}
+    assert {(i["kind"], i["subject"]) for i in items} == {
+        ("reserve", "m1-01-lead"),
+        ("reserve", "m1-02-lead"),
+    }
+    assert all(i["resolved"] for i in items)  # answered when the switch went on
+    assert reserves == [0, 1]  # the first run ended; the next is on the reserve
+    assert [run["reserve"] for run in _rows(repo, "runs")] == [0, 0]  # and ended in turn
+
+
+def test_a_switch_turned_on_24_hours_ago_reads_off_and_asks_again(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard
+):
+    """The owner, 2026-10-04: on lasts 24 hours; then it is off and a Needs-you item asks."""
+    _readings_at(repo, 0.79)
+    _switch_on(repo, "week", at=THURSDAY - timedelta(hours=24))
+    _lead_task(repo, "m1-01-lead")
+    _, jobs = fake_lead
+    report = _run(repo)
+    assert jobs == [] and report.tasks == []
+    assert _state(repo).switches == {}
+    items = {(i["kind"], i["subject"]): i for i in _rows(repo, "owner_items")}
+    assert set(items) == {("reserve", "week"), ("reserve", "m1-01-lead")}
+    assert items["reserve", "week"]["resolved"] is None
+    assert items["reserve", "week"]["command"] == "uv run runner reserve week on"
 
 
 @pytest.mark.parametrize("week_used", [0.1, 0.5])
-def test_a_lead_ticket_short_of_the_reserve_doesnt_ask(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch, week_used
+def test_a_lead_ticket_short_of_the_reserve_runs_with_the_switch_off(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch, week_used
 ):
     """0.5 on a Thursday is past the week's pace line, but not into the reserve."""
     _readings_at(repo, week_used)
@@ -2761,12 +2747,10 @@ def test_a_lead_ticket_short_of_the_reserve_doesnt_ask(
     _passes(monkeypatch)
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done"]
-    assert owner_answers[1] == []
+    assert _rows(repo, "owner_items") == []
 
 
-def test_support_roles_use_the_reserve_without_asking(
-    repo, fake_model, fake_lead, fake_clock, owner_answers
-):
+def test_support_roles_use_the_reserve_with_the_switch_off(repo, fake_model, fake_lead, fake_clock):
     _readings_at(repo, 0.95)
     _escalate_on_protected(repo, fake_model)
     script, jobs = fake_lead
@@ -2774,62 +2758,6 @@ def test_support_roles_use_the_reserve_without_asking(
     report = _run(repo)
     assert [j.kind for j in jobs] == ["direction"]
     assert report.tasks[0].result == "escalated"
-    assert owner_answers[1] == []
-
-
-def test_without_a_terminal_there_is_no_answer(monkeypatch):
-    monkeypatch.setattr("sys.stdin", io.StringIO("y\n"))  # piped, not typed by the owner
-    assert loop.read_answer(600) is None
-
-
-@pytest.fixture
-def ticking(monkeypatch) -> list[float]:
-    """Each sleep, in order; `clock` moves on by it."""
-    slept: list[float] = []
-    at = [0.0]
-
-    def sleep(seconds: float) -> None:
-        slept.append(seconds)
-        at[0] += seconds
-
-    monkeypatch.setattr("time.sleep", sleep)
-    monkeypatch.setattr(loop, "clock", lambda: at[0])
-    return slept
-
-
-def test_an_answer_from_the_dashboard_lands_within_one_poll(monkeypatch, ticking):
-    """f5 D2: with no terminal (a run under nohup), the phone is the owner's only way in."""
-    monkeypatch.setattr("sys.stdin", io.StringIO(""))
-    answers = iter([None, None, "yes"])
-    assert loop.read_answer(600, poll=lambda: next(answers)) == "yes"
-    assert ticking == [loop.REQUEST_POLL_S, loop.REQUEST_POLL_S]  # asked at once, then each poll
-
-
-def test_a_poll_with_no_answer_gives_up_at_the_timeout(monkeypatch, ticking):
-    monkeypatch.setattr("sys.stdin", io.StringIO(""))
-    polls: list[float] = []
-    assert loop.read_answer(12, poll=lambda: polls.append(loop.clock())) is None
-    assert ticking == [5.0, 5.0, 2.0] and polls == [0.0, 5.0, 10.0, 12.0]
-
-
-class _Terminal(io.StringIO):
-    def isatty(self) -> bool:
-        return True
-
-
-@pytest.mark.parametrize(("typed", "expected"), [(True, "y"), (False, "no")])
-def test_at_a_terminal_a_typed_answer_and_the_dashboards_both_count(monkeypatch, typed, expected):
-    monkeypatch.setattr("sys.stdin", _Terminal("y\n"))
-    waits: list[float] = []
-
-    def select(read, write, error, timeout):
-        waits.append(timeout)
-        return (read if typed else [], [], [])
-
-    monkeypatch.setattr("select.select", select)
-    answers = iter([None, "no"])
-    assert loop.read_answer(600, poll=lambda: next(answers)) == expected
-    assert waits == [loop.REQUEST_POLL_S]  # the terminal waits no longer than one poll
 
 
 def _ask_from_the_dashboard(repo: Path, kind: str, subject=None, value=None) -> int:
@@ -3003,29 +2931,10 @@ def test_the_run_says_what_it_does_between_two_tickets(repo, fake_model, monkeyp
     assert run["ended"] is not None and (run["activity"], run["waiting_until"]) == (None, None)
 
 
-def test_the_run_says_when_it_asks_the_owner(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
-):
-    _claude_at(repo, 0.80, week=0.79)
-    _lead_task(repo, "m1-01-lead")
-    script, _ = fake_lead
-    script.append(_lead_implements)
-    _passes(monkeypatch)
-    seen: list[object] = []
-
-    def read_answer(timeout: float, poll=None) -> str | None:
-        seen.append(_activity(repo)[0])
-        return "y"
-
-    monkeypatch.setattr(loop, "read_answer", read_answer)
-    _run(repo)
-    assert seen == ["asking you about Claude's reserve", "asking you about Claude's 5-hour window"]
-
-
 def test_a_ctrl_c_leaves_no_run_alive_or_on_the_reserve(repo, fake_model, monkeypatch):
     """f2-03: after a Ctrl-C, run 20261002-055804 kept ended NULL and reserve 1, so the page
     said "on Claude's reserve" until the heartbeat went stale."""
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(granted=True))
+    _switch_on(repo, "week", at=loop.now())
     _add_task(repo, "m1-01-thing")
 
     def ctrl_c(repo_: Path, prompt: str) -> None:
@@ -3154,40 +3063,11 @@ def test_a_claude_jobs_row_shows_its_tokens_and_steps_before_it_ends(repo, monke
     assert (job["outcome"], job["steps"]) == ("passed", 3)
 
 
-def test_a_yes_to_the_reserve_clears_its_item_at_once_and_marks_the_run(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
-):
-    """2026-10-01: Needs-you kept "waits for Claude's reserve … answer y" after the owner's y."""
-    _readings_at(repo, 0.79)
-    _lead_task(repo, "m1-01-lead")
-    script, _ = fake_lead
-    items: list[dict[str, object]] = []
-    reserves: list[object] = []
-
-    def lead(job: ClaudeJob, repo_: Path) -> None:
-        items.extend(_rows(repo, "owner_items"))
-        reserves.extend(run["reserve"] for run in _rows(repo, "runs"))
-        _lead_implements(job, repo_)
-
-    script.append(lead)
-    _passes(monkeypatch)
-    answers, _ = owner_answers
-    answers.extend([None, "y"])
-    _run(repo)  # no answer: parked, an owner item
-    assert _rows(repo, "owner_items")[0]["resolved"] is None
-    _earlier_run(repo)
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer())  # the owner reruns
-    _run(repo)
-    [item] = items
-    assert (item["kind"], item["subject"]) == ("reserve", "m1-01-lead") and item["resolved"]
-    assert reserves == [0, 1]  # the first run ended; the rerun is on the reserve
-    assert [run["reserve"] for run in _rows(repo, "runs")] == [0, 0]  # and ended in turn
-
-
-def test_a_restart_after_a_yes_marks_its_run_on_the_reserve(repo, monkeypatch):
-    monkeypatch.setattr(loop, "RESERVE", loop.ReserveAnswer(granted=True))
+@pytest.mark.parametrize(("switch", "reserve"), [("week", True), ("five_hour", False)])
+def test_a_run_started_with_the_week_switch_on_is_on_the_reserve(repo, switch, reserve):
+    _switch_on(repo, switch, at=loop.now())
     loop.open_session(_config(repo))
-    assert [run["reserve"] for run in _rows(repo, "runs")] == [1]
+    assert [bool(run["reserve"]) for run in _rows(repo, "runs")] == [reserve]
 
 
 def test_a_ticket_deleted_from_tasks_leaves_the_queue(repo):
@@ -3612,9 +3492,6 @@ def test_a_developer_ticket_touching_protected_paths_is_the_leads(
 # --- Claude's 5-hour window (ADR 16 items 1–4 and 9) -----------------------------------------
 
 FIVE_RESETS = THURSDAY + timedelta(hours=2)
-FIVE_HOUR_QUESTION = (
-    "Claude's 5-hour window is at 80% (resets 14:00), kept for you. Use it for this run? [y/N]"
-)
 
 
 def _claude_at(
@@ -3654,11 +3531,12 @@ def _with_sonnet(repo: Path, **roles: tuple[str, ...]) -> SessionReport:
     return report
 
 
-def test_at_80_percent_developer_work_goes_on_and_the_lead_ticket_parks_without_a_question(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch, capsys
+def test_at_80_percent_developer_work_goes_on_and_the_lead_ticket_parks_till_the_reset(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
     """F1, 2 Oct 05:26: Sonnet took three developer tickets at 22% of the 5-hour window, the
-    window reached 100% and lead ticket f1-53 parked (ADR 16 items 1–3)."""
+    window reached 100% and lead ticket f1-53 parked (ADR 16 items 1–3). With the switch off,
+    the lead ticket parks and goes on by itself after the reset."""
     _claude_at(repo, 0.80)
     _lead_task(repo, "m1-01-lead")
     _add_task(repo, "m1-02-thing")
@@ -3671,38 +3549,30 @@ def test_at_80_percent_developer_work_goes_on_and_the_lead_ticket_parks_without_
 
     script.append(lead)
     _passes(monkeypatch)
-    answers, waits = owner_answers
-    answers.append(None)  # nobody at the keyboard
-
-    def local(repo_: Path, prompt: str) -> None:
-        assert waits == []  # no question while another ticket can run
-        _implement(repo_, prompt)
-
-    fake_model.append(local)
+    fake_model.append(_implement)
     report = _with_sonnet(repo)
     [developer, _] = _rows(repo, "jobs")
     assert (developer["agent"], developer["routing_reason"]) == (
         "local-m",
         "local-m, the floor: claude-sonnet: lead work is ready, it goes first",
     )
-    # Asked once, when nothing else could run; unanswered, the lead ticket waited for the
-    # window's reset and then went on by itself.
-    assert len(waits) == 1
-    assert FIVE_HOUR_QUESTION in capsys.readouterr().out
+    assert "[y/N]" not in capsys.readouterr().out
     assert [j.kind for j in jobs] == ["lead-ticket"] and ran_at[0] > FIVE_RESETS
     assert [(t.id, t.result) for t in report.tasks] == [
         ("m1-02-thing", "done"),
         ("m1-01-lead", "done"),
     ]
-    # Its Needs-you item, open while it waited, is cleared once it ran.
+    # Its Needs-you item, open while it waited, names the switch, and is cleared once it ran.
     [item] = _rows(repo, "owner_items")
     assert (item["kind"], item["subject"]) == ("five-hour", "m1-01-lead")
     assert "80%" in str(item["text"]) and item["resolved"] is not None
+    assert "Let the factory use your 25% of the 5-hour window" in str(item["text"])
+    assert item["command"] == "uv run runner reserve five-hour on"
     assert _state(repo).parked == {}
 
 
-def test_at_70_percent_a_lead_ticket_runs_without_asking(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+def test_at_70_percent_a_lead_ticket_runs_with_the_switch_off(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch
 ):
     _claude_at(repo, 0.70)
     _lead_task(repo, "m1-01-lead")
@@ -3711,79 +3581,56 @@ def test_at_70_percent_a_lead_ticket_runs_without_asking(
     _passes(monkeypatch)
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done"]
-    assert owner_answers[1] == [] and fake_clock[0] == THURSDAY
+    assert _rows(repo, "owner_items") == [] and fake_clock[0] == THURSDAY
 
 
-def test_a_yes_to_the_5_hour_question_lets_the_lead_ticket_go_at_once(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+def test_with_the_5_hour_switch_on_lead_tickets_go_past_75_percent(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
     _claude_at(repo, 0.80)
+    _switch_on(repo, "five_hour")
     _lead_task(repo, "m1-01-lead")
     _lead_task(repo, "m1-02-lead")
     script, _ = fake_lead
     script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
     _passes(monkeypatch)
-    answers, waits = owner_answers
-    answers.append("y")
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done", "done"]
-    assert len(waits) == 1 and fake_clock[0] == THURSDAY  # asked once, and nothing waited
-    assert loop.FIVE_HOUR.yes and not loop.RESERVE.yes
-    [item] = _rows(repo, "owner_items")
-    assert item["kind"] == "five-hour" and item["resolved"] is not None
+    assert fake_clock[0] == THURSDAY and _rows(repo, "owner_items") == []
+    assert not loop.switch_on(_state(repo), "week", THURSDAY)  # one switch per window
 
 
-def test_a_yes_from_the_dashboard_while_the_question_waits_lets_the_ticket_go(
-    repo, fake_model, fake_lead, fake_clock, monkeypatch, ticking, capsys
+@pytest.mark.parametrize(("value", "goes"), [("on", True), ("off", False)])
+def test_a_reserve_request_lets_a_lead_ticket_past_75_percent_or_parks_it(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch, value, goes
 ):
-    """f5 D2: the owner answers on the phone; the question takes it within one poll."""
+    """f8-04's Done when: `reserve five_hour on` lets it run at once; `off` parks it."""
     _claude_at(repo, 0.80)
-    _lead_task(repo, "m1-01-lead")
-    script, jobs = fake_lead
-    script.append(_lead_implements)
-    _passes(monkeypatch)
-    monkeypatch.setattr("sys.stdin", io.StringIO(""))  # no terminal: a run under nohup
-    asked: list[int] = []
-    real_sleep = time.sleep  # the `ticking` one
-
-    def phone(seconds: float) -> None:
-        if not asked:  # the question has waited one poll: the owner taps Yes
-            asked.append(_ask_from_the_dashboard(repo, "five_hour", value="yes"))
-        real_sleep(seconds)
-
-    monkeypatch.setattr("time.sleep", phone)
-    report = _run(repo)
-    assert FIVE_HOUR_QUESTION in capsys.readouterr().out
-    assert ticking == [loop.REQUEST_POLL_S]  # one poll, then the yes
-    assert [j.kind for j in jobs] == ["lead-ticket"] and fake_clock[0] == THURSDAY
-    assert [t.result for t in report.tasks] == ["done"]
-    assert loop.FIVE_HOUR.yes
-    [request] = _rows(repo, "owner_requests")
-    assert request["id"] == asked[0] and request["done"] is not None
-    assert "yes" in str(request["result"])
-    [item] = _rows(repo, "owner_items")  # its Needs-you item is answered
-    assert item["kind"] == "five-hour" and item["resolved"] is not None
-
-
-def test_a_yes_from_the_dashboard_before_the_pick_needs_no_question(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
-):
-    _claude_at(repo, 0.80)
+    _switch_on(repo, "five_hour")
     _lead_task(repo, "m1-01-lead")
     script, _ = fake_lead
-    script.append(_lead_implements)
+    ran_at: list[datetime] = []
+
+    def lead(job, repo_):
+        ran_at.append(loop.now())
+        _lead_writes(repo_, "lead")
+
+    script.append(lead)
     _passes(monkeypatch)
-    _ask_from_the_dashboard(repo, "five_hour", value="yes")
+    _ask_from_the_dashboard(repo, "reserve", "five_hour", value)
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done"]
-    assert owner_answers[1] == [] and loop.FIVE_HOUR.yes  # never asked
+    assert (ran_at[0] == THURSDAY) is goes and (ran_at[0] > FIVE_RESETS) is not goes
+    [request] = _rows(repo, "owner_requests")
+    assert request["done"] is not None
 
 
-def test_a_yes_to_the_5_hour_question_runs_the_parked_escalation_before_the_asking_ticket(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch
+def test_turning_the_5_hour_switch_on_during_the_wait_lets_the_parked_work_go(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """F2, 2 Oct 12:01: f2-06's escalation was parked at 78%; the owner said y on lead ticket
-    f2-03, which ran first, and the escalation waited for the next pass (f4-01)."""
+    """f5 D2: the owner turns the switch on from the phone while the run sleeps for the
+    window; the wait takes it within a poll, and the escalation that was parked goes before
+    the lead ticket (F2, 2 Oct 12:01; f4-01)."""
     _claude_at(repo, 0.80)
     write_task(repo / "tasks" / "escalated", "m1-09-stuck")
     logs = repo / "var" / "runs" / "earlier" / "m1-09-stuck"
@@ -3805,24 +3652,35 @@ def test_a_yes_to_the_5_hour_question_runs_the_parked_escalation_before_the_aski
     script, jobs = fake_lead
     script.extend([lambda job, repo_: None, _lead_implements])
     _passes(monkeypatch)
-    answers, waits = owner_answers
-    answers.append("y")
+    slept: list[float] = []
+    clock_sleep = time.sleep  # fake_clock's
+
+    def phone(seconds: float) -> None:
+        if not slept:  # the run sleeps for the window: the owner turns the switch on
+            _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")
+        slept.append(seconds)
+        clock_sleep(seconds)
+
+    monkeypatch.setattr("time.sleep", phone)
     report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     assert report is not None
     assert [j.kind for j in jobs] == ["escalation", "lead-ticket"]
-    assert len(waits) == 1 and fake_clock[0] == THURSDAY  # asked once, and nothing waited
-    # Waiting its turn cost the ticket nothing: one attempt, no park, no open Needs-you item.
+    assert slept == [loop.SWITCH_POLL_S]  # taken at the first poll, long before the reset
+    assert fake_clock[0] < FIVE_RESETS
     assert [(t.id, t.result, t.attempts) for t in report.tasks] == [("m1-01-lead", "done", 1)]
     after = _state(repo)
     assert after.parked == {} and after.escalations == {"m1-09-stuck": 1}
     assert all(item["resolved"] is not None for item in _rows(repo, "owner_items"))
+    [request] = _rows(repo, "owner_requests")
+    assert request["done"] is not None
 
 
-def test_a_yes_to_the_weeks_reserve_doesnt_lift_the_5_hour_reserve(
-    repo, fake_model, fake_lead, fake_clock, owner_answers, monkeypatch, capsys
+def test_the_week_switch_doesnt_lift_the_5_hour_reserve(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """ADR 16 item 3: two questions, one per window; a yes to one doesn't answer the other."""
+    """ADR 16 item 3 and the owner (2026-10-04): one switch per window."""
     _claude_at(repo, 0.80, week=0.79)
+    _switch_on(repo, "week")
     _lead_task(repo, "m1-01-lead")
     script, _ = fake_lead
     ran_at: list[datetime] = []
@@ -3833,15 +3691,11 @@ def test_a_yes_to_the_weeks_reserve_doesnt_lift_the_5_hour_reserve(
 
     script.append(lead)
     _passes(monkeypatch)
-    answers, waits = owner_answers
-    answers.extend(["y", None])  # yes to the week, then nobody
     report = _run(repo)
-    out = capsys.readouterr().out
-    assert "Claude is at its reserve (21% of the week left" in out
-    assert FIVE_HOUR_QUESTION in out
-    assert len(waits) == 2
-    assert loop.RESERVE.yes and not loop.FIVE_HOUR.yes
     assert [t.result for t in report.tasks] == ["done"] and ran_at[0] > FIVE_RESETS
+    assert {(i["kind"], i["subject"]) for i in _rows(repo, "owner_items")} == {
+        ("five-hour", "m1-01-lead")
+    }
 
 
 @pytest.mark.parametrize(("lead", "agent"), [(False, "claude-sonnet"), (True, "local-m")])
@@ -4184,24 +4038,42 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     assert git(repo, "status", "--porcelain") == ""
 
 
-def test_a_review_at_80_percent_asks_once_then_waits_for_the_reset(
-    repo, fake_clock, owner_answers, capsys
+def test_a_review_at_80_percent_waits_for_the_reset_with_the_switch_off(
+    repo, fake_clock, at_the_keyboard, capsys
 ):
     """Nothing else runs during the review, so it waits rather than parks (ADR 16 item 4)."""
     _claude_at(repo, 0.80)
-    answers, waits = owner_answers
-    answers.append(None)
     s = loop.open_session(_config(repo))
     loop.wait_for_room(s, "the review")
-    assert len(waits) == 1 and FIVE_HOUR_QUESTION in capsys.readouterr().out
+    assert "[y/N]" not in capsys.readouterr().out
     assert fake_clock[0] > FIVE_RESETS
 
 
-def test_a_yes_lets_the_review_go_at_once(repo, fake_clock, owner_answers):
+def test_the_5_hour_switch_lets_the_review_go_at_once(repo, fake_clock, at_the_keyboard):
     _claude_at(repo, 0.80)
-    owner_answers[0].append("y")
+    _switch_on(repo, "five_hour")
     loop.wait_for_room(loop.open_session(_config(repo)), "the review")
-    assert fake_clock[0] == THURSDAY and loop.FIVE_HOUR.yes
+    assert fake_clock[0] == THURSDAY
+
+
+def test_the_5_hour_switch_turned_on_during_the_reviews_wait_ends_it(
+    repo, fake_clock, at_the_keyboard, monkeypatch
+):
+    _claude_at(repo, 0.80)
+    s = loop.open_session(_config(repo))
+    slept: list[float] = []
+    clock_sleep = time.sleep  # fake_clock's
+
+    def phone(seconds: float) -> None:
+        if not slept:  # the review waits: the owner turns the switch on
+            _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")
+        slept.append(seconds)
+        clock_sleep(seconds)
+
+    monkeypatch.setattr("time.sleep", phone)
+    loop.wait_for_room(s, "the review")
+    assert slept == [loop.SWITCH_POLL_S] and fake_clock[0] < FIVE_RESETS
+    assert loop.switch_on(_state(repo), "five_hour", loop.now())
 
 
 def _source_ticket(repo: Path) -> None:
@@ -4288,8 +4160,8 @@ def _probe_reads(five_hour: float) -> JobResult:
     )
 
 
-def test_a_fresh_reading_under_the_owners_share_runs_the_lead_ticket_without_asking(
-    repo, fake_clock, owner_answers, monkeypatch
+def test_a_fresh_reading_under_the_owners_share_runs_the_lead_ticket_without_waiting(
+    repo, fake_clock, monkeypatch
 ):
     """The owner, 2026-10-02: a run began at the owner's share of the 5-hour window, from the
     last session's reading, when the window had room."""
@@ -4303,7 +4175,7 @@ def test_a_fresh_reading_under_the_owners_share_runs_the_lead_ticket_without_ask
         ("m1-01-lead", "done"),
         ("m1-02-lead", "done"),
     ]
-    assert owner_answers[1] == [] and _state(repo).parked == {}
+    assert _rows(repo, "owner_items") == [] and _state(repo).parked == {}
     # Once per session: the second lead ticket, 20 minutes on, goes by the probe's reading.
     assert [j.kind for j in jobs] == ["probe", "lead-ticket", "lead-ticket"]
     assert probed == [THURSDAY]
@@ -4329,17 +4201,14 @@ def test_no_probe_without_claude_work(repo, fake_model, fake_clock, monkeypatch)
     assert jobs == []
 
 
-def test_no_probe_when_the_reading_is_under_ten_minutes_old(
-    repo, fake_clock, owner_answers, monkeypatch
-):
+def test_no_probe_when_the_reading_is_under_ten_minutes_old(repo, fake_clock, monkeypatch):
     _claude_at(repo, 0.80, age=timedelta(minutes=9))
+    _switch_on(repo, "five_hour")  # the 80% stands, and the lead ticket goes at once
     _lead_task(repo, "m1-01-lead")
     _passes(monkeypatch)
-    owner_answers[0].append("y")
     jobs, _ = _fresh_claude(monkeypatch, lambda: _probe_reads(0.20))
     report = _run(repo)
     assert [j.kind for j in jobs] == ["lead-ticket"]
-    assert len(owner_answers[1]) == 1  # the 80% stood: asked
     assert [t.result for t in report.tasks] == ["done"]
 
 
@@ -4354,20 +4223,19 @@ def test_no_probe_when_the_reading_is_under_ten_minutes_old(
     ],
 )
 def test_a_failed_probe_falls_back_to_the_stored_reading(
-    repo, fake_clock, owner_answers, monkeypatch, capsys, probe, why
+    repo, fake_clock, monkeypatch, capsys, probe, why
 ):
     _claude_at(repo, 0.80)
     _lead_task(repo, "m1-01-lead")
     _passes(monkeypatch)
-    owner_answers[0].append("y")
     jobs, _ = _fresh_claude(monkeypatch, probe)
     report = _run(repo)
     assert [j.kind for j in jobs] == ["probe", "lead-ticket"]
     out = capsys.readouterr().out
     assert f"no fresh reading of Claude's windows ({why})" in out
     assert "the stored one from 11:30" in out
-    assert FIVE_HOUR_QUESTION in out and len(owner_answers[1]) == 1
     assert [t.result for t in report.tasks] == ["done"]
+    assert [item["kind"] for item in _rows(repo, "owner_items")] == ["five-hour"]
     [probe_job] = [j for j in _rows(repo, "jobs") if j["role"] == "probe"]
     assert probe_job["outcome"] == "failed"
 
@@ -4446,19 +4314,3 @@ def test_a_fix_ticket_on_a_missing_path_takes_the_tickets_files_and_names_the_pa
     from runner.tasks import preflight
 
     assert preflight(task, repo) == []
-
-
-def test_a_yes_granted_until_a_time_lapses_then_and_the_question_is_asked_again(monkeypatch):
-    """`runner run --use-reserve` (owner, 2026-10-04): a yes for 24 hours, then ask again."""
-    at = datetime(2026, 10, 4, 22, 0, tzinfo=UTC)
-    monkeypatch.setattr(loop, "now", lambda: at)
-    answer = loop.ReserveAnswer()
-    answer.grant_until(at + timedelta(hours=24))
-    assert answer.yes and not answer.no
-    monkeypatch.setattr(loop, "now", lambda: at + timedelta(hours=23, minutes=59))
-    assert answer.yes
-    monkeypatch.setattr(loop, "now", lambda: at + timedelta(hours=24))
-    assert not answer.yes and not answer.no  # unanswered again: the runner asks
-    answer.yes = True  # a typed yes still lasts for the whole command
-    monkeypatch.setattr(loop, "now", lambda: at + timedelta(days=5))
-    assert answer.yes

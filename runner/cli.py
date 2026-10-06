@@ -6,7 +6,7 @@ import socket
 import subprocess
 import sys
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
 from runner import (
@@ -34,7 +34,7 @@ from runner.milestone import (
     run_due_review,
     run_milestone,
 )
-from runner.state import load_state
+from runner.state import load_state, save_state
 from runner.tasks import TaskError, milestone_arg
 
 
@@ -65,35 +65,25 @@ def _today() -> date:
 RESTARTED_ENV = "COUCOU_RUNNER_RESTARTED"  # set by `_restart` for the process it starts
 
 
-def _handed_on(answer: loop.ReserveAnswer, value: str | None) -> None:
-    """A yes the restart handed on: "1" for the whole command, else the time it ends."""
-    if value == "1":
-        answer.yes = True
-    elif value:
-        answer.grant_until(datetime.fromisoformat(value))
-
-
-def _use_reserve(which: str | None) -> None:
-    """`runner run --use-reserve [week|five-hour]`: yes to the reserve questions, ahead, for
-    ``USE_RESERVE_HOURS`` (owner, 2026-10-04); then the runner asks again."""
-    until = loop.now() + timedelta(hours=loop.USE_RESERVE_HOURS)
-    if which in ("both", "week"):
-        loop.RESERVE.grant_until(until)
-    if which in ("both", "five-hour"):
-        loop.FIVE_HOUR.grant_until(until)
-    if which is not None:
-        print(f"runner: Claude's reserve may be used until {until:%a %H:%M}.", flush=True)
+def _switch_request(cfg: Config, switch: str, value: str) -> None:
+    """`runner reserve` and `runner run --use-reserve`: the request the dashboard's switch
+    writes (ADR 22 item 4), so both go by the same code. The command applies it at once
+    (`_apply_requests`), unless a run is live: that run applies it at its next pick."""
+    conn = metrics.open_db(cfg.metrics_db)
+    try:
+        project = metrics.upsert_project(conn, cfg.repo.name, repo=str(cfg.repo))
+        metrics.add_request(conn, project, requests.RESERVE, switch, value, loop.now().isoformat())
+    finally:
+        conn.close()
 
 
 def _restart() -> None:
-    """Carry on in a fresh process: Claude changed runner/, and Python keeps the old modules."""
+    """Carry on in a fresh process: Claude changed runner/, and Python keeps the old modules.
+    The switches are in state.json, so nothing else is handed on."""
     print("runner: the runner's code changed; restarting.", flush=True)
     argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
     env = dict(os.environ)
     env[RESTARTED_ENV] = "1"  # so `--use-reserve` doesn't start its 24 hours again
-    for answer, name in ((loop.RESERVE, loop.RESERVE_ENV), (loop.FIVE_HOUR, loop.FIVE_HOUR_ENV)):
-        if answer.yes:  # the owner's yes lasts for the whole command, or until its end
-            env[name] = answer.until.isoformat() if answer.until else "1"
     os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
 
 
@@ -116,11 +106,16 @@ _NO_REQUESTS = ("check-all", "check-layout", "check-i18n")
 
 def _apply_requests(cfg: Config, db: Path) -> None:
     """The owner's requests from the dashboard made while nothing ran (f5 D2): the next
-    command applies them first. A live run applies its own, at its next pick."""
+    command applies them first, and turns off the switches whose 24 hours are over. A live
+    run applies its own, at its next pick."""
+    state_path = cfg.runs_dir / "state.json"
     try:
         if loop.live_run(replace(cfg, metrics_db=db)) is not None:
             return
-        lines = requests.apply_requests(cfg.repo, db, loop.now())
+        state = load_state(state_path)
+        lines = requests.apply_requests(cfg.repo, db, loop.now(), state)
+        if lines:
+            save_state(state, state_path)
     except Exception as exc:
         print(
             f"runner: the owner's requests weren't read ({type(exc).__name__}: {exc})",
@@ -146,8 +141,13 @@ def main(argv: list[str] | None = None) -> int:
         nargs="?",
         const="both",
         choices=("both", "week", "five-hour"),
-        help="say yes ahead to using Claude's reserve (both, or one window) for 24 hours",
+        help="turn on the reserve switches (both, or one window's) for 24 hours as it starts",
     )
+    reserve = sub.add_parser(
+        "reserve", help="the owner: let the factory use Claude's reserve, for 24 hours (ADR 22)"
+    )
+    reserve.add_argument("window", choices=("week", "five-hour"))
+    reserve.add_argument("value", choices=("on", "off"))
     milestone = sub.add_parser(
         "milestone", help="run a whole milestone: tickets, review, then a verdict (ADR 12)"
     )
@@ -236,17 +236,19 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if getattr(args, "lan", False) and args.host:
         dashboard.error("--lan finds this machine's address itself: give --lan or --host, not both")
-    # A yes to Claude's reserve, handed on by this command's own restart (below); taken out
-    # so that nothing this process starts inherits it (ADR 15 item 5).
-    _handed_on(loop.RESERVE, os.environ.pop(loop.RESERVE_ENV, None))
-    _handed_on(loop.FIVE_HOUR, os.environ.pop(loop.FIVE_HOUR_ENV, None))  # its own question
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
-    if not restarted:  # a restart keeps the first deadline, or its lapse
-        _use_reserve(getattr(args, "use_reserve", None))
 
     repo = _repo()
     cfg = load_config(repo)
-    if args.command not in _NO_REQUESTS and not getattr(args, "dry_run", False):
+    dry_run = getattr(args, "dry_run", False)
+    use_reserve = getattr(args, "use_reserve", None)
+    if args.command == "reserve":
+        _switch_request(cfg, args.window.replace("-", "_"), args.value)
+    elif use_reserve is not None and not restarted and not dry_run:
+        # a restart keeps the first 24 hours, or their end
+        for switch in ("week", "five_hour") if use_reserve == "both" else (use_reserve,):
+            _switch_request(cfg, switch.replace("-", "_"), "on")
+    if args.command not in _NO_REQUESTS and not dry_run:
         _apply_requests(cfg, getattr(args, "db", None) or cfg.metrics_db)
     try:
         if args.command in (None, "run"):
@@ -281,6 +283,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"{key.upper()} signed off and tagged {key}-done.")
         elif args.command == "queue":
             print(f"{loop.queue_ticket(cfg, args.ticket)}: back in tasks/ready/.")
+        elif args.command == "reserve":
+            if loop.live_run(cfg) is not None:  # `_apply_requests` left it to the run
+                print(f"runner: a run is live: the run turns it {args.value} at its next pick.")
         elif args.command in ("accept", "reject"):
             decision = "Accepted" if args.command == "accept" else "Rejected"
             path = owner.decide_adr(repo, args.number, decision, _today(), db=cfg.metrics_db)
