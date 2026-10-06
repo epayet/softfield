@@ -3817,18 +3817,27 @@ def _at_five_hour(s: Session, at: datetime) -> tuple[str, datetime] | None:
 def _five_hour_switched(s: Session) -> bool:
     """While the run waits for the owner's 25%: whether the 5-hour switch is on now, taking
     the dashboard's switches alone (f5 D2); the other requests wait for the pick."""
+    at = now()
+    if not switch_on(s.state, FIVE_HOUR, at):
+        _take_switches(s, at)
+    return switch_on(s.state, FIVE_HOUR, at)
+
+
+def _take_switches(s: Session, at: datetime) -> None:
+    """During a wait, the owner's requests that change state.json alone (`take_switches`):
+    the switches, the pause and the resume. A switch turned on frees what waited for it."""
     from runner.requests import take_switches  # runner.requests imports this module
 
-    at = now()
-    if s.project_id is not None and not switch_on(s.state, FIVE_HOUR, at):
-        for line in _record(s, take_switches, s.project_id, s.state, at) or []:
-            s.log(f"[{RUNNER_AGENT}] the owner's request: {line}")
-        save_state(s.state, s.state_path)
-        if switch_on(s.state, FIVE_HOUR, at):
-            _five_hour_switched_on(s)
-        if switch_on(s.state, WEEK, at):
-            _week_switched_on(s)
-    return switch_on(s.state, FIVE_HOUR, at)
+    if s.project_id is None:
+        return
+    was_on = {switch: switch_on(s.state, switch, at) for switch in SWITCHES}
+    for line in _record(s, take_switches, s.project_id, s.state, at) or []:
+        s.log(f"[{RUNNER_AGENT}] the owner's request: {line}")
+    save_state(s.state, s.state_path)
+    if switch_on(s.state, FIVE_HOUR, at) and not was_on[FIVE_HOUR]:
+        _five_hour_switched_on(s)
+    if switch_on(s.state, WEEK, at) and not was_on[WEEK]:
+        _week_switched_on(s)
 
 
 def _five_hour_switched_on(s: Session) -> None:
@@ -3939,6 +3948,26 @@ def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queue
     return True
 
 
+def _hold_for_the_owner(s: Session) -> bool:
+    """While the owner pauses the factory (ADR 22 item 5), the pick takes nothing: the run
+    neither ends nor sleeps to a reset, but holds, "paused by you", taking their resume and
+    the switches every ``SWITCH_POLL_S`` seconds. The hold is no limit's `wait`: the pause's
+    own usage event (`runner.requests`) counts it as stopped for the owner. False, and no
+    hold, when the run has no project row to read a resume from: it ends instead."""
+    since = datetime.fromisoformat(str(s.state.owner_pause)).astimezone(now().tzinfo)
+    paused = f"Paused by you since {since:%H:%M}"
+    if s.project_id is None:
+        s.report.notes.append(f"{paused}: `uv run runner resume`, then run again.")
+        return False
+    s.log(f"[{RUNNER_AGENT}] {paused}: nothing runs until you resume.")
+    with doing(s, dispatch.PAUSED):
+        while s.state.owner_pause is not None:
+            time.sleep(SWITCH_POLL_S)
+            _take_switches(s, now())
+    s.log(f"[{RUNNER_AGENT}] Resumed by you.")
+    return True
+
+
 # --- the session ------------------------------------------------------------------
 
 
@@ -4020,7 +4049,7 @@ def work_queue(
     parked for a Claude limit goes first among tickets once its reset has passed. Until then
     only developer tickets run, and with none left the queue sleeps until the earliest reset.
     Claude's windows are checked by each job as it starts (a stand-in, a park), so the pick
-    is given none.
+    is given none. While the owner pauses it (f5-18), it holds between jobs until they resume.
 
     With ``reviews`` (`runner run`, f4-20), a milestone whose tickets are all done queues its
     review, which stops the queue before its next ticket: ``s.report.review`` names it, for
@@ -4051,10 +4080,15 @@ def work_queue(
         behind = waiting_rows(s, ready)
         task = _next_task(s, ready, done, paused | held.keys() | behind.keys())
         tickets = [] if task is None else [_dispatch_ticket(s, task, ready)]
-        job = dispatch.pick(rows, tickets, dispatch.Windows(), now())
+        paused_by_owner = s.state.owner_pause is not None
+        job = dispatch.pick(rows, tickets, dispatch.Windows(), now(), paused=paused_by_owner)
         if once and ran and (job is None or job.kind == dispatch.TICKET):
             return False
         if job is None:
+            if paused_by_owner:
+                if _hold_for_the_owner(s):
+                    continue
+                return False
             if _wait_for_reset(s, ready, rows):
                 continue
             if paused:
@@ -4246,7 +4280,8 @@ def dry_run_plan(cfg: Config) -> None:
             *(("five_hour",) if switch_on(state, FIVE_HOUR, at) else ()),
         },
     )
-    _print_plan(dispatch.plan(queued, tickets, windows, at), ready, done, paused, cfg.repo)
+    lines = dispatch.plan(queued, tickets, windows, at, paused=state.owner_pause is not None)
+    _print_plan(lines, ready, done, paused, cfg.repo)
 
 
 def _stored_queue(cfg: Config) -> tuple[list[dispatch.Queued], dict[str, sqlite3.Row]]:

@@ -681,6 +681,71 @@ def test_sending_a_proposal_back_becomes_a_message_to_the_lead(repo):
     assert owners == text
 
 
+# --- pause and resume (ADR 22 item 5, f5-18) --------------------------------------------------
+
+
+def _pauses(repo: Path) -> list[tuple[object, object]]:
+    """The runner's pause usage events: since, and until (None while it holds)."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        rows = conn.execute("SELECT * FROM usage_events WHERE kind = 'pause' ORDER BY id")
+        return [(r["at"], r["resets_at"]) for r in rows]
+    finally:
+        conn.close()
+
+
+def test_a_pause_request_holds_the_runner_until_a_resume_request(repo):
+    state = State()
+    paused = _ask(repo, "pause")
+    assert _apply(repo, state) == ["pause: paused: the runner finishes its job, then holds"]
+    assert state.owner_pause == NOW.isoformat() and state.paused_until is None
+    assert _request(repo, paused) == (
+        NOW.isoformat(),
+        "paused: the runner finishes its job, then holds",
+    )
+    # Paused again: still since the first, which is when the line stopped.
+    _ask(repo, "pause")
+    later = NOW + timedelta(minutes=5)
+    assert _apply(repo, state, later) == ["pause: already paused, since 12:00"]
+    assert state.owner_pause == NOW.isoformat()
+    assert _pauses(repo) == [(NOW.isoformat(), None)]  # open: "Stopped for you" while it holds
+    resumed = _ask(repo, "resume")
+    end = NOW + timedelta(minutes=20)
+    assert _apply(repo, state, end) == ["resume: resumed"]
+    assert state.owner_pause is None
+    assert _request(repo, resumed) == (end.isoformat(), "resumed")
+    assert _pauses(repo) == [(NOW.isoformat(), end.isoformat())]
+    _ask(repo, "resume")
+    assert _apply(repo, state, end) == ["resume: not paused"]
+    assert _pauses(repo) == [(NOW.isoformat(), end.isoformat())]
+
+
+def test_a_pause_outlives_the_state_files_reload(repo):
+    """A restart reads state.json again: the pause is in it, so the runner stays paused."""
+    path = repo / "var" / "runs" / "state.json"
+    state = load_state(path)
+    _ask(repo, "pause")
+    _apply(repo, state)
+    save_state(state, path)
+    assert load_state(path).owner_pause == NOW.isoformat()
+
+
+def test_the_pause_and_resume_requests_are_taken_during_a_wait(repo):
+    """`take_switches`: a wait applies a resume as it does a switch; the rest waits for the
+    pick, which may commit."""
+    state = State(owner_pause=NOW.isoformat())
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.add_request(conn, project, "queue", "m4-12", None, NOW.isoformat())
+        metrics.add_request(conn, project, "resume", None, None, NOW.isoformat())
+        assert requests.take_switches(conn, project, state, NOW) == ["resume: resumed"]
+        assert state.owner_pause is None
+        assert [r["kind"] for r in metrics.open_requests(conn, project)] == ["queue"]
+    finally:
+        conn.close()
+
+
 # --- `runner reserve` and `runner run --use-reserve` (ADR 22 item 4, f8 D4) ------------------
 
 

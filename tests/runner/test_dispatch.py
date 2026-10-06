@@ -177,3 +177,16 @@ def test_an_unknown_kind_is_listed_last_and_never_picked():
 def test_nothing_queued_and_no_ticket_picks_nothing():
     assert plan([], [], OPEN, NOW) == []
     assert pick([], [], OPEN, NOW) is None
+
+
+def test_while_the_owner_pauses_every_line_waits_and_nothing_is_picked():
+    """ADR 22 item 5 (f5-18): pause is a state of the pick, whatever each job waited for."""
+    queued = [_row("checkpoint", "f8"), _row("planner", "f6/1"), _row("mystery", "x")]
+    tickets = [_lead("f8-02", 1), _dev("f8-07", 2), _dev("f8-08", 3, waits="waiting on f8-06")]
+    limited = Windows(limited_until=NOW + timedelta(hours=2))
+    for windows in (OPEN, limited):
+        lines = plan(queued, tickets, windows, NOW, paused=True)
+        assert _order(lines) == _order(plan(queued, tickets, windows, NOW))  # the same order
+        assert [line.waits for line in lines] == ["paused by you"] * 6
+        assert pick(queued, tickets, windows, NOW, paused=True) is None
+    assert pick(queued, tickets, OPEN, NOW, paused=False) is not None

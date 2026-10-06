@@ -30,7 +30,9 @@
   <div class="running-card">
     <div class="running-head">
       {% if run.reserve %}<span class="pill warn">on Claude's reserve</span>{% endif %}
-      {% if run.activity %}
+      {% if run.activity == "paused by you" %}{# the runner's words while it holds (f5-18) #}
+      <span>Holding between jobs: nothing runs until you resume</span>
+      {% elif run.activity %}
       <span>Running: {{ run.activity }}</span>
       {% elif run.waiting_clock %}
       <span>Waiting for Claude's limit to reset, until {{ run.waiting_clock }}</span>
@@ -46,5 +48,17 @@
   <p class="sub">Nothing is running.</p>
   {% endfor %}
   {% endfor %}
+
+  {# The owner's pause (f5-18): the runner finishes the job it is on, then holds until they resume. #}
+  {% if paused_clock or pausing %}
+  <div class="running-head">
+    <span class="pill warn">{% if paused_clock %}Paused by you since {{ paused_clock }}{% else %}Pausing after this job{% endif %}</span>
+    <button type="button" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ project | tojson }}}' hx-swap="outerHTML">Resume</button>
+  </div>
+  {% elif runs %}
+  <div class="running-head">
+    <button type="button" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ project | tojson }}}' hx-swap="outerHTML">Pause after this job</button>
+  </div>
+  {% endif %}
 
 </section>

@@ -1,10 +1,11 @@
 """The owner's requests from the dashboard (ADR 18 item 2, f5 D1 and D2).
 
 The dashboard only writes a request row. The runner applies it, with the code of its console
-command: at each pick, while a wait for the owner's 25% sleeps (`take_switches`), and at the
-start of every ``runner`` command while no run is live. Each request is finished once, with
-its result or its error, and never retried. Git and tasks/ keep one writer, and the run
-state.json, whose reserve switches (ADR 22 item 4) the requests set.
+command: at each pick, while a wait for the owner's 25% or their resume sleeps
+(`take_switches`), and at the start of every ``runner`` command while no run is live. Each
+request is finished once, with its result or its error, and never retried. Git and tasks/
+keep one writer, and the run state.json, whose reserve switches (ADR 22 item 4) and pause
+(item 5) the requests set.
 """
 
 import json
@@ -36,6 +37,9 @@ SEND_BACK = "send_back"  # subject: <thread>/<proposal id>; value: {text, commen
 ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
 APPROVE_PLAN = "approve_plan"  # subject: the card
 PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
+PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
+RESUME = "resume"
+_STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
 _COMMITS = (SIGNOFF, QUEUE, PLANT, *_APPROVALS)
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
@@ -76,6 +80,24 @@ def _switch(
         if lapsed or waiting:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
     return f"Claude's reserve: {loop.set_switch(state, name, on, now)}"
+
+
+def _pause(conn: sqlite3.Connection, state: State, now: datetime, kind: str) -> str:
+    """The owner pauses the factory, or resumes it (ADR 22 item 5): the pick takes nothing
+    while ``state`` holds the pause. The hold is a ``pause`` usage event from when it took to
+    the resume, open meanwhile: what clogged the line counts it as stopped for the owner."""
+    since = state.owner_pause
+    if kind == PAUSE:
+        if since is not None:
+            return f"already paused, since {datetime.fromisoformat(since):%H:%M}"
+        state.owner_pause = now.isoformat()
+        metrics.add_usage_event(conn, loop.RUNNER_AGENT, state.owner_pause, PAUSE)
+        return "paused: the runner finishes its job, then holds"
+    if since is None:
+        return "not paused"
+    state.owner_pause = None
+    metrics.add_usage_event(conn, loop.RUNNER_AGENT, since, PAUSE, resets_at=now.isoformat())
+    return "resumed"
 
 
 def _plan_message(
@@ -375,6 +397,8 @@ def _apply(
             return f"queued {loop.move_to_ready(repo, str(subject))}"
         if kind == RESERVE:
             return _switch(conn, project_id, state, now, subject, value)
+        if kind in (PAUSE, RESUME):
+            return _pause(conn, state, now, kind)
         if kind == PLAN_MESSAGE:
             return _plan_message(conn, project_id, now, row)
         if kind == SEND_BACK:
@@ -455,13 +479,18 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
 def take_switches(
     conn: sqlite3.Connection, project_id: int, state: State, now: datetime
 ) -> list[str]:
-    """The open switch requests (``reserve``) applied to ``state`` and finished, for a wait
-    that sleeps for the owner's 25%; the others wait for the pick, which may commit."""
+    """The open requests that change ``state`` alone (a switch, a pause, a resume) applied
+    and finished, for a wait that sleeps for the owner's 25% or their resume; the others wait
+    for the pick, which may commit."""
     lines = []
     for row in metrics.open_requests(conn, project_id):
-        if row["kind"] != RESERVE:
+        kind = row["kind"]
+        if kind not in _STATE_ONLY:
             continue
-        result = _switch(conn, project_id, state, now, row["subject"], row["value"])
+        if kind == RESERVE:
+            result = _switch(conn, project_id, state, now, row["subject"], row["value"])
+        else:
+            result = _pause(conn, state, now, kind)
         if metrics.finish_request(conn, row["id"], now.isoformat(), result):
             lines.append(f"{_what(row)}: {result}")
     return lines

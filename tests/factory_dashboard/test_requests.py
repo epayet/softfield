@@ -184,6 +184,72 @@ def test_the_status_of_an_unknown_request_is_404(client):
     assert client.get("/requests/999").status_code == 404
 
 
+# --- pause and resume on Now (f5-18) -----------------------------------------------------------
+
+
+def _buttons(html: str) -> dict[str, str]:
+    """Now's buttons that post a request: their words -> the kind they post."""
+    found = {}
+    for attrs, words in re.findall(r"<button([^>]*)>([^<]*)</button>", html):
+        if 'hx-post="/requests"' in attrs:
+            kind = re.search(r"&#34;kind&#34;: &#34;(\w+)&#34;|\"kind\": \"(\w+)\"", attrs)
+            assert kind, attrs
+            found[words.strip()] = kind[1] or kind[2]
+    return found
+
+
+def _now_section(client) -> str:
+    html = str(client.get("/live").text)
+    return html[html.index('<section id="now"') : html.index("</section>", html.index('id="now"'))]
+
+
+def _paused_at(db_path, since, until=None):
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.add_usage_event(conn, "runner", since, "pause", resets_at=until)
+    finally:
+        conn.close()
+
+
+def test_now_offers_pause_after_this_job_while_the_runner_runs(serve, db_path):
+    client = serve()
+    now = _now_section(client)
+    assert _buttons(now) == {"Pause after this job": "pause"}
+    assert "Paused by you" not in now
+    # the button's post, as htmx sends it, asks the runner to pause
+    assert _post(client, "kind=pause", HTMX).status_code == 200
+    assert [(r["kind"], r["subject"], r["value"]) for r in _rows(db_path)] == [
+        ("pause", None, None)
+    ]
+    # asked: until the runner takes it, Now says it pauses after this job
+    now = _now_section(client)
+    assert "Pausing after this job" in now
+    assert _buttons(now) == {"Resume": "resume"}
+
+
+def test_now_shows_the_pause_and_a_resume_button_while_paused(serve, db_path):
+    client = serve()
+    _paused_at(db_path, "2026-10-02T11:40:00+00:00")
+    now = _now_section(client)
+    assert "Paused by you since 11:40" in now
+    assert _buttons(now) == {"Resume": "resume"}
+    assert _post(client, "kind=resume", HTMX).status_code == 200
+    assert [r["kind"] for r in _rows(db_path)] == ["resume"]
+
+
+def test_a_pause_that_ended_shows_no_more(serve, db_path):
+    client = serve()
+    _paused_at(db_path, "2026-10-02T11:00:00+00:00", "2026-10-02T11:30:00+00:00")
+    now = _now_section(client)
+    assert "Paused by you" not in now
+    assert _buttons(now) == {"Pause after this job": "pause"}
+
+
+def test_no_pause_button_while_nothing_runs(serve):
+    client = serve(live=False)
+    assert _buttons(_now_section(client)) == {}
+
+
 def test_reading_a_status_writes_nothing_and_needs_no_guard(client, db_path):
     _post(client, "kind=reserve&subject=five_hour&value=off", HTMX)
     before = _rows(db_path)

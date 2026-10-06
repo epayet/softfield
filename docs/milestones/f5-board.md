@@ -25,6 +25,8 @@
     | `signoff` | the milestone key | – |
     | `five_hour` | – | `yes` / `no` |
     | `queue` | the ticket id | – |
+    | `pause` | – | – |
+    | `resume` | – | – |
 
   - `runner/metrics.py` owns `add_request(conn, project_id, kind, subject, value, created)` and `open_requests(conn, project_id)`. It also owns `finish_request(conn, request_id, done, result)`.
 - **D2 Who applies requests:** `runner/requests.py`, `apply_requests(repo, db, now) -> list[str]` (one line per request done).

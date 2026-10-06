@@ -20,7 +20,7 @@ from runner.gates import GateResult
 from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTotals
 from runner.report import SessionReport, TaskRecord
 from runner.review import Finding
-from runner.state import load_state, save_state
+from runner.state import State, load_state, save_state
 from runner.tasks import load_dir, parse_task
 from tests.runner.conftest import git, write_task
 
@@ -480,6 +480,16 @@ def test_dry_run_lists_a_parked_escalation_first_once_its_reset_has_passed(repo,
     out = _dry_run(repo, capsys)
     assert "-> escalation m1-00-old: runnable, parked for a Claude limit" in out
     assert "   m1-01-thing: runnable" in out
+
+
+def test_dry_run_shows_every_line_paused_by_the_owner(repo, capsys):
+    """f5-18: pause is a state of the pick (ADR 22 item 5)."""
+    _add_task(repo, "m1-01-thing")
+    cfg = _config(repo)
+    save_state(State(owner_pause=loop.now().isoformat()), cfg.runs_dir / "state.json")
+    out = _dry_run(repo, capsys)
+    assert "   m1-01-thing: paused by you, priority 100, developer ticket" in out
+    assert "next: nothing" in out
 
 
 def test_dry_run_lists_no_review_once_its_done(repo, capsys):
@@ -2768,6 +2778,89 @@ def _ask_from_the_dashboard(repo: Path, kind: str, subject=None, value=None) -> 
         return metrics.add_request(conn, project, kind, subject, value, loop.now().isoformat())
     finally:
         conn.close()
+
+
+def _implement_other(repo: Path, prompt: str) -> None:
+    (repo / "coucou" / "other.py").write_text("def other() -> int:\n    return 7\n")
+
+
+def _holds_then_resumes(repo: Path, monkeypatch, seen: list[tuple[object, ...]]) -> list[float]:
+    """The run's sleeps; at each, what the run says and which jobs ran. The owner resumes
+    at the second poll, from the dashboard."""
+    slept: list[float] = []
+    clock_sleep = time.sleep  # fake_clock's
+
+    def phone(seconds: float) -> None:
+        [run] = _rows(repo, "runs")
+        seen.append((run["activity"], len(_rows(repo, "jobs"))))
+        if len(slept) == 1:
+            _ask_from_the_dashboard(repo, "resume")
+        slept.append(seconds)
+        clock_sleep(seconds)
+
+    monkeypatch.setattr("time.sleep", phone)
+    return slept
+
+
+def test_a_pause_lets_the_job_finish_then_holds_until_the_owner_resumes(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """f5-18: the owner pauses from the phone mid-job, to talk about what they saw."""
+    _add_task(repo, "m1-01-thing")
+    _add_task(repo, "m1-02-other")
+
+    def pause_meanwhile(repo_: Path, prompt: str) -> None:
+        _ask_from_the_dashboard(repo, "pause")  # the job runs on: it is never stopped
+        _implement(repo_, prompt)
+
+    fake_model.extend([pause_meanwhile, _implement_other])
+    seen: list[tuple[object, ...]] = []
+    slept = _holds_then_resumes(repo, monkeypatch, seen)
+    cfg = replace(_config(repo), checkpoint_every=3)  # two merges: no checkpoint
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-01-thing", "done"),
+        ("m1-02-other", "done"),
+    ]
+    # It held between the two, polling, saying so; the second went only after the resume.
+    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert seen == [("paused by you", 1), ("paused by you", 1)]
+    first, second = _rows(repo, "jobs")
+    assert str(second["started"]) >= (THURSDAY + timedelta(seconds=120)).isoformat()
+    assert str(first["ended"]) <= THURSDAY.isoformat()
+    assert _state(repo).owner_pause is None
+    assert [r["done"] is not None for r in _rows(repo, "owner_requests")] == [True, True]
+    # "What clogged the line": the pause is the owner's, not a limit's wait.
+    events = [(e["kind"], e["at"], e["resets_at"]) for e in _rows(repo, "usage_events")]
+    assert events == [("pause", THURSDAY.isoformat(), fake_clock[0].isoformat())]
+
+
+def test_a_paused_runner_that_restarts_stays_paused(repo, fake_model, fake_clock, monkeypatch):
+    """The pause is in state.json: a restart (a runner change, a crash) picks nothing until
+    the owner resumes."""
+    _add_task(repo, "m1-01-thing")
+    since = (THURSDAY - timedelta(minutes=30)).isoformat()
+    save_state(State(owner_pause=since), _config(repo).runs_dir / "state.json")
+    fake_model.append(_implement)
+    seen: list[tuple[object, ...]] = []
+    slept = _holds_then_resumes(repo, monkeypatch, seen)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
+    assert seen == [("paused by you", 0), ("paused by you", 0)]
+    assert len(slept) == 2 and _state(repo).owner_pause is None
+
+
+def test_a_paused_runner_with_nothing_to_do_holds_rather_than_ends(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """A None pick while paused neither ends the run nor sleeps to a reset."""
+    save_state(State(owner_pause=THURSDAY.isoformat()), _config(repo).runs_dir / "state.json")
+    seen: list[tuple[object, ...]] = []
+    slept = _holds_then_resumes(repo, monkeypatch, seen)
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
+    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert _state(repo).paused_until is None  # not a limit's pause
 
 
 def test_a_queue_request_made_during_a_run_is_applied_at_the_next_pick(repo, fake_model):

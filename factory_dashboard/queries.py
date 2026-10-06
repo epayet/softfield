@@ -28,6 +28,7 @@ LEAD_PREFIX = "claude-"  # Claude's agents, whose jobs cost dollars, whatever th
 LOCAL_ROLES = ("developer", "last-attempt")  # a developer's attempts at a ticket
 LEAD_ROLES = ("lead-ticket", "direction", "escalation", "checkpoint", "review", "narrative")
 UNKNOWN_AGENT = "backfill-unknown"  # D6
+PAUSE = "pause"  # the runner's usage event while the owner pauses it (`runner.requests`)
 SEVERITIES = ("blocking", "should-fix", "nit")
 
 
@@ -658,7 +659,8 @@ def clog(
     """What clogged the line between ``since`` and ``now`` (D11 says what each number counts):
     Claude's limit while a runner lived, failed developer attempts, each developer machine
     (``machines``; default: the agents that ran a developer job) idle while another job ran,
-    and the owner's open items while no job ran. Only what had happened by ``now`` counts."""
+    and the owner's open items and pauses while no job ran. Only what had happened by ``now``
+    counts."""
     window = [(since, now)]
     runs = conn.execute(
         "SELECT r.started, r.ended, r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"
@@ -710,8 +712,13 @@ def clog(
         " WHERE p.name = ? AND i.created IS NOT NULL",
         (project,),
     ).fetchall()
+    # The owner's pause (f5-18), from when it took to their resume, or on while it holds
+    pauses = conn.execute(
+        "SELECT at AS created, resets_at AS resolved FROM usage_events WHERE kind = ?", (PAUSE,)
+    ).fetchall()
     opened = _union(
-        (_time(r["created"]), _time(r["resolved"]) if r["resolved"] else now) for r in items
+        (_time(r["created"]), _time(r["resolved"]) if r["resolved"] else now)
+        for r in [*items, *pauses]
     )
     owner = _without(_overlap(opened, window), busy)
 
@@ -730,6 +737,16 @@ def clog(
         owner=round(_minutes(owner)),
         live=round(alive),
     )
+
+
+def paused_since(conn: sqlite3.Connection) -> str | None:
+    """When the owner's pause took (f5-18), while the runner still holds for it: its usage
+    event's ``at``, with no ``resets_at`` until they resume."""
+    row = conn.execute(
+        "SELECT at FROM usage_events WHERE kind = ? AND resets_at IS NULL ORDER BY at DESC LIMIT 1",
+        (PAUSE,),
+    ).fetchone()
+    return None if row is None else str(row["at"])
 
 
 def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:

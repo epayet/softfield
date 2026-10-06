@@ -69,10 +69,15 @@ def _switch_request(cfg: Config, switch: str, value: str) -> None:
     """`runner reserve` and `runner run --use-reserve`: the request the dashboard's switch
     writes (ADR 22 item 4), so both go by the same code. The command applies it at once
     (`_apply_requests`), unless a run is live: that run applies it at its next pick."""
+    _request(cfg, requests.RESERVE, switch, value)
+
+
+def _request(cfg: Config, kind: str, subject: str | None, value: str | None) -> None:
+    """The owner's request as the dashboard writes it, for a console command."""
     conn = metrics.open_db(cfg.metrics_db)
     try:
         project = metrics.upsert_project(conn, cfg.repo.name, repo=str(cfg.repo))
-        metrics.add_request(conn, project, requests.RESERVE, switch, value, loop.now().isoformat())
+        metrics.add_request(conn, project, kind, subject, value, loop.now().isoformat())
     finally:
         conn.close()
 
@@ -148,6 +153,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     reserve.add_argument("window", choices=("week", "five-hour"))
     reserve.add_argument("value", choices=("on", "off"))
+    sub.add_parser("pause", help="the owner: hold the factory after the job it is on (f5-18)")
+    sub.add_parser("resume", help="the owner: let a paused factory go on")
     milestone = sub.add_parser(
         "milestone", help="run a whole milestone: tickets, review, then a verdict (ADR 12)"
     )
@@ -244,6 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     use_reserve = getattr(args, "use_reserve", None)
     if args.command == "reserve":
         _switch_request(cfg, args.window.replace("-", "_"), args.value)
+    elif args.command in (requests.PAUSE, requests.RESUME):
+        _request(cfg, args.command, None, None)
     elif use_reserve is not None and not restarted and not dry_run:
         # a restart keeps the first 24 hours, or their end
         for switch in ("week", "five_hour") if use_reserve == "both" else (use_reserve,):
@@ -286,6 +295,10 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "reserve":
             if loop.live_run(cfg) is not None:  # `_apply_requests` left it to the run
                 print(f"runner: a run is live: the run turns it {args.value} at its next pick.")
+        elif args.command in (requests.PAUSE, requests.RESUME):
+            if loop.live_run(cfg) is not None:  # `_apply_requests` left it to the run
+                then = "pauses after the job it is on" if args.command == "pause" else "resumes"
+                print(f"runner: a run is live: it {then}.")
         elif args.command in ("accept", "reject"):
             decision = "Accepted" if args.command == "accept" else "Rejected"
             path = owner.decide_adr(repo, args.number, decision, _today(), db=cfg.metrics_db)

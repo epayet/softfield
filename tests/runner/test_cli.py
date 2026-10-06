@@ -233,6 +233,41 @@ def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):
     assert ended == ["ended", "ended"]
 
 
+def test_runner_pause_and_resume_write_the_dashboards_requests(in_repo, monkeypatch, capsys):
+    """f5-18: the console's pause goes by the request, as `runner reserve` does; with no run
+    live, the command applies it at once, so the next run starts paused."""
+    at = datetime(2026, 10, 7, 21, 30, tzinfo=UTC)
+    monkeypatch.setattr(loop, "now", lambda: at)
+    state_path = in_repo / "var" / "runs" / "state.json"
+    assert cli.main(["pause"]) == 0
+    assert load_state(state_path).owner_pause == at.isoformat()
+    assert "pause: paused: the runner finishes its job, then holds" in capsys.readouterr().out
+    assert cli.main(["resume"]) == 0
+    assert load_state(state_path).owner_pause is None
+    conn = metrics.open_db(in_repo / "var" / "factory-metrics.sqlite")
+    try:
+        rows = conn.execute("SELECT kind, subject, value, done FROM owner_requests ORDER BY id")
+        assert [tuple(r) for r in rows] == [
+            ("pause", None, None, at.isoformat()),
+            ("resume", None, None, at.isoformat()),
+        ]
+    finally:
+        conn.close()
+
+
+def test_runner_pause_during_a_live_run_leaves_it_to_the_run(in_repo, monkeypatch, capsys):
+    at = datetime(2026, 10, 7, 21, 30, tzinfo=UTC)
+    monkeypatch.setattr(loop, "now", lambda: at)
+    conn = metrics.open_db(in_repo / "var" / "factory-metrics.sqlite")
+    project = metrics.upsert_project(conn, in_repo.name)
+    beat = (at - timedelta(seconds=30)).isoformat()
+    metrics.upsert_run(conn, project, "20261007-212900", started=beat, heartbeat=beat)
+    conn.close()
+    assert cli.main(["pause"]) == 0
+    assert load_state(in_repo / "var" / "runs" / "state.json").owner_pause is None
+    assert "a run is live: it pauses after the job it is on" in capsys.readouterr().out
+
+
 @pytest.mark.parametrize(("argv", "score"), [(["--score", "7"], 7), ([], None)])
 def test_signoff_passes_the_owners_score_on(in_repo, monkeypatch, argv, score):
     seen: list[object] = []

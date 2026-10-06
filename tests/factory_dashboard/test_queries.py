@@ -177,6 +177,22 @@ def test_clog_counts_the_owners_open_items_while_no_job_ran(clog_db):
     assert clog(clog_db, PROJECT, MIDNIGHT, NOON).owner == 10 + 60
 
 
+def test_the_owners_pause_counts_as_stopped_for_you_not_as_a_limit(clog_db):
+    """f5-18: the runner held for the owner from their pause to their resume, or to now while
+    it still holds."""
+    before = clog(clog_db, PROJECT, MIDNIGHT, NOON)
+    writing = _write(clog_db)
+    try:
+        metrics.add_usage_event(
+            writing, "runner", _clock("10:25"), "pause", resets_at=_clock("10:35")
+        )
+        metrics.add_usage_event(writing, "runner", _clock("11:40"), "pause")  # still paused
+    finally:
+        writing.close()
+    found = clog(clog_db, PROJECT, MIDNIGHT, NOON)
+    assert (found.owner, found.limit) == (before.owner + 10 + 20, before.limit)
+
+
 def test_a_day_with_no_runs_gives_zeros(db):
     found = clog(db, PROJECT, MIDNIGHT, NOON, machines=[LOCAL])
     assert (found.limit, found.failed, found.owner, found.live) == (0, 0, 0, 0)

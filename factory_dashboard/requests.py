@@ -22,18 +22,32 @@ from runner import metrics
 from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
+    PAUSE,
     PLAN_MESSAGE,
     PLANT,
     QUEUE,
     RESERVE,
+    RESUME,
     SEND_BACK,
     SIGNOFF,
 )
 
 router = APIRouter()
 
-# The planning room's five (f6 D1) too; the runner checks each value, as for the first three
-KINDS = (SIGNOFF, RESERVE, QUEUE, PLAN_MESSAGE, PLANT, SEND_BACK, ACCEPT_ADR, APPROVE_PLAN)
+# The planning room's five (f6 D1) too, and Now's pause and resume (f5-18); the runner checks
+# each value, as for the first three
+KINDS = (
+    SIGNOFF,
+    RESERVE,
+    QUEUE,
+    PLAN_MESSAGE,
+    PLANT,
+    SEND_BACK,
+    ACCEPT_ADR,
+    APPROVE_PLAN,
+    PAUSE,
+    RESUME,
+)
 
 
 def from_the_dashboard(request: Request) -> bool:
