@@ -26,3 +26,10 @@ Read D4 in `docs/milestones/f8-one-queue.md`, `docs/security.md`, `factory_dashb
 - a `five_hour` post is 400
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
