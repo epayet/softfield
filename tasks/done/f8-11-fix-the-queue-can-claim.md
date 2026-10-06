@@ -25,3 +25,12 @@ f9-line-polish-C467-1: The queue can claim it is empty while queued jobs are lis
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1685
+gate_failures: []
+tokens: 1043833
+```
