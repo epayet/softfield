@@ -39,3 +39,12 @@ Read the mock-up (`docs/milestones/planning-room-mockup/Main.dc.html`, `docs/mil
 - the layout check (`layout_problems` in `tests/browser/conftest.py`, as `tests/factory_dashboard/test_app.py` uses it) passes at phone and desktop sizes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 5032263
+logs: var/runs/20261006-205704/f6-06-desk-page
+```
