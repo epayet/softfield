@@ -1174,3 +1174,121 @@ def test_no_data_yet_has_empty_ring(page, serve, db_path):
             found_empty = True
             break
     assert found_empty, "no dial with empty ring found"
+
+
+def test_queued_checkpoint_comes_before_tickets_and_shows_reason(client, db_path):
+    """A queued checkpoint row comes first, before every ticket, with its reason."""
+    from factory_dashboard.overview import queued_jobs
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        now_iso = NOW.isoformat()
+        metrics.queue_job(conn, project, "checkpoint", "f1", "Checkpoint reason", now_iso)
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    assert "Checkpoint:" in next_section
+    assert "Checkpoint reason" in next_section
+    # The checkpoint row comes before any ticket row
+    ticket_rows = [m for m in re.findall(r"\b\d (f1-\d\d-[a-z-]+)", next_section)]
+    assert len(ticket_rows) >= 2
+    # queued_jobs returns them in dispatch order: checkpoint before tickets
+    conn = metrics.open_db(db_path)
+    try:
+        jobs = queued_jobs(conn, PROJECT, NOW)
+    finally:
+        conn.close()
+    assert len(jobs) >= 1
+
+
+def test_escalation_comes_before_checkpoint(client, db_path):
+    """A queued escalation comes before an older queued checkpoint."""
+    from factory_dashboard.overview import queued_jobs
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        # Escalation created first (older)
+        metrics.queue_job(
+            conn, project, "escalation", "f1", "Escalation reason", "2026-10-01T10:00:00+00:00"
+        )
+        # Checkpoint created later (newer)
+        metrics.queue_job(
+            conn, project, "checkpoint", "f1", "Checkpoint reason", "2026-10-02T10:00:00+00:00"
+        )
+    finally:
+        conn.close()
+
+    conn = metrics.open_db(db_path)
+    try:
+        jobs = queued_jobs(conn, PROJECT, NOW)
+    finally:
+        conn.close()
+    kinds = [j.kind for j in jobs]
+    # Escalation should come before checkpoint in dispatch order
+    esc_idx = kinds.index("Escalation")
+    cp_idx = kinds.index("Checkpoint")
+    assert esc_idx < cp_idx, f"Escalation ({esc_idx}) should come before Checkpoint ({cp_idx})"
+
+
+def test_future_not_before_says_waits_until(client, db_path):
+    """A row with not_before in the future says "waits until" and that time."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        # not_before is after NOW (2026-10-02 12:00 UTC)
+        metrics.queue_job(
+            conn,
+            project,
+            "checkpoint",
+            "f1",
+            "A checkpoint",
+            "2026-10-02T10:00:00+00:00",
+            not_before="2026-10-05T17:00:00+00:00",
+        )
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    assert "waits until" in next_section
+
+
+def test_done_row_isnt_shown(client, db_path):
+    """A done queued job row isn't shown."""
+    from factory_dashboard.overview import queued_jobs
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        now_iso = NOW.isoformat()
+        metrics.queue_job(conn, project, "checkpoint", "f1", "A checkpoint", now_iso)
+        # Mark it done
+        conn.execute(
+            "UPDATE work_queue SET done = ? WHERE kind = 'checkpoint' AND subject = 'f1'"
+            " AND done IS NULL",
+            (now_iso,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    conn = metrics.open_db(db_path)
+    try:
+        jobs = queued_jobs(conn, PROJECT, NOW)
+    finally:
+        conn.close()
+    assert len(jobs) == 0

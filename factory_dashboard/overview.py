@@ -256,6 +256,59 @@ def queue(
     return ready_now + waiting
 
 
+# --- queued support jobs ------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class QueuedJob:
+    kind: str  # plain words: "Checkpoint", "Review", etc.
+    subject: str
+    reason: str
+    waits: str | None = None
+
+
+def queued_jobs(
+    conn: sqlite3.Connection,
+    project: str,
+    now: datetime,
+) -> list[QueuedJob]:
+    """The project's open ``work_queue`` rows, minus those whose ``started_job`` is still
+    running, each with the order and wait from ``dispatch.plan``."""
+    from runner import dispatch
+
+    project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()["id"]
+    rows = metrics.open_jobs(conn, project_id)
+    # Leave out a row whose started_job is a job still running.
+    running_jobs = {
+        row["id"]
+        for row in conn.execute(
+            "SELECT j.id FROM jobs j"
+            " JOIN runs r ON r.id = j.run_id"
+            " JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND j.outcome = 'running'",
+            (project,),
+        ).fetchall()
+    }
+    open_queues = [
+        row for row in rows if row["started_job"] is None or row["started_job"] not in running_jobs
+    ]
+    queued = [dispatch.Queued.from_row(row) for row in open_queues]
+    plan = dispatch.plan(queued, [], dispatch.Windows(), now)
+    found: list[QueuedJob] = []
+    for line in plan:
+        pick = line.pick
+        kind_map = {
+            dispatch.CHECKPOINT: "Checkpoint",
+            dispatch.REVIEW: "Review",
+            dispatch.DIRECTION: "Direction",
+            dispatch.ESCALATION: "Escalation",
+            dispatch.PLANNER: "Planning",
+        }
+        plain = kind_map.get(pick.kind, pick.kind)
+        found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits))
+    return found
+
+
 # --- Needs you (D8) -----------------------------------------------------------------------
 
 
@@ -485,6 +538,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     all_queued = queue(conn, project, now)
     # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
+    qjobs = queued_jobs(conn, project, now)
     return {
         "needs": needs_you(conn, project, now, jobs, all_queued),
         "running": [job for job in jobs if job.live],
@@ -493,6 +547,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         "next": live_line(conn, project, now.astimezone())["now"]["next"],
         "drain": _drain(all_queued[0].milestone or "") if all_queued else None,
         "waits": waits,
+        "queued_jobs": qjobs,
     }
 
 

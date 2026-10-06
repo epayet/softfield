@@ -7,6 +7,9 @@
   {% endif %}
   <div class="next-in-line">
     <h3>Next in line</h3>
+    {% for j in queued_jobs %}
+    <div class="next-row"><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
+    {% endfor %}
     {% for t in next %}
     {% if t.ticket %}
     <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · waits for {{ waits[t.ticket] }}{% endif %}</div>
