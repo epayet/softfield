@@ -31,3 +31,10 @@ Read `docs/adr/20-planning-room.md`, D2 and D4 in `docs/milestones/f6-planning-r
 - the prompt names the block, the branch and the approval rule (test on `prompts.PLANNER`)
 - a fake planner job's edits land on `plan/<card>`, never on main, and are committed by the runner
 - `uv run runner check-all --task f6-02-planner-prompt` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
