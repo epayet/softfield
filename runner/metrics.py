@@ -904,3 +904,21 @@ def planner_messages(conn: sqlite3.Connection, thread_id: int) -> list[sqlite3.R
     return conn.execute(
         "SELECT * FROM planner_messages WHERE thread_id = ? ORDER BY id", (thread_id,)
     ).fetchall()
+
+
+def find_proposal(
+    conn: sqlite3.Connection, project_id: int, card: str, proposal_id: str
+) -> dict[str, object] | None:
+    """A proposal on the thread about ``card`` as the lead last listed it (f6 D2), if any."""
+    rows = conn.execute(
+        "SELECT m.proposals FROM planner_messages m"
+        " JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.project_id = ? AND t.card = ? AND m.author = 'lead'"
+        " AND m.proposals IS NOT NULL ORDER BY m.id DESC",
+        (project_id, card),
+    ).fetchall()
+    for row in rows:
+        for proposal in json.loads(row["proposals"]):
+            if isinstance(proposal, dict) and proposal.get("id") == proposal_id:
+                return proposal
+    return None

@@ -33,6 +33,33 @@ def test_a_reply_block_gives_its_points_and_proposals_and_the_text_around_it():
     assert reply.note is None
 
 
+@pytest.mark.parametrize(
+    ("doc", "expected"),
+    [
+        (
+            "# F7\n\n> **State:** planning · **Priority:** 3\n\n## Outcome\n- **State:** idea\n",
+            "# F7\n\n> **State:** ready · **Priority:** 3\n\n## Outcome\n- **State:** idea\n",
+        ),
+        ("# F7\n\n> **State:** idea\n", "# F7\n\n> **State:** ready\n"),
+        ("# F7\n\nSome words.\n", "# F7\n\n> **State:** ready\n\nSome words.\n"),
+    ],
+)
+def test_a_cards_state_is_set_to_ready_in_its_header_only(doc, expected):
+    assert planner.ready_card(doc) == expected
+
+
+@pytest.mark.parametrize(
+    ("text", "adrs"),
+    [
+        ("Build on `docs/adr/23-parallel-planners.md` items 2-3.", {23}),
+        ("As ADR 7 item 2 and ADR 20 say.", {7, 20}),
+        ("Read docs/adr/README.md and the address 23-a.", set()),
+    ],
+)
+def test_the_adrs_a_ticket_relies_on_are_the_ones_it_names(text, adrs):
+    assert planner.named_adrs(text) == adrs
+
+
 def test_a_reply_without_proposals_has_none():
     reply = planner.parse_reply(_reply({"points": POINTS}))
     assert reply.points == tuple(POINTS) and reply.proposals == ()

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import cli, loop, metrics, requests
+from runner import cli, loop, metrics, milestone, planner, requests
 from runner.state import State, load_state, save_state
 from tests.runner.conftest import git, write_task
 from tests.runner.test_cli import in_repo  # noqa: F401 - a fixture
@@ -361,6 +361,308 @@ def test_a_message_the_runner_cant_read_is_finished_with_why_and_queues_nothing(
     _apply(repo)
     assert _request(repo, asked) == (NOW.isoformat(), error)
     assert _queued(repo) == []
+
+
+# --- `approve_plan`, `accept_adr`, `send_back`: the owner approves (ADR 20 items 6–7) -------
+
+CARD = "# Milestone F7: one queue\n\n> **State:** planning · **Priority:** 3\n\n## Outcome\n"
+TICKET = """\
+---
+id: {id}
+milestone: f7
+depends_on: []
+files:
+  - coucou/thing.py
+tests:
+  - tests/unit/test_thing.py
+---
+
+### Goal
+Make the thing work.
+
+### Context
+{context}
+
+### Done when
+Tests pass.
+"""
+ADR = "# ADR 23: Parallel planners\n\n- **Status:** Proposed\n- **Date:** 2026-10-06\n"
+
+
+def _card(repo: Path) -> None:
+    """F7's card on main, and a ticket set aside for another milestone."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f7-one-queue.md").write_text(CARD)
+    git(repo, "add", "docs")
+    _later(repo, "f3-09-old")
+
+
+def _ticket(task_id: str, context: str = "`coucou/thing.py` has `def thing() -> int`.") -> str:
+    return TICKET.format(id=task_id, context=context)
+
+
+def _plan(repo: Path, files: dict[str, str], card: str = "f7") -> None:
+    """The planner's drafts, committed on the card's plan branch; back on main."""
+    git(repo, "checkout", "-q", "-b", f"plan/{card}", "main")
+    for rel, text in files.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "drafts")
+    git(repo, "checkout", "-q", "main")
+
+
+def _main_unchanged(repo: Path, head: str) -> None:
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    assert sorted(p.name for p in (repo / "tasks" / "ready").glob("*.md")) == []
+
+
+def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_card(repo):
+    _card(repo)
+    _plan(
+        repo,
+        {
+            "tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            "tasks/later/f7-02-b.md": _ticket("f7-02-b"),
+            "docs/milestones/f7-one-queue.md": CARD + "- The plan, drafted.\n",
+            "docs/milestones/f7-mockup/index.html": "<p>queue</p>\n",
+        },
+    )
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7-one-queue")
+    result = "approved plan/f7: queued f7-01-a, f7-02-b"
+    assert _apply(repo) == [f"approve_plan f7-one-queue: {result}"]
+    assert _request(repo, asked) == (NOW.isoformat(), result)
+    ready = sorted(p.name for p in (repo / "tasks" / "ready").glob("*.md"))
+    assert ready == ["f7-01-a.md", "f7-02-b.md"]
+    later = sorted(p.name for p in (repo / "tasks" / "later").glob("*.md"))
+    assert later == ["f3-09-old.md"]  # set aside by the owner: not this plan's to queue
+    doc = (repo / "docs" / "milestones" / "f7-one-queue.md").read_text()
+    assert milestone.card("f7-one-queue", doc).state == "ready"
+    assert "- The plan, drafted." in doc and "**Priority:** 3" in doc
+    assert (repo / "docs" / "milestones" / "f7-mockup" / "index.html").is_file()
+    # one commit on main, by the owner's request; the branch is gone, its drafts merged
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
+    assert git(repo, "status", "--porcelain") == ""
+    assert git(repo, "branch", "--list", "plan/f7") == ""
+    assert _apply(repo) == []  # finished once
+
+
+@pytest.mark.parametrize("stray", ["runner/loop.py", "tasks/ready/f7-09-sneak.md", "AGENTS.md"])
+def test_a_plan_touching_anything_but_drafts_is_refused_and_main_is_unchanged(repo, stray):
+    _card(repo)
+    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a"), stray: "x = 1\n"})
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    [line] = _apply(repo)
+    _, result = _request(repo, asked)
+    assert line == f"approve_plan f7: {result}"
+    assert result == (f"plan/f7 changes {stray}, outside docs/ and tasks/later/: not approved")
+    _main_unchanged(repo, head)
+    assert not (repo / "tasks" / "later" / "f7-01-a.md").exists()
+    assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"  # kept, to fix
+
+
+def test_a_plan_with_a_symlink_is_refused(repo):
+    """A link in docs/ would let a later edit reach outside the drafts."""
+    _card(repo)
+    git(repo, "checkout", "-q", "-b", "plan/f7", "main")
+    (repo / "docs" / "link.md").symlink_to("../runner/loop.py")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "drafts")
+    git(repo, "checkout", "-q", "main")
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert (
+        _request(repo, asked)[1] == "plan/f7 changes docs/link.md, not a plain file: not approved"
+    )
+    _main_unchanged(repo, head)
+
+
+def test_a_plan_that_clashes_with_main_is_refused_and_main_is_unchanged(repo):
+    _card(repo)
+    _plan(
+        repo,
+        {
+            "tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            "docs/milestones/f7-one-queue.md": CARD.replace("one queue", "two queues"),
+        },
+    )
+    (repo / "docs" / "milestones" / "f7-one-queue.md").write_text(CARD.replace("one", "a"))
+    git(repo, "commit", "-q", "-am", "the owner's edit")
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "plan/f7 clashes with main: not approved"
+    _main_unchanged(repo, head)
+    assert not (repo / "tasks" / "later" / "f7-01-a.md").exists()
+    assert not Path(repo, git(repo, "rev-parse", "--git-path", "SQUASH_MSG").strip()).exists()
+
+
+def test_a_ticket_with_a_bare_path_refuses_the_approval_with_the_problem_named(repo):
+    _card(repo)
+    _plan(
+        repo,
+        {
+            "tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
+            "tasks/later/f7-02-b.md": _ticket("f7-02-b"),
+            "tasks/later/f7-03-c.md": "no frontmatter\n",
+        },
+    )
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == (
+        "not approved: f7-01-a: referenced path does not exist: conftest.py;"
+        " f7-03-c: task file must start with YAML frontmatter (---)"
+    )
+    _main_unchanged(repo, head)
+    assert not (repo / "tasks" / "later" / "f7-02-b.md").exists()  # nothing merged
+    assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"
+
+
+def test_accept_adr_merges_the_draft_and_the_plan_waits_for_it(repo):
+    _card(repo)
+    relies = "Build on `docs/adr/23-parallel-planners.md`."
+    _plan(
+        repo,
+        {
+            "docs/adr/23-parallel-planners.md": ADR,
+            "tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
+        },
+    )
+    head = git(repo, "rev-parse", "HEAD")
+    first = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, first)[1] == (
+        "not approved: f7-01-a: relies on ADR 23, still Proposed: accept it first"
+    )
+    _main_unchanged(repo, head)
+
+    accepted = _ask(repo, "accept_adr", "f7", "23")
+    assert _apply(repo) == ["accept_adr f7: accepted docs/adr/23-parallel-planners.md"]
+    assert _request(repo, accepted)[1] == "accepted docs/adr/23-parallel-planners.md"
+    adr = repo / "docs" / "adr" / "23-parallel-planners.md"
+    assert "- **Status:** Accepted (by the owner, 2026-10-01)\n" in adr.read_text()
+    assert git(repo, "log", "-1", "--format=%s").strip() == "ADR 23 accepted by the owner"
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert not (repo / "tasks" / "later" / "f7-01-a.md").exists()  # the ADR alone
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+
+    second = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, second)[1] == "approved plan/f7: queued f7-01-a"
+    assert (repo / "tasks" / "ready" / "f7-01-a.md").is_file()
+    assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
+
+
+def test_accept_adr_resolves_the_owner_items_that_ask_about_it(repo):
+    _card(repo)
+    _plan(repo, {"docs/adr/23-parallel-planners.md": ADR})
+    _item(repo, "adr", "docs/adr/23-parallel-planners.md")
+    _ask(repo, "accept_adr", "f7", "23")
+    _apply(repo)
+    assert _items(repo)[0][3] is False
+
+
+def test_accept_adr_of_an_adr_already_on_main_accepts_it(repo):
+    _card(repo)
+    (repo / "docs" / "adr").mkdir()
+    (repo / "docs" / "adr" / "23-parallel-planners.md").write_text(ADR)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "adr")
+    asked = _ask(repo, "accept_adr", "f7", "23")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "accepted docs/adr/23-parallel-planners.md"
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "error"),
+    [
+        ("approve_plan", "general", None, "the general thread has no plan to approve"),
+        ("approve_plan", "f9", None, "there is no plan/f9 to approve"),
+        ("approve_plan", "../x", None, "a thread is a card's key or general, not '../x'"),
+        ("accept_adr", "f7", "x", "an ADR is named by its number, not 'x'"),
+        ("accept_adr", "f7", "99", "ADR 99 not found in docs/adr/"),
+        ("send_back", "f7/nothing", _message("Hi."), "F7 has no proposal nothing"),
+        ("send_back", "f7", _message("Hi."), "a proposal is <thread>/<id>, not 'f7'"),
+    ],
+)
+def test_an_approval_the_runner_cant_apply_is_finished_with_why(repo, kind, subject, value, error):
+    _card(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, kind, subject, value)
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), error)
+    _main_unchanged(repo, head)
+
+
+@pytest.mark.parametrize("kind", ["approve_plan", "accept_adr"])
+def test_an_approval_waits_for_a_clean_main(repo, kind):
+    _card(repo)
+    _plan(repo, {"docs/adr/23-parallel-planners.md": ADR})
+    asked = _ask(repo, kind, "f7", "23")
+    (repo / "coucou" / "thing.py").write_text("# the owner's edit\n")
+    assert _apply(repo) == [f"{kind} f7: waits for a clean main: an approval commits on it"]
+    git(repo, "checkout", "-q", "--", "coucou/thing.py")
+    git(repo, "checkout", "-q", "plan/f7")
+    assert _apply(repo) == [f"{kind} f7: waits for the repo to be on main"]
+    assert _request(repo, asked) == (None, None)
+
+
+def _proposed(repo: Path) -> None:
+    """The lead's reply on F7, with its ADR proposal."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        thread = metrics.planner_thread(conn, project, "f7", NOW.isoformat())
+        proposal = {
+            "id": "adr-23",
+            "kind": "adr",
+            "title": "Parallel planners",
+            "path": "docs/adr/23-parallel-planners.md",
+            "key_points": [
+                {"n": 1, "title": "Two at once", "text": "Beside developers.", "flag": False},
+                {"n": 2, "title": "One branch", "text": "Each card's own.", "flag": False},
+            ],
+        }
+        metrics.add_planner_message(
+            conn, thread["id"], "lead", NOW.isoformat(), "My plan.", proposals=[proposal]
+        )
+    finally:
+        conn.close()
+
+
+def test_sending_a_proposal_back_becomes_a_message_to_the_lead(repo):
+    _proposed(repo)
+    asked = _ask(repo, "send_back", "f7/adr-23", _message("Nearly.", p2="Why not one?"))
+    assert _apply(repo) == ["send_back f7/adr-23: queued for the lead"]
+    assert _request(repo, asked) == (NOW.isoformat(), "queued for the lead")
+    [(kind, subject, reason, done)] = _queued(repo)
+    assert (kind, reason, done) == ("planner", "your message on F7", None)
+    thread, request_id = planner.request_of(str(subject))
+    assert thread == "f7"
+    conn = metrics.open_db(_db(repo))
+    try:
+        message = metrics.find_request(conn, request_id)
+    finally:
+        conn.close()
+    assert message is not None and message["kind"] == "plan_message"
+    text, comments = planner.message(message["value"])
+    assert comments == {}  # on the proposal's key points, not the reply's
+    assert text == (
+        "I sent back your proposal “Parallel planners” (adr-23).\n"
+        "- On its key point 2 (One branch): Why not one?\n\nNearly."
+    )
+    [(_, owners)] = [
+        (m["author"], m["text"]) for m in _thread(repo, "f7") if m["author"] == "owner"
+    ]
+    assert owners == text
 
 
 # --- `runner reserve` and `runner run --use-reserve` (ADR 22 item 4, f8 D4) ------------------

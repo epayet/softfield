@@ -7,21 +7,40 @@ its result or its error, and never retried. Git and tasks/ keep one writer, and 
 state.json, whose reserve switches (ADR 22 item 4) the requests set.
 """
 
+import json
+import re
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 
+import yaml
+
 from runner import loop, metrics, owner, planner
-from runner.gitops import Git
+from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
-from runner.tasks import TaskError, milestone_arg
+from runner.tasks import (
+    LATER,
+    TaskError,
+    full_key,
+    milestone_arg,
+    milestone_file,
+    parse_task,
+    preflight,
+)
 
 SIGNOFF = "signoff"  # subject: the milestone key
 RESERVE = "reserve"  # subject: week or five_hour; value: on or off (f8 D4)
 QUEUE = "queue"  # subject: the ticket id
 PLAN_MESSAGE = planner.PLAN_MESSAGE  # subject: the thread; value: {text, comments} (f6 D1)
+SEND_BACK = "send_back"  # subject: <thread>/<proposal id>; value: {text, comments}
+ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
+APPROVE_PLAN = "approve_plan"  # subject: the card
+_APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
+_COMMITS = (SIGNOFF, QUEUE, *_APPROVALS)
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
+_PLAIN = ("100644", "100755", "000000")  # a draft's mode: a file, or none (deleted)
+_MAX_DIFF = 1000  # parse_task needs one; pre-flight doesn't read it
 
 
 def _what(row: sqlite3.Row) -> str:
@@ -75,17 +94,187 @@ def _plan_message(
     return QUEUED_FOR_THE_LEAD
 
 
+def _send_back(conn: sqlite3.Connection, project_id: int, now: datetime, row: sqlite3.Row) -> str:
+    """The owner's comments on a proposal's key points (f6 D1): they become a ``plan_message``
+    on its thread, finished at once, so the lead revises it on its next job."""
+    thread, wanted = planner.proposal_of(row["subject"])
+    text, comments = planner.message(row["value"])
+    proposal = metrics.find_proposal(conn, project_id, thread, wanted)
+    if proposal is None:
+        raise planner.PlannerError(f"{planner.thread_name(thread)} has no proposal {wanted}")
+    said = json.dumps({"text": planner.sent_back(proposal, text, comments), "comments": {}})
+    at = now.isoformat()
+    request_id = metrics.add_request(conn, project_id, PLAN_MESSAGE, thread, said, at)
+    message = metrics.find_request(conn, request_id)
+    if message is None:  # just written
+        raise planner.PlannerError(f"the message for {planner.thread_name(thread)} is gone")
+    result = _plan_message(conn, project_id, now, message)
+    metrics.finish_request(conn, request_id, at, result)
+    return result
+
+
+# --- approvals: the card's drafts reach main only here (ADR 20 items 6 and 7, f6 D4) ---------
+
+
+def _has_branch(git: Git, branch: str) -> bool:
+    return bool(git.run("branch", "--list", branch).strip())
+
+
+def _undo(git: Git) -> None:
+    """Main as it was before an approval that failed: it was clean (``_waits``)."""
+    git.run("reset", "-q", "--hard", "HEAD")
+    Path(git.repo, git.run("rev-parse", "--git-path", "SQUASH_MSG").strip()).unlink(missing_ok=True)
+
+
+def _drafts(git: Git, branch: str) -> list[tuple[str, str]]:
+    """Each path the plan branch changed since it left main, with its mode there."""
+    changes = []
+    for line in git.run("diff", "--raw", "--no-renames", f"{loop.MAIN}...{branch}").splitlines():
+        meta, _, path = line.partition("\t")
+        changes.append((meta.split()[1], path))
+    return changes
+
+
+def _outside(branch: str, changes: list[tuple[str, str]]) -> str | None:
+    """Why the branch can't be merged, if it changes more than drafts: docs/ and the tickets
+    in tasks/later/, as plain files (a link would lead an edit out of them)."""
+    stray = [path for _, path in changes if not planner.is_draft(path)]
+    if stray:
+        return f"{branch} changes {', '.join(stray)}, outside docs/ and tasks/later/: not approved"
+    links = [path for mode, path in changes if mode not in _PLAIN]
+    if links:
+        return f"{branch} changes {', '.join(links)}, not a plain file: not approved"
+    return None
+
+
+def _proposed(repo: Path, number: int) -> bool:
+    found = sorted((repo / "docs" / "adr").glob(f"{number:02d}-*.md"))
+    return bool(found) and planner.is_proposed(found[0].read_text(encoding="utf-8"))
+
+
+def _ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
+    """Each merged ticket's pre-flight problems, and an ADR it relies on that is still
+    Proposed, by ticket."""
+    problems = []
+    for rel in tickets:
+        path = repo / rel
+        try:
+            task = parse_task(path, _MAX_DIFF)
+        except (ValueError, yaml.YAMLError) as exc:  # TaskError, or a file that won't read
+            problems.append(f"{path.stem}: {exc}")
+            continue
+        found = preflight(task, repo)
+        elsewhere = [
+            p.parent.name
+            for p in (repo / "tasks").glob(f"*/{task.id}.md")
+            if p.parent.name != LATER
+        ]
+        found += [f"already in tasks/{folder}/" for folder in sorted(elsewhere)]
+        adrs = planner.named_adrs(path.read_text(encoding="utf-8"))
+        found += [
+            f"relies on ADR {n}, still Proposed: accept it first"
+            for n in sorted(adrs)
+            if _proposed(repo, n)
+        ]
+        problems += [f"{task.id}: {problem}" for problem in found]
+    return problems
+
+
+def _approve_plan(repo: Path, subject: object) -> str:
+    """Merge a card's plan branch into main, queue its tickets and set the card ready, in one
+    commit; the branch then goes. Refused, with main as it was, when the branch changes more
+    than drafts, clashes with main, or a ticket fails pre-flight (the planner fixes it next)."""
+    thread = planner.thread_key(subject)
+    branch = planner.plan_branch(thread)
+    if branch is None:
+        raise planner.PlannerError("the general thread has no plan to approve")
+    git = Git(repo)
+    if not _has_branch(git, branch):
+        raise planner.PlannerError(f"there is no {branch} to approve")
+    changes = _drafts(git, branch)
+    if (refused := _outside(branch, changes)) is not None:
+        return refused
+    tickets = sorted(
+        path
+        for mode, path in changes
+        if path.startswith(f"tasks/{LATER}/") and path.endswith(".md") and mode != "000000"
+    )
+    try:
+        git.run("merge", "-q", "--squash", branch)
+    except GitError:
+        _undo(git)
+        return f"{branch} clashes with {loop.MAIN}: not approved"
+    try:
+        if problems := _ticket_problems(repo, tickets):
+            _undo(git)
+            return "not approved: " + "; ".join(problems)
+        doc = milestone_file(repo, "milestones", full_key(repo, thread))
+        if not doc.is_file():
+            _undo(git)
+            return f"{planner.thread_name(thread)} has no card in docs/milestones/: not approved"
+        doc.write_text(planner.ready_card(doc.read_text(encoding="utf-8")), encoding="utf-8")
+        for rel in tickets:
+            git.move(repo / rel, repo / "tasks" / "ready" / Path(rel).name)
+        git.commit_all(f"{planner.thread_name(thread)} plan approved by the owner")
+    except Exception:
+        _undo(git)
+        raise
+    git.run("branch", "-q", "-D", branch)
+    return f"approved {branch}: queued {', '.join(Path(t).stem for t in tickets) or 'nothing'}"
+
+
+def _adr_number(value: object) -> int:
+    text = str(value) if type(value) is int else value
+    if not (isinstance(text, str) and text.isascii() and text.isdigit() and len(text) <= 4):
+        raise planner.PlannerError(f"an ADR is named by its number, not {value!r}")
+    return int(text)
+
+
+def _accept_adr(repo: Path, db: Path, now: datetime, subject: object, value: object) -> str:
+    """Merge ADR N's draft from the card's plan branch into main and accept it (``decide_adr``,
+    one commit). The branch takes main's accepted copy, so approving the plan merges cleanly.
+    An ADR already on main is accepted as it is."""
+    thread = planner.thread_key(subject)
+    number = _adr_number(value)
+    git = Git(repo)
+    branch = planner.plan_branch(thread)
+    draft = None
+    if branch is not None and _has_branch(git, branch):
+        names = git.run("ls-tree", "--name-only", branch, "docs/adr/").splitlines()
+        wanted = re.compile(rf"docs/adr/{number:02d}-[^/]+\.md")
+        draft = next((name for name in sorted(names) if wanted.fullmatch(name)), None)
+    if branch is None or draft is None:
+        path = owner.decide_adr(repo, number, "Accepted", now.date(), db=db)
+        return f"accepted {path.relative_to(repo).as_posix()}"
+    git.run("checkout", branch, "--", draft)
+    try:
+        owner.decide_adr(repo, number, "Accepted", now.date(), db=db)
+    except Exception:
+        _undo(git)
+        raise
+    git.checkout(branch)
+    try:
+        git.run("checkout", loop.MAIN, "--", draft)
+        message = f"runner: ADR {number} accepted on {loop.MAIN}"
+        git.commit_all(with_trailers(message, agent="runner"), author=RUNNER_AUTHOR)
+    finally:
+        git.checkout(loop.MAIN)
+    return f"accepted {draft}"
+
+
 def _waits(repo: Path, kind: str) -> str | None:
     """Why a request that commits must wait, if it must: a queue commits on the branch it is
-    on, and a sign-off commits the whole tree, so neither goes anywhere but a main that is
-    as clean as it needs to be. It stays open for a later command or pick."""
-    if kind not in (SIGNOFF, QUEUE):
+    on, and a sign-off or an approval commits the whole tree, so none goes anywhere but a main
+    that is as clean as it needs to be. It stays open for a later command or pick."""
+    if kind not in _COMMITS:
         return None
     git = Git(repo)
     if git.current_branch() != loop.MAIN:
         return f"waits for the repo to be on {loop.MAIN}"
     if kind == SIGNOFF and not git.is_clean():
         return f"waits for a clean {loop.MAIN}: a sign-off commits the whole tree"
+    if kind in _APPROVALS and not git.is_clean():
+        return f"waits for a clean {loop.MAIN}: an approval commits on it"
     return None
 
 
@@ -113,6 +302,12 @@ def _apply(
             return _switch(conn, project_id, state, now, subject, value)
         if kind == PLAN_MESSAGE:
             return _plan_message(conn, project_id, now, row)
+        if kind == SEND_BACK:
+            return _send_back(conn, project_id, now, row)
+        if kind == APPROVE_PLAN:
+            return _approve_plan(repo, subject)
+        if kind == ACCEPT_ADR:
+            return _accept_adr(repo, db, now, subject, value)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:

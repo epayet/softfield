@@ -111,6 +111,59 @@ def is_draft(path: str) -> bool:
     return path.startswith(DRAFT_DIRS) and ".." not in path.split("/")
 
 
+def proposal_of(subject: object) -> tuple[str, str]:
+    """A ``send_back``'s thread and proposal id, from its subject: ``f7/adr-23``."""
+    thread, sep, wanted = subject.partition("/") if isinstance(subject, str) else ("", "", "")
+    if not sep or not wanted:
+        raise PlannerError(f"a proposal is <thread>/<id>, not {subject!r}")
+    return thread_key(thread), wanted
+
+
+def sent_back(proposal: Mapping[str, Any], text: str, comments: Mapping[int, str]) -> str:
+    """The message a ``send_back`` becomes (f6 D1): the proposal, the owner's comments on its
+    key points by number and title, then their words."""
+    key_points = proposal.get("key_points")
+    titles = {
+        point.get("n"): point.get("title")
+        for point in (key_points if isinstance(key_points, list) else [])
+        if isinstance(point, dict)
+    }
+    lines = [f"I sent back your proposal “{proposal.get('title')}” ({proposal.get('id')})."]
+    for n, comment in comments.items():
+        title = f" ({titles[n]})" if isinstance(titles.get(n), str) else ""
+        lines.append(f"- On its key point {n}{title}: {comment}")
+    return "\n".join(lines) + (f"\n\n{text}" if text else "")
+
+
+# A ticket relies on an ADR it names: by its path, or as "ADR 20".
+_ADR_NAMED_RE = re.compile(r"\bdocs/adr/(\d+)-[\w.-]*\.md\b|\bADR (\d+)\b")
+_PROPOSED_RE = re.compile(r"^- \*\*Status:\*\*[ \t]*Proposed\b", re.MULTILINE)
+READY = "ready"  # the card's state once its plan is approved (f5 D4)
+_STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*[^·*\n]*?(?=[ \t]*(?:·|\*|$))", re.MULTILINE)
+
+
+def named_adrs(text: str) -> set[int]:
+    """The ADRs a ticket's text names, by number."""
+    return {int(path or words) for path, words in _ADR_NAMED_RE.findall(text)}
+
+
+def is_proposed(adr: str) -> bool:
+    """Whether an ADR's status line still says Proposed."""
+    return _PROPOSED_RE.search(adr) is not None
+
+
+def ready_card(doc: str) -> str:
+    """A card's milestone doc with its state set to ready, in its header (above the first
+    ``## ``); a header without a state gets one under its title."""
+    section = re.search(r"^## ", doc, re.MULTILINE)
+    end = section.start() if section else len(doc)
+    header, body = doc[:end], doc[end:]
+    if _STATE_RE.search(header):
+        return _STATE_RE.sub(f"**State:** {READY}", header, count=1) + body
+    title, _, rest = doc.partition("\n")
+    return f"{title}\n\n> **State:** {READY}\n{rest}"
+
+
 def prompt(thread: str, text: str, comments: Mapping[int, str]) -> str:
     """The planner job's prompt for one message: a card's drafts on its plan branch, none on
     the general thread (``prompts.PLANNER``)."""
