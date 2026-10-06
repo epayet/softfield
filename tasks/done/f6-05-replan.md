@@ -26,3 +26,10 @@ Read `docs/milestones/f6-planning-room.md`, the diffs of f6-01 to f6-04 (`git lo
 - every backticked path and named function in f6-06 to f6-10 exists
 - `uv run pytest -q tests/runner/test_tasks.py` passes
 - the milestone doc has its Replan section
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
