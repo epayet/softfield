@@ -31,3 +31,10 @@ Read `docs/adr/20-planning-room.md` items 6–7, D4 in `docs/milestones/f6-plann
 - a ticket with a bare path refuses the approval with the problem named
 - `accept_adr` merges and accepts; `approve_plan` before it is refused when a ticket needs the ADR
 - `uv run runner check-all --task f6-03-proposals-approval` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
