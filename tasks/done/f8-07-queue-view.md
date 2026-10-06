@@ -27,3 +27,12 @@ Read D1–D2 in `docs/milestones/f8-one-queue.md`, `queue` in `factory_dashboard
 - a row with `not_before` in the future says "waits until" and that time; a done row isn't shown
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 3901
+gate_failures: ['stopped', 'stopped']
+tokens: 3692446
+```
