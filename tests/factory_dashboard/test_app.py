@@ -1,7 +1,9 @@
 import hashlib
+import json
 import re
 import sqlite3
 from datetime import timedelta
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -15,7 +17,7 @@ from factory_dashboard.queries import connect
 from runner import cli, metrics
 from tests.browser.conftest import DISPLAY, PHONE, layout_problems
 from tests.factory_dashboard.conftest import NOW, OTHER, PROJECT, write_allowance
-from tests.factory_dashboard.test_overview import open_overview
+from tests.factory_dashboard.test_overview import REFRESH, open_overview
 
 STATIC = Path(app_module.__file__).parent / "static"
 VENDOR = STATIC / "vendor"
@@ -410,3 +412,146 @@ def test_a_page_says_when_a_new_version_is_available(client, tmp_path, monkeypat
     assert "New version" not in client.get(f"/version?seen={version[1]}").text
     monkeypatch.setattr(app_module, "code_version", lambda: "changed")
     assert "New version" in client.get(f"/version?seen={version[1]}").text
+
+
+# --- notifications (f5-12, ADR 18 item 4) ---------------------------------------------------
+
+
+def _facts(html: str) -> tuple[dict[str, str], str]:
+    """What ``notify.js`` compares: the open Needs-you items (id -> text), and "all done"."""
+    tag = re.search(r'<div id="live-facts"[^>]*>', html)
+    assert tag, "no #live-facts"
+    needs = re.search(r"data-needs='([^']*)'", tag[0])
+    done = re.search(r'data-all-done="(true|false)"', tag[0])
+    assert needs and done, tag[0]
+    return json.loads(unescape(needs[1])), done[1]
+
+
+def _owner_item_ids(db_path: Path) -> dict[str, int]:
+    conn = connect(db_path)
+    try:
+        rows = conn.execute("SELECT subject, id FROM owner_items").fetchall()
+    finally:
+        conn.close()
+    return {row["subject"]: row["id"] for row in rows}
+
+
+def test_the_live_partial_carries_the_open_items_and_whether_work_is_running(serve, db_path):
+    needs, done = _facts(serve().get("/live").text)
+    ids = _owner_item_ids(db_path)
+    # only the open item: the resolved "ollama" one is not there
+    assert needs == {f"owner-{ids['ADR 15']}": "Should reactions be editable once sent?"}
+    assert done == "false"  # a job runs and two tickets wait
+
+
+def test_what_the_dashboard_sees_itself_has_an_id_too(serve, db_path):
+    needs, done = _facts(serve(heartbeat_age=timedelta(minutes=3)).get("/live").text)
+    ids = _owner_item_ids(db_path)
+    assert set(needs) == {f"owner-{ids['ADR 15']}", "runner-20261002-113500", "queue"}
+    assert "heartbeat stopped 3 min ago" in needs["runner-20261002-113500"]
+    assert needs["queue"] == "2 tickets waiting and the runner is idle."
+    assert done == "false"  # a job stopped mid-way isn't done
+
+
+def test_all_done_when_nothing_waits_or_runs(serve_between, db_path):
+    client = serve_between(activity="check-all on main")
+    assert _facts(client.get("/live").text) == ({}, "true")
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.queue_job(conn, project, "checkpoint", "f1", "A checkpoint", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    assert _facts(client.get("/live").text) == ({}, "false")  # a queued job is work left
+
+
+def test_a_ready_ticket_is_work_left(serve_between, db_path):
+    client = serve_between(activity="check-all on main")
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="ready")
+    finally:
+        conn.close()
+    assert _facts(client.get("/live").text) == ({}, "false")
+
+
+def test_every_page_has_the_notify_button_and_polls_only_once_allowed(client):
+    for path in PAGES:
+        html = client.get(path).text
+        assert '<script src="/static/notify.js" defer></script>' in html, path
+        bar = re.search(r'<div class="bar-top">(.*?)</div>', html, re.S)
+        assert bar, path
+        assert '<button type="button" id="notify-me" hidden>Notify me</button>' in bar[1], path
+        poll = re.search(r'<div id="notify-live"[^>]*>', html)
+        assert poll, path
+        assert 'hx-get="/live?project=coucou"' in poll[0] and "hidden" in poll[0]
+        assert 'hx-trigger="every 5s [window.notifyOn()]"' in poll[0]
+        assert 'hx-select="#live-facts"' in poll[0]
+    assert client.get("/static/notify.js").status_code == 200
+
+
+# A stand-in for the browser's Notification: it records what the page asks and shows.
+FAKE_NOTIFICATION = """
+window.shown = []; window.asked = 0;
+class FakeNotification {
+  constructor(title, options) { window.shown.push({ title, body: options && options.body }); }
+}
+FakeNotification.permission = "default";
+FakeNotification.requestPermission = async () => {
+  window.asked += 1; FakeNotification.permission = "granted"; return "granted";
+};
+window.Notification = FakeNotification;
+"""
+
+
+def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
+    page, serve_between, db_path
+):
+    page.add_init_script(FAKE_NOTIFICATION)
+    open_overview(page, serve_between(activity="check-all on main"))
+    button = page.locator("#notify-me")
+    button.wait_for(state="visible")
+    page.wait_for_timeout(6_000)  # a poll's worth: nothing asked, nothing fetched for it
+    assert page.evaluate("window.asked") == 0
+    assert page.locator("#live-facts").count() == 0
+    button.click()
+    button.wait_for(state="hidden")
+    assert page.evaluate("window.asked") == 1
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    assert page.evaluate("window.shown") == []  # what was there before isn't news
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 30",
+            text="A question that came later.",
+            created=NOW.isoformat(),
+        )
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="ready")
+    finally:
+        conn.close()
+    page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
+    page.wait_for_selector('#live-facts[data-all-done="false"]', state="attached", timeout=REFRESH)
+    page.wait_for_timeout(6_000)  # the next poll sees the same item: no second notification
+    shown = page.evaluate("window.shown")
+    assert len(shown) == 1 and "A question that came later." in shown[0]["body"]
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="done")
+    finally:
+        conn.close()
+    page.wait_for_function("window.shown.length > 1", timeout=REFRESH)
+    page.wait_for_timeout(6_000)
+    shown = page.evaluate("window.shown")
+    assert len(shown) == 2 and "done" in shown[1]["title"].lower()

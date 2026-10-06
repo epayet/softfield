@@ -8,6 +8,7 @@
 <script src="/static/vendor/htmx.min.js" defer></script>
 <script src="/static/vendor/echarts.min.js" defer></script>
 <script src="/static/charts.js" defer></script>
+<script src="/static/notify.js" defer></script>
 <script>
   // The live parts poll every 5 s and swap their HTML: wait while the owner scrolls (10 s)
   // or has text selected, so neither the queue's scroll nor a selection is lost (2026-10-03).
@@ -34,6 +35,7 @@
         </select>
       </label>
       <noscript><button>Show</button></noscript>
+      <button type="button" id="notify-me" hidden>Notify me</button>
     </form>
   </div>
   <div class="hazard" aria-hidden="true"></div>
@@ -44,6 +46,8 @@
     {% endfor %}
   </nav>
 </header>
+{# notify.js's facts, on every page, polled only once the owner allowed notifications (f5-12) #}
+<div id="notify-live" hidden hx-get="/live{{ q }}" hx-trigger="every 5s [window.notifyOn()]" hx-select="#live-facts" hx-swap="innerHTML"></div>
 <main>
   {{ version_poll | safe }}
   <nav class="crumbs" aria-label="Breadcrumbs">

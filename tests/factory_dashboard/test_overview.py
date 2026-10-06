@@ -91,7 +91,9 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
     # /running returns 404 (the endpoint was removed).
     assert client.get("/running").status_code == 404
     # there are now three hx-get wrappers (needs-you, now, queue) on the main page.
-    page_html = client.get("/?project=coucou").text
+    page_html = client.get("/?project=coucou").text.split("<main>")[
+        1
+    ]  # not base.html's notify poll
     assert page_html.count('hx-get="/live?project=coucou"') == 3
     assert page_html.count('hx-swap="innerHTML"') == 3
 

@@ -314,6 +314,7 @@ def queued_jobs(
 
 @dataclass(frozen=True)
 class Need:
+    id: str  # stable while the need is open, so notify.js tells a new one (f5-12)
     kind: str
     text: str
     command: str | None = None
@@ -330,12 +331,14 @@ def needs_you(
     """Open owner items, newest first; then what the dashboard sees itself: a runner whose
     heartbeat stopped mid-job (a dead runner can't write that), and a queue left waiting."""
     items = conn.execute(
-        "SELECT o.kind, o.subject, o.text, o.command FROM owner_items o"
+        "SELECT o.id, o.kind, o.subject, o.text, o.command FROM owner_items o"
         " JOIN projects p ON p.id = o.project_id WHERE p.name = ? AND o.resolved IS NULL"
         " ORDER BY o.created DESC, o.id DESC",
         (project,),
     ).fetchall()
-    found = [Need(i["kind"], i["text"] or i["subject"], i["command"]) for i in items]
+    found = [
+        Need(f"owner-{i['id']}", i["kind"], i["text"] or i["subject"], i["command"]) for i in items
+    ]
     stopped: dict[str, Running] = {}
     for job in jobs:
         if not job.live:
@@ -344,6 +347,7 @@ def needs_you(
         when = f" {ago(job.heartbeat)} ago" if job.heartbeat else ""
         found.append(
             Need(
+                f"runner-{job.run_dir}",
                 "runner",
                 f"The runner's heartbeat stopped{when} mid-job: a crash or a closed terminal."
                 " Rerun it; it picks up where it stopped.",
@@ -354,7 +358,7 @@ def needs_you(
     if waiting and not runner_live(conn, project, now):
         n = len(waiting)
         text = f"{n} ticket{'s' if n != 1 else ''} waiting and the runner is idle."
-        found.append(Need("queue", text, _drain(waiting[0].milestone or "")))
+        found.append(Need("queue", "queue", text, _drain(waiting[0].milestone or "")))
     return found
 
 
@@ -539,8 +543,12 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
     qjobs = queued_jobs(conn, project, now)
+    needs = needs_you(conn, project, now, jobs, all_queued)
     return {
-        "needs": needs_you(conn, project, now, jobs, all_queued),
+        "needs": needs,
+        # what notify.js compares after each poll (f5-12): a job stopped mid-way isn't done
+        "notify": {need.id: need.text for need in needs},
+        "all_done": not (all_queued or qjobs or jobs),
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),
         "queue": all_queued,

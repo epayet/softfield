@@ -2,3 +2,5 @@
 {% include "_partials/needs_you.html" %}
 {% include "_partials/running.html" %}
 {% include "_partials/queue.html" %}
+{# What notify.js compares after each poll (f5-12): the open Needs-you items, id -> text, and whether all the work is done #}
+<div id="live-facts" hidden data-project="{{ project }}" data-needs='{{ notify | tojson }}' data-all-done="{{ 'true' if all_done else 'false' }}"></div>
