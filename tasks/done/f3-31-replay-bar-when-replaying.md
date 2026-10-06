@@ -24,3 +24,12 @@ Read the replay bar rules in `factory_dashboard/static/dashboard.css` (`.replay`
 - after "Replay": it is sticky at the bottom with 44 px controls, as f3-07's test checks; after "Back to live" it is not sticky again
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2196
+gate_failures: ['task-tests', 'stopped']
+tokens: 1305494
+```
