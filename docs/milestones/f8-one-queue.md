@@ -25,3 +25,5 @@
 | 05 | replan | L | 3 | 03, 04 | check 06–07, f5-18 and F6's tickets against 01–04; fix them; log it here |
 | 06 | switch-buttons | D | 4 | 05, f3-25 | the two switches on the allowance panel, refreshed live (replaces f5-10; folds in f4-12 and f4-16) |
 | 07 | queue-view | D | 4 | 05 | the Overview's queue lists queued jobs with their reasons |
+| 08 | claude-rechecks-stand-in | L | 6 | 03 | merges only a stand-in checked wait in one queued Claude re-check (owner, 2026-10-06) |
+| 09 | stand-in-fix-tickets | L | 6 | – | the stand-in's prompt and `fix_ticket`: one ticket per merged ticket and kind; test-only tickets for developers |
