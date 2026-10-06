@@ -12,9 +12,12 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from runner import prompts
 from runner.tasks import BUGS, TaskError, milestone_key, short_key
 
 PLANNER = "planner"  # the role, and the queued job's kind (`dispatch.PLANNER`)
+DRAFTS = ("docs/**", "tasks/later/**")  # what a card's planner job may edit (f6 D4)
+DRAFT_DIRS = ("docs/", "tasks/later/")
 PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `message`'s JSON
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
@@ -97,29 +100,26 @@ def message(value: object) -> tuple[str, dict[int, str]]:
     return text.strip(), dict(sorted(by_point.items()))
 
 
-PROMPT = """\
-You are the lead, planning with the owner in the planning room \
-(docs/adr/20-planning-room.md). This is their message on {thread}. Read what you need in the \
-repo; change nothing.
-{comments}
-The owner's message:
+def plan_branch(thread: str) -> str | None:
+    """The card's branch its drafts go on (f6 D4): ``plan/f7``. The general thread has none."""
+    return None if thread == GENERAL else f"plan/{thread}"
 
-{text}
 
-Answer their comments first, then the message, in plain words, as numbered points: each \
-with a title, an answer and a suggested action. Every point of yours they didn't comment on \
-counts as agreed. End your reply with one fenced `json` block, nothing after it:
-
-```json
-{{"points": [{{"n": 1, "title": "…", "answer": "…", "action": "…"}}], "proposals": []}}
-```"""
+def is_draft(path: str) -> bool:
+    """Whether a planner job may change ``path`` on its plan branch (f6 D4): docs and the
+    tickets in ``tasks/later/``, never ``tasks/ready/`` or code."""
+    return path.startswith(DRAFT_DIRS) and ".." not in path.split("/")
 
 
 def prompt(thread: str, text: str, comments: Mapping[int, str]) -> str:
-    """The planner job's prompt for one message (f6-02 writes how the planner plans)."""
+    """The planner job's prompt for one message: a card's drafts on its plan branch, none on
+    the general thread (``prompts.PLANNER``)."""
     lines = "".join(f"- On your point {n}: {comment}\n" for n, comment in comments.items())
     said = f"\nTheir comments on your last points:\n{lines}" if lines else ""
-    return PROMPT.format(thread=thread_name(thread), comments=said, text=text or "(none)")
+    template = prompts.PLANNER_GENERAL if thread == GENERAL else prompts.PLANNER
+    return template.format(
+        thread=thread_name(thread), card=thread, comments=said, text=text or "(none)"
+    )
 
 
 def parse_reply(text: str) -> Reply:

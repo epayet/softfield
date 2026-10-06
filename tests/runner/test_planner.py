@@ -127,6 +127,31 @@ def test_the_prompt_carries_the_message_and_the_comments_by_point():
     assert "point 2" in prompt
 
 
+def test_a_cards_prompt_names_its_branch_and_the_general_one_none():
+    card = planner.prompt("f7", "Draft it.", {})
+    assert "plan/f7 only, never main" in card and "docs/milestones/f7-mockup/" in card
+    assert "{" not in card.split("```json")[0]  # every field filled
+    general = planner.prompt("general", "An idea.", {})
+    assert "plan/" not in general and "change nothing" in general
+    assert (planner.plan_branch("f7"), planner.plan_branch("general")) == ("plan/f7", None)
+
+
+@pytest.mark.parametrize(
+    ("path", "draft"),
+    [
+        ("docs/adr/21-room.md", True),
+        ("docs/milestones/f7-mockup/index.html", True),
+        ("tasks/later/f7-01-x.md", True),
+        ("tasks/ready/f7-01-x.md", False),
+        ("runner/loop.py", False),
+        ("docs/../runner/loop.py", False),
+        ("documents/x.md", False),
+    ],
+)
+def test_a_draft_is_in_docs_or_the_later_tickets(path, draft):
+    assert planner.is_draft(path) is draft
+
+
 # --- the tables (f6 D1) ------------------------------------------------------------------------
 
 

@@ -71,6 +71,9 @@ Plan (with the owner) → `uv run runner milestone N` (unattended) → sign-off 
 - **A new kind of work** (a new language, layer or pattern): build the first one yourself and add it to the worked examples in `developer.md`.
 - **Replans ([ADR 16](../adr/16-claude-window-and-named-milestones.md) item 7):** after any chain of three or more lead tickets whose results later tickets rely on (a schema, a probe, a new module's functions), add a replan lead ticket. It checks the Decisions and the ready tickets against what was built, fixes them, and logs what it did in the milestone doc. F1's two cost $5.6 and caught a gate blind spot and three wrong facts.
 
+## Planning room
+The owner also plans from the dashboard ([ADR 20](../adr/20-planning-room.md), [F6](../milestones/f6-planning-room.md)). A planner job is you, headless, on the thread's Claude session, with `prompts.PLANNER` (`runner/prompts.py`) as its brief. It plans as the sections above say: the owner's questions first, then revisions, as numbered points with an answer and an action, ending with the JSON block (F6 D2). Drafts go on `plan/<card>` only (docs and `tasks/later/`), which the runner checks out before the job and commits after it; nothing is queued until the owner approves. Change how the planner plans in that prompt, and keep this section pointing at it.
+
 ## Tickets
 Format: [`docs/task-format.md`](../task-format.md). Craft: [`docs/task-writing.md`](../task-writing.md).
 - A goal, the files to read (paths, not pastes), acceptance criteria as bullets. Paste only facts no file holds. No stubs, no reference implementation.

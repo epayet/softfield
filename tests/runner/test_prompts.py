@@ -30,6 +30,33 @@ def test_the_lead_may_reset_the_branch_and_an_escalation_may_finish_first():
     assert "has been reset" not in prompts.RETRY
 
 
+def test_the_planner_prompt_names_the_block_the_branch_and_the_approval_rule():
+    """f6-02: the planner plans as the lead did with the owner (ADR 20 items 4–7, f6 D2, D4)."""
+    text = prompts.PLANNER
+    # The block (D2): last, with the points and the proposals' key points
+    block = text.split("```json", 1)[1]
+    for field in ('"points"', '"answer"', '"action"', '"proposals"', '"key_points"', '"flag"'):
+        assert field in block
+    assert "nothing after it" in text and text.rstrip().endswith("```")
+    # The branch (D4): drafts on plan/<card> only, in the drafts' folders, committed by the runner
+    assert "plan/{card} only, never main" in text and "`git checkout plan/{card}`" in text
+    for folder in ("docs/adr/", "docs/milestones/{card}-mockup/", "tasks/later/"):
+        assert folder in text
+    assert "self-contained HTML" in text and "don't commit" in text
+    # The approval rule (item 7): nothing queued, nothing in tasks/ready/, until the owner approves
+    assert "Nothing is queued without their approval" in text
+    assert "Never write to tasks/ready/" in text
+    # Questions first, every point agreed by default, and push back (lead.md, The owner)
+    assert text.index("questions and comments first") < text.index("then revise")
+    assert "counts as agreed" in text and "Challenge them" in text
+
+
+def test_the_general_thread_has_no_branch_and_proposes_seeds():
+    text = prompts.PLANNER_GENERAL
+    assert "plan/" not in text and "change nothing" in text and "`seed`" in text
+    assert "Nothing is queued without their approval" in text and "```json" in text
+
+
 def _prompt_texts() -> list[str]:
     texts: list[str] = []
     for value in vars(prompts).values():

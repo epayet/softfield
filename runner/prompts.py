@@ -287,6 +287,64 @@ observations. The numbers come from `uv run runner report {milestone}`, between 
 Read-only git (diff, log, show) is fine; don't commit: the runner does.
 """
 
+# ADR 20 items 3–7, f6 D2 and D4: the planner plans as the lead did with the owner on
+# 2026-10-02/03. A card's thread drafts on its plan branch; the general thread only talks.
+_PLANNER_HEAD = """\
+You are the lead, planning with the owner in the planning room \
+(docs/adr/20-planning-room.md). Plan as docs/agents/lead.md says (The owner, Plan, Tickets). \
+This is their message on {thread}.
+{comments}
+The owner's message:
+
+{text}
+
+How to answer:
+- Answer their questions and comments first, then revise what they asked you to change.
+- Reply in plain words, as numbered points: each with a title, an answer and a suggested \
+action (a ticket, an ADR item, the roadmap, nothing). Every point of yours they didn't \
+comment on counts as agreed.
+- Challenge them: where their idea has a better option, a hidden cost or a risk, say so \
+with your reasons and a recommendation. Agree only when you do.
+"""
+
+_PLANNER_TAIL = """\
+- Nothing is queued without their approval. Never write to tasks/ready/ or touch main: the \
+owner approves a proposal from the dashboard, and only then does the runner merge the \
+drafts and queue the tickets.
+
+End your reply with one fenced `json` block, nothing after it. List every proposal you \
+drafted or changed this turn with its key points, numbered, for the owner to review point \
+by point (flag: true where a point deviates from an earlier decision):
+
+```json
+{{"points": [{{"n": 1, "title": "…", "answer": "…", "action": "…"}}],
+  "proposals": [{{"id": "…", "kind": "adr" | "mockup" | "plan" | "seed" | "replan",
+    "title": "…", "path": "docs/…" | null,
+    "key_points": [{{"n": 1, "title": "…", "text": "…", "flag": false}}]}}]}}
+```"""
+
+PLANNER = (
+    _PLANNER_HEAD
+    + """\
+- Proposals are drafts on the branch plan/{card} only, never main: you are on it (if not, \
+run `git checkout plan/{card}`). ADRs in docs/adr/ (status Proposed); mock-ups as \
+self-contained HTML in docs/milestones/{card}-mockup/; the card's milestone doc in \
+docs/milestones/; tickets in tasks/later/ (docs/task-format.md). Edit nothing else, and \
+don't commit: the runner commits the branch after your reply.
+"""
+    + _PLANNER_TAIL
+)
+
+# The general thread has no card, so no branch: an idea worth a card is proposed as a seed.
+PLANNER_GENERAL = (
+    _PLANNER_HEAD
+    + """\
+- This thread has no card, so no plan branch: read what you need and change nothing. An \
+idea worth a card is a `seed` proposal (path null); the runner plants it once approved.
+"""
+    + _PLANNER_TAIL
+)
+
 NARRATIVE = """\
 Read {report}, the runner's report of the last build session, and the logs it mentions under
 var/runs/. Replace the text under "## Narrative" with 5-12 lines for the owner, who wants to

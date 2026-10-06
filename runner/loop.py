@@ -3558,12 +3558,49 @@ def _park_support(s: Session, role: str, name: str, hold: Hold, /, **resume: str
     s.log(console.paused(RUNNER_AGENT, f"the {what} waits for Claude", hold.until, now()))
 
 
+def _plan_branch(s: Session, branch: str) -> bool:
+    """Check out a card's plan branch for its planner job (f6 D4): caught up with main, or
+    new from main. Returns whether it is new. One that clashes with main is used as it is."""
+    if not _has_branch(s.git, branch):
+        s.git.run("checkout", "-q", "-b", branch, MAIN)
+        return True
+    if not _catch_up(s, branch):
+        s.report.notes.append(f"{branch} clashes with {MAIN}: the planner drafted on it as it is.")
+        s.git.checkout(branch)
+    return False
+
+
+def _commit_drafts(s: Session, branch: str, subject: str, new: bool) -> None:
+    """After a planner job: commit its drafts on ``branch`` and go back to main (f6 D4). What
+    it changed outside the drafts' folders is dropped; a new branch with no drafts goes."""
+    if s.git.current_branch() != branch:  # never commit drafts anywhere else
+        s.git.checkout(MAIN)
+        return
+    status = s.git.run("status", "--porcelain", "--untracked-files=all").splitlines()
+    stray = [(line[:2], line[3:]) for line in status if not planner.is_draft(line[3:])]
+    for code, path in stray:
+        if code == "??":
+            (s.repo / path).unlink(missing_ok=True)
+        else:
+            s.git.run("checkout", "-q", "HEAD", "--", path)
+    if stray:
+        dropped = ", ".join(path for _, path in stray)
+        s.report.notes.append(f"The planner's {subject} changed {dropped}, outside its drafts.")
+    s.git.commit_all(
+        with_trailers(f"planner {subject}: drafts (by Claude)", agent=CLAUDE_HEADLESS_AGENT)
+    )
+    s.git.checkout(MAIN)
+    if new and not s.git.run("rev-list", f"{MAIN}..{branch}").strip():
+        s.git.run("branch", "-q", "-D", branch)
+
+
 def run_planner(s: Session, row: dispatch.Queued) -> None:
     """Answer one of the owner's messages (ADR 20 items 1–4, f6 D1–D3): a planner job on its
     thread's Claude session (a new one for a new thread), its reply's points and proposals
-    recorded, and a Needs-you item until the owner answers. It may use the owner's 25% of
-    the 5-hour window; at a limit its row parks and the message waits. A message whose
-    request or project is gone is done."""
+    recorded, and a Needs-you item until the owner answers. A card's job drafts on its plan
+    branch, which the runner commits (f6 D4). It may use the owner's 25% of the 5-hour
+    window; at a limit its row parks and the message waits. A message whose request or
+    project is gone is done."""
     if s.project_id is None:
         return
     try:
@@ -3580,19 +3617,26 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     found = _record(s, metrics.planner_thread, s.project_id, thread, at)
     if found is None:
         return
+    branch = planner.plan_branch(thread)
     job = JobSpec(
         role=PLANNER,
         prompt=planner.prompt(thread, text, comments),
         timeout=s.cfg.claude_timeout,
-        commands=GIT_READ_COMMANDS,
+        # A card's drafts, on its plan branch only; the general thread only talks (f6 D4)
+        edit=planner.DRAFTS if branch else (),
+        commands=(*GIT_READ_COMMANDS, *((f"git checkout {branch}",) if branch else ())),
         resume=found["session_id"] or None,
         title=f"planning: {row.reason}",
     )
     milestone = "" if thread == planner.GENERAL else full_key(s.repo, thread)
+    new = branch is not None and _plan_branch(s, branch)
     try:
         result = call_claude(s, job, milestone, row.subject, park=True)
     except Parked:
         return
+    finally:
+        if branch is not None:
+            _commit_drafts(s, branch, row.subject, new)
     if result.ok:
         reply = planner.parse_reply(result.text)
     else:  # its message is the owner's to send again
