@@ -28,3 +28,10 @@ Read `docs/adr/22-one-visible-queue.md` item 4, D4 in `docs/milestones/f8-one-qu
 - `uv run runner reserve week on` records the same as the request
 - a switch turned on 24 hours ago reads off, and its Needs-you item is open; `runner run --use-reserve five-hour` turns only that one on
 - `uv run runner check-all --task f8-04-reserve-switches` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
