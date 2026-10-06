@@ -23,3 +23,12 @@ Read the route in `factory_dashboard/timeline.py` (`filter_milestone = milestone
 - the form keeps `project` when it submits
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1666
+gate_failures: []
+tokens: 1418307
+```
