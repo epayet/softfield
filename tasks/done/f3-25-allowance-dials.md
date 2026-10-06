@@ -26,3 +26,12 @@ Read the `allowance` section of `factory_dashboard/templates/overview.html`, the
 - each dial's fill colour class follows the same rule as the bar's, and "no data yet" has an empty ring
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2959
+gate_failures: []
+tokens: 2080543
+```
