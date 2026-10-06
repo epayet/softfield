@@ -1217,9 +1217,16 @@ def test_queued_checkpoint_comes_before_tickets_and_shows_reason(client, db_path
     next_section = queue_section.split("Next in line", 1)[1]
     assert "Checkpoint:" in next_section
     assert "Checkpoint reason" in next_section
-    # The checkpoint row comes before any ticket row
+    # The checkpoint row comes before any ticket row in the rendered HTML
     ticket_rows = [m for m in re.findall(r"\b\d (f1-\d\d-[a-z-]+)", next_section)]
     assert len(ticket_rows) >= 2
+    # Find the checkpoint row and verify it precedes all ticket rows
+    checkpoint_idx = next_section.find("Checkpoint:")
+    ticket_indices = [next_section.find(t) for t in ticket_rows]
+    for idx in ticket_indices:
+        assert checkpoint_idx < idx, (
+            f"Checkpoint row at {checkpoint_idx} should come before ticket row at {idx}"
+        )
     # queued_jobs returns them in dispatch order: checkpoint before tickets
     conn = metrics.open_db(db_path)
     try:
@@ -1285,6 +1292,8 @@ def test_future_not_before_says_waits_until(client, db_path):
     queue_section = section(html, "queue")
     next_section = queue_section.split("Next in line", 1)[1]
     assert "waits until" in next_section
+    # The displayed time matches the not_before value (Mon 5 Oct 17:00)
+    assert "Mon 5 Oct 17:00" in next_section
 
 
 def test_done_row_isnt_shown(client, db_path):
@@ -1314,3 +1323,7 @@ def test_done_row_isnt_shown(client, db_path):
     finally:
         conn.close()
     assert len(jobs) == 0
+    # The done row is absent from rendered HTML, not just the helper result
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    assert "A checkpoint" not in queue_section
