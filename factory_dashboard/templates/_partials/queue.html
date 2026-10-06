@@ -1,6 +1,6 @@
 <section id="queue" class="panel">
   <h3>Queue</h3>
-  {% if queue %}
+  {% if queue or queued_jobs %}
     <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting. Drain it with <code>{{ drain }}</code></p>
   {% else %}
     <p class="sub">The queue is empty.</p>

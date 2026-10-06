@@ -585,6 +585,28 @@ def test_empty_queue_shows_message_once(serve):
     assert count == 1, f"expected 1, got {count}"
 
 
+def test_queue_with_queued_jobs_says_how_many(queue_client, db_path):
+    """f9-line-polish-C467-1: when there are no tickets but queued jobs exist,
+    the queue section must NOT say "The queue is empty."."""
+    # Remove all tickets from the queue so queue is empty
+    conn = metrics.open_db(db_path)
+    conn.execute("UPDATE tickets SET state = 'done' WHERE state = 'ready'")
+    conn.commit()
+    conn.close()
+    # Insert a queued checkpoint job
+    conn = metrics.open_db(db_path)
+    try:
+        proj = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()["id"]
+        metrics.queue_job(conn, proj, "checkpoint", "f1", "A checkpoint", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    html = queue_client.get("/live").text
+    queue_section = section(html, "queue")
+    assert "The queue is empty." not in queue_section
+    assert "Checkpoint:" in queue_section
+
+
 def test_the_live_part_pauses_while_the_owner_scrolls_or_selects(client):
     """2026-10-03: the queue jumped back to the top every 5 s while the owner scrolled it,
     and a selection was lost (f4-14)."""
