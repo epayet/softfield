@@ -39,7 +39,7 @@
   <div class="hazard" aria-hidden="true"></div>
   <nav class="tabs" aria-label="Pages">
     {# Board joins the tabs here, after Overview, once f5-16 adds its route: ("/board", "Board") #}
-    {% for path, label in [("/", "Overview"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
+    {% for path, label in [("/", "Overview"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench"), ("/planning", "Planning")] %}
     <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}>{{ label }}</a>
     {% endfor %}
   </nav>

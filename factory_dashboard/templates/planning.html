@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+
+{% block title %}Planning · {{ project }}{% endblock %}
+
+{% block content %}
+<section id="tiles" aria-label="Can I plan now" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule)">
+  <div id="factory-now" style="background: var(--bay); padding: 10px 14px; display: flex; flex-direction: column; gap: 3px">
+    <h2 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted)">The factory now</h2>
+    {% if factory.running %}
+    <p style="margin: 0">Running <b>{{ factory.running.ticket or factory.running.role }}</b> on {{ factory.running.agent }}, attempt {{ factory.running.attempt }}, {{ factory.running.elapsed | ago }}.</p>
+    {% else %}
+    <p style="margin: 0">Nothing running right now.</p>
+    {% endif %}
+    {% if factory.next_reply %}
+    <p style="margin: 0; color: var(--good-ink)">Your next reply: {{ factory.next_reply }}.</p>
+    {% else %}
+    <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">planning goes first: a message is answered once the running job is done</p>
+    {% endif %}
+  </div>
+
+  <div id="lead-window" style="background: var(--bay); padding: 10px 14px; display: flex; flex-direction: column; gap: 5px">
+    <h2 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--opus)">The lead's window</h2>
+    {% set value = (window.value or 0) if window else 0 %}
+    <div class="meter">
+      <span class="{{ 'past-mark' if window and window.mark is not none and value >= window.mark else 'under-mark' }}" style="width: {{ '%.0f' | format(value * 100) }}%"></span>
+      <span class="mark" title="the factory stops here; the rest is yours" style="left: {{ '%.0f' | format(((window.mark if window else none) or 0.75) * 100) }}%"></span>
+    </div>
+    <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">5-hour window {{ window.percent if window and window.percent else "–" }} · planning may go past the 75% line, the factory stops there</p>
+  </div>
+</section>
+
+<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
+  <form id="plant" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
+    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({title: this.elements.title.value, thoughts: this.elements.thoughts.value})}'
+    style="flex: 1 1 280px; min-width: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+    <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Plant an idea</h2>
+    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Title
+      <input type="text" name="title" required placeholder="Memory drift on the frame" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; min-height: 44px; box-sizing: border-box">
+    </label>
+    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Your thoughts, as rough as you like
+      <textarea name="thoughts" rows="3" placeholder="What it is, why, what worries you…" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
+    </label>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+      <button type="submit" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Plant it</button>
+      <span id="plant-status" style="font-size: 12.5px; color: var(--muted)">No Claude needed: it becomes a seed card at once.</span>
+    </div>
+  </form>
+
+  <section id="desk" aria-label="Your desk" style="flex: 999 1 420px; min-width: 0; background: var(--bay); border: 1px solid var(--rule)">
+    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk</h2>
+    {% for group in groups if group.items %}
+    <div id="desk-{{ group.key }}" style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
+      <h3 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var({{ group.color }})">{{ group.name }}</h3>
+      {% for item in group.items %}
+      <a href="{{ item.link }}{{ q }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+        <span style="font-size: 14px">{{ item.title }}</span>
+        {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="margin: 0; padding: 10px 14px; color: var(--muted)">Nothing waits for you.</p>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}

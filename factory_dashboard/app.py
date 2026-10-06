@@ -64,6 +64,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
         line,
         milestones,
         overview,
+        planning,
         projects,
         requests,
         runs,
@@ -89,6 +90,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.include_router(agents.router)
     app.include_router(bench.router)
     app.include_router(requests.router)
+    app.include_router(planning.router)
 
     @app.get("/version", response_class=HTMLResponse)
     def version(seen: str = "") -> str:

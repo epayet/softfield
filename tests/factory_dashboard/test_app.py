@@ -29,6 +29,7 @@ PAGES = [
     "/timeline",
     "/agents",
     "/bench",
+    "/planning",
 ]
 
 

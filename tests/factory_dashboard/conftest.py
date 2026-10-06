@@ -1755,3 +1755,49 @@ def later_client(db_path: Path) -> TestClient:
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+PLANNING_ADR = {
+    "id": "adr-20",
+    "kind": "adr",
+    "title": "ADR 20: the planning room",
+    "path": "docs/adr/20-planning-room.md",
+    "key_points": [{"n": 1, "title": "Planning goes first"}, {"n": 2, "title": "Opus plans"}],
+}
+PLANNING_PLAN = {"id": "plan", "kind": "plan", "title": "F6 plan: 7 tickets", "path": None}
+
+
+def write_planning(conn: sqlite3.Connection) -> int:
+    """On top of ``write_fixture`` (``m4`` is ripe: its one ticket is done), at ``NOW``:
+    - ``general``: the owner wrote 2 h ago, the lead replied 1 h ago (your answers wanted);
+    - ``f6`` (The planning room): the lead's reply 2 h ago lists ``PLANNING_ADR`` and
+      ``PLANNING_PLAN``; an older reply listed a proposal since dropped; the owner answered 1 h
+      ago, so the thread waits for the lead, not for the owner;
+    - two idea cards: ``f7`` (Memory drift) has a thread, ``f9`` (Parallel developers) has none.
+    Returns the project's id."""
+    project = metrics.upsert_project(conn, PROJECT)
+    metrics.upsert_milestone(conn, project, "f6-planning-room", title="The planning room")
+    for key, title in (("f7-memory-drift", "Memory drift"), ("f9-parallel", "Parallel developers")):
+        metrics.upsert_milestone(conn, project, key, title=title, state="idea")
+
+    general = metrics.planner_thread(conn, project, "general", _at(timedelta(hours=3)))["id"]
+    metrics.add_planner_message(conn, general, "owner", _at(timedelta(hours=2)), "My goals.")
+    metrics.add_planner_message(conn, general, "lead", _at(timedelta(hours=1)), "Here's mine.")
+
+    f6 = metrics.planner_thread(conn, project, "f6", _at(timedelta(hours=5)))["id"]
+    dropped = {"id": "old", "kind": "plan", "title": "An older plan", "path": None}
+    metrics.add_planner_message(
+        conn, f6, "lead", _at(timedelta(hours=4)), "A first go.", proposals=[dropped]
+    )
+    metrics.add_planner_message(
+        conn,
+        f6,
+        "lead",
+        _at(timedelta(hours=2)),
+        "Here's the plan.",
+        proposals=[PLANNING_ADR, PLANNING_PLAN],
+    )
+    metrics.add_planner_message(conn, f6, "owner", _at(timedelta(hours=1)), "Looks good.")
+
+    metrics.planner_thread(conn, project, "f7", _at(timedelta(hours=1)))
+    return project
