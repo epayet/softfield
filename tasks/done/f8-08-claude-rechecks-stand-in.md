@@ -25,3 +25,10 @@ Read `stand_in_checkpoint` and `checkpoint` in `runner/loop.py` (the stand-in em
 - two stand-in checkpoints, then Claude free: one Claude checkpoint over all their merges, and the queue empties
 - while Claude is out the re-check stays queued and developer tickets still run
 - `uv run runner check-all --task f8-08-claude-rechecks-stand-in` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
