@@ -1079,6 +1079,10 @@ def _set_not_before(conn: sqlite3.Connection, row_id: int, not_before: str | Non
     conn.execute("UPDATE work_queue SET not_before = ? WHERE id = ?", (not_before, row_id))
 
 
+def _set_reason(conn: sqlite3.Connection, row_id: int, reason: str) -> None:
+    conn.execute("UPDATE work_queue SET reason = ? WHERE id = ?", (reason, row_id))
+
+
 def _set_started(conn: sqlite3.Connection, row_id: int, job_id: int) -> None:
     """The row's job: its latest of the row's kind (a parked one's resume replaces it)."""
     conn.execute("UPDATE work_queue SET started_job = ? WHERE id = ?", (job_id, row_id))
@@ -1156,6 +1160,28 @@ def _merges(merged: Sequence[str]) -> str:
     return names[0] if len(names) < 2 else ", ".join(names[:-1]) + f" and {names[-1]}"
 
 
+def checkpoint_reason(state: State) -> str:
+    """A queued checkpoint's reason: the merges Claude re-checks after a stand-in (f8-08),
+    then those no checkpoint has reviewed yet."""
+    parts = []
+    if state.recheck:
+        parts.append(f"Claude re-checks {_merges(state.recheck)}, after a stand-in")
+    if state.unchecked:
+        parts.append(f"after {_merges(state.unchecked)} merged")
+    return "; ".join(parts)
+
+
+def _name_checkpoint(s: Session) -> None:
+    """The open checkpoint's reason brought up to date with the merges it now holds."""
+    row = find_row(s, CHECKPOINT)
+    if row is None or not (reason := checkpoint_reason(s.state)):
+        return
+    if (row.id or 0) < 0:
+        s.unqueued[row.id or 0] = replace(row, reason=reason)
+    elif row.id is not None:
+        _record(s, _set_reason, row.id, reason)
+
+
 def _direction_reason(task_id: str, failures: Sequence[str]) -> str:
     return f"{task_id} failed: {', then '.join(failures) or 'its attempts'}"
 
@@ -1172,7 +1198,7 @@ def _queue_parked(s: Session, at: datetime) -> None:
         needs = {k: v for k, v in entry.items() if k not in dropped}
         if kind == CHECKPOINT:
             subject = str(entry.get("milestone") or CHECKPOINT)
-            reason = f"after {_merges(s.state.unchecked)} merged"
+            reason = checkpoint_reason(s.state)
         elif kind == ESCALATION:
             subject = key.partition(":")[2]
             reason = f"{subject}: {entry.get('reason', 'escalated')}"
@@ -2212,7 +2238,7 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     if find_row(s, CHECKPOINT) is not None:
         return
     if len(s.state.unchecked) >= s.cfg.checkpoint_every:
-        reason = f"after {_merges(s.state.unchecked)} merged"
+        reason = checkpoint_reason(s.state)
         enqueue(s, CHECKPOINT, task.milestone, reason, milestone=task.milestone)
 
 
@@ -2641,15 +2667,37 @@ def _authors(s: Session, merged: Iterable[str]) -> list[Agent]:
     return [s.cfg.agents[i] for i in dict.fromkeys(ids) if i in s.cfg.agents]
 
 
+RECHECK_NOTE = (
+    "\n\nA stand-in reviewed {merges} while you were out: this checkpoint checks them again."
+    " It already filed findings on {filed}; its fix tickets carry `finding:`. Don't file those"
+    " again."
+)
+
+
+def _recheck_note(state: State) -> str:
+    """What Claude's re-check is told of the stand-in's work: only checked ids and paths."""
+    if not state.recheck:
+        return ""
+    filed = ", ".join(
+        f"{ticket} ({file})" if file else ticket for ticket, file in state.recheck_filed
+    )
+    return RECHECK_NOTE.format(merges=_merges(state.recheck), filed=filed or "nothing")
+
+
 def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
-    """Review the unchecked merges. When Claude can't (a limit, or the owner's share of its
-    5-hour window), a stand-in does it read-only; with none permitted, it parks and the queue
-    goes on (ADR 16 items 4 and 9). ``out`` is a parked checkpoint's note, for its resume."""
-    merged = list(s.state.unchecked)
+    """Review the unchecked merges, and those only a stand-in reviewed (f8-08). When Claude
+    can't (a limit, or the owner's share of its 5-hour window), a stand-in reviews the
+    unchecked ones read-only and the checkpoint parks, for Claude to check them all again once
+    it may; the queue goes on (ADR 16 items 4 and 9). ``out`` is a parked checkpoint's note,
+    for its resume."""
+    merged = list(dict.fromkeys([*s.state.recheck, *s.state.unchecked]))
     if (hold := claude_hold(s, now())) is not None:
-        if not stand_in_checkpoint(s, milestone, merged, hold):
-            _park_support(s, CHECKPOINT, milestone, hold, milestone=milestone)
+        if s.state.unchecked:  # never the stand-in again on what it reviewed
+            stand_in_checkpoint(s, milestone, list(s.state.unchecked), hold)
+        _park_support(s, CHECKPOINT, milestone, hold, milestone=milestone)
+        _name_checkpoint(s)
         return
+    filed = {(ticket, file) for ticket, file in s.state.recheck_filed}
     out = out or s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
     findings_out = out.with_suffix(".json")
     job = JobSpec(
@@ -2658,7 +2706,8 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
             merges="\n".join(f"- {m.split()[0]}: `git show {m.split()[1]}`" for m in merged),
             out=out.relative_to(s.repo).as_posix(),
             findings=findings_out.relative_to(s.repo).as_posix(),
-        ),
+        )
+        + _recheck_note(s.state),
         timeout=s.cfg.claude_timeout,
         edit=("tasks/ready/**", "docs/agents/developer.md", "var/runs/**"),
         # pytest: the tickets' pre-flight test; its commit skips the hook
@@ -2683,7 +2732,7 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
         )
     except Parked:
         return
-    s.state.unchecked = []
+    s.state.unchecked, s.state.recheck, s.state.recheck_filed = [], [], []
     save_state(s.state, s.state_path)
     if out.is_file():
         s.report.notes.append("Checkpoint: " + out.read_text(encoding="utf-8").strip())
@@ -2692,6 +2741,8 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
     except ReviewFileError as exc:
         s.report.notes.append(f"Checkpoint findings unusable: {exc}")
     else:
+        # A finding the stand-in filed (same ticket and file) isn't filed twice (f8-08)
+        findings = tuple(f for f in findings if (f.ticket, f.file) not in filed)
         # Keyed by the checkpoint's job, unique in the milestone (the review judges them)
         if s.last_job_id is not None:
             prefix = f"{milestone}-C{s.last_job_id}-"
@@ -2834,7 +2885,8 @@ def stand_in_checkpoint(s: Session, milestone: str, merged: list[str], hold: "Ho
     """A checkpoint Claude can't take, done read-only by the first agent `[roles]
     checkpoint-stand-in` lists that may (its month a cap, not a pace). It is acted on as
     Claude's would be: each finding that isn't a nit becomes a fix ticket (`fix_ticket`),
-    routed "local". False when none may, or its job failed: the checkpoint then parks."""
+    routed "local"; its merges then wait for Claude's re-check (f8-08). False when none may,
+    or its job failed: the merges stay unchecked."""
     agents = [s.cfg.agents[agent_id] for agent_id in s.cfg.roles.get(STAND_IN, ())]
     if not agents:
         return False
@@ -2874,7 +2926,13 @@ def stand_in_checkpoint(s: Session, milestone: str, merged: list[str], hold: "Ho
         acted.append(finding)
     if job_id is not None:
         record_findings(s, milestone, acted, agent.id, prefix)
-    s.state.unchecked = []
+    # Its merges wait for Claude's re-check (f8-08), with what it filed: checked ids only
+    s.state.recheck = list(dict.fromkeys([*s.state.recheck, *merged]))
+    for f in acted:
+        safe = _TICKET_ID_RE.fullmatch(f.ticket) and (not f.file or _FIX_PATH_RE.fullmatch(f.file))
+        if safe and [f.ticket, f.file] not in s.state.recheck_filed:
+            s.state.recheck_filed.append([f.ticket, f.file])
+    s.state.unchecked = [m for m in s.state.unchecked if m not in merged]
     save_state(s.state, s.state_path)
     tickets = ", ".join(p.stem for p in written) or "none"
     s.report.notes.append(
@@ -3452,7 +3510,7 @@ def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:
     before, s.running_row = s.running_row, row
     try:
         if row.kind == CHECKPOINT:
-            if s.state.unchecked:
+            if s.state.unchecked or s.state.recheck:
                 out = s.repo / needs["out"] if needs.get("out") else None
                 checkpoint(s, str(needs.get("milestone") or row.subject), out)
         elif row.kind == ESCALATION:

@@ -16,6 +16,10 @@ class State:
     directions: dict[str, int] = field(default_factory=dict)  # task id -> directions given
     escalations: dict[str, int] = field(default_factory=dict)  # task id -> escalations
     unchecked: list[str] = field(default_factory=list)  # developer merges since the last checkpoint
+    # Merges only a stand-in checkpoint reviewed, for Claude's re-check (f8-08), and the
+    # [ticket, file] of each finding it filed: the re-check doesn't file those again.
+    recheck: list[str] = field(default_factory=list)
+    recheck_filed: list[list[str]] = field(default_factory=list)
     # task id -> {"adr": path, "question": one line}: decisions a job left for the owner
     owner: dict[str, dict[str, str]] = field(default_factory=dict)
     # The job running now (ADR 15 item 11): kind ("local" or a Claude job's), ticket, branch,

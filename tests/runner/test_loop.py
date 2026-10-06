@@ -4005,26 +4005,44 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     )
     conn.close()
     specs = _fake_copilot(monkeypatch, JobResult(ok=True, text=answer, duration_s=1.0))
+    script, jobs = fake_lead
 
     def fixes(repo_: Path, prompt: str) -> None:
         assert "PART is never read" in prompt and "Two modules share a name." in prompt
+        assert jobs == []  # Claude's 25% untouched: its re-check waits in the queue
+        [row] = [r for r in _queue(repo) if r["done"] is None]
+        assert row["kind"] == "checkpoint" and row["not_before"] == FIVE_RESETS.isoformat()
+        assert row["reason"] == "Claude re-checks m1-01-thing and m1-02-thing, after a stand-in"
         (repo_ / "coucou" / "part1.py").write_text("PART = 10\n")
 
     fake_model.append(fixes)
+    new = {**fix, "file": "coucou/thing.py", "summary": "PART shadows", "ticket": "m1-02-thing"}
+
+    def recheck(job: ClaudeJob, repo_: Path) -> None:
+        assert loop.now() > FIVE_RESETS
+        for ticket in ("m1-01-thing", "m1-02-thing", "m1-03-fix-part-is-never-read"):
+            assert f"- {ticket}: `git show " in job.prompt
+        assert "m1-01-thing (coucou/part1.py)" in job.prompt  # what the stand-in filed
+        _checkpoint_writes(json.dumps({"findings": [{**fix, "route": "local"}, new]}))(job, repo_)
+
+    script.append(recheck)
     report = _with_sonnet(repo, **{"checkpoint-stand-in": (COPILOT.id,)})
-    _, jobs = fake_lead
-    assert jobs == []  # Claude's 25% untouched
-    [spec] = specs
+    assert len(jobs) == 1 and jobs[0].kind == "checkpoint"
+    [spec] = specs  # the re-check never ran on the stand-in
     assert spec.role == "checkpoint" and spec.read_only
     assert "m1-01-thing" in spec.prompt and "coucou/part2.py" in spec.prompt
-    [checkpoint] = [j for j in _rows(repo, "jobs") if j["role"] == "checkpoint"]
+    checkpoint, claudes = [j for j in _rows(repo, "jobs") if j["role"] == "checkpoint"]
     assert (checkpoint["agent"], checkpoint["outcome"]) == ("copilot-auto", "passed")
     assert str(checkpoint["routing_reason"]).startswith(
         "copilot-auto stands in for Claude (claude: 5-hour window 80% used, over its cap of 75%)"
     )
+    assert (claudes["agent"], claudes["outcome"]) == ("claude-sonnet", "passed")
     found = {f["key"]: f for f in _rows(repo, "findings")}
     key = f"m1-C{checkpoint['id']}-1"
-    assert set(found) == {key, f"m1-C{checkpoint['id']}-2"}
+    # Claude's re-check rates the authors on its own finding; the stand-in's isn't filed twice
+    again = f"m1-C{claudes['id']}-2"
+    assert set(found) == {key, f"m1-C{checkpoint['id']}-2", again}
+    assert (found[again]["summary"], found[again]["agent"]) == ("PART shadows", "claude-sonnet")
     assert (found[key]["route"], found[key]["agent"]) == ("local", "copilot-auto")
     assert found[f"m1-C{checkpoint['id']}-2"]["route"] == "backlog"
     # The fix ticket was written, queued and done by a developer
@@ -4033,9 +4051,55 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     assert (ticket.finding, ticket.agent, ticket.files) == (key, "developer", ("coucou/part1.py",))
     assert ticket.tests == ("tests/unit/test_thing.py",)  # those of the ticket at fault
     assert [t.result for t in report.tasks] == ["done"] * 3
-    [unchecked] = _state(repo).unchecked  # only the fix waits for the next checkpoint
-    assert unchecked.startswith("m1-03-fix-part-is-never-read ")
+    after = _state(repo)  # Claude's re-check covered the fix too
+    assert (after.unchecked, after.recheck, after.recheck_filed) == ([], [], [])
+    assert all(r["done"] is not None for r in _queue(repo))
     assert git(repo, "status", "--porcelain") == ""
+
+
+def test_two_stand_in_checkpoints_then_claude_free_make_one_claude_recheck_of_all_their_merges(
+    repo, fake_lead, fake_clock, monkeypatch
+):
+    """f8-08 (the owner, 2026-10-06): while Claude is out, a stand-in reviews each batch of
+    merges and one queued checkpoint gathers them; once Claude is free, it checks them all."""
+    _claude_at(repo, 0.80)
+    specs = _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
+    roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
+    agents = {**_config(repo).agents, COPILOT.id: COPILOT}
+    s = loop.open_session(replace(_config(repo), agents=agents, roles=roles))
+    head = git(repo, "rev-parse", "HEAD").strip()
+
+    def merged(*tickets: str) -> None:
+        s.state.unchecked = [f"{ticket} {head} local-m" for ticket in tickets]
+
+    merged("m1-01-a", "m1-02-b")
+    queued = loop.enqueue(s, "checkpoint", "m1", "after m1-01-a and m1-02-b merged", milestone="m1")
+    loop.run_queued(s, queued, escalate=False)
+    merged("m1-03-c", "m1-04-d")
+    again = loop.find_row(s, "checkpoint")
+    assert again is not None
+    loop.run_queued(s, again, escalate=False)
+    [row] = _queue(repo)  # one re-check, waiting for Claude's window
+    assert (row["done"], row["not_before"]) == (None, FIVE_RESETS.isoformat())
+    assert row["reason"] == (
+        "Claude re-checks m1-01-a, m1-02-b, m1-03-c and m1-04-d, after a stand-in"
+    )
+    first, second = specs
+    assert "m1-02-b" in first.prompt and "m1-03-c" not in first.prompt
+    assert "m1-03-c" in second.prompt and "m1-02-b" not in second.prompt
+    script, jobs = fake_lead
+    assert jobs == []
+    script.append(_checkpoint_writes('{"findings": []}'))
+    fake_clock[0] = FIVE_RESETS + timedelta(minutes=1)
+    free = loop.find_row(s, "checkpoint")
+    assert free is not None
+    loop.run_queued(s, free, escalate=False)
+    [job] = jobs
+    assert job.kind == "checkpoint" and len(specs) == 2  # Claude's, not the stand-in again
+    for ticket in ("m1-01-a", "m1-02-b", "m1-03-c", "m1-04-d"):
+        assert f"- {ticket}: `git show {head}`" in job.prompt
+    assert all(r["done"] is not None for r in _queue(repo))
+    assert (s.state.unchecked, s.state.recheck) == ([], [])
 
 
 def test_a_review_at_80_percent_waits_for_the_reset_with_the_switch_off(
