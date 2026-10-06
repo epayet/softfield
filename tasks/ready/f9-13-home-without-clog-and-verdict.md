@@ -1,7 +1,7 @@
 ---
 id: f9-13-home-without-clog-and-verdict
 milestone: f9-line-polish
-depends_on: []
+depends_on: [f3-32-remove-test-spacer]
 difficulty: 2
 files:
   - factory_dashboard/templates/overview.html
