@@ -19,11 +19,21 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, templates, writable
 from runner import metrics
-from runner.requests import QUEUE, RESERVE, SIGNOFF
+from runner.requests import (
+    ACCEPT_ADR,
+    APPROVE_PLAN,
+    PLAN_MESSAGE,
+    PLANT,
+    QUEUE,
+    RESERVE,
+    SEND_BACK,
+    SIGNOFF,
+)
 
 router = APIRouter()
 
-KINDS = (SIGNOFF, RESERVE, QUEUE)
+# The planning room's five (f6 D1) too; the runner checks each value, as for the first three
+KINDS = (SIGNOFF, RESERVE, QUEUE, PLAN_MESSAGE, PLANT, SEND_BACK, ACCEPT_ADR, APPROVE_PLAN)
 
 
 def from_the_dashboard(request: Request) -> bool:

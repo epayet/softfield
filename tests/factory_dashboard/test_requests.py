@@ -2,6 +2,7 @@
 for the runner, from the dashboard's own page only."""
 
 import re
+from urllib.parse import urlencode
 
 import pytest
 
@@ -62,6 +63,39 @@ def test_each_kind_keeps_its_subject_or_value(client, db_path):
         ("reserve", "week", "on"),
         ("queue", "f5-09-queue-button", None),
     ]
+
+
+PLANNING = [  # the planning room's five requests (f6 D1); the runner checks their values
+    ("plan_message", "f7", '{"text": "Draft it.", "comments": {}}'),
+    ("plant", None, '{"title": "One queue", "thoughts": "", "area": "factory"}'),
+    ("send_back", "f7/adr-23", '{"text": "Not yet.", "comments": {"1": "Why?"}}'),
+    ("accept_adr", "f7", "23"),
+    ("approve_plan", "f7", None),
+]
+
+
+def _body(kind, subject, value):
+    fields = {"kind": kind, "subject": subject, "value": value}
+    return urlencode({k: v for k, v in fields.items() if v is not None})
+
+
+@pytest.mark.parametrize(("kind", "subject", "value"), PLANNING)
+def test_each_planning_request_writes_one_row_with_its_subject_and_value(
+    client, db_path, kind, subject, value
+):
+    assert _post(client, _body(kind, subject, value), HTMX).status_code == 200
+    assert [(r["kind"], r["subject"], r["value"]) for r in _rows(db_path)] == [
+        (kind, subject, value)
+    ]
+
+
+@pytest.mark.parametrize(("kind", "subject", "value"), PLANNING)
+def test_a_planning_request_from_another_site_gets_403_and_writes_nothing(
+    client, db_path, kind, subject, value
+):
+    headers = {"HX-Request": "true", "Origin": "http://attacker.example"}
+    assert _post(client, _body(kind, subject, value), headers).status_code == 403
+    assert _rows(db_path) == []
 
 
 def test_a_referer_from_the_same_host_will_do_without_an_origin(client, db_path):

@@ -8,6 +8,7 @@ The lead's reply ends with a fenced ``json`` block (D2), checked here before it 
 
 import json
 import re
+import subprocess
 import unicodedata
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -119,6 +120,34 @@ def is_draft(path: str) -> bool:
     """Whether a planner job may change ``path`` on its plan branch (f6 D4): docs and the
     tickets in ``tasks/later/``, never ``tasks/ready/`` or code."""
     return path.startswith(DRAFT_DIRS) and ".." not in path.split("/")
+
+
+def draft(repo: Path, thread: str, path: str) -> bytes | None:
+    """A card's draft for the dashboard: the file at ``path`` on ``plan/<thread>`` while that
+    branch exists, else on main; None when there is none, or when ``thread`` isn't a thread
+    or ``path`` isn't a draft. It reads git only: planner jobs check the plan branch out."""
+    try:
+        thread = thread_key(thread)
+    except PlannerError:
+        return None
+    # Every part a name: `./` and `//` mean other things to git's `<ref>:<path>`
+    if not isinstance(path, str) or not is_draft(path):
+        return None
+    if any(part in ("", ".") or "\0" in part for part in path.split("/")):
+        return None
+    branch = plan_branch(thread)
+    ref = f"refs/heads/{branch}" if branch else _MAIN
+    if _git(repo, "rev-parse", "--verify", "-q", ref) is None:
+        ref = _MAIN
+    return _git(repo, "cat-file", "blob", f"{ref}:{path}")
+
+
+_MAIN = "refs/heads/main"  # loop.MAIN; loop imports this module
+
+
+def _git(repo: Path, *args: str) -> bytes | None:
+    proc = subprocess.run(["git", *args], cwd=repo, capture_output=True, check=False)
+    return proc.stdout if proc.returncode == 0 else None
 
 
 def proposal_of(subject: object) -> tuple[str, str]:

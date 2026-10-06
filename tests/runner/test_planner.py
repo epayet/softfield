@@ -184,6 +184,75 @@ def test_a_draft_is_in_docs_or_the_later_tickets(path, draft):
     assert planner.is_draft(path) is draft
 
 
+# --- reading a card's draft from git, for the dashboard (f6 D4) --------------------------------
+
+ADR = "docs/adr/21-room.md"
+MOCKUP = "docs/milestones/f7-mockup/index.html"
+
+
+def _write(repo: Path, rel: str, text: str) -> None:
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text(text)
+
+
+@pytest.fixture
+def drafted(repo: Path) -> Path:
+    """main holds the ADR and a stray ``x``; ``plan/f7`` revises the ADR, adds a mock-up and
+    code beside them. The working tree is back on main, with an uncommitted edit."""
+    _write(repo, ADR, "main's\n")
+    _write(repo, "x", "outside\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "adr")
+    git(repo, "checkout", "-q", "-b", "plan/f7")
+    _write(repo, ADR, "the plan's\n")
+    _write(repo, MOCKUP, "<p>mock</p>\n")
+    _write(repo, "runner/x.py", "code\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "drafts")
+    git(repo, "checkout", "-q", "main")
+    _write(repo, ADR, "the working tree's\n")
+    return repo
+
+
+def test_a_draft_is_read_from_the_plan_branch_while_it_exists(drafted):
+    assert planner.draft(drafted, "f7", ADR) == b"the plan's\n"
+    assert planner.draft(drafted, "f7", MOCKUP) == b"<p>mock</p>\n"
+    assert planner.draft(drafted, "f7-planning-room", MOCKUP) == b"<p>mock</p>\n"  # its long key
+
+
+def test_without_the_plan_branch_a_draft_is_mains(drafted):
+    git(drafted, "branch", "-q", "-D", "plan/f7")
+    assert planner.draft(drafted, "f7", ADR) == b"main's\n"  # git's, never the working tree's
+    assert planner.draft(drafted, "f7", MOCKUP) is None
+    assert planner.draft(drafted, "general", ADR) == b"main's\n"  # it has no plan branch
+
+
+def test_another_cards_plan_branch_is_not_read(drafted):
+    assert planner.draft(drafted, "f8", ADR) == b"main's\n"
+    assert planner.draft(drafted, "f8", MOCKUP) is None
+
+
+@pytest.mark.parametrize(
+    ("thread", "path"),
+    [
+        ("f7", "runner/x.py"),  # on the plan branch, but code
+        ("f7", "docs/../x"),
+        ("f7", "docs/./adr/21-room.md"),
+        ("f7", "docs//adr/21-room.md"),
+        ("f7", "docs/adr"),  # a folder, not a file
+        ("f7", "docs/adr/22-none.md"),
+        ("f7", "docs/a\0b"),
+        ("../x", ADR),
+        ("f7/../main", ADR),
+        ("plan/f7", ADR),
+        ("", ADR),
+        (None, ADR),
+    ],
+)
+def test_nothing_but_a_draft_of_a_thread_is_read(drafted, thread, path):
+    assert planner.draft(drafted, thread, path) is None
+
+
 # --- the tables (f6 D1) ------------------------------------------------------------------------
 
 
