@@ -98,6 +98,7 @@ def test_the_repos_toml_declares_f1s_agents_and_roles():
         "lead-ticket": (opus,),
         "review": (opus,),
         "narrative": (opus,),
+        "planner": (opus,),  # the planning room (ADR 20 item 1)
         "checkpoint": (sonnet, opus),
         "checkpoint-shadow": (),  # off: the bench replaces shadowing (ADR 16 item 10)
         "checkpoint-stand-in": ("copilot-auto",),  # when Claude can't (ADR 16 item 9)

@@ -25,6 +25,7 @@ from runner import (
     dispatch,
     messages,
     metrics,
+    planner,
     prompts,
     ratings,
     router,
@@ -90,6 +91,7 @@ from runner.tasks import (
     carry_footers,
     difficulty,
     find_ticket,
+    full_key,
     held_ids,
     load_dir,
     milestone_file,
@@ -688,7 +690,10 @@ def record_start(
     if s.run_id is None or s.project_id is None:
         return None
     at = now().isoformat()
-    milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
+    # The planning room's general thread is about no milestone (f6-01)
+    milestone_id = (
+        _record(s, metrics.upsert_milestone, s.project_id, milestone) if milestone else None
+    )
     ticket_id = _record(s, metrics.upsert_ticket, s.project_id, ticket) if ticket else None
     _record(s, metrics.update_run_heartbeat, s.run_id, at)
     job_id = _record(
@@ -985,7 +990,10 @@ class Parked(Exception):
 # row waits (f8 D3). A ticket's own jobs park in state.json's `parked`, keyed by its id.
 SUPPORT = ("checkpoint", "escalation")
 DIRECTION, ESCALATION, REVIEW = dispatch.DIRECTION, dispatch.ESCALATION, dispatch.REVIEW
-QUEUED = (*SUPPORT, DIRECTION)  # the support jobs a ticket's run queues
+PLANNER = dispatch.PLANNER
+# The queued jobs whose rows park: the support jobs a ticket's run queues, and the owner's
+# messages to the planner (f6-01)
+QUEUED = (*SUPPORT, DIRECTION, PLANNER)
 FIVE_HOUR_HELD = "five_hour"  # a parked entry's flag: held by the owner's 25%, not a limit
 
 
@@ -3514,15 +3522,16 @@ class Hold:
     five_hour: bool  # only the owner's share of the 5-hour window holds it: its switch lifts it
 
 
-def claude_hold(s: Session, at: datetime) -> Hold | None:
+def claude_hold(s: Session, at: datetime, *, owners: bool = False) -> Hold | None:
     """Whether a support job (a direction, a checkpoint, an escalation, a review) must wait
     for Claude (ADR 16 item 4): a job parked for a limit, a refusal still resting a window, or
     the owner's share of the 5-hour window with its switch off. The week's reserve is theirs
-    to use (ADR 15 item 4)."""
+    to use (ADR 15 item 4). The ``owners`` own work (a planner job) may use both reserves
+    (ADR 20 item 2)."""
     if ahead := _limits_ahead(s, at, five_hour=False):
         return Hold(max(min(ahead), at + timedelta(minutes=1)), "Claude is limited", False)
     windows = rested_claude_windows(s, at)
-    five_on = switch_on(s.state, FIVE_HOUR, at)
+    five_on = owners or switch_on(s.state, FIVE_HOUR, at)
     kept = {"seven_day", *(("five_hour",) if five_on else ())}
     fit = allowance.answer(CLAUDE, windows, LEAD_COST, at, use_reserve=kept)
     if fit.ok:
@@ -3549,6 +3558,73 @@ def _park_support(s: Session, role: str, name: str, hold: Hold, /, **resume: str
     s.log(console.paused(RUNNER_AGENT, f"the {what} waits for Claude", hold.until, now()))
 
 
+def run_planner(s: Session, row: dispatch.Queued) -> None:
+    """Answer one of the owner's messages (ADR 20 items 1–4, f6 D1–D3): a planner job on its
+    thread's Claude session (a new one for a new thread), its reply's points and proposals
+    recorded, and a Needs-you item until the owner answers. It may use the owner's 25% of
+    the 5-hour window; at a limit its row parks and the message waits. A message whose
+    request or project is gone is done."""
+    if s.project_id is None:
+        return
+    try:
+        thread, request_id = planner.request_of(row.subject)
+        request = _record(s, metrics.find_request, request_id)
+        text, comments = planner.message(request["value"] if request else None)
+    except planner.PlannerError as exc:
+        s.report.notes.append(f"The planner's {row.subject} can't run: {exc}.")
+        return
+    if (hold := claude_hold(s, now(), owners=True)) is not None:
+        _park_support(s, PLANNER, row.subject, hold)
+        return
+    at = now().isoformat()
+    found = _record(s, metrics.planner_thread, s.project_id, thread, at)
+    if found is None:
+        return
+    job = JobSpec(
+        role=PLANNER,
+        prompt=planner.prompt(thread, text, comments),
+        timeout=s.cfg.claude_timeout,
+        commands=GIT_READ_COMMANDS,
+        resume=found["session_id"] or None,
+        title=f"planning: {row.reason}",
+    )
+    milestone = "" if thread == planner.GENERAL else full_key(s.repo, thread)
+    try:
+        result = call_claude(s, job, milestone, row.subject, park=True)
+    except Parked:
+        return
+    if result.ok:
+        reply = planner.parse_reply(result.text)
+    else:  # its message is the owner's to send again
+        failed = f"the lead's job failed ({result.text.strip()[:200]}): send the message again"
+        reply = planner.Reply("", note=failed)
+    if reply.note is not None:
+        s.report.notes.append(f"The planner's reply on {row.subject}: {reply.note}.")
+    if result.session_id:
+        _record(s, metrics.set_thread_session, found["id"], result.session_id)
+    _record(
+        s,
+        metrics.add_planner_message,
+        found["id"],
+        "lead",
+        now().isoformat(),
+        planner.stored_text(reply),
+        points=None if reply.note else reply.points,
+        proposals=None if reply.note else reply.proposals,
+        job_id=s.last_job_id,
+    )
+    name = planner.thread_name(thread)
+    _record(
+        s,
+        metrics.upsert_owner_item,
+        s.project_id,
+        planner.PLANNING,
+        thread,
+        text=f"The lead answered your message on {name}: your answers are wanted.",
+        created=now().isoformat(),
+    )
+
+
 def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:
     """Run a queued support job (ADR 22). Its row is done when the job ends, unless it parked
     again (its row then waits for the reset); one whose subject is gone is done at once."""
@@ -3573,6 +3649,9 @@ def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:
                 with doing(s, task.id):
                     rec = run_task(s, task, directing=needs)
                 after_ticket(s, task, rec, escalate=escalate)
+        elif row.kind == PLANNER:
+            with doing(s, f"answering {row.reason}"):
+                run_planner(s, row)
     finally:
         s.running_row = before
     if not _row_waits(s, row.kind, row.subject):

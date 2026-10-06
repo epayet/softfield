@@ -221,8 +221,31 @@ CREATE TABLE work_queue (
 );
 """
 
+# f6 D1 (ADR 20 item 3): the planning room's threads, one per card plus ``general``, each
+# continuing one Claude session; and their messages, the lead's with its points and proposals.
+_V9 = """
+CREATE TABLE planner_threads (
+    id INTEGER PRIMARY KEY,
+    project_id INTEGER NOT NULL REFERENCES projects(id),
+    card TEXT NOT NULL,
+    session_id TEXT,
+    created TEXT NOT NULL,
+    UNIQUE (project_id, card)
+);
+CREATE TABLE planner_messages (
+    id INTEGER PRIMARY KEY,
+    thread_id INTEGER NOT NULL REFERENCES planner_threads(id),
+    author TEXT NOT NULL,
+    at TEXT NOT NULL,
+    text TEXT NOT NULL,
+    points TEXT,
+    proposals TEXT,
+    job_id INTEGER REFERENCES jobs(id)
+);
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -813,3 +836,71 @@ def finish_queued(conn: sqlite3.Connection, queue_id: int, done: str) -> bool:
         "UPDATE work_queue SET done = ? WHERE id = ? AND done IS NULL", (done, queue_id)
     )
     return cursor.rowcount == 1
+
+
+def find_request(conn: sqlite3.Connection, request_id: int) -> sqlite3.Row | None:
+    """A request by its id, finished or not."""
+    row: sqlite3.Row | None = conn.execute(
+        "SELECT * FROM owner_requests WHERE id = ?", (request_id,)
+    ).fetchone()
+    return row
+
+
+AUTHORS = ("owner", "lead")  # who writes in a planning thread (f6 D1)
+
+
+def planner_thread(
+    conn: sqlite3.Connection, project_id: int, card: str, created: str
+) -> sqlite3.Row:
+    """The project's thread about ``card`` (or ``general``), made at ``created`` the first time."""
+    conn.execute(
+        "INSERT INTO planner_threads (project_id, card, created) VALUES (?, ?, ?)"
+        " ON CONFLICT (project_id, card) DO NOTHING",
+        (project_id, card, created),
+    )
+    row: sqlite3.Row = conn.execute(
+        "SELECT * FROM planner_threads WHERE project_id = ? AND card = ?", (project_id, card)
+    ).fetchone()
+    return row
+
+
+def set_thread_session(conn: sqlite3.Connection, thread_id: int, session_id: str) -> None:
+    """The Claude session the thread's next planner job resumes (f6 D3)."""
+    _update(conn, "planner_threads", thread_id, {"session_id": session_id})
+
+
+def add_planner_message(
+    conn: sqlite3.Connection,
+    thread_id: int,
+    author: str,
+    at: str,
+    text: str,
+    *,
+    points: Sequence[object] | None = None,
+    proposals: Sequence[object] | None = None,
+    job_id: int | None = None,
+) -> int:
+    """A message on a thread, its ``points`` and ``proposals`` kept as JSON (f6 D1, D2)."""
+    if author not in AUTHORS:
+        raise ValueError(f"a message's author is {' or '.join(AUTHORS)}, not {author!r}")
+    row = conn.execute(
+        "INSERT INTO planner_messages (thread_id, author, at, text, points, proposals, job_id)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
+        (
+            thread_id,
+            author,
+            at,
+            text,
+            None if points is None else _sql_value(points),
+            None if proposals is None else _sql_value(proposals),
+            job_id,
+        ),
+    ).fetchone()
+    return int(row[0])
+
+
+def planner_messages(conn: sqlite3.Connection, thread_id: int) -> list[sqlite3.Row]:
+    """A thread's messages, oldest first."""
+    return conn.execute(
+        "SELECT * FROM planner_messages WHERE thread_id = ? ORDER BY id", (thread_id,)
+    ).fetchall()

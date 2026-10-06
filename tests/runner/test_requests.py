@@ -1,6 +1,7 @@
 """The owner's requests from the dashboard (ADR 18 item 2, f5 D2): applied as the console
 commands would, each finished once with its result."""
 
+import json
 import os
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -273,6 +274,93 @@ def test_a_wait_takes_only_the_switches_and_leaves_the_rest_for_the_pick(repo):
         conn.close()
     assert _request(repo, asked) == (NOW.isoformat(), line.split(": ", 1)[1])
     assert loop.switch_on(state, "five_hour", NOW)
+
+
+# --- `plan_message`: the owner's message to the lead (ADR 20 items 3 and 9, f6 D1) ------------
+
+
+def _message(text: str, **comments: str) -> str:
+    return json.dumps({"text": text, "comments": {n.lstrip("p"): c for n, c in comments.items()}})
+
+
+def _queued(repo: Path) -> list[tuple[object, object, object, object]]:
+    conn = metrics.open_db(_db(repo))
+    try:
+        rows = conn.execute("SELECT * FROM work_queue ORDER BY id").fetchall()
+        return [(r["kind"], r["subject"], r["reason"], r["done"]) for r in rows]
+    finally:
+        conn.close()
+
+
+def _thread(repo: Path, card: str) -> list[dict[str, object]]:
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.find_project(conn, repo.name)
+        assert project is not None
+        thread = metrics.planner_thread(conn, project, card, NOW.isoformat())
+        return [dict(row) for row in metrics.planner_messages(conn, thread["id"])]
+    finally:
+        conn.close()
+
+
+def test_two_messages_on_one_thread_make_two_planner_rows_each_with_its_reason(repo):
+    """ADR 22 item 1: one open row per kind and subject, so each message has its own."""
+    first = _ask(repo, "plan_message", "f7", _message("Why one queue?"))
+    second = _ask(repo, "plan_message", "f7-one-queue", _message("And the switches?"))
+    general = _ask(repo, "plan_message", "general", _message("An idea."))
+    assert _apply(repo) == [
+        "plan_message f7: queued for the lead",
+        "plan_message f7-one-queue: queued for the lead",
+        "plan_message general: queued for the lead",
+    ]
+    assert _queued(repo) == [
+        ("planner", f"f7#{first}", "your message on F7", None),
+        ("planner", f"f7#{second}", "your message on F7", None),
+        ("planner", f"general#{general}", "your message on the general thread", None),
+    ]
+    assert _request(repo, first) == (NOW.isoformat(), "queued for the lead")
+    assert [(m["author"], m["text"]) for m in _thread(repo, "f7")] == [
+        ("owner", "Why one queue?"),
+        ("owner", "And the switches?"),
+    ]
+    assert _apply(repo) == []  # finished once: no second row
+
+
+def test_a_messages_comments_are_kept_with_it_by_point(repo):
+    _ask(repo, "plan_message", "f7", _message("Agreed otherwise.", p2="Why first?"))
+    _apply(repo)
+    [message] = _thread(repo, "f7")
+    assert json.loads(str(message["points"])) == [{"n": 2, "comment": "Why first?"}]
+
+
+def test_sending_answers_on_a_thread_resolves_its_planning_item(repo):
+    """ADR 20 item 9: the lead's reply waits for the owner until they answer on that thread."""
+    _item(repo, "planning", "f7")
+    _item(repo, "planning", "f8")
+    _ask(repo, "plan_message", "f7", _message("Thanks."))
+    _apply(repo)
+    assert {(kind, subject, open_) for kind, subject, _, open_ in _items(repo)} == {
+        ("planning", "f7", False),
+        ("planning", "f8", True),
+    }
+
+
+@pytest.mark.parametrize(
+    ("subject", "value", "error"),
+    [
+        ("../x", _message("Hi."), "a thread is a card's key or general, not '../x'"),
+        (None, _message("Hi."), "a thread is a card's key or general, not None"),
+        ("f7", "Hi.", "a message is JSON with its text and comments"),
+        ("f7", _message(""), "a message has words or comments"),
+    ],
+)
+def test_a_message_the_runner_cant_read_is_finished_with_why_and_queues_nothing(
+    repo, subject, value, error
+):
+    asked = _ask(repo, "plan_message", subject, value)
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), error)
+    assert _queued(repo) == []
 
 
 # --- `runner reserve` and `runner run --use-reserve` (ADR 22 item 4, f8 D4) ------------------

@@ -60,7 +60,7 @@ ROLES = {
     "checkpoint": ("claude-sonnet",),
     **{
         role: ("claude-opus",)
-        for role in ("direction", "escalation", "lead-ticket", "review", "narrative")
+        for role in ("direction", "escalation", "lead-ticket", "review", "narrative", "planner")
     },
 }
 
@@ -3795,6 +3795,145 @@ def test_an_escalation_refused_by_a_limit_parks_and_free_tickets_go_on(
     state = _state(repo)
     assert state.parked == {} and state.escalations == {"m1-01-thing": 1}
     assert git(repo, "status", "--porcelain") == ""
+
+
+# --- the planning room: the owner's messages go first (ADR 20 items 1–3, f6-01) -------------
+
+POINTS = [{"n": 1, "title": "One queue", "answer": "Yes, visible.", "action": "A ticket"}]
+
+
+def _plan_message(repo: Path, thread: str, text: str) -> int:
+    return _ask_from_the_dashboard(
+        repo, "plan_message", thread, json.dumps({"text": text, "comments": {}})
+    )
+
+
+def _planner_replies(
+    monkeypatch,
+    replies: list[str],
+    events: list[tuple[str, str | None, datetime]],
+    limited: datetime | None = None,
+) -> None:
+    """Headless Claude: a planner job answers with the next reply, in session s1 (a limit
+    first, with ``limited``); a lead ticket writes its file."""
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        events.append((job.kind, resume, loop.now()))
+        if job.kind == "lead-ticket":
+            _lead_writes(repo_, "lead")
+            return JobResult(ok=True, text="", duration_s=1.0)
+        if limited is not None and resume is None:
+            raise UsageLimited(limited, session_id="s1")
+        return JobResult(ok=True, text=replies.pop(0), duration_s=1.0, num_turns=2, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+
+
+def _messages(repo: Path) -> list[dict[str, object]]:
+    return _rows(repo, "planner_messages")
+
+
+def test_the_owners_messages_go_before_a_lead_ticket_and_continue_one_session(
+    repo, fake_model, monkeypatch
+):
+    """f6-01's Done when: two queued messages and a ready lead ticket; the second message's
+    job resumes the first's session, and each reply is stored for the dashboard."""
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    _plan_message(repo, "f7", "Why one queue?")
+    _plan_message(repo, "f7", "And the switches?")
+    events: list[tuple[str, str | None, datetime]] = []
+    good = f'My answer.\n\n```json\n{{"points": {json.dumps(POINTS)}}}\n```'
+    _planner_replies(monkeypatch, [good, "Sorry, no block."], events)
+    report = _run(repo)
+    assert [(kind, resume) for kind, resume, _ in events] == [
+        ("planner", None),  # a new thread starts a session
+        ("planner", "s1"),  # the next message on it resumes that session
+        ("lead-ticket", None),
+    ]
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
+    [thread] = _rows(repo, "planner_threads")
+    assert (thread["card"], thread["session_id"]) == ("f7", "s1")
+    owner_1, owner_2, reply, broken = _messages(repo)
+    assert [m["author"] for m in (owner_1, owner_2, reply, broken)] == [
+        "owner",
+        "owner",
+        "lead",
+        "lead",
+    ]
+    assert reply["text"] == "My answer." and json.loads(str(reply["points"])) == POINTS
+    assert json.loads(str(reply["proposals"])) == []
+    assert broken["points"] is None and broken["proposals"] is None
+    assert str(broken["text"]).startswith("Sorry, no block.\n\n")
+    assert "no json block" in str(broken["text"])
+    planner_jobs = [j for j in _rows(repo, "jobs") if j["role"] == "planner"]
+    assert [reply["job_id"], broken["job_id"]] == [j["id"] for j in planner_jobs]
+    rows = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
+    assert [r["reason"] for r in rows] == ["your message on F7"] * 2
+    assert all(r["done"] is not None for r in rows)
+    assert [r["started_job"] for r in rows] == [j["id"] for j in planner_jobs]
+    # Each reply waits for the owner's answers (ADR 20 item 9)
+    [item] = [i for i in _rows(repo, "owner_items") if i["kind"] == "planning"]
+    assert (item["subject"], item["resolved"]) == ("f7", None)
+    assert "F7" in str(item["text"])
+
+
+def test_at_80_percent_a_planner_job_still_runs_and_a_lead_ticket_parks(
+    repo, fake_model, fake_clock, at_the_keyboard, monkeypatch
+):
+    """ADR 20 item 2: planning may use the owner's 25% of the 5-hour window; the factory
+    still stops at 75%."""
+    _claude_at(repo, 0.80)
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    _plan_message(repo, "general", "An idea for the line.")
+    events: list[tuple[str, str | None, datetime]] = []
+    _planner_replies(monkeypatch, ['Noted.\n```json\n{"points": []}\n```'], events)
+    report = _run(repo)
+    [(planner_kind, _, planned_at), (lead_kind, _, led_at)] = events
+    assert (planner_kind, lead_kind) == ("planner", "lead-ticket")
+    assert planned_at == THURSDAY  # at once, at 80%
+    assert led_at > FIVE_RESETS  # the lead ticket parked until the reset
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
+    [thread] = _rows(repo, "planner_threads")
+    assert thread["card"] == "general"
+    [planner_job] = [j for j in _rows(repo, "jobs") if j["role"] == "planner"]
+    assert planner_job["milestone_id"] is None  # the general thread is no milestone
+
+
+def test_a_planner_job_at_a_hard_limit_parks_its_row_and_the_message_waits(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    resets = THURSDAY + timedelta(hours=1)
+    _plan_message(repo, "f7", "Why one queue?")
+    events: list[tuple[str, str | None, datetime]] = []
+    _planner_replies(monkeypatch, ['Here.\n```json\n{"points": []}\n```'], events, limited=resets)
+    _run(repo)
+    assert [(kind, resume, at > resets) for kind, resume, at in events] == [
+        ("planner", None, False),
+        ("planner", "s1", True),  # after the reset, in the session the limit stopped
+    ]
+    [first, second] = [j for j in _rows(repo, "jobs") if j["role"] == "planner"]
+    assert (first["outcome"], first["note"]) == ("failed", "parked")
+    [row] = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
+    assert row["done"] is not None and row["started_job"] == second["id"]
+    assert [m["author"] for m in _messages(repo)] == ["owner", "lead"]  # one reply
+    assert _state(repo).queued == {} and _state(repo).interrupted == {}
+
+
+def test_a_failed_planner_job_says_so_on_the_thread(repo, fake_model, monkeypatch):
+    _plan_message(repo, "f7", "Why one queue?")
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        return JobResult(ok=False, text="timed out", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    _run(repo)
+    _, reply = _messages(repo)
+    assert reply["author"] == "lead" and reply["points"] is None
+    assert reply["text"] == "(the lead's job failed (timed out): send the message again.)"
+    [thread] = _rows(repo, "planner_threads")
+    assert thread["session_id"] is None  # nothing to resume
 
 
 # --- support jobs are queued before they run (ADR 22 item 1, f8-03) --------------------------

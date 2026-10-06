@@ -11,7 +11,7 @@ import sqlite3
 from datetime import datetime
 from pathlib import Path
 
-from runner import loop, metrics, owner
+from runner import loop, metrics, owner, planner
 from runner.gitops import Git
 from runner.state import State
 from runner.tasks import TaskError, milestone_arg
@@ -19,7 +19,9 @@ from runner.tasks import TaskError, milestone_arg
 SIGNOFF = "signoff"  # subject: the milestone key
 RESERVE = "reserve"  # subject: week or five_hour; value: on or off (f8 D4)
 QUEUE = "queue"  # subject: the ticket id
+PLAN_MESSAGE = planner.PLAN_MESSAGE  # subject: the thread; value: {text, comments} (f6 D1)
 _SWITCHED = ("on", "off")
+QUEUED_FOR_THE_LEAD = "queued for the lead"
 
 
 def _what(row: sqlite3.Row) -> str:
@@ -50,6 +52,27 @@ def _switch(
         if lapsed or waiting:
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
     return f"Claude's reserve: {loop.set_switch(state, name, on, now)}"
+
+
+def _plan_message(
+    conn: sqlite3.Connection, project_id: int, now: datetime, row: sqlite3.Row
+) -> str:
+    """The owner's message on a thread (ADR 20 items 3 and 9): kept on the thread with its
+    comments by point, and queued as its own ``planner`` row (ADR 22 item 1); the thread's
+    reply that waited for these answers is answered."""
+    thread = planner.thread_key(row["subject"])
+    text, comments = planner.message(row["value"])
+    at = now.isoformat()
+    thread_id = metrics.planner_thread(conn, project_id, thread, at)["id"]
+    said = [{"n": n, "comment": comment} for n, comment in comments.items()]
+    metrics.add_planner_message(conn, thread_id, "owner", at, text, points=said or None)
+    subject = planner.row_subject(thread, row["id"])
+    reason = f"your message on {planner.thread_name(thread)}"
+    metrics.queue_job(conn, project_id, planner.PLANNER, subject, reason, at)
+    for item in metrics.open_owner_items(conn, project_id):
+        if item["kind"] == planner.PLANNING and item["subject"] == thread:
+            metrics.resolve_owner_item(conn, item["id"], at)
+    return QUEUED_FOR_THE_LEAD
 
 
 def _waits(repo: Path, kind: str) -> str | None:
@@ -88,7 +111,9 @@ def _apply(
             return f"queued {loop.move_to_ready(repo, str(subject))}"
         if kind == RESERVE:
             return _switch(conn, project_id, state, now, subject, value)
-    except (owner.OwnerError, loop.RunnerError, TaskError) as exc:
+        if kind == PLAN_MESSAGE:
+            return _plan_message(conn, project_id, now, row)
+    except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:
         return f"{type(exc).__name__}: {exc}"
