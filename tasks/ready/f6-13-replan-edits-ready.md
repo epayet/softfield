@@ -1,7 +1,7 @@
 ---
 id: f6-13-replan-edits-ready
 milestone: f6-planning-room
-depends_on: [f6-12-merge-duplicates, f5-18-pause]
+depends_on: [f6-12-merge-duplicates, f5-18-pause, f6-14-talk-while-paused]
 agent: lead
 difficulty: 6
 files:
@@ -20,7 +20,7 @@ The owner can redirect a milestone that is running, from the planning room. A `r
 Read F6's D2 and its "Later" note in `docs/milestones/f6-planning-room.md` (a `replan` can't edit ready tickets yet), `is_draft` and `parse_reply` in `runner/planner.py`, the `approve_plan` handling in `runner/requests.py`, the planner prompts in `runner/prompts.py`, and the pause f5-18 built (its request kinds and the `State` field it added).
 - The owner (2026-10-06): "my goal is to steer and plan the work from the planning UI, so I need less of this stop-the-factory-and-chat-in-the-terminal".
 - **On the branch:** a `replan` proposal's plan branch may also carry edits to its own milestone's `tasks/ready/` tickets: changed, added, or moved to `tasks/later/`. Never another milestone's, never a running ticket (the one in the runner's state file's `in_flight`), never `tasks/done/`. `is_draft` grows a check that takes the card.
-- **While talking:** the owner can pause the line (f5-18) so nothing starts from a ticket being changed. The planner's reply says when it advises a pause.
+- **While talking:** the owner can pause the line (f5-18) so nothing starts from a ticket being changed; planner jobs and approvals still run while paused (f6-14, ADR 22 item 5's ⚑). The planner's reply says when it advises a pause.
 - **On approval:** pre-flight runs on every changed ticket first. Any problem refuses the approval, naming it, and nothing is applied. Then the branch merges as for a plan, and a pause the owner set is lifted.
 - Update D2 ("As built") and the "Later" note.
 

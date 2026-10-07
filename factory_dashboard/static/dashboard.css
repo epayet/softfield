@@ -90,6 +90,8 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
 .filters label { font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 select, input[type=search], button { font: inherit; font-size: 13px; padding: 3px 6px; text-transform: none;
   letter-spacing: 0; border: 1px solid var(--rule); border-radius: 0; background: var(--plate); color: var(--ink); }
+button, summary, select { cursor: pointer; }
+button:disabled { cursor: default; }
 nav.tabs { display: flex; flex-wrap: wrap; justify-self: start; border-top: 1px solid var(--rule);
   border-left: 1px solid var(--rule); }
 nav.tabs a { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);

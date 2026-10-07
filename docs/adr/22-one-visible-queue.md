@@ -66,6 +66,7 @@ The order between them is spread across `work_queue`, `_resume_support`, `lead_w
    - The runner no longer asks y/N in the console. The Needs-you item for the week's reserve says which switch would let the ticket run.
    - f5-10 (the Yes/No buttons) is rewritten as the switches.
 5. **Pause is a state of the picker** (f5-18, as written): while paused, the pick returns nothing and says "paused by you". A running job is never stopped.
+   - ⚑ **Except planning** (owner, 2026-10-07, after acceptance; f6-14): while paused, the owner's requests (plants, messages, send-backs, approvals) are still applied and planner jobs still run, so the owner can pause, talk the change through with the lead on `/planning` and approve it while the line holds. Nothing else starts.
 6. **Nothing else changes:** caps, attempts, directions and escalations per task, `checkpoint_every`, review rounds, routing and the Claude rules stay as they are. This ADR changes *where* the decisions are made and *what you can see*, not what runs.
 
 ## Consequences
@@ -82,6 +83,8 @@ The order between them is spread across `work_queue`, `_resume_support`, `lead_w
 ## Settled with the owner (2026-10-04)
 - **Two switches,** one per window: you may want one on and the other off.
 - **A due review keeps today's place:** it runs as soon as its milestone is done, before other milestones' tickets.
+
+- **⚑ Planning runs during a pause** (owner, 2026-10-07, after acceptance; item 5): the first pause from the dashboard held the owner's own message to the lead until Resume, which defeats pausing to replan.
 
 - **⚑ A switch turned on lasts 24 hours** (owner, 2026-10-04, after acceptance): then it turns itself off, and the runner asks again (a Needs-you item and a notification: "Claude's reserve: turn it on again for 24 h?"). `uv run runner run --use-reserve` starts the command with both switches on for 24 hours (`--use-reserve week` or `five-hour` for one). The dashboard shows "on until <day> HH:MM" beside a switch that's on.
 

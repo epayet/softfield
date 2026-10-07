@@ -64,11 +64,21 @@
 | 09 | needs-you-desk | D | 3 | 06 | Needs you and "Planning · N" from the desk |
 | 10 | planning-phone | D | 4 | 07, 08 | One point at a time, the Send button pinned at the bottom |
 | 12 | merge-duplicates | L | 6 | 08 | The planner spots duplicate cards and threads and proposes a `merge`; approval closes one and keeps talking in the other (owner, 2026-10-06) |
-| 13 | replan-edits-ready | L | 6 | 12, f5-18 | A `replan` changes its milestone's ready tickets, applied on approval while paused: the "Later" item, brought forward (owner, 2026-10-06) |
+| 13 | replan-edits-ready | L | 6 | 12, f5-18, 14 | A `replan` changes its milestone's ready tickets, applied on approval while paused: the "Later" item, brought forward (owner, 2026-10-06) |
+| 14 | talk-while-paused | L | 4 | f5-18 | While paused, the owner's requests apply and planner jobs run; nothing else starts (ADR 22 item 5 ⚑, owner 2026-10-07) |
+| 15 | queue-message | D | 3 | – | Next in line: a planning row shows the message's start (whole on hover) and links to its thread; pending plants are rows |
+| 16 | top-bar-status | L | 4 | 14 | Every page's top bar: running, idle, pausing, paused or waiting, a big Pause/Resume, the Planning count, "Turn on notifications" |
+| 17 | drop-seed | L | 4 | 14 | `drop_seed`: Remove seed on an idea's page; cards and tickets whose file is gone leave the dashboard |
+| 18 | priority-buttons | L | 5 | 17 | `priority`: ↑/↓ on Next in line's tickets and on Milestones, applied as a commit |
+| 19 | replan | L | 3 | 13, 16, 18 | Check D1–D6 against 13–21; walk the steering loop end to end |
+| 20 | desk-coming | D | 3 | – | The desk's "Coming" group, dashed orange: pending plants, threads waiting for the lead |
+| 21 | sent-message | D | 3 | – | A sent message shows at once as the owner's, "Sent", and the Send box goes |
 
 **Priority 1 (owner, 2026-10-06):** steering and planning from this room comes first, so the owner stops the factory less often to plan in a terminal. f5-12 (notifications, for 09) and f5-18 (pause, for 13) carry `priority: 1` too.
 
-Later: parallel planner jobs beside developers (with parallel developers); a live, streaming reply; a preview of the work ahead; a `replan` that edits ready tickets under f5-18's pause (suggested: a lead ticket once f5-18 is done, letting a `replan`'s branch carry edits to its milestone's `tasks/ready/` tickets that `approve_plan` applies while paused).
+**The owner's notes of 2026-10-07** (after the first pause from the dashboard) are 14–21: steering from the room still needed a terminal session, because a pause held the planner too, and nothing the owner asked for showed until the runner's next pick. Routing: developer tickets where the change is small, unprotected and follows an example in the code; the lead's where it wires something new (owner, 2026-10-07).
+
+Later: cancel or edit a message the lead hasn't picked up yet (owner, 2026-10-07); parallel planner jobs beside developers (with parallel developers); a live, streaming reply; a preview of the work ahead; a `replan` that edits ready tickets under f5-18's pause (suggested: a lead ticket once f5-18 is done, letting a `replan`'s branch carry edits to its milestone's `tasks/ready/` tickets that `approve_plan` applies while paused).
 
 ## Replan
 **f6-05 (2026-10-06)**, against f6-01 to f6-04 as merged (`3962439`, `0518a23`, `00a90a8`, `50a77af`):

@@ -30,7 +30,7 @@
 | 08–09 | (stand-in fixes) | D | – | – | Copilot's code findings on f3-30 and f3-29; its test-only findings wait in `tasks/later/`: f8-09 made 06, 07, 10 and 11 `tests_only` developer tickets (11 holds 12's finding too, so 12 goes) |
 | 13 | home-without-clog-and-verdict | D | 2 | – | the Overview drops the clog and Last verdict panels (owner, 2026-10-06) |
 | 14 | away-span-in-place | D | 4 | – | choosing a stretch redraws While you were away without a reload |
-| 15 | away-who-did-it | D | 3 | – | each ticket while away: who did it, and in how many attempts |
+| 15 | away-who-did-it | D | 4 | – | each ticket while away: who did it, in how many attempts, lead ticket or finished; the blocked ones named (owner, 2026-10-07) |
 | 16 | no-ollama-allowance | D | 2 | – | the allowance panel drops the Ollama row (no data, ever) |
 | 17 | phone-allowance-bars | D | 3 | – | rewritten (owner, 2026-10-06): phone allowances back to bars, green to red; the dials and their colour fix go |
 | 21 | milestones-in-order | D | 3 | – | Milestones: in progress, then not started by priority, then done, latest first |
@@ -40,5 +40,7 @@
 | 25 | seeds-and-planting | D | 4 | 24 | Planting counts cards in talks (it was a hard-coded 0); the seeds open the sheet listing set-aside tickets |
 | 26 | replay-under-floor | D | 2 | 13 | the replay bar right after the floor |
 | 27 | phone-rows-compact | L | 4 | 25 | the phone's planted rows: 3 compact rows and "Show all N" |
+| 28 | allowance-live | D | 3 | 16 | the allowance panel refreshes live, its legend at the bottom; the lead window shows the week too (owner, 2026-10-07) |
+| 29 | week-pace | L | 3 | 28 | Claude's week meter shows today's pace line and says "on pace" or "over pace: lead tickets wait" (owner, 2026-10-07) |
 
 **The owner's notes of 2026-10-06** (from using the line on the phone) are 17 and 21–27. Crates moving along the belts went to [F10](f10-crates.md).
