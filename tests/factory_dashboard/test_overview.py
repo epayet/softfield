@@ -1395,3 +1395,134 @@ def test_an_empty_desk_has_no_entry_and_a_plain_tab(serve_between, db_path):
     for html in (client.get("/").text, client.get("/live").text):
         assert 'id="desk-entry"' not in html
         assert planning_tab(html) == "Planning"
+
+
+def test_planning_row_shows_first_60_chars_and_title(client, db_path):
+    """A planner row for a 100-character message: first 60 chars + …, title holds all 100,
+    link is /planning/F11."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        # Insert an owner_requests row with a 100-char message
+        long_text = "a" * 100
+        conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, subject, value, created)"
+            " VALUES (?, 'plan_message', ?, ?, ?)",
+            (project, "f11#1", json.dumps({"text": long_text, "comments": {}}), NOW.isoformat()),
+        )
+        conn.commit()
+        # Queue a planner job referencing that request
+        metrics.queue_job(conn, project, "planner", "f11#1", "A message", NOW.isoformat())
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    # The row should contain Planning:
+    assert "Planning:" in next_section
+    # Find the planning row in raw HTML (href/title can't be found in stripped text)
+    planning_row = html.split("Planning:")[1].split("</div>")[0]
+    assert 'href="/planning/F11"' in planning_row
+    # Title attribute is on the <div>, find it from the full row
+    title_match = re.search(r'<div[^>]*title="([^"]*)"[^>]*>.*?Planning:', html)
+    assert title_match
+    assert title_match.group(1) == long_text
+    # Visible text: first 60 chars + …
+    row_text = " ".join(unescape(re.sub(r"<[^>]+>", " ", planning_row)).split())
+    expected_preview = "a" * 60 + "…"
+    assert expected_preview in row_text
+
+
+def test_planning_row_with_empty_text_shows_first_comment(client, db_path):
+    """A planner row with no text shows its first comment."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        # Insert an owner_requests row with empty text but a comment
+        conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, subject, value, created)"
+            " VALUES (?, 'plan_message', ?, ?, ?)",
+            (
+                project,
+                "f11#1",
+                json.dumps({"text": "", "comments": {"2": "First comment."}}),
+                NOW.isoformat(),
+            ),
+        )
+        conn.commit()
+        metrics.queue_job(conn, project, "planner", "f11#1", "A message", NOW.isoformat())
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    assert "First comment." in next_section
+
+
+def test_open_plant_shows_plant_row(client, db_path):
+    """An open plant request shows a Plant: <title> row."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, value, created)"
+            " VALUES (?, 'plant', ?, ?)",
+            (
+                project,
+                json.dumps({"title": "A new plant", "thoughts": "Thoughts here."}),
+                NOW.isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    assert "Plant:" in next_section
+    assert "A new plant" in next_section
+    assert "at the runner's next pick" in next_section
+
+
+def test_done_plant_shows_no_row(client, db_path):
+    """A done plant request shows no row."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, value, created, done)"
+            " VALUES (?, 'plant', ?, ?, ?)",
+            (
+                project,
+                json.dumps({"title": "Done plant", "thoughts": "Done thoughts."}),
+                NOW.isoformat(),
+                NOW.isoformat(),
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    assert "Done plant" not in next_section

@@ -277,6 +277,8 @@ class QueuedJob:
     subject: str
     reason: str
     waits: str | None = None
+    message: str | None = None  # truncated message preview for Planning rows
+    title: str | None = None  # plant title for Plant rows
 
 
 def queued_jobs(
@@ -285,7 +287,8 @@ def queued_jobs(
     now: datetime,
 ) -> list[QueuedJob]:
     """The project's open ``work_queue`` rows, minus those whose ``started_job`` is still
-    running, each with the order and wait from ``dispatch.plan``."""
+    running, each with the order and wait from ``dispatch.plan``. Also includes open plant
+    requests from ``owner_requests``."""
     from runner import dispatch
 
     project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()["id"]
@@ -317,7 +320,40 @@ def queued_jobs(
             dispatch.PLANNER: "Planning",
         }
         plain = kind_map.get(pick.kind, pick.kind)
-        found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits))
+        # For Planning rows, look up the message from owner_requests.
+        message: str | None = None
+        if plain == "Planning" and pick.subject and "#" in pick.subject:
+            request_id_str = pick.subject.rpartition("#")[2]
+            if request_id_str.isdigit():
+                req = conn.execute(
+                    "SELECT value FROM owner_requests WHERE id = ?",
+                    (int(request_id_str),),
+                ).fetchone()
+                if req and req["value"]:
+                    data = (
+                        json.loads(req["value"]) if isinstance(req["value"], str) else req["value"]
+                    )
+                    if isinstance(data, dict):
+                        text = data.get("text", "")
+                        if not text:
+                            comments = data.get("comments", {})
+                            if comments:
+                                text = next(iter(comments.values()), "")
+                        if text:
+                            message = text
+        found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits, message))
+    # Open plant requests from owner_requests.
+    plant_rows = conn.execute(
+        "SELECT owner_requests.id, value FROM owner_requests"
+        " JOIN projects p ON p.id = owner_requests.project_id"
+        " WHERE p.name = ? AND kind = 'plant' AND done IS NULL"
+        " ORDER BY owner_requests.id",
+        (project,),
+    ).fetchall()
+    for pr in plant_rows:
+        data = json.loads(pr["value"]) if isinstance(pr["value"], str) else pr["value"]
+        title = data.get("title", "") if isinstance(data, dict) else ""
+        found.append(QueuedJob("Plant", title, "at the runner's next pick", title=title))
     return found
 
 

@@ -8,7 +8,17 @@
   <div class="next-in-line">
     <h3>Next in line</h3>
     {% for j in queued_jobs %}
+    {% if j.kind == "Planning" and j.message %}
+    {% set parts = j.subject.split('#') %}
+    {% set thread = parts[0] if parts else '' %}
+    {% set preview = j.message[:60] %}
+    {% set truncated = j.message | length > 60 %}
+    <div class="next-row" title="{{ j.message }}"><b class="mono">{{ j.kind }}: <a href="/planning/{{ thread | upper }}">{{ thread | upper }}</a></b> · {% if truncated %}"{{ preview }}…"{% else %}"{{ preview }}"{% endif %}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
+    {% elif j.kind == "Plant" %}
+    <div class="next-row"><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}</div>
+    {% else %}
     <div class="next-row"><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
+    {% endif %}
     {% endfor %}
     {% for t in next %}
     {% if t.ticket %}
