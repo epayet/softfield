@@ -32,3 +32,10 @@ Read "Frontmatter" and "Milestone keys" in `docs/task-format.md` (a ticket's `pr
 - Next in line's ticket rows and the Milestones page's rows show each priority with ↑ and ↓ buttons posting the request
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
