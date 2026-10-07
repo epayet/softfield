@@ -232,9 +232,11 @@ def test_the_top_bar_has_a_planning_tab(client):
     assert re.search(
         r'<a href="/planning\?project=coucou" id="planning-tab">Planning · 1</a>', html
     )
+    # the Planning page keeps its count too (the owner, 2026-10-07, f6-16)
     planning = client.get("/planning").text
     assert re.search(
-        r'<a href="/planning\?project=coucou" aria-current="page" id="planning-tab">Planning</a>',
+        r'<a href="/planning\?project=coucou" aria-current="page" id="planning-tab">'
+        r"Planning · 1</a>",
         planning,
     )
 

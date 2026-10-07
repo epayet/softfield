@@ -20,12 +20,23 @@
     const tab = document.querySelector("nav.tabs a[aria-current='page']");
     if (tab) tab.scrollIntoView({ inline: "center", block: "nearest" });
   });
+  // The top bar's Pause or Resume (f6-16) shows what was asked at once, on its way, and goes
+  // until the next poll brings the runner's own state: the request waits for its next pick.
+  document.addEventListener("htmx:beforeRequest", (event) => {
+    const button = event.detail && event.detail.elt;
+    if (!(button instanceof Element) || !button.matches("#factory-status button[data-asked]")) return;
+    const words = button.parentElement.querySelector("[role=status]");
+    words.textContent = button.dataset.asked;
+    words.className = "pill big warn asked";
+    setTimeout(() => button.remove());
+  });
 </script>
 </head>
 <body>
 <header class="bar">
   <div class="bar-top">
     <span class="brand">software-factory <small>{{ request.url.netloc }}</small></span>
+    {% include "_partials/bar_status.html" %}
     <form class="filters" method="get">
       <label>Project
         <select name="project" onchange="this.form.submit()">
@@ -35,7 +46,7 @@
         </select>
       </label>
       <noscript><button>Show</button></noscript>
-      <button type="button" id="notify-me" hidden>Notify me</button>
+      <button type="button" id="notify-me" hidden title="A browser notification when something needs you or all the work is done">Turn on notifications</button>
     </form>
   </div>
   <div class="hazard" aria-hidden="true"></div>
@@ -46,8 +57,8 @@
     {% endfor %}
   </nav>
 </header>
-{# notify.js's facts, on every page, polled only once the owner allowed notifications (f5-12) #}
-<div id="notify-live" hidden hx-get="/live{{ q }}" hx-trigger="every 5s [window.notifyOn()]" hx-select="#live-facts" hx-swap="innerHTML"></div>
+{# Every page's poll (f6-16): the /live partial's out-of-band top bar (the status, its button, the Planning count), and notify.js's facts, compared only once the owner allowed notifications (f5-12) #}
+<div id="live-poll" hidden hx-get="/live{{ q }}" hx-trigger="every 5s" hx-select="#live-facts" hx-swap="innerHTML"></div>
 <main>
   {{ version_poll | safe }}
   <nav class="crumbs" aria-label="Breadcrumbs">

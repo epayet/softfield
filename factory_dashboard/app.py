@@ -14,6 +14,7 @@ import hashlib
 import os
 import sqlite3
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
@@ -182,6 +183,75 @@ Project = Annotated[str, Depends(get_project)]
 Now = Annotated[datetime, Depends(get_now)]
 
 
+@dataclass(frozen=True)
+class Status:
+    """What the factory does, in the top bar (f6-16): its words, always shown; its pill's
+    classes in dashboard.css; and the request its button posts (``pause``, ``resume``, none)."""
+
+    words: str
+    tone: str
+    button: str | None
+
+
+PICKING = "picking the next ticket"  # runner/loop.py's PICKING: between jobs
+
+
+def _clock(at: str) -> str:
+    return datetime.fromisoformat(at).strftime("%H:%M")
+
+
+def _asked(conn: sqlite3.Connection, project: str) -> str | None:
+    """The owner's latest pause or resume the runner hasn't taken yet, if any."""
+    row = conn.execute(
+        "SELECT r.kind FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+        " WHERE p.name = ? AND r.done IS NULL AND r.kind IN ('pause', 'resume')"
+        " ORDER BY r.id DESC LIMIT 1",
+        (project,),
+    ).fetchone()
+    return None if row is None else str(row["kind"])
+
+
+def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Status:
+    """Stopped with no live run; else the owner's pause (held, asked, or a resume asked), a
+    wait for Claude, the job running, what the run does between jobs, or idle with no work."""
+    from factory_dashboard import overview, queries  # overview imports this module
+
+    runs = overview.live_runs(conn, project, now)
+    if not runs:
+        return Status("Stopped", "", None)
+    paused, asked = queries.paused_since(conn), _asked(conn, project)
+    if paused and asked == "resume":
+        return Status("Resuming…", "asked", None)
+    if paused:
+        return Status(f"Paused by you since {_clock(paused)}", "warn", "resume")
+    if asked == "pause":
+        return Status("Pausing after this job", "warn asked", "resume")
+    waiting = next((r.waiting_until for r in runs if r.waiting_until), None)
+    if waiting:
+        return Status(f"Waiting for Claude until {_clock(waiting)}", "serious", "pause")
+    jobs = overview.running_jobs(conn, project, now)
+    job = next((j for j in jobs if j.live), None)
+    if job:
+        return Status(f"Running: {job.ticket or f'{job.role}, job {job.job}'}", "good", "pause")
+    activity = next((r.activity for r in runs if r.activity), None) or PICKING
+    if activity == PICKING and not (
+        jobs or overview.queue(conn, project, now) or overview.queued_jobs(conn, project, now)
+    ):
+        return Status("Idle: nothing to do", "", "pause")
+    return Status(f"Running: {activity}", "good", "pause")
+
+
+def top_bar(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Any]:
+    """The top bar's live facts on every page (f6-16): the factory's status and the Planning
+    tab's count. ``render`` adds them to each page's first paint; ``/live`` refreshes them."""
+    from factory_dashboard.planning import desk  # planning imports this module
+
+    return {
+        "bar_status": factory_status(conn, project, now),
+        "planning_count": sum(len(group.items) for group in desk(conn, project, now)),
+    }
+
+
 def render(
     request: Request,
     conn: sqlite3.Connection,
@@ -189,8 +259,11 @@ def render(
     template: str,
     context: dict[str, Any],
 ) -> HTMLResponse:
-    """A page: ``template`` with the top bar's projects, and ``q`` to keep ``?project=``."""
+    """A page: ``template`` with the top bar's projects and live facts, and ``q`` to keep
+    ``?project=``."""
     names = [row["name"] for row in conn.execute("SELECT name FROM projects ORDER BY name")]
+    # the clock a test pinned, as the routes' ``Now`` reads it
+    now = request.app.dependency_overrides.get(get_now, get_now)()
     return templates.TemplateResponse(
         request,
         template,
@@ -199,6 +272,7 @@ def render(
             "projects": names if project in names else [*names, project],
             "q": "?" + urlencode({"project": project}),
             "version_poll": VERSION_POLL.format(version=code_version()),
+            **top_bar(conn, project, now),
             **context,
         },
     )

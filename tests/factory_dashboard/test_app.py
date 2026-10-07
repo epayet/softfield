@@ -5,6 +5,7 @@ import sqlite3
 from datetime import timedelta
 from html import unescape
 from pathlib import Path
+from urllib.parse import parse_qs
 
 import pytest
 import uvicorn
@@ -17,7 +18,7 @@ from factory_dashboard.queries import connect
 from runner import cli, metrics
 from tests.browser.conftest import DISPLAY, PHONE, layout_problems
 from tests.factory_dashboard.conftest import NOW, OTHER, PROJECT, write_allowance
-from tests.factory_dashboard.test_overview import REFRESH, open_overview
+from tests.factory_dashboard.test_overview import REFRESH, lead_replies, open_overview
 
 STATIC = Path(app_module.__file__).parent / "static"
 VENDOR = STATIC / "vendor"
@@ -210,14 +211,19 @@ def test_the_top_bar_has_the_mockups_title_hazard_stripe_and_tab_segment(client)
 
 @pytest.mark.parametrize("scheme", ["dark", "light"])
 def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme):
-    """f3-30: under 640 px the bar is two short lines, tabs scroll sideways, current tab visible."""
+    """f3-30: under 640 px the bar is short lines, tabs scroll sideways, current tab visible. The
+    title and the project share a line; the factory's status and its button take one (f6-16),
+    and "Turn on notifications" one more while it shows."""
     page.emulate_media(color_scheme=scheme)
     page.set_viewport_size(PHONE)
     open_overview(page, client)
     page.evaluate("() => document.fonts.ready")
     header = page.locator("header.bar")
     height = header.evaluate("el => el.getBoundingClientRect().height")
-    assert height <= 110, f"header {height}px > 110px"
+    assert height <= 140, f"header {height}px > 140px"
+    title, project = page.locator(".brand"), page.locator(".filters select")
+    assert title.bounding_box()["y"] == pytest.approx(project.bounding_box()["y"], abs=8)
+    assert title.bounding_box()["height"] < 30, "the title wraps"
     tabs = page.locator("nav.tabs")
     assert tabs.evaluate("el => el.scrollWidth > el.clientWidth"), "tabs not scrollable"
     # Each tab keeps its word's width: shrunk, they overlapped (the owner, 2026-10-06)
@@ -478,17 +484,21 @@ def test_a_ready_ticket_is_work_left(serve_between, db_path):
     assert _facts(client.get("/live").text) == ({}, "false")
 
 
-def test_every_page_has_the_notify_button_and_polls_only_once_allowed(client):
+def test_every_page_has_the_notify_button_and_polls_live_whether_or_not_allowed(client):
     for path in PAGES:
         html = client.get(path).text
         assert '<script src="/static/notify.js" defer></script>' in html, path
-        bar = re.search(r'<div class="bar-top">(.*?)</div>', html, re.S)
+        bar = re.search(r'<header class="bar">(.*?)</header>', html, re.S)
         assert bar, path
-        assert '<button type="button" id="notify-me" hidden>Notify me</button>' in bar[1], path
-        poll = re.search(r'<div id="notify-live"[^>]*>', html)
+        button = re.search(r'<button type="button" id="notify-me"[^>]*>([^<]*)</button>', bar[1])
+        assert button, path
+        assert button[1] == "Turn on notifications" and " hidden" in button[0], path
+        # the top bar's status and Planning count refresh on every page (f6-16), so the poll no
+        # longer waits for notifications; notify.js compares the facts only once they're on
+        poll = re.search(r'<div id="live-poll"[^>]*>', html)
         assert poll, path
         assert 'hx-get="/live?project=coucou"' in poll[0] and "hidden" in poll[0]
-        assert 'hx-trigger="every 5s [window.notifyOn()]"' in poll[0]
+        assert 'hx-trigger="every 5s"' in poll[0]
         assert 'hx-select="#live-facts"' in poll[0]
     assert client.get("/static/notify.js").status_code == 200
 
@@ -514,13 +524,15 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
     open_overview(page, serve_between(activity="check-all on main"))
     button = page.locator("#notify-me")
     button.wait_for(state="visible")
-    page.wait_for_timeout(6_000)  # a poll's worth: nothing asked, nothing fetched for it
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    page.wait_for_timeout(6_000)  # another poll: nothing asked, nothing shown before it's on
     assert page.evaluate("window.asked") == 0
-    assert page.locator("#live-facts").count() == 0
+    assert page.evaluate("window.shown") == []
+    assert page.evaluate("localStorage.getItem('notify:coucou')") is None  # nothing compared
     button.click()
     button.wait_for(state="hidden")
     assert page.evaluate("window.asked") == 1
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
     assert page.evaluate("window.shown") == []  # what was there before isn't news
 
     conn = metrics.open_db(db_path)
@@ -555,3 +567,197 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
     page.wait_for_timeout(6_000)
     shown = page.evaluate("window.shown")
     assert len(shown) == 2 and "done" in shown[1]["title"].lower()
+
+
+# --- the top bar's status, its button and the Planning count (f6-16) -------------------------
+
+ORIGIN = "http://127.0.0.1:8765"  # the test client's own origin
+ASK = {"Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true", "Origin": ORIGIN}
+
+
+def _status(html: str) -> tuple[str, dict[str, str]]:
+    """The top bar's status: its words, and its buttons' words -> the request each posts."""
+    block = re.search(r'<div id="factory-status"[^>]*>(.*?)</div>', html, re.S)
+    assert block, "no #factory-status"
+    words = re.search(r'<span class="pill[^"]*" role="status">([^<]*)</span>', block[1])
+    assert words, block[1]
+    buttons = {}
+    for attrs, text in re.findall(r"<button([^>]*)>([^<]*)</button>", block[1]):
+        assert 'hx-post="/requests"' in attrs, attrs
+        kind = re.search(r'"kind": "(\w+)"', attrs)
+        assert kind, attrs
+        buttons[text.strip()] = kind[1]
+    return words[1], buttons
+
+
+def _ask(client: TestClient, kind: str) -> None:
+    assert client.post("/requests", content=f"kind={kind}", headers=ASK).status_code == 200
+
+
+def _pause_held(db_path: Path) -> None:
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.add_usage_event(conn, "runner", "2026-10-02T11:40:00+00:00", "pause")
+    finally:
+        conn.close()
+
+
+def _running(serve, serve_between, db_path):
+    return serve()
+
+
+def _idle(serve, serve_between, db_path):
+    return serve_between(activity="picking the next ticket")
+
+
+def _pause_asked(serve, serve_between, db_path):
+    client = serve()
+    _ask(client, "pause")
+    return client
+
+
+def _pause_held_client(serve, serve_between, db_path):
+    client = serve()
+    _pause_held(db_path)
+    return client
+
+
+def _resume_asked(serve, serve_between, db_path):
+    client = _pause_held_client(serve, serve_between, db_path)
+    _ask(client, "resume")
+    return client
+
+
+def _waiting(serve, serve_between, db_path):
+    return serve_between(
+        activity="waiting for Claude · f1-20-next until 12:40",
+        waiting_until="2026-10-02T12:40:00+00:00",
+    )
+
+
+def _stopped(serve, serve_between, db_path):
+    return serve(live=False)
+
+
+@pytest.mark.parametrize(
+    ("setup", "words", "buttons"),
+    [
+        (_running, "Running: f1-04-live", {"Pause": "pause"}),
+        (_idle, "Idle: nothing to do", {"Pause": "pause"}),
+        (_pause_asked, "Pausing after this job", {"Resume": "resume"}),
+        (_pause_held_client, "Paused by you since 11:40", {"Resume": "resume"}),
+        (_resume_asked, "Resuming…", {}),  # on its way: nothing to press until the runner takes it
+        (_waiting, "Waiting for Claude until 12:40", {"Pause": "pause"}),
+        (_stopped, "Stopped", {}),
+    ],
+    ids=["running", "idle", "pause-asked", "paused", "resume-asked", "waiting", "stopped"],
+)
+def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
+    serve, serve_between, db_path, setup, words, buttons
+):
+    client = setup(serve, serve_between, db_path)
+    for path in ("/", "/planning", "/tickets", "/live"):
+        assert _status(client.get(path).text) == (words, buttons), path
+    # /live carries it out of band, for every page's poll to swap into its top bar
+    assert re.search(
+        r'<div id="factory-status"[^>]*hx-swap-oob="outerHTML"', client.get("/live").text
+    )
+
+
+def test_the_status_wears_a_colour_from_the_tokens_and_its_words(serve):
+    html = serve().get("/tickets").text
+    assert re.search(r'<span class="pill big good" role="status">Running: f1-04-live</span>', html)
+    css = (STATIC / "dashboard.css").read_text()
+    assert re.search(r"\.pill\.big \{[^}]*var\(--display\)", css)
+    # what the owner asked shows on its way: a dashed orange edge (lead.md, 2026-10-07)
+    assert re.search(r"\.pill\.asked \{[^}]*dashed var\(--opus\)", css)
+
+
+def _tab(html: str) -> str:
+    tab = re.search(r'<a [^>]*id="planning-tab"[^>]*>([^<]*)</a>', html)
+    assert tab, "no Planning tab"
+    return tab[1]
+
+
+def test_every_page_shows_the_planning_count_on_first_paint(serve, db_path):
+    client = serve()
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for key in ("f8", "f9"):  # two ideas no thread is about: two seeds on the desk
+            metrics.upsert_milestone(conn, project, key, title=f"Idea {key}", state="idea")
+    finally:
+        conn.close()
+    counted = _tab(client.get("/live").text)
+    assert re.fullmatch(r"Planning · \d+", counted), counted
+    # the Planning page itself too: the count went missing there (the owner, 2026-10-07)
+    for path in ("/", "/planning", "/tickets", "/jobs"):
+        assert _tab(client.get(path).text) == counted, path
+
+
+def test_the_top_bar_refreshes_on_any_page_without_notifications(page, serve, db_path):
+    client = serve()
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        if url.startswith("/static/"):
+            r.fulfill(path=str(STATIC / url.split("?", 1)[0].removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/planning")
+    tab = page.locator("#planning-tab")
+    assert tab.text_content() == "Planning · 1"
+    _pause_held(db_path)
+    lead_replies(db_path, "f7")
+    page.wait_for_function(
+        "document.querySelector('#factory-status [role=status]').textContent"
+        " === 'Paused by you since 11:40'",
+        timeout=REFRESH,
+    )
+    page.wait_for_function("document.querySelector('#planning-tab').textContent === 'Planning · 2'")
+    assert tab.get_attribute("aria-current") == "page"  # still the page shown
+    assert page.locator("#factory-status button").text_content() == "Resume"
+
+
+def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serve, db_path):
+    client = serve()
+    posted: list[str] = []
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path == "/live":
+            r.abort()  # no poll: only the click can change the bar
+        elif path == "/requests":
+            posted.append(r.request.post_data or "")
+            answer = client.post("/requests", content=r.request.post_data, headers=ASK)
+            r.fulfill(status=answer.status_code, body=answer.text, content_type="text/html")
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/tickets")
+    words = page.locator("#factory-status [role=status]")
+    assert words.text_content() == "Running: f1-04-live"
+    page.locator("#factory-status button", has_text="Pause").click()
+    page.wait_for_function(
+        "document.querySelector('#factory-status [role=status]').textContent"
+        " === 'Pausing after this job'",
+        timeout=1_000,
+    )
+    page.wait_for_function("document.querySelector('#factory-status button') === null")
+    for _ in range(50):
+        if posted:
+            break
+        page.wait_for_timeout(100)
+    assert [parse_qs(body)["kind"] for body in posted] == [["pause"]]
+    conn = connect(db_path)
+    try:
+        kinds = [row["kind"] for row in conn.execute("SELECT kind FROM owner_requests")]
+    finally:
+        conn.close()
+    assert kinds == ["pause"]

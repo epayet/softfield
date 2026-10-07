@@ -86,6 +86,15 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
   margin-left: 8px; }
 .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px);
   opacity: .85; }
+/* The factory's status (f6-16): big, its words always shown, its colour from the tokens, and
+   Pause or Resume beside it; what the owner asked shows on its way, a dashed orange edge */
+.factory-status { display: flex; align-items: center; gap: 8px; align-self: center; }
+.pill.big { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding: 3px 12px 3px 9px;
+  border-radius: 16px; border-color: var(--dot, var(--rule)); white-space: normal; }
+.pill.big::before { width: 10px; height: 10px; flex: none; }
+.pill.asked { border: 1px dashed var(--opus); }
+.bar-button { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase;
+  padding: 4px 16px; background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; }
 .filters label { font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 select, input[type=search], button { font: inherit; font-size: 13px; padding: 3px 6px; text-transform: none;
@@ -241,7 +250,16 @@ tbody tr:hover { background: var(--accent-wash); }
 /* Phone top bar (f3-30): title + filter one line, host hidden, tabs scroll sideways */
 @media (max-width: 639px) {
   header.bar { padding-top: 2px; padding-bottom: 2px; row-gap: 2px; }
-  .bar-top { flex-direction: column; gap: 2px; padding: 4px; }
+  /* the brand and the project on one line, the status and its button on the next (f6-16) */
+  .bar-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center;
+    gap: 4px 8px; padding: 2px 4px; }
+  .bar-top .filters { display: contents; }
+  .bar-top .filters label { grid-area: 1 / 2; font-size: 0; }  /* the select names the project */
+  #notify-me { grid-column: 1 / -1; justify-self: start; }
+  .factory-status { grid-column: 1 / -1; flex-wrap: wrap; }
+  .brand { font-size: 19px; white-space: nowrap; }
+  .pill.big { font-size: 14px; }
+  .bar-button { padding: 2px 12px; }
   .brand small { display: none; }
   .hazard { margin-top: -2px; height: 4px; }
   nav.tabs { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;

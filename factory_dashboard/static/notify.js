@@ -1,9 +1,10 @@
 // Browser notifications while a dashboard page is open (f5-12, ADR 18 item 4). The top bar's
-// "Notify me" asks permission, never on load. Once allowed, base.html's #notify-live polls
-// /live for its #live-facts: the open Needs-you items (id -> text) and whether all the work is
-// done. After each swap this compares them with what it saw last and notifies once per new
-// item, and once when all done turns true. What it saw is kept per project in localStorage, so
-// moving to another page or a second tab doesn't notify again. No service worker: nothing
+// "Turn on notifications" asks permission, never on load, and hides once granted. base.html's
+// #live-poll fetches /live's #live-facts every 5 s (f6-16): the open Needs-you items (id ->
+// text) and whether all the work is done. Once allowed, after each swap this compares them
+// with what it saw last and notifies once per new item, and once when all done turns true.
+// What it saw is kept per project in localStorage, so moving to another page or a second tab
+// doesn't notify again. No service worker: nothing
 // shows once every dashboard page is closed (push to a closed page is in the roadmap).
 "use strict";
 
