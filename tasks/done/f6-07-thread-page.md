@@ -42,3 +42,9 @@ attempts: 3
 tokens: 5299517
 logs: var/runs/20261007-005149/f6-07-thread-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
