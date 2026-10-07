@@ -1537,6 +1537,10 @@ def test_planning_row_with_empty_text_shows_first_comment(client, db_path):
     queue_section = section(html, "queue")
     next_section = queue_section.split("Next in line", 1)[1]
     assert "First comment." in next_section
+    # Title attribute is on the <div>, find it from the full row
+    title_match = re.search(r'<div[^>]*title="([^"]*)"[^>]*>.*?Planning:', html)
+    assert title_match
+    assert title_match.group(1) == "First comment."
 
 
 def test_open_plant_shows_plant_row(client, db_path):
@@ -1566,7 +1570,9 @@ def test_open_plant_shows_plant_row(client, db_path):
     next_section = queue_section.split("Next in line", 1)[1]
     assert "Plant:" in next_section
     assert "A new plant" in next_section
-    assert "at the runner's next pick" in next_section
+    plant_row = html.split("A new plant")[1].split("</div>")[0]
+    row_text = " ".join(unescape(re.sub(r"<[^>]+>", " ", plant_row)).split())
+    assert "at the runner's next pick" in row_text
 
 
 def test_done_plant_shows_no_row(client, db_path):
