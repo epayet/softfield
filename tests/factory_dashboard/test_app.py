@@ -17,7 +17,7 @@ from factory_dashboard.app import HOST, PORT, Db, create_app
 from factory_dashboard.queries import connect
 from runner import cli, metrics
 from tests.browser.conftest import DISPLAY, PHONE, layout_problems
-from tests.factory_dashboard.conftest import NOW, OTHER, PROJECT, write_allowance
+from tests.factory_dashboard.conftest import LOCAL, NOW, OTHER, PROJECT, write_allowance
 from tests.factory_dashboard.test_overview import REFRESH, lead_replies, open_overview
 
 STATIC = Path(app_module.__file__).parent / "static"
@@ -639,6 +639,46 @@ def _stopped(serve, serve_between, db_path):
     return serve(live=False)
 
 
+def _pause_held_planner(serve, serve_between, db_path):
+    client = serve()
+    _pause_held(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-120000",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+        )
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-04-live",
+            milestone_id=metrics.upsert_milestone(conn, project, "f1"),
+            kind="developer",
+            state="running",
+            difficulty=5,
+            title="Running now.",
+        )
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=metrics.upsert_milestone(conn, project, "f1"),
+            role="planner",
+            agent=LOCAL,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+        metrics.update_running_job(conn, job, tokens_in=42_000, steps=17)
+    finally:
+        conn.close()
+    return client
+
+
 @pytest.mark.parametrize(
     ("setup", "words", "buttons"),
     [
@@ -646,11 +686,25 @@ def _stopped(serve, serve_between, db_path):
         (_idle, "Idle: nothing to do", {"Pause": "pause"}),
         (_pause_asked, "Pausing after this job", {"Resume": "resume"}),
         (_pause_held_client, "Paused by you since 11:40", {"Resume": "resume"}),
+        (
+            _pause_held_planner,
+            "Paused by you since 11:40 · the lead is answering you",
+            {"Resume": "resume"},
+        ),
         (_resume_asked, "Resuming…", {}),  # on its way: nothing to press until the runner takes it
         (_waiting, "Waiting for Claude until 12:40", {"Pause": "pause"}),
         (_stopped, "Stopped", {}),
     ],
-    ids=["running", "idle", "pause-asked", "paused", "resume-asked", "waiting", "stopped"],
+    ids=[
+        "running",
+        "idle",
+        "pause-asked",
+        "paused",
+        "paused-planner",
+        "resume-asked",
+        "waiting",
+        "stopped",
+    ],
 )
 def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
     serve, serve_between, db_path, setup, words, buttons

@@ -223,7 +223,11 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     if paused and asked == "resume":
         return Status("Resuming…", "asked", None)
     if paused:
-        return Status(f"Paused by you since {_clock(paused)}", "warn", "resume")
+        words = f"Paused by you since {_clock(paused)}"
+        jobs = overview.running_jobs(conn, project, now)
+        if any(j.live and j.role == "planner" for j in jobs):
+            words += " · the lead is answering you"
+        return Status(words, "warn", "resume")
     if asked == "pause":
         return Status("Pausing after this job", "warn asked", "resume")
     waiting = next((r.waiting_until for r in runs if r.waiting_until), None)
