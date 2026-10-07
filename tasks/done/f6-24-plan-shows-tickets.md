@@ -31,3 +31,10 @@ Read F6's D2 ("As built (f6-13)") and D4 in `docs/milestones/f6-planning-room.md
 - a card with no plan branch, and the general thread, show no such section
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
