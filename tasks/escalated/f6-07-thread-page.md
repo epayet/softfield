@@ -33,3 +33,12 @@ Read the mock-up (`docs/milestones/planning-room-mockup/Main.dc.html`, `docs/mil
 - a pending reply hides Send and shows the wait
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 5299517
+logs: var/runs/20261007-005149/f6-07-thread-page
+```
