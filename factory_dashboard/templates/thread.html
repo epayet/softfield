@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+
+{% block title %}Planning · {{ card_title }} · {{ project }}{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
+
+  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+
+    <header id="card" style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column">
+      {% if card_meta %}<span style="font: 600 12px var(--mono); color: var(--muted)">{{ card_meta }}</span>{% endif %}
+      <h2 style="margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">{{ card_title }}</h2>
+    </header>
+
+    {% for msg in messages %}
+    {% if msg.author == "owner" %}
+    <article class="message" style="background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font: 600 12px var(--mono); color: var(--hazard)">You · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+      {% for c in msg.points %}
+      <p style="margin: 0; font-size: 14px; color: var(--ink-2)"><b>On {{ c.n }}:</b> {{ c.comment }}</p>
+      {% endfor %}
+    </article>
+    {% else %}
+    <article class="message" style="background: var(--bay); border: 1px solid var(--opus); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
+      <span style="font: 600 12px var(--mono); color: var(--opus)">The lead · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+      {% if msg.points %}
+      <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+      {% for p in msg.points %}
+        <li class="point" data-point="{{ p.n }}" style="background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; gap: 10px; align-items: baseline">
+          <b style="font: 700 13px var(--mono); color: var(--muted); min-width: 22px">{{ p.n }}</b>
+          <div style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0">
+            <b style="font-size: 15px">{{ p.title }}</b>
+            {% if p.answer %}<span style="font-size: 14px; color: var(--ink-2)">{{ p.answer }}</span>{% endif %}
+            {% if p.action %}<span style="font-size: 14px"><span style="color: var(--opus); font-weight: 600">→ </span>{{ p.action }}</span>{% endif %}
+            {% if msg.latest and next_reply is none %}
+            <details>
+              <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); min-height: 40px; display: flex; align-items: center; cursor: pointer">Comment…</summary>
+              <textarea class="comment" data-point="{{ p.n }}" rows="2" aria-label="Your comment on point {{ p.n }}" style="width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px"></textarea>
+            </details>
+            {% endif %}
+          </div>
+        </li>
+      {% endfor %}
+      </ol>
+      {% endif %}
+    </article>
+    {% endif %}
+    {% endfor %}
+
+    {% if next_reply %}
+    <p id="waiting" style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted)">Next for the lead · {{ next_reply }}</p>
+    {% else %}
+    <form id="reply" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
+      hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim()))})}'
+      style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      {% if points %}<span id="progress" data-points="{{ points }}" style="font: 12px var(--mono); color: var(--muted)">{{ points }} points · 0 comments</span>{% endif %}
+      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted)">Anything else? A question, a new thought
+        <textarea name="text" rows="2" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
+      </label>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <button type="submit" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Send</button>
+        <span id="reply-status" style="font-size: 12.5px; color: var(--muted)">Every point is agreed unless you comment on it.</span>
+      </div>
+    </form>
+    <script>
+      document.addEventListener("input", () => {
+        const progress = document.getElementById("progress");
+        if (!progress) return;
+        const n = Array.from(document.querySelectorAll("textarea.comment")).filter(t => t.value.trim()).length;
+        progress.textContent = `${progress.dataset.points} points · ${n} comment${n === 1 ? "" : "s"}`;
+      });
+    </script>
+    {% endif %}
+  </div>
+
+  {% if proposals %}
+  <aside id="proposals" aria-label="Proposals" style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+    <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Proposals from this card</h2>
+    {% for prop in proposals %}
+    <a href="{{ prop.link }}{{ q }}" class="proposal" style="background: var(--bay); border: 1px solid var(--rule); border-top: 3px solid var({{ prop.color }}); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box">
+      <span style="font: 600 11px var(--mono); color: var(--muted)">{{ prop.kind | upper }} · {{ "answered" if prop.answered else "open" }}</span>
+      <b style="font-size: 15px">{{ prop.title }}</b>
+    </a>
+    {% endfor %}
+    <p style="margin: 0; font-size: 12.5px; color: var(--muted)">Nothing becomes a ticket until you approve it.</p>
+  </aside>
+  {% endif %}
+
+</div>
+{% endblock %}

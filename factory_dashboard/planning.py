@@ -284,3 +284,132 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "groups": desk(conn, project, now),
         },
     )
+
+
+# --- a thread (f6-07) ---------------------------------------------------------------------
+
+# Each proposal kind's colour, a token from dashboard.css
+_KIND_COLOR = {
+    "adr": "--serious",
+    "mockup": "--qwen",
+    "plan": "--good",
+    "replan": "--a7",
+    "seed": "--ink-2",
+}
+
+
+@dataclass(frozen=True)
+class Message:
+    author: str
+    at: str
+    text: str
+    points: list[dict[str, object]]  # a lead message's, or the owner's comments
+    latest: bool  # the lead's latest points: the ones the owner comments on
+
+
+@dataclass(frozen=True)
+class Proposal:
+    kind: str
+    title: str
+    color: str
+    answered: bool
+    link: str
+
+
+def _header(conn: sqlite3.Connection, project_id: int, thread: str) -> tuple[str, str]:
+    """The card's title and its status and area, from its ``milestones`` row."""
+    if thread == GENERAL:
+        return "General", ""
+    rows = conn.execute(
+        "SELECT key, title, status, area FROM milestones WHERE project_id = ? ORDER BY id",
+        (project_id,),
+    ).fetchall()
+    for r in rows:
+        if short_key(r["key"]) == thread:
+            return r["title"] or r["key"], " · ".join(x for x in (r["status"], r["area"]) if x)
+    return thread, ""
+
+
+def _messages(rows: list[sqlite3.Row]) -> list[Message]:
+    latest = max((r["id"] for r in rows if r["author"] == "lead" and r["points"]), default=None)
+    return [
+        Message(
+            r["author"],
+            r["at"],
+            r["text"],
+            json.loads(r["points"]) if r["points"] else [],
+            r["id"] == latest,
+        )
+        for r in rows
+    ]
+
+
+def _proposals(
+    conn: sqlite3.Connection, project_id: int, thread: str, rows: list[sqlite3.Row]
+) -> list[Proposal]:
+    """The proposals in the thread's latest lead message that lists some, open or answered as
+    D6 defines open."""
+    lead = [r for r in rows if r["author"] == "lead" and r["proposals"]]
+    if not lead:
+        return []
+    since = _when(lead[-1]["at"])
+    requests = [
+        r
+        for r in conn.execute(
+            "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id", (project_id,)
+        ).fetchall()
+        if _when(r["created"]) > since
+    ]
+    return [
+        Proposal(
+            str(p.get("kind") or ""),
+            str(p.get("title") or p["id"]),
+            _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
+            _settled(requests, _about(p, thread)),
+            f"/planning/{thread}/proposals/{p['id']}",
+        )
+        for p in json.loads(lead[-1]["proposals"])
+        if isinstance(p, dict) and p.get("id")
+    ]
+
+
+@router.get("/planning/{thread}", response_class=HTMLResponse)
+def thread_page(
+    request: Request, thread: str, conn: Db, project: Project, now: Now
+) -> HTMLResponse:
+    """A card's thread: its messages and the lead's points, Send, and its proposals."""
+    project_id = metrics.find_project(conn, project)
+    title, meta = thread, ""
+    messages: list[Message] = []
+    proposals: list[Proposal] = []
+    pending = False
+    if project_id is not None:
+        title, meta = _header(conn, project_id, thread)
+        rows = conn.execute(
+            "SELECT m.* FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
+            " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
+            (project_id, thread),
+        ).fetchall()
+        messages = _messages(rows)
+        proposals = _proposals(conn, project_id, thread, rows)
+        pending = any(
+            r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{thread}#")
+            for r in metrics.open_jobs(conn, project_id)
+        )
+    jobs = [j for j in running_jobs(conn, project, now) if j.live]
+    return render(
+        request,
+        conn,
+        project,
+        "thread.html",
+        {
+            "active": "/planning",
+            "thread": thread,
+            "card_title": title,
+            "card_meta": meta,
+            "messages": messages,
+            "points": next((len(m.points) for m in messages if m.latest), 0),
+            "proposals": proposals,
+            "next_reply": _next_reply(conn, project, jobs, pending),
+        },
+    )

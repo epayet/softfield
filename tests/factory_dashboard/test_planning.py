@@ -3,6 +3,7 @@ and "Plant an idea". The rows come from ``write_planning`` in the conftest."""
 
 import json
 import re
+import sqlite3
 from collections.abc import Callable
 from datetime import timedelta
 from html import unescape
@@ -232,8 +233,8 @@ def test_the_top_bar_has_a_planning_tab(client):
     )
 
 
-def _open(page, client: TestClient) -> None:
-    """``/planning`` in Chromium, each request answered by ``client``, the POST too."""
+def _open(page, client: TestClient, path: str = "/planning") -> None:
+    """``path`` in Chromium, each request answered by ``client``, the POST too."""
 
     def serve(route) -> None:
         request = route.request
@@ -257,7 +258,7 @@ def _open(page, client: TestClient) -> None:
         )
 
     page.route(f"{ORIGIN}/**", serve)
-    page.goto(f"{ORIGIN}/planning")
+    page.goto(f"{ORIGIN}{path}")
 
 
 def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve):
@@ -298,3 +299,172 @@ def test_the_desk_page_lays_out_at_phone_and_display_sizes(page, planning, db_pa
     # test_phone_top_bar_is_compact_and_tabs_scroll in test_app.py checks them)
     page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
+
+
+# --- thread page fixtures --------------------------------------------------------------------
+
+_SEVEN_POINTS = [
+    {
+        "n": 1,
+        "title": "Planning goes first",
+        "answer": "A planner job is the lead's highest priority.",
+        "action": "ADR 20 item 1",
+    },
+    {
+        "n": 2,
+        "title": "It runs inside the runner",
+        "answer": "One process, as you asked.",
+        "action": "ADR 20 item 2",
+    },
+    {
+        "n": 3,
+        "title": "Opus plans, inside your 25%",
+        "answer": "Planning may use the whole 5-hour window.",
+        "action": "ADR 20 item 3",
+    },
+    {
+        "n": 4,
+        "title": "One thread per card",
+        "answer": "Each card keeps its own conversation.",
+        "action": "ADR 20 item 4",
+    },
+    {
+        "n": 5,
+        "title": "Answers come as numbered points",
+        "answer": "Every lead reply lists points.",
+        "action": "A planner prompt",
+    },
+    {
+        "n": 6,
+        "title": "The lead only proposes",
+        "answer": "ADRs, mock-ups, milestones and tickets are drafts.",
+        "action": "ADR 20 item 5",
+    },
+    {
+        "n": 7,
+        "title": "Notifications",
+        "answer": "A browser notification when a reply is ready.",
+        "action": "F5's notifications",
+    },
+]
+
+
+def _seven_points(conn: sqlite3.Connection, project_id: int) -> None:
+    """On f6's thread, the lead's reply 30 min ago lists ``_SEVEN_POINTS``."""
+    f6 = metrics.planner_thread(conn, project_id, "f6", _at(timedelta(hours=5)))["id"]
+    metrics.add_planner_message(
+        conn,
+        f6,
+        "lead",
+        _at(timedelta(minutes=30)),
+        "Here's each point with my answer.",
+        points=_SEVEN_POINTS,
+    )
+
+
+def _thread(client: TestClient, thread: str) -> str:
+    response = client.get(f"/planning/{thread}")
+    assert response.status_code == 200
+    return str(response.text)
+
+
+def _text(markup: str) -> str:
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", markup)).split())
+
+
+def _points(html: str) -> dict[str, str]:
+    """Each point's text by its number."""
+    return {
+        n: _text(body)
+        for n, body in re.findall(
+            r'<li class="point" data-point="(\d+)"[^>]*>(.*?)</li>', html, re.S
+        )
+    }
+
+
+def test_a_fixture_reply_with_7_points_shows_each_point(planning, db_path, serve):
+    """The card's header, the messages in order, then each point's title, answer and action
+    within that point, each with its Comment… box, and the progress line."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    html = _thread(serve(), "f6")
+    assert "The planning room" in _text(html.split('<header id="card"', 1)[1].split("</header>")[0])
+    text = _text(html)
+    assert text.index("A first go.") < text.index("Looks good.") < text.index("Here's each point")
+    points = _points(html)
+    assert list(points) == [str(p["n"]) for p in _SEVEN_POINTS]
+    for p in _SEVEN_POINTS:
+        point = points[str(p["n"])]
+        assert f"{p['title']} {p['answer']} → {p['action']} Comment…" in point
+    assert "7 points · 0 comments" in text
+
+
+def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_path, serve):
+    """The latest listing's proposals, each linking to its review page; one the owner approved
+    since is answered (D6)."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "approve_plan", "f6", None, _at(timedelta(minutes=30))
+        ),
+    )
+    html = _thread(serve(), "f6")
+    found = re.findall(r'<a href="([^"?]+)[^"]*" class="proposal"[^>]*>(.*?)</a>', html, re.S)
+    assert [(link, _text(body)) for link, body in found] == [
+        ("/planning/f6/proposals/adr-20", "ADR · open ADR 20: the planning room"),
+        ("/planning/f6/proposals/plan", "PLAN · answered F6 plan: 7 tickets"),
+    ]
+
+
+def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
+    """Comments on points 2 and 4 and a free message: one ``plan_message`` request about the
+    thread carrying them, the other points agreed by saying nothing."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    for n, comment in (("2", "Inside, but say how it stops."), ("4", 'Keep "general" too.')):
+        page.click(f'li[data-point="{n}"] summary')
+        page.fill(f'li[data-point="{n}"] textarea', comment)
+    page.fill('#reply textarea[name="text"]', "And the phone?")
+    page.wait_for_selector("#progress >> text=7 points · 2 comments")
+    page.click('#reply button[type="submit"]')
+    page.wait_for_selector("#reply-status >> text=Asked")
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
+        asked = [(r["kind"], r["subject"], json.loads(r["value"])) for r in rows]
+    finally:
+        conn.close()
+    assert asked == [
+        (
+            "plan_message",
+            "f6",
+            {
+                "text": "And the phone?",
+                "comments": {"2": "Inside, but say how it stops.", "4": 'Keep "general" too.'},
+            },
+        )
+    ]
+
+
+def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve):
+    """An open planner row about this thread: the wait instead of Send and the Comment…
+    boxes; one about another thread changes nothing here."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "general#1", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+    client = serve()
+    assert '<form id="reply"' in _thread(client, "f6")
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=4))
+        ),
+    )
+    html = _thread(client, "f6")
+    assert "Next for the lead · after f1-04-live, any minute now" in _text(html)
+    assert '<form id="reply"' not in html
+    assert "Send" not in _text(html)
+    assert "Comment…" not in html
