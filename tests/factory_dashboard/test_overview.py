@@ -587,6 +587,76 @@ def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path)
     assert "4 f1-" not in rows
 
 
+def _moves(html: str) -> list[tuple[str, str, dict[str, object]]]:
+    """Next in line's ↑ and ↓ buttons: each one's arrow, label and the request it posts."""
+    rows = html.split("Next in line", 1)[1].split("</section>", 1)[0]
+    button = r"<button[^>]*?hx-vals='([^']*)'[^>]*aria-label=\"([^\"]*)\"[^>]*>(.)</"
+    found = re.findall(button, rows)
+    return [(arrow, label, json.loads(vals)) for vals, label, arrow in found]
+
+
+def _post(ticket: str, value: str) -> dict[str, object]:
+    return {"kind": "priority", "project": PROJECT, "subject": ticket, "value": value}
+
+
+def test_next_in_line_shows_each_priority_with_buttons_that_move_it(queue_client, db_path):
+    """f6-18: ↑ asks for one less than the ticket above's (0 at least), ↓ one more than the
+    one below's; the first's ↑ is by one from its own. All at the default 100 here."""
+    html = queue_client.get("/").text
+    rows = section(html, "queue").split("Next in line", 1)[1]
+    for ticket in ("f1-05-first", "f1-06-second", "f1-10-queued"):
+        assert re.search(rf"\b{ticket}\b[^·]*· [^·]+ · priority 100 ↑ ↓", rows), ticket
+    assert all(h == "/requests" for h in re.findall(r'hx-post="([^"]*)"', html.split("Next in")[1]))
+    assert _moves(html) == [
+        ("↑", "Move f1-05-first up: priority 99", _post("f1-05-first", "99")),
+        ("↓", "Move f1-05-first down: priority 101", _post("f1-05-first", "101")),
+        ("↑", "Move f1-06-second up: priority 99", _post("f1-06-second", "99")),
+        ("↓", "Move f1-06-second down: priority 101", _post("f1-06-second", "101")),
+        ("↑", "Move f1-10-queued up: priority 99", _post("f1-10-queued", "99")),
+        ("↓", "Move f1-10-queued down: priority 101", _post("f1-10-queued", "101")),
+    ]
+
+
+def _prioritise(db_path: Path, ticket: str, own: int, card: int) -> None:
+    """``ticket``'s own ``priority:`` in its file, and its milestone card's priority."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        body = f"---\nid: {ticket}\nmilestone: f1\npriority: {own}\n---\n\n### Goal\nFirst now.\n"
+        metrics.upsert_ticket(conn, project, ticket, body=body)
+        metrics.upsert_milestone(conn, project, "f1", priority=card)
+    finally:
+        conn.close()
+
+
+def test_next_in_line_follows_the_priorities_the_runner_reads(queue_client, db_path):
+    """A ticket's own priority, else its card's: lower first, as `pick_next` takes them."""
+    _prioritise(db_path, "f1-10-queued", own=5, card=50)
+    html = queue_client.get("/").text
+    rows = section(html, "queue").split("Next in line", 1)[1]
+    assert [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)] == [
+        "f1-10-queued",
+        "f1-05-first",
+        "f1-06-second",
+    ]
+    assert "priority 5 ↑ ↓" in rows and "priority 50 ↑ ↓" in rows
+    assert [(arrow, post["subject"], post["value"]) for arrow, _, post in _moves(html)] == [
+        ("↑", "f1-10-queued", "4"),
+        ("↓", "f1-10-queued", "51"),
+        ("↑", "f1-05-first", "4"),
+        ("↓", "f1-05-first", "51"),
+        ("↑", "f1-06-second", "49"),
+        ("↓", "f1-06-second", "51"),  # one more than f1-11-waits-done's, below it
+    ]
+    assert list(waits(db_path))[:3] == ["f1-10-queued", "f1-05-first", "f1-06-second"]
+
+
+def test_a_priority_at_0_has_no_up_button(queue_client, db_path):
+    _prioritise(db_path, "f1-10-queued", own=0, card=100)
+    moves = [(arrow, post["subject"]) for arrow, _, post in _moves(queue_client.get("/").text)]
+    assert moves[:2] == [("↓", "f1-10-queued"), ("↑", "f1-05-first")]
+
+
 def test_empty_queue_shows_message_once(serve):
     """An empty queue shows "The queue is empty." once, not twice."""
     client = serve(live=False)

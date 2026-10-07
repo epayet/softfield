@@ -17,7 +17,20 @@ from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from runner.tasks import Task, blocked_ids, milestone_order, pick_next
+import yaml
+
+from runner.tasks import (
+    BUG_PRIORITY,
+    BUGS,
+    DEFAULT_PRIORITY,
+    Task,
+    TaskError,
+    blocked_ids,
+    milestone_order,
+    pick_next,
+    split_frontmatter,
+)
+from runner.tasks import run_order as _run_order
 from runner.usage import CACHE_READ_WEIGHT, OUTPUT_WEIGHT
 
 DOLLARS_PER_TOKEN = 4 / 1_000_000  # per token-equivalent (D7)
@@ -503,6 +516,7 @@ class Upcoming:
     kind: str | None
     milestone: str | None
     waits: tuple[str, ...]  # its dependencies not merged yet
+    priority: int = DEFAULT_PRIORITY  # as the runner reads it (f6-18)
 
     @property
     def ready_now(self) -> bool:
@@ -514,8 +528,36 @@ def depends_on(ticket: sqlite3.Row) -> tuple[str, ...]:
     return tuple(json.loads(ticket["depends_on"])) if ticket["depends_on"] else ()
 
 
-def as_task(ticket: str, milestone: str | None, after: Sequence[str]) -> Task:
-    """Enough of a ``Task`` for ``pick_next``: its id, milestone and dependencies."""
+def ticket_priority(body: str | None, milestone: str | None, card: int | None) -> int:
+    """A ticket row's priority as the runner reads it (`runner.tasks.task_priority`): the
+    ``priority:`` in its text, else a bug's 50, else its card's, else 100. Lower goes first."""
+    try:
+        meta = split_frontmatter(body or "")[0]
+    except (TaskError, yaml.YAMLError):
+        meta = {}
+    own = meta.get("priority")
+    if type(own) is int and own >= 0:
+        return own
+    if milestone == BUGS:
+        return BUG_PRIORITY
+    return DEFAULT_PRIORITY if card is None else card
+
+
+def moves(priorities: Sequence[int]) -> list[tuple[int, int]]:
+    """The priorities each row's ↑ and ↓ ask for (f6-18), the rows in run order: ↑ one less
+    than the row above's (0 at least), ↓ one more than the row below's; the first's ↑ and the
+    last's ↓ are by one from its own."""
+    last = len(priorities) - 1
+    return [
+        (max((priorities[i - 1] if i else p) - 1, 0), (priorities[i + 1] if i < last else p) + 1)
+        for i, p in enumerate(priorities)
+    ]
+
+
+def as_task(
+    ticket: str, milestone: str | None, after: Sequence[str], priority: int | None = None
+) -> Task:
+    """Enough of a ``Task`` for ``pick_next``: its id, milestone, dependencies and priority."""
     return Task(
         id=ticket,
         milestone=milestone or "m0",
@@ -526,6 +568,7 @@ def as_task(ticket: str, milestone: str | None, after: Sequence[str]) -> Task:
         finding=None,
         sections={},
         path=Path(ticket),
+        priority=priority,
     )
 
 
@@ -541,7 +584,7 @@ def in_run_order(
         picked.append(task)
         left.remove(task)
         merged.add(task.id)
-    return picked, sorted(left, key=lambda t: (milestone_order(t.milestone), t.id))
+    return picked, sorted(left, key=lambda t: _run_order(t, {}))
 
 
 def run_order(
@@ -549,10 +592,11 @@ def run_order(
 ) -> list[Upcoming]:
     """The project's ``ready`` tickets in the order the runner will take them, each with the
     dependencies it still waits for (none: ready now); those it can't take yet come last.
-    ``states`` overrides tickets' states (the line at a past moment, f3-06)."""
+    ``states`` overrides tickets' states (the line at a past moment, f3-06). Each has its
+    priority, which orders them as it does the runner's pick (f6-18)."""
     rows = conn.execute(
-        "SELECT t.ticket, t.title, t.kind, t.state, t.depends_on, m.key AS milestone"
-        " FROM tickets t JOIN projects p ON p.id = t.project_id"
+        "SELECT t.ticket, t.title, t.kind, t.state, t.depends_on, t.body, m.key AS milestone,"
+        " m.priority AS card FROM tickets t JOIN projects p ON p.id = t.project_id"
         " LEFT JOIN milestones m ON m.id = t.milestone_id WHERE p.name = ?",
         (project,),
     ).fetchall()
@@ -560,7 +604,15 @@ def run_order(
     done = {r["ticket"] for r in rows if state[r["ticket"]] == "done"}
     stopped = {r["ticket"] for r in rows if state[r["ticket"]] in STOPPED_STATES}
     ready = {r["ticket"]: r for r in rows if state[r["ticket"]] == "ready"}
-    tasks = [as_task(r["ticket"], r["milestone"], depends_on(r)) for r in ready.values()]
+    tasks = [
+        as_task(
+            r["ticket"],
+            r["milestone"],
+            depends_on(r),
+            ticket_priority(r["body"], r["milestone"], r["card"]),
+        )
+        for r in ready.values()
+    ]
     picked, left = in_run_order(tasks, done, stopped)
     return [
         Upcoming(
@@ -569,6 +621,7 @@ def run_order(
             kind=ready[t.id]["kind"],
             milestone=ready[t.id]["milestone"],
             waits=tuple(d for d in t.depends_on if d not in done),
+            priority=t.priority if t.priority is not None else DEFAULT_PRIORITY,
         )
         for t in [*picked, *left]
     ]

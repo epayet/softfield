@@ -26,6 +26,7 @@ from runner.requests import (
     PAUSE,
     PLAN_MESSAGE,
     PLANT,
+    PRIORITY,
     QUEUE,
     RESERVE,
     RESUME,
@@ -35,8 +36,9 @@ from runner.requests import (
 
 router = APIRouter()
 
-# The planning room's six (f6 D1) too, and Now's pause and resume (f5-18); the runner checks
-# each value, as for the first three
+# The planning room's six (f6 D1) too, Now's pause and resume (f5-18), and the ↑ and ↓ of
+# Next in line and the Milestones page (f6-18); the runner checks each value, as for the first
+# three
 KINDS = (
     SIGNOFF,
     RESERVE,
@@ -49,6 +51,7 @@ KINDS = (
     DROP_SEED,
     PAUSE,
     RESUME,
+    PRIORITY,
 )
 
 

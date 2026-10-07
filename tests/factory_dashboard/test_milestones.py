@@ -168,6 +168,63 @@ def test_milestone_f2_cells(milestones_client):
     assert "in progress" in cells[2]  # status must show in progress
 
 
+def _cards(db_path) -> None:
+    """F2 building at 5, F10 an idea at the default 100, F1 done at 1; M4 has no card."""
+    from runner import metrics
+    from tests.factory_dashboard.conftest import PROJECT
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        cards = (("f2", "building", 5), ("f10", "idea", 100), ("f1", "done", 1))
+        for key, state, priority in cards:
+            metrics.upsert_milestone(conn, project, key, state=state, priority=priority)
+    finally:
+        conn.close()
+
+
+def _row_cells(html: str, key: str) -> tuple[list[str], str]:
+    """A milestone row's cells as text, and its HTML."""
+    for row in re.findall(r"<tr>(.*?)</tr>", html, re.S):
+        cells = [re.sub(r"<[^>]+>", " ", c) for c in re.findall(r"<td[^>]*>(.*?)</td>", row, re.S)]
+        cells = [" ".join(c.split()) for c in cells]
+        if cells and cells[0] == key:
+            return cells, row
+    raise AssertionError(f"no row {key}")
+
+
+def _posts(row: str) -> list[tuple[str, dict[str, object]]]:
+    found = re.findall(r"<button[^>]*?hx-vals='([^']*)'[^>]*>(.)</button>", row)
+    return [(arrow, json.loads(vals)) for vals, arrow in found]
+
+
+def test_each_milestone_not_done_shows_its_priority_with_buttons_that_move_it(
+    milestones_client, db_path
+):
+    """f6-18: ↑ asks for one less than the milestone before it in the run order (0 at least),
+    ↓ one more than the one after it; a done milestone, or one with no card, has none."""
+    from tests.factory_dashboard.conftest import PROJECT
+
+    _cards(db_path)
+    html = milestones_client.get("/milestones").text
+    assert "<th>Priority</th>" in html or '<th class="num">Priority</th>' in html
+
+    def post(key: str, value: str) -> dict[str, object]:
+        return {"kind": "priority", "project": PROJECT, "subject": key, "value": value}
+
+    cells, row = _row_cells(html, "F2")
+    assert cells[-1] == "5 ↑ ↓"
+    assert _posts(row) == [("↑", post("f2", "4")), ("↓", post("f2", "101"))]
+    cells, row = _row_cells(html, "F10")
+    assert cells[-1] == "100 ↑ ↓"
+    assert _posts(row) == [("↑", post("f10", "4")), ("↓", post("f10", "101"))]
+    for key in ("F1", "M4"):
+        cells, row = _row_cells(html, key)
+        assert cells[-1] == "–" and _posts(row) == []
+    # the columns before it are as they were
+    assert _row_cells(html, "F1")[0][:4] == ["F1", "The factory measures itself", "done", "3"]
+
+
 def test_milestone_detail_answers_200(milestone_detail_client):
     resp = milestone_detail_client.get("/milestones/f1")
     assert resp.status_code == 200

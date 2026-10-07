@@ -72,6 +72,8 @@ PLANNING = [  # the planning room's six requests (f6 D1); the runner checks thei
     ("accept_adr", "f7", "23"),
     ("approve_plan", "f7", None),
     ("drop_seed", "f11", None),  # f6-17
+    ("priority", "f1-05-first", "4"),  # f6-18: a ticket's, or a card's
+    ("priority", "f7", "0"),
 ]
 
 

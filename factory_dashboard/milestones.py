@@ -8,7 +8,7 @@ ticket and savings per milestone, as small charts (D5).
 
 import re
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Any
 
@@ -17,6 +17,7 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
+from runner.tasks import milestone_order
 
 router = APIRouter()
 
@@ -35,6 +36,36 @@ class MilestoneRow:
     review_rounds: int
     claude_dollars: float
     net_savings: float
+    priority: int | None = None  # a card not done's (f6-18), with what its ↑ and ↓ ask for
+    up: int | None = None
+    down: int | None = None
+
+
+UNMOVED = (None, "done", "removed")  # card states without a priority to change
+
+
+def _with_moves(
+    conn: sqlite3.Connection, project: str, rows: list[MilestoneRow]
+) -> list[MilestoneRow]:
+    """Each card not done with its priority, and the priorities its ↑ and ↓ ask for against
+    its neighbours in the run order (priority, then milestone order), not the page's order."""
+    cards = {
+        row["key"]: row["priority"]
+        for row in conn.execute(
+            "SELECT m.key, m.state, m.status, m.priority FROM milestones m"
+            " JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
+            (project,),
+        )
+        if row["state"] not in UNMOVED and row["status"] != "done" and row["priority"] is not None
+    }
+    order = sorted(cards, key=lambda key: (cards[key], milestone_order(key), key))
+    moved = dict(zip(order, queries.moves([cards[key] for key in order]), strict=True))
+    return [
+        replace(r, priority=cards[r.key], up=moved[r.key][0], down=moved[r.key][1])
+        if r.key in moved
+        else r
+        for r in rows
+    ]
 
 
 def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]:
@@ -112,7 +143,7 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
         ts = datetime.fromisoformat(started).timestamp() if started else 0.0
         return (0 if started else 1, -ts, r.key)
 
-    return sorted(all_rows, key=_sort_key)
+    return _with_moves(conn, project, sorted(all_rows, key=_sort_key))
 
 
 def _rate_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:

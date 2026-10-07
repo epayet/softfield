@@ -7,7 +7,7 @@
   <h2>Milestones <span class="src">newest first</span></h2>
   {% if milestones %}
   <div class="scroll"><table>
-    <thead><tr><th>Key</th><th>Title</th><th>Status</th><th class="num">Merged</th><th class="num">Pass rate</th><th class="num">Escalations</th><th class="num">Review rounds</th><th class="num">Claude $</th><th class="num">Net $</th></tr></thead>
+    <thead><tr><th>Key</th><th>Title</th><th>Status</th><th class="num">Merged</th><th class="num">Pass rate</th><th class="num">Escalations</th><th class="num">Review rounds</th><th class="num">Claude $</th><th class="num">Net $</th><th class="num">Priority</th></tr></thead>
     <tbody>
       {% for m in milestones %}
       <tr>
@@ -20,6 +20,7 @@
         <td class="num">{{ m.review_rounds }}</td>
         <td class="num">{{ m.claude_dollars | usd }}</td>
         <td class="num">{{ m.net_savings | usd }}</td>
+        <td class="num">{% if m.priority is not none %}{% with subject = m.key, name = m.key | upper, priority = m.priority, up = m.up, down = m.down, said = "" %}{% include "_partials/move.html" %}{% endwith %}{% else %}–{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

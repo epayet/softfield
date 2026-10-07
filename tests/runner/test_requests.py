@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from runner import cli, loop, metrics, milestone, planner, requests
+from runner import cli, dispatch, loop, metrics, milestone, planner, requests
 from runner.state import State, load_state, save_state
+from runner.tasks import load_dir, parse_task
 from tests.runner.conftest import git, write_task
 from tests.runner.test_cli import in_repo  # noqa: F401 - a fixture
 from tests.runner.test_owner import _milestone
@@ -986,6 +987,182 @@ def test_sending_a_merge_back_works_as_for_any_proposal(repo):
     ]
     assert git(repo, "rev-parse", "HEAD") == head
     assert (repo / "docs" / "milestones" / "f12-queue-once.md").is_file()
+
+
+# --- `priority`: the owner reorders the work from the dashboard (f6-18) ------------------------
+
+
+def _two_ready(repo: Path) -> str:
+    """m1-01-a and m1-02-b ready, both at the default priority, each with its row; main's
+    head."""
+    for task_id in ("m1-01-a", "m1-02-b"):
+        write_task(repo / "tasks" / "ready", task_id)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "two ready")
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        for task_id in ("m1-01-a", "m1-02-b"):
+            text = (repo / "tasks" / "ready" / f"{task_id}.md").read_text()
+            metrics.upsert_ticket(conn, project, task_id, state="ready", body=text)
+    finally:
+        conn.close()
+    return git(repo, "rev-parse", "HEAD")
+
+
+def _pick_order(repo: Path) -> list[str]:
+    """The ready tickets in the order `dispatch.plan` runs them, as the run builds them."""
+    ready = load_dir(repo / "tasks" / "ready", 400)
+    tickets = loop._dispatch_tickets(repo, ready, set(), set(), {}, NOW)
+    return [line.pick.subject for line in dispatch.plan([], tickets, dispatch.Windows(), NOW)]
+
+
+def _body(repo: Path, task_id: str) -> object:
+    conn = metrics.open_db(_db(repo))
+    try:
+        row = conn.execute("SELECT body FROM tickets WHERE ticket = ?", (task_id,)).fetchone()
+        return row["body"]
+    finally:
+        conn.close()
+
+
+def test_a_priority_request_sets_a_ready_tickets_priority_in_one_commit_and_the_pick_follows(
+    repo,
+):
+    head = _two_ready(repo)
+    assert _pick_order(repo) == ["m1-01-a", "m1-02-b"]
+    asked = _ask(repo, "priority", "m1-02-b", "4")
+    assert _apply(repo) == ["priority m1-02-b: priority of m1-02-b set to 4"]
+    assert _request(repo, asked) == (NOW.isoformat(), "priority of m1-02-b set to 4")
+    path = repo / "tasks" / "ready" / "m1-02-b.md"
+    assert parse_task(path, 400).priority == 4
+    assert path.read_text().count("priority:") == 1
+    assert _pick_order(repo) == ["m1-02-b", "m1-01-a"]
+    # one commit of that one file, by the owner's request; a clean tree
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == (
+        "m1-02-b: priority 100 → 4, by the owner"
+    )
+    changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
+    assert changed == ["tasks/ready/m1-02-b.md"]
+    assert git(repo, "status", "--porcelain") == ""
+    # the dashboard's row has the new text at once; the other ticket's is as it was
+    assert "priority: 4" in str(_body(repo, "m1-02-b"))
+    assert "priority:" not in str(_body(repo, "m1-01-a"))
+    assert _apply(repo) == []  # finished once
+
+
+def test_a_priority_request_replaces_a_set_aside_tickets_own_priority(repo):
+    (repo / "tasks" / "later").mkdir(parents=True)
+    text = TICKET.format(id="f7-01-a", context="x").replace("depends_on", "priority: 7\ndepends_on")
+    (repo / "tasks" / "later" / "f7-01-a.md").write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "set aside")
+    _ask(repo, "priority", "f7-01-a", "2")
+    assert _apply(repo) == ["priority f7-01-a: priority of f7-01-a set to 2"]
+    after = (repo / "tasks" / "later" / "f7-01-a.md").read_text()
+    assert after == text.replace("priority: 7", "priority: 2")
+    assert git(repo, "log", "-1", "--format=%s").strip() == "f7-01-a: priority 7 → 2, by the owner"
+
+
+def _priority_of(repo: Path, key: str) -> object:
+    conn = metrics.open_db(_db(repo))
+    try:
+        row = conn.execute("SELECT priority FROM milestones WHERE key = ?", (key,)).fetchone()
+        return None if row is None else row["priority"]
+    finally:
+        conn.close()
+
+
+def test_a_priority_request_on_a_card_sets_its_headers_priority(repo):
+    _card(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "priority", "f7", "1")
+    assert _apply(repo) == ["priority f7: priority of F7 set to 1"]
+    assert _request(repo, asked)[1] == "priority of F7 set to 1"
+    doc = (repo / "docs" / "milestones" / "f7-one-queue.md").read_text()
+    assert doc == CARD.replace("**Priority:** 3", "**Priority:** 1")
+    assert milestone.card("f7-one-queue", doc) == milestone.Card("planning", 1, "factory")
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7: priority 3 → 1, by the owner"
+    changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
+    assert changed == ["docs/milestones/f7-one-queue.md"]
+    assert git(repo, "status", "--porcelain") == ""
+    assert _priority_of(repo, "f7-one-queue") == 1  # the board's row, at once
+
+
+@pytest.mark.parametrize(
+    ("card", "header"),
+    [
+        (SEED_CARD, "> **State:** idea · **Priority:** 0 · **Area:** factory\n"),
+        (SEED_CARD.replace(" · **Area:** factory", ""), "> **State:** idea · **Priority:** 0\n"),
+        ("# Milestone F11: a test\n\n## Notes\nA test.\n", "> **Priority:** 0\n"),
+    ],
+)
+def test_a_card_without_a_priority_gets_one_in_its_header(repo, card, header):
+    _seeded(repo, card)
+    _ask(repo, "priority", "f11-test", "0")
+    assert _apply(repo) == ["priority f11-test: priority of F11 set to 0"]
+    doc = (repo / "docs" / "milestones" / "f11-test.md").read_text()
+    assert header in doc and doc.endswith("## Notes\nA test.\n")
+    assert milestone.card("f11-test", doc).priority == 0
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F11: priority 100 → 0, by the owner"
+
+
+def _done_ticket(repo: Path) -> None:
+    _two_ready(repo)
+    write_task(repo / "tasks" / "done", "m1-00-old")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "done")
+
+
+def _done_card(repo: Path) -> None:
+    _two_ready(repo)
+    _seeded(repo, SEED_CARD.replace("idea", "done"))
+
+
+@pytest.mark.parametrize(
+    ("before", "subject", "value", "error"),
+    [
+        (_done_ticket, "m1-00-old", "1", "m1-00-old is in tasks/done/: its priority stays"),
+        (_two_ready, "m1-01-a", "1", "m1-01-a is running: its priority stays"),
+        (_done_card, "f11", "1", "F11 is done: its priority stays"),
+        (_two_ready, "m1-02-b", "-1", "a priority is a whole number from 0, not '-1'"),
+        (_two_ready, "m1-02-b", "1.5", "a priority is a whole number from 0, not '1.5'"),
+        (_two_ready, "m1-02-b", "x", "a priority is a whole number from 0, not 'x'"),
+        (_two_ready, "m1-02-b", None, "a priority is a whole number from 0, not None"),
+        (_two_ready, "m1-02", "1", "m1-02 is no ticket in tasks/ready/ or tasks/later/"),
+        (_two_ready, "f13", "1", "F13 has no card in docs/milestones/: its priority stays"),
+        (_two_ready, "general", "1", "the general thread has no priority"),
+        (_two_ready, "../x", "1", "a thread is a card's key or general, not '../x'"),
+        (_two_ready, None, "1", "a priority request names a ticket or a card"),
+    ],
+)
+def test_a_priority_the_runner_cant_apply_is_refused_and_main_is_unchanged(
+    repo, before, subject, value, error
+):
+    before(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "priority", subject, value)
+    _apply(repo, State(in_flight={"ticket": "m1-01-a"}))
+    assert _request(repo, asked) == (NOW.isoformat(), error)
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_a_priority_already_set_changes_nothing(repo):
+    head = _two_ready(repo)
+    _ask(repo, "priority", "m1-02-b", "100")
+    assert _apply(repo) == ["priority m1-02-b: priority of m1-02-b is 100 already"]
+    assert git(repo, "rev-parse", "HEAD") == head
+
+
+def test_a_priority_waits_for_main(repo):
+    _two_ready(repo)
+    git(repo, "checkout", "-q", "-b", "elsewhere")
+    asked = _ask(repo, "priority", "m1-02-b", "4")
+    assert _apply(repo) == ["priority m1-02-b: waits for the repo to be on main"]
+    assert _request(repo, asked) == (None, None)
 
 
 # --- pause and resume (ADR 22 item 5, f5-18) --------------------------------------------------

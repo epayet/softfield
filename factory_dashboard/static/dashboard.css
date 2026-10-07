@@ -95,6 +95,10 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
 .pill.asked { border: 1px dashed var(--opus); }
 .bar-button { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase;
   padding: 4px 16px; background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+/* A priority's ↑ and ↓ (f6-18): big enough for a thumb; "Asked" shows in the status below */
+.move { white-space: nowrap; }
+.move-button { min-width: 32px; min-height: 32px; padding: 0 6px; font-weight: 700; }
+.move-status .request { margin: 2px 0 0; border: 1px dashed var(--opus); padding: 2px 6px; }
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 0 auto; }
 .filters label { font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
 select, input[type=search], button { font: inherit; font-size: 13px; padding: 3px 6px; text-transform: none;

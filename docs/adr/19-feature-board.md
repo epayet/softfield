@@ -35,6 +35,7 @@
    - Columns by state; the cards are milestones and bugs, coloured by area, with bugs marked as bugs; search; the harvested column shows the latest few, with a link to the rest.
    - A card opens its milestone page, which gains the notes and the planner answers.
    - **Read-only at first** (owner, 2026-10-02): cards are created, edited and reprioritised in a Claude Code session. Moving, editing and adding cards from the board come later, as [ADR 18](18-dashboard-writes.md) requests, with the planner questions.
+     - Reprioritising from the dashboard is now an ADR 18 request, as item 3 foresaw ("the owner changes them, on the console or the board"): `priority` (F6 D1, f6-18), from the ↑ and ↓ of Next in line's tickets and of the Milestones page's cards.
    - **A mock-up comes before its tickets** (lead.md).
 5. **Planner questions** (asynchronous; later, after the read-only board):
    - On a card, the owner writes a question or a thought at any time, even while Claude is at its limit.

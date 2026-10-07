@@ -11,6 +11,7 @@ keep one writer, and the run state.json, whose reserve switches (ADR 22 item 4) 
 import json
 import re
 import sqlite3
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -25,8 +26,12 @@ from runner.tasks import (
     full_key,
     milestone_arg,
     milestone_file,
+    milestone_key,
     parse_task,
     preflight,
+    short_key,
+    split_frontmatter,
+    task_priority,
 )
 
 SIGNOFF = "signoff"  # subject: the milestone key
@@ -38,11 +43,12 @@ ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
 APPROVE_PLAN = "approve_plan"  # subject: the thread; its plan and its merges (f6-12)
 PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
 DROP_SEED = "drop_seed"  # subject: the idea card's short key; no value (f6-17)
+PRIORITY = "priority"  # subject: a ticket in ready/ or later/, or a card; value: N (f6-18)
 PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
 RESUME = "resume"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
-_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, *_APPROVALS)
+_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, *_APPROVALS)
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
@@ -575,6 +581,147 @@ def _drop_seed(
     return f"removed {rel}"
 
 
+# --- reprioritising: a ticket's or a card's priority, from the dashboard (f6-18) --------------
+
+_TICKET_ID_RE = re.compile(r"(?:[a-z]+\d+|bug)-\d+(?:-[a-z0-9]+)*")  # not a card's key
+_MAX_ID = 120
+_MOVABLE = ("ready", LATER)  # the folders whose tickets the owner reorders
+_TICKET_PRIORITY_RE = re.compile(r"^priority:.*$", re.MULTILINE)
+_CARD_PRIORITY_RE = re.compile(r"(\*\*Priority:\*\*[ \t]*)\d+")
+_CARD_STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*[^·*\n]*[^·*\n \t]")
+
+
+def _whole(value: object) -> int:
+    text = str(value) if type(value) is int else value
+    if not (isinstance(text, str) and text.isascii() and text.isdigit() and len(text) <= 6):
+        raise planner.PlannerError(f"a priority is a whole number from 0, not {value!r}")
+    return int(text)
+
+
+def _commit_file(git: Git, path: Path, text: str, message: str) -> None:
+    """``path`` rewritten as ``text`` and committed alone, by the runner; as it was if the
+    commit fails."""
+    before = path.read_text(encoding="utf-8")
+    rel = path.relative_to(git.repo).as_posix()
+    path.write_text(text, encoding="utf-8")
+    try:
+        git.run("add", "--", rel)
+        message = with_trailers(message, agent="runner")
+        git.run("commit", "-q", "--no-verify", "-m", message, "--author", RUNNER_AUTHOR, "--", rel)
+    except GitError:
+        git.run("reset", "-q", "--", rel, check=False)
+        path.write_text(before, encoding="utf-8")
+        raise
+
+
+def _ticket_with(text: str, priority: int) -> str:
+    """A ticket's text with its frontmatter's ``priority:`` set, added last when it has none."""
+    head, sep, body = text.removeprefix("---\n").partition("\n---\n")
+    if _TICKET_PRIORITY_RE.search(head):
+        head = _TICKET_PRIORITY_RE.sub(f"priority: {priority}", head, count=1)
+    else:
+        head = f"{head}\npriority: {priority}"
+    return f"---\n{head}{sep}{body}"
+
+
+def _card_with(doc: str, priority: int) -> str:
+    """A card's milestone doc with its header's Priority set: in place, else after its state,
+    else on a line of its own under the title (as ``planner.ready_card``)."""
+    section = re.search(r"^## ", doc, re.MULTILINE)
+    end = section.start() if section else len(doc)
+    header, body = doc[:end], doc[end:]
+    said = f"**Priority:** {priority}"
+    if _CARD_PRIORITY_RE.search(header):
+        return _CARD_PRIORITY_RE.sub(lambda m: f"{m.group(1)}{priority}", header, count=1) + body
+    if (state := _CARD_STATE_RE.search(header)) is not None:
+        return f"{header[: state.end()]} · {said}{header[state.end() :]}{body}"
+    title, _, rest = doc.partition("\n")
+    return f"{title}\n\n> {said}\n{rest}"
+
+
+def _ticket_priority(
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    state: State,
+    ticket: str,
+    priority: int,
+) -> str:
+    """A ticket's ``priority:``, for one in tasks/ready/ or tasks/later/ that isn't running;
+    the dashboard's row gets its new text at once."""
+    if ticket == (state.in_flight or {}).get("ticket"):
+        return f"{ticket} is running: its priority stays"
+    found = sorted((repo / "tasks").glob(f"*/{ticket}.md"))
+    path = next((p for p in found if p.parent.name in _MOVABLE), None)
+    if path is None:
+        if found:
+            return f"{ticket} is in tasks/{found[0].parent.name}/: its priority stays"
+        return f"{ticket} is no ticket in tasks/ready/ or tasks/later/"
+    task = parse_task(path, _MAX_DIFF)
+    doc = milestone_file(repo, "milestones", task.milestone)
+    text = doc.read_text(encoding="utf-8") if doc.is_file() else None
+    cards = {short_key(task.milestone): milestone.card(doc.stem, text).priority} if text else {}
+    was = task_priority(task, cards)
+    if was == priority:
+        return f"priority of {ticket} is {priority} already"
+    changed = _ticket_with(path.read_text(encoding="utf-8"), priority)
+    if split_frontmatter(changed)[0].get("priority") != priority:
+        return f"{ticket}'s frontmatter can't take a priority: not changed"
+    _commit_file(Git(repo), path, changed, f"{ticket}: priority {was} → {priority}, by the owner")
+    row = conn.execute(
+        "SELECT 1 FROM tickets WHERE project_id = ? AND ticket = ?", (project_id, ticket)
+    ).fetchone()
+    if row is not None:  # else the next sync makes it
+        metrics.upsert_ticket(conn, project_id, ticket, body=changed)
+    return f"priority of {ticket} set to {priority}"
+
+
+def _card_priority(
+    repo: Path, conn: sqlite3.Connection, project_id: int, subject: object, priority: int
+) -> str:
+    """A card's header Priority, for a card not done; the board's row gets it at once."""
+    thread = planner.thread_key(subject)
+    name = planner.thread_name(thread)
+    if thread == planner.GENERAL:
+        return f"{name} has no priority"
+    doc = milestone_file(repo, "milestones", full_key(repo, thread))
+    if not doc.is_file():
+        return f"{name} has no card in docs/milestones/: its priority stays"
+    text = doc.read_text(encoding="utf-8")
+    found = milestone.card(doc.stem, text)
+    if found.state == "done":
+        return f"{name} is done: its priority stays"
+    if found.priority == priority:
+        return f"priority of {name} is {priority} already"
+    changed = _card_with(text, priority)
+    if milestone.card(doc.stem, changed) != replace(found, priority=priority):
+        return f"{name}'s header can't take a priority: not changed"
+    message = f"{name}: priority {found.priority} → {priority}, by the owner"
+    _commit_file(Git(repo), doc, changed, message)
+    metrics.upsert_milestone(conn, project_id, milestone_key(doc.stem), priority=priority)
+    return f"priority of {name} set to {priority}"
+
+
+def _priority(
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    state: State,
+    subject: object,
+    value: object,
+) -> str:
+    """The owner reorders the work (f6-18): a ticket's ``priority:`` or a card's header
+    Priority set, in a commit of its own, for the next pick to follow. Refused, main
+    unchanged, for a ticket done or running, a card done, or a value that isn't a whole
+    number from 0."""
+    if not subject:
+        return "a priority request names a ticket or a card"
+    priority = _whole(value)
+    if isinstance(subject, str) and len(subject) <= _MAX_ID and _TICKET_ID_RE.fullmatch(subject):
+        return _ticket_priority(repo, conn, project_id, state, subject, priority)
+    return _card_priority(repo, conn, project_id, subject, priority)
+
+
 def _waits(repo: Path, kind: str) -> str | None:
     """Why a request that commits must wait, if it must: a queue commits on the branch it is
     on, and a sign-off or an approval commits the whole tree, so none goes anywhere but a main
@@ -627,6 +774,8 @@ def _apply(
             return _plant(repo, conn, project_id, now, row)
         if kind == DROP_SEED:
             return _drop_seed(repo, conn, project_id, now, subject)
+        if kind == PRIORITY:
+            return _priority(repo, conn, project_id, state, subject, value)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:

@@ -616,16 +616,23 @@ def live_line(
         for t in today
         if t.to == "merged" and t.crate in tickets
     ]
-    tickets_next = [
+    upcoming = queries.run_order(conn, project, states)
+    tickets_next: list[dict[str, Any]] = [
         {
             "ticket": u.ticket,
             "title": u.title,
             "kind": _kind(u.kind),
             "milestone": u.milestone,
             "waits": list(u.waits),
+            "priority": u.priority,
         }
-        for u in queries.run_order(conn, project, states)
+        for u in upcoming
     ]
+    # the priorities its ↑ and ↓ ask for, against its neighbours in the run order (f6-18)
+    for crate, (up, down) in zip(
+        tickets_next, queries.moves([u.priority for u in upcoming]), strict=True
+    ):
+        crate.update(up=up, down=down)
     queue = [
         {**crate, "number": n}
         for n, crate in enumerate([*_due_reviews(conn, project), *tickets_next], start=1)

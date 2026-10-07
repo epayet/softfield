@@ -197,9 +197,11 @@ def queue(
     now: datetime,
 ) -> list[Queued]:
     """Tickets whose dependencies are all done first, then the waiting ones, in
-    the order ``pick_next`` would take them.  Tickets with a running job are excluded."""
+    the order ``pick_next`` would take them (priority first, f6-18).  Tickets with a running
+    job are excluded."""
     rows = conn.execute(
-        "SELECT t.ticket, t.title, t.kind, t.difficulty, t.depends_on, m.key AS milestone"
+        "SELECT t.ticket, t.title, t.kind, t.difficulty, t.depends_on, t.body,"
+        " m.key AS milestone, m.priority AS card"
         " FROM tickets t"
         " JOIN projects p ON p.id = t.project_id"
         " LEFT JOIN milestones m ON m.id = t.milestone_id"
@@ -234,6 +236,9 @@ def queue(
         ).fetchall()
     }
     done = {tid for tid, st in all_states.items() if st == "done"}
+    priority = {
+        r["ticket"]: queries.ticket_priority(r["body"], r["milestone"], r["card"]) for r in rows
+    }
     found: list[Queued] = []
     for r in rows:
         if r["ticket"] in running:
@@ -263,9 +268,11 @@ def queue(
         )
     ready_now = [q for q in found if q.waits_for is None]
     waiting = [q for q in found if q.waits_for is not None]
-    ready_now.sort(key=lambda q: (milestone_order(q.milestone or "m0"), q.ticket))
-    waiting.sort(key=lambda q: (milestone_order(q.milestone or "m0"), q.ticket))
-    return ready_now + waiting
+
+    def order(q: Queued) -> tuple[int, tuple[str, int], str]:
+        return priority[q.ticket], milestone_order(q.milestone or "m0"), q.ticket
+
+    return sorted(ready_now, key=order) + sorted(waiting, key=order)
 
 
 # --- queued support jobs ------------------------------------------------------------------
