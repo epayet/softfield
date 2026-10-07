@@ -28,3 +28,12 @@ f6-planning-room-C3-1: `coming` only lists threads whose latest stored `planner_
 - what the finding describes no longer holds, and a test shows it, asserting within the Coming section on its text with tags stripped
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 1389066
+logs: var/runs/20261007-213326/f6-29-fix-coming-misses-unpicked-message
+```
