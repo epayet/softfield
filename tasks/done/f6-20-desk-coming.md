@@ -30,3 +30,12 @@ Read `desk`, `_seeds`, `_answers_wanted` and `_next_reply` in `factory_dashboard
 - assert within the group's element, on its text with tags stripped and entities unescaped (`_text` in `tests/factory_dashboard/test_planning.py`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2895
+gate_failures: []
+tokens: 3823862
+```
