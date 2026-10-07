@@ -26,3 +26,12 @@ Read D6 in `docs/milestones/f6-planning-room.md`, `factory_dashboard/planning.py
 - with none, there's no desk entry and the tab reads "Planning"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 8838264
+logs: var/runs/20261007-005149/f6-09-needs-you-desk
+```
