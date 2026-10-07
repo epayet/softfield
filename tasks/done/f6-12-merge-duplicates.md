@@ -35,3 +35,10 @@ Read `runner/planner.py` (`PROPOSAL_KINDS`, `parse_reply`, `seed_card`, `next_ke
 - `send_back` on a merge works as on any proposal
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
