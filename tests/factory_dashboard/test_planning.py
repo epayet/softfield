@@ -8,6 +8,7 @@ from collections.abc import Callable
 from datetime import timedelta
 from html import unescape
 from pathlib import Path
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -23,6 +24,7 @@ from tests.factory_dashboard.conftest import (
     _at,
     write_planning,
 )
+from tests.runner.conftest import git
 
 ORIGIN = "http://127.0.0.1:8765"
 STATIC = Path(__file__).parents[2] / "factory_dashboard" / "static"
@@ -468,3 +470,201 @@ def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve)
     assert '<form id="reply"' not in html
     assert "Send" not in _text(html)
     assert "Comment…" not in html
+
+
+# --- proposal review page (f6-08) -----------------------------------------------------------
+
+_REVIEW_ADR: dict[str, Any] = {
+    "id": "adr-20",
+    "kind": "adr",
+    "title": "ADR 20: the planning room",
+    "path": "docs/adr/20-planning-room.md",
+    "key_points": [
+        {"n": 1, "title": "Planning goes first", "text": "At the next pick.", "flag": True},
+        {"n": 2, "title": "Inside the runner", "text": "One process.", "flag": False},
+        {"n": 3, "title": "Opus, in your 25%", "text": "The whole window.", "flag": None},
+    ],
+}
+_REVIEW_PLAN: dict[str, Any] = {
+    "id": "plan",
+    "kind": "plan",
+    "title": "F6 plan: 7 tickets",
+    "path": None,
+    "key_points": [{"n": 1, "title": "Desk first", "text": "Then threads.", "flag": False}],
+}
+_REVIEW_MOCKUP: dict[str, Any] = {
+    "id": "mockup",
+    "kind": "mockup",
+    "title": "The desk, drawn",
+    "path": "docs/milestones/f6-mockup/index.html",
+    "key_points": [],
+}
+_REVIEW_SEED: dict[str, Any] = {
+    "id": "seed-1",
+    "kind": "seed",
+    "title": "Parallel developers",
+    "path": None,
+    "key_points": [{"n": 1, "title": "Two at once", "text": "Beside each other.", "flag": False}],
+}
+ADR_ON_MAIN = "# ADR 20: the planning room\n\n- **Status:** {status}\n"
+
+
+def _review(conn: sqlite3.Connection, project_id: int, thread: str, *proposals: object) -> None:
+    """On ``thread``, the lead's reply 30 min ago lists ``proposals``."""
+    found = metrics.planner_thread(conn, project_id, thread, _at(timedelta(hours=5)))["id"]
+    metrics.add_planner_message(
+        conn, found, "lead", _at(timedelta(minutes=30)), "Here.", proposals=list(proposals)
+    )
+
+
+def _review_page(client: TestClient, path: str) -> str:
+    response = client.get(path)
+    assert response.status_code == 200
+    return str(response.text)
+
+
+def _key_points(html: str) -> list[str]:
+    return [
+        _text(body) for body in re.findall(r'<div class="key-point"[^>]*>(.*?)<button', html, re.S)
+    ]
+
+
+def _posts(html: str, button: str) -> dict[str, str]:
+    """What the button posts to ``/requests``: its ``hx-vals``."""
+    found = re.search(rf'<button type="button" id="{button}"[^>]*hx-vals=\'([^\']*)\'', html)
+    assert found, button
+    vals: dict[str, str] = json.loads(unescape(found[1]))
+    return vals
+
+
+@pytest.fixture
+def checkout(tmp_path: Path, db_path: Path, planning: int, monkeypatch) -> Path:
+    """The project's repo, a git checkout on main; its ADR 20 not there yet."""
+    for name in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE"):  # set when run from a hook
+        monkeypatch.delenv(name, raising=False)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.email", "t@example.com")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "init")
+    _write(db_path, lambda conn: metrics.upsert_project(conn, PROJECT, repo=str(repo)))
+    return repo
+
+
+def test_an_adr_proposal_shows_its_points_in_order_with_their_flags(planning, db_path, serve):
+    """Each point's number, title and text in the proposal's order, a ⚑ only where ``flag`` is
+    true; tabs for the card's proposals; Accept ADR posts the number from the path."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    html = _review_page(serve(), "/planning/f6/proposals/adr-20")
+    assert _key_points(html) == [
+        "1 ⚑ Planning goes first At the next pick.",
+        "2 Inside the runner One process.",
+        "3 Opus, in your 25% The whole window.",
+    ]
+    nav = html.split('<nav id="proposal-tabs"', 1)[1].split("</nav>", 1)[0]
+    assert re.findall(r'<a href="([^"?]+)[^"]*"( aria-current="page")?', nav) == [
+        ("/planning/f6/proposals/adr-20", ' aria-current="page"'),
+        ("/planning/f6/proposals/plan", ""),
+    ]
+    assert _posts(html, "accept-adr") == {
+        "kind": "accept_adr",
+        "project": PROJECT,
+        "subject": "f6",
+        "value": "20",
+    }
+    assert 'id="approve-plan"' not in html
+    assert '<iframe id="mockup"' not in html
+
+
+def test_a_comment_turns_the_primary_button_into_send_back(page, planning, db_path, serve):
+    """Accept ADR until a comment; then Send back alone, posting the comments by point."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR))
+    _open(page, serve(), "/planning/f6/proposals/adr-20")
+    assert page.locator("#accept-adr").is_visible()
+    assert not page.locator("#send-back").is_visible()
+    page.click('.change-btn[data-point="2"]')
+    page.fill('textarea.comment[data-point="2"]', "Say how it stops.")
+    assert not page.locator("#accept-adr").is_visible()
+    assert page.locator("#send-back").inner_text().lower() == "send 1 change back"
+    page.click("#send-back")
+    page.wait_for_selector("#review-status >> text=Asked")
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
+        asked = [(r["kind"], r["subject"], json.loads(r["value"])) for r in rows]
+    finally:
+        conn.close()
+    assert asked == [
+        ("send_back", "f6/adr-20", {"text": "", "comments": {"2": "Say how it stops."}})
+    ]
+
+
+def test_approve_plan_waits_for_the_cards_adr_on_main(planning, db_path, serve, checkout):
+    """Disabled while ADR 20 is missing from main, then while it is Proposed; enabled once
+    Accepted. It posts ``approve_plan`` about the card."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    client = serve()
+
+    def approve() -> str:
+        html = _review_page(client, "/planning/f6/proposals/plan")
+        found = re.search(r'<button type="button" id="approve-plan"[^>]*>', html)
+        assert found
+        assert _posts(html, "approve-plan") == {
+            "kind": "approve_plan",
+            "project": PROJECT,
+            "subject": "f6",
+        }
+        return found[0]
+
+    assert " disabled" in approve()
+    adr = checkout / "docs" / "adr" / "20-planning-room.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
+    assert " disabled" in approve()
+    adr.write_text(ADR_ON_MAIN.format(status="Accepted"))
+    assert " disabled" not in approve()
+
+
+def test_a_seeds_button_posts_plant_about_its_general_id(planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "general", _REVIEW_SEED))
+    html = _review_page(serve(), "/planning/general/proposals/seed-1")
+    assert _posts(html, "plant") == {
+        "kind": "plant",
+        "project": PROJECT,
+        "subject": "general/seed-1",
+    }
+    assert 'id="accept-adr"' not in html
+    assert 'id="approve-plan"' not in html
+
+
+def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
+    planning, db_path, serve, checkout
+):
+    """The mock-up proposal's page frames its file, sandboxed; the route reads it from
+    ``plan/f6`` and refuses any path outside a ``-mockup/`` folder, even a draft beside it."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    for rel, text in (
+        ("docs/milestones/f6-mockup/index.html", "<p>the desk</p>"),
+        ("docs/milestones/f6-planning-room.md", "# F6"),
+        ("docs/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    client = serve()
+    html = _review_page(client, "/planning/f6/proposals/mockup")
+    frame = re.search(r'<iframe id="mockup" src="([^"?]+)[^"]*" sandbox ', html)
+    assert frame and frame[1] == "/planning/mockups/f6/docs/milestones/f6-mockup/index.html"
+    served = client.get(frame[1])
+    assert (served.status_code, served.text) == (200, "<p>the desk</p>")
+    for refused in (
+        "docs/milestones/f6-planning-room.md",
+        "docs/adr/20-planning-room.md",
+        "docs/milestones/f6-mockup/missing.html",
+        "docs/milestones/f6-mockup/",
+    ):
+        assert client.get(f"/planning/mockups/f6/{refused}").status_code == 404, refused

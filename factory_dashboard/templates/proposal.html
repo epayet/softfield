@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Planning · {{ project }} · Review{% endblock %}
+
+{% block content %}
+<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
+
+  <div style="flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+
+    <a href="/planning/{{ thread }}{{ q }}" style="font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: inline-flex; align-items: center">&lsaquo; The planning room · {{ thread }}</a>
+
+    <header style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var({{ color }}); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+      <span style="font: 600 12px var(--mono); color: var(--muted)">Proposed by the lead</span>
+      <h1 style="margin: 0; font: 700 22px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">Review {{ proposal.title }}</h1>
+      {% if proposals %}
+      <nav id="proposal-tabs" aria-label="Proposals" style="display: flex; flex-wrap: wrap; border: 1px solid var(--rule); align-self: flex-start">
+        {% for prop in proposals %}
+        {% set current = prop.link == request.url.path %}
+        <a href="{{ prop.link }}{{ q }}"{% if current %} aria-current="page"{% endif %} style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: {% if current %}var(--hazard-ink){% else %}var(--muted){% endif %}; background: {% if current %}var(--hazard){% else %}transparent{% endif %}; padding: 0 14px; min-height: 44px; display: inline-flex; align-items: center; border-right: 1px solid var(--rule); text-decoration: none; box-sizing: border-box">{{ prop.kind | upper }} · {{ prop.title }}</a>
+        {% endfor %}
+      </nav>
+      {% endif %}
+    </header>
+
+    {% if mockup %}
+    <iframe id="mockup" src="{{ mockup }}{{ q }}" sandbox title="{{ proposal.title }}" style="width: 100%; height: 480px; border: 1px solid var(--rule); background: var(--plate)"></iframe>
+    {% endif %}
+
+    <p style="margin: 0; color: var(--ink-2)">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
+
+    <div id="key-points" style="display: flex; flex-direction: column; gap: 8px">
+      {% for point in key_points %}
+      <div class="key-point" style="background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center">
+        <b style="font: 700 13px var(--mono); color: var(--muted); min-width: 26px">{{ point.n }}</b>
+        <div style="flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+          <b>{% if point.flag %}<span class="flag" title="the lead flags this one" style="color: var(--hazard)">&#9873;</span> {% endif %}{{ point.title }}</b>
+          <span style="font-size: 14px; color: var(--ink-2)">{{ point.text }}</span>
+        </div>
+        <button type="button" class="change-btn" data-point="{{ point.n }}" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); background: transparent; border: 1px solid var(--hazard); padding: 0 12px; min-height: 44px">Comment&hellip;</button>
+        <label class="comment-box" data-point="{{ point.n }}" hidden style="flex-basis: 100%; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">What would you change?
+          <textarea class="comment" data-point="{{ point.n }}" rows="2" style="width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px"></textarea>
+        </label>
+      </div>
+      {% endfor %}
+    </div>
+
+  </div>
+
+  <aside style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+    <section style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your review</h2>
+      <span id="review-count" style="font: 12.5px var(--mono); color: var(--muted)">{{ key_points | length }} agreed · 0 to change</span>
+      {% set button = "font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; min-height: 44px; width: 100%" %}
+      <button type="button" id="send-back" hidden
+        hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+        hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: "", comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'
+        style="{{ button }}">Send back</button>
+      <div id="primary">
+        {% if kind == "adr" and adr_number %}
+        <button type="button" id="accept-adr"
+          hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+          hx-vals='{"kind": "accept_adr", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ adr_number | tojson }}}'
+          style="{{ button }}">Accept ADR</button>
+        {% elif kind in ("plan", "mockup", "replan") %}
+        <button type="button" id="approve-plan"{% if adr_waits %} disabled{% endif %}
+          hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+          hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
+          style="{{ button }}{% if adr_waits %}; color: var(--muted); background: transparent; border: 1px dashed var(--muted){% endif %}">Approve plan</button>
+        {% if adr_waits %}<span style="font-size: 12.5px; color: var(--muted)">Accept the card's ADR first: the plan builds on it.</span>{% endif %}
+        {% elif kind == "seed" %}
+        <button type="button" id="plant"
+          hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+          hx-vals='{"kind": "plant", "project": {{ project | tojson }}, "subject": {{ ("general/" ~ proposal.id) | tojson }}}'
+          style="{{ button }}">Plant it</button>
+        {% endif %}
+      </div>
+      <span id="review-status" style="font-size: 12.5px; color: var(--muted)">Every point is agreed unless you comment on it.</span>
+    </section>
+    <section style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">What happens next</h2>
+      <ol style="margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px">
+        <li>Send back: your comments go to the lead as the next planner job, and it asks you again.</li>
+        <li>Accept the ADR, then approve the plan: its drafts reach main.</li>
+        <li>The runner queues the tickets at its next pick.</li>
+      </ol>
+    </section>
+  </aside>
+
+</div>
+
+<script>
+(function () {
+  var total = {{ key_points | length }};
+  var sendBack = document.getElementById('send-back');
+  var primary = document.getElementById('primary');
+  var count = document.getElementById('review-count');
+
+  function update() {
+    var n = Array.from(document.querySelectorAll('textarea.comment')).filter(function (t) { return t.value.trim(); }).length;
+    sendBack.hidden = n === 0;
+    primary.hidden = n > 0;
+    sendBack.textContent = n ? 'Send ' + n + (n === 1 ? ' change' : ' changes') + ' back' : 'Send back';
+    count.textContent = (total - n) + ' agreed · ' + n + ' to change';
+  }
+
+  document.querySelectorAll('.change-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var box = document.querySelector('.comment-box[data-point="' + btn.dataset.point + '"]');
+      box.hidden = !box.hidden;
+      box.style.display = box.hidden ? '' : 'flex';
+      if (box.hidden) box.querySelector('textarea').value = '';
+      else box.querySelector('textarea').focus();
+      update();
+    });
+  });
+  document.querySelectorAll('textarea.comment').forEach(function (t) { t.addEventListener('input', update); });
+})();
+</script>
+{% endblock %}

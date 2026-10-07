@@ -12,15 +12,16 @@ import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, ago, render
 from factory_dashboard.line import live_line
 from factory_dashboard.overview import Running, agent_allowances, running_jobs
 from runner import metrics
-from runner.planner import PLANNER
+from runner.planner import PLANNER, draft, is_proposed
 from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
@@ -411,5 +412,84 @@ def thread_page(
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,
             "next_reply": _next_reply(conn, project, jobs, pending),
+        },
+    )
+
+
+# --- proposal review (f6-08) ----------------------------------------------------------------
+
+_MOCKUP_RE = re.compile(r"docs/milestones/[^/]+-mockup/[^/].*")
+
+
+def _repo(conn: sqlite3.Connection, project: str) -> Path | None:
+    """The project's checkout; None when ``projects.repo`` isn't a folder here (a URL)."""
+    row = conn.execute("SELECT repo FROM projects WHERE name = ?", (project,)).fetchone()
+    repo = Path(row["repo"]) if row and row["repo"] else None
+    return repo if repo and repo.is_dir() else None
+
+
+def _adr_waits(repo: Path | None, proposals: list[dict[str, object]]) -> bool:
+    """Whether the card has an ``adr`` proposal whose file on main is missing or still Proposed
+    (as ``runner.requests`` reads it): Approve plan waits for it."""
+    for p in proposals:
+        if p.get("kind") != "adr":
+            continue
+        number = _ADR_NUMBER.match(str(p.get("path") or ""))
+        found = sorted((repo / "docs" / "adr").glob(f"{number[1]}-*.md")) if repo and number else []
+        if not found or is_proposed(found[0].read_text(encoding="utf-8")):
+            return True
+    return False
+
+
+@router.get("/planning/mockups/{thread}/{path:path}", response_class=HTMLResponse)
+def mockup_file(thread: str, path: str, conn: Db, project: Project) -> HTMLResponse:
+    """A mock-up's file from the card's plan branch (``planner.draft``), for a sandboxed
+    ``<iframe>``; anything outside ``docs/milestones/*-mockup/`` is 404."""
+    repo = _repo(conn, project)
+    content = draft(repo, thread, path) if repo and _MOCKUP_RE.fullmatch(path) else None
+    if content is None:
+        raise HTTPException(404, "no such mock-up")
+    return HTMLResponse(content.decode("utf-8", errors="replace"))
+
+
+@router.get("/planning/{thread}/proposals/{id}", response_class=HTMLResponse)
+def proposal_review(
+    request: Request, thread: str, id: str, conn: Db, project: Project
+) -> HTMLResponse:
+    """A proposal's review page: its key points, agreed by default, with Comment… on each,
+    and Send back, Accept ADR, Approve plan or Plant it."""
+    project_id = metrics.find_project(conn, project)
+    proposal = None if project_id is None else metrics.find_proposal(conn, project_id, thread, id)
+    if project_id is None or proposal is None:
+        raise HTTPException(404, "no such proposal")
+    rows = conn.execute(
+        "SELECT m.* FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
+        (project_id, thread),
+    ).fetchall()
+    lead = [r for r in rows if r["author"] == "lead" and r["proposals"]]
+    listed = [p for p in json.loads(lead[-1]["proposals"]) if isinstance(p, dict)] if lead else []
+    kind = str(proposal.get("kind") or "")
+    key_points = proposal.get("key_points")
+    number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
+    path = str(proposal.get("path") or "")
+    return render(
+        request,
+        conn,
+        project,
+        "proposal.html",
+        {
+            "active": "/planning",
+            "thread": thread,
+            "proposal": proposal,
+            "kind": kind,
+            "color": _KIND_COLOR.get(kind, "--ink-2"),
+            "key_points": [p for p in key_points if isinstance(p, dict)]
+            if isinstance(key_points, list)
+            else [],
+            "proposals": _proposals(conn, project_id, thread, rows),
+            "adr_number": str(int(number[1])) if number else None,
+            "mockup": f"/planning/mockups/{thread}/{path}" if _MOCKUP_RE.fullmatch(path) else None,
+            "adr_waits": _adr_waits(_repo(conn, project), listed),
         },
     )
