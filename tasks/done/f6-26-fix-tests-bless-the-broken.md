@@ -26,3 +26,12 @@ f6-planning-room-C529-2: Tests bless the broken link and do not consistently ass
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3379
+gate_failures: []
+tokens: 1032288
+```
