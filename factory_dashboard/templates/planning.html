@@ -46,6 +46,27 @@
     </div>
   </form>
 
+  {% if coming.items %}
+  <section id="desk-coming" class="desk-coming" aria-label="Coming" style="flex: 999 1 420px; min-width: 0; background: var(--bay)">
+    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">Coming</h2>
+    {% for item in coming.items %}
+    <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
+      {% if item.link %}
+      <a href="{{ item.link }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+        <span style="font-size: 14px">{{ item.title }}</span>
+        {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
+      </a>
+      {% else %}
+      <div style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+        <span style="font-size: 14px">{{ item.title }}</span>
+        {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </section>
+  {% endif %}
+
   <section id="desk" aria-label="Your desk" style="flex: 999 1 420px; min-width: 0; background: var(--bay); border: 1px solid var(--rule)">
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk</h2>
     {% for group in groups if group.items %}

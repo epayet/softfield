@@ -201,6 +201,75 @@ def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     ]
 
 
+def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
+    """What is on its way: pending plants and threads waiting for the lead's reply."""
+    project_id = metrics.find_project(conn, project)
+    items: list[DeskItem] = []
+
+    # Pending plant requests
+    if project_id is not None:
+        plant_rows = conn.execute(
+            "SELECT * FROM owner_requests"
+            " WHERE project_id = ? AND kind = 'plant' AND done IS NULL ORDER BY id",
+            (project_id,),
+        ).fetchall()
+        for r in plant_rows:
+            value = json.loads(r["value"]) if r["value"] else {}
+            items.append(
+                DeskItem(
+                    "coming",
+                    str(value.get("title") or ""),
+                    "planting at the runner's next pick",
+                    "",
+                )
+            )
+
+    # Threads with an open plan_message request or open planner row
+    if project_id is not None:
+        # Threads where the owner's message is the latest
+        thread_rows = conn.execute(
+            "SELECT t.card FROM planner_threads t"
+            " JOIN planner_messages m ON m.id = ("
+            "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
+            " WHERE t.project_id = ? AND m.author = 'owner' ORDER BY t.id",
+            (project_id,),
+        ).fetchall()
+        titles = _card_titles(conn, project_id)
+        open_jobs = metrics.open_jobs(conn, project_id)
+        for tr in thread_rows:
+            card = tr["card"]
+            # Check for open plan_message request about this thread
+            has_open_request = any(
+                r["kind"] == "plan_message"
+                and str(r["subject"] or "") == card
+                and r["done"] is None
+                for r in conn.execute(
+                    "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id",
+                    (project_id,),
+                ).fetchall()
+            )
+            # Check for open planner row about this thread
+            has_open_planner = any(
+                r["kind"] == "planner" and str(r["subject"] or "").startswith(f"{card}#")
+                for r in open_jobs
+            )
+            if not has_open_request and not has_open_planner:
+                continue
+            # Compute _next_reply for this thread
+            pending_any = any(r["kind"] == "PLANNER" for r in open_jobs)
+            next_reply = _next_reply(conn, project, running_jobs(conn, project, now), pending_any)
+            items.append(
+                DeskItem(
+                    "coming",
+                    _thread_title(card, titles),
+                    f"waiting for the lead · {next_reply}",
+                    f"/planning/{card}",
+                )
+            )
+
+    return DeskGroup("coming", "Coming", "--hazard", items)
+
+
 def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
     """What waits for the owner (D6), in four groups in this order, empty ones included."""
     project_id = metrics.find_project(conn, project)
@@ -285,6 +354,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
         (a for a in agent_allowances(conn, now) if a.label == "Claude" and a.window == "five_hour"),
         None,
     )
+    c = coming(conn, project, now)
     return render(
         request,
         conn,
@@ -294,6 +364,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "active": "/planning",
             "factory": factory_now(conn, project, now),
             "window": window,
+            "coming": c,
             "groups": desk(conn, project, now),
         },
     )

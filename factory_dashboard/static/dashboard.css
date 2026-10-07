@@ -387,3 +387,6 @@ tbody tr:hover { background: var(--accent-wash); }
 #crate-card .card-waits { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 #crate-card .card-waits::before { content: "after "; color: var(--muted); }
 
+/* The owner's desk: what is on its way, a dashed orange edge (f6-20) */
+.desk-coming { border: 1px dashed var(--hazard); }
+

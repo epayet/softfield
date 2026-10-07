@@ -795,3 +795,152 @@ def test_on_a_phone_one_point_shows_at_a_time(
     page.set_viewport_size(DISPLAY)
     assert len(_shown(page, points)) == (7 if points == "li.point" else 3)
     assert not previous.is_visible()
+
+
+# --- Coming group (f6-20) --------------------------------------------------------------------
+
+
+def _coming(html: str) -> str:
+    """The Coming section's markup, from the page's HTML."""
+    found = re.search(r'<section id="desk-coming"(.*?)</section>', html, re.S)
+    assert found, "no Coming section"
+    return found[1]
+
+
+def _coming_items(html: str) -> list[tuple[str, str]]:
+    """Coming's items: (link, title) from the section."""
+    section = _coming(html)
+    items: list[tuple[str, str]] = []
+    seen: set[str] = set()
+    # Extract links and their titles
+    for link, title in re.findall(
+        r'<a href="([^"?]+)[^"]*"[^>]*>\s*<span[^>]*>([^<]*)</span>', section
+    ):
+        if title not in seen:
+            items.append((link, unescape(title)))
+            seen.add(title)
+    # Extract non-link items (plant requests use <div> wrapping a <span>)
+    for title in re.findall(r"<div[^>]*>\s*<span[^>]*>([^<]*)</span>", section):
+        if title not in seen:
+            items.append(("", unescape(title)))
+            seen.add(title)
+    return items
+
+
+def _coming_text(html: str) -> str:
+    """Coming's text: tags stripped and entities unescaped."""
+    section = _coming(html)
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", section)).split())
+
+
+def test_an_open_plant_request_shows_in_coming_with_its_title(planning, db_path, serve):
+    """A pending plant: its title and the words "planting at the runner's next pick", no link."""
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, value, created)"
+            " VALUES (?, 'plant', ?, ?)",
+            (
+                planning,
+                json.dumps({"title": "Memory drift on the frame", "thoughts": "It forgets."}),
+                _at(timedelta(minutes=5)),
+            ),
+        ),
+    )
+    client = serve()
+    html = _page(client)
+    assert "desk-coming" in html
+    assert _coming_items(html) == [("", "Memory drift on the frame")]
+    assert "planting at the runner's next pick" in _coming_text(html)
+
+
+def test_a_done_plant_does_not_show_in_coming(planning, db_path, serve):
+    """Once the plant is done, the Coming section disappears."""
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, value, created, done, result)"
+            " VALUES (?, 'plant', ?, ?, ?, ?)",
+            (
+                planning,
+                json.dumps({"title": "Done plant"}),
+                _at(timedelta(minutes=5)),
+                NOW.isoformat(),
+                "planted ",
+            ),
+        ),
+    )
+    client = serve()
+    html = _page(client)
+    assert "desk-coming" not in html
+
+
+def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve):
+    """F6's last message is the owner's; an open planner row about F6 puts it in Coming."""
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+    client = serve()
+    html = _page(client)
+    assert "desk-coming" in html
+    assert ("/planning/f6", "The planning room") in _coming_items(html)
+    assert "waiting for the lead" in _coming_text(html)
+
+
+def test_after_the_leads_reply_the_thread_moves_to_answers_wanted(planning, db_path, serve):
+    """Once the lead's reply is stored, the thread moves to "Your answers wanted"."""
+    # First verify the thread is in Coming with an open planner row
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+    client = serve()
+    html = _page(client)
+    assert "desk-coming" in html
+    assert ("/planning/f6", "The planning room") in _coming_items(html)
+
+    # Now the lead replies: add a lead message to f6
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+
+    # The Coming section should no longer have f6
+    html = _page(client)
+    assert "desk-coming" not in html
+
+    # The thread should now be in "Your answers wanted"
+    groups = _groups(html)
+    assert "/planning/general" in [link for link, _ in _items(groups["answers"])]
+
+
+def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
+    planning, db_path, serve
+):
+    """Coming has items: the Planning tab's count and the Overview's Needs you stay the same."""
+    # First check the count without Coming
+    client = serve()
+    html = _page(client)
+    planning_tab = re.search(
+        r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
+    )
+    base_count = int(planning_tab[1]) if planning_tab else 0
+
+    # Now add Coming items
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+    html = _page(client)
+    # The desk groups are still the same four (Coming is separate)
+    groups = _groups(html)
+    assert list(groups) == ["answers", "proposals", "ripe", "seeds"]
+    # The Planning tab count is unchanged
+    planning_tab = re.search(
+        r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
+    )
+    assert planning_tab and planning_tab[1] == str(base_count)
