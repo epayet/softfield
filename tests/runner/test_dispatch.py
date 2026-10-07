@@ -181,7 +181,7 @@ def test_nothing_queued_and_no_ticket_picks_nothing():
 
 def test_while_the_owner_pauses_every_line_waits_and_nothing_is_picked():
     """ADR 22 item 5 (f5-18): pause is a state of the pick, whatever each job waited for."""
-    queued = [_row("checkpoint", "f8"), _row("planner", "f6/1"), _row("mystery", "x")]
+    queued = [_row("checkpoint", "f8"), _row("escalation", "f8-04"), _row("mystery", "x")]
     tickets = [_lead("f8-02", 1), _dev("f8-07", 2), _dev("f8-08", 3, waits="waiting on f8-06")]
     limited = Windows(limited_until=NOW + timedelta(hours=2))
     for windows in (OPEN, limited):
@@ -190,3 +190,30 @@ def test_while_the_owner_pauses_every_line_waits_and_nothing_is_picked():
         assert [line.waits for line in lines] == ["paused by you"] * 6
         assert pick(queued, tickets, windows, NOW, paused=True) is None
     assert pick(queued, tickets, OPEN, NOW, paused=False) is not None
+
+
+def test_while_the_owner_pauses_a_planner_job_still_goes_and_keeps_its_own_wait():
+    """ADR 22 item 5's ⚑ (f6-14): the owner pauses to talk a change through on /planning, so
+    their messages still reach the lead; a ticket, a checkpoint and an escalation wait."""
+    queued = [_row("checkpoint", "f8"), _row("escalation", "f8-04"), _row("planner", "f6/1")]
+    tickets = [_lead("f8-02", 1), _dev("f8-07", 2)]
+    lines = plan(queued, tickets, OPEN, NOW, paused=True)
+    waits = {line.pick.subject: line.waits for line in lines}
+    assert waits == {
+        "f6/1": None,
+        "f8-04": "paused by you",
+        "f8": "paused by you",
+        "f8-02": "paused by you",
+        "f8-07": "paused by you",
+    }
+    assert pick(queued, tickets, OPEN, NOW, paused=True) == Pick(
+        "planner", "f6/1", "why planner f6/1"
+    )
+    # Its own wait still holds it: a row parked for a limit, or Claude limited
+    parked = _row("planner", "f6/2", not_before=NOW + timedelta(hours=3))
+    [line] = plan([parked], [], OPEN, NOW, paused=True)
+    assert line.waits == "waits until Mon 5 Oct 15:00"
+    limited = Windows(limited_until=NOW + timedelta(hours=2))
+    [line] = plan([_row("planner", "f6/1")], [], limited, NOW, paused=True)
+    assert line.waits == "Claude is limited until Mon 5 Oct 14:00"
+    assert pick([parked], tickets, OPEN, NOW, paused=True) is None

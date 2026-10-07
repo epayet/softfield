@@ -492,6 +492,25 @@ def test_dry_run_shows_every_line_paused_by_the_owner(repo, capsys):
     assert "next: nothing" in out
 
 
+def test_dry_run_shows_the_planner_next_while_paused(repo, capsys):
+    """f6-14: the owner's message to the lead goes while the line holds."""
+    _add_task(repo, "m1-01-thing")
+    cfg = _config(repo)
+    save_state(State(owner_pause=loop.now().isoformat()), cfg.runs_dir / "state.json")
+    conn = metrics.open_db(cfg.metrics_db)
+    try:
+        project = metrics.upsert_project(conn, repo.name)
+        metrics.queue_job(
+            conn, project, "planner", "f7#1", "your message on F7", loop.now().isoformat()
+        )
+    finally:
+        conn.close()
+    out = _dry_run(repo, capsys)
+    assert "-> planner f7#1: runnable, your message on F7" in out
+    assert "   m1-01-thing: paused by you, priority 100, developer ticket" in out
+    assert "next: planner f7#1" in out
+
+
 def test_dry_run_lists_no_review_once_its_done(repo, capsys):
     _two_milestones(repo)
     git(repo, "mv", "tasks/ready/f9-02-last.md", "tasks/done/f9-02-last.md")
@@ -2784,15 +2803,22 @@ def _implement_other(repo: Path, prompt: str) -> None:
     (repo / "coucou" / "other.py").write_text("def other() -> int:\n    return 7\n")
 
 
-def _holds_then_resumes(repo: Path, monkeypatch, seen: list[tuple[object, ...]]) -> list[float]:
-    """The run's sleeps; at each, what the run says and which jobs ran. The owner resumes
-    at the second poll, from the dashboard."""
+def _holds_then_resumes(
+    repo: Path,
+    monkeypatch,
+    seen: list[tuple[object, ...]],
+    meanwhile: Callable[[], object] | None = None,
+) -> list[float]:
+    """The run's sleeps; at each, what the run says and which jobs ran. The owner does
+    ``meanwhile`` at the first poll and resumes at the second, from the dashboard."""
     slept: list[float] = []
     clock_sleep = time.sleep  # fake_clock's
 
     def phone(seconds: float) -> None:
         [run] = _rows(repo, "runs")
         seen.append((run["activity"], len(_rows(repo, "jobs"))))
+        if not slept and meanwhile is not None:
+            meanwhile()
         if len(slept) == 1:
             _ask_from_the_dashboard(repo, "resume")
         slept.append(seconds)
@@ -2861,6 +2887,72 @@ def test_a_paused_runner_with_nothing_to_do_holds_rather_than_ends(
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
     assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
     assert _state(repo).paused_until is None  # not a limit's pause
+
+
+def _done_at(repo: Path, kind: str) -> str:
+    [request] = [r for r in _rows(repo, "owner_requests") if r["kind"] == kind]
+    assert request["done"] is not None
+    return str(request["done"])
+
+
+def test_a_message_to_the_lead_while_paused_runs_its_planner_job_before_the_resume(
+    repo, fake_model, fake_clock, monkeypatch, capsys
+):
+    """f6-14 (ADR 22 item 5's ⚑): the owner pauses to talk a change through on /planning;
+    their message is applied during the hold and the lead answers it while the line holds.
+    The ticket waits for the resume."""
+    _add_task(repo, "m1-01-thing")
+    save_state(State(owner_pause=THURSDAY.isoformat()), _config(repo).runs_dir / "state.json")
+    fake_model.append(_implement)
+    planned: list[tuple[str, bool, datetime]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        planned.append((job.kind, _state(repo).owner_pause is not None, loop.now()))
+        return JobResult(ok=True, text='Yes.\n```json\n{"points": []}\n```', duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    seen: list[tuple[object, ...]] = []
+    slept = _holds_then_resumes(
+        repo, monkeypatch, seen, lambda: _plan_message(repo, "f7", "Shall we split it?")
+    )
+    report = _run(repo)
+    # Applied at the first poll, answered while paused, before the resume
+    [(kind, still_paused, at)] = planned
+    assert (kind, still_paused) == ("planner", True)
+    assert at.isoformat() < _done_at(repo, "resume")
+    assert [m["author"] for m in _messages(repo)] == ["owner", "lead"]
+    # Then it held again, and the ticket went only after the resume
+    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert seen == [("paused by you", 0), ("paused by you", 1)]
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
+    _, ticket = _rows(repo, "jobs")
+    assert str(ticket["started"]) >= _done_at(repo, "resume")
+    out = capsys.readouterr().out
+    assert out.count("Paused by you since") == 2  # one line per hold, not per poll
+    assert out.count("Resumed by you.") == 1
+
+
+def test_a_plant_while_paused_is_applied_before_the_resume_and_the_run_keeps_holding(
+    repo, fake_model, fake_clock, monkeypatch, capsys
+):
+    """f6-14: a plant needs no planner job, so it is applied (its card committed) and the hold
+    goes on; nothing runs until the resume."""
+    save_state(State(owner_pause=THURSDAY.isoformat()), _config(repo).runs_dir / "state.json")
+    title = json.dumps({"title": "Rubber ducks", "thoughts": "Yellow.", "area": "product"})
+    seen: list[tuple[object, ...]] = []
+    slept = _holds_then_resumes(
+        repo, monkeypatch, seen, lambda: _ask_from_the_dashboard(repo, "plant", None, title)
+    )
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
+    planted = _done_at(repo, "plant")
+    assert planted < _done_at(repo, "resume")
+    [card] = (repo / "docs" / "milestones").glob("*-rubber-ducks.md")
+    assert "Yellow." in card.read_text()
+    assert "planted by the owner" in git(repo, "log", "-1", "--format=%s", "--", str(card))
+    assert git(repo, "status", "--porcelain") == ""
+    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert seen == [("paused by you", 0), ("paused by you", 0)]
+    assert capsys.readouterr().out.count("Paused by you since") == 1
 
 
 def test_a_queue_request_made_during_a_run_is_applied_at_the_next_pick(repo, fake_model):

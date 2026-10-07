@@ -3952,11 +3952,14 @@ def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queue
 
 
 def _hold_for_the_owner(s: Session) -> bool:
-    """While the owner pauses the factory (ADR 22 item 5), the pick takes nothing: the run
-    neither ends nor sleeps to a reset, but holds, "paused by you", taking their resume and
-    the switches every ``SWITCH_POLL_S`` seconds. The hold is no limit's `wait`: the pause's
-    own usage event (`runner.requests`) counts it as stopped for the owner. False, and no
-    hold, when the run has no project row to read a resume from: it ends instead."""
+    """While the owner pauses the factory (ADR 22 item 5), the pick takes nothing but planning:
+    the run neither ends nor sleeps to a reset, but holds, "paused by you", applying every
+    request of theirs (a plant, a message, an approval, their resume) every ``SWITCH_POLL_S``
+    seconds: the run is git's one writer and nothing else runs meanwhile. The hold ends at the
+    resume or as soon as a planner job can go (its ⚑, f6-14); the pick then runs it and holds
+    again. The hold is no limit's `wait`: the pause's own usage event (`runner.requests`)
+    counts it as stopped for the owner. False, and no hold, when the run has no project row to
+    read a resume from: it ends instead."""
     since = datetime.fromisoformat(str(s.state.owner_pause)).astimezone(now().tzinfo)
     paused = f"Paused by you since {since:%H:%M}"
     if s.project_id is None:
@@ -3964,11 +3967,18 @@ def _hold_for_the_owner(s: Session) -> bool:
         return False
     s.log(f"[{RUNNER_AGENT}] {paused}: nothing runs until you resume.")
     with doing(s, dispatch.PAUSED):
-        while s.state.owner_pause is not None:
+        while s.state.owner_pause is not None and not _planning_goes(s):
             time.sleep(SWITCH_POLL_S)
-            _take_switches(s, now())
-    s.log(f"[{RUNNER_AGENT}] Resumed by you.")
+            apply_owner_requests(s)
+    if s.state.owner_pause is None:
+        s.log(f"[{RUNNER_AGENT}] Resumed by you.")
     return True
+
+
+def _planning_goes(s: Session) -> bool:
+    """Whether a planner job could run now, paused or not (`dispatch.plan`)."""
+    rows = [row for row in open_rows(s) if row.kind == PLANNER]
+    return dispatch.pick(rows, [], dispatch.Windows(), now(), paused=True) is not None
 
 
 # --- the session ------------------------------------------------------------------

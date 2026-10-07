@@ -13,7 +13,8 @@ callers read the metrics database, ``tasks/`` and ``state.json``.
   reserve (ADR 15 item 4); a lead ticket only the reserves the owner lets the factory use.
   Developer tickets never wait for Claude: that keeps "lead work first, developers
   meanwhile" (ADR 16 item 2) without a path of its own.
-- While the owner pauses the factory, every job waits, "paused by you" (ADR 22 item 5).
+- While the owner pauses the factory, every job waits, "paused by you" (ADR 22 item 5), but
+  the planner's: the owner pauses to talk a change through on /planning (its ⚑, f6-14).
 """
 
 import sqlite3
@@ -35,7 +36,7 @@ CLAUDE = "claude"
 COST = 0.0  # a job's share of Claude's windows isn't learned yet (`loop.LEAD_COST`)
 SUPPORT_RESERVE = "seven_day"  # the week's reserve is the support roles' (ADR 15 item 4)
 UNKNOWN_KIND = "unknown kind of job"
-PAUSED = "paused by you"  # the owner paused the factory (f5-18): every line waits
+PAUSED = "paused by you"  # the owner paused the factory (f5-18): every line but planning waits
 
 
 @dataclass(frozen=True)
@@ -118,14 +119,17 @@ def plan(
     paused: bool = False,
 ) -> list[Line]:
     """Every job in the order it would run, each with what it waits for. While the owner
-    pauses the factory (ADR 22 item 5), every one waits for them."""
+    pauses the factory (ADR 22 item 5), every one waits for them but a planner job, which
+    keeps its own wait (its ⚑, f6-14)."""
     rows = sorted(queued, key=lambda q: (_rank(q.kind), _at(q.created), q.id or 0))
     lines = [_queued_line(q, windows, now) for q in rows if q.kind in KINDS]
     ordered = sorted(tickets, key=lambda t: _ticket_rank(t, now))  # stable: the run order
     lines += [_ticket_line(t, windows, now) for t in ordered]
     unknown = [q for q in rows if q.kind not in KINDS]
     lines += [Line(Pick(q.kind, q.subject, q.reason), UNKNOWN_KIND) for q in unknown]
-    return [Line(line.pick, PAUSED) for line in lines] if paused else lines
+    if not paused:
+        return lines
+    return [line if line.pick.kind == PLANNER else Line(line.pick, PAUSED) for line in lines]
 
 
 def _rank(kind: str) -> int:
