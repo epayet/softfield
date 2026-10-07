@@ -3322,6 +3322,7 @@ SWITCHES = {
 }
 USE_RESERVE_HOURS = 24  # on lasts this long, then turns itself off (owner, 2026-10-04)
 SWITCH_POLL_S = 60.0  # how often a wait for the owner's 25% checks for the switch (f5 D2)
+HOLD_POLL_S = 5.0  # how often the hold for the owner applies their requests (f6-22)
 FIVE_HOUR_KIND = "five-hour"  # a lead ticket parked for the owner's 25%, and its owner item
 RESERVE_KIND = "reserve"  # a lead ticket parked at the week's reserve, a lapsed switch's item
 RETRY = "retry"  # a parked entry's flag: a restart tries it again before its reset
@@ -3964,7 +3965,7 @@ def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queue
 def _hold_for_the_owner(s: Session) -> bool:
     """While the owner pauses the factory (ADR 22 item 5), the pick takes nothing but planning:
     the run neither ends nor sleeps to a reset, but holds, "paused by you", applying every
-    request of theirs (a plant, a message, an approval, their resume) every ``SWITCH_POLL_S``
+    request of theirs (a plant, a message, an approval, their resume) every ``HOLD_POLL_S``
     seconds: the run is git's one writer and nothing else runs meanwhile. The hold ends at the
     resume or as soon as a planner job can go (its ⚑, f6-14); the pick then runs it and holds
     again. The hold is no limit's `wait`: the pause's own usage event (`runner.requests`)
@@ -3978,7 +3979,7 @@ def _hold_for_the_owner(s: Session) -> bool:
     s.log(f"[{RUNNER_AGENT}] {paused}: nothing runs until you resume.")
     with doing(s, dispatch.PAUSED):
         while s.state.owner_pause is not None and not _planning_goes(s):
-            time.sleep(SWITCH_POLL_S)
+            time.sleep(HOLD_POLL_S)
             apply_owner_requests(s)
     if s.state.owner_pause is None:
         s.log(f"[{RUNNER_AGENT}] Resumed by you.")

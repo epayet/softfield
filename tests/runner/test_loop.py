@@ -2850,10 +2850,10 @@ def test_a_pause_lets_the_job_finish_then_holds_until_the_owner_resumes(
         ("m1-02-other", "done"),
     ]
     # It held between the two, polling, saying so; the second went only after the resume.
-    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert slept == [5.0, 5.0]
     assert seen == [("paused by you", 1), ("paused by you", 1)]
     first, second = _rows(repo, "jobs")
-    assert str(second["started"]) >= (THURSDAY + timedelta(seconds=120)).isoformat()
+    assert str(second["started"]) >= (THURSDAY + timedelta(seconds=10)).isoformat()
     assert str(first["ended"]) <= THURSDAY.isoformat()
     assert _state(repo).owner_pause is None
     assert [r["done"] is not None for r in _rows(repo, "owner_requests")] == [True, True]
@@ -2885,8 +2885,30 @@ def test_a_paused_runner_with_nothing_to_do_holds_rather_than_ends(
     seen: list[tuple[object, ...]] = []
     slept = _holds_then_resumes(repo, monkeypatch, seen)
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
-    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert slept == [5.0, 5.0]
     assert _state(repo).paused_until is None  # not a limit's pause
+
+
+def test_a_resume_while_the_run_holds_is_taken_at_the_first_poll(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """f6-22: the hold polls every 5 s, not the 25% wait's minute; the owner's first Resume
+    took 45 s and looked broken."""
+    save_state(State(owner_pause=THURSDAY.isoformat()), _config(repo).runs_dir / "state.json")
+    slept: list[float] = []
+    clock_sleep = time.sleep  # fake_clock's
+
+    def phone(seconds: float) -> None:
+        if not slept:  # the run holds: the owner resumes at once
+            _ask_from_the_dashboard(repo, "resume")
+        slept.append(seconds)
+        clock_sleep(seconds)
+
+    monkeypatch.setattr("time.sleep", phone)
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
+    assert slept == [5.0]
+    assert _done_at(repo, "resume") == (THURSDAY + timedelta(seconds=5)).isoformat()
+    assert _state(repo).owner_pause is None
 
 
 def _done_at(repo: Path, kind: str) -> str:
@@ -2922,7 +2944,7 @@ def test_a_message_to_the_lead_while_paused_runs_its_planner_job_before_the_resu
     assert at.isoformat() < _done_at(repo, "resume")
     assert [m["author"] for m in _messages(repo)] == ["owner", "lead"]
     # Then it held again, and the ticket went only after the resume
-    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert slept == [5.0, 5.0]
     assert seen == [("paused by you", 0), ("paused by you", 1)]
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
     _, ticket = _rows(repo, "jobs")
@@ -2950,7 +2972,7 @@ def test_a_plant_while_paused_is_applied_before_the_resume_and_the_run_keeps_hol
     assert "Yellow." in card.read_text()
     assert "planted by the owner" in git(repo, "log", "-1", "--format=%s", "--", str(card))
     assert git(repo, "status", "--porcelain") == ""
-    assert slept == [loop.SWITCH_POLL_S, loop.SWITCH_POLL_S]
+    assert slept == [5.0, 5.0]
     assert seen == [("paused by you", 0), ("paused by you", 0)]
     assert capsys.readouterr().out.count("Paused by you since") == 1
 

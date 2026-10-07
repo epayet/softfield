@@ -33,7 +33,7 @@
   - **A pending reply:** each `plan_message` queues a `work_queue` row of kind `planner`, subject `<thread>#<request id>` (`planner.row_subject`), open (`metrics.open_jobs`) until the lead's reply is stored.
   - **A reply** raises an owner item of kind `planning`, subject the thread, resolved by the owner's next message there.
   - **The dashboard's `POST /requests`** takes every kind above, with F5's `pause` and `resume` (`KINDS` in `factory_dashboard/requests.py`, protected): f6-11 added the first five, f6-17 and f6-18 the last two.
-  - **While paused (f6-14, ADR 22 item 5 ⚑):** `dispatch.plan` gives a `planner` row its own wait and every other line `PAUSED`. The hold (`_hold_for_the_owner` in `runner/loop.py`) applies every open request at each poll (`apply_owner_requests`: plants, messages, approvals, drops, priorities, the resume) and ends as soon as a planner job can go; the pick runs it and holds again. As built it polls every `SWITCH_POLL_S` (60 s), not the 5 s f6-14 asked for: f6-22.
+  - **While paused (f6-14, ADR 22 item 5 ⚑):** `dispatch.plan` gives a `planner` row its own wait and every other line `PAUSED`. The hold (`_hold_for_the_owner` in `runner/loop.py`) applies every open request at each poll (`apply_owner_requests`: plants, messages, approvals, drops, priorities, the resume) and ends as soon as a planner job can go; the pick runs it and holds again. It polls every `HOLD_POLL_S` (5 s, f6-22); the 25% wait keeps `SWITCH_POLL_S` (60 s).
 
 - **D2 The reply block:** the planner ends each reply with a fenced `json` block:
   - `points`: a list of `{n, title, answer, action}`;
