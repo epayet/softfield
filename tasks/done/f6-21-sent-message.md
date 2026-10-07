@@ -27,3 +27,12 @@ Read `thread_page` and `_messages` in `factory_dashboard/planning.py`, and `fact
 - assert within the message's element, on its text with tags stripped and entities unescaped (`_text` in `tests/factory_dashboard/test_planning.py`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 7677
+gate_failures: ['task-tests', 'protected-paths']
+tokens: 7051976
+```
