@@ -105,8 +105,18 @@ def test_the_queue_item_goes_from_live_once_a_run_is_live(serve):
     assert "runner is idle" not in section(running, "needs-you")
 
 
-def test_needs_you_is_absent_when_nothing_needs_the_owner(serve_between):
+def sign_off_all(db_path: Path) -> None:
+    """Every milestone signed off, so none waits on the desk as ripe (f6-09)."""
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute("UPDATE milestones SET status = 'done'")
+    finally:
+        conn.close()
+
+
+def test_needs_you_is_absent_when_nothing_needs_the_owner(serve_between, db_path):
     client = serve_between(activity="check-all on main")
+    sign_off_all(db_path)
     for html in (client.get("/").text, client.get("/live").text):
         assert "Needs you" not in html and "Nothing needs you" not in html
         assert 'id="needs-you"' not in html
@@ -647,7 +657,9 @@ def test_needs_you_comes_back_when_a_need_appears_after_the_page_loaded(
     page, serve_between, db_path
 ):
     """In f3-14 the empty Needs you swapped its wrapper away, so a later need never showed."""
-    open_overview(page, serve_between(activity="check-all on main"))
+    client = serve_between(activity="check-all on main")
+    sign_off_all(db_path)
+    open_overview(page, client)
     assert page.locator("#needs-you").count() == 0
     page.wait_for_timeout(6_000)  # one refresh with nothing to show
     conn = metrics.open_db(db_path)
@@ -1329,3 +1341,57 @@ def test_done_row_isnt_shown(client, db_path):
     html = client.get("/live").text
     queue_section = section(html, "queue")
     assert "A checkpoint" not in queue_section
+
+
+def lead_replies(db_path: Path, *cards: str) -> None:
+    """A thread per card whose last message is the lead's, each raising its ``planning`` owner
+    item as the runner does (f6-09)."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for card in cards:
+            thread = metrics.planner_thread(conn, project, card, NOW.isoformat())
+            metrics.add_planner_message(conn, thread["id"], "lead", NOW.isoformat(), "A reply.")
+            text = f"The lead answered your message on {card.upper()}."
+            metrics.upsert_owner_item(conn, project, "planning", card, text=text)
+    finally:
+        conn.close()
+
+
+def planning_tab(html: str) -> str:
+    match = re.search(r'<a [^>]*id="planning-tab"[^>]*>(.*?)</a>', html, re.S)
+    assert match, "no Planning tab"
+    return " ".join(match.group(1).split())
+
+
+def test_three_desk_items_show_their_count_links_and_tab(serve_between, db_path):
+    client = serve_between()
+    sign_off_all(db_path)
+    lead_replies(db_path, "f7", "f8", "f9")
+    for html in (client.get("/").text, client.get("/live").text):
+        needs = section(html, "needs-you")
+        assert "3 things wait for you on your desk" in needs
+        assert "Open your desk ›" in needs
+        entry = html.split('id="desk-entry"')[1].split("</li>")[0]
+        links = re.findall(r'href="/planning/(f\d)\?', entry)
+        assert links == ["f7", "f8", "f9"]
+        assert planning_tab(html) == "Planning · 3"
+
+
+def test_a_lead_reply_shows_once_in_the_desk_entry(serve_between, db_path):
+    client = serve_between()
+    sign_off_all(db_path)
+    lead_replies(db_path, "f7")
+    html = client.get("/live").text
+    needs = section(html, "needs-you")
+    assert "1 thing waits for you on your desk" in needs
+    assert "The lead answered" not in needs and "planning" not in needs  # the entry stands for it
+    assert "The lead answered" in html.split('id="live-facts"')[1]  # notify.js still tells it
+
+
+def test_an_empty_desk_has_no_entry_and_a_plain_tab(serve_between, db_path):
+    client = serve_between()
+    sign_off_all(db_path)
+    for html in (client.get("/").text, client.get("/live").text):
+        assert 'id="desk-entry"' not in html
+        assert planning_tab(html) == "Planning"

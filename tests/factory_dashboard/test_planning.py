@@ -228,10 +228,14 @@ def test_the_lead_window_shows_the_75_line(planning, db_path, serve):
 
 def test_the_top_bar_has_a_planning_tab(client):
     html = client.get("/").text
-    assert re.search(r'<a href="/planning\?project=coucou">Planning</a>', html)
+    # the fixture's ripe milestone waits on the desk (f6-09)
+    assert re.search(
+        r'<a href="/planning\?project=coucou" id="planning-tab">Planning · 1</a>', html
+    )
     planning = client.get("/planning").text
     assert re.search(
-        r'<a href="/planning\?project=coucou" aria-current="page">Planning</a>', planning
+        r'<a href="/planning\?project=coucou" aria-current="page" id="planning-tab">Planning</a>',
+        planning,
     )
 
 

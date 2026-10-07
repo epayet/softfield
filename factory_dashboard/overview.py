@@ -549,17 +549,28 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
     the run order)."""
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
+    from factory_dashboard.planning import desk  # planning.py imports from overview at module level
 
     jobs = running_jobs(conn, project, now)
     all_queued = queue(conn, project, now)
     # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
     qjobs = queued_jobs(conn, project, now)
-    needs = needs_you(conn, project, now, jobs, all_queued)
+    open_needs = needs_you(conn, project, now, jobs, all_queued)
+    # the desk's entry stands for its answers wanted, so no lead reply shows on its own (f6-09)
+    needs = [n for n in open_needs if n.kind != "planning"]
+    items = [item for group in desk(conn, project, now) for item in group.items]
+    if items:
+        n = len(items)
+        text = f"{n} thing{'s wait' if n != 1 else ' waits'} for you on your desk"
+        needs.insert(0, Need("desk", "desk", text))
     return {
         "needs": needs,
-        # what notify.js compares after each poll (f5-12): a job stopped mid-way isn't done
-        "notify": {need.id: need.text for need in needs},
+        "desk_items": items[:3],
+        "planning_count": len(items),  # the Planning tab's count, refreshed by the live partial
+        # what notify.js compares after each poll (f5-12), each lead reply still on its own:
+        # a job stopped mid-way isn't done
+        "notify": {need.id: need.text for need in open_needs},
         "all_done": not (all_queued or qjobs or jobs),
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),

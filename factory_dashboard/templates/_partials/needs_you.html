@@ -4,11 +4,16 @@
   <h2>Needs you <span class="src">each item goes when it's done</span></h2>
   <ul class="steps">
     {% for need in needs %}
-    <li>
+    <li{% if need.id == "desk" %} id="desk-entry"{% endif %}>
       <span class="when"><span class="pill warn">{{ need.kind }}</span></span>
       <span class="what">
         <span>{{ need.text }}{% if need.ticket %} (<a class="mono" href="/tickets/{{ need.ticket }}{{ q }}">{{ need.ticket }}</a>){% endif %}</span>
         {% if need.command %}<code>{{ need.command }}</code>{% endif %}
+        {# the desk's top three and the desk itself (f6-09) #}
+        {% if need.id == "desk" %}
+        {% for item in desk_items %}<a class="mono" href="{{ item.link }}{{ q }}">{{ item.title }}</a> {% endfor %}
+        <a class="mono" href="/planning{{ q }}">Open your desk ›</a>
+        {% endif %}
       </span>
     </li>
     {% endfor %}

@@ -4,3 +4,5 @@
 {% include "_partials/queue.html" %}
 {# What notify.js compares after each poll (f5-12): the open Needs-you items, id -> text, and whether all the work is done #}
 <div id="live-facts" hidden data-project="{{ project }}" data-needs='{{ notify | tojson }}' data-all-done="{{ 'true' if all_done else 'false' }}"></div>
+{# The Planning tab's count (f6-09), swapped out of band into the top bar #}
+<a id="planning-tab" href="/planning{{ q }}" hx-swap-oob="outerHTML">Planning{% if planning_count %} · {{ planning_count }}{% endif %}</a>
