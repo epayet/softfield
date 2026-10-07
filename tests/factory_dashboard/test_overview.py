@@ -1469,7 +1469,7 @@ def test_an_empty_desk_has_no_entry_and_a_plain_tab(serve_between, db_path):
 
 def test_planning_row_shows_first_60_chars_and_title(client, db_path):
     """A planner row for a 100-character message: first 60 chars + …, title holds all 100,
-    link is /planning/F11."""
+    link is /planning/f11."""
     from runner import metrics
 
     conn = metrics.open_db(db_path)
@@ -1497,7 +1497,7 @@ def test_planning_row_shows_first_60_chars_and_title(client, db_path):
     assert "Planning:" in next_section
     # Find the planning row in raw HTML (href/title can't be found in stripped text)
     planning_row = html.split("Planning:")[1].split("</div>")[0]
-    assert 'href="/planning/F11"' in planning_row
+    assert 'href="/planning/f11"' in planning_row
     # Title attribute is on the <div>, find it from the full row
     title_match = re.search(r'<div[^>]*title="([^"]*)"[^>]*>.*?Planning:', html)
     assert title_match
