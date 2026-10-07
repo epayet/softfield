@@ -316,9 +316,9 @@ with your reasons and a recommendation. Agree only when you do.
 """
 
 _PLANNER_TAIL = """\
-- Nothing is queued without their approval. Never write to tasks/ready/ or touch main: the \
-owner approves a proposal from the dashboard, and only then does the runner merge the \
-drafts and queue the tickets.
+- Nothing is queued without their approval. Never touch main: the owner approves a \
+proposal from the dashboard, and only then does the runner merge the drafts and queue the \
+tickets.
 
 End your reply with one fenced `json` block, nothing after it. List every proposal you \
 drafted or changed this turn with its key points, numbered, for the owner to review point \
@@ -339,6 +339,14 @@ run `git checkout plan/{card}`). ADRs in docs/adr/ (status Proposed); mock-ups a
 self-contained HTML in docs/milestones/{card}-mockup/; the card's milestone doc in \
 docs/milestones/; tickets in tasks/later/ (docs/task-format.md). Edit nothing else, and \
 don't commit: the runner commits the branch after your reply.
+- To redirect {card} while it runs, propose a `replan` (f6-13): on the branch it may also \
+change {card}'s waiting tickets, tasks/ready/{card}-*.md: edit one, add one, or set one \
+aside (move it to tasks/later/). Never another milestone's ticket, never the one in \
+progress (`in_flight` in var/runs/state.json names it), never tasks/done/: the runner refuses the \
+approval. Each changed ticket must pass pre-flight. Only a `replan` may touch tasks/ready/.
+- When a change touches tickets the line may start while you talk (a `replan`, a ticket \
+reworked), suggest the owner pause the factory from the dashboard first, and say so in a \
+point; approving the `replan` lifts their pause.
 """
     + _PLANNER_TAIL
 )
@@ -348,7 +356,8 @@ PLANNER_GENERAL = (
     _PLANNER_HEAD
     + """\
 - This thread has no card, so no plan branch: read what you need and change nothing. An \
-idea worth a card is a `seed` proposal (path null); the runner plants it once approved.
+idea worth a card is a `seed` proposal (path null); the runner plants it once approved. \
+Never write to tasks/: a card's own thread redirects its tickets.
 """
     + _PLANNER_TAIL
 )

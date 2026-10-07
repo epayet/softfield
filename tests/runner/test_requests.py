@@ -417,9 +417,12 @@ def _ticket(task_id: str, context: str = "`coucou/thing.py` has `def thing() -> 
     return TICKET.format(id=task_id, context=context)
 
 
-def _plan(repo: Path, files: dict[str, str], card: str = "f7") -> None:
-    """The planner's drafts, committed on the card's plan branch; back on main."""
+def _plan(repo: Path, files: dict[str, str], card: str = "f7", gone: tuple[str, ...] = ()) -> None:
+    """The planner's drafts, committed on the card's plan branch (``gone`` removed); back on
+    main."""
     git(repo, "checkout", "-q", "-b", f"plan/{card}", "main")
+    for rel in gone:
+        git(repo, "rm", "-q", "--", rel)
     for rel, text in files.items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
         (repo / rel).write_text(text)
@@ -467,7 +470,7 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     assert _apply(repo) == []  # finished once
 
 
-@pytest.mark.parametrize("stray", ["runner/loop.py", "tasks/ready/f7-09-sneak.md", "AGENTS.md"])
+@pytest.mark.parametrize("stray", ["runner/loop.py", "tasks/done/f7-09-sneak.md", "AGENTS.md"])
 def test_a_plan_touching_anything_but_drafts_is_refused_and_main_is_unchanged(repo, stray):
     _card(repo)
     _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a"), stray: "x = 1\n"})
@@ -904,6 +907,190 @@ def test_the_pause_and_resume_requests_are_taken_during_a_wait(repo):
         assert [r["kind"] for r in metrics.open_requests(conn, project)] == ["queue"]
     finally:
         conn.close()
+
+
+# --- a `replan` edits its running milestone's ready tickets (f6-13) ----------------------------
+
+BUILDING = CARD.replace("planning", "building")
+REPLAN = {
+    "id": "replan-1",
+    "kind": "replan",
+    "title": "Redirect F7",
+    "path": None,
+    "key_points": [{"n": 1, "title": "Less", "text": "f7-01-a does less.", "flag": False}],
+}
+LESS = _ticket("f7-01-a").replace("Make the thing work.", "Make less of the thing work.")
+LATER_ON = NOW + timedelta(minutes=30)
+
+
+def _running(repo: Path, kind: str = "replan") -> str:
+    """F7 building on main with f7-01-a and f7-02-b ready, and f5-01-x of another milestone;
+    the lead's reply on F7 proposing a ``kind``; main's head."""
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True)
+    (docs / "f7-one-queue.md").write_text(BUILDING)
+    (repo / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
+    for task_id in ("f7-01-a", "f7-02-b", "f5-01-x"):
+        (repo / "tasks" / "ready" / f"{task_id}.md").write_text(_ticket(task_id))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "F7 running")
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        thread = metrics.planner_thread(conn, project, "f7", NOW.isoformat())
+        proposal = {**REPLAN, "kind": kind}
+        metrics.add_planner_message(
+            conn, thread["id"], "lead", NOW.isoformat(), "Redirect it.", proposals=[proposal]
+        )
+    finally:
+        conn.close()
+    return git(repo, "rev-parse", "HEAD")
+
+
+def _paused(repo: Path) -> State:
+    state = State()
+    _ask(repo, "pause")
+    _apply(repo, state)
+    return state
+
+
+def _ready(repo: Path) -> dict[str, str]:
+    return {p.stem: p.read_text() for p in sorted((repo / "tasks" / "ready").glob("*.md"))}
+
+
+def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_pause(repo):
+    head = _running(repo)
+    _plan(
+        repo,
+        {
+            "tasks/ready/f7-01-a.md": LESS,
+            "tasks/ready/f7-04-d.md": _ticket("f7-04-d"),
+            "tasks/later/f7-03-c.md": _ticket("f7-03-c"),
+        },
+    )
+    state = _paused(repo)
+    asked = _ask(repo, "approve_plan", "f7")
+    result = "approved plan/f7: queued f7-03-c, f7-04-d; changed f7-01-a; resumed"
+    assert _apply(repo, state, LATER_ON) == [f"approve_plan f7: {result}"]
+    assert _request(repo, asked) == (LATER_ON.isoformat(), result)
+    ready = _ready(repo)
+    assert sorted(ready) == ["f5-01-x", "f7-01-a", "f7-02-b", "f7-03-c", "f7-04-d"]
+    assert ready["f7-01-a"] == LESS
+    # the card keeps building: a replan redirects it, it doesn't start it again
+    doc = (repo / "docs" / "milestones" / "f7-one-queue.md").read_text()
+    assert milestone.card("f7-one-queue", doc).state == "building"
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
+    assert git(repo, "status", "--porcelain") == ""
+    assert git(repo, "branch", "--list", "plan/f7") == ""
+    # the owner's pause is lifted, its hold ended at the approval
+    assert state.owner_pause is None
+    assert _pauses(repo) == [(NOW.isoformat(), LATER_ON.isoformat())]
+
+
+def test_a_replan_approved_without_a_pause_still_applies(repo):
+    _running(repo)
+    _plan(repo, {"tasks/ready/f7-01-a.md": LESS})
+    state = State()
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; changed f7-01-a"
+    assert _ready(repo)["f7-01-a"] == LESS
+    assert state.owner_pause is None and _pauses(repo) == []
+
+
+def test_a_replan_sets_a_ready_ticket_aside_in_later(repo):
+    _running(repo)
+    _plan(repo, {"tasks/later/f7-02-b.md": _ticket("f7-02-b")}, gone=("tasks/ready/f7-02-b.md",))
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; set aside f7-02-b"
+    assert sorted(_ready(repo)) == ["f5-01-x", "f7-01-a"]
+    assert (repo / "tasks" / "later" / "f7-02-b.md").is_file()
+
+
+def _replan_refused(repo: Path, head: str, state: State, asked: int) -> str:
+    """Main as it was, the ready tickets untouched, the pause still held; the result."""
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    assert _ready(repo) == {t: _ticket(t) for t in ("f5-01-x", "f7-01-a", "f7-02-b")}
+    assert state.owner_pause == NOW.isoformat()
+    assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"  # kept, to fix
+    return str(_request(repo, asked)[1])
+
+
+@pytest.mark.parametrize(
+    ("files", "gone", "kind", "error"),
+    [
+        (
+            {"tasks/ready/f5-01-x.md": LESS},
+            (),
+            "replan",
+            "plan/f7 changes tasks/ready/f5-01-x.md, another milestone's ticket: not approved",
+        ),
+        (
+            {"tasks/ready/f7-01-a.md": LESS},
+            (),
+            "replan",
+            "plan/f7 changes tasks/ready/f7-01-a.md, the running ticket: not approved",
+        ),
+        (
+            {"tasks/later/f7-01-a.md": _ticket("f7-01-a")},
+            ("tasks/ready/f7-01-a.md",),
+            "replan",
+            "plan/f7 changes tasks/ready/f7-01-a.md, the running ticket: not approved",
+        ),
+        (
+            {},
+            ("tasks/ready/f7-02-b.md",),
+            "replan",
+            "plan/f7 changes tasks/ready/f7-02-b.md,"
+            " a ready ticket removed, not set aside in tasks/later/: not approved",
+        ),
+        (
+            {"tasks/ready/f7-02-b.md": LESS},
+            (),
+            "plan",
+            "plan/f7 changes tasks/ready/f7-02-b.md,"
+            " a ready ticket only a replan changes: not approved",
+        ),
+        (
+            {"tasks/done/f7-00-z.md": LESS},
+            (),
+            "replan",
+            "plan/f7 changes tasks/done/f7-00-z.md, outside docs/ and tasks/later/: not approved",
+        ),
+    ],
+)
+def test_a_replan_reaching_past_its_milestones_waiting_tickets_is_refused(
+    repo, files, gone, kind, error
+):
+    head = _running(repo, kind)
+    _plan(repo, files, gone=gone)
+    state = _paused(repo)
+    state.in_flight = {"kind": "local", "ticket": "f7-01-a", "branch": "task/f7-01-a"}
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    assert _replan_refused(repo, head, state, asked) == error
+
+
+def test_a_changed_ticket_failing_pre_flight_refuses_the_replan(repo):
+    head = _running(repo)
+    _plan(
+        repo,
+        {
+            "tasks/ready/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
+            "tasks/later/f7-03-c.md": _ticket("f7-03-c"),
+        },
+    )
+    state = _paused(repo)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    assert _replan_refused(repo, head, state, asked) == (
+        "not approved: f7-01-a: referenced path does not exist: conftest.py"
+    )
+    assert not (repo / "tasks" / "later" / "f7-03-c.md").exists()
 
 
 # --- `runner reserve` and `runner run --use-reserve` (ADR 22 item 4, f8 D4) ------------------

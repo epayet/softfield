@@ -162,12 +162,49 @@ def _drafts(git: Git, branch: str) -> list[tuple[str, str]]:
     return changes
 
 
-def _outside(branch: str, changes: list[tuple[str, str]]) -> str | None:
-    """Why the branch can't be merged, if it changes more than drafts: docs/ and the tickets
-    in tasks/later/, as plain files (a link would lead an edit out of them)."""
-    stray = [path for _, path in changes if not planner.is_draft(path)]
-    if stray:
-        return f"{branch} changes {', '.join(stray)}, outside docs/ and tasks/later/: not approved"
+_OUTSIDE = "outside docs/ and tasks/later/"
+_BUILDING = "building"  # a card's state while its tickets run (f5 D4): a plan keeps it
+
+
+def _why_not(
+    path: str, mode: str, card: str, replan: bool, running: str | None, later: set[str]
+) -> str | None:
+    """Why the plan branch may not change ``path``: a draft may change, and a ``replan`` its
+    card's ready tickets too (f6-13), but not the running one, and one it removes only to set
+    it aside in tasks/later/."""
+    if planner.is_draft(path):
+        return None
+    if not path.startswith(planner.READY_DIR):
+        return _OUTSIDE
+    if not planner.is_draft(path, card):
+        return "another milestone's ticket"
+    if not replan:
+        return "a ready ticket only a replan changes"
+    name = Path(path).name
+    if name.removesuffix(".md") == running:
+        return "the running ticket"
+    if mode == "000000" and name not in later:
+        return "a ready ticket removed, not set aside in tasks/later/"
+    return None
+
+
+def _outside(
+    branch: str, changes: list[tuple[str, str]], card: str, replan: bool, running: str | None
+) -> str | None:
+    """Why the branch can't be merged, if it changes more than it may (``_why_not``), or as
+    other than plain files (a link would lead an edit out of them)."""
+    later = {
+        Path(path).name
+        for mode, path in changes
+        if path.startswith(f"tasks/{LATER}/") and mode != "000000"
+    }
+    stray: dict[str, list[str]] = {}
+    for mode, path in changes:
+        if (why := _why_not(path, mode, card, replan, running, later)) is not None:
+            stray.setdefault(why, []).append(path)
+    if stray:  # the first reason found, with every path it holds for
+        why, paths = next(iter(stray.items()))
+        return f"{branch} changes {', '.join(paths)}, {why}: not approved"
     links = [path for mode, path in changes if mode not in _PLAIN]
     if links:
         return f"{branch} changes {', '.join(links)}, not a plain file: not approved"
@@ -181,7 +218,7 @@ def _proposed(repo: Path, number: int) -> bool:
 
 def _ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
     """Each merged ticket's pre-flight problems, and an ADR it relies on that is still
-    Proposed, by ticket."""
+    Proposed, by ticket: one in tasks/later/ to be queued, or a ready one a replan changed."""
     problems = []
     for rel in tickets:
         path = repo / rel
@@ -194,7 +231,7 @@ def _ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
         elsewhere = [
             p.parent.name
             for p in (repo / "tasks").glob(f"*/{task.id}.md")
-            if p.parent.name != LATER
+            if p.parent.name not in (LATER, path.parent.name)
         ]
         found += [f"already in tasks/{folder}/" for folder in sorted(elsewhere)]
         adrs = planner.named_adrs(path.read_text(encoding="utf-8"))
@@ -207,12 +244,12 @@ def _ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
     return problems
 
 
-def _merges(conn: sqlite3.Connection, project_id: int, thread: str) -> list[tuple[str, str]]:
-    """The ``merge`` proposals of the thread's latest lead message that lists proposals (f6
-    D6's open ones): each duplicate and the card it joins."""
+def _merges(proposals: list[dict[str, object]]) -> list[tuple[str, str]]:
+    """The ``merge`` proposals among the thread's open ones: each duplicate and the card it
+    joins."""
     return [
         planner.merge_cards(proposal)
-        for proposal in metrics.latest_proposals(conn, project_id, thread)
+        for proposal in proposals
         if proposal.get("kind") == planner.MERGE
     ]
 
@@ -257,18 +294,51 @@ def _merged(
                 metrics.resolve_owner_item(conn, item["id"], at)
 
 
+def _ready_changes(
+    repo: Path, changes: list[tuple[str, str]]
+) -> tuple[list[str], list[str], list[str]]:
+    """A replan's ready tickets, by path, read before the merge while main is checked out:
+    those it adds, changes, and sets aside (removed from tasks/ready/: ``_outside`` has checked
+    each goes to tasks/later/)."""
+    added: list[str] = []
+    changed: list[str] = []
+    aside: list[str] = []
+    for mode, path in sorted(changes, key=lambda change: change[1]):
+        if not path.startswith(planner.READY_DIR):
+            continue
+        if mode == "000000":
+            aside.append(path)
+        elif (repo / path).is_file():
+            changed.append(path)
+        else:
+            added.append(path)
+    return added, changed, aside
+
+
 def _approve_plan(
-    repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime, subject: object
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    state: State,
+    now: datetime,
+    subject: object,
 ) -> str:
     """Merge a card's plan branch into main, queue its tickets and set the card ready, and
     apply the thread's ``merge`` proposals, in one commit; the branch then goes. Refused, with
     main as it was, when the branch changes more than drafts, clashes with main, a ticket fails
     pre-flight (the planner fixes it next), or a merge can't be applied. A thread with merges
-    and no branch (the general one too) approves its merges alone."""
+    and no branch (the general one too) approves its merges alone.
+
+    A ``replan`` (f6-13) may change its card's ready tickets too, but not the running one: a
+    changed one is pre-flighted, one moved to tasks/later/ stays there, and the owner's pause
+    is lifted once it is applied. A building card keeps its state."""
     thread = planner.thread_key(subject)
     branch = planner.plan_branch(thread)
     git = Git(repo)
-    merges = _merges(conn, project_id, thread)
+    proposals = metrics.latest_proposals(conn, project_id, thread)
+    merges = _merges(proposals)
+    replan = any(proposal.get("kind") == planner.REPLAN for proposal in proposals)
+    running = (state.in_flight or {}).get("ticket") or None
     if branch is None and not merges:
         raise planner.PlannerError("the general thread has no plan to approve")
     planned = branch is not None and _has_branch(git, branch)
@@ -280,14 +350,22 @@ def _approve_plan(
         return f"{branch} has drafts for {name}, which merges into {there}: send it back"
     joined = [f"{planner.thread_name(d)} into {planner.thread_name(k)}" for d, k in merges]
     tickets: list[str] = []
+    added: list[str] = []
+    changed: list[str] = []
+    aside: list[str] = []
     if planned and branch is not None:
         changes = _drafts(git, branch)
-        if (refused := _outside(branch, changes)) is not None:
+        if (refused := _outside(branch, changes, thread, replan, running)) is not None:
             return refused
+        added, changed, aside = _ready_changes(repo, changes)
+        set_aside = {Path(path).name for path in aside}
         tickets = sorted(
             path
             for mode, path in changes
-            if path.startswith(f"tasks/{LATER}/") and path.endswith(".md") and mode != "000000"
+            if path.startswith(f"tasks/{LATER}/")
+            and path.endswith(".md")
+            and mode != "000000"
+            and Path(path).name not in set_aside
         )
         try:
             git.run("merge", "-q", "--squash", branch)
@@ -296,14 +374,17 @@ def _approve_plan(
             return f"{branch} clashes with {loop.MAIN}: not approved"
     try:
         if planned:
-            if problems := _ticket_problems(repo, tickets):
+            checked = sorted([*tickets, *added, *changed], key=lambda path: Path(path).name)
+            if problems := _ticket_problems(repo, checked):
                 _undo(git)
                 return "not approved: " + "; ".join(problems)
             doc = milestone_file(repo, "milestones", full_key(repo, thread))
             if not doc.is_file():
                 _undo(git)
                 return f"{name} has no card in docs/milestones/: not approved"
-            doc.write_text(planner.ready_card(doc.read_text(encoding="utf-8")), encoding="utf-8")
+            text = doc.read_text(encoding="utf-8")
+            if milestone.card(doc.stem, text).state != _BUILDING:  # a replan redirects it
+                doc.write_text(planner.ready_card(text), encoding="utf-8")
             for rel in tickets:
                 git.move(repo / rel, repo / "tasks" / "ready" / Path(rel).name)
         for duplicate, kept in merges:
@@ -321,8 +402,20 @@ def _approve_plan(
     if not planned:
         return f"approved: {'; '.join(said)}"
     git.run("branch", "-q", "-D", str(branch))
-    queued = ", ".join(Path(t).stem for t in tickets) or "nothing"
-    return "; ".join([f"approved {branch}: queued {queued}", *said])
+    queued = ", ".join(sorted(Path(t).stem for t in [*tickets, *added])) or "nothing"
+    parts = [f"approved {branch}: queued {queued}"]
+    parts += [
+        f"{what} {', '.join(Path(t).stem for t in found)}"
+        for what, found in (
+            ("changed", changed),
+            ("set aside", aside),
+        )
+        if found
+    ]
+    parts += said
+    if replan and state.owner_pause is not None:  # applied while the line held: it goes on
+        parts.append(_pause(conn, state, now, RESUME))
+    return "; ".join(parts)
 
 
 def _adr_number(value: object) -> int:
@@ -479,7 +572,7 @@ def _apply(
         if kind == SEND_BACK:
             return _send_back(conn, project_id, now, row)
         if kind == APPROVE_PLAN:
-            return _approve_plan(repo, conn, project_id, now, subject)
+            return _approve_plan(repo, conn, project_id, state, now, subject)
         if kind == ACCEPT_ADR:
             return _accept_adr(repo, db, now, subject, value)
         if kind == PLANT:

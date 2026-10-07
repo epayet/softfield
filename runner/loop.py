@@ -3570,14 +3570,15 @@ def _plan_branch(s: Session, branch: str) -> bool:
     return False
 
 
-def _commit_drafts(s: Session, branch: str, subject: str, new: bool) -> None:
+def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool) -> None:
     """After a planner job: commit its drafts on ``branch`` and go back to main (f6 D4). What
-    it changed outside the drafts' folders is dropped; a new branch with no drafts goes."""
+    it changed outside the drafts' folders and its card's ready tickets (a replan's, f6-13) is
+    dropped; a new branch with no drafts goes."""
     if s.git.current_branch() != branch:  # never commit drafts anywhere else
         s.git.checkout(MAIN)
         return
     status = s.git.run("status", "--porcelain", "--untracked-files=all").splitlines()
-    stray = [(line[:2], line[3:]) for line in status if not planner.is_draft(line[3:])]
+    stray = [(line[:2], line[3:]) for line in status if not planner.is_draft(line[3:], thread)]
     for code, path in stray:
         if code == "??":
             (s.repo / path).unlink(missing_ok=True)
@@ -3624,7 +3625,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         prompt=planner.prompt(thread, text, comments, threads),
         timeout=s.cfg.claude_timeout,
         # A card's drafts, on its plan branch only; the general thread only talks (f6 D4)
-        edit=planner.DRAFTS if branch else (),
+        edit=planner.drafts(thread) if branch else (),
         commands=(*GIT_READ_COMMANDS, *((f"git checkout {branch}",) if branch else ())),
         resume=found["session_id"] or None,
         title=f"planning: {row.reason}",
@@ -3637,7 +3638,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         return
     finally:
         if branch is not None:
-            _commit_drafts(s, branch, row.subject, new)
+            _commit_drafts(s, thread, branch, row.subject, new)
     if result.ok:
         reply = planner.parse_reply(
             result.text, planner.cards(s.repo)

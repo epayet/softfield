@@ -4134,18 +4134,23 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
             (repo_ / "docs" / "adr" / "21-room.md").write_text("# ADR 21: The room\n")
             (repo_ / "coucou" / "thing.py").write_text("changed outside the drafts\n")
             (repo_ / "stray.py").write_text("STRAY = 1\n")
+            (repo_ / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
+            (repo_ / "tasks" / "ready" / "f5-01-other.md").write_text("another's\n")
         elif job.prompt.count("Now the tickets."):
             assert (repo_ / "docs" / "adr" / "21-room.md").is_file()  # its earlier drafts
             later = repo_ / "tasks" / "later"
             later.mkdir(parents=True, exist_ok=True)
             (later / "f7-01-room.md").write_text("a ticket\n")
+            # A replan's edit to its card's own ready ticket is a draft too (f6-13)
+            (repo_ / "tasks" / "ready" / "f7-02-ready.md").write_text("a ready ticket\n")
         reply = f"Drafted.\n```json\n{block}\n```"
         return JobResult(ok=True, text=reply, duration_s=1.0, session_id="s1")
 
     monkeypatch.setattr(claude, "run_claude", run_claude)
     report = _run(repo)
     reads = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
-    drafts = ("Edit(docs/**)", "Edit(tasks/later/**)", *reads, "Bash(git checkout plan/f7:*)")
+    edits = ("Edit(docs/**)", "Edit(tasks/later/**)", "Edit(tasks/ready/f7-*)")
+    drafts = (*edits, *reads, "Bash(git checkout plan/f7:*)")
     assert [(on, tools[-len(drafts) :]) for on, tools in seen[:2]] == [("plan/f7", drafts)] * 2
     [(on, general)] = seen[2:]
     assert on == "main" and general[-len(reads) :] == reads  # the general thread only talks
@@ -4159,7 +4164,11 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     touched = git(repo, "log", "--format=%H", f"{main_before}..main", "--", "docs/adr", "tasks")
     assert touched == ""
     changed = git(repo, "diff", "--name-only", "main...plan/f7").split()
-    assert changed == ["docs/adr/21-room.md", "tasks/later/f7-01-room.md"]
+    assert changed == [
+        "docs/adr/21-room.md",
+        "tasks/later/f7-01-room.md",
+        "tasks/ready/f7-02-ready.md",
+    ]
     assert git(repo, "show", "plan/f7:docs/adr/21-room.md") == "# ADR 21: The room\n"
     # Committed by the runner, one commit per job, on Claude's behalf
     commits = git(repo, "log", "--format=%s|%(trailers:key=Agent,valueonly)", "main..plan/f7")
@@ -4168,7 +4177,7 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     assert all(line.startswith("planner f7#") for line in subjects)
     assert "raise NotImplementedError" in (repo / "coucou" / "thing.py").read_text()
     [note] = [n for n in report.notes if "outside its drafts" in n]
-    assert "coucou/thing.py" in note and "stray.py" in note
+    assert "coucou/thing.py" in note and "stray.py" in note and "f5-01-other.md" in note
     assert git(repo, "branch", "--list", "plan/general") == ""
     [reply, *_] = [m for m in _messages(repo) if m["author"] == "lead"]
     assert json.loads(str(reply["proposals"])) == [proposal]

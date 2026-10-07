@@ -227,6 +227,15 @@ def test_a_cards_prompt_names_its_branch_and_the_general_one_none():
     assert (planner.plan_branch("f7"), planner.plan_branch("general")) == ("plan/f7", None)
 
 
+def test_a_cards_prompt_says_what_a_replan_may_change_and_when_to_suggest_a_pause():
+    card = planner.prompt("f7", "Redirect it.", {})
+    assert "`replan`" in card and "tasks/ready/f7-*.md" in card
+    assert "move it to tasks/later/" in card and "never tasks/done/" in card
+    assert "in progress" in card and "suggest the owner pause" in card
+    general = planner.prompt("general", "An idea.", {})
+    assert "tasks/ready/f" not in general and "suggest the owner pause" not in general
+
+
 @pytest.mark.parametrize(
     ("path", "draft"),
     [
@@ -241,6 +250,31 @@ def test_a_cards_prompt_names_its_branch_and_the_general_one_none():
 )
 def test_a_draft_is_in_docs_or_the_later_tickets(path, draft):
     assert planner.is_draft(path) is draft
+
+
+@pytest.mark.parametrize(
+    ("path", "draft"),
+    [
+        ("tasks/ready/f7-01-x.md", True),
+        ("tasks/later/f7-01-x.md", True),
+        ("docs/adr/21-room.md", True),
+        ("tasks/ready/f5-01-x.md", False),  # another milestone's
+        ("tasks/ready/f70-01-x.md", False),
+        ("tasks/ready/f7-notes.md", False),
+        ("tasks/ready/f7-01-x.txt", False),
+        ("tasks/ready/f7-01/x.md", False),
+        ("tasks/ready/f7-01-../x.md", False),
+        ("tasks/done/f7-01-x.md", False),
+        ("runner/loop.py", False),
+    ],
+)
+def test_a_replans_drafts_take_its_own_cards_ready_tickets_too(path, draft):
+    """f6-13: given the card, its tickets in tasks/ready/ are drafts; never another's or done."""
+    assert planner.is_draft(path, "f7") is draft
+
+
+def test_a_cards_planner_job_may_edit_its_own_ready_tickets():
+    assert planner.drafts("f7") == ("docs/**", "tasks/later/**", "tasks/ready/f7-*")
 
 
 # --- reading a card's draft from git, for the dashboard (f6 D4) --------------------------------

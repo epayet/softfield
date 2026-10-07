@@ -29,11 +29,13 @@ from runner.tasks import (
 PLANNER = "planner"  # the role, and the queued job's kind (`dispatch.PLANNER`)
 DRAFTS = ("docs/**", "tasks/later/**")  # what a card's planner job may edit (f6 D4)
 DRAFT_DIRS = ("docs/", "tasks/later/")
+READY_DIR = "tasks/ready/"
 PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `message`'s JSON
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
 MERGE = "merge"  # a card that repeats another, closed into it once approved (f6-12)
-PROPOSAL_KINDS = ("adr", "mockup", "plan", "seed", "replan", MERGE)
+REPLAN = "replan"  # a running milestone redirected: it may change its ready tickets (f6-13)
+PROPOSAL_KINDS = ("adr", "mockup", "plan", "seed", REPLAN, MERGE)
 _MAX_KEY = 64
 _BLOCK_RE = re.compile(r"```json[ \t]*\n(.*?)\n?```", re.DOTALL)
 
@@ -117,10 +119,24 @@ def plan_branch(thread: str) -> str | None:
     return None if thread == GENERAL else f"plan/{thread}"
 
 
-def is_draft(path: str) -> bool:
+def drafts(card: str) -> tuple[str, ...]:
+    """What a card's planner job may edit: the drafts, and its card's ready tickets for a
+    ``replan`` (f6-13)."""
+    return (*DRAFTS, f"{READY_DIR}{card}-*")
+
+
+def is_draft(path: str, card: str | None = None) -> bool:
     """Whether a planner job may change ``path`` on its plan branch (f6 D4): docs and the
-    tickets in ``tasks/later/``, never ``tasks/ready/`` or code."""
-    return path.startswith(DRAFT_DIRS) and ".." not in path.split("/")
+    tickets in ``tasks/later/``, never code or ``tasks/done/``. Given its ``card``, the card's
+    own tickets in ``tasks/ready/`` too, which only a ``replan`` may change (f6-13)."""
+    if ".." in path.split("/"):
+        return False
+    return path.startswith(DRAFT_DIRS) or (card is not None and is_ready_ticket(path, card))
+
+
+def is_ready_ticket(path: str, card: str) -> bool:
+    """Whether ``path`` is one of ``card``'s tickets in ``tasks/ready/``: ``f7-01-….md``."""
+    return re.fullmatch(rf"{READY_DIR}{re.escape(card)}-\d[\w.-]*\.md", path) is not None
 
 
 def draft(repo: Path, thread: str, path: str) -> bytes | None:

@@ -45,9 +45,10 @@ def test_the_planner_prompt_names_the_block_the_branch_and_the_approval_rule():
     for folder in ("docs/adr/", "docs/milestones/{card}-mockup/", "tasks/later/"):
         assert folder in text
     assert "self-contained HTML" in text and "don't commit" in text
-    # The approval rule (item 7): nothing queued, nothing in tasks/ready/, until the owner approves
+    # The approval rule (item 7): nothing queued until the owner approves; only a replan's
+    # branch touches tasks/ready/ (f6-13)
     assert "Nothing is queued without their approval" in text
-    assert "Never write to tasks/ready/" in text
+    assert "Only a `replan` may touch tasks/ready/" in text
     # Questions first, every point agreed by default, and push back (lead.md, The owner)
     assert text.index("questions and comments first") < text.index("then revise")
     assert "counts as agreed" in text and "Challenge them" in text
