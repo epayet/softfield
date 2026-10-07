@@ -37,3 +37,9 @@ attempts: 3
 tokens: 1389066
 logs: var/runs/20261007-213326/f6-29-fix-coming-misses-unpicked-message
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
