@@ -436,6 +436,11 @@ def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
     page.click('#reply button[type="submit"]')
     page.wait_for_selector("#conversation >> text=And the phone?")
     page.wait_for_selector("#reply", state="hidden")
+    # waiting message: #waiting present, message shows "Sent"
+    assert page.locator("#waiting").is_visible()
+    msg = page.locator("#conversation .message").last
+    assert msg.is_visible()
+    assert "Sent" in msg.inner_text()
     conn = metrics.open_db(db_path)
     try:
         rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
@@ -452,6 +457,93 @@ def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
             },
         )
     ]
+
+
+def test_an_open_plan_message_request_shows_sent_with_dashed_border(planning, db_path, serve):
+    """An open plan_message request: the owner's message element has the text, \"On N: <comment>\"
+    and \"Sent\", a dashed hazard border in its style, `#waiting` is present and `#reply` is
+    absent."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn,
+            planning,
+            "plan_message",
+            "f6",
+            json.dumps(
+                {
+                    "text": "And the phone?",
+                    "comments": {"2": "Inside, but say how it stops.", "4": 'Keep "general" too.'},
+                }
+            ),
+            _at(timedelta(minutes=5)),
+        ),
+    )
+    html = _thread(serve(), "f6")
+    # find the owner's waiting message containing "And the phone?"
+    msg_html = ""
+    msg_style = ""
+    for m in re.finditer(r'<article class="message"([^>]*)>(.*?)</article>', html, re.S):
+        if "And the phone?" in m[2]:
+            msg_html = m[2]
+            msg_style = m[1]
+            break
+    assert msg_html, "no message with 'And the phone?' found"
+    # text and comment reference
+    assert "And the phone?" in _text(msg_html)
+    assert "On 2:" in _text(msg_html) and "Inside, but say how it stops." in _text(msg_html)
+    # "Sent" status
+    assert "Sent" in _text(msg_html)
+    # dashed hazard border (on the article's style attribute)
+    assert "border-style: dashed" in msg_style
+    assert "border-color: var(--hazard)" in msg_style
+    # #waiting present, #reply absent
+    assert '<p id="waiting"' in html
+    assert 'id="reply"' not in html
+
+
+def test_a_done_plan_message_with_lead_reply_shows_once(planning, db_path, serve):
+    """Once the request is done and the lead replies: the text shows once, with no \"Sent\" and
+    no dashed border."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn,
+            planning,
+            "plan_message",
+            "f6",
+            '{"text": "And the phone?"}',
+            _at(timedelta(minutes=5)),
+        ),
+    )
+    client = serve()
+    # first: the waiting message is there
+    html = _thread(client, "f6")
+    assert "Sent" in _text(html)
+    assert "border-style: dashed" in html
+
+    # now the request is done and the lead has replied
+    def done_and_replied(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "UPDATE owner_requests SET done = ? WHERE kind = 'plan_message'",
+            (_at(timedelta(minutes=4)),),
+        )
+        thread = metrics.planner_thread(
+            conn, project_id=planning, card="f6", created=_at(timedelta(minutes=4))
+        )["id"]
+        metrics.add_planner_message(
+            conn, thread, "owner", _at(timedelta(minutes=4)), "And the phone?"
+        )
+        metrics.add_planner_message(conn, thread, "lead", _at(timedelta(minutes=1)), "It passes.")
+
+    _write(db_path, done_and_replied)
+    html = _thread(client, "f6")
+    # text appears once (no "Sent" line, no dashed border)
+    assert html.count("And the phone?") == 1
+    assert "Sent" not in _text(html)
+    assert "border-style: dashed" not in html
 
 
 def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve):
