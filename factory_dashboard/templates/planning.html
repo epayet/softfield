@@ -84,4 +84,18 @@
     {% endfor %}
   </section>
 </div>
+
+{% if archived %}
+<details id="archived" style="margin-top: 14px; background: var(--bay); border: 1px solid var(--rule)">
+  <summary style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; cursor: pointer; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted)">Archived · {{ archived | length }}</summary>
+  <div style="padding: 0 14px 10px; display: flex; flex-direction: column; gap: 6px">
+    {% for item in archived %}
+    <a href="{{ item.link }}{{ q }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+      <span style="font-size: 14px">{{ item.title }}</span>
+      <span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
 {% endblock %}

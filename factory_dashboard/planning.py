@@ -75,12 +75,13 @@ def _thread_title(card: str, titles: dict[str, str]) -> str:
 def _answers_wanted(
     conn: sqlite3.Connection, project_id: int, titles: dict[str, str], now: datetime
 ) -> list[DeskItem]:
-    """Threads whose last message is the lead's: a reply the owner hasn't answered."""
+    """Threads whose last message is the lead's: a reply the owner hasn't answered. An
+    archived thread waits for nothing."""
     rows = conn.execute(
         "SELECT t.card, m.at FROM planner_threads t"
         " JOIN planner_messages m ON m.id = ("
         "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
-        " WHERE t.project_id = ? AND m.author = 'lead' ORDER BY m.id",
+        " WHERE t.project_id = ? AND m.author = 'lead' AND t.archived IS NULL ORDER BY m.id",
         (project_id,),
     ).fetchall()
     return [
@@ -133,13 +134,14 @@ def _settled(requests: list[sqlite3.Row], about: list[tuple[str, str, str | None
 
 
 def _open_proposals(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
-    """The proposals in each thread's latest lead message that lists some, still open."""
+    """The proposals in each thread's latest lead message that lists some, still open, on
+    threads not archived."""
     rows = conn.execute(
         "SELECT t.card, m.at, m.proposals FROM planner_threads t"
         " JOIN planner_messages m ON m.id = ("
         "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id AND author = 'lead'"
         "   AND proposals IS NOT NULL AND proposals != '[]')"
-        " WHERE t.project_id = ? ORDER BY m.id",
+        " WHERE t.project_id = ? AND t.archived IS NULL ORDER BY m.id",
         (project_id,),
     ).fetchall()
     requests = conn.execute(
@@ -201,6 +203,29 @@ def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     ]
 
 
+def archived(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
+    """The archived threads, the most recently archived first (the owner, 2026-10-07). A
+    message from the owner opens one again."""
+    project_id = metrics.find_project(conn, project)
+    if project_id is None:
+        return []
+    titles = _card_titles(conn, project_id)
+    rows = conn.execute(
+        "SELECT card, archived FROM planner_threads"
+        " WHERE project_id = ? AND archived IS NOT NULL ORDER BY archived DESC, id DESC",
+        (project_id,),
+    ).fetchall()
+    return [
+        DeskItem(
+            "archived",
+            _thread_title(r["card"], titles),
+            f"archived {ago(now - _when(r['archived']))} ago",
+            f"/planning/{r['card']}",
+        )
+        for r in rows
+    ]
+
+
 def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
     """What is on its way: pending plants and threads waiting for the lead's reply."""
     project_id = metrics.find_project(conn, project)
@@ -224,40 +249,33 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
                 )
             )
 
-    # Threads with an open plan_message request or open planner row
+    # Threads waiting for the lead: the owner's message is the latest and a planner row about
+    # it is open, or an open plan_message request names it whatever is stored (the runner
+    # stores that message, and makes the thread, only at its next pick). Each shows once.
     if project_id is not None:
-        # Threads where the owner's message is the latest
-        thread_rows = conn.execute(
+        planned = {
+            str(r["subject"] or "").split("#")[0]
+            for r in metrics.open_jobs(conn, project_id)
+            if r["kind"] == PLANNER
+        }
+        owners_last = conn.execute(
             "SELECT t.card FROM planner_threads t"
             " JOIN planner_messages m ON m.id = ("
             "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
             " WHERE t.project_id = ? AND m.author = 'owner' ORDER BY t.id",
             (project_id,),
         ).fetchall()
-        titles = _card_titles(conn, project_id)
-        open_jobs = metrics.open_jobs(conn, project_id)
-        for tr in thread_rows:
-            card = tr["card"]
-            # Check for open plan_message request about this thread
-            has_open_request = any(
-                r["kind"] == "plan_message"
-                and str(r["subject"] or "") == card
-                and r["done"] is None
-                for r in conn.execute(
-                    "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id",
-                    (project_id,),
-                ).fetchall()
-            )
-            # Check for open planner row about this thread
-            has_open_planner = any(
-                r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{card}#")
-                for r in open_jobs
-            )
-            if not has_open_request and not has_open_planner:
-                continue
-            # Compute _next_reply for this thread
-            pending = has_open_request or has_open_planner
-            next_reply = _next_reply(conn, project, running_jobs(conn, project, now), pending)
+        asked = conn.execute(
+            "SELECT subject FROM owner_requests"
+            " WHERE project_id = ? AND kind = 'plan_message' AND done IS NULL ORDER BY id",
+            (project_id,),
+        ).fetchall()
+        cards = [r["card"] for r in owners_last if r["card"] in planned]
+        cards += [str(r["subject"]) for r in asked if r["subject"]]
+        if cards:
+            titles = _card_titles(conn, project_id)
+            next_reply = _next_reply(conn, project, running_jobs(conn, project, now), True)
+        for card in dict.fromkeys(cards):
             items.append(
                 DeskItem(
                     "coming",
@@ -366,6 +384,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "window": window,
             "coming": c,
             "groups": desk(conn, project, now),
+            "archived": archived(conn, project, now),
         },
     )
 
@@ -470,8 +489,18 @@ def thread_page(
     messages: list[Message] = []
     proposals: list[Proposal] = []
     pending = False
+    archived_at: str | None = None
+    archiving: str | None = None  # "on" or "off": an archive request the runner hasn't done
     if project_id is not None:
         title, meta, seed = _header(conn, project_id, thread)
+        found = metrics.find_thread(conn, project_id, thread)
+        archived_at = found["archived"] if found is not None else None
+        asked = conn.execute(
+            "SELECT value FROM owner_requests WHERE project_id = ? AND kind = 'archive'"
+            " AND subject = ? AND done IS NULL ORDER BY id DESC LIMIT 1",
+            (project_id, thread),
+        ).fetchone()
+        archiving = asked["value"] if asked is not None else None
         rows = conn.execute(
             "SELECT m.* FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
             " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
@@ -516,6 +545,9 @@ def thread_page(
             "card_title": title,
             "card_meta": meta,
             "seed": seed,
+            "has_thread": bool(messages),
+            "archived_at": archived_at,
+            "archiving": archiving,
             "messages": messages,
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,

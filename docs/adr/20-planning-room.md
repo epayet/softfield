@@ -34,6 +34,7 @@ All of it without checking first whether the factory is busy, whether the lead h
    - **The Overview's Needs you** shows its count and top items.
    - **The top bar** shows "Planning · N".
    - **A notification** comes when a reply or proposal lands.
+   - **Archiving a thread** (owner, 2026-10-07) takes it off all of these: its Needs-you item goes, and the Planning page lists it under Archived, the most recently archived first. Unarchive, or any message from the owner on it, opens it again.
 
    "The factory now" says what runs, and when the next reply will come.
 

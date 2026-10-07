@@ -22,6 +22,7 @@ from runner import metrics
 from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
+    ARCHIVE,
     DROP_SEED,
     PAUSE,
     PLAN_MESSAGE,
@@ -37,8 +38,8 @@ from runner.requests import (
 router = APIRouter()
 
 # The planning room's six (f6 D1) too, Now's pause and resume (f5-18), and the ↑ and ↓ of
-# Next in line and the Milestones page (f6-18); the runner checks each value, as for the first
-# three
+# Next in line and the Milestones page (f6-18), and archiving a thread (2026-10-07); the runner
+# checks each value, as for the first three
 KINDS = (
     SIGNOFF,
     RESERVE,
@@ -52,6 +53,7 @@ KINDS = (
     PAUSE,
     RESUME,
     PRIORITY,
+    ARCHIVE,
 )
 
 

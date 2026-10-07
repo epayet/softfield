@@ -44,6 +44,7 @@ APPROVE_PLAN = "approve_plan"  # subject: the thread; its plan and its merges (f
 PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
 DROP_SEED = "drop_seed"  # subject: the idea card's short key; no value (f6-17)
 PRIORITY = "priority"  # subject: a ticket in ready/ or later/, or a card; value: N (f6-18)
+ARCHIVE = "archive"  # subject: the thread; value: on or off (the owner, 2026-10-07)
 PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
 RESUME = "resume"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
@@ -116,7 +117,10 @@ def _plan_message(
     thread = planner.thread_key(row["subject"])
     text, comments = planner.message(row["value"])
     at = now.isoformat()
-    thread_id = metrics.planner_thread(conn, project_id, thread, at)["id"]
+    found = metrics.planner_thread(conn, project_id, thread, at)
+    thread_id = found["id"]
+    if found["archived"] is not None:  # the owner's message opens an archived thread again
+        metrics.set_thread_archived(conn, thread_id, None)
     said = [{"n": n, "comment": comment} for n, comment in comments.items()]
     metrics.add_planner_message(conn, thread_id, "owner", at, text, points=said or None)
     subject = planner.row_subject(thread, row["id"])
@@ -126,6 +130,33 @@ def _plan_message(
         if item["kind"] == planner.PLANNING and item["subject"] == thread:
             metrics.resolve_owner_item(conn, item["id"], at)
     return QUEUED_FOR_THE_LEAD
+
+
+def _archive(
+    conn: sqlite3.Connection, project_id: int, now: datetime, subject: object, value: object
+) -> str:
+    """Archive a thread, or open it again (the owner, 2026-10-07): an archived thread leaves the
+    desk and its Needs-you item goes; the Planning page lists it under Archived."""
+    thread = planner.thread_key(subject)
+    name = planner.thread_name(thread)
+    if value not in _SWITCHED:
+        return f"archive is on or off, not {value!r}"
+    found = metrics.find_thread(conn, project_id, thread)
+    if found is None:
+        return f"{name} has no thread to archive"
+    at = now.isoformat()
+    if value == "off":
+        if found["archived"] is None:
+            return f"{name} is not archived"
+        metrics.set_thread_archived(conn, found["id"], None)
+        return f"{name} is open again"
+    if found["archived"] is not None:
+        return f"{name} is archived already"
+    metrics.set_thread_archived(conn, found["id"], at)
+    for item in metrics.open_owner_items(conn, project_id):
+        if item["kind"] == planner.PLANNING and item["subject"] == thread:
+            metrics.resolve_owner_item(conn, item["id"], at)
+    return f"archived {name}"
 
 
 def _send_back(conn: sqlite3.Connection, project_id: int, now: datetime, row: sqlite3.Row) -> str:
@@ -786,6 +817,8 @@ def _apply(
             return _plant(repo, conn, project_id, now, row)
         if kind == DROP_SEED:
             return _drop_seed(repo, conn, project_id, now, subject)
+        if kind == ARCHIVE:
+            return _archive(conn, project_id, now, subject, value)
         if kind == PRIORITY:
             return _priority(repo, conn, project_id, state, subject, value)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:

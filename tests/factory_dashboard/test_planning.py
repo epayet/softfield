@@ -883,6 +883,28 @@ def test_a_done_plant_does_not_show_in_coming(planning, db_path, serve):
     assert "desk-coming" not in html
 
 
+def test_a_thread_with_open_plan_message_request_shows_in_coming(planning, db_path, serve):
+    """A thread whose last stored message is the lead's: an open plan_message request puts it in
+    Coming with its link and "waiting for the lead"."""
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, subject, created)"
+            " VALUES (?, 'plan_message', ?, ?)",
+            (
+                planning,
+                "general",
+                _at(timedelta(minutes=5)),
+            ),
+        ),
+    )
+    client = serve()
+    html = _page(client)
+    assert "desk-coming" in html
+    assert ("/planning/general", "General") in _coming_items(html)
+    assert "waiting for the lead" in _coming_text(html)
+
+
 def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve):
     """F6's last message is the owner's; an open planner row about F6 puts it in Coming."""
     _write(
@@ -896,6 +918,75 @@ def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve
     assert "desk-coming" in html
     assert ("/planning/f6", "The planning room") in _coming_items(html)
     assert "after f1-04-live, any minute now" in _coming_text(html)
+
+
+def test_a_thread_with_both_open_request_and_planner_row_shows_once(planning, db_path, serve):
+    """A thread with both an open request and an open planner row shows once in Coming."""
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, subject, created)"
+            " VALUES (?, 'plan_message', ?, ?)",
+            (
+                planning,
+                "general",
+                _at(timedelta(minutes=5)),
+            ),
+        ),
+    )
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "general#1", "a message", _at(timedelta(minutes=4))
+        ),
+    )
+    client = serve()
+    html = _page(client)
+    assert "desk-coming" in html
+    items = _coming_items(html)
+    general_items = [i for i in items if i[0] == "/planning/general"]
+    assert len(general_items) == 1
+
+
+def test_after_the_request_is_done_and_the_lead_replies_the_thread_leaves_coming(
+    planning, db_path, serve
+):
+    """The general thread's last stored message is the lead's: the owner's open message puts it
+    in Coming; once the runner has stored it and the lead's reply, it leaves."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "plan_message", "general", "{}", _at(timedelta(minutes=5))
+        ),
+    )
+    client = serve()
+    assert ("/planning/general", "General") in _coming_items(_page(client))
+
+    def answered(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "UPDATE owner_requests SET done = ? WHERE kind = 'plan_message'",
+            (_at(timedelta(minutes=4)),),
+        )
+        thread = metrics.planner_thread(conn, planning, "general", _at(timedelta(minutes=4)))["id"]
+        metrics.add_planner_message(conn, thread, "owner", _at(timedelta(minutes=4)), "And test 1?")
+        metrics.add_planner_message(conn, thread, "lead", _at(timedelta(minutes=1)), "It passes.")
+
+    _write(db_path, answered)
+    assert "desk-coming" not in _page(client)
+
+
+def test_a_first_message_on_a_card_with_no_thread_shows_in_coming(planning, db_path, serve):
+    """F9 is an idea card nobody has talked about: the runner makes its thread at its next pick,
+    but the owner's message shows in Coming at once."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "plan_message", "f9", "{}", _at(timedelta(minutes=5))
+        ),
+    )
+    html = _page(serve())
+    assert _coming_items(html) == [("/planning/f9", "Parallel developers")]
+    assert "waiting for the lead" in _coming_text(html)
 
 
 def test_after_the_leads_reply_the_thread_moves_to_answers_wanted(planning, db_path, serve):
@@ -957,3 +1048,95 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
     assert planning_tab and planning_tab[1] == str(base_count)
     # The Overview's Needs you count is unchanged
     assert _needs_you_count(client.get("/").text) == base_needs
+
+
+# --- archiving a thread (the owner, 2026-10-07) ---------------------------------------------
+
+
+def _archive(db_path: Path, project_id: int, card: str, ago: timedelta) -> None:
+    def write(conn: sqlite3.Connection) -> None:
+        found = metrics.find_thread(conn, project_id, card)
+        assert found is not None, card
+        metrics.set_thread_archived(conn, found["id"], _at(ago))
+
+    _write(db_path, write)
+
+
+def _archived(html: str) -> list[tuple[str, str]]:
+    found = re.search(r'<details id="archived"(.*?)</details>', html, re.S)
+    return [] if found is None else _items(found[1])
+
+
+def test_an_archived_thread_leaves_the_desk(planning, db_path, serve):
+    """The general thread's unanswered reply and F6's open proposals leave the desk once
+    archived; the Planning count drops with them."""
+    client = serve()
+    before = _groups(_page(client))
+    assert _items(before["answers"]) and _items(before["proposals"])
+    _archive(db_path, planning, "general", timedelta(hours=2))
+    _archive(db_path, planning, "f6", timedelta(hours=1))
+    after = _groups(_page(client))
+    assert "answers" not in after and "proposals" not in after
+    assert _items(after["seeds"]) == [("/planning/f9", "Parallel developers")]  # not a thread
+
+
+def test_the_archived_list_shows_the_most_recently_archived_first(planning, db_path, serve):
+    client = serve()
+    assert 'id="archived"' not in _page(client)  # none archived: no list
+    _archive(db_path, planning, "general", timedelta(hours=2))
+    _archive(db_path, planning, "f6", timedelta(minutes=30))
+    html = _page(client)
+    assert [link for link, _ in _archived(html)] == ["/planning/f6", "/planning/general"]
+    found = re.search(r'<details id="archived"(.*?)</details>', html, re.S)
+    assert found is not None
+    assert "Archived · 2" in _text(found[1])
+    assert "archived 30 min ago" in found[1] and "archived 2 h ago" in found[1]
+
+
+def test_a_threads_button_archives_it_and_an_archived_ones_opens_it_again(planning, db_path, serve):
+    client = serve()
+    html = _thread(client, "general")
+    assert _posts(html, "archive-button") == {
+        "kind": "archive",
+        "project": PROJECT,
+        "subject": "general",
+        "value": "on",
+    }
+    assert ">Archive</button>" in html
+    _archive(db_path, planning, "general", timedelta(hours=1))
+    html = _thread(client, "general")
+    assert _posts(html, "archive-button")["value"] == "off"
+    assert ">Unarchive</button>" in html
+    assert "Or just reply: a message opens it again." in _text(html)
+
+
+def test_an_archive_on_its_way_shows_at_once_and_its_button_goes(planning, db_path, serve):
+    """What the owner asked shows on its way until the runner's next pick (owner.md)."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "archive", "general", "on", NOW.isoformat()
+        ),
+    )
+    html = _thread(serve(), "general")
+    assert "Archiving at the runner's next pick" in _text(html)
+    assert 'id="archive-button"' not in html
+
+
+def test_a_card_with_no_thread_has_no_archive_button(planning, serve):
+    """F9 is an idea card nobody has talked about yet: nothing to archive."""
+    assert 'id="archive-button"' not in _thread(serve(), "f9")
+
+
+def test_archive_posts_once_and_the_button_goes(page, planning, db_path, serve):
+    _open(page, serve(), "/planning/general")
+    page.click("#archive-button")
+    page.wait_for_selector("#archive-status >> text=Asked")
+    assert page.locator("#archive-button").count() == 0
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
+        asked = [(r["kind"], r["subject"], r["value"]) for r in rows]
+    finally:
+        conn.close()
+    assert asked == [("archive", "general", "on")]

@@ -245,8 +245,14 @@ CREATE TABLE planner_messages (
 );
 """
 
+# The owner archives a thread (2026-10-07): when, or NULL while it is open. A message from the
+# owner opens it again.
+_V10 = """
+ALTER TABLE planner_threads ADD COLUMN archived TEXT;
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -899,6 +905,19 @@ def planner_thread(
         "SELECT * FROM planner_threads WHERE project_id = ? AND card = ?", (project_id, card)
     ).fetchone()
     return row
+
+
+def find_thread(conn: sqlite3.Connection, project_id: int, card: str) -> sqlite3.Row | None:
+    """The project's thread about ``card``, without making one."""
+    row: sqlite3.Row | None = conn.execute(
+        "SELECT * FROM planner_threads WHERE project_id = ? AND card = ?", (project_id, card)
+    ).fetchone()
+    return row
+
+
+def set_thread_archived(conn: sqlite3.Connection, thread_id: int, at: str | None) -> None:
+    """Archive a thread at ``at``, or open it again with None (the owner, 2026-10-07)."""
+    conn.execute("UPDATE planner_threads SET archived = ? WHERE id = ?", (at, thread_id))
 
 
 def set_thread_session(conn: sqlite3.Connection, thread_id: int, session_id: str) -> None:

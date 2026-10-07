@@ -671,3 +671,75 @@ def test_approving_a_general_threads_seed_plants_it_the_same_way(repo):
     again = _ask(repo, "plant", "general/seed-1")
     _apply(repo)
     assert _request(repo, again)[1] == ("parallel-planners is a card already: f7-parallel-planners")
+
+
+# --- archiving a thread (the owner, 2026-10-07) ---------------------------------------------
+
+
+def _thread_row(repo: Path, card: str) -> dict[str, Any]:
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        found = metrics.find_thread(conn, project, card)
+        assert found is not None, card
+        items = [dict(i) for i in metrics.open_owner_items(conn, project) if i["subject"] == card]
+        return {**dict(found), "items": items}
+    finally:
+        conn.close()
+
+
+def _talked_about(repo: Path, card: str) -> None:
+    """A thread with the owner's message on it, and the lead's reply waiting for answers."""
+    _ask(repo, "plan_message", card, json.dumps({"text": "Hi.", "comments": {}}))
+    _apply(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.upsert_owner_item(
+            conn, project, planner.PLANNING, card, text="answers wanted", created=NOW.isoformat()
+        )
+    finally:
+        conn.close()
+
+
+def test_archiving_a_thread_stamps_it_and_clears_its_needs_you_item(repo):
+    _talked_about(repo, "f7")
+    asked = _ask(repo, "archive", "f7", "on")
+    assert _apply(repo) == ["archive f7: archived F7"]
+    assert _request(repo, asked) == (NOW.isoformat(), "archived F7")
+    found = _thread_row(repo, "f7")
+    assert found["archived"] == NOW.isoformat() and found["items"] == []
+    _ask(repo, "archive", "f7", "on")
+    assert _apply(repo) == ["archive f7: F7 is archived already"]
+
+
+def test_unarchive_and_a_new_message_both_open_a_thread_again(repo):
+    _talked_about(repo, "f7")
+    _ask(repo, "archive", "f7", "on")
+    _apply(repo)
+    _ask(repo, "archive", "f7", "off")
+    assert _apply(repo) == ["archive f7: F7 is open again"]
+    assert _thread_row(repo, "f7")["archived"] is None
+    _ask(repo, "archive", "f7", "off")
+    assert _apply(repo) == ["archive f7: F7 is not archived"]
+    _ask(repo, "archive", "f7", "on")
+    _apply(repo)
+    _ask(repo, "plan_message", "f7", json.dumps({"text": "One more thing.", "comments": {}}))
+    _apply(repo)
+    assert _thread_row(repo, "f7")["archived"] is None  # replying opens it again
+
+
+@pytest.mark.parametrize(
+    ("subject", "value", "result"),
+    [
+        ("f8", "on", "F8 has no thread to archive"),
+        ("f7", "yes", "archive is on or off, not 'yes'"),
+        ("x y", "on", "a thread is a card's key or general, not 'x y'"),
+    ],
+)
+def test_an_archive_the_runner_cant_apply_says_why(repo, subject, value, result):
+    _talked_about(repo, "f7")
+    asked = _ask(repo, "archive", subject, value)
+    _apply(repo)
+    assert _request(repo, asked)[1] == result
+    assert _thread_row(repo, "f7")["archived"] is None
