@@ -23,3 +23,10 @@ Read F6's D1, D2, D4 and D6 in `docs/milestones/f6-planning-room.md`, its ticket
 ### Done when
 - F6's doc says what was built, as built, and lists every gap found as a ticket or a "Later" line
 - `uv run pytest -q tests/runner/test_tasks.py` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
