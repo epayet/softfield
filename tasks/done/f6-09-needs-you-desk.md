@@ -35,3 +35,9 @@ attempts: 3
 tokens: 8838264
 logs: var/runs/20261007-005149/f6-09-needs-you-desk
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
