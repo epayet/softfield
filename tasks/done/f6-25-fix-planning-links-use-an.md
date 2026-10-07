@@ -25,3 +25,12 @@ f6-planning-room-C529-1: Planning links use an uppercase thread key and fail to 
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1597
+gate_failures: []
+tokens: 290710
+```
