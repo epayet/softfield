@@ -31,3 +31,10 @@ Read F6's D2 and its "Later" note in `docs/milestones/f6-planning-room.md` (a `r
 - the planner prompt says what a `replan` may change and when to suggest a pause
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
