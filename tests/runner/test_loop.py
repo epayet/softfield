@@ -3267,6 +3267,50 @@ def test_a_ticket_deleted_from_tasks_leaves_the_queue(repo):
     assert states == {"m1-09-gone": "removed", "m1-01-thing": "ready"}
 
 
+def test_a_deleted_tickets_row_leaves_whatever_its_state_but_done(repo):
+    """f4-21's `blocked` row, its file deleted, kept "1 blocked now" on the Overview (f6-17);
+    a done ticket's row is history and stays."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name)
+    for ticket, state in (("m1-07-stuck", "blocked"), ("m1-08-aside", "later")):
+        metrics.upsert_ticket(conn, project, ticket, state=state)
+    metrics.upsert_ticket(conn, project, "m1-06-shipped", state="done")
+    conn.close()
+    _add_task(repo, "m1-01-thing")
+    loop.open_session(_config(repo))
+    states = {row["ticket"]: row["state"] for row in _rows(repo, "tickets")}
+    assert states == {
+        "m1-07-stuck": "removed",
+        "m1-08-aside": "removed",
+        "m1-06-shipped": "done",
+        "m1-01-thing": "ready",
+    }
+
+
+def test_a_card_whose_doc_is_gone_leaves_the_board(repo):
+    """A card merged away or `git rm`ed stayed a seed on the desk (f6-17): its row is
+    `removed`. A milestone row that was never a card (no state) is left as it is."""
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "f10-one-queue.md").write_text("# Milestone F10: one queue\n\n> **State:** idea\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a card")
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name)
+    metrics.upsert_milestone(conn, project, "f12-queue-once", title="queue once", state="idea")
+    metrics.upsert_milestone(conn, project, "f10", state="idea")  # the doc names it in full
+    metrics.upsert_milestone(conn, project, "m1", status="done")
+    conn.close()
+    loop.open_session(_config(repo))
+    states = {row["key"]: row["state"] for row in _rows(repo, "milestones")}
+    assert states == {
+        "f12-queue-once": "removed",
+        "f10": "idea",
+        "m1": None,
+        "f10-one-queue": "idea",
+    }
+
+
 def test_a_ticket_set_aside_is_recorded_as_later(repo):
     """ADR 17 item 3; a later ticket that was ready before leaves the queue too."""
     conn = metrics.open_db(_config(repo).metrics_db)

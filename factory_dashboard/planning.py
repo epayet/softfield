@@ -329,18 +329,20 @@ class Proposal:
     link: str
 
 
-def _header(conn: sqlite3.Connection, project_id: int, thread: str) -> tuple[str, str]:
-    """The card's title and its status and area, from its ``milestones`` row."""
+def _header(conn: sqlite3.Connection, project_id: int, thread: str) -> tuple[str, str, bool]:
+    """The card's title, its status and area, and whether it is a seed (an idea card the
+    owner may remove, f6-17), from its ``milestones`` row."""
     if thread == GENERAL:
-        return "General", ""
+        return "General", "", False
     rows = conn.execute(
-        "SELECT key, title, status, area FROM milestones WHERE project_id = ? ORDER BY id",
+        "SELECT key, title, status, area, state FROM milestones WHERE project_id = ? ORDER BY id",
         (project_id,),
     ).fetchall()
     for r in rows:
         if short_key(r["key"]) == thread:
-            return r["title"] or r["key"], " · ".join(x for x in (r["status"], r["area"]) if x)
-    return thread, ""
+            meta = " · ".join(x for x in (r["status"], r["area"]) if x)
+            return r["title"] or r["key"], meta, r["state"] == "idea"
+    return thread, "", False
 
 
 def _messages(rows: list[sqlite3.Row]) -> list[Message]:
@@ -392,12 +394,12 @@ def thread_page(
 ) -> HTMLResponse:
     """A card's thread: its messages and the lead's points, Send, and its proposals."""
     project_id = metrics.find_project(conn, project)
-    title, meta = thread, ""
+    title, meta, seed = thread, "", False
     messages: list[Message] = []
     proposals: list[Proposal] = []
     pending = False
     if project_id is not None:
-        title, meta = _header(conn, project_id, thread)
+        title, meta, seed = _header(conn, project_id, thread)
         rows = conn.execute(
             "SELECT m.* FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
             " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
@@ -420,6 +422,7 @@ def thread_page(
             "thread": thread,
             "card_title": title,
             "card_meta": meta,
+            "seed": seed,
             "messages": messages,
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,

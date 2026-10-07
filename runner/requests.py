@@ -37,11 +37,12 @@ SEND_BACK = "send_back"  # subject: <thread>/<proposal id>; value: {text, commen
 ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
 APPROVE_PLAN = "approve_plan"  # subject: the thread; its plan and its merges (f6-12)
 PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
+DROP_SEED = "drop_seed"  # subject: the idea card's short key; no value (f6-17)
 PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
 RESUME = "resume"
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
-_COMMITS = (SIGNOFF, QUEUE, PLANT, *_APPROVALS)
+_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, *_APPROVALS)
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
@@ -279,9 +280,11 @@ def _merge(repo: Path, now: datetime, duplicate: str, kept: str) -> None:
 def _merged(
     conn: sqlite3.Connection, project_id: int, now: datetime, merges: list[tuple[str, str]]
 ) -> None:
-    """Each merged card's thread points to the kept card's, and its reply's item is answered."""
+    """Each merged card's thread points to the kept card's, its reply's item is answered, and
+    it leaves the board."""
     at = now.isoformat()
     for duplicate, kept in merges:
+        metrics.remove_cards(conn, project_id, gone=duplicate)
         name, there = planner.thread_name(duplicate), planner.thread_name(kept)
         text = (
             f"The owner merged {name} into {there}: its notes are on {there}'s card now. "
@@ -527,6 +530,51 @@ def _plant(
     return f"planted {rel}"
 
 
+def _drop_seed(
+    repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime, subject: object
+) -> str:
+    """Remove an idea card the owner no longer wants (f6-17): its doc ``git rm``ed in a commit
+    of its own, its thread told, its pending planner rows closed, its reply's item answered,
+    and the card off the board. Refused, main unchanged, for a card that isn't an idea or that
+    a ticket in tasks/ belongs to."""
+    thread = planner.thread_key(subject)
+    name = planner.thread_name(thread)
+    if thread == planner.GENERAL:
+        return f"{name} is not a seed: not removed"
+    doc = milestone_file(repo, "milestones", full_key(repo, thread))
+    if not doc.is_file():
+        return f"{name} has no card in docs/milestones/: not removed"
+    state = milestone.card(doc.stem, doc.read_text(encoding="utf-8")).state
+    if state != planner.IDEA:
+        return f"{name} is {state}, not an idea: not removed"
+    tickets = sorted(p.relative_to(repo).as_posix() for p in repo.glob(f"tasks/*/{thread}-*.md"))
+    if tickets:
+        return f"{name} has tickets ({', '.join(tickets)}): not removed"
+    rel = doc.relative_to(repo).as_posix()
+    git = Git(repo)
+    try:
+        git.run("rm", "-q", "--", rel)
+        message = with_trailers(f"{name} removed by the owner", agent="runner")
+        git.run("commit", "-q", "--no-verify", "-m", message, "--author", RUNNER_AUTHOR, "--", rel)
+    except GitError:
+        git.run("reset", "-q", "--", rel, check=False)
+        git.run("checkout", "-q", "--", rel, check=False)
+        raise
+    at = now.isoformat()
+    if thread in metrics.thread_cards(conn, project_id):
+        thread_id = metrics.planner_thread(conn, project_id, thread, at)["id"]
+        text = f"Removed by the owner on {now.date().isoformat()}."
+        metrics.add_planner_message(conn, thread_id, "lead", at, text)
+    for row in metrics.open_jobs(conn, project_id):
+        if row["kind"] == planner.PLANNER and str(row["subject"]).rpartition("#")[0] == thread:
+            metrics.finish_queued(conn, row["id"], at)
+    for item in metrics.open_owner_items(conn, project_id):
+        if item["kind"] == planner.PLANNING and item["subject"] == thread:
+            metrics.resolve_owner_item(conn, item["id"], at)
+    metrics.remove_cards(conn, project_id, gone=thread)
+    return f"removed {rel}"
+
+
 def _waits(repo: Path, kind: str) -> str | None:
     """Why a request that commits must wait, if it must: a queue commits on the branch it is
     on, and a sign-off or an approval commits the whole tree, so none goes anywhere but a main
@@ -577,6 +625,8 @@ def _apply(
             return _accept_adr(repo, db, now, subject, value)
         if kind == PLANT:
             return _plant(repo, conn, project_id, now, row)
+        if kind == DROP_SEED:
+            return _drop_seed(repo, conn, project_id, now, subject)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:

@@ -65,12 +65,13 @@ def test_each_kind_keeps_its_subject_or_value(client, db_path):
     ]
 
 
-PLANNING = [  # the planning room's five requests (f6 D1); the runner checks their values
+PLANNING = [  # the planning room's six requests (f6 D1); the runner checks their values
     ("plan_message", "f7", '{"text": "Draft it.", "comments": {}}'),
     ("plant", None, '{"title": "One queue", "thoughts": "", "area": "factory"}'),
     ("send_back", "f7/adr-23", '{"text": "Not yet.", "comments": {"1": "Why?"}}'),
     ("accept_adr", "f7", "23"),
     ("approve_plan", "f7", None),
+    ("drop_seed", "f11", None),  # f6-17
 ]
 
 

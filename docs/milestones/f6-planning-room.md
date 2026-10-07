@@ -22,6 +22,10 @@
     | `send_back` | the proposal: `<thread>/<proposal id>` | as `plan_message`, comments by key point number | `queued for the lead` |
     | `accept_adr` | the thread (the card's key) | the ADR's number (`23`, from the proposal's path `docs/adr/23-….md`) | `accepted docs/adr/…` |
     | `approve_plan` | the thread (the card's key, or `general` for its merges) | – | `approved plan/…: queued …`, then `; merged F12 into F10` per merge; `approved: merged …` with no branch |
+    | `drop_seed` (f6-17) | the idea card's short key (`f11`) | – | `removed docs/milestones/f11-….md` |
+
+  - **`drop_seed`** (f6-17, the owner's "Remove seed" on an idea card's thread page, after a confirm step): refused, main unchanged, when the card isn't `**State:** idea` or a ticket in `tasks/` (`tasks/*/f11-*.md`) belongs to it. Otherwise one commit, `F11 removed by the owner`, `git rm`s its doc alone; its thread (if any) gets the lead message "Removed by the owner on <date>.", its open `planner` rows are done and its `planning` owner item resolves. A `plan/f11` branch is left as it is.
+  - **Gone files leave the board (f6-17):** a card's `milestones` row whose doc is gone from `docs/milestones/` (by short key) gets `state` `removed`, kept rather than deleted, as jobs, tickets and findings may point at it. `sync_cards` does it each session; a merge and a `drop_seed` do it at once. A row with no `state` (never a card) is left alone. `sync_tickets` marks `removed` any ticket row whose file is in no `tasks/` folder, whatever its state but `done` (history stays).
 
   - **A thread's `card`** is the card's short key (`f7`, `runner.tasks.short_key`) or `general`, never `milestones.key` (`f7-planning-room`).
   - **A pending reply:** each `plan_message` queues a `work_queue` row of kind `planner`, subject `<thread>#<request id>` (`planner.row_subject`), open (`metrics.open_jobs`) until the lead's reply is stored.

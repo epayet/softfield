@@ -830,6 +830,150 @@ def test_a_merge_the_runner_cant_apply_is_refused_and_main_is_unchanged(repo, be
     assert _items(repo)[0][3] is True
 
 
+def _card_state(repo: Path, key: str) -> object:
+    conn = metrics.open_db(_db(repo))
+    try:
+        row = conn.execute("SELECT state FROM milestones WHERE key = ?", (key,)).fetchone()
+        return None if row is None else row["state"]
+    finally:
+        conn.close()
+
+
+def test_a_merge_takes_the_duplicate_off_the_board_at_once(repo):
+    """f6-17: the desk had F12 as a seed until the next session's sync."""
+    _duplicates(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.upsert_milestone(conn, project, "f12-queue-once", state="idea")
+    finally:
+        conn.close()
+    _ask(repo, "approve_plan", "f12")
+    _apply(repo)
+    assert _card_state(repo, "f12-queue-once") == "removed"
+
+
+# --- `drop_seed`: the owner removes a seed they no longer want (f6-17) ------------------------
+
+SEED_CARD = (
+    "# Milestone F11: a test\n\n> **State:** idea · **Area:** factory\n\n## Notes\nA test.\n"
+)
+
+
+def _seeded(repo: Path, card: str = SEED_CARD) -> str:
+    """F11's card on main and on the board, a thread with a pending message and a reply the
+    owner hasn't answered; main's head."""
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "f11-test.md").write_text(card)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a seed")
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.upsert_milestone(conn, project, "f11-test", title="a test", state="idea")
+        found = metrics.planner_thread(conn, project, "f11", NOW.isoformat())
+        metrics.add_planner_message(conn, found["id"], "lead", NOW.isoformat(), "Noted.")
+        for thread in ("f11", "f7"):
+            metrics.queue_job(conn, project, "planner", f"{thread}#1", "a message", NOW.isoformat())
+            metrics.upsert_owner_item(
+                conn, project, planner.PLANNING, thread, text="answers", created=NOW.isoformat()
+            )
+    finally:
+        conn.close()
+    return git(repo, "rev-parse", "HEAD")
+
+
+def _seeded_with_a_ticket(repo: Path) -> None:
+    _seeded(repo)
+    _later(repo, "f11-01-a")
+
+
+def test_dropping_a_seed_removes_its_card_in_one_commit_and_closes_its_thread(repo):
+    head = _seeded(repo)
+    asked = _ask(repo, "drop_seed", "f11")
+    assert _apply(repo) == ["drop_seed f11: removed docs/milestones/f11-test.md"]
+    assert _request(repo, asked) == (NOW.isoformat(), "removed docs/milestones/f11-test.md")
+    assert not (repo / "docs" / "milestones" / "f11-test.md").exists()
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F11 removed by the owner"
+    changed = git(repo, "show", "--name-status", "--format=", "HEAD").split("\n")
+    assert list(filter(None, changed)) == ["D\tdocs/milestones/f11-test.md"]
+    assert git(repo, "status", "--porcelain") == ""
+    assert [(m["author"], m["text"]) for m in _thread(repo, "f11")][-1] == (
+        "lead",
+        "Removed by the owner on 2026-10-01.",
+    )
+    # its planner row closes and its Needs-you item is answered; F7's stay open
+    assert [(subject, done is None) for _, subject, _, done in _queued(repo)] == [
+        ("f11#1", False),
+        ("f7#1", True),
+    ]
+    assert [(subject, open_) for _, subject, _, open_ in _items(repo)] == [
+        ("f11", False),
+        ("f7", True),
+    ]
+    assert _card_state(repo, "f11-test") == "removed"
+    assert _apply(repo) == []  # finished once
+
+
+def test_dropping_a_seed_with_no_thread_makes_none(repo):
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f11-test.md").write_text(SEED_CARD)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a seed")
+    asked = _ask(repo, "drop_seed", "f11-test")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "removed docs/milestones/f11-test.md"
+    conn = metrics.open_db(_db(repo))
+    try:
+        assert conn.execute("SELECT count(*) FROM planner_threads").fetchone()[0] == 0
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize(
+    ("before", "subject", "error"),
+    [
+        (
+            lambda repo: _seeded(repo, SEED_CARD.replace("idea", "building")),
+            "f11",
+            "F11 is building, not an idea: not removed",
+        ),
+        (
+            _seeded_with_a_ticket,
+            "f11",
+            "F11 has tickets (tasks/later/f11-01-a.md): not removed",
+        ),
+        (_seeded, "f13", "F13 has no card in docs/milestones/: not removed"),
+        (_seeded, "general", "the general thread is not a seed: not removed"),
+        (_seeded, "../x", "a thread is a card's key or general, not '../x'"),
+    ],
+)
+def test_a_drop_the_runner_cant_apply_is_refused_and_main_is_unchanged(
+    repo, before, subject, error
+):
+    before(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "drop_seed", subject)
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), error)
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    assert (repo / "docs" / "milestones" / "f11-test.md").is_file()
+    assert [m["text"] for m in _thread(repo, "f11")] == ["Noted."]
+    assert all(done is None for *_, done in _queued(repo))
+    assert _card_state(repo, "f11-test") == "idea"
+
+
+def test_a_drop_waits_for_main(repo):
+    _seeded(repo)
+    git(repo, "checkout", "-q", "-b", "elsewhere")
+    asked = _ask(repo, "drop_seed", "f11")
+    assert _apply(repo) == ["drop_seed f11: waits for the repo to be on main"]
+    assert _request(repo, asked) == (None, None)
+
+
 def test_sending_a_merge_back_works_as_for_any_proposal(repo):
     head = _duplicates(repo)
     asked = _ask(repo, "send_back", "f12/merge-f12", _message("Keep F12.", p1="Not the same."))

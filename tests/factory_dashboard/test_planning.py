@@ -478,6 +478,33 @@ def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve)
     assert "Comment…" not in html
 
 
+def test_only_a_seeds_thread_has_remove_seed(planning, serve):
+    """f6-17: F9 is an idea card; F6 isn't, and the general thread is no card."""
+    client = serve()
+    html = _thread(client, "f9")
+    assert "Remove seed" in html and "Remove F9? Its notes go too." in _text(html)
+    assert _posts(html, "drop-seed") == {"kind": "drop_seed", "project": PROJECT, "subject": "f9"}
+    for other in ("f6", "general"):
+        page = _thread(client, other)
+        assert "Remove seed" not in page and 'id="drop-seed"' not in page
+
+
+def test_remove_seed_asks_first_then_posts_drop_seed(page, planning, db_path, serve):
+    _open(page, serve(), "/planning/f9")
+    assert not page.locator("#drop-seed").is_visible()  # the confirm step hides it
+    page.click("#remove-seed summary")
+    assert page.locator("#drop-seed").is_visible()
+    page.click("#drop-seed")
+    page.wait_for_selector("#drop-status >> text=Asked")
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
+        asked = [(r["kind"], r["subject"], r["value"]) for r in rows]
+    finally:
+        conn.close()
+    assert asked == [("drop_seed", "f9", None)]
+
+
 # --- proposal review page (f6-08) -----------------------------------------------------------
 
 _REVIEW_ADR: dict[str, Any] = {

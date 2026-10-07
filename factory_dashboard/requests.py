@@ -22,6 +22,7 @@ from runner import metrics
 from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
+    DROP_SEED,
     PAUSE,
     PLAN_MESSAGE,
     PLANT,
@@ -34,7 +35,7 @@ from runner.requests import (
 
 router = APIRouter()
 
-# The planning room's five (f6 D1) too, and Now's pause and resume (f5-18); the runner checks
+# The planning room's six (f6 D1) too, and Now's pause and resume (f5-18); the runner checks
 # each value, as for the first three
 KINDS = (
     SIGNOFF,
@@ -45,6 +46,7 @@ KINDS = (
     SEND_BACK,
     ACCEPT_ADR,
     APPROVE_PLAN,
+    DROP_SEED,
     PAUSE,
     RESUME,
 )

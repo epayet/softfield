@@ -7,6 +7,7 @@ JSON. An optional argument left as ``None`` keeps the column's current value.
 """
 
 import json
+import re
 import sqlite3
 from collections.abc import Collection, Mapping, Sequence
 from datetime import datetime
@@ -458,18 +459,54 @@ def upsert_ticket(
     return _upsert(conn, "tickets", "project_id, ticket", key, values)
 
 
+REMOVED = "removed"  # a ticket or card whose file left the repo: off the queue and the board
+
+
 def remove_missing_tickets(
     conn: sqlite3.Connection, project_id: int, present: Collection[str]
 ) -> int:
-    """Mark ``removed`` the project's ``ready`` rows whose ticket isn't in ``present`` (deleted
-    from tasks/): they leave the queue (f1 D8). Returns how many."""
+    """Mark ``removed`` the project's rows whose ticket isn't in ``present`` (deleted from
+    tasks/): they leave the queue (f1 D8), and a deleted ``blocked`` one stops counting as
+    blocked (f6-17). A ``done`` row is history and stays. Returns how many."""
     rows = conn.execute(
-        "SELECT id, ticket FROM tickets WHERE project_id = ? AND state = 'ready'", (project_id,)
+        "SELECT id, ticket FROM tickets WHERE project_id = ? AND state NOT IN ('done', ?)",
+        (project_id, REMOVED),
     ).fetchall()
     gone = [row["id"] for row in rows if row["ticket"] not in present]
     for ticket_id in gone:
-        _update(conn, "tickets", ticket_id, {"state": "removed"})
+        _update(conn, "tickets", ticket_id, {"state": REMOVED})
     return len(gone)
+
+
+def _card_short(key: str) -> str:
+    """A milestone row's key as a thread names its card: ``f6`` of ``f6-planning-room``."""
+    found = re.match(r"[a-z]+\d+", key)
+    return found[0] if found else key
+
+
+def remove_cards(
+    conn: sqlite3.Connection,
+    project_id: int,
+    *,
+    present: Collection[str] | None = None,
+    gone: str | None = None,
+) -> int:
+    """Mark ``removed`` the project's cards (rows with a ``state``) whose doc left
+    docs/milestones/, by short key: each not in ``present``, or the one card ``gone``. They
+    leave the board (f6-17). Returns how many."""
+    rows = conn.execute(
+        "SELECT id, key FROM milestones WHERE project_id = ? AND state IS NOT NULL AND state != ?",
+        (project_id, REMOVED),
+    ).fetchall()
+    found = [
+        row["id"]
+        for row in rows
+        if (short := _card_short(row["key"])) == gone
+        or (present is not None and short not in present)
+    ]
+    for milestone_id in found:
+        _update(conn, "milestones", milestone_id, {"state": REMOVED})
+    return len(found)
 
 
 def start_job(

@@ -509,27 +509,35 @@ TICKET_FOLDERS = ("ready", "done", *STOPPED, LATER)
 
 def sync_tickets(s: Session) -> None:
     """Every ticket in tasks/ with its folder's state (f1 D4): the queue the dashboard reads.
-    A ``ready`` row whose file is gone (deleted, like f1-30 by ADR 15) leaves it."""
+    A row whose file is in no folder (deleted, like f1-30 by ADR 15, or f4-21 while blocked)
+    leaves it, unless it is done."""
+    present = set()
     for folder in TICKET_FOLDERS:
         for path in sorted(s.tasks_dir(folder).glob("*.md")):
             record_ticket(s, path)
+            present.add(path.stem)
     if s.project_id is not None:
-        ready = {path.stem for path in s.tasks_dir("ready").glob("*.md")}
-        _record(s, metrics.remove_missing_tickets, s.project_id, ready)
+        _record(s, metrics.remove_missing_tickets, s.project_id, present)
 
 
 def sync_cards(s: Session) -> None:
     """Every milestone doc's card (f5 D4) and title, as ``sync_tickets`` does for tickets: an
-    idea with no tickets yet is on the board too. A doc not named by a key is left out."""
+    idea with no tickets yet is on the board too. A doc not named by a key is left out, and a
+    card whose doc is gone (merged away, dropped, deleted) leaves the board (f6-17)."""
     from runner.milestone import card, milestone_doc  # runner.milestone imports this module
 
     if s.project_id is None:
         return
+    present = set()
     for path in sorted((s.repo / "docs" / "milestones").glob("*.md")):
         try:
             key = milestone_key(path.stem)
+        except TaskError:
+            continue
+        present.add(short_key(key))  # an unreadable doc's card stays where it is
+        try:
             text = path.read_text(encoding="utf-8")
-        except (TaskError, OSError, UnicodeDecodeError):
+        except (OSError, UnicodeDecodeError):
             continue
         found = card(key, text)
         _record(
@@ -542,6 +550,7 @@ def sync_cards(s: Session) -> None:
             priority=found.priority,
             area=found.area,
         )
+    _record(s, metrics.remove_cards, s.project_id, present=present)
 
 
 PICKING = "picking the next ticket"
