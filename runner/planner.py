@@ -148,12 +148,12 @@ def draft(repo: Path, thread: str, path: str) -> bytes | None:
         thread = thread_key(thread)
     except PlannerError:
         return None
+    branch = plan_branch(thread)
     # Every part a name: `./` and `//` mean other things to git's `<ref>:<path>`
-    if not isinstance(path, str) or not is_draft(path):
+    if not isinstance(path, str) or not is_draft(path, None if branch is None else thread):
         return None
     if any(part in ("", ".") or "\0" in part for part in path.split("/")):
         return None
-    branch = plan_branch(thread)
     ref = f"refs/heads/{branch}" if branch else _MAIN
     if _git(repo, "rev-parse", "--verify", "-q", ref) is None:
         ref = _MAIN
@@ -161,6 +161,60 @@ def draft(repo: Path, thread: str, path: str) -> bytes | None:
 
 
 _MAIN = "refs/heads/main"  # loop.MAIN; loop imports this module
+_LATER_DIR = "tasks/later/"
+_WORDS = {"A": "added", "D": "removed"}  # any other status is "changed"
+
+
+@dataclass(frozen=True)
+class Change:
+    """A path the plan branch changes, in a word ("added", "changed", "set aside" or
+    "removed"), and the path its text is read from on the branch (``draft``); None when it
+    is gone."""
+
+    path: str
+    word: str
+    source: str | None
+
+
+def plan_changes(repo: Path, thread: str) -> list[Change]:
+    """What approving the card's plan branch changes (f6-24): each path it changed since it
+    left main, by path; a ready ticket removed and moved to tasks/later/ is "set aside", once,
+    under its tasks/ready/ path. Empty with no branch, or for the general thread. Git only,
+    as ``draft``: ``runner.requests._drafts`` reads the same diff."""
+    try:
+        branch = plan_branch(thread_key(thread))
+    except PlannerError:
+        return []
+    if branch is None or _git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}") is None:
+        return []
+    out = _git(repo, "diff", "--raw", "--no-renames", "-z", f"{_MAIN}...refs/heads/{branch}")
+    if out is None:
+        return []
+    # `-z`: each change is its `:<modes> <shas> <status>` then its path, NUL after each
+    fields = out.decode("utf-8", errors="replace").split("\0")[:-1]
+    status = {
+        path: meta.split()[-1][:1] for meta, path in zip(fields[::2], fields[1::2], strict=True)
+    }
+    later = {
+        path.removeprefix(_LATER_DIR): path
+        for path, code in status.items()
+        if path.startswith(_LATER_DIR) and code != "D"
+    }
+    aside = {
+        path: later[path.removeprefix(READY_DIR)]
+        for path, code in status.items()
+        if path.startswith(READY_DIR) and code == "D" and path.removeprefix(READY_DIR) in later
+    }
+    changes = []
+    for path, code in sorted(status.items()):
+        if path in aside.values():
+            continue
+        if path in aside:
+            changes.append(Change(path, "set aside", aside[path]))
+        else:
+            word = _WORDS.get(code, "changed")
+            changes.append(Change(path, word, None if word == "removed" else path))
+    return changes
 
 
 def _git(repo: Path, *args: str) -> bytes | None:

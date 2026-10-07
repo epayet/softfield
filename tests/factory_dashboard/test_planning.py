@@ -831,6 +831,91 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
         assert client.get(f"/planning/mockups/f6/{refused}").status_code == 404, refused
 
 
+_REVIEW_REPLAN: dict[str, Any] = {
+    "id": "replan",
+    "kind": "replan",
+    "title": "F7, redirected",
+    "path": None,
+    "key_points": [{"n": 1, "title": "Less", "text": "Set b aside.", "flag": False}],
+}
+
+
+def _changes(html: str) -> list[tuple[str, str, str | None]]:
+    """Each row of "What approving changes": its path, its word and its text, if shown."""
+    section = re.search(r'<section id="plan-changes".*?</section>', html, re.S)
+    assert section, "no plan-changes section"
+    rows = re.findall(r'<li class="plan-change"[^>]*>(.*?)</li>', section[0], re.S)
+    found = []
+    for row in rows:
+        path = re.search(r'<code class="path"[^>]*>(.*?)</code>', row, re.S)
+        word = re.search(r'<b class="word"[^>]*>(.*?)</b>', row, re.S)
+        text = re.search(r"<pre[^>]*>(.*?)</pre>", row, re.S)
+        assert path and word, row
+        found.append((unescape(path[1]), word[1], unescape(text[1]) if text else None))
+    return found
+
+
+def _replanned(checkout: Path) -> None:
+    """main holds f7-01-a and f7-02-b; ``plan/f7`` changes a, adds c and sets b aside."""
+    a, b = "tasks/ready/f7-01-a.md", "tasks/ready/f7-02-b.md"
+    for rel, text in ((a, "main's a"), (b, "<b>'s text")):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "tickets")
+    git(checkout, "checkout", "-q", "-b", "plan/f7")
+    (checkout / a).write_text("the replan's a")
+    (checkout / "tasks/ready/f7-03-c.md").write_text("the replan's c")
+    (checkout / "tasks/later").mkdir()
+    git(checkout, "mv", b, "tasks/later/f7-02-b.md")
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "replan")
+    git(checkout, "checkout", "-q", "main")
+
+
+def test_a_replan_shows_what_approving_changes_with_each_text(planning, db_path, serve, checkout):
+    """f6-24: each ticket it changes, adds or sets aside, its text from the branch, escaped;
+    main's copy never; and what approving a replan does at once."""
+    _replanned(checkout)
+    _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_REPLAN))
+    html = _review_page(serve(), "/planning/f7/proposals/replan")
+    assert _changes(html) == [
+        ("tasks/ready/f7-01-a.md", "changed", "the replan's a"),
+        ("tasks/ready/f7-02-b.md", "set aside", "<b>'s text"),
+        ("tasks/ready/f7-03-c.md", "added", "the replan's c"),
+    ]
+    assert "main's a" not in html and "<b>'s text" not in html  # escaped
+    assert "<details" in html.split('id="plan-changes"', 1)[1]
+    steps = _text(html.split("What happens next", 1)[1].split("</ol>", 1)[0])
+    assert "applies the ticket changes at once, even while paused, and resumes the line" in steps
+
+
+def test_a_plan_without_its_branch_or_on_the_general_thread_shows_no_changes(
+    planning, db_path, serve, checkout
+):
+    _replanned(checkout)
+    plan = {**_REVIEW_PLAN, "id": "plan"}
+    _write(db_path, lambda conn: _review(conn, planning, "f8", plan))
+    _write(db_path, lambda conn: _review(conn, planning, "general", plan))
+    client = serve()
+    for thread in ("f8", "general"):
+        html = _review_page(client, f"/planning/{thread}/proposals/plan")
+        assert 'id="plan-changes"' not in html, thread
+        assert "resumes the line" not in html, thread
+
+
+def test_a_plan_with_its_branch_shows_its_changes_too(planning, db_path, serve, checkout):
+    _replanned(checkout)
+    _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN))
+    html = _review_page(serve(), "/planning/f7/proposals/plan")
+    assert [path for path, _, _ in _changes(html)] == [
+        "tasks/ready/f7-01-a.md",
+        "tasks/ready/f7-02-b.md",
+        "tasks/ready/f7-03-c.md",
+    ]
+    assert "resumes the line" not in html
+
+
 # --- on a phone (f6-10) -------------------------------------------------------------------------
 
 

@@ -364,6 +364,87 @@ def test_nothing_but_a_draft_of_a_thread_is_read(drafted, thread, path):
     assert planner.draft(drafted, thread, path) is None
 
 
+# --- what approving a plan branch changes (f6-24) ------------------------------------------------
+
+READY_A = "tasks/ready/f7-01-a.md"
+READY_B = "tasks/ready/f7-02-b.md"
+READY_C = "tasks/ready/f7-03-c.md"
+LATER_B = "tasks/later/f7-02-b.md"
+OTHER = "tasks/ready/f8-01-x.md"
+DONE = "tasks/done/f7-00-z.md"
+
+
+@pytest.fixture
+def replanned(repo: Path) -> Path:
+    """main holds f7-01-a, f7-02-b, another card's f8-01-x and a done ticket; ``plan/f7``
+    changes f7-01-a, adds f7-03-c, sets f7-02-b aside in tasks/later/, drops ADR 21 and edits
+    the others it may not. The working tree is back on main."""
+    for rel in (READY_A, READY_B, OTHER, DONE, ADR):
+        _write(repo, rel, f"main's {rel}\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    git(repo, "checkout", "-q", "-b", "plan/f7")
+    _write(repo, READY_A, "the replan's a\n")
+    _write(repo, READY_C, "the replan's c\n")
+    _write(repo, LATER_B, f"main's {READY_B}\n")
+    git(repo, "rm", "-q", READY_B)
+    git(repo, "rm", "-q", ADR)
+    _write(repo, OTHER, "the replan's x\n")
+    _write(repo, DONE, "the replan's z\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "replan")
+    git(repo, "checkout", "-q", "main")
+    return repo
+
+
+def test_a_plan_branchs_changes_are_listed_with_their_words(replanned):
+    """A ticket set aside shows once, under its tasks/ready/ path, read from tasks/later/."""
+    assert planner.plan_changes(replanned, "f7") == [
+        planner.Change(ADR, "removed", None),
+        planner.Change(DONE, "changed", DONE),
+        planner.Change(READY_A, "changed", READY_A),
+        planner.Change(READY_B, "set aside", LATER_B),
+        planner.Change(READY_C, "added", READY_C),
+        planner.Change(OTHER, "changed", OTHER),
+    ]
+    assert planner.plan_changes(replanned, "f7-planning-room") == planner.plan_changes(
+        replanned, "f7"
+    )
+
+
+def test_a_set_aside_ticket_reads_from_the_branch_not_main(replanned):
+    assert planner.draft(replanned, "f7", READY_A) == b"the replan's a\n"
+    assert planner.draft(replanned, "f7", READY_C) == b"the replan's c\n"
+    assert planner.draft(replanned, "f7", LATER_B) == f"main's {READY_B}\n".encode()
+    assert planner.draft(replanned, "f7", READY_B) is None  # gone from tasks/ready/
+
+
+def test_no_branch_and_the_general_thread_have_no_changes(replanned):
+    assert planner.plan_changes(replanned, "general") == []
+    assert planner.plan_changes(replanned, "f8") == []  # no plan/f8
+    assert planner.plan_changes(replanned, "../x") == []
+    git(replanned, "branch", "-q", "-D", "plan/f7")
+    assert planner.plan_changes(replanned, "f7") == []
+
+
+@pytest.mark.parametrize(
+    ("thread", "path"),
+    [
+        ("f7", OTHER),  # another card's ready ticket, changed on this branch
+        ("f8", READY_A),  # this card's ticket, read as another card's
+        ("f7", DONE),
+        ("f7", "tasks/ready/f7-01-a.md/../../done/f7-00-z.md"),
+        ("f7", "tasks/ready/f70-01-a.md"),
+        ("general", READY_A),
+        ("f7", "/etc/passwd"),
+        ("f7", "../outside/tasks/ready/f7-01-a.md"),
+    ],
+)
+def test_the_dashboard_reads_no_ready_ticket_but_its_cards(replanned, thread, path):
+    """Isolation (f6-24): ``draft`` stays the only way the dashboard reads the branch."""
+    assert planner.draft(replanned, thread, path) is None
+
+
 # --- the tables (f6 D1) ------------------------------------------------------------------------
 
 

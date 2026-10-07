@@ -21,7 +21,15 @@ from factory_dashboard.app import Db, Now, Project, ago, render
 from factory_dashboard.line import live_line
 from factory_dashboard.overview import Running, agent_allowances, running_jobs
 from runner import metrics
-from runner.planner import MERGE, PLANNER, PlannerError, draft, is_proposed, merge_words
+from runner.planner import (
+    MERGE,
+    PLANNER,
+    PlannerError,
+    draft,
+    is_proposed,
+    merge_words,
+    plan_changes,
+)
 from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
@@ -592,6 +600,26 @@ def mockup_file(thread: str, path: str, conn: Db, project: Project) -> HTMLRespo
     return HTMLResponse(content.decode("utf-8", errors="replace"))
 
 
+@dataclass(frozen=True)
+class PlanChange:
+    path: str
+    word: str  # "added", "changed", "set aside" or "removed"
+    text: str | None  # from the plan branch, through ``draft``; None when gone or not a draft
+
+
+def _plan_changes(repo: Path | None, thread: str, kind: str) -> list[PlanChange]:
+    """What approving a ``plan`` or ``replan`` changes (f6-24), each with its text from the
+    branch; none for another kind, or with no plan branch."""
+    if repo is None or kind not in ("plan", "replan"):
+        return []
+    found = []
+    for change in plan_changes(repo, thread):
+        content = draft(repo, thread, change.source) if change.source else None
+        text = content.decode("utf-8", errors="replace") if content is not None else None
+        found.append(PlanChange(change.path, change.word, text))
+    return found
+
+
 @router.get("/planning/{thread}/proposals/{id}", response_class=HTMLResponse)
 def proposal_review(
     request: Request, thread: str, id: str, conn: Db, project: Project
@@ -613,6 +641,7 @@ def proposal_review(
     key_points = proposal.get("key_points")
     number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
     path = str(proposal.get("path") or "")
+    repo = _repo(conn, project)
     return render(
         request,
         conn,
@@ -631,6 +660,7 @@ def proposal_review(
             "adr_number": str(int(number[1])) if number else None,
             "merge": _merge_words(proposal),
             "mockup": f"/planning/mockups/{thread}/{path}" if _MOCKUP_RE.fullmatch(path) else None,
-            "adr_waits": _adr_waits(_repo(conn, project), listed),
+            "adr_waits": _adr_waits(repo, listed),
+            "changes": _plan_changes(repo, thread, kind),
         },
     )

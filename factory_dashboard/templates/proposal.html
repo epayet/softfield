@@ -46,6 +46,27 @@
     </div>
     {% with deck = key_points %}{% include "_partials/deck_nav.html" %}{% endwith %}
 
+    {% if changes %}
+    <section id="plan-changes" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">What approving changes</h2>
+      <span style="font-size: 13px; color: var(--muted)">Each file the plan branch adds, changes, sets aside (moves to tasks/later/) or removes. Tap one for its text.</span>
+      <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px">
+        {% for change in changes %}
+        <li class="plan-change" style="background: var(--plate); border: 1px solid var(--rule); padding: 8px 12px; min-width: 0">
+          {% if change.text is not none %}
+          <details>
+            <summary style="min-height: 44px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; cursor: pointer"><b class="word" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2)">{{ change.word }}</b> <code class="path" style="overflow-wrap: anywhere">{{ change.path }}</code></summary>
+            <pre style="margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.4 var(--mono); color: var(--fg)">{{ change.text }}</pre>
+          </details>
+          {% else %}
+          <div style="min-height: 44px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center"><b class="word" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2)">{{ change.word }}</b> <code class="path" style="overflow-wrap: anywhere">{{ change.path }}</code></div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
   </div>
 
   <aside class="dock-host" style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
@@ -89,6 +110,9 @@
       <ol style="margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px">
         <li>Send back: your comments go to the lead as the next planner job, and it asks you again.</li>
         <li>Accept the ADR, then approve the plan: its drafts reach main.</li>
+        {% if kind == "replan" %}
+        <li>Approving this replan applies the ticket changes at once, even while paused, and resumes the line.</li>
+        {% endif %}
         <li>The runner queues the tickets at its next pick.</li>
       </ol>
     </section>
