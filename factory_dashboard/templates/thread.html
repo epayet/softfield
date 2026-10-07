@@ -26,7 +26,7 @@
       <span style="font: 600 12px var(--mono); color: var(--opus)">The lead · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
       <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
       {% if msg.points %}
-      <ol style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+      <ol class="deck" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
       {% for p in msg.points %}
         <li class="point" data-point="{{ p.n }}" style="background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; gap: 10px; align-items: baseline">
           <b style="font: 700 13px var(--mono); color: var(--muted); min-width: 22px">{{ p.n }}</b>
@@ -36,7 +36,7 @@
             {% if p.action %}<span style="font-size: 14px"><span style="color: var(--opus); font-weight: 600">→ </span>{{ p.action }}</span>{% endif %}
             {% if msg.latest and next_reply is none %}
             <details>
-              <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); min-height: 40px; display: flex; align-items: center; cursor: pointer">Comment…</summary>
+              <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); min-height: 44px; display: flex; align-items: center; cursor: pointer">Comment…</summary>
               <textarea class="comment" data-point="{{ p.n }}" rows="2" aria-label="Your comment on point {{ p.n }}" style="width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px"></textarea>
             </details>
             {% endif %}
@@ -44,6 +44,7 @@
         </li>
       {% endfor %}
       </ol>
+      {% with deck = msg.points %}{% include "_partials/deck_nav.html" %}{% endwith %}
       {% endif %}
     </article>
     {% endif %}
@@ -54,7 +55,7 @@
     {% else %}
     <form id="reply" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
       hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim()))})}'
-      style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      class="dock" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
       {% if points %}<span id="progress" data-points="{{ points }}" style="font: 12px var(--mono); color: var(--muted)">{{ points }} points · 0 comments</span>{% endif %}
       <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted)">Anything else? A question, a new thought
         <textarea name="text" rows="2" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
@@ -89,4 +90,5 @@
   {% endif %}
 
 </div>
+<script src="/static/deck.js"></script>
 {% endblock %}

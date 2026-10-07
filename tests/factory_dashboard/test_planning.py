@@ -672,3 +672,62 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
         "docs/milestones/f6-mockup/",
     ):
         assert client.get(f"/planning/mockups/f6/{refused}").status_code == 404, refused
+
+
+# --- on a phone (f6-10) -------------------------------------------------------------------------
+
+
+def _shown(page, points: str) -> list[str | None]:
+    """The numbers of the points the browser draws."""
+    return [p.get_attribute("data-point") for p in page.locator(points).all() if p.is_visible()]
+
+
+@pytest.mark.parametrize(
+    ("path", "points", "comment", "send"),
+    [
+        ("/planning/f6", "li.point", "summary", "#reply button[type=submit]"),
+        ("/planning/f6/proposals/adr-20", ".key-point", ".change-btn", "#send-back"),
+    ],
+    ids=["thread", "review"],
+)
+def test_on_a_phone_one_point_shows_at_a_time(
+    page, planning, db_path, serve, path, points, comment, send
+):
+    """At 390 px one point, ◀ ▶ step through them, a commented point's dot is marked, Send
+    stays in view at the bottom, every control is 44 px tall and nothing runs off the
+    screen; on a display, every point and no ◀ ▶."""
+    if points == "li.point":
+        _write(db_path, lambda conn: _seven_points(conn, planning))
+    else:
+        _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), path)
+    previous, following = page.locator(".deck-arrows button").all()
+    assert _shown(page, points) == ["1"]
+    following.click()
+    assert _shown(page, points) == ["2"]
+    page.locator(f"{points}:visible {comment}").click()
+    page.locator(f"{points}:visible textarea.comment").fill("Say how it stops.")
+    dots = page.locator(".deck-dots span")
+    assert ["commented" in (d.get_attribute("class") or "") for d in dots.all()[:3]] == [
+        False,
+        True,
+        False,
+    ]
+    previous.click()
+    assert _shown(page, points) == ["1"]
+    page.evaluate("() => window.scrollTo(0, 0)")
+    box = page.locator(send).bounding_box()
+    assert box and PHONE["height"] - 120 < box["y"] + box["height"] <= PHONE["height"]
+    for control in page.locator(f"{points}:visible button, {points}:visible summary").all():
+        assert (control.bounding_box() or {"height": 0})["height"] >= 44
+    for control in (previous, following, page.locator(send)):
+        assert (control.bounding_box() or {"height": 0})["height"] >= 44
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]
+    # the dock floats over the points by design: check the page with it back in the flow
+    page.evaluate("() => document.querySelector('.dock').style.position = 'static'")
+    assert layout_problems(page) == []
+    page.set_viewport_size(DISPLAY)
+    assert len(_shown(page, points)) == (7 if points == "li.point" else 3)
+    assert not previous.is_visible()

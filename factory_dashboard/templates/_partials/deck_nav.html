@@ -1,0 +1,9 @@
+{% if deck %}
+<div class="deck-nav">
+  <div class="deck-dots" aria-hidden="true">{% for _ in deck %}<span></span>{% endfor %}</div>
+  <div class="deck-arrows">
+    <button type="button" aria-label="Previous point">&#9664;</button>
+    <button type="button" aria-label="Next point">&#9654;</button>
+  </div>
+</div>
+{% endif %}
