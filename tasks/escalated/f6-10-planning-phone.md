@@ -27,3 +27,12 @@ Read the mock-up (`docs/milestones/planning-room-mockup/Main.dc.html`, `docs/mil
 - no horizontal scroll at 390 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: all-tests)
+attempts: 3
+tokens: 4647917
+logs: var/runs/20261007-005149/f6-10-planning-phone
+```
