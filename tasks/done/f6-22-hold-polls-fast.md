@@ -24,3 +24,10 @@ Read `_hold_for_the_owner` and `_planning_goes` in `runner/loop.py`, and `SWITCH
 - a resume posted while the run holds is taken at the first poll, 5 s after the hold starts
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
