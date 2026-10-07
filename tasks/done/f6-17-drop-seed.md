@@ -34,3 +34,10 @@ Read F6's D1 table and D4's merges in `docs/milestones/f6-planning-room.md`, `KI
 - the dashboard posts `drop_seed` from the button, and refuses an unknown kind as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
