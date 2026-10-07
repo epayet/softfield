@@ -34,3 +34,12 @@ Read the mock-up (`docs/milestones/planning-room-mockup/Main.dc.html`, `docs/mil
 - the mock-up route serves a file under a `-mockup/` folder from the card's plan branch, and refuses any other path
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: mypy)
+attempts: 3
+tokens: 6088581
+logs: var/runs/20261007-005149/f6-08-proposal-review
+```
