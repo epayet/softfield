@@ -26,3 +26,12 @@ Read `QueuedJob` and `queued_jobs` in `factory_dashboard/overview.py` and the `q
 - assert on the row's text with tags stripped and entities unescaped, within that row (`_text` in `tests/factory_dashboard/test_planning.py` is the example to follow)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 7289
+gate_failures: ['ruff', 'task-tests']
+tokens: 5951510
+```
