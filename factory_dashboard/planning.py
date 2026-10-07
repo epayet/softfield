@@ -389,6 +389,7 @@ class Message:
     text: str
     points: list[dict[str, object]]  # a lead message's, or the owner's comments
     latest: bool  # the lead's latest points: the ones the owner comments on
+    waiting: bool = False  # an open plan_message request not yet picked up
 
 
 @dataclass(frozen=True)
@@ -482,6 +483,27 @@ def thread_page(
             r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{thread}#")
             for r in metrics.open_jobs(conn, project_id)
         )
+        # Append open plan_message requests as waiting messages
+        for req in conn.execute(
+            "SELECT * FROM owner_requests"
+            " WHERE project_id = ? AND kind = 'plan_message'"
+            " AND subject = ? AND done IS NULL ORDER BY id",
+            (project_id, thread),
+        ).fetchall():
+            pending = True
+            value = json.loads(req["value"]) if req["value"] else {}
+            value = json.loads(req["value"]) if req["value"] else {}
+            text = value.get("text", "") if isinstance(value, dict) else ""
+            comments_raw = value.get("comments", {}) if isinstance(value, dict) else {}
+            if isinstance(comments_raw, dict):
+                points = [
+                    {"n": int(n), "comment": c}
+                    for n, c in sorted(comments_raw.items())
+                    if isinstance(n, str) and n.isdigit() and isinstance(c, str) and c.strip()
+                ]
+            else:
+                points = []
+            messages.append(Message("owner", req["created"], text, points, False, waiting=True))
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
     return render(
         request,

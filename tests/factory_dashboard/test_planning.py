@@ -434,7 +434,8 @@ def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
     page.fill('#reply textarea[name="text"]', "And the phone?")
     page.wait_for_selector("#progress >> text=7 points · 2 comments")
     page.click('#reply button[type="submit"]')
-    page.wait_for_selector("#reply-status >> text=Asked")
+    page.wait_for_selector("#conversation >> text=And the phone?")
+    page.wait_for_selector("#reply", state="hidden")
     conn = metrics.open_db(db_path)
     try:
         rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))

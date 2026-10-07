@@ -25,11 +25,13 @@
       {% endif %}
     </header>
 
+    <div id="conversation">
     {% for msg in messages %}
     {% if msg.author == "owner" %}
-    <article class="message" style="background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px">
+    <article class="message" style="background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px{% if msg.waiting %}; border-style: dashed; border-color: var(--hazard){% endif %}">
       <span style="font: 600 12px var(--mono); color: var(--hazard)">You · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
       <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+      {% if msg.waiting %}<p style="margin: 0; font-size: 12.5px; color: var(--muted)">Sent · the runner picks it up at its next pick</p>{% endif %}
       {% for c in msg.points %}
       <p style="margin: 0; font-size: 14px; color: var(--ink-2)"><b>On {{ c.n }}:</b> {{ c.comment }}</p>
       {% endfor %}
@@ -85,8 +87,20 @@
         const n = Array.from(document.querySelectorAll("textarea.comment")).filter(t => t.value.trim()).length;
         progress.textContent = `${progress.dataset.points} points · ${n} comment${n === 1 ? "" : "s"}`;
       });
+      document.getElementById("reply").addEventListener("htmx:afterRequest", (event) => {
+        if (event.detail.successful) {
+          setTimeout(() => {
+            htmx.ajax("GET", window.location.href, {
+              target: "#conversation",
+              select: "#conversation",
+              swap: "innerHTML"
+            });
+          }, 100);
+        }
+      });
     </script>
     {% endif %}
+    </div>
   </div>
 
   {% if proposals %}
