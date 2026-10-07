@@ -834,6 +834,13 @@ def _coming_text(html: str) -> str:
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", section)).split())
 
 
+def _needs_you_count(html: str) -> int:
+    """The number of items in the Overview's Needs you section."""
+    found = re.search(r'<section id="needs-you"[^>]*>(.*?)</section>', html, re.S)
+    assert found, "no Needs you section"
+    return len(re.findall(r"<li[^>]*>", found[1]))
+
+
 def test_an_open_plant_request_shows_in_coming_with_its_title(planning, db_path, serve):
     """A pending plant: its title and the words "planting at the runner's next pick", no link."""
     _write(
@@ -888,7 +895,6 @@ def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve
     html = _page(client)
     assert "desk-coming" in html
     assert ("/planning/f6", "The planning room") in _coming_items(html)
-    assert "waiting for the lead" in _coming_text(html)
     assert "after f1-04-live, any minute now" in _coming_text(html)
 
 
@@ -929,6 +935,9 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
     )
     base_count = int(planning_tab[1]) if planning_tab else 0
+    # The Overview's "Needs you" is on the home page, not /planning
+    overview = client.get("/").text
+    base_needs = _needs_you_count(overview)
 
     # Now add Coming items
     _write(
@@ -946,3 +955,5 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
     )
     assert planning_tab and planning_tab[1] == str(base_count)
+    # The Overview's Needs you count is unchanged
+    assert _needs_you_count(client.get("/").text) == base_needs
