@@ -23,3 +23,12 @@ Read `factory_status` in `factory_dashboard/app.py` and `running_jobs` in `facto
 - paused with a live job that is not a planner (an old row from before the pause): the bar reads "Paused by you since 11:40" alone
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1510
+gate_failures: []
+tokens: 1146145
+```
