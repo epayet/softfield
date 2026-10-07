@@ -33,6 +33,7 @@ The factory is also heading out of this repo, to become a generic tool for sever
 ### 1. ⚑ One metrics database per user, for every project
 - **Where:** `~/.local/share/software-factory/factory-metrics.sqlite`, configurable in `runner.toml`. It's outside the repo: never in git, and shared by future projects.
 - **When:** a row is written as soon as its facts are known, so a crash loses nothing.
+- **Backed up daily, off the machine** (owner, 2026-10-07, F20): the runner copies the database once a day into `[backup] dir` (`~/Dropbox/software-factory-backups` by default), keeping the last 14. Planning threads, the owner's requests and the ratings live nowhere else.
 - **The tables follow the hierarchy** `projects` → `milestones` → `tickets` → `jobs`, with `runs` alongside:
   - A ticket can span runs (a rerun after a pause), so every job records both its run and its ticket.
   - A **job** is one unit of work by one agent: an attempt, a direction, a checkpoint, a shadow review, an escalation, a lead ticket, a review round or a bench attempt.

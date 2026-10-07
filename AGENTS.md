@@ -2,7 +2,7 @@
 
 **Who are you?**
 - **Developer** (running a task from `tasks/`): this file plus `docs/agents/developer.md` (both are in your prompt already).
-- **Lead** (planning, writing tickets, escalations, review): this file plus `docs/agents/lead.md`.
+- **Lead** (planning, writing tickets, escalations, review): this file plus `docs/agents/owner.md` (the owner's preferences, first) and `docs/agents/lead.md`.
 
 When a task file and this file disagree, stop and write `BLOCKED.md`.
 

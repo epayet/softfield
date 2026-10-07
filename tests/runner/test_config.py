@@ -168,6 +168,7 @@ def test_security_tests_and_the_leads_docs_are_protected():
         "tests/browser/test_outbox.py",
         "tests/e2e/test_display.py",
         "docs/agents/lead.md",
+        "docs/agents/owner.md",
         "docs/agents/developer.md",
         "AGENTS.md",
     ]

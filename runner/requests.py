@@ -533,7 +533,19 @@ def _plant(
     metrics.upsert_milestone(
         conn, project_id, full, title=title, state=found.state, priority=found.priority, area=area
     )
-    return f"planted {rel}"
+    if subject:  # an approved seed: the lead wrote it already
+        return f"planted {rel}"
+    # The owner's words are also the card thread's first message, so the lead answers them:
+    # a planted idea is often a question (the owner, 2026-10-07). It waits at a limit.
+    words = "\n\n".join(filter(None, [title, thoughts]))
+    said = json.dumps({"text": words, "comments": {}})
+    at = now.isoformat()
+    request_id = metrics.add_request(conn, project_id, PLAN_MESSAGE, key, said, at)
+    asked = metrics.find_request(conn, request_id)
+    if asked is None:  # just written
+        raise planner.PlannerError(f"the message for {planner.thread_name(key)} is gone")
+    metrics.finish_request(conn, request_id, at, _plan_message(conn, project_id, now, asked))
+    return f"planted {rel}, {QUEUED_FOR_THE_LEAD}"
 
 
 def _drop_seed(

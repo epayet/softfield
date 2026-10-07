@@ -3630,9 +3630,16 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         return
     branch = planner.plan_branch(thread)
     threads = _record(s, metrics.thread_cards, s.project_id) or []
+    earlier = ""
+    if not found["session_id"]:  # a new thread, or replies written outside a job
+        said = list(_record(s, metrics.planner_messages, found["id"]) or [])
+        # up to the lead's last reply: the owner's after it are this message or queued ones
+        while said and said[-1]["author"] == "owner":
+            said.pop()
+        earlier = planner.history(said)
     job = JobSpec(
         role=PLANNER,
-        prompt=planner.prompt(thread, text, comments, threads),
+        prompt=planner.prompt(thread, text, comments, threads, earlier),
         timeout=s.cfg.claude_timeout,
         # A card's drafts, on its plan branch only; the general thread only talks (f6 D4)
         edit=planner.drafts(thread) if branch else (),

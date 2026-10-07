@@ -8,9 +8,10 @@ The lead's reply ends with a fenced ``json`` block (D2), checked here before it 
 
 import json
 import re
+import sqlite3
 import subprocess
 import unicodedata
-from collections.abc import Collection, Mapping
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -404,13 +405,38 @@ def merged_card(doc: str, notes: str, source: str) -> str:
     return f"{doc[: section.start()]}{body}\n\n{block}" + (f"\n{after}" if after else "")
 
 
+def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]]) -> str:
+    """A thread's earlier messages in words, for a job with no session to resume: the lead's
+    text and its points. Lead replies written outside a job (2026-10-07) have no session."""
+    said = []
+    for message in messages:
+        who = "The owner" if message["author"] == "owner" else "You (the lead)"
+        points = json.loads(message["points"]) if message["points"] else []
+        if message["author"] == "owner":
+            lines = [f"On point {p['n']}: {p['comment']}" for p in points if "comment" in p]
+        else:
+            lines = [
+                f"{p.get('n')}. {p.get('title')}: {p.get('answer')} ({p.get('action')})"
+                for p in points
+            ]
+        said.append("\n".join([f"{who}:", str(message["text"]).strip(), *lines]).strip())
+    if not said:
+        return ""
+    return "\nWhat was said on this thread before, oldest first:\n\n" + "\n\n".join(said) + "\n"
+
+
 def prompt(
-    thread: str, text: str, comments: Mapping[int, str], threads: Collection[str] = ()
+    thread: str,
+    text: str,
+    comments: Mapping[int, str],
+    threads: Collection[str] = (),
+    earlier: str = "",
 ) -> str:
     """The planner job's prompt for one message: a card's drafts on its plan branch, none on
-    the general thread (``prompts.PLANNER``); the other threads named, to spot a repeat."""
+    the general thread (``prompts.PLANNER``); the other threads named, to spot a repeat;
+    ``earlier`` the thread's ``history`` when the job has no session to resume."""
     lines = "".join(f"- On your point {n}: {comment}\n" for n, comment in comments.items())
-    said = f"\nTheir comments on your last points:\n{lines}" if lines else ""
+    said = earlier + (f"\nTheir comments on your last points:\n{lines}" if lines else "")
     others = [t for t in threads if t not in (thread, GENERAL)]
     others += [GENERAL] if GENERAL in threads and thread != GENERAL else []
     template = prompts.PLANNER_GENERAL if thread == GENERAL else prompts.PLANNER

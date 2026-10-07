@@ -49,7 +49,7 @@ def test_the_planner_prompt_names_the_block_the_branch_and_the_approval_rule():
     # branch touches tasks/ready/ (f6-13)
     assert "Nothing is queued without their approval" in text
     assert "Only a `replan` may touch tasks/ready/" in text
-    # Questions first, every point agreed by default, and push back (lead.md, The owner)
+    # Questions first, every point agreed by default, and push back (owner.md)
     assert text.index("questions and comments first") < text.index("then revise")
     assert "counts as agreed" in text and "Challenge them" in text
 

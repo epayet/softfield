@@ -291,7 +291,8 @@ Read-only git (diff, log, show) is fine; don't commit: the runner does.
 # 2026-10-02/03. A card's thread drafts on its plan branch; the general thread only talks.
 _PLANNER_HEAD = """\
 You are the lead, planning with the owner in the planning room \
-(docs/adr/20-planning-room.md). Plan as docs/agents/lead.md says (The owner, Plan, Tickets). \
+(docs/adr/20-planning-room.md). Plan as docs/agents/owner.md and docs/agents/lead.md \
+(Plan, Tickets) say. \
 This is their message on {thread}.
 {comments}
 The owner's message:

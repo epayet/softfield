@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -210,6 +211,23 @@ def test_the_prompt_carries_the_message_and_the_comments_by_point():
     assert "Go on." in prompt and "Why first?" in prompt and "F7" in prompt
     assert "```json" in prompt and '"points"' in prompt
     assert "point 2" in prompt
+
+
+def test_a_job_with_no_session_reads_what_was_said_on_its_thread_before():
+    """Lead replies written outside a job (2026-10-07) have no session to resume: the next
+    job's prompt carries them, the lead's points with them."""
+    said: list[dict[str, Any]] = [
+        {"author": "owner", "text": "When is the board?", "points": None},
+        {"author": "lead", "text": "After F5's replan.", "points": json.dumps(POINTS)},
+        {"author": "owner", "text": "Fine.", "points": json.dumps([{"n": 2, "comment": "Why?"}])},
+    ]
+    earlier = planner.history(said)
+    assert earlier.index("The owner:\nWhen is the board?") < earlier.index("You (the lead):")
+    assert "2. The queue: Planner jobs go first. (A ticket)" in earlier
+    assert "On point 2: Why?" in earlier
+    prompt = planner.prompt("f7", "Go on.", {}, earlier=earlier)
+    assert earlier in prompt and prompt.index("When is the board?") < prompt.index("Go on.")
+    assert planner.history([]) == ""
 
 
 def test_the_prompt_names_the_other_threads_to_check_for_duplicates():
@@ -505,6 +523,21 @@ def _board(repo: Path) -> dict[str, tuple[object, object, object, object]]:
         conn.close()
 
 
+def _for_the_lead(repo: Path) -> list[tuple[str, str]]:
+    """The planner jobs queued, each with its thread's owner message: (job subject, text)."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        rows = conn.execute(
+            "SELECT q.subject, m.text FROM work_queue q, planner_threads t,"
+            " planner_messages m WHERE q.kind = 'planner' AND q.done IS NULL"
+            " AND m.thread_id = t.id AND m.author = 'owner'"
+            " AND t.card = substr(q.subject, 1, instr(q.subject, '#') - 1) ORDER BY q.id"
+        ).fetchall()
+        return [(r["subject"].split("#")[0], r["text"]) for r in rows]
+    finally:
+        conn.close()
+
+
 def _no_claude(*args, **kwargs):
     raise AssertionError("planting needs no Claude")
 
@@ -523,7 +556,7 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     (repo / "coucou" / "thing.py").write_text("# the owner's edit, left alone\n")
     head = git(repo, "rev-parse", "HEAD").strip()
     asked = _ask(repo, "plant", None, _plant("Parallel planners", "Two at once?\nMaybe."))
-    result = "planted docs/milestones/f7-parallel-planners.md"
+    result = "planted docs/milestones/f7-parallel-planners.md, queued for the lead"
     assert _apply(repo, parked) == [f"plant: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
     doc = (repo / "docs" / "milestones" / "f7-parallel-planners.md").read_text()
@@ -537,6 +570,8 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     assert changed == ["docs/milestones/f7-parallel-planners.md"]
     assert git(repo, "status", "--porcelain").strip() == "M coucou/thing.py"
     assert _board(repo)["f7-parallel-planners"] == ("Parallel planners", "idea", 100, "factory")
+    # the owner's words are also F7's first message, for the lead to answer (2026-10-07)
+    assert _for_the_lead(repo) == [("f7", "Parallel planners\n\nTwo at once?\nMaybe.")]
     assert _apply(repo) == []  # finished once
 
 
@@ -632,6 +667,7 @@ def test_approving_a_general_threads_seed_plants_it_the_same_way(repo):
     assert "the general thread's seed-1" in doc
     assert milestone.card("f7-parallel-planners", doc).state == "idea"
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
+    assert _for_the_lead(repo) == []  # the lead wrote the seed: nothing to answer
     again = _ask(repo, "plant", "general/seed-1")
     _apply(repo)
     assert _request(repo, again)[1] == ("parallel-planners is a card already: f7-parallel-planners")

@@ -2954,13 +2954,21 @@ def test_a_message_to_the_lead_while_paused_runs_its_planner_job_before_the_resu
     assert out.count("Resumed by you.") == 1
 
 
-def test_a_plant_while_paused_is_applied_before_the_resume_and_the_run_keeps_holding(
+def test_a_plant_while_paused_is_applied_and_answered_by_the_lead_before_the_resume(
     repo, fake_model, fake_clock, monkeypatch, capsys
 ):
-    """f6-14: a plant needs no planner job, so it is applied (its card committed) and the hold
-    goes on; nothing runs until the resume."""
+    """f6-14: a plant is applied (its card committed) during the hold; its words are the
+    card thread's first message (the owner, 2026-10-07), so the lead answers them while the
+    line holds."""
     save_state(State(owner_pause=THURSDAY.isoformat()), _config(repo).runs_dir / "state.json")
     title = json.dumps({"title": "Rubber ducks", "thoughts": "Yellow.", "area": "product"})
+    planned: list[tuple[str, bool]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        planned.append((job.kind, _state(repo).owner_pause is not None))
+        return JobResult(ok=True, text='Yes.\n```json\n{"points": []}\n```', duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
     seen: list[tuple[object, ...]] = []
     slept = _holds_then_resumes(
         repo, monkeypatch, seen, lambda: _ask_from_the_dashboard(repo, "plant", None, title)
@@ -2971,10 +2979,11 @@ def test_a_plant_while_paused_is_applied_before_the_resume_and_the_run_keeps_hol
     [card] = (repo / "docs" / "milestones").glob("*-rubber-ducks.md")
     assert "Yellow." in card.read_text()
     assert "planted by the owner" in git(repo, "log", "-1", "--format=%s", "--", str(card))
-    assert git(repo, "status", "--porcelain") == ""
+    assert planned == [("planner", True)]
+    said = [(m["author"], m["text"]) for m in _messages(repo)]
+    assert said == [("owner", "Rubber ducks\n\nYellow."), ("lead", "Yes.")]
     assert slept == [5.0, 5.0]
-    assert seen == [("paused by you", 0), ("paused by you", 0)]
-    assert capsys.readouterr().out.count("Paused by you since") == 1
+    assert seen == [("paused by you", 0), ("paused by you", 1)]
 
 
 def test_a_queue_request_made_during_a_run_is_applied_at_the_next_pick(repo, fake_model):
@@ -4082,6 +4091,37 @@ def _planner_replies(
 
 def _messages(repo: Path) -> list[dict[str, object]]:
     return _rows(repo, "planner_messages")
+
+
+def test_a_thread_with_replies_but_no_session_gives_the_lead_its_history(
+    repo, fake_model, monkeypatch
+):
+    """Lead replies written outside a job (2026-10-07): the thread has no session, so the job
+    is a new one whose prompt carries what was said up to the lead's last reply."""
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+    thread = metrics.planner_thread(conn, project, "f7", THURSDAY.isoformat())["id"]
+    metrics.add_planner_message(conn, thread, "owner", THURSDAY.isoformat(), "When is it?")
+    metrics.add_planner_message(
+        conn, thread, "lead", THURSDAY.isoformat(), "After F5.", points=POINTS
+    )
+    conn.commit()
+    conn.close()
+    _plan_message(repo, "f7", "Why so late?")
+    _plan_message(repo, "f7", "And then?")
+    prompts: list[tuple[str | None, str]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        prompts.append((resume, job.prompt))
+        return JobResult(ok=True, text="Yes.", duration_s=1.0, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    _run(repo)
+    [(resume, first), (again, second)] = prompts
+    assert resume is None and "When is it?" in first and "1. One queue: Yes, visible." in first
+    assert "And then?" not in first  # queued after, not history
+    assert first.count("Why so late?") == 1
+    assert again == "s1" and "When is it?" not in second  # the session has it now
 
 
 def test_the_owners_messages_go_before_a_lead_ticket_and_continue_one_session(
