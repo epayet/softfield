@@ -889,6 +889,7 @@ def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve
     assert "desk-coming" in html
     assert ("/planning/f6", "The planning room") in _coming_items(html)
     assert "waiting for the lead" in _coming_text(html)
+    assert "after f1-04-live, any minute now" in _coming_text(html)
 
 
 def test_after_the_leads_reply_the_thread_moves_to_answers_wanted(planning, db_path, serve):

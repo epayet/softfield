@@ -250,14 +250,14 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
             )
             # Check for open planner row about this thread
             has_open_planner = any(
-                r["kind"] == "planner" and str(r["subject"] or "").startswith(f"{card}#")
+                r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{card}#")
                 for r in open_jobs
             )
             if not has_open_request and not has_open_planner:
                 continue
             # Compute _next_reply for this thread
-            pending_any = any(r["kind"] == "PLANNER" for r in open_jobs)
-            next_reply = _next_reply(conn, project, running_jobs(conn, project, now), pending_any)
+            pending = has_open_request or has_open_planner
+            next_reply = _next_reply(conn, project, running_jobs(conn, project, now), pending)
             items.append(
                 DeskItem(
                     "coming",
