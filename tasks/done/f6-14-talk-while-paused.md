@@ -29,3 +29,10 @@ Read ADR 22 item 5 and its ⚑ amendment (`docs/adr/22-one-visible-queue.md`), `
 - a resume posted while the run holds is taken within 5 s
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
