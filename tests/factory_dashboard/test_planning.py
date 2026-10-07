@@ -642,6 +642,41 @@ def test_a_seeds_button_posts_plant_about_its_general_id(planning, db_path, serv
     assert 'id="approve-plan"' not in html
 
 
+_REVIEW_MERGE: dict[str, Any] = {
+    "id": "merge-f9",
+    "kind": "merge",
+    "title": "Parallel, said twice",
+    "path": "docs/milestones/f9-parallel.md",
+    "into": "f7",
+    "key_points": [{"n": 1, "title": "Notes", "text": "F9's notes go to F7.", "flag": False}],
+}
+
+
+def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
+    planning, db_path, db, serve
+):
+    """f6-12: on the desk and its page, its words say "merge F9 into F7"; approving it is the
+    thread's ``approve_plan``, which settles it (D6)."""
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    [item] = [i for i in desk(db, PROJECT, NOW)[1].items if i.link.endswith("/merge-f9")]
+    assert item.words == "merge F9 into F7 · 1 key points"
+    html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
+    assert ">Merge F9 into F7</span>" in html and "Approve: merge F9 into F7" in html
+    assert _posts(html, "approve-merge") == {
+        "kind": "approve_plan",
+        "project": PROJECT,
+        "subject": "f9",
+    }
+    assert 'id="approve-plan"' not in html and 'id="accept-adr"' not in html
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "approve_plan", "f9", None, NOW.isoformat()
+        ),
+    )
+    assert not [i for i in desk(db, PROJECT, NOW)[1].items if i.link.endswith("/merge-f9")]
+
+
 def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     planning, db_path, serve, checkout
 ):

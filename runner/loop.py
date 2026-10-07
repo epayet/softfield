@@ -3618,9 +3618,10 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     if found is None:
         return
     branch = planner.plan_branch(thread)
+    threads = _record(s, metrics.thread_cards, s.project_id) or []
     job = JobSpec(
         role=PLANNER,
-        prompt=planner.prompt(thread, text, comments),
+        prompt=planner.prompt(thread, text, comments, threads),
         timeout=s.cfg.claude_timeout,
         # A card's drafts, on its plan branch only; the general thread only talks (f6 D4)
         edit=planner.DRAFTS if branch else (),
@@ -3638,7 +3639,9 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         if branch is not None:
             _commit_drafts(s, branch, row.subject, new)
     if result.ok:
-        reply = planner.parse_reply(result.text)
+        reply = planner.parse_reply(
+            result.text, planner.cards(s.repo)
+        )  # main's: merges apply there
     else:  # its message is the owner's to send again
         failed = f"the lead's job failed ({result.text.strip()[:200]}): send the message again"
         reply = planner.Reply("", note=failed)

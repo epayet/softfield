@@ -21,7 +21,7 @@
     | `plant` | none, or a general seed `general/<id>` (f6-04) | JSON `{"title", "thoughts", "area"}` (area optional: factory); a seed's optional `{"area"}` | `planted docs/milestones/…` |
     | `send_back` | the proposal: `<thread>/<proposal id>` | as `plan_message`, comments by key point number | `queued for the lead` |
     | `accept_adr` | the thread (the card's key) | the ADR's number (`23`, from the proposal's path `docs/adr/23-….md`) | `accepted docs/adr/…` |
-    | `approve_plan` | the thread (the card's key) | – | `approved plan/…: queued …` |
+    | `approve_plan` | the thread (the card's key, or `general` for its merges) | – | `approved plan/…: queued …`, then `; merged F12 into F10` per merge; `approved: merged …` with no branch |
 
   - **A thread's `card`** is the card's short key (`f7`, `runner.tasks.short_key`) or `general`, never `milestones.key` (`f7-planning-room`).
   - **A pending reply:** each `plan_message` queues a `work_queue` row of kind `planner`, subject `<thread>#<request id>` (`planner.row_subject`), open (`metrics.open_jobs`) until the lead's reply is stored.
@@ -30,8 +30,9 @@
 
 - **D2 The reply block:** the planner ends each reply with a fenced `json` block:
   - `points`: a list of `{n, title, answer, action}`;
-  - `proposals`: a list of `{id, kind (adr | mockup | plan | seed | replan), title, path, key_points: [{n, title, text, flag}]}`.
+  - `proposals`: a list of `{id, kind (adr | mockup | plan | seed | replan | merge), title, path, key_points: [{n, title, text, flag}]}`, and a merge's `into`.
   - A `replan` (owner, 2026-10-03: "direct a milestone as it's happening… trigger a replan from the result of the chat") changes the ready tickets of a milestone that is running. f5-18's pause holds the line while the owner and the lead talk, and approving the proposal applies it and resumes. f6-03 handles it as a `plan`.
+  - A `merge` (f6-12, owner 2026-10-06: "whenever I plant an idea… the lead should detect it, suggest closing one of the duplicates") says a card repeats another: `{id, kind: "merge", title, path: "docs/milestones/<duplicate>.md", into: "<kept card's short key>", key_points}`, the key points saying what moves where. `parse_reply(text, planner.cards(repo))` refuses one without `into`, naming a card with no doc on main, or merging a card into itself. Both prompts ask the planner to check the idea, planning and ready cards and the other threads (named in the prompt) first. A planted title that is already a card is still refused (`card_named`): a merge covers the same idea in other words.
   - **As built (f6-05):** a plan branch holds only `docs/` and `tasks/later/` (`planner.is_draft`), and f5-18 is still in `tasks/ready/`. So today a `replan` can change docs and add tickets, which `approve_plan` queues; it can't edit a ready ticket, and nothing pauses. See "Later".
 
   `runner/planner.py` owns `parse_reply(text) -> Reply` and checks it.
@@ -40,10 +41,11 @@
   - **As built:** the branch is made at the card's first planner job and deleted when that job drafted nothing. Mock-ups go in `docs/milestones/<card>-mockup/`.
   - An ADR draft reaches main at `accept_adr`; everything else on the branch (plans, mock-ups, tickets) reaches it at `approve_plan`, all at once. Before that, a draft exists only on the branch, and the runner checks the branch out during a planner job.
   - So the dashboard reads a draft from git, never from the working tree: `planner.draft(repo, thread, path)` (f6-11), the file on `plan/<card>` while it exists, else main's.
+  - **Merges (f6-12):** `approve_plan` on a thread also applies the `merge` proposals of its latest lead message that lists proposals, in the same commit as its plan (`F10 plan approved by the owner; F12 merged into F10`), or alone when the thread has no branch, the general thread included (`F12 merged into F10 by the owner`; result `approved: merged F12 into F10`). Each one appends the duplicate's Notes (every section when it has none, headings demoted, quoted lines escaped) to the kept card's Notes under `### From F12: <title> (merged by the owner on <date>)`, and `git rm`s the duplicate's doc. After the commit, the duplicate's thread gets a lead message pointing to `/planning/<kept>` and its `planning` owner item is resolved. Refused, main unchanged: a duplicate with tickets in `tasks/`, a card with no doc, or a thread whose own card merges away while its plan branch has drafts (send it back). `send_back` works as for any proposal. Nothing changes before approval.
 - **D5 Planting:** the next free key in the area's series (`f` factory, `m` product), the slug from the title, **State:** idea. A general-thread `seed` proposal plants the same way when approved.
 - **D6 The desk** (`factory_dashboard/planning.py`, `desk(conn, project)`), one list for the planning page, Needs you and the top bar's count. Each item has its group, its words and its link (`/planning/<thread>` or `/planning/<thread>/proposals/<id>`):
   - threads whose last message is the lead's (your answers wanted; the same threads as the open `planning` owner items);
-  - open proposals: those in a thread's latest lead message that lists proposals, unless an owner request about one was made after that message and is still pending or worked (D1's results). About a proposal means: its `send_back`; for an `adr`, the card's `accept_adr` with its number; for a `plan`, `mockup` or `replan`, the card's `approve_plan`; for a `seed`, its `plant` `general/<id>`. A refused request leaves it open;
+  - open proposals: those in a thread's latest lead message that lists proposals, unless an owner request about one was made after that message and is still pending or worked (D1's results). About a proposal means: its `send_back`; for an `adr`, the card's `accept_adr` with its number; for a `plan`, `mockup`, `replan` or `merge`, the card's `approve_plan`; for a `seed`, its `plant` `general/<id>`. A refused request leaves it open;
   - ripe cards: every ticket done and not signed off, as the line's field has them (`_field` in `factory_dashboard/line.py`);
   - idea cards with no thread: `milestones.state` is `idea` and no `planner_threads` row has its short key.
 

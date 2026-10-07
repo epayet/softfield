@@ -298,6 +298,14 @@ The owner's message:
 
 {text}
 
+Before answering, look for a repeat (f6-12): read the cards in docs/milestones/ whose state \
+is idea, planning or ready, and think of the other threads. Other threads: {threads}. When \
+this idea or message repeats another card or thread, even in other words, say so as a point \
+and propose a `merge`: `path` the duplicate card's doc, `into` the short key of the card it \
+joins (`f10`), key points saying what moves where. Don't edit or remove either card \
+yourself: once the owner approves, the runner moves the duplicate's notes into the kept card, \
+removes the duplicate and points its thread to the kept one, where the conversation goes on.
+
 How to answer:
 - Answer their questions and comments first, then revise what they asked you to change.
 - Reply in plain words, as numbered points: each with a title, an answer and a suggested \
@@ -318,8 +326,8 @@ by point (flag: true where a point deviates from an earlier decision):
 
 ```json
 {{"points": [{{"n": 1, "title": "…", "answer": "…", "action": "…"}}],
-  "proposals": [{{"id": "…", "kind": "adr" | "mockup" | "plan" | "seed" | "replan",
-    "title": "…", "path": "docs/…" | null,
+  "proposals": [{{"id": "…", "kind": "adr" | "mockup" | "plan" | "seed" | "replan" | "merge",
+    "title": "…", "path": "docs/…" | null, "into": "f10" (a merge only),
     "key_points": [{{"n": 1, "title": "…", "text": "…", "flag": false}}]}}]}}
 ```"""
 

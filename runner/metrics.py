@@ -906,6 +906,30 @@ def planner_messages(conn: sqlite3.Connection, thread_id: int) -> list[sqlite3.R
     ).fetchall()
 
 
+def thread_cards(conn: sqlite3.Connection, project_id: int) -> list[str]:
+    """Every thread's card (or ``general``), oldest first."""
+    rows = conn.execute(
+        "SELECT card FROM planner_threads WHERE project_id = ? ORDER BY id", (project_id,)
+    ).fetchall()
+    return [row["card"] for row in rows]
+
+
+def latest_proposals(
+    conn: sqlite3.Connection, project_id: int, card: str
+) -> list[dict[str, object]]:
+    """The proposals of the latest lead message that lists some on the thread about ``card``
+    (f6 D6's open ones, before the owner's requests about them)."""
+    row = conn.execute(
+        "SELECT m.proposals FROM planner_messages m"
+        " JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.project_id = ? AND t.card = ? AND m.author = 'lead'"
+        " AND m.proposals IS NOT NULL AND m.proposals != '[]' ORDER BY m.id DESC LIMIT 1",
+        (project_id, card),
+    ).fetchone()
+    found = json.loads(row["proposals"]) if row else []
+    return [proposal for proposal in found if isinstance(proposal, dict)]
+
+
 def find_proposal(
     conn: sqlite3.Connection, project_id: int, card: str, proposal_id: str
 ) -> dict[str, object] | None:

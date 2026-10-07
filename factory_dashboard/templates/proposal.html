@@ -12,6 +12,7 @@
     <header style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var({{ color }}); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
       <span style="font: 600 12px var(--mono); color: var(--muted)">Proposed by the lead</span>
       <h1 style="margin: 0; font: 700 22px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">Review {{ proposal.title }}</h1>
+      {% if merge %}<span id="merge-words" style="font: 600 13px var(--mono); color: var(--ink-2)">{{ merge[:1] | upper }}{{ merge[1:] }}</span>{% endif %}
       {% if proposals %}
       <nav id="proposal-tabs" aria-label="Proposals" style="display: flex; flex-wrap: wrap; border: 1px solid var(--rule); align-self: flex-start">
         {% for prop in proposals %}
@@ -68,6 +69,12 @@
           hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
           style="{{ button }}{% if adr_waits %}; color: var(--muted); background: transparent; border: 1px dashed var(--muted){% endif %}">Approve plan</button>
         {% if adr_waits %}<span style="font-size: 12.5px; color: var(--muted)">Accept the card's ADR first: the plan builds on it.</span>{% endif %}
+        {% elif kind == "merge" and merge %}
+        <button type="button" id="approve-merge"
+          hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+          hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
+          style="{{ button }}">Approve: {{ merge }}</button>
+        <span style="font-size: 12.5px; color: var(--muted)">The duplicate's notes join the kept card, its card goes, and its thread points to the kept one.</span>
         {% elif kind == "seed" %}
         <button type="button" id="plant"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"

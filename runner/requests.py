@@ -35,7 +35,7 @@ QUEUE = "queue"  # subject: the ticket id
 PLAN_MESSAGE = planner.PLAN_MESSAGE  # subject: the thread; value: {text, comments} (f6 D1)
 SEND_BACK = "send_back"  # subject: <thread>/<proposal id>; value: {text, comments}
 ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
-APPROVE_PLAN = "approve_plan"  # subject: the card
+APPROVE_PLAN = "approve_plan"  # subject: the thread; its plan and its merges (f6-12)
 PLANT = "plant"  # value: {title, thoughts, area}; or subject: general/<seed id>, value: {area}
 PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
 RESUME = "resume"
@@ -207,47 +207,122 @@ def _ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
     return problems
 
 
-def _approve_plan(repo: Path, subject: object) -> str:
-    """Merge a card's plan branch into main, queue its tickets and set the card ready, in one
-    commit; the branch then goes. Refused, with main as it was, when the branch changes more
-    than drafts, clashes with main, or a ticket fails pre-flight (the planner fixes it next)."""
+def _merges(conn: sqlite3.Connection, project_id: int, thread: str) -> list[tuple[str, str]]:
+    """The ``merge`` proposals of the thread's latest lead message that lists proposals (f6
+    D6's open ones): each duplicate and the card it joins."""
+    return [
+        planner.merge_cards(proposal)
+        for proposal in metrics.latest_proposals(conn, project_id, thread)
+        if proposal.get("kind") == planner.MERGE
+    ]
+
+
+def _merge(repo: Path, now: datetime, duplicate: str, kept: str) -> None:
+    """The duplicate's notes appended to the kept card's Notes, saying where they came from,
+    and its doc removed (``git rm``), for the approval's one commit. A card with tickets isn't
+    merged away: they would be left without their milestone."""
+    names = (planner.thread_name(duplicate), planner.thread_name(kept))
+    docs = [milestone_file(repo, "milestones", full_key(repo, key)) for key in (duplicate, kept)]
+    for name, path in zip(names, docs, strict=True):
+        if not path.is_file():
+            raise planner.PlannerError(f"{name} has no card in docs/milestones/: not merged")
+    tickets = sorted(p.relative_to(repo).as_posix() for p in repo.glob(f"tasks/*/{duplicate}-*.md"))
+    if tickets:
+        raise planner.PlannerError(
+            f"{names[0]} has tickets ({', '.join(tickets)}): it can't be merged away"
+        )
+    text = docs[0].read_text(encoding="utf-8")
+    title = milestone.milestone_doc(text).get("title") or duplicate
+    source = f"From {names[0]}: {title} (merged by the owner on {now.date().isoformat()})"
+    doc = docs[1].read_text(encoding="utf-8")
+    docs[1].write_text(planner.merged_card(doc, planner.card_notes(text), source), "utf-8")
+    Git(repo).run("rm", "-q", "--", docs[0].relative_to(repo).as_posix())
+
+
+def _merged(
+    conn: sqlite3.Connection, project_id: int, now: datetime, merges: list[tuple[str, str]]
+) -> None:
+    """Each merged card's thread points to the kept card's, and its reply's item is answered."""
+    at = now.isoformat()
+    for duplicate, kept in merges:
+        name, there = planner.thread_name(duplicate), planner.thread_name(kept)
+        text = (
+            f"The owner merged {name} into {there}: its notes are on {there}'s card now. "
+            f"The conversation goes on on {there}'s thread: /planning/{kept}"
+        )
+        thread_id = metrics.planner_thread(conn, project_id, duplicate, at)["id"]
+        metrics.add_planner_message(conn, thread_id, "lead", at, text)
+        for item in metrics.open_owner_items(conn, project_id):
+            if item["kind"] == planner.PLANNING and item["subject"] == duplicate:
+                metrics.resolve_owner_item(conn, item["id"], at)
+
+
+def _approve_plan(
+    repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime, subject: object
+) -> str:
+    """Merge a card's plan branch into main, queue its tickets and set the card ready, and
+    apply the thread's ``merge`` proposals, in one commit; the branch then goes. Refused, with
+    main as it was, when the branch changes more than drafts, clashes with main, a ticket fails
+    pre-flight (the planner fixes it next), or a merge can't be applied. A thread with merges
+    and no branch (the general one too) approves its merges alone."""
     thread = planner.thread_key(subject)
     branch = planner.plan_branch(thread)
-    if branch is None:
-        raise planner.PlannerError("the general thread has no plan to approve")
     git = Git(repo)
-    if not _has_branch(git, branch):
+    merges = _merges(conn, project_id, thread)
+    if branch is None and not merges:
+        raise planner.PlannerError("the general thread has no plan to approve")
+    planned = branch is not None and _has_branch(git, branch)
+    if branch is not None and not planned and not merges:
         raise planner.PlannerError(f"there is no {branch} to approve")
-    changes = _drafts(git, branch)
-    if (refused := _outside(branch, changes)) is not None:
-        return refused
-    tickets = sorted(
-        path
-        for mode, path in changes
-        if path.startswith(f"tasks/{LATER}/") and path.endswith(".md") and mode != "000000"
-    )
-    try:
-        git.run("merge", "-q", "--squash", branch)
-    except GitError:
-        _undo(git)
-        return f"{branch} clashes with {loop.MAIN}: not approved"
-    try:
-        if problems := _ticket_problems(repo, tickets):
+    name = planner.thread_name(thread)
+    if planned and (into := dict(merges).get(thread)) is not None:
+        there = planner.thread_name(into)
+        return f"{branch} has drafts for {name}, which merges into {there}: send it back"
+    joined = [f"{planner.thread_name(d)} into {planner.thread_name(k)}" for d, k in merges]
+    tickets: list[str] = []
+    if planned and branch is not None:
+        changes = _drafts(git, branch)
+        if (refused := _outside(branch, changes)) is not None:
+            return refused
+        tickets = sorted(
+            path
+            for mode, path in changes
+            if path.startswith(f"tasks/{LATER}/") and path.endswith(".md") and mode != "000000"
+        )
+        try:
+            git.run("merge", "-q", "--squash", branch)
+        except GitError:
             _undo(git)
-            return "not approved: " + "; ".join(problems)
-        doc = milestone_file(repo, "milestones", full_key(repo, thread))
-        if not doc.is_file():
-            _undo(git)
-            return f"{planner.thread_name(thread)} has no card in docs/milestones/: not approved"
-        doc.write_text(planner.ready_card(doc.read_text(encoding="utf-8")), encoding="utf-8")
-        for rel in tickets:
-            git.move(repo / rel, repo / "tasks" / "ready" / Path(rel).name)
-        git.commit_all(f"{planner.thread_name(thread)} plan approved by the owner")
+            return f"{branch} clashes with {loop.MAIN}: not approved"
+    try:
+        if planned:
+            if problems := _ticket_problems(repo, tickets):
+                _undo(git)
+                return "not approved: " + "; ".join(problems)
+            doc = milestone_file(repo, "milestones", full_key(repo, thread))
+            if not doc.is_file():
+                _undo(git)
+                return f"{name} has no card in docs/milestones/: not approved"
+            doc.write_text(planner.ready_card(doc.read_text(encoding="utf-8")), encoding="utf-8")
+            for rel in tickets:
+                git.move(repo / rel, repo / "tasks" / "ready" / Path(rel).name)
+        for duplicate, kept in merges:
+            _merge(repo, now, duplicate, kept)
+        merged = [words.replace(" into ", " merged into ", 1) for words in joined]
+        if planned:
+            git.commit_all("; ".join([f"{name} plan approved by the owner", *merged]))
+        else:
+            git.commit_all(f"{'; '.join(merged)} by the owner")
     except Exception:
         _undo(git)
         raise
-    git.run("branch", "-q", "-D", branch)
-    return f"approved {branch}: queued {', '.join(Path(t).stem for t in tickets) or 'nothing'}"
+    _merged(conn, project_id, now, merges)
+    said = [f"merged {words}" for words in joined]
+    if not planned:
+        return f"approved: {'; '.join(said)}"
+    git.run("branch", "-q", "-D", str(branch))
+    queued = ", ".join(Path(t).stem for t in tickets) or "nothing"
+    return "; ".join([f"approved {branch}: queued {queued}", *said])
 
 
 def _adr_number(value: object) -> int:
@@ -404,7 +479,7 @@ def _apply(
         if kind == SEND_BACK:
             return _send_back(conn, project_id, now, row)
         if kind == APPROVE_PLAN:
-            return _approve_plan(repo, subject)
+            return _approve_plan(repo, conn, project_id, now, subject)
         if kind == ACCEPT_ADR:
             return _accept_adr(repo, db, now, subject, value)
         if kind == PLANT:

@@ -4,6 +4,8 @@ import json
 import re
 from pathlib import Path
 
+import pytest
+
 from runner import prompts
 from runner.prompts import local_prompt
 from runner.tasks import parse_task
@@ -55,6 +57,18 @@ def test_the_general_thread_has_no_branch_and_proposes_seeds():
     text = prompts.PLANNER_GENERAL
     assert "plan/" not in text and "change nothing" in text and "`seed`" in text
     assert "Nothing is queued without their approval" in text and "```json" in text
+
+
+@pytest.mark.parametrize("text", [prompts.PLANNER, prompts.PLANNER_GENERAL])
+def test_both_planner_prompts_look_for_duplicates_and_propose_a_merge(text):
+    """f6-12: before answering, the cards in docs/milestones/ (idea, planning or ready) and the
+    other threads; a repeat is a point and a `merge` proposal, applied only once approved."""
+    looks = text.index("Before answering")
+    assert "docs/milestones/" in text[looks:] and "idea, planning or ready" in text
+    assert "{threads}" in text and "repeats another" in text
+    assert "`merge`" in text and '"into"' in text.split("```json", 1)[1]
+    assert "once the owner approves" in text
+    assert text.index("Before answering") < text.index("```json")
 
 
 def _prompt_texts() -> list[str]:

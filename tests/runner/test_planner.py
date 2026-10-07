@@ -99,6 +99,59 @@ def test_a_broken_block_leaves_the_whole_reply_as_text_with_a_note(text, why):
     assert reply.note is not None and why in reply.note
 
 
+# --- a `merge`: one card repeats another (f6-12, D2) ----------------------------------------------
+
+MERGE = {
+    "id": "merge-f12",
+    "kind": "merge",
+    "title": "One queue, said twice",
+    "path": "docs/milestones/f12-queue-once.md",
+    "into": "f10",
+    "key_points": [{"n": 1, "title": "Notes", "text": "F12's notes go to F10.", "flag": False}],
+}
+CARDS = {"f10", "f12", "m4"}
+
+
+def test_a_merge_proposal_names_the_duplicates_doc_and_the_card_it_joins():
+    reply = planner.parse_reply(_reply({"points": POINTS, "proposals": [MERGE]}), CARDS)
+    assert reply.note is None and reply.proposals == (MERGE,)
+    assert planner.merge_cards(MERGE) == ("f12", "f10")
+    assert planner.merge_words(MERGE) == "merge F12 into F10"
+
+
+@pytest.mark.parametrize(
+    ("change", "why"),
+    [
+        ({"into": None}, "into"),
+        ({"into": "f99"}, "f99 is no card"),
+        ({"into": "general"}, "into"),
+        ({"into": "f12"}, "into itself"),
+        ({"path": "docs/milestones/f99-gone.md"}, "f99 is no card"),
+        ({"path": "docs/adr/23-x.md"}, "a card's doc"),
+        ({"path": "docs/milestones/../adr/f12-x.md"}, "a card's doc"),
+        ({"path": None}, "a card's doc"),
+    ],
+)
+def test_a_merge_without_into_or_with_an_unknown_card_is_refused(change, why):
+    proposal = {key: value for key, value in {**MERGE, **change}.items() if value is not None}
+    reply = planner.parse_reply(_reply({"points": POINTS, "proposals": [proposal]}), CARDS)
+    assert reply.proposals == ()
+    assert reply.note is not None and why in reply.note
+
+
+def test_without_the_cards_no_merge_is_read():
+    """A caller that doesn't say which cards exist gets every merge refused, never guessed."""
+    assert planner.parse_reply(_reply({"points": POINTS, "proposals": [MERGE]})).note
+
+
+def test_the_cards_are_the_milestone_docs_short_keys(tmp_path):
+    docs = tmp_path / "docs" / "milestones"
+    (docs / "f6-mockup").mkdir(parents=True)
+    for name in ("f6-planning-room", "m4", "bugs", "README"):
+        (docs / f"{name}.md").write_text("# x\n")
+    assert planner.cards(tmp_path) == {"f6", "m4"}
+
+
 def test_a_stored_reply_says_when_its_points_couldnt_be_read():
     broken = planner.parse_reply("No block here.")
     assert planner.stored_text(broken).startswith("No block here.\n\n")
@@ -157,6 +210,12 @@ def test_the_prompt_carries_the_message_and_the_comments_by_point():
     assert "Go on." in prompt and "Why first?" in prompt and "F7" in prompt
     assert "```json" in prompt and '"points"' in prompt
     assert "point 2" in prompt
+
+
+def test_the_prompt_names_the_other_threads_to_check_for_duplicates():
+    prompt = planner.prompt("f12", "Go on.", {}, threads=["general", "f10", "f12"])
+    assert "Other threads: F10, the general thread." in prompt
+    assert "Other threads: none." in planner.prompt("general", "Hi.", {})
 
 
 def test_a_cards_prompt_names_its_branch_and_the_general_one_none():

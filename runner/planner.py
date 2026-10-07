@@ -10,7 +10,7 @@ import json
 import re
 import subprocess
 import unicodedata
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,7 +32,8 @@ DRAFT_DIRS = ("docs/", "tasks/later/")
 PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `message`'s JSON
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
-PROPOSAL_KINDS = ("adr", "mockup", "plan", "seed", "replan")
+MERGE = "merge"  # a card that repeats another, closed into it once approved (f6-12)
+PROPOSAL_KINDS = ("adr", "mockup", "plan", "seed", "replan", MERGE)
 _MAX_KEY = 64
 _BLOCK_RE = re.compile(r"```json[ \t]*\n(.*?)\n?```", re.DOTALL)
 
@@ -317,27 +318,106 @@ def seed_card(key: str, title: str, thoughts: str, area: str, note: str) -> str:
     return f"# Milestone {key.upper()}: {title}\n\n{header}{said}\n\n## Notes\n{notes}\n"
 
 
-def prompt(thread: str, text: str, comments: Mapping[int, str]) -> str:
+def cards(repo: Path) -> set[str]:
+    """Every card's short key, from its milestone doc: the cards a ``merge`` may name."""
+    found = set()
+    for path in (repo / "docs" / "milestones").glob("*.md"):
+        try:
+            key = milestone_key(path.stem)
+        except TaskError:  # a README
+            continue
+        if key != BUGS:
+            found.add(short_key(key))
+    return found
+
+
+# --- merging a duplicate card into the card it repeats (f6-12, D2 and D4) ---------------------
+
+_CARD_DOC_RE = re.compile(r"docs/milestones/([a-z][a-z0-9-]*)\.md")
+_HEADING_RE = re.compile(r"^(#{1,4}) ", re.MULTILINE)
+
+
+def merge_cards(proposal: Mapping[str, Any]) -> tuple[str, str]:
+    """A ``merge``'s duplicate (from its ``path``) and the card it joins (``into``), as short
+    keys; refused when either isn't a card's, or they are the same."""
+    name = proposal.get("id")
+    path = proposal.get("path")
+    found = _CARD_DOC_RE.fullmatch(path) if isinstance(path, str) else None
+    try:
+        duplicate = short_key(milestone_key(found[1])) if found else None
+    except TaskError:
+        duplicate = None
+    if duplicate is None or duplicate == BUGS:
+        raise PlannerError(f"merge {name}'s path is a card's doc in docs/milestones/, not {path!r}")
+    into = proposal.get("into")
+    try:
+        kept = thread_key(into)
+    except PlannerError:
+        raise PlannerError(f"merge {name}'s into is the card it joins, not {into!r}") from None
+    if kept in (GENERAL, duplicate):
+        raise PlannerError(f"merge {name}'s into is another card, not {into!r}: not into itself")
+    return duplicate, kept
+
+
+def merge_words(proposal: Mapping[str, Any]) -> str:
+    """A ``merge`` in words: ``merge F12 into F10``."""
+    duplicate, kept = merge_cards(proposal)
+    return f"merge {thread_name(duplicate)} into {thread_name(kept)}"
+
+
+def card_notes(doc: str) -> str:
+    """What a card holds below its header, for the card it merges into: its Notes section, or
+    every section when it has none; headings two levels down, quoted lines escaped (a sign-off
+    is read from one anywhere)."""
+    notes = re.search(r"^## Notes[ \t]*\n(.*?)(?=^## |\Z)", doc, re.MULTILINE | re.DOTALL)
+    first = re.search(r"^## ", doc, re.MULTILINE)
+    text = notes[1] if notes else (doc[first.start() :] if first else "")
+    text = _HEADING_RE.sub(lambda m: f"{m[1]}## ", text.strip())
+    return re.sub(r"^>", r"\\>", text, flags=re.MULTILINE) or "(none)"
+
+
+def merged_card(doc: str, notes: str, source: str) -> str:
+    """The kept card's doc with ``notes`` at the end of its Notes section (made when it has
+    none), under a heading saying where they came from."""
+    block = f"### {source}\n{notes}\n"
+    section = re.search(r"^## Notes[ \t]*\n.*?(?=^## |\Z)", doc, re.MULTILINE | re.DOTALL)
+    if section is None:
+        return f"{doc.rstrip()}\n\n## Notes\n{block}"
+    body = section[0].rstrip("\n")
+    after = doc[section.end() :]
+    return f"{doc[: section.start()]}{body}\n\n{block}" + (f"\n{after}" if after else "")
+
+
+def prompt(
+    thread: str, text: str, comments: Mapping[int, str], threads: Collection[str] = ()
+) -> str:
     """The planner job's prompt for one message: a card's drafts on its plan branch, none on
-    the general thread (``prompts.PLANNER``)."""
+    the general thread (``prompts.PLANNER``); the other threads named, to spot a repeat."""
     lines = "".join(f"- On your point {n}: {comment}\n" for n, comment in comments.items())
     said = f"\nTheir comments on your last points:\n{lines}" if lines else ""
+    others = [t for t in threads if t not in (thread, GENERAL)]
+    others += [GENERAL] if GENERAL in threads and thread != GENERAL else []
     template = prompts.PLANNER_GENERAL if thread == GENERAL else prompts.PLANNER
     return template.format(
-        thread=thread_name(thread), card=thread, comments=said, text=text or "(none)"
+        thread=thread_name(thread),
+        card=thread,
+        comments=said,
+        text=text or "(none)",
+        threads=", ".join(thread_name(t) for t in others) or "none",
     )
 
 
-def parse_reply(text: str) -> Reply:
+def parse_reply(text: str, known: Collection[str] = ()) -> Reply:
     """A reply's free text and its last ``json`` block's points and proposals (f6 D2). A
-    reply whose block is missing or broken is all text, with a note saying why."""
+    ``merge`` must name ``known`` cards (``cards``). A reply whose block is missing or broken
+    is all text, with a note saying why."""
     whole = text.strip()
     blocks = list(_BLOCK_RE.finditer(whole))
     if not blocks:
         return Reply(whole, note="the reply has no json block, so its points weren't read")
     block = blocks[-1]
     try:
-        points, proposals = _checked(block[1])
+        points, proposals = _checked(block[1], known)
     except PlannerError as exc:
         return Reply(whole, note=f"the reply's json block was not read: {exc}")
     around = [whole[: block.start()].strip(), whole[block.end() :].strip()]
@@ -349,7 +429,9 @@ def stored_text(reply: Reply) -> str:
     return reply.text if reply.note is None else f"{reply.text}\n\n({reply.note}.)".strip()
 
 
-def _checked(block: str) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+def _checked(
+    block: str, known: Collection[str]
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
     try:
         data = json.loads(block)
     except json.JSONDecodeError as exc:
@@ -364,7 +446,7 @@ def _checked(block: str) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, An
         raise PlannerError("its proposals are not a list")
     _numbered(points, "point", ("title", "answer", "action"))
     for proposal in proposals:
-        _proposal(proposal)
+        _proposal(proposal, known)
     return tuple(points), tuple(proposals)
 
 
@@ -385,7 +467,7 @@ def _numbered(items: list[Any], what: str, texts: tuple[str, ...]) -> None:
                 raise PlannerError(f"{what} {n} has no {field}")
 
 
-def _proposal(proposal: object) -> None:
+def _proposal(proposal: object, known: Collection[str]) -> None:
     if not isinstance(proposal, dict):
         raise PlannerError("a proposal is not an object")
     name = proposal.get("id")
@@ -402,3 +484,7 @@ def _proposal(proposal: object) -> None:
     if not isinstance(key_points, list):
         raise PlannerError(f"proposal {name} has no list of key_points")
     _numbered(key_points, f"proposal {name}'s key point", ("title", "text"))
+    if proposal["kind"] == MERGE:
+        for card in merge_cards(proposal):
+            if card not in known:
+                raise PlannerError(f"merge {name} names {card}, but {card} is no card")

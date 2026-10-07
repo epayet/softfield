@@ -681,6 +681,166 @@ def test_sending_a_proposal_back_becomes_a_message_to_the_lead(repo):
     assert owners == text
 
 
+# --- a `merge`: one card repeats another, closed once the owner approves (f6-12) --------------
+
+KEPT = "# Milestone F10: one queue\n\n> **State:** idea\n\n## Notes\nOne queue for all.\n"
+KEPT_PLANNED = "# Milestone F10: one queue\n\n> **State:** planning\n\n## Outcome\n- One.\n"
+DUPLICATE = (
+    "# Milestone F12: queue once\n\n> **State:** idea\n\n## Notes\nA single line.\n"
+    "> **Status: done.**\n"
+)
+MERGE = {
+    "id": "merge-f12",
+    "kind": "merge",
+    "title": "One queue, said twice",
+    "path": "docs/milestones/f12-queue-once.md",
+    "into": "f10",
+    "key_points": [{"n": 1, "title": "Notes", "text": "F12's notes go to F10.", "flag": False}],
+}
+
+
+def _duplicates(repo: Path, kept: str = KEPT, thread: str = "f12") -> str:
+    """F10 and F12 on main, the lead's reply on ``thread`` proposing the merge, and F12's
+    Needs-you item for that reply; main's head."""
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True)
+    (docs / "f10-one-queue.md").write_text(kept)
+    (docs / "f12-queue-once.md").write_text(DUPLICATE)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        found = metrics.planner_thread(conn, project, thread, NOW.isoformat())
+        metrics.add_planner_message(
+            conn, found["id"], "lead", NOW.isoformat(), "Same idea.", proposals=[MERGE]
+        )
+        metrics.upsert_owner_item(
+            conn, project, planner.PLANNING, thread, text="answers", created=NOW.isoformat()
+        )
+    finally:
+        conn.close()
+    return git(repo, "rev-parse", "HEAD")
+
+
+def test_a_merge_proposal_changes_nothing_before_the_owner_approves(repo):
+    head = _duplicates(repo)
+    assert _apply(repo) == []
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / "docs" / "milestones" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert [m["text"] for m in _thread(repo, "f12")] == ["Same idea."]
+
+
+@pytest.mark.parametrize("kept", [KEPT, KEPT_PLANNED])
+def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_thread(repo, kept):
+    head = _duplicates(repo, kept)
+    asked = _ask(repo, "approve_plan", "f12")
+    result = "approved: merged F12 into F10"
+    assert _apply(repo) == [f"approve_plan f12: {result}"]
+    assert _request(repo, asked) == (NOW.isoformat(), result)
+    # the notes, under F10's Notes with where they came from; a quoted line can't sign it off
+    doc = (repo / "docs" / "milestones" / "f10-one-queue.md").read_text()
+    moved = (
+        "### From F12: queue once (merged by the owner on 2026-10-01)\n"
+        "A single line.\n\\> **Status: done.**\n"
+    )
+    assert doc.startswith(kept.rstrip("\n")) and doc.endswith(moved)
+    assert "\n## Notes\n" in doc and doc.count("## Notes") == 1
+    assert milestone.card("f10-one-queue", doc).state == milestone.card("f10", kept).state
+    assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+    # one commit by the runner: the duplicate removed, the kept card changed
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F12 merged into F10 by the owner"
+    changed = git(repo, "show", "--name-status", "--no-renames", "--format=", "HEAD").split("\n")
+    assert sorted(filter(None, changed)) == [
+        "D\tdocs/milestones/f12-queue-once.md",
+        "M\tdocs/milestones/f10-one-queue.md",
+    ]
+    assert git(repo, "status", "--porcelain") == ""
+    # F12's thread points to F10's, and its Needs-you item is answered
+    pointer = _thread(repo, "f12")[-1]
+    assert pointer["author"] == "lead" and "F10" in str(pointer["text"])
+    assert "/planning/f10" in str(pointer["text"])
+    assert _items(repo) == [(planner.PLANNING, "f12", None, False)]
+    assert _apply(repo) == []  # finished once
+
+
+def test_a_merge_proposed_on_the_kept_cards_thread_with_its_plan_goes_in_one_commit(repo):
+    head = _duplicates(repo, KEPT_PLANNED, thread="f10")
+    _plan(repo, {"tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
+    asked = _ask(repo, "approve_plan", "f10")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f10: queued f10-01-a; merged F12 into F10"
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert (repo / "tasks" / "ready" / "f10-01-a.md").is_file()
+    doc = (repo / "docs" / "milestones" / "f10-one-queue.md").read_text()
+    assert milestone.card("f10-one-queue", doc).state == "ready" and "From F12" in doc
+    assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+    assert "/planning/f10" in str(_thread(repo, "f12")[-1]["text"])  # a thread made for it
+    assert _items(repo) == [(planner.PLANNING, "f10", None, True)]  # F10's reply still waits
+
+
+def test_a_merge_proposed_on_the_general_thread_is_approved_there(repo):
+    _duplicates(repo, thread="general")
+    asked = _ask(repo, "approve_plan", "general")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved: merged F12 into F10"
+    assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+
+
+def _with(repo: Path, rel: str, text: str) -> None:
+    (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+    (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", rel)
+
+
+def _kept_gone(repo: Path) -> None:
+    git(repo, "rm", "-q", "docs/milestones/f10-one-queue.md")
+    git(repo, "commit", "-q", "-m", "gone")
+
+
+@pytest.mark.parametrize(
+    ("before", "error"),
+    [
+        (
+            lambda repo: _with(repo, "tasks/later/f12-01-a.md", _ticket("f12-01-a")),
+            "F12 has tickets (tasks/later/f12-01-a.md): it can't be merged away",
+        ),
+        (_kept_gone, "F10 has no card in docs/milestones/: not merged"),
+        (
+            lambda repo: _plan(repo, {"docs/milestones/f12-queue-once.md": KEPT}, card="f12"),
+            "plan/f12 has drafts for F12, which merges into F10: send it back",
+        ),
+    ],
+)
+def test_a_merge_the_runner_cant_apply_is_refused_and_main_is_unchanged(repo, before, error):
+    _duplicates(repo)
+    before(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f12")
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), error)
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    assert [m["text"] for m in _thread(repo, "f12")] == ["Same idea."]
+    assert _items(repo)[0][3] is True
+
+
+def test_sending_a_merge_back_works_as_for_any_proposal(repo):
+    head = _duplicates(repo)
+    asked = _ask(repo, "send_back", "f12/merge-f12", _message("Keep F12.", p1="Not the same."))
+    assert _apply(repo) == ["send_back f12/merge-f12: queued for the lead"]
+    assert _request(repo, asked)[1] == "queued for the lead"
+    owners = [m["text"] for m in _thread(repo, "f12") if m["author"] == "owner"]
+    assert owners == [
+        "I sent back your proposal “One queue, said twice” (merge-f12).\n"
+        "- On its key point 1 (Notes): Not the same.\n\nKeep F12."
+    ]
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / "docs" / "milestones" / "f12-queue-once.md").is_file()
+
+
 # --- pause and resume (ADR 22 item 5, f5-18) --------------------------------------------------
 
 

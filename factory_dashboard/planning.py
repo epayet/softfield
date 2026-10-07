@@ -21,7 +21,7 @@ from factory_dashboard.app import Db, Now, Project, ago, render
 from factory_dashboard.line import live_line
 from factory_dashboard.overview import Running, agent_allowances, running_jobs
 from runner import metrics
-from runner.planner import PLANNER, draft, is_proposed
+from runner.planner import MERGE, PLANNER, PlannerError, draft, is_proposed, merge_words
 from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
@@ -102,11 +102,21 @@ def _about(proposal: dict[str, object], card: str) -> list[tuple[str, str, str |
         number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
         if number:
             about.append((ACCEPT_ADR, card, str(int(number[1]))))
-    elif kind in ("plan", "mockup", "replan"):
+    elif kind in ("plan", "mockup", "replan", MERGE):
         about.append((APPROVE_PLAN, card, None))
     elif kind == "seed":
         about.append((PLANT, f"{GENERAL}/{pid}", None))
     return about
+
+
+def _merge_words(proposal: dict[str, object]) -> str | None:
+    """A ``merge`` proposal in words, ``merge F12 into F10``; None for another kind."""
+    if proposal.get("kind") != MERGE:
+        return None
+    try:
+        return merge_words(proposal)
+    except PlannerError:
+        return None
 
 
 def _settled(requests: list[sqlite3.Row], about: list[tuple[str, str, str | None]]) -> bool:
@@ -146,6 +156,8 @@ def _open_proposals(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]
                 continue
             points = proposal.get("key_points")
             words = f"{len(points)} key points" if isinstance(points, list) and points else ""
+            if merged := _merge_words(proposal):
+                words = f"{merged} · {words}" if words else merged
             items.append(
                 DeskItem(
                     "proposals",
@@ -489,6 +501,7 @@ def proposal_review(
             else [],
             "proposals": _proposals(conn, project_id, thread, rows),
             "adr_number": str(int(number[1])) if number else None,
+            "merge": _merge_words(proposal),
             "mockup": f"/planning/mockups/{thread}/{path}" if _MOCKUP_RE.fullmatch(path) else None,
             "adr_waits": _adr_waits(_repo(conn, project), listed),
         },
