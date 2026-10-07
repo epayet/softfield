@@ -31,3 +31,10 @@ Read `factory_dashboard/templates/base.html` (the top bar, the Planning tab, `#n
 - a browser test: pressing Pause in the bar shows "Pausing after this job" at once and posts a `pause` request
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
