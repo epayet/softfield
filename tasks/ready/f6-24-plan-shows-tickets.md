@@ -1,7 +1,9 @@
 ---
 id: f6-24-plan-shows-tickets
 milestone: f6-planning-room
-depends_on: []
+depends_on:
+- f6-29-fix-coming-misses-unpicked-message
+- f6-30-fix-sent-message-tests-thin
 agent: lead
 difficulty: 5
 files:
