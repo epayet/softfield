@@ -43,3 +43,9 @@ attempts: 3
 tokens: 6088581
 logs: var/runs/20261007-005149/f6-08-proposal-review
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
