@@ -25,3 +25,12 @@ f6-planning-room-C529-3: Coming rows lose the expected reply time because the jo
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2035
+gate_failures: []
+tokens: 1178085
+```
