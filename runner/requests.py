@@ -372,9 +372,16 @@ def _merged(
         )
         thread_id = metrics.planner_thread(conn, project_id, duplicate, at)["id"]
         metrics.add_planner_message(conn, thread_id, "lead", at, text)
-        for item in metrics.open_owner_items(conn, project_id):
-            if item["kind"] == planner.PLANNING and item["subject"] == duplicate:
-                metrics.resolve_owner_item(conn, item["id"], at)
+    _resolve_items(conn, project_id, now, [d for d, _ in merges])
+
+
+def _resolve_items(
+    conn: sqlite3.Connection, project_id: int, now: datetime, threads: list[str]
+) -> None:
+    """The threads' planning items answered: they leave Needs you."""
+    for item in metrics.open_owner_items(conn, project_id):
+        if item["kind"] == planner.PLANNING and item["subject"] in threads:
+            metrics.resolve_owner_item(conn, item["id"], now.isoformat())
 
 
 def _ready_changes(
@@ -440,6 +447,16 @@ def _approve_plan(
     git = Git(repo)
     proposals = metrics.latest_proposals(conn, project_id, thread)
     merges = _merges(proposals)
+    # A duplicate whose card left the repo was merged (or dropped) already: approving its merge
+    # again settles it rather than refusing it forever (F24, F45, F47 on 2026-10-08)
+    gone = [
+        d for d, _ in merges if not milestone_file(repo, "milestones", full_key(repo, d)).is_file()
+    ]
+    merges = [(d, k) for d, k in merges if d not in gone]
+    already = [f"{planner.thread_name(d)} merged already" for d in gone]
+    if gone and not merges and not (branch is not None and _has_branch(git, branch)):
+        _resolve_items(conn, project_id, now, gone)
+        return f"approved: {'; '.join(already)}"
     replan = any(proposal.get("kind") == planner.REPLAN for proposal in proposals)
     running = (state.in_flight or {}).get("ticket") or None
     if branch is None and not merges:
@@ -507,7 +524,8 @@ def _approve_plan(
             made.unlink(missing_ok=True)
         raise
     _merged(conn, project_id, now, merges)
-    said = [f"merged {words}" for words in joined]
+    _resolve_items(conn, project_id, now, gone)
+    said = [f"merged {words}" for words in joined] + already
     if not planned:
         return f"approved: {'; '.join(said)}"
     git.run("branch", "-q", "-D", str(branch))

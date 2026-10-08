@@ -895,6 +895,20 @@ def test_a_merge_the_runner_cant_apply_is_refused_and_main_is_unchanged(repo, be
     assert _items(repo)[0][3] is True
 
 
+def test_approving_a_merge_whose_duplicate_is_gone_already_settles_it(repo):
+    """F24, F45 and F47 (2026-10-08): merged once, their threads' Approve was refused as "has
+    no card" at every press, and they stayed on Needs you."""
+    _duplicates(repo)
+    git(repo, "rm", "-q", "docs/milestones/f12-queue-once.md")
+    git(repo, "commit", "-q", "-m", "F12 merged into F10 by the owner")
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f12")
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), "approved: F12 merged already")
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert _items(repo) == [(planner.PLANNING, "f12", None, False)]
+
+
 def _card_state(repo: Path, key: str) -> object:
     conn = metrics.open_db(_db(repo))
     try:
