@@ -167,28 +167,22 @@ tbody tr:hover { background: var(--accent-wash); }
 .allow > div { min-width: 180px; }
 .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
 .allow .line small { color: var(--muted); }
-/* Mobile: allowance dials in one row (f3-25) */
+/* Mobile: one row per window with name, bar and reset text (f9-17) */
 @media (max-width: 639px) {
   #allowance { padding: 4px 14px; }
   #allowance .allow {
-    display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px;
+    display: flex; flex-direction: column; gap: 8px;
   }
   #allowance > .allow > div {
-    background: var(--bay); border: 1px solid var(--rule); padding: 2px 1px 2px;
-    display: flex; flex-direction: column; align-items: center; gap: 1px;
-    min-width: 0;
+    background: var(--bay); border: 1px solid var(--rule); padding: 6px 8px;
   }
-  .allow { flex-wrap: nowrap; }
-  .dial { display: block; }
-  .dial > circle { transition: stroke-dasharray .3s; }
-  .dial > text { font: 700 13px var(--mono); fill: var(--fg); text-anchor: middle; }
-  #allowance .agent { font-size: 10.5px; font-weight: 600; text-transform: uppercase;
-    letter-spacing: .06em; text-align: center; line-height: 1.2; }
   #allowance h2 { display: none; }
-  #allowance .meter, #allowance .legend { display: none; }
-  #allowance .line:last-child { display: none; }
+  #allowance .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono);
+    color: var(--ink-2); margin: 6px 0 0; }
+  #allowance .line { font-size: 12px; }
+  #allowance .line small { color: var(--muted); }
+  #allowance .meter { height: 8px; }
 }
-@media (min-width: 640px) { .dial { display: none; } }
 .running-card { display: grid; gap: 8px; }
 .running-card + .running-card { border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
 .running-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }

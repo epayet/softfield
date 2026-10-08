@@ -1756,9 +1756,9 @@ def test_planted_row_links_to_milestone_and_seeds_to_set_aside_tickets(page, lin
 # --- allowance rows layout (f4-34)---------------------------------------------------------------
 
 
-def test_allowance_rows_side_by_side_at_desktop_and_in_one_row_at_phone(page, allowance_client):
-    """f3-25: on phone the four windows share one row of dials;
-    on desktop the bars are drawn as today."""
+def test_allowance_rows_side_by_side_at_desktop_and_stacked_at_phone(page, allowance_client):
+    """f9-17: on desktop the bars are side by side;
+    on phone each window is one row stacked vertically."""
     ORIGIN = "http://127.0.0.1:8765"
     ROWS = "#allowance .allow > div"
 
@@ -1784,14 +1784,15 @@ def test_allowance_rows_side_by_side_at_desktop_and_in_one_row_at_phone(page, al
     for i in range(len(boxes) - 1):
         assert abs(boxes[i]["y"] - boxes[i + 1]["y"]) < 4
 
-    # Phone: rows share one row (dials layout, within 4 px).
+    # Phone: rows stacked vertically (different y).
     page.set_viewport_size({"width": 390, "height": 1200})
     page.reload()
     page.wait_for_selector(ROWS)
     boxes = page.eval_on_selector_all(ROWS, "els => els.map(e => e.getBoundingClientRect())")
     assert len(boxes) >= 2
-    for i in range(len(boxes) - 1):
-        assert abs(boxes[i]["y"] - boxes[i + 1]["y"]) < 4
+    # At least some rows have different y (stacked)
+    ys = [b["y"] for b in boxes]
+    assert len(set(ys)) > 1, "rows should be stacked vertically on phone"
 
     # Labels and percentages visible at both sizes.
     for row in page.locator(ROWS).all():
