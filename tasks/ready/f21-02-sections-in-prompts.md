@@ -10,6 +10,7 @@ files:
 tests:
   - tests/runner/test_prompts.py
   - tests/runner/test_loop.py
+priority: 2
 ---
 
 ### Goal
