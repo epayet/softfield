@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from factory_dashboard.overview import queue
 from runner import metrics
+from tests.browser.conftest import layout_problems
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, SONNET
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
@@ -1152,12 +1153,12 @@ def test_running_and_queue_share_a_row_on_root(client):
     assert 'id="queue"' in row_content, "Queue not in same .row as Running"
 
 
-# --- allowance dials on phone (f3-25) -----------------------------------------------------------
+# --- allowance bars on phone (f9-17) -----------------------------------------------------------
 
 
-def test_allowance_dials_share_one_row_at_phone(page, allowance_client):
-    """f3-25: on phone the four windows share one row (same top, within 4 px)
-    and #allowance is at most 160 px tall."""
+def test_allowance_bars_one_row_per_window_at_phone(page, allowance_client):
+    """f9-17: at 390 px each window is one row with its name, its bar and its reset text,
+    and no ``.dial`` is in the page."""
     ORIGIN = "http://127.0.0.1:8765"
 
     def serve(route) -> None:
@@ -1176,24 +1177,42 @@ def test_allowance_dials_share_one_row_at_phone(page, allowance_client):
     page.goto(ORIGIN + "/")
     page.wait_for_selector("#allowance .allow > div")
 
-    boxes = page.eval_on_selector_all(
-        "#allowance .allow > div",
-        "els => els.map(e => e.getBoundingClientRect())",
-    )
-    assert len(boxes) >= 2
-    for i in range(len(boxes) - 1):
-        assert abs(boxes[i]["y"] - boxes[i + 1]["y"]) < 4, "dial rows not aligned: " + str(
-            [b["y"] for b in boxes]
+    # No dial SVG should exist
+    assert page.locator("#allowance .dial").count() == 0
+
+    # Each window is one row: name + bar + reset text
+    rows = page.locator("#allowance .allow > div").all()
+    assert len(rows) >= 2
+    for row in rows:
+        assert row.locator(".agent").count() == 1
+        assert row.locator(".meter").count() == 1
+        assert row.locator(".line small").count() >= 1
+
+    # Layout check passes at 390 px
+    assert layout_problems(page) == []
+
+
+def test_allowance_bar_colours_match_at_phone_and_desktop(page, allowance_client, db_path):
+    """f9-17: at 390 px a window under its mark, one past it and one above 95% have three
+    different bar colours, each the same as that window's bar at 1440 px."""
+    # Guarantee a nearly-out reading so three colours are present.
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute(
+            "DELETE FROM usage_events WHERE kind = 'reading' AND agent = 'copilot-auto'",
         )
-    allow_height = page.eval_on_selector(
-        "#allowance",
-        "el => el.offsetHeight",
-    )
-    assert allow_height <= 160, "#allowance is " + str(allow_height) + " px tall (max 160)"
+        metrics.add_usage_event(
+            conn,
+            "copilot-auto",
+            NOW.isoformat(),
+            "reading",
+            window="month",
+            value=0.97,
+            resets_at=(NOW + timedelta(days=30)).isoformat(),
+        )
+    finally:
+        conn.close()
 
-
-def test_allowance_bars_drawn_at_desktop(page, allowance_client):
-    """f3-25: at 1440 px the bars are drawn (not dials)."""
     ORIGIN = "http://127.0.0.1:8765"
 
     def serve(route) -> None:
@@ -1208,43 +1227,77 @@ def test_allowance_bars_drawn_at_desktop(page, allowance_client):
             route.fulfill(status=404, body="")
 
     page.route(f"{ORIGIN}/**", serve)
+
+    # Desktop: capture bar colours at 1440 px
     page.set_viewport_size({"width": 1440, "height": 900})
     page.goto(ORIGIN + "/")
-    page.wait_for_selector("#allowance .meter")
+    page.wait_for_selector("#allowance .meter > span")
 
-    meters = page.locator("#allowance .meter").all()
-    assert len(meters) >= 2
-    for meter in meters:
-        assert meter.is_visible()
+    desktop_colors = page.eval_on_selector_all(
+        "#allowance .meter > span",
+        "els => els.map(e => getComputedStyle(e).backgroundColor)",
+    )
+
+    # Phone: capture bar colours at 390 px
+    page.set_viewport_size({"width": 390, "height": 1200})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#allowance .meter > span")
+
+    phone_colors = page.eval_on_selector_all(
+        "#allowance .meter > span",
+        "els => els.map(e => getComputedStyle(e).backgroundColor)",
+    )
+
+    assert len(desktop_colors) >= 3
+    assert len(phone_colors) >= 3
+
+    # Three different colours among the bars
+    assert len(set(desktop_colors)) >= 3, (
+        f"expected at least 3 different colours at desktop, got {desktop_colors}"
+    )
+    assert len(set(phone_colors)) >= 3, (
+        f"expected at least 3 different colours at phone, got {phone_colors}"
+    )
+
+    # Same colours at both sizes (same order)
+    for i, (d, p) in enumerate(zip(desktop_colors, phone_colors, strict=True)):
+        assert d == p, f"row {i} colour differs: desktop={d}, phone={p}"
+
+    # Each phone bar with usage is visible (non-zero width)
+    desktop_widths = page.eval_on_selector_all(
+        "#allowance .meter > span",
+        "els => els.map(e => e.offsetWidth)",
+    )
+    widths = page.eval_on_selector_all(
+        "#allowance .meter > span",
+        "els => els.map(e => e.offsetWidth)",
+    )
+    for dw, w in zip(desktop_widths, widths, strict=True):
+        if dw > 0:
+            assert w > 0, f"bar with usage has width {w} at 390 px (desktop width {dw})"
 
 
-def test_dial_fill_class_follows_bar_rule(allowance_client):
-    """Each dial's fill colour class follows the same rule as the bar's."""
+def test_allowance_legend_names_bar_mark(allowance_client):
+    """f9-17: the legend explains the mark's meaning, not a ring."""
     panel = re.search(
         r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>',
         allowance_client.get("/").text,
         re.S,
     )
     assert panel
-    rows = re.findall(
-        r'<div id="allow-([a-z_-]+)">.*?</div>\s*</div>\s*</div>',
-        panel.group(1),
-        re.S,
+    legend_text = " ".join(re.sub(r"<[^>]+>", " ", panel.group(1)).split())
+    assert "ring" not in legend_text.lower()
+    # Must mention the mark and something meaningful about it (factory / owner / stops).
+    assert "mark" in legend_text.lower()
+    assert (
+        "factory" in legend_text.lower()
+        or "owner" in legend_text.lower()
+        or "stop" in legend_text.lower()
     )
-    # Check that dial classes match meter classes for each row
-    for row in rows:
-        dial_match = re.search(r'class="[^"]*\bdial\b([^"]*)"', row)
-        meter_match = re.search(r'<span class="([a-z-]+)"', row)
-        if dial_match and meter_match:
-            dial_class = dial_match.group(1).strip()
-            meter_class = meter_match.group(1)
-            assert dial_class == meter_class, (
-                f"dial class '{dial_class}' != meter class '{meter_class}'"
-            )
 
 
-def test_no_data_yet_has_empty_ring(page, serve, db_path):
-    """'no data yet' shows an empty ring (no fill)."""
+def test_no_data_yet_has_empty_bar(page, serve, db_path):
+    """'no data yet' shows an empty bar (width 0)."""
     conn = metrics.open_db(db_path)
     try:
         conn.execute("DELETE FROM usage_events WHERE kind = 'reading'")
@@ -1270,16 +1323,16 @@ def test_no_data_yet_has_empty_ring(page, serve, db_path):
     page.goto(ORIGIN + "/")
     page.wait_for_selector("#allowance .allow > div")
 
-    # Check that at least one dial has stroke-dasharray starting with "0 "
-    dials = page.locator("#allowance .dial").all()
-    assert len(dials) >= 2
+    # Check that at least one bar has width 0
+    bars = page.locator("#allowance .meter > span").all()
+    assert len(bars) >= 2
     found_empty = False
-    for dial in dials:
-        inner = dial.inner_html()
-        if 'stroke-dasharray="0 100"' in inner:
+    for bar in bars:
+        width = bar.evaluate("el => el.offsetWidth")
+        if width == 0:
             found_empty = True
             break
-    assert found_empty, "no dial with empty ring found"
+    assert found_empty, "no bar with width 0 found"
 
 
 def test_queued_checkpoint_comes_before_tickets_and_shows_reason(client, db_path):

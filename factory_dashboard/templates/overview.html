@@ -25,7 +25,7 @@
       <span><i class="swatch under-mark"></i>green: under the mark</span>
       <span><i class="swatch past-mark"></i>yellow: past the mark</span>
       <span><i class="swatch nearly-out"></i>red: above 95%</span>
-      <span>the mark: the tick on the ring</span>
+      <span>the mark: the factory stops here; the rest of the window is the owner's</span>
     </details>
     <div class="allow">
       {% for a in allowance %}
@@ -33,21 +33,6 @@
       {% set used = a.value or 0 %}
       {% set fill = "under-mark" if no_data else ("nearly-out" if used > 0.95 else "past-mark" if a.mark is not none and used >= a.mark else "under-mark") %}
       <div id="allow-{{ a.label | lower }}-{{ a.window }}">
-        <svg class="dial {{ fill }}" width="52" height="52" viewBox="0 0 52 52" aria-label="{{ a.label }} {{ a.display }}">
-          <circle cx="26" cy="26" r="19" fill="none" stroke="var(--grid)" stroke-width="7"></circle>
-          <circle cx="26" cy="26" r="19" fill="none" stroke="var(--c, var(--a2))" stroke-width="7"
-            pathLength="100" stroke-dasharray="{{ '0 100' if no_data else ('%.0f' | format((a.value or 0) * 100)) ~ ' 100' }}"
-            transform="rotate(-90 26 26)"></circle>
-          {% if a.mark is not none %}
-          <line x1="26" y1="3" x2="26" y2="11" stroke="var(--ink)" stroke-width="2.5"
-            transform="rotate({{ '%.1f' | format(a.mark * 360) }} 26 26)"
-            opacity="{{ '0' if no_data else '1' }}"></line>
-          {% endif %}
-          <text x="26" y="31" text-anchor="middle" fill="var(--fg)"
-            font-family="var(--mono)" font-size="13" font-weight="700">
-            {{ a.percent if a.percent else '\u2013' }}
-          </text>
-        </svg>
         <div class="line">
           <span class="agent">{{ a.label }}</span>
           <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span>
