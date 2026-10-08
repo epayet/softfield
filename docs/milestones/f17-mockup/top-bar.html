@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F17 mock-up: the top bar's dot and pause sign</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405;
+    --opus: #ff9640; --copilot: #7aa7ff;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.45 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h2 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 28px 0 10px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(390px, 1fr)); gap: 14px; }
+  .case { background: var(--bay); border: 1px solid var(--rule); }
+  .case > p { margin: 0; padding: 8px 12px 10px; font-size: 13px; color: var(--ink-2); }
+  .case > p b { color: var(--fg); }
+
+  /* ---- the bar as drawn ---- */
+  .bar { background: var(--bay); }
+  .bar-top { display: flex; align-items: center; gap: 10px 18px; padding: 8px 12px; }
+  .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; text-transform: uppercase; white-space: nowrap; }
+  .project { margin-left: auto; font: 13px var(--body); background: var(--plate); color: var(--fg);
+    border: 1px solid var(--rule); padding: 3px 6px; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  .tabs { display: flex; gap: 2px; padding: 0 8px; overflow: hidden; font: 600 12px var(--display);
+    letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .tabs span { padding: 8px 10px; white-space: nowrap; }
+  .tabs span:first-child { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* the status: a dot (a button: tap it for the words), the words on a wide screen, and the sign */
+  .status { display: flex; align-items: center; gap: 4px; border: 1px solid transparent; border-radius: 22px; padding: 0 2px; }
+  .status.asked { border: 1px dashed var(--opus); }            /* on its way, as now */
+  .dot-btn { position: relative; width: 44px; height: 44px; display: grid; place-items: center;
+    background: none; border: 0; padding: 0; cursor: pointer; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--muted); }
+  .dot.lead { background: var(--opus); box-shadow: 0 0 0 4px rgba(255,150,64,.18); animation: breathe 2.6s ease-in-out infinite; }
+  .dot.dev  { background: var(--copilot); box-shadow: 0 0 0 4px rgba(122,167,255,.18); animation: breathe 2.6s ease-in-out infinite; }
+  .dot.idle { background: var(--muted); }
+  .dot.wait { background: none; border: 2px solid var(--opus); width: 10px; height: 10px; }   /* the lead's turn, held */
+  .dot.off  { background: none; border: 2px solid var(--muted); width: 10px; height: 10px; }  /* stopped */
+  @keyframes breathe { 50% { box-shadow: 0 0 0 7px rgba(255,255,255,0); } }
+  @media (prefers-reduced-motion: reduce) { .dot { animation: none !important; } }
+  .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px; }
+  .sign { width: 44px; height: 44px; display: grid; place-items: center; border: 1px solid var(--hazard);
+    background: var(--hazard); color: var(--hazard-ink); font-size: 18px; border-radius: 6px; cursor: pointer; padding: 0; }
+  .tip { position: absolute; top: 40px; left: 0; z-index: 2; background: var(--plate); border: 1px solid var(--rule);
+    padding: 6px 10px; font: 500 13px var(--body); color: var(--fg); white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,.4); }
+  .tip[hidden] { display: none; }
+
+  /* phone: 390 px, the status joins the brand's row; the words only on a tap */
+  .phone { width: 390px; max-width: 100%; }
+  .phone .bar-top { padding: 2px 6px; gap: 6px; }
+  .phone .brand { font-size: 19px; }
+  .phone .words { display: none; }
+  .phone .status { margin-left: auto; }
+  .phone .project { margin-left: 0; }
+  .wide .status { margin-left: 8px; }
+  .wide .dot-btn { width: 28px; }
+  .wide .sign { width: 36px; height: 36px; }
+
+  .legend { display: flex; flex-wrap: wrap; gap: 14px 22px; font-size: 14px; color: var(--ink-2); margin: 6px 0 0; }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend .dot { animation: none; }
+  .before { opacity: .75; }
+  .before .pill { font: 600 14px var(--display); border: 1px solid #5fd17a; border-radius: 16px; padding: 3px 12px; }
+  .before .old-btn { font: 700 14px var(--display); text-transform: uppercase; letter-spacing: .06em; background: var(--hazard);
+    color: var(--hazard-ink); border: 0; padding: 2px 12px; }
+</style>
+</head>
+<body>
+<h1>F17 · the top bar: a dot and a sign</h1>
+<p class="lede">The status shrinks to a dot that says whether a job is running and whose (orange: the lead; blue: a developer; grey: no job), and the Pause or Resume button to its sign, ⏸ or ▶. On a phone the status moves up beside the brand, so the bar loses a whole row; tap the dot for its words. On a wide screen the words stay beside the dot. Colours are the floor's: the lead's orange (Opus) and the developer bay's blue.</p>
+
+<div class="legend" aria-label="What the dot means">
+  <span><i class="dot lead"></i> the lead is on a job</span>
+  <span><i class="dot dev"></i> a developer is on a job</span>
+  <span><i class="dot idle"></i> no job: between jobs, idle or paused</span>
+  <span><i class="dot wait"></i> waiting for Claude's window</span>
+  <span><i class="dot off"></i> stopped: no runner</span>
+  <span><span class="status asked" style="padding:4px 8px">on its way</span> your pause or resume, until the runner takes it</span>
+</div>
+
+<h2>Today, on a phone (for comparison)</h2>
+<div class="case phone before">
+  <div class="bar">
+    <div class="bar-top" style="flex-wrap:wrap"><span class="brand">software-factory</span><select class="project"><option>coucou</option></select>
+      <div style="display:flex;gap:8px;align-items:center;width:100%"><span class="pill">● Running: f9-22-floor-words</span><button class="old-btn">Pause</button></div>
+    </div>
+    <div class="hazard"></div>
+    <div class="tabs"><span>Overview</span><span>Planning · 3</span><span>Milestones</span></div>
+  </div>
+  <p>Two rows above the stripe; the status row wraps when a ticket's name is long.</p>
+</div>
+
+<h2>Phone, 390 px: one row</h2>
+<div class="grid" id="phones"></div>
+
+<h2>Wide screen: the dot and the words</h2>
+<div id="wides" style="display:flex;flex-direction:column;gap:14px"></div>
+
+<template id="case">
+  <div class="case">
+    <div class="bar">
+      <div class="bar-top">
+        <span class="brand">software-factory</span>
+        <div class="status">
+          <button type="button" class="dot-btn"><i class="dot"></i><span class="tip" hidden></span></button>
+          <span class="words" role="status"></span>
+        </div>
+        <select class="project"><option>coucou</option></select>
+      </div>
+      <div class="hazard"></div>
+      <div class="tabs"><span>Overview</span><span>Planning · 3</span><span>Milestones</span><span>Tickets</span><span>Jobs</span></div>
+    </div>
+    <p></p>
+  </div>
+</template>
+
+<script>
+  // Each state as app.py's factory_status words it today, with the dot and the sign it gets.
+  const states = [
+    { dot: "lead", words: "Running: f9-29-week-pace", sign: "pause", note: "<b>The lead on a ticket.</b> Orange, breathing slowly. A checkpoint, a review, a direction or the planner answering you is orange too." },
+    { dot: "dev", words: "Running: f9-22-floor-words", sign: "pause", note: "<b>A developer on a ticket.</b> Blue, as the developer bay." },
+    { dot: "idle", words: "Running: picking the next ticket", sign: "pause", note: "<b>Between jobs.</b> Grey: the runner is up, no job right now." },
+    { dot: "wait", words: "Waiting for Claude until 14:00", sign: "pause", note: "<b>Waiting for Claude's window.</b> An orange ring: the lead's turn, held." },
+    { dot: "dev", words: "Pausing after this job", sign: "resume", asked: true, note: "<b>You tapped ⏸.</b> The dashed orange edge at once. The job goes on, so the dot stays blue; from the next poll ▶ is there to change your mind, as Resume is today." },
+    { dot: "idle", words: "Paused by you since 10:42", sign: "resume", note: "<b>Paused.</b> Grey dot, ▶ to resume." },
+    { dot: "lead", words: "Paused by you since 10:42 · the lead is answering you", sign: "resume", note: "<b>Paused, and the lead answers you in Planning.</b> The dot is orange: a job runs while paused." },
+    { dot: "idle", words: "Resuming…", sign: null, asked: true, note: "<b>You tapped ▶.</b> On its way, no sign." },
+    { dot: "idle", words: "Idle: nothing to do", sign: "pause", note: "<b>Idle.</b> Grey, as between jobs; the words say which." },
+    { dot: "off", words: "Stopped", sign: null, note: "<b>Stopped.</b> A grey ring, no sign: there's nothing to pause." },
+  ];
+  const signs = { pause: ["⏸", "Pause after this job"], resume: ["▶", "Resume"] };
+  function draw(into, cls) {
+    for (const s of states) {
+      const node = document.getElementById("case").content.cloneNode(true);
+      const box = node.querySelector(".case"); box.classList.add(cls);
+      const status = node.querySelector(".status"); if (s.asked) status.classList.add("asked");
+      node.querySelector(".dot").classList.add(s.dot);
+      node.querySelector(".words").textContent = s.words;
+      const dotBtn = node.querySelector(".dot-btn"), tip = node.querySelector(".tip");
+      dotBtn.setAttribute("aria-label", s.words); dotBtn.title = s.words; tip.textContent = s.words;
+      dotBtn.addEventListener("click", () => { tip.hidden = !tip.hidden; });
+      if (s.sign) {
+        const b = document.createElement("button");
+        b.type = "button"; b.className = "sign"; b.textContent = signs[s.sign][0];
+        b.setAttribute("aria-label", signs[s.sign][1]); b.title = signs[s.sign][1];
+        status.append(b);
+      }
+      node.querySelector("p").innerHTML = s.note;
+      into.append(node);
+    }
+  }
+  draw(document.getElementById("phones"), "phone");
+  draw(document.getElementById("wides"), "wide");
+</script>
+</body>
+</html>
