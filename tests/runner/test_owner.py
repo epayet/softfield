@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import owner
+from runner import milestone, owner
 from runner.state import State
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
@@ -74,6 +74,47 @@ def test_signoff_marks_the_milestone_done_and_tags_it(repo: Path):
     assert "- **Status:** done, signed off by the owner on 2026-10-01." in review
     assert git(repo, "tag").split() == ["m1-done"]
     assert git(repo, "log", "-1", "--format=%s").strip() == "M1 signed off by the owner"
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_signoff_takes_a_planning_room_card_and_a_review_with_no_status_line(repo: Path):
+    """2026-10-08: F41 and F55 (a `State:` line, no `Status:`) and F20's review (sheet first,
+    no status line) couldn't be signed off."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    card = repo / "docs" / "milestones" / "f7-one-queue.md"
+    card.write_text(
+        "# Milestone F7: one queue\n\n> **State:** ready · **Priority:** 2 · **Area:** factory\n"
+        "> Planted by the owner on 2026-10-01.\n\n## Notes\nx\n"
+    )
+    (repo / "docs" / "reviews").mkdir(parents=True)
+    review = repo / "docs" / "reviews" / "f7-one-queue.md"
+    review.write_text("# Review: F7 one queue\n\n## Sign-off sheet\n\n### 1. What changed\n- x\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "docs")
+    owner.signoff(repo, "f7-one-queue", TODAY)
+    doc = card.read_text()
+    assert doc.startswith(
+        "# Milestone F7: one queue\n\n> **State:** done · **Priority:** 2 · **Area:** factory\n"
+        "> **Status: done.** Signed off by the owner on 2026-10-01."
+    )
+    assert "> Planted by the owner on 2026-10-01.\n" in doc
+    assert milestone.card("f7-one-queue", doc) == milestone.Card("done", 2, "factory")
+    assert review.read_text().startswith(
+        "# Review: F7 one queue\n\n- **Status:** done, signed off by the owner on 2026-10-01.\n"
+        "\n## Sign-off sheet\n"
+    )
+    assert git(repo, "tag").split() == ["f7-one-queue-done"]
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_refused_signoff_writes_nothing(repo: Path):
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    card = repo / "docs" / "milestones" / "f7-one-queue.md"
+    card.write_text("# Milestone F7: one queue\n\nNo header at all.\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "docs")
+    with pytest.raises(owner.OwnerError, match="no status line"):
+        owner.signoff(repo, "f7-one-queue", TODAY)
     assert git(repo, "status", "--porcelain") == ""
 
 

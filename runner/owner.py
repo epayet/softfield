@@ -36,6 +36,7 @@ OWNER_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone"
 _UNFINISHED = ("ready", *STOPPED)
 _STATUS_MILESTONE = re.compile(r"^> \*\*Status:.*$", re.MULTILINE)
 _STATUS_LINE = re.compile(r"^- \*\*Status:\*\*.*$", re.MULTILINE)
+_CARD_STATE_LINE = re.compile(r"^> \*\*State:\*\*.*$", re.MULTILINE)  # a planning-room card
 _TEST_STEPS = re.compile(r"^### \d+\. How to test it yourself\n(.*?)(?=^#|\Z)", re.M | re.S)
 
 
@@ -271,6 +272,29 @@ def record_verdict(repo: Path, text: str) -> Path | None:
     return reports[-1]
 
 
+def _signed_doc(doc: Path, status: str) -> str:
+    """The milestone doc with its status line done. A planning-room card has a State line
+    instead (``> **State:** ready · …``): its state becomes done, and the status line goes
+    under it (2026-10-08: F41 and F55 couldn't be signed off)."""
+    text = doc.read_text(encoding="utf-8")
+    if _STATUS_MILESTONE.search(text):
+        return _STATUS_MILESTONE.sub(lambda _: status, text, count=1)
+    if (found := _CARD_STATE_LINE.search(text)) is None:
+        raise OwnerError(f"no status line in {doc}")
+    line = re.sub(r"(\*\*State:\*\*\s*)[^·\n]*?(\s*(?:·|$))", r"\1done\2", found[0], count=1)
+    return f"{text[: found.start()]}{line}\n{status}{text[found.end() :]}"
+
+
+def _signed_review(review: Path, line: str) -> str:
+    """The review with its status line done; a review written without one (the sign-off
+    sheet first) gets it under its title."""
+    text = review.read_text(encoding="utf-8")
+    if _STATUS_LINE.search(text):
+        return _STATUS_LINE.sub(lambda _: line, text, count=1)
+    title, newline, rest = text.partition("\n")
+    return f"{title}\n\n{line}\n{rest}" if newline else f"{title}\n\n{line}\n"
+
+
 def _replace_line(path: Path, pattern: re.Pattern[str], line: str) -> None:
     text = path.read_text(encoding="utf-8")
     if not pattern.search(text):
@@ -328,18 +352,22 @@ def signoff(
         )
     doc = milestone_file(repo, "milestones", milestone)
     review = milestone_file(repo, "reviews", milestone)
-    _replace_line(
-        doc,
-        _STATUS_MILESTONE,
+    status = (
         f"> **Status: done.** Signed off by the owner on {today.isoformat()}."
         f" Base: git tag `{milestone}-start`."
-        f" Report: [`docs/reviews/{review.name}`](../reviews/{review.name}).",
+        f" Report: [`docs/reviews/{review.name}`](../reviews/{review.name})."
     )
+    # Both files are checked before either is written: a refusal leaves no half sign-off
+    new_doc = _signed_doc(doc, status)
     sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
-    if review.is_file():
-        _replace_line(
-            review, _STATUS_LINE, f"- **Status:** done, signed off by the owner on {today}."
-        )
+    new_review = (
+        _signed_review(review, f"- **Status:** done, signed off by the owner on {today}.")
+        if review.is_file()
+        else None
+    )
+    doc.write_text(new_doc, encoding="utf-8")
+    if new_review is not None:
+        review.write_text(new_review, encoding="utf-8")
     git = Git(repo)
     git.commit_all(f"{milestone.upper()} signed off by the owner")
     git.run("tag", f"{milestone}-done")
