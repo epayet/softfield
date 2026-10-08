@@ -18,6 +18,7 @@ default_max_diff = 1000                 # a backstop against rewritten files, no
 warmup = 300
 opencode = 2700                         # M4: attempts took 15–30 min; 8 of m4-06's 9 hit 1800
 claude = 1800
+review = 3600                           # a milestone review: F6's (30 tickets) hit 1800 twice, 2026-10-08
 gate = 900
 
 [local_model]

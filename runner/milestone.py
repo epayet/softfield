@@ -566,7 +566,7 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
                 checkpoints=_checkpoint_list(s, milestone),
                 out=out.relative_to(cfg.repo).as_posix(),
             ),
-            timeout=cfg.claude_timeout,
+            timeout=cfg.review_timeout,
             edit=(ANY,),
             commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS),
         )

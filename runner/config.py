@@ -38,6 +38,7 @@ class Config:
     metrics_db: Path  # outside the repo, shared by every project (ADR 13 item 1)
     project_description: str = ""  # the metrics database's project row (f1 D2)
     claude_reserve: float = 0.3  # the share of Claude's week kept for support roles (ADR 15)
+    review_timeout: int = 1800  # a milestone review's own limit; Claude's when unset (2026-10-08)
     five_hour_reserve: float = 0.25  # Claude's 5-hour window kept for the owner (ADR 16 item 1)
     developer_five_hour_cap: float = 0.5  # Claude develops only under it (ADR 16 item 2)
     agents: Mapping[str, Agent] = field(default_factory=dict)  # by id (ADR 14 item 3)
@@ -96,6 +97,7 @@ def load_config(repo: Path) -> Config:
         warmup_timeout=timeouts["warmup"],
         opencode_timeout=timeouts["opencode"],
         claude_timeout=timeouts["claude"],
+        review_timeout=timeouts.get("review", timeouts["claude"]),
         gate_timeout=timeouts["gate"],
         lm_base_url=lm["base_url"],
         lm_model=lm["model"],

@@ -54,6 +54,17 @@ def test_the_bench_dir_is_read_from_the_toml_or_defaults_outside_the_repo(tmp_pa
     assert load_config(_repo(tmp_path / "default")).bench_copies == expected
 
 
+def test_a_review_has_its_own_timeout_or_claudes(tmp_path):
+    """F6's review hit Claude's 30 minutes twice on 2026-10-08: a milestone review gets its
+    own limit; without one it keeps Claude's."""
+    repo = _repo(tmp_path)
+    assert load_config(repo).review_timeout == 1
+    toml = repo / "workflow" / "runner.toml"
+    toml.write_text(MINIMAL_TOML.replace("gate = 1", "gate = 1\nreview = 7"), encoding="utf-8")
+    assert (load_config(repo).claude_timeout, load_config(repo).review_timeout) == (1, 7)
+    assert load_config(REPO).review_timeout == 3600
+
+
 def test_the_repos_toml_loads_with_an_absolute_metrics_db():
     assert load_config(REPO).metrics_db.is_absolute()
 
