@@ -80,6 +80,11 @@ def test_sections():
     }
 
 
+def test_sections_read_level_two_headings():
+    """f23-01's plan was refused for "## Goal" (2026-10-08): a heading's form isn't a reason."""
+    assert parse_sections("## Goal\none\n### Context\ntwo\n") == {"Goal": "one", "Context": "two"}
+
+
 def _tasks(tmp_path: Path, specs: dict[str, str]):
     return [parse_task(write_task(tmp_path, tid, deps), 150) for tid, deps in specs.items()]
 
@@ -129,6 +134,29 @@ def test_preflight(repo):
     task = parse_task(task.path, 150)
     (repo / "coucou" / "other.py").unlink()
     assert "referenced path does not exist: coucou/other.py" in preflight(task, repo)
+
+
+def _with_context(repo: Path, context: str):
+    path = write_task(repo / "tasks" / "ready", "m1-01-thing")
+    text = path.read_text().replace("`coucou/thing.py` has `def thing() -> int`.", context)
+    path.write_text(text)
+    return parse_task(path, 150)
+
+
+def test_preflight_reads_prose_class_as_no_symbol(repo):
+    """f42-02 was refused for "symbol not found: to", from "adds a class to" (2026-10-08)."""
+    task = _with_context(repo, "A scroll down adds a class to `header.bar` that moves it up.")
+    assert preflight(task, repo) == []
+    task = _with_context(repo, "```python\ndef missing(x):\n```")
+    assert preflight(task, repo) == ["symbol not found in the task's files: missing"]
+
+
+def test_preflight_takes_a_listed_files_bare_name(repo):
+    """f33-01 said `overview.py` after naming its listed path (2026-10-08)."""
+    task = _with_context(repo, "Read `coucou/thing.py`; `thing.py` gains a function.")
+    assert preflight(task, repo) == []
+    task = _with_context(repo, "`other.py` gains a function.")
+    assert preflight(task, repo) == ["referenced path does not exist: other.py"]
 
 
 def test_preflight_allows_new_files_and_unwritten_tests(repo):

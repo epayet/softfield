@@ -12,7 +12,9 @@ import yaml
 # follow" and "Steps" are optional.
 SECTIONS = ("Goal", "Context", "Done when")
 _PATH_RE = re.compile(r"`([\w./-]+\.(?:py|js|html|css|md|toml|json|txt))`")
-_SYMBOL_RE = re.compile(r"\b(?:def|class)\s+([A-Za-z_]\w*)")
+# Code only: `def name` in backticks, or followed by ( or : as in a code block; prose such as
+# "adds a class to" names no symbol (f42-02)
+_SYMBOL_RE = re.compile(r"`(?:def|class)\s+([A-Za-z_]\w*)|\b(?:def|class)\s+([A-Za-z_]\w*)\s*[(:]")
 
 
 AGENTS = ("developer", "lead")  # who works a ticket (ADR 12 item 9)
@@ -186,10 +188,10 @@ def parse_sections(body: str) -> dict[str, str]:
     current: str | None = None
     lines: list[str] = []
     for line in body.splitlines():
-        if line.startswith("### "):
+        if line.startswith(("## ", "### ")):  # a `##` heading counts too (f23-01)
             if current is not None:
                 sections[current] = "\n".join(lines).strip()
-            current, lines = line[4:].strip(), []
+            current, lines = line.lstrip("#").strip(), []
         elif current is not None:
             lines.append(line)
     if current is not None:
@@ -415,10 +417,13 @@ def preflight(task: Task, repo: Path) -> list[str]:
     if task.milestone == BUGS and task.area is None:
         problems.append(AREA_MISSING)
     paths = set(_PATH_RE.findall(text))
+    listed = (*task.files, *task.tests)
+    named = {Path(f).name for f in listed}  # `overview.py` once its path is listed (f33-01)
     for rel in sorted(paths):
-        if not (repo / rel).exists() and rel not in (*task.files, *task.tests):  # may be new
-            problems.append(f"referenced path does not exist: {rel}")
-    symbols = set(_SYMBOL_RE.findall(task.sections["Context"]))
+        if (repo / rel).exists() or rel in listed or ("/" not in rel and rel in named):
+            continue  # a listed one may be new
+        problems.append(f"referenced path does not exist: {rel}")
+    symbols = {a or b for a, b in _SYMBOL_RE.findall(task.sections["Context"])}
     if symbols:
         corpus = "\n".join(
             (repo / f).read_text(encoding="utf-8")
