@@ -311,11 +311,11 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
             (project_id,),
         ).fetchall()
         for r in plant_rows:
-            value = json.loads(r["value"]) if r["value"] else {}
+            words = owners_words(r)  # leniently: the dashboard stores any value
             items.append(
                 DeskItem(
                     "coming",
-                    str(value.get("title") or ""),
+                    (words.title if words else "") or "Your idea",
                     "planting at the runner's next pick",
                     "",
                 )
@@ -346,7 +346,8 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
         cards += [str(r["subject"]) for r in asked if r["subject"]]
         if cards:
             titles = _card_titles(conn, project_id)
-            next_reply = _next_reply(conn, project, running_jobs(conn, project, now), True)
+            jobs = [j for j in running_jobs(conn, project, now) if j.live]
+            next_reply = _next_reply(conn, project, jobs, True)
         for card in dict.fromkeys(cards):
             items.append(
                 DeskItem(

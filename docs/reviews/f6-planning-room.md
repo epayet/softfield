@@ -1,3 +1,100 @@
+# Review: F6, the planning room
+
+- **Status:** reviewed (round 1, 2026-10-08), waiting for the owner's sign-off
+- **Stop reason:** none. Round 1 found 3 should-fix points and 1 nit. The lead fixed the 3 should-fix points (all small) and put the nit in the backlog. No ADR is needed.
+
+## Sign-off sheet
+
+### 1. What changed
+- **`/planning` is your desk**, on a phone too. From top to bottom:
+  - what the factory is doing now and when your next reply is due;
+  - the lead's 5-hour window;
+  - what is **Coming** (dashed orange: a plant or a message on its way);
+  - what **didn't go through**, with your words, Try again and Dismiss;
+  - the lead's replies waiting for your answers;
+  - proposals to review;
+  - finished milestones to talk through;
+  - seeds nobody has asked about yet;
+  - and **Archived** threads at the bottom.
+- **Plant an idea** writes a seed card at the runner's next pick. "Plant and ask the lead" also opens its thread.
+- **A thread** shows the conversation. The lead's latest points are agreed by default: Comment… only where you disagree, then Send. What you sent shows at once, marked "Sent", and the Send box goes until the lead replies.
+- **A proposal's review page** shows its key points, plus Send back, Accept ADR, Approve plan or Plant it. Mock-ups show in a sandbox. For a plan or a replan, it also shows every ticket and doc that approving would change, with their text.
+- **The lead spots duplicates** and proposes to merge them. Approving closes one and keeps the conversation in the other.
+- **Pause and Resume** sit in every page's top bar. The bar says whether the factory is running, idle, pausing, paused or waiting, and says when the lead is answering while paused. **While paused**, your messages, approvals, plants and priority changes still apply within 5 seconds, and the lead still answers. Nothing else starts.
+- **A replan can change a running milestone's ready tickets**, and only when you approve it. Approving lifts your pause.
+- **↑ / ↓ priority** on Next in line and on the Milestones page. **Remove seed** on an idea's thread. Notifications while a dashboard page is open.
+
+### 2. How to test it yourself
+1. On your phone, on the home Wi-Fi, open `/planning`. Plant an idea with a short note. It should show under Coming at once. After the runner's next pick, it should be under Seeds.
+2. Press **Pause** in the top bar. The bar should say "Pausing after this job", then "Paused by you".
+3. While paused, open the new seed's thread, write a question and Send. Your message should show as "Sent". Within about a minute of the runner holding, the bar should say the lead is answering, and its reply should arrive with numbered points.
+4. Comment… on one point and Send. If the lead proposes a plan, open it. Check that the review page lists the tickets it adds, with their text, then Approve plan. The tickets should appear in Next in line.
+5. Move one ticket up with ↑ on Next in line. It should move at once and stay moved after the next pick.
+6. Press **Resume**. The factory should take the next ticket.
+7. On the laptop with notifications turned on, leave a page open and plant a question: a notification should come with the lead's reply.
+
+### 3. Left for later
+- From F6's "Later": cancel or edit a message before the lead picks it up (f14-03 is ready), parallel planner jobs, a streaming reply, a pause that stops a running job.
+- The milestones you planted during F6 are ready, by priority:
+  - F20 data safety: the daily Dropbox backup (f20-01, f20-02); I'd run it first;
+  - F21 lead briefs: f21-01 to f21-03;
+  - F31 settle and reject: f31-01 to f31-05;
+  - F13 and F14 fixes: f13-01, f14-01 to f14-03;
+  - and F9's line polish tickets.
+- One test nit in [`docs/backlog.md`](../backlog.md) (f6-planning-room-C542-1).
+
+### 4. Decisions waiting for you
+- [ADR 23, parallel lanes](../adr/23-parallel-lanes.md): Proposed, and marked "to review after F6". Now is its time. It is not needed to sign F6 off.
+
+### 5. How the work went
+- 2026-10-06 16:47 → 20:25 ([1647](../sessions/2026-10-06-1647.md), [1940](../sessions/2026-10-06-1940.md), [2007](../sessions/2026-10-06-2007.md), [2025](../sessions/2026-10-06-2025.md)): the lead's runner tickets f6-01 to f6-05 and f6-11, all merged first time, each in a short session.
+- 2026-10-06 23:42 ([2342](../sessions/2026-10-06-2342.md)): f5-12 notifications and f5-18 pause, both merged.
+- 2026-10-07 00:51 ([0051](../sessions/2026-10-07-0051.md)), 445 min: f6-12 merged. Qwen got 0 of 4 page tickets (f6-07 to f6-10): it read for 10 minutes without an edit, or timed out. Opus finished all four.
+- 2026-10-07 08:56 → 13:02 ([0856](../sessions/2026-10-07-0856.md), [0923](../sessions/2026-10-07-0923.md), [0953](../sessions/2026-10-07-0953.md), [1302](../sessions/2026-10-07-1302.md)): f6-13 to f6-18 merged.
+- 2026-10-07 13:38 ([1338](../sessions/2026-10-07-1338.md)), 217 min: f6-19 to f6-22 merged; f6-21 took Qwen 3 attempts.
+- 2026-10-07 21:33 → 22:31 ([2133](../sessions/2026-10-07-2133.md), [2231](../sessions/2026-10-07-2231.md)): the checkpoint fix tickets. f6-29 was escalated and finished by the lead; f6-24 and f6-30 merged.
+- 2026-10-08 02:39 → 03:35 ([0239](../sessions/2026-10-08-0239.md), [0244](../sessions/2026-10-08-0244.md), [0335](../sessions/2026-10-08-0335.md)): f31-06 (refused words on the desk) merged.
+- **Lessons:**
+  - A page ticket that has to read new modules is past Qwen. Split it to one template or one function on an existing pattern (lead.md, Known range).
+  - Assert a page's text after stripping tags, within the item. A test that only checks that a button exists can't catch what the button posts. Both are now worked examples in developer.md.
+  - When a count doesn't match, find the extra row before changing the expected number (developer.md note 10, sharpened twice).
+  - Assert what the browser draws, not the attribute that should cause it. The layout check now skips closed `<details>`.
+
+### 6. What next
+- **Factory:**
+  - Run F20 (the backup) next. Planning threads and ratings live only in the metrics database.
+  - Then F21: lead briefs that are shorter and cheaper.
+  - Write the page tickets as one template on an example, or route them to the lead. On F6's page work, delegating cost $10.40 more than doing it.
+  - Review ADR 23 (parallel lanes) now that the planning room exists.
+- **Product:** on hold, as you asked (2026-10-04). Once the factory settles, the planning room is the place to plant Mum's next ideas: a seed planted from the phone becomes a planned milestone without a terminal.
+
+### 7. What clogged the factory line
+I can't query the metrics database from this review job, so these hours are the session reports' durations, not `usage_events`.
+- **Qwen on the page tickets:** about 7.4 h overnight on 2026-10-07 for 1 merge. 12 attempts timed out or stopped without an edit before Opus finished all four tickets. *Unclog:* split page tickets (now in Known range), or route them to the lead when they wire new modules (owner, 2026-10-07).
+- **f6-21:** 3 Qwen attempts over 118 model-minutes for a 3-point ticket. *Unclog:* the same.
+- **Short sessions:** almost every session ended with "the runner needs a fresh process" after a lead ticket changed `runner/`. The runner restarts itself (`runner/cli.py`), so this cost minutes, not hours. Nothing to change.
+
+## What was built
+Tickets f6-01 to f6-30 (see [the milestone](../milestones/f6-planning-room.md) and its two replans, f6-05 and f6-19), with f5-12, f5-18 and F31's f31-06. All 30 merged.
+- **Runner:** `runner/planner.py`, which covers threads, the prompt, the reply block, drafts on `plan/<card>` and plan changes. In `runner/requests.py`: every planning request kind, approvals that pre-flight tickets and refuse what only the owner sets, merges, replans, priority, archive and dismiss. In `runner/loop.py`: planner jobs and the hold while paused.
+- **Dashboard:** `factory_dashboard/planning.py` with the desk, thread and proposal pages. Also the top bar's status, notifications, and the phone "deck".
+
+## Findings and resolutions
+Round 1. The checkpoints' seven findings were all real, and fix tickets f6-25 to f6-30 resolved six of them before this review; the seventh (C542-1, a nit) went to the backlog.
+
+| Id | Grade | What | Resolution |
+|---|---|---|---|
+| f6-planning-room-F1 | should-fix | Coming took a dead run's job as running, so its reply time ("after f1-04-live") disagreed with the tile above it ("at the factory's next pick") | Fixed by the lead: Coming keeps the live jobs, as the tile does. New test. |
+| f6-planning-room-F2 | should-fix | A pending plant whose value isn't a JSON object made `/planning` and the Overview fail with a 500 until the runner refused it (`POST /requests` stores any value) | Fixed by the lead: both read the title leniently through `owners_words` (F31 D9), "Your idea" when there is none. New test on both pages. |
+| f6-planning-room-F3 | should-fix | A Coming test said the thread moves to Your answers wanted but checked the general thread, which was there from the start | Fixed by the lead: it checks F6. |
+| f6-planning-room-C542-1 | nit | Two Next in line tests read the row's `title` from the rest of the page | Backlog |
+
+All three should-fix points were in diffs the checkpoints read (f6-20, f6-27 and f6-15), so they count as missed. No French to check: F6 is factory work, and the dashboard stays English (ADR 00 A2).
+
+## Workflow observations
+- The checkpoints worked: 7 of 7 findings were real, and Qwen fixed 5 of them in one attempt each, as small tickets. The review's three findings sat beside the code those checkpoints looked at. Two of them came from inconsistencies between neighbouring functions (a live filter, lenient reading), which a checkpoint reading one diff at a time is likely to miss.
+- The planning room was used for real during its own build: F13 to F40 were planted from it, and F31's refused-words feature came from a failure the owner saw there.
+
 <!-- runner report -->
 ## Numbers
 

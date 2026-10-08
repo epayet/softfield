@@ -277,6 +277,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** measure before you fix. f7-06's probe ran a real `opencode run` and found the cause in `PWD`, which two earlier fixes (f2-12's clone, f4-19's root commit) had guessed wrong. The same probe showed that every earlier OpenCode bench was invalid, and those benches feed ADR 24's recompute. So a ratings fix built on bench data has to check how that data was made. The review routed it to f7-07.
 - **Decisions affected:** none. ADR 24 holds. Its expected ratings (Qwen ≈3, gpt-oss-120b ≈2) wait for f7-07's recompute without the void benches.
 
+### F6 (2026-10-08): the planning room ([review](../reviews/f6-planning-room.md))
+
+- **Q1:** 6 escalations, 8 directions, 5 checkpoints for 30 merges. The four page tickets of the first night (f6-07 to f6-10) were all `finish` or `implemented` by Opus after Qwen read for 10 minutes without an edit or timed out (445 min, 1 merge).
+- **Q3:** Qwen 7 of 15 first time. It passed the small fix tickets (f6-25 to f6-28, f6-30) in one attempt each, and failed the page tickets that had to read new modules.
+- **Q5:** $51.98 of Claude, net savings −$10.40. Supporting Qwen on the page tickets cost more than writing them.
+- **Anything else:** the checkpoints found 7 real findings, all fixed by tickets before the review. The review found two more in the same Coming code: one helper read the running jobs without the "live" filter its two neighbours use, and two pages parsed a request's value strictly although `POST /requests` stores any value. The steering loop worked from the dashboard while paused, which was the owner's aim.
+- **Decisions affected:** none. The lesson "split a page ticket to one template or one function on an existing pattern" is in lead.md's Known range.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

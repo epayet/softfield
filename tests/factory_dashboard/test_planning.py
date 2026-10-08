@@ -1079,6 +1079,21 @@ def test_a_done_plant_does_not_show_in_coming(planning, db_path, serve):
     assert "desk-coming" not in html
 
 
+@pytest.mark.parametrize("value", ["not JSON", '["a list"]'])
+def test_a_plant_the_runner_will_refuse_still_shows(planning, db_path, serve, value):
+    """``POST /requests`` stores any value: until the runner refuses it, the plant shows on
+    its way on the desk and Next in line, and neither page fails (f6-planning-room-F2)."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(conn, planning, "plant", None, value, NOW.isoformat()),
+    )
+    client = serve()
+    assert _coming_items(_page(client)) == [("", "Your idea")]
+    response = client.get("/")
+    assert response.status_code == 200
+    assert "Plant: Your idea" in _text(response.text)
+
+
 def test_a_thread_with_open_plan_message_request_shows_in_coming(planning, db_path, serve):
     """A thread whose last stored message is the lead's: an open plan_message request puts it in
     Coming with its link and "waiting for the lead"."""
@@ -1114,6 +1129,20 @@ def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve
     assert "desk-coming" in html
     assert ("/planning/f6", "The planning room") in _coming_items(html)
     assert "after f1-04-live, any minute now" in _coming_text(html)
+
+
+def test_coming_skips_a_job_whose_run_has_stopped_beating(planning, db_path, serve):
+    """A run that died leaves its job ``running``: Coming says what the tile says, the next
+    pick, not "after" a job nothing runs (f6-planning-room-F1)."""
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+    html = _page(serve(heartbeat_age=timedelta(hours=2)))
+    assert "Your next reply: at the factory's next pick." in _tile(html, "factory-now")
+    assert "waiting for the lead · at the factory's next pick" in _coming_text(html)
 
 
 def test_a_thread_with_both_open_request_and_planner_row_shows_once(planning, db_path, serve):
@@ -1208,7 +1237,7 @@ def test_after_the_leads_reply_the_thread_moves_to_answers_wanted(planning, db_p
 
     # The thread should now be in "Your answers wanted"
     groups = _groups(html)
-    assert "/planning/general" in [link for link, _ in _items(groups["answers"])]
+    assert ("/planning/f6", "The planning room") in _items(groups["answers"])
 
 
 def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(

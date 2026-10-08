@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, ago, render
 from runner import metrics
+from runner.requests import owners_words
 from runner.tasks import milestone_order
 
 router = APIRouter()
@@ -351,15 +352,15 @@ def queued_jobs(
         found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits, message))
     # Open plant requests from owner_requests.
     plant_rows = conn.execute(
-        "SELECT owner_requests.id, value FROM owner_requests"
+        "SELECT owner_requests.id, kind, subject, value FROM owner_requests"
         " JOIN projects p ON p.id = owner_requests.project_id"
         " WHERE p.name = ? AND kind = 'plant' AND done IS NULL"
         " ORDER BY owner_requests.id",
         (project,),
     ).fetchall()
     for pr in plant_rows:
-        data = json.loads(pr["value"]) if isinstance(pr["value"], str) else pr["value"]
-        title = data.get("title", "") if isinstance(data, dict) else ""
+        words = owners_words(pr)  # leniently: the dashboard stores any value
+        title = (words.title if words else "") or "Your idea"
         found.append(QueuedJob("Plant", title, "at the runner's next pick", title=title))
     return found
 
