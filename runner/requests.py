@@ -364,8 +364,10 @@ def _merged(
     merges: list[tuple[str, str]],
     by: str = "owner",
 ) -> None:
-    """Each merged card's thread points to the kept card's and is archived, its reply's item
-    is answered, and it leaves the board."""
+    """Each merged card's thread points to the kept card's, and it leaves the board. When the
+    owner approved the merge, the thread is archived and its item answered: they have seen it.
+    When the lead merged on its own (F49 D1), the thread stays on the desk until the owner
+    reads the reply: F63, F64 and F65's answers were archived unseen (2026-10-08)."""
     at = now.isoformat()
     for duplicate, kept in merges:
         metrics.remove_cards(conn, project_id, gone=duplicate)
@@ -376,10 +378,10 @@ def _merged(
         )
         thread_id = metrics.planner_thread(conn, project_id, duplicate, at)["id"]
         metrics.add_planner_message(conn, thread_id, "lead", at, text)
-        # its card is gone: its thread waits for nothing (2026-10-08: the pointer line put it
-        # back in "Your answers wanted"); a message from the owner opens it again
-        metrics.set_thread_archived(conn, thread_id, at, planner.APPROVED)
-    _resolve_items(conn, project_id, now, [d for d, _ in merges])
+        if by == "owner":  # a message from the owner opens it again
+            metrics.set_thread_archived(conn, thread_id, at, planner.APPROVED)
+    if by == "owner":
+        _resolve_items(conn, project_id, now, [d for d, _ in merges])
 
 
 def _resolve_items(

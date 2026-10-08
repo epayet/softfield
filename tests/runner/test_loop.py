@@ -4349,6 +4349,10 @@ def test_a_merge_in_a_planner_reply_is_applied_at_once_by_the_lead(
     assert json.loads(str(reply["proposals"])) == [{**MERGE_F12, "applied": True}]
     pointer = [m for m in _messages(repo) if "The lead merged F12 into F10" in str(m["text"])]
     assert len(pointer) == 1
+    # F63 (2026-10-08): the owner hasn't read the answer yet, so the thread stays on the desk
+    [found] = [t for t in _rows(repo, "planner_threads") if t["card"] == thread]
+    assert found["archived"] is None
+    assert [m["text"] for m in _messages(repo) if m["thread_id"] == found["id"]][-1] == "Yes."
 
 
 def test_a_merge_the_runner_cant_apply_waits_for_the_owner(repo, fake_model, monkeypatch):
