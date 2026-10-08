@@ -4,6 +4,7 @@ Nits from reviews and triaged discoveries that aren't scheduled yet. One bullet 
 
 <!-- e.g. - [m1-review nit] Rename `x` to `y` in coucou/ordering.py -->
 
+- [f41-review nit, f41-F3] `runner report` counts only the runner's merges, so tickets the lead builds in a terminal session read as "0 of 2 merged" (F41). Count a `tasks/done/` ticket whose runner footer says `result: done` and `agent: lead` as merged by the lead.
 - [m0] Exercise the headless Claude paths live. Escalation: done in calibration (2 runs, Pro login, cap counted). Still untested: the review loop (M1 review) and the usage-limit pause.
 - [m1-review nit, m1-F3] `seed_demo` finds the demo display by label, so renaming it and rerunning creates a second pending display; its "nothing changed" message also ignores `controllers.add(me)`.
 - [m2-review nit, m2-F6] `/api/pair/status` is a `POST` with a signed body, but ADR 00 §2.4 and `docs/milestones/m2.md` say `GET`. The milestone doc and `docs/security.md` are fixed; correct ADR 00 the next time an ADR touches the protocol.

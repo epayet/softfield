@@ -62,7 +62,7 @@
         <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Full reply</summary>
         <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
       </details>
-      {% else %}
+      {% elif msg.text %}
       <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
       {% endif %}
       {% if msg.points %}

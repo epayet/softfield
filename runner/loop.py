@@ -3661,9 +3661,21 @@ def _auto_merge(s: Session, reply: planner.Reply) -> planner.Reply:
                 proposal = {**proposal, planner.APPLIED: True}
             else:
                 what = str(proposal.get("title") or proposal.get("id") or "a merge")
-                why.append(f"The runner didn't apply {what}: {refused}. It waits for your Approve.")
+                why.append((f"The runner didn't apply {what}", refused))
         proposals.append(proposal)
-    text = "\n\n".join([reply.text.rstrip(), *why]) if why else reply.text
+    if why and reply.points:  # F41 D2: the text folds under the points, so this is one too
+        said = tuple(
+            {
+                "n": len(reply.points) + i,
+                "title": title,
+                "answer": f"{refused}.",
+                "action": "It waits for your Approve.",
+            }
+            for i, (title, refused) in enumerate(why, 1)
+        )
+        return replace(reply, points=reply.points + said, proposals=tuple(proposals))
+    lines = [f"{title}: {refused}. It waits for your Approve." for title, refused in why]
+    text = "\n\n".join([reply.text.rstrip(), *lines]) if why else reply.text
     return replace(reply, text=text, proposals=tuple(proposals))
 
 

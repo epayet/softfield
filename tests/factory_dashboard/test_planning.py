@@ -409,25 +409,30 @@ def test_a_fixture_reply_with_7_points_shows_each_point(planning, db_path, serve
 
 def test_a_reply_with_points_folds_its_text_and_one_without_shows_it(planning, db_path, serve):
     """F41 D2, D3: the points carry everything, so the text waits in a closed "Full reply"
-    above them; a reply with no points (its block broken) shows its text open."""
+    above them; a reply with no points (its block broken) shows its text open, and one with
+    points but no text has neither a fold nor an empty line. The owner's never folds."""
     _write(db_path, lambda conn: _seven_points(conn, planning))
-    _write(
-        db_path,
-        lambda conn: metrics.add_planner_message(
-            conn,
-            metrics.planner_thread(conn, planning, "f6", NOW.isoformat())["id"],
-            "lead",
-            _at(timedelta(minutes=10)),
-            "Sorry.\n\n(no json block.)",
-        ),
-    )
+
+    def later(conn: sqlite3.Connection) -> None:
+        f6 = metrics.planner_thread(conn, planning, "f6", NOW.isoformat())["id"]
+        metrics.add_planner_message(conn, f6, "owner", _at(timedelta(minutes=20)), "Why so?")
+        metrics.add_planner_message(
+            conn, f6, "lead", _at(timedelta(minutes=10)), "Sorry.\n\n(no json block.)"
+        )
+        metrics.add_planner_message(
+            conn, f6, "lead", _at(timedelta(minutes=5)), "", points=_SEVEN_POINTS[:1]
+        )
+
+    _write(db_path, later)
     html = _thread(serve(), "f6")
     [fold] = re.findall(r'<details class="full-reply"[^>]*>(.*?)</details>', html, re.S)
     assert "open" not in html.split('<details class="full-reply"', 1)[1].split(">", 1)[0]
     assert _text(fold) == "Full reply Here's each point with my answer."
     assert html.index('class="full-reply"') < html.index('class="deck"')
     assert "Sorry." not in fold and "(no json block.)" in _text(html)
-    assert html.count('class="full-reply"') == 1  # the owner's message and the broken reply
+    assert "Why so?" not in fold and "Why so?" in _text(html)
+    assert html.count('class="full-reply"') == 1  # the owner's, the broken and the textless
+    assert '<p style="margin: 0; white-space: pre-line"></p>' not in html
 
 
 def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_path, serve):

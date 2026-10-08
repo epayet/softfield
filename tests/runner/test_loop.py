@@ -4363,9 +4363,11 @@ def test_a_merge_the_runner_cant_apply_waits_for_the_owner(repo, fake_model, mon
     assert (repo / "docs" / "milestones" / "f12-queue-once.md").is_file()
     [reply] = [m for m in _messages(repo) if m["author"] == "lead"]
     assert json.loads(str(reply["proposals"])) == [MERGE_F12]
-    assert "F12 has tickets" in str(reply["text"]) and "waits for your Approve" in str(
-        reply["text"]
-    )
+    # F41 D2: the text folds under the points, so the runner's word is a point, not text
+    *_, said = json.loads(str(reply["points"]))
+    assert said["n"] == len(POINTS) + 1 and said["title"].startswith("The runner didn't apply")
+    assert "F12 has tickets" in said["answer"] and "waits for your Approve" in said["action"]
+    assert "F12 has tickets" not in str(reply["text"])
 
 
 def test_a_failed_planner_job_says_so_on_the_thread(repo, fake_model, monkeypatch):

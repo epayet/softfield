@@ -293,6 +293,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** both features were already in real use before the review: a copy in `~/Dropbox/software-factory-backups` and five threads in `docs/planning/`. Reading the real exports showed the lead's points twice in each reply (text and boxes), which is the planner prompt's doing and already F41's fix. The review found no code defect; it added the restore steps (a backup nobody knows how to restore is half a backup) and one test.
 - **Decisions affected:** none.
 
+### F41 (2026-10-08): the points carry everything ([review](../reviews/f41-i-find-that-on-conversations-there.md))
+
+- **Q1:** two small tickets, both built by the lead in one terminal session with the owner; no escalation, direction or checkpoint. The runner's report reads "0 of 2 merged" because it only counts its own merges (backlog).
+- **Q3:** no developer work: f41-02 was a developer ticket, but the lead built it with f41-01 in the same session.
+- **Q5:** $1.13 of Claude.
+- **Anything else:** the review found the one place the fold hid something the owner must see: F49's "the runner didn't apply this merge" note, appended to the lead's text the same day. Two milestones touching the same reply a few hours apart, with no checkpoint on either, is where such gaps slip through; reading the other writers of a field you change catches them.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
