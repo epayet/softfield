@@ -309,6 +309,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** building F55 with F31 D1 in one commit was right: they share `proposal_state`, which now lives in `runner/planner.py` and serves the desk, the thread page and the runner alike, so "settled" has one meaning. The clear-out's tests covered only threads whose lead reply had no proposals; the review added the realistic case (a plan approved, an ADR left open).
 - **Decisions affected:** none.
 
+### F50 (2026-10-08): a finished card shows its review ([review](../reviews/f50-the-data-safety-review-it-asks.md))
+
+- **Q1:** three developer tickets (difficulty 2–3, `factory_dashboard/` only), built instead by the lead in one terminal commit (`4b9fefe`); no escalation, direction or checkpoint. The report reads "0 of 3 merged" for the same reason as F41.
+- **Q3:** no developer work, though all three were planned for one: a developer ticket the lead builds itself leaves no result for the Known range.
+- **Q5:** $2.06 of Claude, this review included.
+- **Anything else:** the Sign off button copied Archive's pattern, and Archive's pattern predates the owner's 2026-10-07 rule: a press showed "Asked" in grey, not the dashed "Signing off" that the Done when named. The proposal page's `on-its-way` class is the pattern that meets the rule; the review fixed Sign off with it. When copying a button, copy the newest one.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

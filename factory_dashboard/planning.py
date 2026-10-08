@@ -645,6 +645,7 @@ class Review:
     sections: list[tuple[str, str]]  # (heading, HTML from the lead's Markdown)
     ripe: bool
     signing_off: bool
+    refused: str | None = None  # the runner's word on the last sign-off, the card still ripe
 
 
 def _review(
@@ -673,15 +674,16 @@ def _review(
         if isinstance(sheet.get(key), str) and sheet[key].strip()
     ]
     ripe = any(m["key"] == row["key"] for m in live_line(conn, project, now)["field"]["ripe"])
-    signing_off = (
-        conn.execute(
-            "SELECT 1 FROM owner_requests WHERE project_id = ? AND kind = 'signoff'"
-            " AND subject IN (?, ?) AND done IS NULL",
-            (project_id, row["key"], thread),
-        ).fetchone()
-        is not None
-    )
-    return Review(row["key"], sections, ripe, signing_off)
+    last = conn.execute(
+        "SELECT done, result FROM owner_requests WHERE project_id = ? AND kind = 'signoff'"
+        " AND subject IN (?, ?) ORDER BY id DESC LIMIT 1",
+        (project_id, row["key"], thread),
+    ).fetchone()
+    signing_off = last is not None and last["done"] is None
+    # a done sign-off on a card still ripe was refused (a dirty main, tickets left): its word
+    # stays under the button after a reload (F50 D3)
+    refused = last["result"] if last is not None and last["done"] and ripe else None
+    return Review(row["key"], sections, ripe, signing_off, refused)
 
 
 def _messages(rows: list[sqlite3.Row]) -> list[Message]:

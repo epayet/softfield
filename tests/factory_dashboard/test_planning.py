@@ -1723,6 +1723,32 @@ def test_a_card_with_no_review_has_no_review_section(planning, serve):
     assert 'id="review"' not in _thread(serve(), "f6")
 
 
+def test_a_refused_sign_off_keeps_its_word_under_the_button(planning, db_path, serve):
+    """F50 D3: the runner refused (a dirty main): after a reload the button is back, and the
+    runner's word stays under it."""
+    _finished(db_path, planning, "signoff", "m4", None, "main has uncommitted changes")
+    review = _review_section(_thread(serve(), "m4"))
+    assert 'id="signoff-button"' in review
+    assert "The runner said: main has uncommitted changes" in _text(review)
+
+
+def test_sign_off_shows_on_its_way_at_once(page, planning, db_path, serve):
+    """The owner (2026-10-07): the press shows the dashed "Signing off" at once, as a reload
+    would, and the button goes."""
+    _open(page, serve(), "/planning/m4")
+    page.click("#signoff-button")
+    page.wait_for_selector("#signoff-status >> text=Asked")
+    assert page.locator("#signing-off").is_visible()
+    assert page.locator("#signoff-button").count() == 0
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
+        asked = [(r["kind"], r["subject"]) for r in rows]
+    finally:
+        conn.close()
+    assert asked == [("signoff", "m4")]
+
+
 # --- a proposal says where it stands (F31 D3, f31-02) ----------------------------------------
 
 

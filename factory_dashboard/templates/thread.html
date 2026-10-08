@@ -52,16 +52,18 @@
       <div class="sheet">{{ html | safe }}</div>
       {% endfor %}
       <a href="/milestones/{{ review.key }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px">The whole review</a>
+      {% set signing = "border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start" %}
       {% if review.signing_off %}
-      <span class="pill" id="signing-off" style="border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start">Signing off at the runner's next pick</span>
+      <span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span>
       {% elif review.ripe %}
       <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
         <button type="button" id="signoff-button"
           hx-post="/requests" hx-target="#signoff-status" hx-swap="innerHTML"
           hx-vals='{"kind": "signoff", "project": {{ project | tojson }}, "subject": {{ review.key | tojson }}}'
-          hx-on::before-request="this.remove()"
+          hx-on::before-request="this.insertAdjacentHTML('beforebegin', document.getElementById('signing-off-shape').innerHTML); this.remove()"
           style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Sign off</button>
-        <span id="signoff-status" style="font-size: 12.5px; color: var(--muted)">Marks it done and tags it, at the runner's next pick.</span>
+        <template id="signing-off-shape"><span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span></template>
+        <span id="signoff-status" style="font-size: 12.5px; color: var(--muted)">{% if review.refused %}The runner said: {{ review.refused }}{% else %}Marks it done and tags it, at the runner's next pick.{% endif %}</span>
       </div>
       {% endif %}
     </section>
