@@ -9,6 +9,11 @@
 ### From F29: the top was saying "resuming" but in the overview page the resume button was still available (merged by the owner on 2026-10-08)
 (none)
 
+### From F34: planner tasks cannot be paused but overview now still says 'paused by you' even if it's currently running under pause (merged by the lead on 2026-10-08)
+- **The owner (2026-10-08):** planner jobs run during a pause (f6-14), yet the overview's Now panel still says only "Paused by you since HH:MM" while one runs.
+- **The cause (lead, from the code):** the top bar already says "Paused by you since HH:MM · the lead is answering you" (f6-23, `factory_status` in `factory_dashboard/app.py`), but Now's pause line (`_partials/running.html`) builds its own words from `paused_clock` and `pausing` in `overview.py`. Same root as F29: Now ignores a resume on its way too, so it keeps a Resume button while the bar says "Resuming…".
+- **The fix:** one ticket (developer, follows f6-23's tests): Now's pause line shows the bar's own status (`bar_status`: words, tone and button), so the two can't disagree again; drop `paused_clock` and `pausing` from the overview context if nothing else reads them. Tests: paused with a live planner job → Now reads "· the lead is answering you"; resume asked → "Resuming…" and no Resume button; plain pause unchanged.
+
 ## Outcome
 - Pause or Resume, in the top bar, shows what was asked at once and keeps showing it until the runner's own state agrees: the 5 s refresh no longer puts the old words and the old button back.
 - A request that doesn't reach the dashboard's server says so, and the button comes back to try again.
