@@ -8,6 +8,9 @@ I like the "coming" dotted box when I plant an idea and the runner will look int
 
 Also remove the "no Claude needed" line
 
+### From F64: It is still the case that when I plan an idea, it doesn't… (merged by the lead on 2026-10-08)
+It is still the case that when I plan an idea, it doesn't go to coming and the form is still full and I have to refresh the page. Verify that this is planned for soon
+
 ## Outcome
 - Pressing "Plant it" on `/planning` shows the idea in Coming at once, dashed orange, "planting at the runner's next pick", with no reload; the form is empty again for the next idea.
 - The "No Claude needed" line is gone (done 2026-10-07: the line under Plant it now says "It becomes a seed card, and the lead answers it on its thread.").
