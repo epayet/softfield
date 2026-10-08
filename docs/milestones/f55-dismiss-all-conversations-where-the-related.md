@@ -1,6 +1,7 @@
 # Milestone F55: Clear out the threads already settled
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-08. Base: git tag `f55-dismiss-all-conversations-where-the-related-start`. Report: [`docs/reviews/f55-dismiss-all-conversations-where-the-related.md`](../reviews/f55-dismiss-all-conversations-where-the-related.md).
 > Planted by the owner on 2026-10-08 as "dismiss all conversations where the related plans have been accepted".
 
 ## Notes
