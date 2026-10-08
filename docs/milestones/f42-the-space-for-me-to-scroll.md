@@ -6,6 +6,9 @@
 ## Notes
 For example f17. Lots of sticky stuff meaning scrolling window small
 
+### From F64: 'your review' in planning doesn't have to be sticky,… (merged by the lead on 2026-10-08)
+'your review' in planning doesn't have to be sticky, scrolling to see is fine there'll be more screen space this way
+
 ## What squeezes it (read from the code, 2026-10-08)
 On a phone (390 × 844, about 660 px left under the browser's own bars), the review page `factory_dashboard/templates/proposal.html` stacks:
 - the top bar, sticky at the top: brand, status and Pause, the hazard stripe, the tabs: about 130 px;
