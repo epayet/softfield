@@ -24,16 +24,19 @@ the didnt go through cards try again don't work or dismiss
   - otherwise the new card takes the slug with `-2` (then `-3`, …), and plants as usual. A real repeat is the lead's to merge (f6-12).
 - **D2 Try again carries what it retries:** the Plant form and a thread's reply box get a hidden `again` (the refused request's id), filled by Try again and cleared after a send. The request's value carries it (`{"title", "thoughts", "ask", "again"}`, `{"text", "comments", "again"}`); the runner ignores it. The desk's "Didn't go through" leaves out a refused request that a later request's `again` names, pending or done: a retry that fails again shows as its own card, so there is one card per note. No new request kind, and `POST /requests` still writes one row.
 - **D3 Dismiss stays as it is:** it hides the card at once and the runner records it at its next pick (ADR 18: the dashboard writes only request rows). No change.
+- **D4 Versioned static files (from F46's plan, moved here by the owner on 2026-10-08):** every `/static/…` link in the templates carries `?v=` followed by a short hash of the file's content, through one Jinja global, so a changed file is a new URL and an unchanged one stays cached. The hash follows the file's mtime, since the server reloads on `.py` changes only. Vendor files (htmx, ECharts) go through it too. Why: `base.html` loads `/static/dashboard.css` with no version, so a phone can keep the CSS from before a merge, and a fixed button (Dismiss, after f31-06) can look dead.
 
 ## Tickets
 | # | Ticket | Who | d | Depends on | What |
 |---|---|---|---|---|---|
 | 01 | retry-plants-once | L | 5 | – | D1, D2 |
+| 02 | static-versions | D | 2 | – | D4 |
 
 ## Done when
 - Plant a note whose first six words match a card's, with other words: a second card is planted (`…-2`), nothing on the desk.
 - Try again a refused note that was planted since: the result says "planted already" with the card, and the desk shows nothing for it.
 - Press Try again on a refused idea and send it: its card leaves the desk at once; a retry refused again shows one card, not two.
+- Change `dashboard.css` and reload on the phone: the change shows without clearing the cache.
 
 ## Not here
 - F31 D7 (one-box plant, f31-05) keeps D1: its slug rule is the same `_plant`.
