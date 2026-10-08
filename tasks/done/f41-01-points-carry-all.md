@@ -26,3 +26,11 @@ Read `_PLANNER_HEAD` and `_PLANNER_TAIL` in `runner/prompts.py`, and `prompt` in
 - the "numbered points" line no longer asks for the points in the prose
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08)
+```

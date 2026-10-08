@@ -56,7 +56,15 @@
     {% else %}
     <article class="message" style="background: var(--bay); border: 1px solid var(--opus); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
       <span style="font: 600 12px var(--mono); color: var(--opus)">The lead · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      {# F41 D2, D3: with points, the text folds (the points say it all); without, it's all there is #}
+      {% if msg.points and msg.text %}
+      <details class="full-reply">
+        <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Full reply</summary>
+        <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+      </details>
+      {% else %}
       <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+      {% endif %}
       {% if msg.points %}
       <ol class="deck" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
       {% for p in msg.points %}

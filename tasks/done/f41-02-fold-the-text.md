@@ -29,3 +29,11 @@ Read the lead message branch of `factory_dashboard/templates/thread.html` (`msg.
 - the points, their comment fields and the phone deck are unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08)
+```

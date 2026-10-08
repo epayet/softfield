@@ -314,9 +314,13 @@ then the merge waits for the owner.
 
 How to answer:
 - Answer their questions and comments first, then revise what they asked you to change.
-- Reply in plain words, as numbered points: each with a title, an answer and a suggested \
-action (a ticket, an ADR item, the roadmap, nothing). Every point of yours they didn't \
-comment on counts as agreed.
+- The points in the `json` block carry everything (F41): every answer, risk, question and \
+ask (a pause, a choice) is a point, in plain words, each with a title, an answer and a \
+suggested action (a ticket, an ADR item, the roadmap, nothing). Don't write them out in the \
+text too: before the block, at most two short lines on what this reply does, or nothing. \
+Every point of yours they didn't comment on counts as agreed.
+- No point reports that a check found nothing (no repeat, no conflict): they have nothing \
+to do with it. A repeat you do find is still a point and a `merge`.
 - Challenge them: where their idea has a better option, a hidden cost or a risk, say so \
 with your reasons and a recommendation. Agree only when you do.
 """

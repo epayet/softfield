@@ -407,6 +407,29 @@ def test_a_fixture_reply_with_7_points_shows_each_point(planning, db_path, serve
     assert "7 points · 0 comments" in text
 
 
+def test_a_reply_with_points_folds_its_text_and_one_without_shows_it(planning, db_path, serve):
+    """F41 D2, D3: the points carry everything, so the text waits in a closed "Full reply"
+    above them; a reply with no points (its block broken) shows its text open."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _write(
+        db_path,
+        lambda conn: metrics.add_planner_message(
+            conn,
+            metrics.planner_thread(conn, planning, "f6", NOW.isoformat())["id"],
+            "lead",
+            _at(timedelta(minutes=10)),
+            "Sorry.\n\n(no json block.)",
+        ),
+    )
+    html = _thread(serve(), "f6")
+    [fold] = re.findall(r'<details class="full-reply"[^>]*>(.*?)</details>', html, re.S)
+    assert "open" not in html.split('<details class="full-reply"', 1)[1].split(">", 1)[0]
+    assert _text(fold) == "Full reply Here's each point with my answer."
+    assert html.index('class="full-reply"') < html.index('class="deck"')
+    assert "Sorry." not in fold and "(no json block.)" in _text(html)
+    assert html.count('class="full-reply"') == 1  # the owner's message and the broken reply
+
+
 def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_path, serve):
     """The latest listing's proposals, each linking to its review page; one the owner approved
     since is answered (D6)."""

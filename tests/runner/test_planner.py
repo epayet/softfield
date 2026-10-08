@@ -267,6 +267,18 @@ def test_a_cards_prompt_says_what_a_replan_may_change_and_when_to_suggest_a_paus
     assert "tasks/ready/f" not in general and "suggest the owner pause" not in general
 
 
+@pytest.mark.parametrize("thread", ["f7", "general"])
+def test_the_prompt_puts_everything_in_the_points_and_no_empty_checks(thread):
+    """F41 D1: the text before the block is at most two short lines; answers, risks,
+    questions and asks are points; no point reports a check that found nothing (F44)."""
+    text = planner.prompt(thread, "Anything?", {})
+    assert "at most two short lines" in text and "every answer, risk, question and ask" in text
+    assert "Don't write them out in the text too" in text
+    assert "No point reports that a check found nothing" in text
+    assert "propose a `merge`" in text  # a repeat found still is one
+    assert "Reply in plain words, as numbered points" not in text
+
+
 @pytest.mark.parametrize(
     ("path", "draft"),
     [
