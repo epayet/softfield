@@ -29,3 +29,11 @@ Read `thread_page` and `_header` in `factory_dashboard/planning.py`, `factory_da
 - assert within `#review`, on its text with tags stripped and entities unescaped (`_text` in `tests/factory_dashboard/test_planning.py`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08)
+```

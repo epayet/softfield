@@ -281,6 +281,21 @@ def test_the_field_rows_ripe_and_stash_match_the_milestones(line_db):
     assert (counts["ripe"], counts["stash"], counts["merged"], counts["queue"]) == (1, 2, 2, 4)
 
 
+def test_a_card_ripens_only_once_its_review_is_written(line_db):
+    """F50 D1: F20's tickets were done but its review wasn't: the desk asked for a sign-off
+    with nothing to read. Without its sheet, f8 stays in the rows, all done."""
+    conn = metrics.open_db(line_db)
+    try:
+        conn.execute("UPDATE milestones SET signoff = NULL WHERE key = 'f8'")
+    finally:
+        conn.close()
+    field = document(line_db)["field"]
+    assert [m["key"] for m in field["ripe"]] == []
+    [row] = [r for r in field["rows"] if r["key"] == "f8"]
+    assert (row["ready"], row["running"], row["done"], row["total"]) == (0, 0, 1, 1)
+    assert [m["key"] for m in field["stash"]] == ["f7", "m4"]  # done ones, sheet or not
+
+
 def test_the_queue_is_in_run_order_and_now_names_the_next_three(line_db):
     doc = document(line_db)
     assert [(c["ticket"], c["number"], c["waits"]) for c in doc["queue"]] == [
@@ -422,7 +437,7 @@ def write_night(conn: Any) -> None:
         )  # fmt: skip
 
     n0 = metrics.upsert_milestone(
-        conn, project, "n0", title="Ripe", status="done",
+        conn, project, "n0", title="Ripe", status="done", signoff={"changed": "Ripe."},
         started=night("18:00").isoformat(), ended=night("23:00").isoformat(),
     )  # fmt: skip
     job(ticket("n0-01-early", n0), "developer", LOCAL, 1, "19:00–19:30")

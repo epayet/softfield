@@ -1611,3 +1611,51 @@ def test_dismiss_takes_the_item_off_at_once_and_a_reload_keeps_it_off(
         conn.close()
     page.reload()
     assert page.locator(f"#refused-{asked}").count() == 0
+
+
+# --- a finished card shows its review, and Sign off (F50) ------------------------------------
+
+
+def _review_section(html: str) -> str:
+    found = re.search(r'<section id="review".*?</section>', html, re.S)
+    assert found, "no #review"
+    return found[0]
+
+
+def test_a_ripe_cards_page_shows_its_sheet_and_signs_off(planning, db_path, db, serve):
+    """F50 D2, D3: m4's review is written and every ticket done: its page opens on What
+    changed, links the whole review, and Sign off posts a signoff with its full key."""
+    html = _thread(serve(), "m4")
+    review = _review_section(html)
+    assert _text(review).startswith("The review What changed The web app.")
+    assert "Decisions waiting for you" not in review  # no decisions in its sheet
+    assert '<a href="/milestones/m4?project=' in review
+    assert _posts(review, "signoff-button") == {
+        "kind": "signoff",
+        "project": PROJECT,
+        "subject": "m4",
+    }
+    assert html.index('id="review"') < html.index('id="conversation"')
+    [item] = desk(db, PROJECT, NOW)[3].items
+    assert item.words == "reviewed · waits for your sign-off"
+
+
+def test_a_sign_off_on_its_way_shows_and_the_button_goes(planning, db_path, serve):
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(conn, planning, "signoff", "m4", None, NOW.isoformat()),
+    )
+    review = _review_section(_thread(serve(), "m4"))
+    assert "Signing off at the runner's next pick" in _text(review)
+    assert 'id="signoff-button"' not in review
+
+
+def test_a_card_with_tickets_left_shows_its_sheet_but_no_sign_off(planning, db_path, serve):
+    """f1's sheet is stored but it has a ticket left: nothing to sign off yet."""
+    review = _review_section(_thread(serve(), "f1"))
+    assert "The factory measures itself." in _text(review)
+    assert 'id="signoff-button"' not in review
+
+
+def test_a_card_with_no_review_has_no_review_section(planning, serve):
+    assert 'id="review"' not in _thread(serve(), "f6")

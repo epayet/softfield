@@ -20,6 +20,7 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, ago, render
 from factory_dashboard.line import live_line
+from factory_dashboard.milestones import _to_html
 from factory_dashboard.overview import Running, agent_allowances, running_jobs
 from runner import metrics
 from runner.planner import (
@@ -193,12 +194,13 @@ def _open_proposals(
 
 
 def _ripe(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
-    """Every ticket done and not signed off, as the line's field has them."""
+    """Every ticket done, its review written, and not signed off, as the line's field has
+    them (F50 D1)."""
     return [
         DeskItem(
             "ripe",
             m["title"] or m["key"],
-            "every ticket merged · waits for your sign-off",
+            "reviewed · waits for your sign-off",
             f"/planning/{short_key(m['key'])}",
         )
         for m in live_line(conn, project, now)["field"]["ripe"]
@@ -518,6 +520,61 @@ def _header(conn: sqlite3.Connection, project_id: int, thread: str) -> tuple[str
     return thread, "", False
 
 
+_SHEET = (  # what the owner acts on (F50 D2); the rest stays on the milestone page
+    ("changed", "What changed"),
+    ("how_to_test", "How to test"),
+    ("decisions", "Decisions waiting for you"),
+)
+
+
+@dataclass(frozen=True)
+class Review:
+    """A card's written review on its page (F50 D2, D3): its sheet's sections, and whether
+    the owner can sign it off now or a sign-off is on its way."""
+
+    key: str  # the card's full key: the milestone page's and the signoff request's
+    sections: list[tuple[str, str]]  # (heading, HTML from the lead's Markdown)
+    ripe: bool
+    signing_off: bool
+
+
+def _review(
+    conn: sqlite3.Connection, project: str, project_id: int, thread: str, now: datetime
+) -> Review | None:
+    """The card's review once its sign-off sheet is stored; None before."""
+    if thread == GENERAL:
+        return None
+    row = next(
+        (
+            r
+            for r in conn.execute(
+                "SELECT key, signoff FROM milestones WHERE project_id = ? AND signoff IS NOT NULL",
+                (project_id,),
+            ).fetchall()
+            if short_key(r["key"]) == thread
+        ),
+        None,
+    )
+    if row is None:
+        return None
+    sheet = json.loads(row["signoff"])
+    sections = [
+        (heading, _to_html(sheet[key]))
+        for key, heading in _SHEET
+        if isinstance(sheet.get(key), str) and sheet[key].strip()
+    ]
+    ripe = any(m["key"] == row["key"] for m in live_line(conn, project, now)["field"]["ripe"])
+    signing_off = (
+        conn.execute(
+            "SELECT 1 FROM owner_requests WHERE project_id = ? AND kind = 'signoff'"
+            " AND subject IN (?, ?) AND done IS NULL",
+            (project_id, row["key"], thread),
+        ).fetchone()
+        is not None
+    )
+    return Review(row["key"], sections, ripe, signing_off)
+
+
 def _messages(rows: list[sqlite3.Row]) -> list[Message]:
     latest = max((r["id"] for r in rows if r["author"] == "lead" and r["points"]), default=None)
     return [
@@ -597,8 +654,10 @@ def thread_page(
     pending = False
     archived_at: str | None = None
     archiving: str | None = None  # "on" or "off": an archive request the runner hasn't done
+    review: Review | None = None
     if project_id is not None:
         title, meta, seed = _header(conn, project_id, thread)
+        review = _review(conn, project, project_id, thread, now)
         found = metrics.find_thread(conn, project_id, thread)
         archived_at = found["archived"] if found is not None else None
         asked = conn.execute(
@@ -648,6 +707,7 @@ def thread_page(
             "has_thread": bool(messages),
             "archived_at": archived_at,
             "archiving": archiving,
+            "review": review,
             "messages": messages,
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,

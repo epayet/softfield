@@ -26,3 +26,11 @@ Read `_field` in `factory_dashboard/line.py` and `_ripe` in `factory_dashboard/p
 - a done milestone with no sheet is in the stash
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08)
+```

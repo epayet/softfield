@@ -489,9 +489,12 @@ def _machines(
 def _field(
     conn: sqlite3.Connection, project: str, ticket_states: dict[str, str], at: datetime
 ) -> dict[str, Any]:
-    """The field at ``at``: a milestone is on it once started, in the stash once signed off."""
+    """The field at ``at``: a milestone is on it once started, ripe once every ticket is done
+    and its review is written (its sign-off sheet stored, F50 D1), in the stash once signed
+    off."""
     rows = conn.execute(
-        "SELECT m.key, m.title, m.status, m.started, m.ended, t.ticket FROM milestones m"
+        "SELECT m.key, m.title, m.status, m.started, m.ended, m.signoff, t.ticket"
+        " FROM milestones m"
         " JOIN projects p ON p.id = m.project_id LEFT JOIN tickets t ON t.milestone_id = m.id"
         " WHERE p.name = ?",
         (project,),
@@ -507,6 +510,7 @@ def _field(
                 "title": r["title"],
                 "done": r["status"] == "done" and not (r["ended"] and _when(r["ended"]) > at),
                 "ended": r["ended"],
+                "reviewed": r["signoff"] is not None,
                 "states": [],
             },
         )
@@ -517,7 +521,7 @@ def _field(
         states = m["states"]
         if m["done"]:
             stash.append(m)
-        elif "ready" in states or "running" in states:
+        elif "ready" in states or "running" in states or (states and not m["reviewed"]):
             planted.append(
                 {
                     "key": m["key"],
