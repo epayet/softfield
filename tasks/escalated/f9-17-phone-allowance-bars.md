@@ -28,3 +28,12 @@ Read the `#allowance` section of `factory_dashboard/templates/overview.html` (ea
 - the dial tests are replaced by these. The layout check passes at 390 px.
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: protected-paths)
+attempts: 3
+tokens: 3998609
+logs: var/runs/20261008-204153/f9-17-phone-allowance-bars
+```
