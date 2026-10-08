@@ -10,7 +10,7 @@
    1. Open your Dropbox (phone or web) and find `software-factory-backups`: there is a `factory-metrics-<date>-<time>.sqlite` from this morning, and a new one appears each day the runner runs.
    2. On GitHub or in the repo, open `docs/planning/f22-move-archive-button-on-planning-desk.md`: your messages and the lead's replies, oldest first, each with who and when.
    3. Approve the next plan from `/planning`, then look at the commit "F… plan approved by the owner": its thread file is in it.
-3. **Left for later:** nothing from this review. The repeated points in the lead's replies (visible in the exports too) are F41's fix, already queued (f41-01).
+3. **Left for later:** nothing from this review. The repeated points in the lead's replies (visible in the five exports) were F41's fix, which has since landed (fcb2d0c); the next approved plan's export will show whether it is gone.
 4. **Decisions waiting for you:** none.
 5. **How the work went**
    - [2026-10-08 07:47](../sessions/2026-10-08-0747.md): f20-01 (backup) merged first time, 34 min, lead only.
@@ -18,7 +18,7 @@
    - Lessons: reading the real output beats reading the tests. The exports showed every lead point twice, which the tests (built on clean messages) could not; it traced back to the planner prompt, already F41's work. And a backup isn't done until someone knows how to restore it: the milestone had no restore steps, the review added them.
 6. **What next**
    - **Product:** on hold, as you asked (2026-10-04).
-   - **Factory:** F40 ("Need back up code asap") is the other half of data safety: the code lives on one disk too. I suggest the planner takes it next, with a daily push to a private remote as the simplest answer. F50 ("the data safety review it asks has no info") is real: the desk asked you to review F20 before this report existed. Its fix belongs in the planner's hands: show the review item only once `docs/reviews/<key>.md` has its sign-off sheet, and link to it.
+   - **Factory:** F40 ("Need back up code asap") is the other half of data safety: the code lives on one disk too, and the card is still an idea with no notes. I suggest the planner takes it next, with a daily push to a private remote as the simplest answer. F50 ("the data safety review it asks has no info") is now planned and ready: a card ripens only once its review exists, and the thread page shows the sign-off sheet.
 7. **What clogged the factory line:** almost nothing for F20 itself: two lead tickets in two short runs (≈1 h), each ending with the restart a runner change needs. The restart between them is the only gap, and it's by design (m4-07).
 
 ## What was built
@@ -32,6 +32,8 @@
 |---|---|---|---|---|
 | f20-data-safety-F1 | should-fix | claude | No restore steps anywhere: the owner would have copies and no safe way back (a stale `-wal` next to a restored file is the trap). | Added `docs/workflow.md` §Backups. Resolved. |
 | f20-data-safety-F2 | nit | claude | The export's undo path (the commit fails after the file is written) had no test. | Added `test_a_commit_that_fails_after_the_export_leaves_no_file`. Resolved. |
+
+**Round 2:** both resolved. The restore steps match the code (`[metrics] db`, `[backup] dir`, `runner backfill`), and the new test passes. The commits since round 1 that touch `runner/requests.py` and `runner/planner.py` (f49-01, f31-05, F31 D1/F55, the merge settling) leave `_export` and its undo as they were; `runner/backup.py` is unchanged. `tests/runner/test_backup.py` and `test_planner.py`: 178 passed. No new finding.
 
 Checked and fine: the tests cover each Done when, including the not-writable folder (run goes on, one note) and the long wait; no existing test was edited (only `test_planner.py`'s imports). No user-facing strings, so no French to check. Full suite green (1674 passed before the fixes; the new test passes).
 
