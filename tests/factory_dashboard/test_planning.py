@@ -815,6 +815,31 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
     assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
 
 
+def _merges_on_the_desk(db: sqlite3.Connection) -> list[str]:
+    return [i.link for i in desk(db, PROJECT, NOW)[2].items if "/merge-" in i.link]
+
+
+def test_an_approved_merge_leaves_the_desk(planning, db_path, db):
+    """2026-10-08: a merge-only approval's result is "approved: merged F9 into F7", which the
+    desk didn't count as worked, so every approved merge stayed."""
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    _finished(db_path, planning, "approve_plan", "f9", None, "approved: merged F9 into F7")
+    assert _merges_on_the_desk(db) == []
+
+
+@pytest.mark.parametrize("gone", ["f9", "f7"])
+def test_a_merge_whose_card_left_main_asks_nothing(planning, db_path, db, checkout, gone):
+    """F9 or F7 was merged elsewhere since the lead proposed it: nothing is left to ask."""
+    docs = checkout / "docs" / "milestones"
+    docs.mkdir(parents=True)
+    for key in {"f9", "f7"} - {gone}:
+        (docs / f"{key}-x.md").write_text(f"# Milestone {key.upper()}: x\n")
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    assert _merges_on_the_desk(db) == []
+    (docs / f"{gone}-x.md").write_text(f"# Milestone {gone.upper()}: x\n")
+    assert _merges_on_the_desk(db) == ["/planning/f9/proposals/merge-f9"]
+
+
 def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
     """F49 D1: the runner applied it after the job; no Approve, on the desk or its page."""
     applied = {**_REVIEW_MERGE, "applied": True}

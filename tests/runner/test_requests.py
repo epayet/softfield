@@ -310,6 +310,17 @@ def _queued(repo: Path) -> list[tuple[object, object, object, object]]:
         conn.close()
 
 
+def _archived(repo: Path, card: str) -> bool:
+    conn = metrics.open_db(_db(repo))
+    try:
+        row = conn.execute(
+            "SELECT archived FROM planner_threads WHERE card = ?", (card,)
+        ).fetchone()
+        return row is not None and row["archived"] is not None
+    finally:
+        conn.close()
+
+
 def _thread(repo: Path, card: str) -> list[dict[str, object]]:
     conn = metrics.open_db(_db(repo))
     try:
@@ -830,6 +841,7 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
     assert pointer["author"] == "lead" and "F10" in str(pointer["text"])
     assert "/planning/f10" in str(pointer["text"])
     assert _items(repo) == [(planner.PLANNING, "f12", None, False)]
+    assert _archived(repo, "f12")  # its card is gone: the pointer asks for no answer
     assert _apply(repo) == []  # finished once
 
 

@@ -27,8 +27,10 @@ from runner.planner import (
     MERGE,
     PLANNER,
     PlannerError,
+    cards,
     draft,
     is_proposed,
+    merge_cards,
     merge_words,
     message,
     plan_changes,
@@ -53,7 +55,8 @@ router = APIRouter()
 
 GENERAL = "general"
 # A request's result when it worked (D1's table); any other result is a refusal.
-WORKED = (QUEUED_FOR_THE_LEAD, "approved ", "accepted ", "planted ")
+# "approved: merged F12 into F10" too: a merge-only approval stayed open (2026-10-08)
+WORKED = (QUEUED_FOR_THE_LEAD, "approved", "accepted ", "planted ")
 _ADR_NUMBER = re.compile(r"docs/adr/(\d+)-")
 _TYPICAL = 20  # finished jobs of the running one's role and agent that make its typical length
 
@@ -162,7 +165,25 @@ def _settled(requests: list[sqlite3.Row], about: list[tuple[str, str, str | None
     return False
 
 
-def _open_proposals(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
+def _known_cards(repo: Path | None) -> set[str] | None:
+    """Every card on main, or None when the checkout isn't here."""
+    return None if repo is None else cards(repo)
+
+
+def _gone_merge(proposal: dict[str, object], known: set[str] | None) -> bool:
+    """A ``merge`` one of whose cards has left main: merged or dropped already, nothing to
+    ask (2026-10-08: such merges filled the desk)."""
+    if proposal.get("kind") != MERGE or known is None:
+        return False
+    try:
+        return not set(merge_cards(proposal)) <= known
+    except PlannerError:
+        return False
+
+
+def _open_proposals(
+    conn: sqlite3.Connection, project_id: int, known: set[str] | None = None
+) -> list[DeskItem]:
     """The proposals in each thread's latest lead message that lists some, still open, on
     threads not archived."""
     rows = conn.execute(
@@ -183,7 +204,9 @@ def _open_proposals(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]
         for proposal in json.loads(row["proposals"]):
             if not isinstance(proposal, dict) or not proposal.get("id"):
                 continue
-            if proposal.get(APPLIED) or _settled(later, _about(proposal, row["card"])):
+            if proposal.get(APPLIED) or _gone_merge(proposal, known):
+                continue
+            if _settled(later, _about(proposal, row["card"])):
                 continue
             points = proposal.get("key_points")
             words = f"{len(points)} key points" if isinstance(points, list) and points else ""
@@ -386,7 +409,7 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
         answers = _answers_wanted(conn, project_id, titles, now)
-        proposals = _open_proposals(conn, project_id)
+        proposals = _open_proposals(conn, project_id, _known_cards(_repo(conn, project)))
         ripe = _ripe(conn, project, now)
         seeds = _seeds(conn, project_id)
     return [
@@ -539,7 +562,11 @@ def _messages(rows: list[sqlite3.Row]) -> list[Message]:
 
 
 def _proposals(
-    conn: sqlite3.Connection, project_id: int, thread: str, rows: list[sqlite3.Row]
+    conn: sqlite3.Connection,
+    project_id: int,
+    thread: str,
+    rows: list[sqlite3.Row],
+    known: set[str] | None = None,
 ) -> list[Proposal]:
     """The proposals in the thread's latest lead message that lists some, open or answered as
     D6 defines open."""
@@ -559,7 +586,7 @@ def _proposals(
             str(p.get("kind") or ""),
             str(p.get("title") or p["id"]),
             _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
-            bool(p.get(APPLIED)) or _settled(requests, _about(p, thread)),
+            bool(p.get(APPLIED)) or _gone_merge(p, known) or _settled(requests, _about(p, thread)),
             f"/planning/{thread}/proposals/{p['id']}",
         )
         for p in json.loads(lead[-1]["proposals"])
@@ -615,7 +642,7 @@ def thread_page(
             (project_id, thread),
         ).fetchall()
         messages = _messages(rows)
-        proposals = _proposals(conn, project_id, thread, rows)
+        proposals = _proposals(conn, project_id, thread, rows, _known_cards(_repo(conn, project)))
         pending = any(
             r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{thread}#")
             for r in metrics.open_jobs(conn, project_id)
@@ -754,7 +781,7 @@ def proposal_review(
             "key_points": [p for p in key_points if isinstance(p, dict)]
             if isinstance(key_points, list)
             else [],
-            "proposals": _proposals(conn, project_id, thread, rows),
+            "proposals": _proposals(conn, project_id, thread, rows, _known_cards(repo)),
             "adr_number": str(int(number[1])) if number else None,
             "merge": _merge_words(proposal),
             "mockup": f"/planning/mockups/{thread}/{path}" if _MOCKUP_RE.fullmatch(path) else None,
