@@ -29,3 +29,12 @@ Read D4 in `docs/milestones/f8-one-queue.md`, `factory_dashboard/requests.py` an
 - `/live` returns the allowance panel, after `#running`; a mark has a `title` equal to its label
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 7349364
+logs: var/runs/20261008-230441/f8-06-switch-buttons
+```
