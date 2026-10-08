@@ -360,8 +360,9 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
         if cards:
             titles = _card_titles(conn, project_id)
             jobs = [j for j in running_jobs(conn, project, now) if j.live]
-            next_reply = _next_reply(conn, project, jobs, True)
         for card in dict.fromkeys(cards):
+            held = _held(conn, project_id, now, card)
+            next_reply = _next_reply(conn, project, jobs, True, held)
             items.append(
                 DeskItem(
                     "coming",
@@ -420,13 +421,46 @@ def _what(job: Running) -> str:
     return job.ticket or job.role
 
 
+_FIVE_HOURS = timedelta(hours=5)
+
+
+def _held(
+    conn: sqlite3.Connection, project_id: int | None, now: datetime, thread: str | None = None
+) -> str | None:
+    """Why the lead's reply waits when its planner job is parked for a Claude limit (the
+    owner, 2026-10-08: it said "at the factory's next pick" while the week was used up); None
+    when it isn't. A wait past 5 hours can only be the weekly limit. ``thread``: that thread's
+    job only."""
+    if project_id is None:
+        return None
+    until = [
+        _when(r["not_before"])
+        for r in metrics.open_jobs(conn, project_id)
+        if r["kind"] == PLANNER
+        and r["not_before"]
+        and _when(r["not_before"]) > now
+        and (thread is None or str(r["subject"] or "").split("#")[0] == thread)
+    ]
+    if not until:
+        return None
+    first = min(until)
+    which = "weekly" if first - now > _FIVE_HOURS else "5-hour"
+    return f"waits for Claude's {which} limit, until {first.astimezone():%a %H:%M}"
+
+
 def _next_reply(
-    conn: sqlite3.Connection, project: str, jobs: list[Running], pending: bool
+    conn: sqlite3.Connection,
+    project: str,
+    jobs: list[Running],
+    pending: bool,
+    held: str | None = None,
 ) -> str | None:
     """When the owner's pending message is answered: after the running job, planning going
-    first (D1); ``None`` with nothing pending."""
+    first (D1), or once Claude's limit resets (``held``); ``None`` with nothing pending."""
     if not pending:
         return None
+    if held is not None:
+        return held
     if any(j.role == PLANNER for j in jobs):
         return "the lead is writing its reply now"
     if not jobs:
@@ -451,7 +485,7 @@ def factory_now(conn: sqlite3.Connection, project: str, now: datetime) -> dict[s
     working = [j for j in jobs if j.role != PLANNER]
     return {
         "running": working[0] if working else None,
-        "next_reply": _next_reply(conn, project, jobs, pending),
+        "next_reply": _next_reply(conn, project, jobs, pending, _held(conn, project_id, now)),
     }
 
 
@@ -758,7 +792,9 @@ def thread_page(
             "messages": messages,
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,
-            "next_reply": _next_reply(conn, project, jobs, pending),
+            "next_reply": _next_reply(
+                conn, project, jobs, pending, _held(conn, project_id, now, thread)
+            ),
         },
     )
 

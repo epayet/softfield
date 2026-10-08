@@ -1219,6 +1219,35 @@ def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve
     assert "after f1-04-live, any minute now" in _coming_text(html)
 
 
+@pytest.mark.parametrize(
+    ("ahead", "which"), [(timedelta(days=2), "weekly"), (timedelta(hours=2), "5-hour")]
+)
+def test_a_reply_parked_for_a_limit_says_which_and_until_when(
+    planning, db_path, serve, ahead, which
+):
+    """The owner (2026-10-08): with Claude's week used up, the thread said "at the factory's
+    next pick" while its planner job was parked until the reset. A wait past 5 hours is the
+    week's."""
+    until = NOW + ahead
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn,
+            planning,
+            "planner",
+            "f6#2",
+            "a message",
+            _at(timedelta(minutes=5)),
+            until.isoformat(),
+        ),
+    )
+    words = f"waits for Claude's {which} limit, until {until.astimezone():%a %H:%M}"
+    client = serve()
+    assert f"waiting for the lead · {words}" in _coming_text(_page(client))
+    assert f"Next for the lead · {words}" in _text(_thread(client, "f6"))
+    assert f"Your next reply: {words}." in _text(_page(client))
+
+
 def test_coming_skips_a_job_whose_run_has_stopped_beating(planning, db_path, serve):
     """A run that died leaves its job ``running``: Coming says what the tile says, the next
     pick, not "after" a job nothing runs (f6-planning-room-F1)."""
