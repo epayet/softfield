@@ -269,12 +269,14 @@ def _open(page, client: TestClient, path: str = "/planning") -> None:
     page.goto(f"{ORIGIN}{path}")
 
 
-def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve):
-    """Planting asks the runner: a ``plant`` request, no subject, the title and the thoughts."""
+@pytest.mark.parametrize(("button", "ask"), [("#plant-only", False), ("#plant-ask", True)])
+def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve, button, ask):
+    """Planting asks the runner: a ``plant`` request, no subject, the title and the thoughts;
+    "Plant and ask the lead" also sends it to the lead, "Plant" doesn't (the owner, 2026-10-08)."""
     _open(page, serve())
     page.fill('#plant input[name="title"]', 'Memory "drift" on the frame')
     page.fill('#plant textarea[name="thoughts"]', "It forgets.\nOn every reload.")
-    page.click('#plant button[type="submit"]')
+    page.click(button)
     page.wait_for_selector("#plant-status >> text=Asked")
     conn = metrics.open_db(db_path)
     try:
@@ -282,13 +284,8 @@ def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve):
         asked = [(r["kind"], r["subject"], json.loads(r["value"])) for r in rows]
     finally:
         conn.close()
-    assert asked == [
-        (
-            "plant",
-            None,
-            {"title": 'Memory "drift" on the frame', "thoughts": "It forgets.\nOn every reload."},
-        )
-    ]
+    words = {"title": 'Memory "drift" on the frame', "thoughts": "It forgets.\nOn every reload."}
+    assert asked == [("plant", None, {**words, "ask": ask})]
 
 
 @pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])

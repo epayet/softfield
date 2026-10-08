@@ -330,11 +330,14 @@ def _words(title: object, thoughts: object) -> tuple[str, str]:
         raise PlannerError("an idea has a title, on one line")
     if not isinstance(thoughts, str):
         raise PlannerError(_PLANT_VALUE)
-    if len(title.strip()) > _MAX_TITLE:
-        raise PlannerError(f"an idea's title is at most {_MAX_TITLE} characters")
-    if len(thoughts.strip()) > _MAX_THOUGHTS:
+    title, thoughts = title.strip(), thoughts.strip()
+    if len(thoughts) > _MAX_THOUGHTS:
         raise PlannerError(f"an idea's thoughts are at most {_MAX_THOUGHTS} characters")
-    return title.strip(), thoughts.strip()
+    if len(title) > _MAX_TITLE:  # never refused (the owner, 2026-10-08): no word is lost
+        cut = title[: _MAX_TITLE - 1]
+        cut = cut.rsplit(" ", 1)[0] if " " in cut else cut
+        title, thoughts = f"{cut.rstrip()}…", "\n\n".join(filter(None, [title, thoughts]))
+    return title, thoughts
 
 
 def _area(data: Mapping[str, Any]) -> str:
@@ -362,6 +365,12 @@ def planting(value: object) -> tuple[str, str, str]:
     data = _plant_data(value)
     title, thoughts = _words(data.get("title"), data.get("thoughts") or "")
     return title, thoughts, _area(data)
+
+
+def asks(value: object) -> bool:
+    """Whether a ``plant`` request also sends the idea to the lead ("Plant and ask the lead");
+    a plain Plant files a seed the owner sends later from its thread (the owner, 2026-10-08)."""
+    return _plant_data(value).get("ask") is True
 
 
 def seed_words(proposal: Mapping[str, Any]) -> tuple[str, str]:

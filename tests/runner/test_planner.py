@@ -541,13 +541,24 @@ def test_a_plant_request_is_a_title_its_thoughts_and_an_area(value, planted):
         json.dumps({"title": "x", "thoughts": 3}),
         json.dumps({"title": "x", "area": "garden"}),
         json.dumps({"title": "a\nb"}),
-        json.dumps({"title": "x" * 121}),
         json.dumps({"title": "x", "thoughts": "y" * 20_001}),
     ],
 )
 def test_a_plant_request_without_a_one_line_title_or_a_known_area_is_refused(value):
     with pytest.raises(planner.PlannerError):
         planner.planting(value)
+
+
+def test_a_long_title_is_cut_at_a_word_and_kept_whole_in_the_thoughts():
+    """Never refused for its length (the owner, 2026-10-08: seven notes were lost that way):
+    the title is cut at a word with an ellipsis, and the whole of it opens the thoughts."""
+    long = "when i accept a proposal from a card what happens to the card? " * 3
+    title, thoughts, _ = planner.planting(json.dumps({"title": long, "thoughts": "Sticky?"}))
+    assert len(title) <= 120 and title.endswith("…")
+    assert long.startswith(title[:-1] + " ")
+    assert thoughts == f"{long.strip()}\n\nSticky?"
+    assert planner.planting(json.dumps({"title": "x" * 130}))[:2] == ("x" * 119 + "…", "x" * 130)
+    assert planner.planting(json.dumps({"title": "y" * 120})) == ("y" * 120, "", "factory")
 
 
 def test_a_seed_card_is_an_idea_with_the_owners_words_under_notes():
@@ -623,8 +634,8 @@ def _no_claude(*args, **kwargs):
     raise AssertionError("planting needs no Claude")
 
 
-def _plant(title: str, thoughts: str = "", area: str | None = None) -> str:
-    return json.dumps({"title": title, "thoughts": thoughts, "area": area})
+def _plant(title: str, thoughts: str = "", area: str | None = None, ask: bool = False) -> str:
+    return json.dumps({"title": title, "thoughts": thoughts, "area": area, "ask": ask})
 
 
 def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(repo, monkeypatch):
@@ -636,7 +647,7 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     parked = State(parked={"f6-05-replan": {"kind": "lead", "resets_at": "2026-10-01T17:00:00"}})
     (repo / "coucou" / "thing.py").write_text("# the owner's edit, left alone\n")
     head = git(repo, "rev-parse", "HEAD").strip()
-    asked = _ask(repo, "plant", None, _plant("Parallel planners", "Two at once?\nMaybe."))
+    asked = _ask(repo, "plant", None, _plant("Parallel planners", "Two at once?\nMaybe.", ask=True))
     result = "planted docs/milestones/f7-parallel-planners.md, queued for the lead"
     assert _apply(repo, parked) == [f"plant: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
@@ -654,6 +665,21 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     # the owner's words are also F7's first message, for the lead to answer (2026-10-07)
     assert _for_the_lead(repo) == [("f7", "Parallel planners\n\nTwo at once?\nMaybe.")]
     assert _apply(repo) == []  # finished once
+
+
+def test_a_plant_not_asked_about_waits_as_a_seed(repo):
+    """The owner, 2026-10-08: "plant and later send to the lead manually": Plant alone files
+    the card; nothing goes to the lead until the owner writes on its thread."""
+    _f6(repo)
+    asked = _ask(repo, "plant", None, _plant("Parallel planners", "Two at once?"))
+    result = "planted docs/milestones/f7-parallel-planners.md"
+    assert _apply(repo) == [f"plant: {result}"]
+    assert _request(repo, asked) == (NOW.isoformat(), result)
+    assert _for_the_lead(repo) == []
+    old = _ask(repo, "plant", None, json.dumps({"title": "Older form"}))  # no ask: a seed
+    _apply(repo)
+    assert _request(repo, old)[1] == "planted docs/milestones/f8-older-form.md"
+    assert _for_the_lead(repo) == []
 
 
 def test_a_product_idea_takes_the_next_product_key(repo):

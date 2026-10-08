@@ -299,6 +299,8 @@ The owner's message:
 
 {text}
 
+On a card's thread, read its doc in docs/milestones/ first: the owner's notes are there, \
+and their message may only point at them. \
 Before answering, look for a repeat (f6-12): read the cards in docs/milestones/ whose state \
 is idea, planning or ready, and think of the other threads. Other threads: {threads}. When \
 this idea or message repeats another card or thread, even in other words, say so as a point \

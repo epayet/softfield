@@ -2961,7 +2961,9 @@ def test_a_plant_while_paused_is_applied_and_answered_by_the_lead_before_the_res
     card thread's first message (the owner, 2026-10-07), so the lead answers them while the
     line holds."""
     save_state(State(owner_pause=THURSDAY.isoformat()), _config(repo).runs_dir / "state.json")
-    title = json.dumps({"title": "Rubber ducks", "thoughts": "Yellow.", "area": "product"})
+    title = json.dumps(
+        {"title": "Rubber ducks", "thoughts": "Yellow.", "area": "product", "ask": True}
+    )
     planned: list[tuple[str, bool]] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):

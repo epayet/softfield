@@ -29,6 +29,7 @@ All of it without checking first whether the factory is busy, whether the lead h
    - **The thread goes into the repo with it** (owner, 2026-10-07, F20): the approval's commit also writes the whole thread to `docs/planning/<card key>.md`, so the why sits beside the decision. A thread that is never approved stays in the database (backed up daily, ADR 13 item 1).
 8. **Planting needs no Claude:** "Plant it" is a request. The runner writes the seed card (`docs/milestones/<key>.md`, next free key, the owner's words) at its next pick.
    - **And the lead answers it** (owner, 2026-10-07): a planted idea is often a question. The owner's words are also the card thread's first message, so a planner job answers them at once. The card still lands without Claude; at a limit only the answer waits.
+   - **Only when asked** (owner, 2026-10-08: "I want the ability to control when I send it to the lead"): the form has Plant (a seed that waits in Seeds until the owner writes on its thread, "Send to the lead") and Plant and ask the lead (the above). A plant request carries `"ask": true` for the second; without it, nothing goes to the lead.
 9. **One list of what waits for the owner:**
    - **The planning page's desk** is the full view.
    - **The Overview's Needs you** shows its count and top items.

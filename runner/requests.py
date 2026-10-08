@@ -564,10 +564,10 @@ def _plant(
     metrics.upsert_milestone(
         conn, project_id, full, title=title, state=found.state, priority=found.priority, area=area
     )
-    if subject:  # an approved seed: the lead wrote it already
+    if subject or not planner.asks(value):  # a seed the lead wrote, or one the owner sends later
         return f"planted {rel}"
-    # The owner's words are also the card thread's first message, so the lead answers them:
-    # a planted idea is often a question (the owner, 2026-10-07). It waits at a limit.
+    # "Plant and ask the lead": the owner's words are also the card thread's first message, so
+    # the lead answers them (the owner, 2026-10-07 and 2026-10-08). It waits at a limit.
     words = "\n\n".join(filter(None, [title, thoughts]))
     said = json.dumps({"text": words, "comments": {}})
     at = now.isoformat()
