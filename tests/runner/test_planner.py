@@ -1026,6 +1026,32 @@ def test_the_clear_out_archives_settled_threads_once(repo):
     assert _thread_row(repo, "f7")["archived"] is None  # opened by the owner: left alone
 
 
+def test_the_clear_out_reads_the_owners_approvals_of_the_latest_proposals(repo):
+    """F55 D3: a plan the owner approved before F31 D1 counts as settled, on a ready or a
+    building card; an ADR of the same reply left unanswered keeps its thread open."""
+    for key, state in (("f7", "ready"), ("f9", "ready"), ("f11", "building")):
+        _card_in(repo, key, state)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    plan = {**SEED_2, "id": "plan-1", "kind": "plan"}
+    adr = {**SEED_2, "id": "adr-1", "kind": "adr", "path": "docs/adr/30-x.md"}
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        for card, proposals in (("f7", [plan]), ("f9", [plan, adr]), ("f11", [plan])):
+            thread = metrics.planner_thread(conn, project, card, NOW.isoformat())["id"]
+            metrics.add_planner_message(
+                conn, thread, "lead", NOW.isoformat(), "Plan.", proposals=proposals
+            )
+            asked = metrics.add_request(conn, project, "approve_plan", card, None, NOW.isoformat())
+            metrics.finish_request(conn, asked, NOW.isoformat(), f"approved {card}")
+    finally:
+        conn.close()
+    _older_database(repo)
+    assert _apply(repo) == ["archived the settled threads of F7, F11 (F55)"]
+    assert _thread_row(repo, "f9")["archived"] is None  # its ADR still waits for the owner
+
+
 def test_a_new_database_owes_no_clear_out(repo):
     _talked_about(repo, "f10")  # no card: it would be cleared on an older database
     conn = metrics.open_db(_db(repo))

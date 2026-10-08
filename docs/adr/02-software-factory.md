@@ -301,6 +301,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the review found the one place the fold hid something the owner must see: F49's "the runner didn't apply this merge" note, appended to the lead's text the same day. Two milestones touching the same reply a few hours apart, with no checkpoint on either, is where such gaps slip through; reading the other writers of a field you change catches them.
 - **Decisions affected:** none.
 
+### F55 (2026-10-08): settled threads leave the desk ([review](../reviews/f55-dismiss-all-conversations-where-the-related.md))
+
+- **Q1:** one lead ticket, built by the lead in a terminal session together with the settling half of f31-01 (F31 D1); no escalation, direction or checkpoint. The report reads "0 of 1 merged" for the same reason as F41.
+- **Q3:** no developer work (protected runner code).
+- **Q5:** $1.24 of Claude.
+- **Anything else:** building F55 with F31 D1 in one commit was right: they share `proposal_state`, which now lives in `runner/planner.py` and serves the desk, the thread page and the runner alike, so "settled" has one meaning. The clear-out's tests covered only threads whose lead reply had no proposals; the review added the realistic case (a plan approved, an ADR left open).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
