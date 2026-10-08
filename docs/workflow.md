@@ -133,6 +133,12 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 
 `uv run runner bench --review <milestone…> --agents <id…>` replays past checkpoints instead ([ADR 16](adr/16-claude-window-and-named-milestones.md) item 10): each agent reviews each checkpoint's merges read-only (the checkpoint shadow's prompt), in a clone at the last of them, and is scored against the findings already known: the checkpoint's own, plus the checkpoints' and reviews' later findings on the same tickets, without those the review rejected. A known finding it also reports (the same summary, or the same file within 5 lines) is found, one it doesn't is missed, and a missed blocking one is counted apart. A finding nobody knew isn't scored: the command prints it and keeps it in `var/bench/<run>/checkpoint-<job>-<agent>/new-findings.json` for the lead to judge. Each replay is a `bench` job with no ticket and its score as its note; an agent's own checkpoints are skipped, and the first refusal stops the bench. The merges a checkpoint reviewed come from the metrics database: the developer tickets whose last job ended since the checkpoint before it, plus those its findings name. The Agents page's eligibility reads these replays, not shadow jobs: ADR 14 item 12's bars, with "2+ milestones" read as replays of 2+ milestones' checkpoints.
 
+## Backups
+
+The metrics database holds what lives nowhere else: planning threads, the owner's requests and desk items, the ratings ([ADR 13](adr/13-factory-dashboard.md), F20). The runner copies it once a day into `[backup] dir` (`~/Dropbox/software-factory-backups`), keeping the last 14 as `factory-metrics-<YYYYMMDD-HHMM>.sqlite` (`runner/backup.py`); a failed copy is a line in the session report, never a stop. An approved plan's thread is also in git, in `docs/planning/`.
+
+To restore a copy: stop `runner run` and `runner dashboard`, move the live `factory-metrics.sqlite` and its `-wal` and `-shm` files aside (a stale `-wal` must not meet the restored file), copy the chosen backup to `[metrics] db` under the live name, then start them again. Runs since the copy come partly back with `uv run runner backfill` (from `var/runs/`).
+
 ## Improving the workflow
 
 Evidence from milestone reports leads to an ADR, and nothing changes until the owner accepts it. Runner bug fixes that don't change behaviour are exempt.

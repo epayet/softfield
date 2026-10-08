@@ -285,6 +285,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the checkpoints found 7 real findings, all fixed by tickets before the review. The review found two more in the same Coming code: one helper read the running jobs without the "live" filter its two neighbours use, and two pages parsed a request's value strictly although `POST /requests` stores any value. The steering loop worked from the dashboard while paused, which was the owner's aim.
 - **Decisions affected:** none. The lesson "split a page ticket to one template or one function on an existing pattern" is in lead.md's Known range.
 
+### F20 (2026-10-08): data safety ([review](../reviews/f20-data-safety.md))
+
+- **Q1:** two lead tickets on the runner, both first time, ≈1 h together; no escalation, direction or checkpoint. Planned on 2026-10-07 and built the next morning, from the owner's question to a backup in Dropbox in under a day.
+- **Q3:** no developer work (protected runner code).
+- **Q5:** $3.75 of Claude.
+- **Anything else:** both features were already in real use before the review: a copy in `~/Dropbox/software-factory-backups` and five threads in `docs/planning/`. Reading the real exports showed the lead's points twice in each reply (text and boxes), which is the planner prompt's doing and already F41's fix. The review found no code defect; it added the restore steps (a backup nobody knows how to restore is half a backup) and one test.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

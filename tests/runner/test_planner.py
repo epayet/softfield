@@ -8,6 +8,7 @@ from typing import Any
 import pytest
 
 from runner import claude, loop, metrics, milestone, planner
+from runner.gitops import Git, GitError
 from runner.state import State
 from runner.tasks import milestone_key
 from tests.runner.conftest import git, write_task
@@ -985,6 +986,24 @@ def test_a_refused_approval_writes_no_export(repo):
     assert str(_request(repo, asked)[1]).startswith("not approved: f7-01-a:")
     _main_unchanged(repo, head)
     assert not (repo / "docs" / "planning").exists()
+
+
+def test_a_commit_that_fails_after_the_export_leaves_no_file(repo, monkeypatch):
+    _card(repo)
+    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _talked_through(repo)
+    head = git(repo, "rev-parse", "HEAD")
+
+    def commit_all(self, message):
+        assert (repo / EXPORT).exists()  # written before the commit, then undone
+        raise GitError("disk full")
+
+    monkeypatch.setattr(Git, "commit_all", commit_all)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "GitError: disk full"
+    _main_unchanged(repo, head)
+    assert not (repo / EXPORT).exists()
 
 
 def test_the_general_threads_approved_merges_export_nothing(repo):
