@@ -11,6 +11,9 @@ The owner, 2026-10-07: "proposals exist after a thread suggests actions from a d
 ### From F45: When I approve a plan it should close the related conversation (merged by the owner on 2026-10-08)
 (none)
 
+### From F47: when i a'pprove a plan and refresh the page (merged by the owner on 2026-10-08)
+it doesn't look like i approved, i can click th ebutton indefinitely
+
 ## Outcome
 - **Approving clears the desk:** once every proposal in the lead's latest reply is approved, accepted, merged or rejected, the thread is archived with the reason, and leaves "Your answers wanted" and Needs you.
 - **A proposal says where it stands:** open, on its way, approved (with the runner's result), rejected, sent back or replaced, on its review page and on its thread. Its buttons show only while it's open, and each is pressed once.
