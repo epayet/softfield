@@ -1,6 +1,7 @@
 # Milestone F41: I find that on conversations, there is the raw text and then small boxes to review each point. the information is not…
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-08. Base: git tag `f41-i-find-that-on-conversations-there-start`. Report: [`docs/reviews/f41-i-find-that-on-conversations-there.md`](../reviews/f41-i-find-that-on-conversations-there.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes

@@ -1,5 +1,7 @@
 # Review: F41, the points carry everything
 
+- **Status:** done, signed off by the owner on 2026-10-08.
+
 ## Sign-off sheet
 
 **Expected:** on a thread, you read the lead's points and nothing else; the lead says everything once, in the points, and its free text is folded shut, there only if you want it.
