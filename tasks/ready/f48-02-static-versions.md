@@ -19,7 +19,7 @@ Every link to a file under `/static/` carries a version from the file's content,
 
 ### Context
 Read `factory_dashboard/app.py` (`templates` and its `templates.env.filters`, and the `/static` mount).
-- F48 D4 (from F46): `base.html` loads `/static/dashboard.css` with no version, so a browser may keep the CSS from before a merge; after f31-06, the Dismiss button may have looked dead on the phone for that reason.
+- F48 D4 (from F46): `base.html` loads `factory_dashboard/static/dashboard.css` as /static/dashboard.css with no version, so a browser may keep the CSS from before a merge; after f31-06, the Dismiss button may have looked dead on the phone for that reason.
 - D4: one Jinja global, `static(path)`, returns `/static/<path>?v=<the first 10 hex of the file's sha256>`. Cache the hash by path and the file's mtime: the server's `reload=True` restarts on a `.py` change only, so a merge that changes only the CSS must still give a new version.
 - Use it for every `/static/` link in the templates: `base.html`, `thread.html`, `proposal.html`, `line.html`, `overview.html`, the vendor files included.
 - A path that isn't a file under `factory_dashboard/static/` raises at render, so a typo fails a test.
