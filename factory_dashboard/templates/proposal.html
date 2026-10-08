@@ -37,7 +37,7 @@
           <b>{% if point.flag %}<span class="flag" title="the lead flags this one" style="color: var(--hazard)">&#9873;</span> {% endif %}{{ point.title }}</b>
           <span style="font-size: 14px; color: var(--ink-2)">{{ point.text }}</span>
         </div>
-        <button type="button" class="change-btn" data-point="{{ point.n }}" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); background: transparent; border: 1px solid var(--hazard); padding: 0 12px; min-height: 44px">Comment&hellip;</button>
+        {% if standing.state == "open" %}<button type="button" class="change-btn" data-point="{{ point.n }}" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); background: transparent; border: 1px solid var(--hazard); padding: 0 12px; min-height: 44px">Comment&hellip;</button>{% endif %}
         <label class="comment-box" data-point="{{ point.n }}" hidden style="flex-basis: 100%; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">What would you change?
           <textarea class="comment" data-point="{{ point.n }}" rows="2" style="width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px"></textarea>
         </label>
@@ -55,11 +55,11 @@
         <li class="plan-change" style="background: var(--plate); border: 1px solid var(--rule); padding: 8px 12px; min-width: 0">
           {% if change.text is not none %}
           <details>
-            <summary style="min-height: 44px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; cursor: pointer"><b class="word" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2)">{{ change.word }}</b> <code class="path" style="overflow-wrap: anywhere">{{ change.path }}</code></summary>
+            <summary style="min-height: 44px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; cursor: pointer"><b class="word" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var({{ word_color.get(change.word, '--muted') }})">{{ change.word }}</b> <code class="path" style="overflow-wrap: anywhere">{{ change.path }}</code>{% if change.who %} <span class="who" style="font: 12px var(--mono); color: var(--muted)">{{ change.who }}{% if change.difficulty %} · difficulty {{ change.difficulty }}{% endif %}</span>{% endif %}</summary>
             <pre style="margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.4 var(--mono); color: var(--fg)">{{ change.text }}</pre>
           </details>
           {% else %}
-          <div style="min-height: 44px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center"><b class="word" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2)">{{ change.word }}</b> <code class="path" style="overflow-wrap: anywhere">{{ change.path }}</code></div>
+          <div style="min-height: 44px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center"><b class="word" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var({{ word_color.get(change.word, '--muted') }})">{{ change.word }}</b> <code class="path" style="overflow-wrap: anywhere">{{ change.path }}</code>{% if change.who %} <span class="who" style="font: 12px var(--mono); color: var(--muted)">{{ change.who }}{% if change.difficulty %} · difficulty {{ change.difficulty }}{% endif %}</span>{% endif %}</div>
           {% endif %}
         </li>
         {% endfor %}
@@ -72,40 +72,72 @@
   <aside class="dock-host" style="flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
     <section class="dock" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
       <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your review</h2>
+      {# F31 D3: one state, from the server. Open: the buttons; a press swaps them at once for
+         the dashed orange "on its way" box (and a reload shows the same); settled: its word
+         and the runner's result, no button #}
+      {% set open = standing.state == "open" %}
+      <div id="actions" class="{% if standing.state == 'on its way' %}on-its-way{% endif %}" style="display: flex; flex-direction: column; gap: 8px">
+      <p class="way-title" style="margin: 0; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard)">On its way · the runner applies it at its next pick</p>
+      {% if open %}
+      <div class="action-buttons" style="display: flex; flex-direction: column; gap: 8px">
       <span id="review-count" style="font: 12.5px var(--mono); color: var(--muted)">{{ key_points | length }} agreed · 0 to change</span>
       {% set button = "font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; min-height: 44px; width: 100%" %}
-      <button type="button" id="send-back" hidden
+      <button type="button" id="send-back"
+          hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')" hidden
         hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
         hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: "", comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'
         style="{{ button }}">Send back</button>
       <div id="primary">
         {% if kind == "adr" and adr_number %}
         <button type="button" id="accept-adr"
+          hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
           hx-vals='{"kind": "accept_adr", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ adr_number | tojson }}}'
           style="{{ button }}">Accept ADR</button>
         {% elif kind in ("plan", "mockup", "replan") %}
-        <button type="button" id="approve-plan"{% if adr_waits %} disabled{% endif %}
+        <button type="button" id="approve-plan"
+          hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"{% if adr_waits %} disabled{% endif %}
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
           hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
           style="{{ button }}{% if adr_waits %}; color: var(--muted); background: transparent; border: 1px dashed var(--muted){% endif %}">Approve plan</button>
         {% if adr_waits %}<span style="font-size: 12.5px; color: var(--muted)">Accept the card's ADR first: the plan builds on it.</span>{% endif %}
-        {% elif kind == "merge" and proposal.applied %}
-        <span id="merged-by-lead" style="font-size: 12.5px; color: var(--muted)">Done: the lead merged them. To undo it, say so on the kept card's thread.</span>
         {% elif kind == "merge" and merge %}
         <button type="button" id="approve-merge"
+          hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
           hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
           style="{{ button }}">Approve: {{ merge }}</button>
         <span style="font-size: 12.5px; color: var(--muted)">The duplicate's notes join the kept card, its card goes, and its thread points to the kept one.</span>
         {% elif kind == "seed" %}
         <button type="button" id="plant"
+          hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
           hx-vals='{"kind": "plant", "project": {{ project | tojson }}, "subject": {{ ("general/" ~ proposal.id) | tojson }}}'
           style="{{ button }}">Plant it</button>
         {% endif %}
       </div>
-      <span id="review-status" style="font-size: 12.5px; color: var(--muted)">Every point is agreed unless you comment on it.</span>
+      {% if not (kind == "merge" and proposal.applied) %}
+      {# F31 D2: won't do, in two taps, saying what it takes with it #}
+      <details id="reject">
+        <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Reject…</summary>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 13px">{% if kind in ("adr", "mockup", "plan", "replan") %}Won't do: the card's plan branch goes, with every draft on it. A card with nothing built goes too.{% else %}Won't do: only this proposal closes; nothing else changes.{% endif %}</span>
+          <button type="button" id="reject-button"
+            hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+            hx-vals='{"kind": "reject", "project": {{ project | tojson }}, "subject": {{ (thread ~ "/" ~ proposal.id) | tojson }}}'
+            hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
+            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: transparent; border: 1px solid var(--rule); min-height: 44px; width: 100%">Reject</button>
+        </div>
+      </details>
+      {% endif %}
+      
+      </div>
+      {% elif standing.state != "on its way" %}
+      <p id="settled" style="margin: 0; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2)">{{ standing.state[:1] | upper }}{{ standing.state[1:] }}</p>
+      {% if kind == "merge" and proposal.applied %}<span id="merged-by-lead" style="font-size: 12.5px; color: var(--muted)">Done: the lead merged them. To undo it, say so on the kept card's thread.</span>{% endif %}
+      {% endif %}
+      <span id="review-status" style="font-size: 12.5px; color: var(--muted)">{% if standing.pending %}{% with asked = standing.pending %}{% include "_partials/request.html" %}{% endwith %}{% elif standing.said and standing.state in ("open", "approved", "rejected") %}The runner said: {{ standing.said }}{% elif open %}Every point is agreed unless you comment on it.{% endif %}</span>
+      </div>
     </section>
     <section style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
       <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">What happens next</h2>
@@ -128,6 +160,7 @@
   var sendBack = document.getElementById('send-back');
   var primary = document.getElementById('primary');
   var count = document.getElementById('review-count');
+  if (!sendBack || !primary) return;  // settled: no buttons
 
   function update() {
     var n = Array.from(document.querySelectorAll('textarea.comment')).filter(function (t) { return t.value.trim(); }).length;

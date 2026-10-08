@@ -42,6 +42,31 @@
       {% endif %}
     </header>
 
+    {% if review %}
+    {# F50 D2, D3: the review's sheet (the lead's Markdown, through _to_html), and Sign off on a
+       ripe card: what was asked shows at once, on its way, and the button goes #}
+    <section id="review" style="background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">The review</h2>
+      {% for heading, html in review.sections %}
+      <h3 style="margin: 4px 0 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted)">{{ heading }}</h3>
+      <div class="sheet">{{ html | safe }}</div>
+      {% endfor %}
+      <a href="/milestones/{{ review.key }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px">The whole review</a>
+      {% if review.signing_off %}
+      <span class="pill" id="signing-off" style="border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start">Signing off at the runner's next pick</span>
+      {% elif review.ripe %}
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <button type="button" id="signoff-button"
+          hx-post="/requests" hx-target="#signoff-status" hx-swap="innerHTML"
+          hx-vals='{"kind": "signoff", "project": {{ project | tojson }}, "subject": {{ review.key | tojson }}}'
+          hx-on::before-request="this.remove()"
+          style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Sign off</button>
+        <span id="signoff-status" style="font-size: 12.5px; color: var(--muted)">Marks it done and tags it, at the runner's next pick.</span>
+      </div>
+      {% endif %}
+    </section>
+    {% endif %}
+
     <div id="conversation">
     {% for msg in messages %}
     {% if msg.author == "owner" %}
@@ -133,7 +158,7 @@
     <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Proposals from this card</h2>
     {% for prop in proposals %}
     <a href="{{ prop.link }}{{ q }}" class="proposal" style="background: var(--bay); border: 1px solid var(--rule); border-top: 3px solid var({{ prop.color }}); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box">
-      <span style="font: 600 11px var(--mono); color: var(--muted)">{{ prop.kind | upper }} · {{ "answered" if prop.answered else "open" }}</span>
+      <span style="font: 600 11px var(--mono); color: var(--muted)">{{ prop.kind | upper }} · <span class="state">{{ prop.state }}</span></span>
       <b style="font-size: 15px">{{ prop.title }}</b>
     </a>
     {% endfor %}

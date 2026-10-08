@@ -1,6 +1,6 @@
 # Milestone F20: data safety
 
-> **Status: planned** (2026-10-07, with the owner, in a terminal session). **State:** ready · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-08. Base: git tag `f20-data-safety-start`. Report: [`docs/reviews/f20-data-safety.md`](../reviews/f20-data-safety.md).
 > The owner (2026-10-07): "does the database ever get backed up, or committed to git? I'm concerned about losing data." It doesn't: `~/.local/share/software-factory/factory-metrics.sqlite` is outside the repo (ADR 13 item 1), and its only copy is a one-off from 2026-10-02.
 
 ## Outcome

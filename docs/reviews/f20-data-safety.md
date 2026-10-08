@@ -1,5 +1,7 @@
 # Review: F20 data safety
 
+- **Status:** done, signed off by the owner on 2026-10-08.
+
 ## Sign-off sheet
 
 1. **What changed**

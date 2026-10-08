@@ -1,5 +1,7 @@
 # Review: F55, settled threads leave the desk
 
+- **Status:** done, signed off by the owner on 2026-10-08.
+
 ## Sign-off sheet
 
 **Expected:** the desk starts clean. Every thread whose plan you already approved, or whose card was merged into another, leaves "Your answers wanted" and Needs you once, and shows under Archived as approved. Nothing still waiting for you is hidden.

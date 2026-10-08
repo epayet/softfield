@@ -26,3 +26,11 @@ Read `thread_page` in `factory_dashboard/planning.py` and `factory_dashboard/tem
 - with an open signoff request, the page shows the pending pill and no button
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08)
+```

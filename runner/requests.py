@@ -50,9 +50,10 @@ ARCHIVE = "archive"  # subject: the thread; value: on or off (the owner, 2026-10
 PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
 RESUME = "resume"
 DISMISS = "dismiss"  # subject: a refused request's id; no value (F31 D9)
+REJECT = "reject"  # subject: <thread>/<proposal id>; no value: won't do (F31 D2)
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
-_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, *_APPROVALS)
+_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, REJECT, *_APPROVALS)
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
@@ -364,8 +365,10 @@ def _merged(
     merges: list[tuple[str, str]],
     by: str = "owner",
 ) -> None:
-    """Each merged card's thread points to the kept card's and is archived, its reply's item
-    is answered, and it leaves the board."""
+    """Each merged card's thread points to the kept card's, and it leaves the board. When the
+    owner approved the merge, the thread is archived and its item answered: they have seen it.
+    When the lead merged on its own (F49 D1), the thread stays on the desk until the owner
+    reads the reply: F63, F64 and F65's answers were archived unseen (2026-10-08)."""
     at = now.isoformat()
     for duplicate, kept in merges:
         metrics.remove_cards(conn, project_id, gone=duplicate)
@@ -376,10 +379,10 @@ def _merged(
         )
         thread_id = metrics.planner_thread(conn, project_id, duplicate, at)["id"]
         metrics.add_planner_message(conn, thread_id, "lead", at, text)
-        # its card is gone: its thread waits for nothing (2026-10-08: the pointer line put it
-        # back in "Your answers wanted"); a message from the owner opens it again
-        metrics.set_thread_archived(conn, thread_id, at, planner.APPROVED)
-    _resolve_items(conn, project_id, now, [d for d, _ in merges])
+        if by == "owner":  # a message from the owner opens it again
+            metrics.set_thread_archived(conn, thread_id, at, planner.APPROVED)
+    if by == "owner":
+        _resolve_items(conn, project_id, now, [d for d, _ in merges])
 
 
 def _resolve_items(
@@ -1030,6 +1033,8 @@ def _apply(
             return _priority(repo, conn, project_id, state, subject, value)
         if kind == DISMISS:
             return _dismiss(conn, project_id, now, subject)
+        if kind == REJECT:
+            return _reject(repo, conn, project_id, now, subject)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:
@@ -1084,14 +1089,17 @@ def _settles(row: sqlite3.Row, result: str) -> str | None:
             return None
     if row["kind"] == PLANT and subject.startswith(f"{planner.GENERAL}/"):
         return planner.GENERAL
+    if row["kind"] == REJECT:
+        return subject.partition("/")[0]
     return None
 
 
 def _settled(
     proposal: dict[str, object], card: str, asked: list[sqlite3.Row], known: set[str]
 ) -> bool:
-    """Approved by the owner (or applied), or a merge one of whose cards has left main."""
-    if planner.proposal_state(proposal, card, asked) == planner.APPROVED:
+    """Approved or rejected by the owner (or applied), or a merge one of whose cards has left
+    main."""
+    if planner.proposal_state(proposal, card, asked) in (planner.APPROVED, planner.REJECTED):
         return True
     if proposal.get("kind") != planner.MERGE:
         return False
@@ -1110,13 +1118,33 @@ def _close_if_settled(
     found = metrics.find_thread(conn, project_id, thread)
     if found is None or found["archived"] is not None:
         return
+    listed, asked = _latest(conn, project_id, found["id"])
+    known = planner.cards(repo)
+    if not listed or not all(_settled(p, thread, asked, known) for p in listed):
+        return
+    at = now.isoformat()
+    states = [planner.proposal_state(p, thread, asked) for p in listed]
+    if all(state == planner.REJECTED for state in states):  # nothing taken: won't do
+        why, line = planner.REJECTED, f"Rejected by the owner on {now.date().isoformat()}: won't do"
+    else:
+        why, line = planner.APPROVED, f"Approved by the owner on {now.date().isoformat()}: {result}"
+    metrics.add_planner_message(conn, found["id"], "lead", at, line)
+    metrics.set_thread_archived(conn, found["id"], at, why)
+    _resolve_items(conn, project_id, now, [thread])
+
+
+def _latest(
+    conn: sqlite3.Connection, project_id: int, thread_id: int
+) -> tuple[list[dict[str, object]], list[sqlite3.Row]]:
+    """The proposals of the thread's latest lead message that lists some, and the owner's
+    requests made since it."""
     lead = [
         m
-        for m in metrics.planner_messages(conn, found["id"])
+        for m in metrics.planner_messages(conn, thread_id)
         if m["author"] == "lead" and m["proposals"] not in (None, "", "[]")
     ]
     if not lead:
-        return
+        return [], []
     since = datetime.fromisoformat(lead[-1]["at"])
     listed = [p for p in json.loads(lead[-1]["proposals"]) if isinstance(p, dict) and p.get("id")]
     asked = [
@@ -1126,14 +1154,61 @@ def _close_if_settled(
         ).fetchall()
         if datetime.fromisoformat(r["created"]) >= since
     ]
-    known = planner.cards(repo)
-    if not listed or not all(_settled(p, thread, asked, known) for p in listed):
-        return
+    return listed, asked
+
+
+def _reject(
+    repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime, subject: object
+) -> str:
+    """Won't do (F31 D2). A draft (an ADR, a mock-up, a plan or a replan): the card's plan
+    branch goes, so every draft of the set is rejected with it, and a card with no ticket in
+    tasks/ that isn't building leaves main in a commit of its own (as ``_drop_seed``). A merge
+    or a seed: nothing changes but that proposal. Refused, nothing changed, for a proposal
+    not in the thread's latest reply, or one settled already."""
+    wanted = subject if isinstance(subject, str) else ""
+    card, _, pid = wanted.partition("/")
+    if not card or not _PROPOSAL_ID_RE.fullmatch(pid):
+        return f"a reject names <thread>/<proposal id>, not {subject!r}"
+    thread = planner.thread_key(card)
+    name = planner.thread_name(thread)
+    found = metrics.find_thread(conn, project_id, thread)
+    listed, asked = _latest(conn, project_id, found["id"]) if found is not None else ([], [])
+    proposal = next((p for p in listed if p.get("id") == pid), None)
+    if proposal is None:
+        return f"{name}'s latest reply has no proposal {pid}: not rejected"
+    mine = [r for r in asked if r["subject"] != wanted or r["kind"] != REJECT or r["done"]]
+    if planner.proposal_state(proposal, thread, mine) in (planner.APPROVED, planner.REJECTED):
+        return f"{pid} is settled already: not rejected"
+    if proposal.get("kind") not in planner.DRAFTED:
+        return f"rejected {pid}"
+    git = Git(repo)
+    branch = planner.plan_branch(thread)
+    drafts = [str(p["id"]) for p in listed if p.get("kind") in planner.DRAFTED]
+    said = f"{planner.REJECTED_DRAFTS}{branch} ({', '.join(drafts)})"
+    if branch is not None and _has_branch(git, branch):
+        git.run("branch", "-q", "-D", branch)
+    doc = milestone_file(repo, "milestones", full_key(repo, thread))
+    if thread == planner.GENERAL or not doc.is_file():
+        return said
+    state = milestone.card(doc.stem, doc.read_text(encoding="utf-8")).state
+    tickets = list(repo.glob(f"tasks/*/{thread}-*.md"))
+    if tickets or state == _BUILDING:
+        return said
+    rel = doc.relative_to(repo).as_posix()
+    try:
+        git.run("rm", "-q", "--", rel)
+        message = with_trailers(f"{name} rejected by the owner", agent="runner")
+        git.run("commit", "-q", "--no-verify", "-m", message, "--author", RUNNER_AUTHOR, "--", rel)
+    except GitError:
+        git.run("reset", "-q", "--", rel, check=False)
+        git.run("checkout", "-q", "--", rel, check=False)
+        raise
     at = now.isoformat()
-    line = f"Approved by the owner on {now.date().isoformat()}: {result}"
-    metrics.add_planner_message(conn, found["id"], "lead", at, line)
-    metrics.set_thread_archived(conn, found["id"], at, planner.APPROVED)
-    _resolve_items(conn, project_id, now, [thread])
+    for row in metrics.open_jobs(conn, project_id):
+        if row["kind"] == planner.PLANNER and str(row["subject"]).rpartition("#")[0] == thread:
+            metrics.finish_queued(conn, row["id"], at)
+    metrics.remove_cards(conn, project_id, gone=thread)
+    return f"{said}; {name} removed"
 
 
 CLEAR_OUT = metrics.ONCE_STEPS[0]  # F55 D3: once per database

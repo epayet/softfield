@@ -77,8 +77,14 @@ def _local(conn: sqlite3.Connection, run: int, m: int, t: int, role: str, n: int
 
 def write_fixture(conn: sqlite3.Connection) -> None:
     project = metrics.upsert_project(conn, PROJECT)
+    # Both reviewed (their sheets stored), so ripe once their tickets are done (F50 D1)
     m4 = metrics.upsert_milestone(
-        conn, project, "m4", title="The web app", started="2026-09-20T09:00:00+02:00"
+        conn,
+        project,
+        "m4",
+        title="The web app",
+        started="2026-09-20T09:00:00+02:00",
+        signoff={"changed": "The web app."},
     )
     f1 = metrics.upsert_milestone(
         conn,
@@ -87,6 +93,7 @@ def write_fixture(conn: sqlite3.Connection) -> None:
         title="The factory measures itself",
         started="2026-09-30T09:00:00+02:00",
         review_rounds=1,
+        signoff={"changed": "The factory measures itself."},
     )
     run = metrics.upsert_run(conn, project, "20260930-100000", command="milestone f1")
     old_run = metrics.upsert_run(conn, project, "20260920-100000", command="backfill")
@@ -1515,7 +1522,7 @@ def write_today(conn: sqlite3.Connection) -> None:
         resets_at="2026-10-02T15:00:00+02:00",
     )
 
-    f8 = milestone("f8", title="Ripe one", status="review")
+    f8 = milestone("f8", title="Ripe one", status="review", signoff={"changed": "Ripe."})
     ripe = ticket("f8-01-ripe", "developer", "done", f8)
     span = ("2026-10-01T15:00:00+02:00", "2026-10-01T15:30:00+02:00")
     _timed(conn, run, f8, ripe, "developer", LOCAL, 1, span)
