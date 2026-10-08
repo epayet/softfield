@@ -8,6 +8,9 @@ when i click on approve plan it looks like i can keep clicking on it
 
 The owner, 2026-10-07: "proposals exist after a thread suggests actions from a discussion. They have a state open, accepted. It should be clearer that when I approve a proposal, then the thread is not on my desk anymore. I can still click on accept proposal even though I accepted already. I also want to reject. The outcome of the proposal could be clearer, perhaps color coded whenever an ADR or a ticket is made. A lot of the points are just for information rather than action, so it shouldn't be a box." Also folded in from notes the runner refused for their length (plants 27, 50, 60): "the only way for me to agree is to comment 'agree'"; "there is the raw text and then small boxes… I tend to just scroll down and ignore the raw text"; "it took me a long time to realise there was a proposal section on the right". And: "instead of asking me for a title, I should just type the content and it gets a relevant title generated later."
 
+### From F45: When I approve a plan it should close the related conversation (merged by the owner on 2026-10-08)
+(none)
+
 ## Outcome
 - **Approving clears the desk:** once every proposal in the lead's latest reply is approved, accepted, merged or rejected, the thread is archived with the reason, and leaves "Your answers wanted" and Needs you.
 - **A proposal says where it stands:** open, on its way, approved (with the runner's result), rejected, sent back or replaced, on its review page and on its thread. Its buttons show only while it's open, and each is pressed once.
