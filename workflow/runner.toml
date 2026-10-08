@@ -125,3 +125,10 @@ narrative = false  # a headless Claude narrative per session costs Pro usage; of
 [metrics]
 db = "~/.local/share/software-factory/factory-metrics.sqlite"  # every project's runs (ADR 13)
 
+# The metrics database's copies (F20 D1): checked at the run's start, at each pick and while
+# it waits; past `keep`, the oldest copy in `dir` goes. A copy that fails never stops the run.
+[backup]
+dir = "~/Dropbox/software-factory-backups"
+keep = 14
+every_hours = 24
+

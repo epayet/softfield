@@ -11,10 +11,21 @@ from runner.agents import Agent, WindowSeed
 DEFAULT_METRICS_DB = "~/.local/share/software-factory/factory-metrics.sqlite"
 # Outside any repo; a copy holds a .venv of a few hundred MB, and /tmp may be RAM (f2-12)
 DEFAULT_BENCH_DIR = "~/.cache/software-factory/bench"
+DEFAULT_BACKUP_DIR = "~/Dropbox/software-factory-backups"
 
 
 class ConfigError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class Backup:
+    """`[backup]`: where the metrics database's copies go, how many stay, and how often a new
+    one is due (F20 D1)."""
+
+    dir: Path = field(default_factory=lambda: Path(DEFAULT_BACKUP_DIR).expanduser())
+    keep: int = 14
+    every_hours: float = 24
 
 
 @dataclass(frozen=True)
@@ -45,6 +56,8 @@ class Config:
     roles: Mapping[str, tuple[str, ...]] = field(default_factory=dict)  # role → agent ids
     # `[bench] dir`: where the bench clones its copies of the repo (f2-12)
     bench_copies: Path = field(default_factory=lambda: Path(DEFAULT_BENCH_DIR).expanduser())
+    # `[backup]`, D1's defaults when the toml has none; None (a test's config) copies nothing
+    backup: Backup | None = None
 
     @property
     def runs_dir(self) -> Path:
@@ -81,6 +94,15 @@ def _roles(data: dict[str, Any], agents: Mapping[str, Agent]) -> dict[str, tuple
     return roles
 
 
+def _backup(table: dict[str, Any]) -> Backup:
+    keep, every = table.get("keep", Backup.keep), table.get("every_hours", Backup.every_hours)
+    if not isinstance(keep, int) or isinstance(keep, bool) or keep < 1:
+        raise ConfigError("[backup] keep must be a whole number of copies, at least 1")
+    if not isinstance(every, int | float) or isinstance(every, bool) or every <= 0:
+        raise ConfigError("[backup] every_hours must be a number of hours above 0")
+    return Backup(Path(table.get("dir", DEFAULT_BACKUP_DIR)).expanduser(), keep, float(every))
+
+
 def load_config(repo: Path) -> Config:
     data = tomllib.loads((repo / "workflow" / "runner.toml").read_text(encoding="utf-8"))
     caps, timeouts, lm = data["caps"], data["timeouts"], data["local_model"]
@@ -112,6 +134,7 @@ def load_config(repo: Path) -> Config:
         agents=agents,
         roles=_roles(data, agents),
         bench_copies=Path(data.get("bench", {}).get("dir", DEFAULT_BENCH_DIR)).expanduser(),
+        backup=_backup(data.get("backup", {})),
     )
 
 

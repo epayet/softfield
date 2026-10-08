@@ -20,6 +20,7 @@ import yaml
 
 from runner import (
     allowance,
+    backup,
     checks,
     console,
     dispatch,
@@ -223,6 +224,9 @@ class Session:
     running_row: dispatch.Queued | None = None  # the queued job running now: its job's row
     # A ticket's record while it waits behind its queued direction, for its last attempt.
     waiting: dict[str, TaskRecord] = field(default_factory=dict)
+    # The metrics database's copies (F20 D1), None without `[backup]`; a failure is noted once
+    backups: backup.Backups | None = None
+    backup_failed: bool = False
 
     @property
     def repo(self) -> Path:
@@ -273,6 +277,8 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     s = Session(
         cfg=cfg, git=git, state=state, report=SessionReport(started=started), run_dir=run_dir
     )
+    if cfg.backup is not None:
+        s.backups = backup.Backups(cfg.metrics_db, cfg.backup)
     if command is not None:
         _start_run(s, command, cut_off.get("job_id") if cut_off else None)
         if s.project_id is not None:
@@ -579,6 +585,30 @@ def doing(s: Session, activity: str, waiting_until: datetime | None = None) -> I
         set_activity(s, *before)
 
 
+def check_backup(s: Session) -> None:
+    """The metrics database's copy, when one is due (F20 D1): at the run's start, at each pick
+    and while it waits. A failure is a console line and a report note (once until a copy
+    works again), never an error that stops the run; a later check tries again."""
+    if s.backups is None:
+        return
+    try:
+        path = s.backups.check(now())
+    except Exception as exc:
+        line = (
+            f"The metrics database's backup failed ({type(exc).__name__}: {exc}); the run went"
+            " on, and a later check tries again."
+        )
+        s.log(f"[{RUNNER_AGENT}] {line}")
+        if not s.backup_failed:
+            s.backup_failed = True
+            s.report.notes.append(line)
+        return
+    if path is not None:
+        s.backup_failed = False
+        s.log(f"[{RUNNER_AGENT}] backed up the metrics database to {path}")
+
+
+BACKUP_POLL_S = 3600.0  # how often a long sleep stops to check the backup (F20 D1)
 WAITING_FOR_CLAUDE = "waiting for Claude"
 
 
@@ -593,18 +623,25 @@ def wait_for_claude(
     """Sleep through a pause for Claude (a limit, a passing error, nothing to run without
     it), the run saying so, and for what, until it ends. A wait for a ``limit`` is kept as a
     ``wait`` usage event, from now to ``resumes``: what clogged the line (f3-04). With
-    ``until``, it is asked at once and every ``SWITCH_POLL_S`` seconds, and ends the wait."""
+    ``until``, it is asked at once and every ``SWITCH_POLL_S`` seconds, and ends the wait. The
+    backup is checked every ``BACKUP_POLL_S`` seconds of it, or every poll."""
     if limit:
         at = now().isoformat()
         _record(s, metrics.add_usage_event, RUNNER_AGENT, at, "wait", resets_at=resumes.isoformat())
     waiting = f"{WAITING_FOR_CLAUDE} · {what}" if what else WAITING_FOR_CLAUDE
     with doing(s, f"{waiting} until {resumes:%H:%M}", resumes):
         if until is None:
-            time.sleep(seconds)
+            step = BACKUP_POLL_S if s.backups is not None else seconds
+            left = seconds
+            while left > 0:
+                time.sleep(min(step, left))
+                left -= step
+                check_backup(s)
             return
         ends = now() + timedelta(seconds=seconds)
         while (left := (ends - now()).total_seconds()) > 0 and not until():
             time.sleep(min(SWITCH_POLL_S, left))
+            check_backup(s)
 
 
 def record_ticket(
@@ -3993,6 +4030,7 @@ def _hold_for_the_owner(s: Session) -> bool:
         while s.state.owner_pause is not None and not _planning_goes(s):
             time.sleep(HOLD_POLL_S)
             apply_owner_requests(s)
+            check_backup(s)
     if s.state.owner_pause is None:
         s.log(f"[{RUNNER_AGENT}] Resumed by you.")
     return True
@@ -4103,6 +4141,7 @@ def work_queue(
             return True
         set_activity(s, PICKING)
         apply_owner_requests(s)
+        check_backup(s)
         fresh_reading(s)
         if reviews:
             _queue_due_review(s)
@@ -4177,6 +4216,7 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         dry_run_plan(cfg)
         return None
     s = open_session(cfg)
+    check_backup(s)  # the run's start; each pick checks again (F20 D1)
     restart = work_queue(s, escalate=escalate, once=once, reviews=True)
     report = close_session(s)
     report.restart = restart
