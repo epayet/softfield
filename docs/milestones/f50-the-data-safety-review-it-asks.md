@@ -13,6 +13,9 @@ From the code: F20 (data safety) is on the desk under "Finished, to talk through
 
 F20 itself works (checked 2026-10-08): `~/Dropbox/software-factory-backups/factory-metrics-20261008-0820.sqlite` exists, and five approved threads are in `docs/planning/`.
 
+### From F63: There are items finished to talk through and need my sign… (merged by the lead on 2026-10-08)
+There are items finished to talk through and need my sign off apparently but I can't do anything with those, there is no sign off button. And one of them is completely empty
+
 ## Expected outcome
 A card reaches "Finished, to talk through" only once its review is written. Its page then opens on what changed, how to test it and any decision waiting, and has a Sign off button.
 
