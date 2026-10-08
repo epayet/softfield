@@ -36,3 +36,10 @@ Read `docs/milestones/f31-when-i-click-on-approve-plan.md` D9 and `docs/agents/o
 - with nothing refused, the group isn't drawn
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
