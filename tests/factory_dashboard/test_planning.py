@@ -448,7 +448,7 @@ def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_
     found = re.findall(r'<a href="([^"?]+)[^"]*" class="proposal"[^>]*>(.*?)</a>', html, re.S)
     assert [(link, _text(body)) for link, body in found] == [
         ("/planning/f6/proposals/adr-20", "ADR · open ADR 20: the planning room"),
-        ("/planning/f6/proposals/plan", "PLAN · answered F6 plan: 7 tickets"),
+        ("/planning/f6/proposals/plan", "PLAN · on its way F6 plan: 7 tickets"),
     ]
 
 
@@ -990,6 +990,8 @@ def test_a_replan_shows_what_approving_changes_with_each_text(planning, db_path,
         ("tasks/ready/f7-03-c.md", "added", "the replan's c"),
     ]
     assert "main's a" not in html and "<b>'s text" not in html  # escaped
+    colours = re.findall(r'class="word" style="[^"]*color: var\((--[\w-]+)\)', html)
+    assert colours == ["--a7", "--muted", "--good"]  # changed, set aside, added (F31 D8)
     assert "<details" in html.split('id="plan-changes"', 1)[1]
     steps = _text(html.split("What happens next", 1)[1].split("</ol>", 1)[0])
     assert "applies the ticket changes at once, even while paused, and resumes the line" in steps
@@ -1683,3 +1685,115 @@ def test_a_card_with_tickets_left_shows_its_sheet_but_no_sign_off(planning, db_p
 
 def test_a_card_with_no_review_has_no_review_section(planning, serve):
     assert 'id="review"' not in _thread(serve(), "f6")
+
+
+# --- a proposal says where it stands (F31 D3, f31-02) ----------------------------------------
+
+
+def test_pressing_approve_shows_it_on_its_way_at_once_and_after_a_reload(
+    page, planning, db_path, serve
+):
+    """The owner (F47): after Approve plan and a refresh, the button was back and could be
+    pressed again. Now the dock turns into the dashed "on its way" box at once, and a reload
+    shows the same box with no button and no Comment…."""
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    client = serve()
+    _open(page, client, "/planning/f9/proposals/merge-f9")
+    assert page.locator("#approve-merge").is_visible()
+    assert page.locator("#reject summary").is_visible()
+    page.click("#approve-merge")
+    page.wait_for_selector("#review-status >> text=Asked")
+    assert page.locator("#actions.on-its-way .way-title").is_visible()
+    assert not page.locator("#approve-merge").is_visible()
+    page.reload()
+    assert page.locator("#actions.on-its-way .way-title").is_visible()
+    assert "Asked" in page.locator("#review-status").inner_text()
+    assert page.locator("#approve-merge").count() == 0
+    assert page.locator(".change-btn").count() == 0
+
+
+@pytest.mark.parametrize(
+    ("result", "words", "buttons"),
+    [
+        (
+            "approved: merged F9 into F7",
+            ["Approved", "The runner said: approved: merged F9 into F7"],
+            False,
+        ),
+        ("rejected merge-f9", ["Rejected", "The runner said: rejected merge-f9"], False),
+        (
+            "F9 has no card in docs/milestones/: not merged",
+            ["The runner said: F9 has no card"],
+            True,
+        ),
+    ],
+)
+def test_a_settled_proposal_shows_its_word_and_the_runners_result(
+    planning, db_path, serve, result, words, buttons
+):
+    """Approved or rejected: the word and the result, no button. A refused approval: its
+    reason, and the buttons again."""
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    kind = "reject" if result.startswith("rejected") else "approve_plan"
+    subject = "f9/merge-f9" if kind == "reject" else "f9"
+    _finished(db_path, planning, kind, subject, None, result)
+    dock = _text(
+        _review_page(serve(), "/planning/f9/proposals/merge-f9")
+        .split('id="actions"', 1)[1]
+        .split("</section>", 1)[0]
+    )
+    for word in words:
+        assert word in dock
+    html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
+    assert ('id="approve-merge"' in html) is buttons
+    assert ('class="change-btn"' in html) is buttons
+
+
+def test_a_proposal_from_an_older_reply_is_replaced(planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    newer = {**_REVIEW_MERGE, "id": "merge-f9-again"}
+    _write(db_path, lambda conn: _review(conn, planning, "f9", newer))
+    html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
+    assert "Replaced by a newer reply" in _text(html)
+    assert 'id="approve-merge"' not in html
+
+
+def test_the_threads_cards_say_the_same_word(planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    _finished(db_path, planning, "reject", "f9/merge-f9", None, "rejected merge-f9")
+    html = _thread(serve(), "f9")
+    assert re.findall(r'<span class="state">([^<]*)</span>', html) == ["rejected"]
+
+
+def test_a_plans_ticket_rows_say_who_builds_them_and_colour_the_word(
+    planning, db_path, serve, checkout
+):
+    """F31 D8: each ticket's builder (lead, or developer when its frontmatter names none) and
+    difficulty beside its word, the word in its colour; another file shows neither."""
+    git(checkout, "checkout", "-q", "-b", "plan/f7")
+    for rel, text in (
+        ("tasks/later/f7-01-a.md", "---\nid: f7-01-a\nagent: lead\ndifficulty: 6\n---\nx\n"),
+        ("tasks/later/f7-02-b.md", "---\nid: f7-02-b\ndifficulty: 2\n---\nx\n"),
+        ("docs/milestones/f7-x.md", "# Milestone F7: x\n"),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "plan")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN))
+    html = _review_page(serve(), "/planning/f7/proposals/plan")
+    section = html.split('id="plan-changes"', 1)[1].split("</section>", 1)[0]
+    rows = re.findall(r'<li class="plan-change"[^>]*>(.*?)</li>', section, re.S)
+    found = {
+        re.search(r'<code class="path"[^>]*>([^<]*)</code>', r)[1]: (  # type: ignore[index]
+            re.search(r'class="word" style="[^"]*color: var\((--[\w-]+)\)', r)[1],  # type: ignore[index]
+            _text(m[1]) if (m := re.search(r'<span class="who"[^>]*>(.*?)</span>', r)) else "",
+        )
+        for r in rows
+    }
+    assert found == {
+        "docs/milestones/f7-x.md": ("--good", ""),
+        "tasks/later/f7-01-a.md": ("--good", "lead · difficulty 6"),
+        "tasks/later/f7-02-b.md": ("--good", "developer · difficulty 2"),
+    }

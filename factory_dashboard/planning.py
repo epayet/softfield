@@ -11,10 +11,13 @@
 import json
 import re
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import yaml
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
@@ -25,7 +28,9 @@ from factory_dashboard.overview import Running, agent_allowances, running_jobs
 from runner import metrics
 from runner.planner import (
     APPLIED,
+    APPROVED,
     MERGE,
+    ON_ITS_WAY,
     OPEN,
     PLANNER,
     PlannerError,
@@ -37,6 +42,7 @@ from runner.planner import (
     message,
     plan_changes,
     plant_words,
+    proposal_requests,
     proposal_state,
     thread_key,
 )
@@ -49,7 +55,7 @@ from runner.requests import (
     owners_words,
     refused,
 )
-from runner.tasks import short_key
+from runner.tasks import short_key, split_frontmatter
 
 router = APIRouter()
 
@@ -500,7 +506,7 @@ class Proposal:
     kind: str
     title: str
     color: str
-    answered: bool
+    state: str  # F31 D3: open, on its way, approved, rejected or sent back
     link: str
 
 
@@ -596,30 +602,71 @@ def _proposals(
     rows: list[sqlite3.Row],
     known: set[str] | None = None,
 ) -> list[Proposal]:
-    """The proposals in the thread's latest lead message that lists some, open or answered as
-    D6 defines open."""
+    """The proposals in the thread's latest lead message that lists some, each with where it
+    stands (F31 D3); a merge whose card has left main is approved."""
     lead = [r for r in rows if r["author"] == "lead" and r["proposals"]]
     if not lead:
         return []
-    since = _when(lead[-1]["at"])
-    requests = [
+    requests = _since(conn, project_id, lead[-1]["at"])
+    return [
+        Proposal(
+            str(p.get("kind") or ""),
+            str(p.get("title") or p["id"]),
+            _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
+            APPROVED if _gone_merge(p, known) else proposal_state(p, thread, requests),
+            f"/planning/{thread}/proposals/{p['id']}",
+        )
+        for p in json.loads(lead[-1]["proposals"])
+        if isinstance(p, dict) and p.get("id")
+    ]
+
+
+def _since(conn: sqlite3.Connection, project_id: int, at: str) -> list[sqlite3.Row]:
+    """The owner's requests made after ``at`` (a lead message's), oldest first."""
+    since = _when(at)
+    return [
         r
         for r in conn.execute(
             "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id", (project_id,)
         ).fetchall()
         if _when(r["created"]) > since
     ]
-    return [
-        Proposal(
-            str(p.get("kind") or ""),
-            str(p.get("title") or p["id"]),
-            _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
-            _gone_merge(p, known) or proposal_state(p, thread, requests) != OPEN,
-            f"/planning/{thread}/proposals/{p['id']}",
-        )
-        for p in json.loads(lead[-1]["proposals"])
-        if isinstance(p, dict) and p.get("id")
-    ]
+
+
+REPLACED = "replaced by a newer reply"
+
+
+@dataclass(frozen=True)
+class Standing:
+    """Where a proposal stands on its review page (F31 D3): its state; the request on its
+    way (its status polls); the runner's word on the latest request about it (a refusal's
+    reason while it is open again)."""
+
+    state: str
+    pending: sqlite3.Row | Mapping[str, Any] | None
+    said: str
+
+
+def _standing(
+    conn: sqlite3.Connection,
+    project_id: int,
+    thread: str,
+    proposal: dict[str, object],
+    lead: list[sqlite3.Row],
+    known: set[str] | None,
+) -> Standing:
+    listed = [p for p in json.loads(lead[-1]["proposals"]) if isinstance(p, dict)] if lead else []
+    if proposal.get("id") not in {p.get("id") for p in listed}:
+        return Standing(REPLACED, None, "")
+    if _gone_merge(proposal, known):
+        return Standing(APPROVED, None, "")
+    requests = _since(conn, project_id, lead[-1]["at"])
+    state = proposal_state(proposal, thread, requests)
+    about = proposal_requests(proposal, thread, requests)
+    pending = next((r for r in reversed(about) if r["done"] is None), None)
+    done = [r for r in about if r["done"] is not None]
+    said = str(done[-1]["result"] or "") if done else ""
+    return Standing(state, pending if state == ON_ITS_WAY else None, said)
 
 
 _MAX_REQUEST_ID = 12
@@ -761,6 +808,8 @@ class PlanChange:
     path: str
     word: str  # "added", "changed", "set aside" or "removed"
     text: str | None  # from the plan branch, through ``draft``; None when gone or not a draft
+    who: str = ""  # a ticket's builder, lead or developer (F31 D8); "" for another file
+    difficulty: str = ""  # a ticket's difficulty, as its frontmatter gives it
 
 
 def _plan_changes(repo: Path | None, thread: str, kind: str) -> list[PlanChange]:
@@ -772,8 +821,26 @@ def _plan_changes(repo: Path | None, thread: str, kind: str) -> list[PlanChange]
     for change in plan_changes(repo, thread):
         content = draft(repo, thread, change.source) if change.source else None
         text = content.decode("utf-8", errors="replace") if content is not None else None
-        found.append(PlanChange(change.path, change.word, text))
+        found.append(PlanChange(change.path, change.word, text, *_who(change.path, text)))
     return found
+
+
+_WORD_COLOR = {"added": "--good", "changed": "--a7"}  # set aside and removed: --muted (D8)
+
+
+def _who(path: str, text: str | None) -> tuple[str, str]:
+    """A ticket's builder and difficulty from its frontmatter (F31 D8); ("", "") for any other
+    file, or a ticket that won't read."""
+    if text is None or not path.startswith("tasks/"):
+        return "", ""
+    try:
+        meta, _ = split_frontmatter(text)
+    except (ValueError, yaml.YAMLError):
+        return "", ""
+    agent = meta.get("agent") or "developer"
+    who = "lead" if agent == "lead" else "developer"
+    difficulty = meta.get("difficulty")
+    return who, str(difficulty) if isinstance(difficulty, int) else ""
 
 
 @router.get("/planning/{thread}/proposals/{id}", response_class=HTMLResponse)
@@ -818,5 +885,7 @@ def proposal_review(
             "mockup": f"/planning/mockups/{thread}/{path}" if _MOCKUP_RE.fullmatch(path) else None,
             "adr_waits": _adr_waits(repo, listed),
             "changes": _plan_changes(repo, thread, kind),
+            "word_color": _WORD_COLOR,
+            "standing": _standing(conn, project_id, thread, proposal, lead, _known_cards(repo)),
         },
     )

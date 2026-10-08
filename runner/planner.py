@@ -742,3 +742,23 @@ def proposal_state(
         elif _matches(row, sent) and state == OPEN:
             state = SENT_BACK
     return state
+
+
+def proposal_requests(
+    proposal: Mapping[str, Any], card: str, requests: Sequence[sqlite3.Row | Mapping[str, Any]]
+) -> list[sqlite3.Row | Mapping[str, Any]]:
+    """The owner's requests about a proposal, in order, as ``proposal_state`` reads them,
+    refused ones too: the review page shows the latest one's result (F31 D3)."""
+    about = _about(proposal, card)
+    own = f"{card}/{proposal.get('id')}"
+    found = []
+    for row in requests:
+        if row["kind"] == "reject" and str(row["subject"] or "").startswith(f"{card}/"):
+            drafts = proposal.get("kind") in DRAFTED and str(row["result"] or "").startswith(
+                REJECTED_DRAFTS
+            )
+            if row["subject"] == own or drafts:
+                found.append(row)
+        elif _matches(row, about) or _matches(row, [("send_back", own, None)]):
+            found.append(row)
+    return found

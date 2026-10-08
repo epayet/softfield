@@ -31,3 +31,11 @@ Read `docs/milestones/f31-when-i-click-on-approve-plan.md` D3 and D8. In `factor
 - f6-24's rows show "lead" or "developer" and the difficulty, the word coloured
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08)
+```

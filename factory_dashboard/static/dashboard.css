@@ -398,3 +398,10 @@ tbody tr:hover { background: var(--accent-wash); }
 .refused.dismissing .refused-body { display: none; }
 .refused.dismissing .refused-gone { display: block; }
 
+
+/* F31 D3: a proposal's dock while its request is on its way: the buttons go, a dashed orange
+   box says so, and the request's status polls under it */
+#actions .way-title { display: none; }
+#actions.on-its-way { border: 1px dashed var(--hazard); padding: 10px 12px; }
+#actions.on-its-way .way-title { display: block; }
+#actions.on-its-way .action-buttons, #actions.on-its-way #settled { display: none !important; }

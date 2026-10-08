@@ -158,7 +158,7 @@
     <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Proposals from this card</h2>
     {% for prop in proposals %}
     <a href="{{ prop.link }}{{ q }}" class="proposal" style="background: var(--bay); border: 1px solid var(--rule); border-top: 3px solid var({{ prop.color }}); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box">
-      <span style="font: 600 11px var(--mono); color: var(--muted)">{{ prop.kind | upper }} · {{ "answered" if prop.answered else "open" }}</span>
+      <span style="font: 600 11px var(--mono); color: var(--muted)">{{ prop.kind | upper }} · <span class="state">{{ prop.state }}</span></span>
       <b style="font-size: 15px">{{ prop.title }}</b>
     </a>
     {% endfor %}
