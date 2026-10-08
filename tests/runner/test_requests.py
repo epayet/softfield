@@ -3,6 +3,7 @@ commands would, each finished once with its result."""
 
 import json
 import os
+import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -1291,6 +1292,146 @@ def test_the_pause_and_resume_requests_are_taken_during_a_wait(repo):
         assert [r["kind"] for r in metrics.open_requests(conn, project)] == ["queue"]
     finally:
         conn.close()
+
+
+# --- the owner's words a request refused, until they dismiss them (F31 D9) -------------------
+
+BAD_AREA = json.dumps({"title": "Ducks", "thoughts": "Rubber ones.", "area": "garden"})
+
+
+def _row(repo: Path, request_id: int) -> sqlite3.Row:
+    conn = metrics.open_db(_db(repo))
+    try:
+        row = metrics.find_request(conn, request_id)
+        assert row is not None
+        return row
+    finally:
+        conn.close()
+
+
+def test_a_refused_plant_is_dismissed_once_and_keeps_its_words(repo):
+    planted = _ask(repo, "plant", None, BAD_AREA)
+    _apply(repo)
+    row = _row(repo, planted)
+    assert requests.refused(row)
+    assert requests.owners_words(row) == requests.Words("Ducks", "Rubber ones.")
+    later = NOW + timedelta(minutes=5)
+    dismissed = _ask(repo, "dismiss", str(planted))
+    assert _apply(repo, at=later) == [f"dismiss {planted}: dismissed request {planted}"]
+    assert _request(repo, dismissed) == (later.isoformat(), f"dismissed request {planted}")
+    row = _row(repo, planted)
+    assert row["dismissed"] == later.isoformat()
+    assert row["value"] == BAD_AREA and not requests.refused(row)  # its words stay
+    _ask(repo, "dismiss", str(planted))
+    assert _apply(repo) == [f"dismiss {planted}: request {planted} is dismissed already"]
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "result", "error"),
+    [
+        # worked: nothing to dismiss
+        ("plan_message", "f7", _message("Go."), "queued for the lead", "wasn't refused"),
+        ("plant", None, BAD_AREA, "planted docs/milestones/f12-ducks.md", "wasn't refused"),
+        # not done yet
+        ("plant", None, BAD_AREA, None, "wasn't refused"),
+        # refused, but no words of the owner's: they show elsewhere
+        ("approve_plan", "f7", None, "there is no plan/f7 to approve", "carries no words"),
+        ("pause", None, None, "already paused, since 12:00", "carries no words"),
+        ("plant", "general/seed-1", None, "the general thread has no proposal", "no words"),
+    ],
+)
+def test_dismiss_refuses_a_request_not_refused_or_without_words(
+    repo, kind, subject, value, result, error
+):
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        target = metrics.add_request(conn, project, kind, subject, value, NOW.isoformat())
+        if result is not None:
+            metrics.finish_request(conn, target, NOW.isoformat(), result)
+    finally:
+        conn.close()
+    if result is None:  # off main, the plant waits: the dismiss alone is applied
+        git(repo, "checkout", "-q", "-b", "elsewhere")
+    asked = _ask(repo, "dismiss", str(target))
+    _apply(repo)
+    done, said = _request(repo, asked)
+    assert done == NOW.isoformat() and error in str(said)
+    assert _row(repo, target)["dismissed"] is None
+
+
+@pytest.mark.parametrize("subject", [None, "", "x", "12a", "99", "1" * 40])
+def test_dismiss_names_a_request_by_its_id(repo, subject):
+    asked = _ask(repo, "dismiss", subject)
+    _apply(repo)
+    done, said = _request(repo, asked)
+    assert done == NOW.isoformat() and "request" in str(said)
+    assert not str(said).startswith("dismissed")
+
+
+def test_another_projects_refused_request_isnt_dismissed(repo):
+    conn = metrics.open_db(_db(repo))
+    try:
+        other = metrics.upsert_project(conn, "elsewhere")
+        target = metrics.add_request(conn, other, "plant", None, BAD_AREA, NOW.isoformat())
+        metrics.finish_request(conn, target, NOW.isoformat(), "an idea's area is …")
+    finally:
+        conn.close()
+    asked = _ask(repo, "dismiss", str(target))
+    _apply(repo)
+    assert _request(repo, asked)[1] == f"there is no request {target}"
+    assert _row(repo, target)["dismissed"] is None
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "words"),
+    [
+        ("plant", None, BAD_AREA, ("Ducks", "Rubber ones.")),
+        ("plant", None, '{"title": "  Ducks  "}', ("Ducks", "")),
+        # read leniently: words the runner couldn't read are still the owner's
+        ("plant", None, "Ducks, rubber ones", ("", "Ducks, rubber ones")),
+        ("plant", None, '{"title": ["Ducks"]}', ("", '{"title": ["Ducks"]}')),
+        ("plan_message", "f7", _message("Go.", p2="Shorter."), ("", "Go.\n\nOn point 2: Shorter.")),
+        ("send_back", "f7/adr-23", _message("", p1="No."), ("", "On point 1: No.")),
+        ("plan_message", "f7", "not json", ("", "not json")),
+        # no words
+        ("plant", "general/seed-1", None, None),
+        ("plant", None, '{"title": " ", "thoughts": ""}', None),
+        ("plan_message", "f7", None, None),
+        ("approve_plan", "f7", None, None),
+    ],
+)
+def test_the_owners_words_a_request_carries(kind, subject, value, words):
+    row = {"kind": kind, "subject": subject, "value": value}
+    found = requests.owners_words(row)
+    assert (None if found is None else (found.title, found.text)) == words
+
+
+@pytest.mark.parametrize(
+    ("kind", "done", "result", "dismissed", "refused"),
+    [
+        ("plant", True, "an idea's area is factory or product, not 'garden'", None, True),
+        ("plant", True, "planted docs/milestones/f12-ducks.md", None, False),
+        ("plant", True, "planted docs/milestones/f12-ducks.md, queued for the lead", None, False),
+        ("plant", None, None, None, False),
+        ("plant", True, "ducks is a card already: f3-ducks", NOW.isoformat(), False),
+        ("plan_message", True, "queued for the lead", None, False),
+        ("plan_message", True, "a thread is a card's key or general, not 'x'", None, True),
+        ("send_back", True, "F7 has no proposal adr-23", None, True),
+        ("send_back", True, "queued for the lead", None, False),
+        ("approve_plan", True, "there is no plan/f7 to approve", None, False),
+    ],
+)
+def test_refused_means_done_without_its_kinds_worked_result(kind, done, result, dismissed, refused):
+    row = {
+        "kind": kind,
+        "subject": "f7/adr-23" if kind == "send_back" else None,
+        "value": BAD_AREA if kind == "plant" else _message("Go."),
+        "done": done and NOW.isoformat(),
+        "result": result,
+        "dismissed": dismissed,
+    }
+    assert requests.refused(row) is refused
 
 
 # --- a `replan` edits its running milestone's ready tickets (f6-13) ----------------------------

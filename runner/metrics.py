@@ -251,8 +251,14 @@ _V10 = """
 ALTER TABLE planner_threads ADD COLUMN archived TEXT;
 """
 
+# F31 D9: when the owner dismissed a refused request's words from the desk, or NULL while they
+# wait there. The request keeps its words.
+_V11 = """
+ALTER TABLE owner_requests ADD COLUMN dismissed TEXT;
+"""
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -842,6 +848,15 @@ def finish_request(conn: sqlite3.Connection, request_id: int, done: str, result:
     cursor = conn.execute(
         "UPDATE owner_requests SET done = ?, result = ? WHERE id = ? AND done IS NULL",
         (done, result, request_id),
+    )
+    return cursor.rowcount == 1
+
+
+def dismiss_request(conn: sqlite3.Connection, request_id: int, at: str) -> bool:
+    """The owner dismissed a refused request's words (F31 D9); False if they had already."""
+    cursor = conn.execute(
+        "UPDATE owner_requests SET dismissed = ? WHERE id = ? AND dismissed IS NULL",
+        (at, request_id),
     )
     return cursor.rowcount == 1
 

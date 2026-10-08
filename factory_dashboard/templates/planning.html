@@ -75,10 +75,35 @@
     <div id="desk-{{ group.key }}" style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
       <h3 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var({{ group.color }})">{{ group.name }}</h3>
       {% for item in group.items %}
+      {% if group.key == "refused" %}
+      {# The owner's words the runner refused (F31 D9): in full, why, Try again and Dismiss #}
+      <article class="refused" id="refused-{{ item.id }}">
+        <div class="refused-body">
+          <span style="font-size: 14px">{{ item.title }}</span>
+          {% if item.text %}<p style="margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px">{{ item.text }}</p>{% endif %}
+          <span style="font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere">The runner said: {{ item.words }}</span>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+            {% if item.again %}
+            <a id="again-{{ item.id }}" href="{{ item.again }}{{ q }}&amp;again={{ item.id }}#reply" style="display: inline-flex; align-items: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); padding: 0 14px; min-height: 44px">Try again</a>
+            {% else %}
+            <button type="button" id="again-{{ item.id }}" data-title="{{ item.idea_title }}" data-thoughts="{{ item.text }}"
+              onclick="const f = document.getElementById('plant'); f.elements.title.value = this.dataset.title; f.elements.thoughts.value = this.dataset.thoughts; f.scrollIntoView(); f.elements.title.focus()"
+              style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Try again</button>
+            {% endif %}
+            <button type="button" id="dismiss-{{ item.id }}" hx-post="/requests" hx-target="#refused-status-{{ item.id }}" hx-swap="innerHTML"
+              hx-vals='{"kind": "dismiss", "project": {{ project | tojson }}, "subject": {{ item.id | string | tojson }}}'
+              hx-on::before-request="this.closest('.refused').classList.add('dismissing')"
+              style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Dismiss</button>
+          </div>
+        </div>
+        <p class="refused-gone">Dismissed {{ item.title }}: <span id="refused-status-{{ item.id }}"></span></p>
+      </article>
+      {% else %}
       <a href="{{ item.link }}{{ q }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
         <span style="font-size: 14px">{{ item.title }}</span>
         {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
       </a>
+      {% endif %}
       {% endfor %}
     </div>
     {% else %}

@@ -90,7 +90,7 @@
       class="dock" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
       {% if points %}<span id="progress" data-points="{{ points }}" style="font: 12px var(--mono); color: var(--muted)">{{ points }} points · 0 comments</span>{% endif %}
       <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted)">{{ "Anything else? A question, a new thought" if has_thread else "What should the lead look at? It reads the card too." }}
-        <textarea name="text" rows="2" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
+        <textarea name="text" rows="2" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ again }}</textarea>
       </label>
       <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
         <button type="submit" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">{{ "Send" if has_thread else "Send to the lead" }}</button>

@@ -2,8 +2,9 @@
 
 - Two tiles: the factory now, with when the next reply is expected (planner jobs go first, so a
   pending message is answered once the running job is done, D1), and the lead's 5-hour window.
-- ``desk(conn, project)``: what waits for the owner, in four groups (D6); the Overview's Needs
-  you and the top bar's count reuse its items' words and links (f6-09).
+- ``desk(conn, project)``: what waits for the owner, in five groups (D6, and F31 D9's "Didn't go
+  through" first); the Overview's Needs you and the top bar's count reuse its items' words and
+  links (f6-09).
 - "Plant an idea": a ``plant`` request through ``POST /requests``, the dashboard's only write.
 """
 
@@ -30,13 +31,18 @@ from runner.planner import (
     merge_words,
     message,
     plan_changes,
+    thread_key,
 )
 from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
+    DISMISS,
     PLANT,
     QUEUED_FOR_THE_LEAD,
     SEND_BACK,
+    WORDS,
+    owners_words,
+    refused,
 )
 from runner.tasks import short_key
 
@@ -55,6 +61,17 @@ class DeskItem:
     title: str
     words: str
     link: str
+
+
+@dataclass(frozen=True)
+class RefusedItem(DeskItem):
+    """The owner's words a request refused (F31 D9): in full, with the runner's reason, and
+    where Try again puts them back."""
+
+    id: int
+    text: str  # an idea's thoughts, or the message with its comments by point
+    idea_title: str  # what Try again puts in the Plant form's title; "" for a message
+    again: str  # the thread whose reply box takes a message back; "" for an idea
 
 
 @dataclass(frozen=True)
@@ -212,6 +229,52 @@ def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     ]
 
 
+def _message_thread(row: sqlite3.Row) -> str:
+    """The thread a refused ``plan_message`` or ``send_back`` was for; the general thread when
+    its subject names none."""
+    subject = str(row["subject"] or "")
+    if row["kind"] == SEND_BACK:
+        subject = subject.partition("/")[0]
+    try:
+        return thread_key(subject)
+    except PlannerError:
+        return GENERAL
+
+
+def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) -> list[DeskItem]:
+    """The owner's words the runner refused (F31 D9), until they dismiss them: a dismiss on
+    its way takes one off at once."""
+    rows = conn.execute(
+        "SELECT * FROM owner_requests WHERE project_id = ? AND done IS NOT NULL"
+        " AND dismissed IS NULL AND kind IN (?, ?, ?) ORDER BY id",
+        (project_id, *WORDS),
+    ).fetchall()
+    dismissing = {
+        str(r["subject"])
+        for r in conn.execute(
+            "SELECT subject FROM owner_requests WHERE project_id = ? AND kind = ? AND done IS NULL",
+            (project_id, DISMISS),
+        ).fetchall()
+    }
+    items: list[DeskItem] = []
+    for r in rows:
+        words = owners_words(r)
+        if words is None or not refused(r) or str(r["id"]) in dismissing:
+            continue
+        if r["kind"] == PLANT:
+            title, again = words.title or "Your idea", ""
+        else:
+            thread = _message_thread(r)
+            title, again = f"Your message on {_thread_title(thread, titles)}", f"/planning/{thread}"
+        reason = str(r["result"] or "")
+        items.append(
+            RefusedItem(
+                "refused", title, reason, "/planning", r["id"], words.text, words.title, again
+            )
+        )
+    return items
+
+
 def archived(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
     """The archived threads, the most recently archived first (the owner, 2026-10-07). A
     message from the owner opens one again."""
@@ -298,20 +361,24 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
 
 
 def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
-    """What waits for the owner (D6), in four groups in this order, empty ones included."""
+    """What waits for the owner (D6), in five groups in this order, empty ones included: what
+    didn't go through first (F31 D9)."""
     project_id = metrics.find_project(conn, project)
     if project_id is None:
+        refusals: list[DeskItem] = []
         answers: list[DeskItem] = []
         proposals: list[DeskItem] = []
         ripe: list[DeskItem] = []
         seeds: list[DeskItem] = []
     else:
         titles = _card_titles(conn, project_id)
+        refusals = _refused(conn, project_id, titles)
         answers = _answers_wanted(conn, project_id, titles, now)
         proposals = _open_proposals(conn, project_id)
         ripe = _ripe(conn, project, now)
         seeds = _seeds(conn, project_id)
     return [
+        DeskGroup("refused", "Didn't go through", "--hazard", refusals),
         DeskGroup("answers", "Your answers wanted", "--hazard", answers),
         DeskGroup("proposals", "Proposals to review", "--opus", proposals),
         DeskGroup("ripe", "Finished, to talk through", "--qwen", ripe),
@@ -488,11 +555,31 @@ def _proposals(
     ]
 
 
+_MAX_REQUEST_ID = 12
+
+
+def _again(conn: sqlite3.Connection, project_id: int | None, thread: str, again: str) -> str:
+    """The words of the refused message ``again`` names, for the thread's reply box; "" for
+    anything else."""
+    if project_id is None or not (again.isascii() and again.isdigit()):
+        return ""
+    if len(again) > _MAX_REQUEST_ID:
+        return ""
+    row = metrics.find_request(conn, int(again))
+    if row is None or row["project_id"] != project_id or row["kind"] == PLANT:
+        return ""
+    words = owners_words(row)
+    if words is None or not refused(row) or _message_thread(row) != thread:
+        return ""
+    return words.text
+
+
 @router.get("/planning/{thread}", response_class=HTMLResponse)
 def thread_page(
-    request: Request, thread: str, conn: Db, project: Project, now: Now
+    request: Request, thread: str, conn: Db, project: Project, now: Now, again: str = ""
 ) -> HTMLResponse:
-    """A card's thread: its messages and the lead's points, Send, and its proposals."""
+    """A card's thread: its messages and the lead's points, Send, and its proposals. ``again``
+    names a refused message of the thread's (F31 D9): its words wait in the reply box."""
     project_id = metrics.find_project(conn, project)
     title, meta, seed = thread, "", False
     messages: list[Message] = []
@@ -542,6 +629,7 @@ def thread_page(
         project,
         "thread.html",
         {
+            "again": _again(conn, project_id, thread, again),
             "active": "/planning",
             "thread": thread,
             "card_title": title,

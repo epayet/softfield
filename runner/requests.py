@@ -11,7 +11,8 @@ keep one writer, and the run state.json, whose reserve switches (ADR 22 item 4) 
 import json
 import re
 import sqlite3
-from dataclasses import replace
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -47,6 +48,7 @@ PRIORITY = "priority"  # subject: a ticket in ready/ or later/, or a card; value
 ARCHIVE = "archive"  # subject: the thread; value: on or off (the owner, 2026-10-07)
 PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while it holds too
 RESUME = "resume"
+DISMISS = "dismiss"  # subject: a refused request's id; no value (F31 D9)
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
 _COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, *_APPROVALS)
@@ -55,6 +57,12 @@ _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
 _PLAIN = ("100644", "100755", "000000")  # a draft's mode: a file, or none (deleted)
 _MAX_DIFF = 1000  # parse_task needs one; pre-flight doesn't read it
+WORDS = (PLANT, PLAN_MESSAGE, SEND_BACK)  # the kinds that carry the owner's words (F31 D9)
+# Each one's result when it worked (F6 D1's table): any other is a refusal
+_WORKED = {PLANT: "planted ", PLAN_MESSAGE: QUEUED_FOR_THE_LEAD, SEND_BACK: QUEUED_FOR_THE_LEAD}
+_MAX_REQUEST_ID = 12
+
+type _Row = sqlite3.Row | Mapping[str, object]
 
 
 def _what(row: sqlite3.Row) -> str:
@@ -661,6 +669,83 @@ def _drop_seed(
     return f"removed {rel}"
 
 
+# --- the owner's words a request refused: on the desk until dismissed (F31 D9) ---------------
+
+
+@dataclass(frozen=True)
+class Words:
+    """The owner's words in a request: an idea's title and thoughts, or a message (no title)
+    with its comments by point."""
+
+    title: str
+    text: str
+
+
+def _plant_words(data: object) -> Words | None:
+    if not isinstance(data, dict):
+        return None
+    title, thoughts = data.get("title") or "", data.get("thoughts") or ""
+    if not (isinstance(title, str) and isinstance(thoughts, str)):
+        return None
+    return Words(title.strip(), thoughts.strip())
+
+
+def _message_words(data: object) -> Words | None:
+    if not isinstance(data, dict):
+        return None
+    text, comments = data.get("text") or "", data.get("comments") or {}
+    if not (isinstance(text, str) and isinstance(comments, dict)):
+        return None
+    if not all(isinstance(comment, str) for comment in comments.values()):
+        return None
+    said = "\n".join(f"On point {n}: {c.strip()}" for n, c in comments.items() if c.strip())
+    return Words("", "\n\n".join(filter(None, [text.strip(), said])))
+
+
+def owners_words(row: _Row) -> Words | None:
+    """The owner's words a ``plant`` (not a seed's), ``plan_message`` or ``send_back`` carries,
+    read leniently: a value the runner couldn't read is still theirs, so it is kept whole.
+    None for another kind, or with no words."""
+    kind, value = row["kind"], row["value"]
+    if kind not in WORDS or (kind == PLANT and row["subject"]) or not isinstance(value, str):
+        return None
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError:
+        data = None
+    words = _plant_words(data) if kind == PLANT else _message_words(data)
+    if words is None:  # not as the dashboard writes it
+        words = Words("", value.strip())
+    return words if words.title or words.text else None
+
+
+def refused(row: _Row) -> bool:
+    """Whether the owner's words in a request didn't go through and wait on the desk: done
+    with a result that isn't its kind's worked one, and not dismissed."""
+    if row["done"] is None or row["dismissed"] is not None or owners_words(row) is None:
+        return False
+    return not str(row["result"] or "").startswith(_WORKED[str(row["kind"])])
+
+
+def _dismiss(conn: sqlite3.Connection, project_id: int, now: datetime, subject: object) -> str:
+    """The owner dismisses a refused request's words from the desk: when is kept on it, its
+    words with it. Refused for a request that wasn't refused or carries no words."""
+    wanted = subject if isinstance(subject, str) else ""
+    if not (wanted.isascii() and wanted.isdigit() and len(wanted) <= _MAX_REQUEST_ID):
+        return f"a dismiss names a refused request by its id, not {subject!r}"
+    row = metrics.find_request(conn, int(wanted))
+    if row is None or row["project_id"] != project_id:
+        return f"there is no request {wanted}"
+    if owners_words(row) is None:
+        return f"request {wanted} carries no words of yours: nothing to dismiss"
+    if row["dismissed"] is not None:
+        return f"request {wanted} is dismissed already"
+    if not refused(row):
+        return f"request {wanted} wasn't refused: nothing to dismiss"
+    metrics.dismiss_request(conn, row["id"], now.isoformat())
+    return f"dismissed request {wanted}"
+
+
 # --- reprioritising: a ticket's or a card's priority, from the dashboard (f6-18) --------------
 
 _TICKET_ID_RE = re.compile(r"(?:[a-z]+\d+|bug)-\d+(?:-[a-z0-9]+)*")  # not a card's key
@@ -858,6 +943,8 @@ def _apply(
             return _archive(conn, project_id, now, subject, value)
         if kind == PRIORITY:
             return _priority(repo, conn, project_id, state, subject, value)
+        if kind == DISMISS:
+            return _dismiss(conn, project_id, now, subject)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:

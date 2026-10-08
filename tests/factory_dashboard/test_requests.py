@@ -48,6 +48,7 @@ def test_a_post_from_the_dashboards_page_writes_one_row_and_answers_asked(client
         "created": NOW.isoformat(),
         "done": None,
         "result": None,
+        "dismissed": None,
     }
     assert "Asked: the runner will do it." in response.text
     # it asks for the request's status every 5 s, in its own place

@@ -69,7 +69,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 10 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 11 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -236,6 +236,31 @@ def test_an_older_database_keeps_its_requests_and_gains_an_empty_work_queue(tmp_
         "started_job",
         "done",
     ]
+    conn.close()
+
+
+def test_a_version_10_database_keeps_its_requests_none_dismissed(tmp_path):
+    """F31 D9: a refused request's words wait on the desk until the owner dismisses them."""
+    path = tmp_path / "factory-metrics.sqlite"
+    old = sqlite3.connect(path, isolation_level=None)
+    steps = "\n".join(metrics.MIGRATIONS[:10])
+    old.executescript(f"BEGIN;\n{steps}\nPRAGMA user_version = 10;\nCOMMIT;")
+    old.execute("INSERT INTO projects (name) VALUES ('coucou')")
+    old.execute(
+        "INSERT INTO owner_requests (project_id, kind, created, done, result)"
+        " VALUES (1, 'plant', ?, ?, 'refused')",
+        (T0, T1),
+    )
+    old.close()
+
+    conn = metrics.open_db(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
+    assert conn.execute("SELECT result, dismissed FROM owner_requests").fetchone()[:] == (
+        "refused",
+        None,
+    )
+    assert metrics.dismiss_request(conn, 1, T1) and not metrics.dismiss_request(conn, 1, T1)
+    assert conn.execute("SELECT dismissed FROM owner_requests").fetchone()[0] == T1
     conn.close()
 
 

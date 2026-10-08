@@ -389,4 +389,12 @@ tbody tr:hover { background: var(--accent-wash); }
 
 /* The owner's desk: what is on its way, a dashed orange edge (f6-20) */
 .desk-coming { border: 1px dashed var(--hazard); }
+/* Words that didn't go through (F31 D9): Dismiss takes them off at once, on their way */
+.refused { display: flex; flex-direction: column; gap: 6px; padding: 7px 9px; background: var(--plate);
+  border: 1px solid var(--hazard); }
+.refused-body { display: flex; flex-direction: column; gap: 6px; }
+.refused-gone { display: none; margin: 0; font-size: 12.5px; color: var(--muted); }
+.refused.dismissing { border-style: dashed; }
+.refused.dismissing .refused-body { display: none; }
+.refused.dismissing .refused-gone { display: block; }
 

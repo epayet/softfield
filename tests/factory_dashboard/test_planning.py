@@ -91,11 +91,12 @@ def test_each_group_shows_its_items_in_order(planning, serve):
     assert _items(groups["seeds"]) == [("/planning/f9", "Parallel developers")]
 
 
-def test_desk_returns_the_four_groups_in_order_empty_ones_too(db_path, db):
+def test_desk_returns_the_five_groups_in_order_empty_ones_too(db_path, db):
     """Without a thread or an idea card, the groups are still there, in order, empty but the
     ripe one: without ``write_live``'s running and ready tickets, f1 is ripe too."""
     groups = desk(db, PROJECT, NOW)
     assert [g.name for g in groups] == [
+        "Didn't go through",
         "Your answers wanted",
         "Proposals to review",
         "Finished, to talk through",
@@ -104,14 +105,15 @@ def test_desk_returns_the_four_groups_in_order_empty_ones_too(db_path, db):
     assert [[i.title for i in g.items] for g in groups] == [
         [],
         [],
+        [],
         ["The factory measures itself", "The web app"],
         [],
     ]
-    assert desk(db, "nowhere", NOW)[2].items == []
+    assert desk(db, "nowhere", NOW)[3].items == []
 
 
 def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
-    seeds = desk(db, PROJECT, NOW)[3].items
+    seeds = desk(db, PROJECT, NOW)[4].items
     assert [s.title for s in seeds] == ["Parallel developers"]
 
 
@@ -151,7 +153,7 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
             ),
         ),
     )
-    proposals = desk(db, PROJECT, NOW)[1].items
+    proposals = desk(db, PROJECT, NOW)[2].items
     assert [p.link.rsplit("/", 1)[1] for p in proposals] == still_open
 
 
@@ -163,7 +165,7 @@ def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
             conn, planning, "approve_plan", "f6", None, _at(timedelta(hours=3))
         ),
     )
-    assert len(desk(db, PROJECT, NOW)[1].items) == 2
+    assert len(desk(db, PROJECT, NOW)[2].items) == 2
 
 
 def test_the_factory_tile_names_the_running_ticket(planning, serve):
@@ -297,9 +299,11 @@ def test_the_desk_page_lays_out_at_phone_and_display_sizes(page, planning, db_pa
             conn, planning, "planner", "general#1", "a message", _at(timedelta(minutes=5))
         ),
     )
+    _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
     page.set_viewport_size(size)
     _open(page, serve())
     assert page.locator("#desk-seeds").is_visible()
+    assert page.locator("#desk-refused").is_visible()
     # On a phone the tabs scroll sideways by design, Planning centred, Overview cut off (f3-30:
     # test_phone_top_bar_is_compact_and_tabs_scroll in test_app.py checks them)
     page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
@@ -792,7 +796,7 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
     """f6-12: on the desk and its page, its words say "merge F9 into F7"; approving it is the
     thread's ``approve_plan``, which settles it (D6)."""
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
-    [item] = [i for i in desk(db, PROJECT, NOW)[1].items if i.link.endswith("/merge-f9")]
+    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
     assert item.words == "merge F9 into F7 · 1 key points"
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert ">Merge F9 into F7</span>" in html and "Approve: merge F9 into F7" in html
@@ -808,7 +812,7 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
             conn, planning, "approve_plan", "f9", None, NOW.isoformat()
         ),
     )
-    assert not [i for i in desk(db, PROJECT, NOW)[1].items if i.link.endswith("/merge-f9")]
+    assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
 
 
 def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
@@ -1332,3 +1336,186 @@ def test_archive_posts_once_and_the_button_goes(page, planning, db_path, serve):
     finally:
         conn.close()
     assert asked == [("archive", "general", "on")]
+
+
+# --- "Didn't go through": the owner's words a request refused (F31 D9) -----------------------
+
+DUCKS = json.dumps({"title": "Rubber ducks", "thoughts": "Yellow ones.\nFor Mum.", "ask": True})
+TAKEN = "rubber-ducks is a card already: f3-rubber-ducks"
+
+
+def _finished(
+    db_path: Path,
+    project_id: int,
+    kind: str,
+    subject: str | None,
+    value: str | None,
+    result: str | None,
+) -> int:
+    """A request the runner finished with ``result`` (None: not yet); its id."""
+    found: list[int] = []
+
+    def write(conn: sqlite3.Connection) -> None:
+        request_id = metrics.add_request(
+            conn, project_id, kind, subject, value, _at(timedelta(minutes=20))
+        )
+        if result is not None:
+            metrics.finish_request(conn, request_id, _at(timedelta(minutes=10)), result)
+        found.append(request_id)
+
+    _write(db_path, write)
+    return found[0]
+
+
+def _refused_items(html: str) -> dict[str, str]:
+    """Each refused item's text by its request id."""
+    return {
+        n: _text(body)
+        for n, body in re.findall(
+            r'<article class="refused" id="refused-(\d+)"[^>]*>(.*?)</article>', html, re.S
+        )
+    }
+
+
+def _count(html: str) -> int:
+    tab = re.search(r'id="planning-tab">Planning · (\d+)</a>', html)
+    assert tab, "no Planning tab"
+    return int(tab[1])
+
+
+def _waits_on_the_desk(html: str) -> int:
+    said = re.search(r"(\d+) things? waits? for you on your desk", html)
+    return int(said[1]) if said else 0
+
+
+def test_a_refused_plant_waits_first_on_the_desk_with_its_words_and_counts(
+    planning, db_path, db, serve
+):
+    client = serve()
+    before = _count(_page(client)), _waits_on_the_desk(client.get("/").text)
+    asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    html = _page(client)
+    assert next(iter(_groups(html))) == "refused"
+    assert "Didn't go through" in _text(html.split('id="desk-refused"', 1)[1])
+    item = _refused_items(html)[str(asked)]
+    for words in ("Rubber ducks", "Yellow ones. For Mum.", TAKEN, "Try again", "Dismiss"):
+        assert words in item
+    assert _count(html) == before[0] + 1
+    assert _waits_on_the_desk(client.get("/").text) == before[1] + 1
+    [refused, *_] = desk(db, PROJECT, NOW)
+    assert (refused.key, refused.name, refused.color) == (
+        "refused",
+        "Didn't go through",
+        "--hazard",
+    )
+    assert [i.title for i in refused.items] == ["Rubber ducks"]
+
+
+def test_a_refused_message_shows_and_try_again_opens_its_thread_with_it(planning, db_path, serve):
+    message = json.dumps({"text": "Make it <calm>.", "comments": {"2": "Shorter."}})
+    asked = _finished(db_path, planning, "plan_message", "f6", message, "the thread is gone")
+    client = serve()
+    html = _page(client)
+    item = _refused_items(html)[str(asked)]
+    assert "Your message on The planning room" in item
+    assert "Make it <calm>. On point 2: Shorter." in item and "the thread is gone" in item
+    again = re.search(rf'<a id="again-{asked}" href="([^"]+)"', html)
+    assert again and unescape(again[1]) == f"/planning/f6?project={PROJECT}&again={asked}#reply"
+    thread = client.get(unescape(again[1]).split("#")[0]).text
+    box = re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', thread, re.S)
+    assert box and unescape(box[1]) == "Make it <calm>.\n\nOn point 2: Shorter."
+    # nothing is posted until the owner presses Send
+    rows = sqlite3.connect(db_path).execute("SELECT count(*) FROM owner_requests").fetchone()
+    assert rows[0] == 1
+
+
+@pytest.mark.parametrize(
+    ("project_of", "result"),
+    [("ours", "queued for the lead"), ("ours", None), ("elsewhere", "refused")],
+)
+def test_try_again_fills_the_box_only_with_a_refused_message_of_ours(
+    planning, db_path, serve, project_of, result
+):
+    """A message that worked, one on its way (the box waits for the lead's reply), or another
+    project's: the box stays empty."""
+    found: list[int] = [planning]
+    if project_of == "elsewhere":
+        _write(db_path, lambda conn: found.append(metrics.upsert_project(conn, "elsewhere")))
+    asked = _finished(db_path, found[-1], "plan_message", "f6", '{"text": "Hi."}', result)
+    thread = serve().get(f"/planning/f6?again={asked}").text
+    box = re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', thread, re.S)
+    assert box is None if result is None else box and box[1] == ""
+
+
+def test_a_refused_send_back_tries_again_on_its_thread(planning, db_path, serve):
+    asked = _finished(
+        db_path, planning, "send_back", "f6/plan", '{"text": "", "comments": {"1": "No."}}', "x"
+    )
+    html = _page(serve())
+    assert "On point 1: No." in _refused_items(html)[str(asked)]
+    again = re.search(rf'<a id="again-{asked}" href="([^"]+)"', html)
+    assert again and unescape(again[1]).startswith("/planning/f6?")
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "result"),
+    [
+        ("plant", None, DUCKS, "planted docs/milestones/f12-rubber-ducks.md, queued for the lead"),
+        ("plant", None, DUCKS, None),
+        ("approve_plan", "f6", None, "there is no plan/f6 to approve"),
+        ("pause", None, None, "already paused, since 12:00"),
+        ("plant", "general/seed-1", None, "the general thread has no proposal seed-1"),
+        ("plan_message", "f6", '{"text": "Go."}', "queued for the lead"),
+    ],
+)
+def test_a_worked_or_wordless_request_never_shows_and_the_group_isnt_drawn(
+    planning, db_path, db, serve, kind, subject, value, result
+):
+    _finished(db_path, planning, kind, subject, value, result)
+    assert desk(db, PROJECT, NOW)[0].items == []
+    html = _page(serve())
+    assert "desk-refused" not in html and "Didn't go through" not in html
+
+
+def test_a_dismissed_or_dismissing_request_leaves_the_desk(planning, db_path, db, serve):
+    """Dismissed by the runner, or a dismiss on its way: gone, a reload doesn't bring it back."""
+    gone = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    going = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    kept = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    _write(db_path, lambda conn: metrics.dismiss_request(conn, gone, NOW.isoformat()))
+    _finished(db_path, planning, "dismiss", str(going), None, None)
+    # a dismiss the runner refused leaves its item
+    _finished(db_path, planning, "dismiss", str(kept), None, "there is no request")
+    assert list(_refused_items(_page(serve()))) == [str(kept)]
+    assert len(desk(db, PROJECT, NOW)[0].items) == 1
+
+
+def test_try_again_on_a_plant_fills_the_plant_form_and_posts_nothing(
+    page, planning, db_path, serve
+):
+    asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    _open(page, serve())
+    page.click(f"#again-{asked}")
+    assert page.input_value('#plant input[name="title"]') == "Rubber ducks"
+    assert page.input_value('#plant textarea[name="thoughts"]') == "Yellow ones.\nFor Mum."
+    rows = sqlite3.connect(db_path).execute("SELECT count(*) FROM owner_requests").fetchone()
+    assert rows[0] == 1
+
+
+def test_dismiss_takes_the_item_off_at_once_and_a_reload_keeps_it_off(
+    page, planning, db_path, serve
+):
+    asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    client = serve()
+    _open(page, client)
+    page.click(f"#dismiss-{asked}")
+    page.wait_for_selector(f"#refused-{asked}.dismissing >> text=Asked")
+    assert not page.locator(f"#refused-{asked} .refused-body").is_visible()
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE kind = 'dismiss'").fetchall()
+        assert [(r["subject"], r["value"]) for r in rows] == [(str(asked), None)]
+    finally:
+        conn.close()
+    page.reload()
+    assert page.locator(f"#refused-{asked}").count() == 0
