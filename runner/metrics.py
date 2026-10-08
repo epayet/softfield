@@ -257,8 +257,20 @@ _V11 = """
 ALTER TABLE owner_requests ADD COLUMN dismissed TEXT;
 """
 
+# F31 D1: why a thread was archived, `approved` (every proposal settled) or `by you` (the
+# owner's Archive); NULL while open. F55 D3: the one-off steps done on this database, by name.
+_V12 = """
+ALTER TABLE planner_threads ADD COLUMN archived_why TEXT;
+CREATE TABLE once_steps (
+    name TEXT PRIMARY KEY,
+    at TEXT NOT NULL
+);
+"""
+
+ONCE_STEPS = ("f55 clear-out",)  # one-off steps an older database still owes (F55 D3)
+
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -273,6 +285,9 @@ def open_db(path: Path) -> sqlite3.Connection:
     version: int = conn.execute("PRAGMA user_version").fetchone()[0]
     for number, step in enumerate(MIGRATIONS[version:], start=version + 1):
         conn.executescript(f"BEGIN;\n{step}\nPRAGMA user_version = {number};\nCOMMIT;")
+    if version == 0:  # a new database has nothing from before to clear out: its steps are done
+        for name in ONCE_STEPS:
+            once(conn, name, "new")
     return conn
 
 
@@ -930,9 +945,21 @@ def find_thread(conn: sqlite3.Connection, project_id: int, card: str) -> sqlite3
     return row
 
 
-def set_thread_archived(conn: sqlite3.Connection, thread_id: int, at: str | None) -> None:
-    """Archive a thread at ``at``, or open it again with None (the owner, 2026-10-07)."""
-    conn.execute("UPDATE planner_threads SET archived = ? WHERE id = ?", (at, thread_id))
+def set_thread_archived(
+    conn: sqlite3.Connection, thread_id: int, at: str | None, why: str | None = None
+) -> None:
+    """Archive a thread at ``at`` with why (F31 D1), or open it again with None (the owner,
+    2026-10-07), which clears why."""
+    conn.execute(
+        "UPDATE planner_threads SET archived = ?, archived_why = ? WHERE id = ?",
+        (at, why if at is not None else None, thread_id),
+    )
+
+
+def once(conn: sqlite3.Connection, name: str, at: str) -> bool:
+    """Mark the one-off step ``name`` done (F55 D3): True the first time only."""
+    found = conn.execute("INSERT OR IGNORE INTO once_steps (name, at) VALUES (?, ?)", (name, at))
+    return found.rowcount == 1
 
 
 def set_thread_session(conn: sqlite3.Connection, thread_id: int, session_id: str) -> None:

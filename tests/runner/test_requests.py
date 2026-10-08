@@ -857,7 +857,11 @@ def test_a_merge_proposed_on_the_kept_cards_thread_with_its_plan_goes_in_one_com
     assert milestone.card("f10-one-queue", doc).state == "ready" and "From F12" in doc
     assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
     assert "/planning/f10" in str(_thread(repo, "f12")[-1]["text"])  # a thread made for it
-    assert _items(repo) == [(planner.PLANNING, "f10", None, True)]  # F10's reply still waits
+    # F31 D1: its plan and its merge, all the reply proposed, are settled: the thread closes
+    assert _items(repo) == [(planner.PLANNING, "f10", None, False)]
+    assert _archived(repo, "f10")
+    line = _thread(repo, "f10")[-1]["text"]
+    assert line == f"Approved by the owner on 2026-10-01: {_request(repo, asked)[1]}"
 
 
 def test_a_merge_proposed_on_the_general_thread_is_approved_there(repo):

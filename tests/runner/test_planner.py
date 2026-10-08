@@ -899,6 +899,146 @@ def test_unarchive_and_a_new_message_both_open_a_thread_again(repo):
     assert _thread_row(repo, "f7")["archived"] is None  # replying opens it again
 
 
+def test_the_owners_archive_says_by_you_and_opening_clears_it(repo):
+    _talked_about(repo, "f7")
+    _ask(repo, "archive", "f7", "on")
+    _apply(repo)
+    assert _thread_row(repo, "f7")["archived_why"] == "by you"
+    _ask(repo, "plan_message", "f7", json.dumps({"text": "Again.", "comments": {}}))
+    _apply(repo)
+    assert _thread_row(repo, "f7")["archived_why"] is None
+
+
+# --- a thread closes once every proposal is settled (F31 D1) ---------------------------------
+
+SEED_2: dict[str, Any] = {
+    "id": "seed-2",
+    "kind": "seed",
+    "title": "Two",
+    "path": None,
+    "key_points": [],
+}
+
+
+def test_planting_every_seed_of_the_reply_closes_the_general_thread(repo):
+    """F31 D1: one seed planted leaves the thread on the desk; the last one closes it with a
+    lead line and resolves its item. An ADR still open keeps it open."""
+    _f6(repo)
+    _seeded(repo)  # seed-1 and an ADR
+    _talked_about(repo, "general")
+    _ask(repo, "plant", "general/seed-1", json.dumps({"area": "factory"}))
+    _apply(repo)
+    assert _thread_row(repo, "general")["archived"] is None  # the ADR is still open
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        thread = metrics.planner_thread(conn, project, "general", NOW.isoformat())["id"]
+        seed_3 = {**SEED_2, "id": "seed-3", "title": "Three"}
+        metrics.add_planner_message(
+            conn, thread, "lead", NOW.isoformat(), "Two seeds.", proposals=[SEED_2, seed_3]
+        )
+    finally:
+        conn.close()
+    _ask(repo, "plant", "general/seed-2", None)
+    _apply(repo)
+    assert _thread_row(repo, "general")["archived"] is None  # seed-3 still open
+    refused = _ask(repo, "plant", "general/seed-9", None)
+    _apply(repo)
+    assert "no proposal" in str(_request(repo, refused)[1])
+    assert _thread_row(repo, "general")["archived"] is None  # a refusal settles nothing
+    asked = _ask(repo, "plant", "general/seed-3", None)
+    _apply(repo)
+    found = _thread_row(repo, "general")
+    assert found["archived"] == NOW.isoformat() and found["archived_why"] == "approved"
+    assert found["items"] == []
+    result = _request(repo, asked)[1]
+    conn = metrics.open_db(_db(repo))
+    try:
+        said = metrics.planner_messages(conn, found["id"])
+    finally:
+        conn.close()
+    assert said[-1]["author"] == "lead"
+    assert said[-1]["text"] == f"Approved by the owner on 2026-10-01: {result}"
+
+
+def test_a_thread_with_no_proposals_stays_until_the_owner_archives_it(repo):
+    _talked_about(repo, "f7")
+    _ask(repo, "approve_plan", "f7", None)
+    _apply(repo)
+    assert _thread_row(repo, "f7")["archived"] is None
+
+
+# --- the clear-out, once per database (F55 D3) -----------------------------------------------
+
+
+def _older_database(repo: Path) -> None:
+    """A database from before F55: its clear-out not done yet."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        conn.execute("DELETE FROM once_steps")
+    finally:
+        conn.close()
+
+
+def _card_in(repo: Path, key: str, state: str) -> None:
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / f"{key}-x.md").write_text(f"# Milestone {key.upper()}: x\n\n> **State:** {state}\n")
+
+
+def test_the_clear_out_archives_settled_threads_once(repo):
+    """F55 D3: a ready card's or a gone card's thread answered by the lead is archived as
+    approved; an idea's, the general thread, and one with an open proposal stay; a thread the
+    owner opens later is never cleared again."""
+    for key, state in (("f7", "ready"), ("f8", "idea"), ("f9", "ready")):
+        _card_in(repo, key, state)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    for card in ("f7", "f8", "f9", "f10", "general"):
+        _talked_about(repo, card)
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        for card in ("f7", "f8", "f10", "general"):
+            thread = metrics.planner_thread(conn, project, card, NOW.isoformat())["id"]
+            metrics.add_planner_message(conn, thread, "lead", NOW.isoformat(), "Done.")
+        thread = metrics.planner_thread(conn, project, "f9", NOW.isoformat())["id"]
+        metrics.add_planner_message(  # a replan still open
+            conn,
+            thread,
+            "lead",
+            NOW.isoformat(),
+            "Redirect?",
+            proposals=[{**SEED_2, "kind": "replan"}],
+        )
+    finally:
+        conn.close()
+    _older_database(repo)
+    assert _apply(repo) == ["archived the settled threads of F7, F10 (F55)"]
+    for card, why in (("f7", "approved"), ("f10", "approved")):
+        found = _thread_row(repo, card)
+        assert found["archived_why"] == why and found["items"] == []
+    for card in ("f8", "f9", "general"):
+        assert _thread_row(repo, card)["archived"] is None
+    _ask(repo, "archive", "f7", "off")
+    _apply(repo)
+    assert _apply(repo) == []
+    assert _thread_row(repo, "f7")["archived"] is None  # opened by the owner: left alone
+
+
+def test_a_new_database_owes_no_clear_out(repo):
+    _talked_about(repo, "f10")  # no card: it would be cleared on an older database
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        thread = metrics.planner_thread(conn, project, "f10", NOW.isoformat())["id"]
+        metrics.add_planner_message(conn, thread, "lead", NOW.isoformat(), "Done.")
+    finally:
+        conn.close()
+    assert _apply(repo) == []
+    assert _thread_row(repo, "f10")["archived"] is None
+
+
 @pytest.mark.parametrize(
     ("subject", "value", "result"),
     [

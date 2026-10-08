@@ -30,3 +30,11 @@ Read `docs/milestones/f55-dismiss-all-conversations-where-the-related.md` D2, D3
 - applying a merge archives the duplicate's thread as `approved` after its line; the kept card's thread is untouched
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08), with the settling half of f31-01; the once step is the once_steps table (a new database starts with it done)
+```

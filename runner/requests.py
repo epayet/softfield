@@ -28,6 +28,7 @@ from runner.tasks import (
     milestone_arg,
     milestone_file,
     milestone_key,
+    milestone_order,
     parse_task,
     preflight,
     short_key,
@@ -61,6 +62,7 @@ WORDS = (PLANT, PLAN_MESSAGE, SEND_BACK)  # the kinds that carry the owner's wor
 # Each one's result when it worked (F6 D1's table): any other is a refusal
 _WORKED = {PLANT: "planted ", PLAN_MESSAGE: QUEUED_FOR_THE_LEAD, SEND_BACK: QUEUED_FOR_THE_LEAD}
 _MAX_REQUEST_ID = 12
+BY_YOU = "by you"  # the owner's own Archive; F31 D1's is planner.APPROVED
 
 type _Row = sqlite3.Row | Mapping[str, object]
 
@@ -160,10 +162,8 @@ def _archive(
         return f"{name} is open again"
     if found["archived"] is not None:
         return f"{name} is archived already"
-    metrics.set_thread_archived(conn, found["id"], at)
-    for item in metrics.open_owner_items(conn, project_id):
-        if item["kind"] == planner.PLANNING and item["subject"] == thread:
-            metrics.resolve_owner_item(conn, item["id"], at)
+    metrics.set_thread_archived(conn, found["id"], at, BY_YOU)
+    _resolve_items(conn, project_id, now, [thread])
     return f"archived {name}"
 
 
@@ -378,7 +378,7 @@ def _merged(
         metrics.add_planner_message(conn, thread_id, "lead", at, text)
         # its card is gone: its thread waits for nothing (2026-10-08: the pointer line put it
         # back in "Your answers wanted"); a message from the owner opens it again
-        metrics.set_thread_archived(conn, thread_id, at)
+        metrics.set_thread_archived(conn, thread_id, at, planner.APPROVED)
     _resolve_items(conn, project_id, now, [d for d, _ in merges])
 
 
@@ -1071,6 +1071,113 @@ def _settle_waits(conn: sqlite3.Connection, project_id: int, state: State, now: 
             metrics.resolve_owner_item(conn, row["id"], now.isoformat())
 
 
+def _settles(row: sqlite3.Row, result: str) -> str | None:
+    """The thread a worked approval is about (F31 D1): an ``approve_plan``'s or an
+    ``accept_adr``'s card, or the general thread for a seed planted from it."""
+    if not result.startswith(planner.WORKED):
+        return None
+    subject = str(row["subject"] or "")
+    if row["kind"] in (APPROVE_PLAN, ACCEPT_ADR):
+        try:
+            return planner.thread_key(subject)
+        except planner.PlannerError:
+            return None
+    if row["kind"] == PLANT and subject.startswith(f"{planner.GENERAL}/"):
+        return planner.GENERAL
+    return None
+
+
+def _settled(
+    proposal: dict[str, object], card: str, asked: list[sqlite3.Row], known: set[str]
+) -> bool:
+    """Approved by the owner (or applied), or a merge one of whose cards has left main."""
+    if planner.proposal_state(proposal, card, asked) == planner.APPROVED:
+        return True
+    if proposal.get("kind") != planner.MERGE:
+        return False
+    try:
+        return not set(planner.merge_cards(proposal)) <= known
+    except planner.PlannerError:
+        return False
+
+
+def _close_if_settled(
+    repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime, thread: str, result: str
+) -> None:
+    """F31 D1: once every proposal of the thread's latest set is settled (approved, or a merge
+    whose card has left main), one lead line says so and the thread is archived as approved,
+    its item resolved. A thread with no proposals, or one still open, stays."""
+    found = metrics.find_thread(conn, project_id, thread)
+    if found is None or found["archived"] is not None:
+        return
+    lead = [
+        m
+        for m in metrics.planner_messages(conn, found["id"])
+        if m["author"] == "lead" and m["proposals"] not in (None, "", "[]")
+    ]
+    if not lead:
+        return
+    since = datetime.fromisoformat(lead[-1]["at"])
+    listed = [p for p in json.loads(lead[-1]["proposals"]) if isinstance(p, dict) and p.get("id")]
+    asked = [
+        r
+        for r in conn.execute(
+            "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id", (project_id,)
+        ).fetchall()
+        if datetime.fromisoformat(r["created"]) >= since
+    ]
+    known = planner.cards(repo)
+    if not listed or not all(_settled(p, thread, asked, known) for p in listed):
+        return
+    at = now.isoformat()
+    line = f"Approved by the owner on {now.date().isoformat()}: {result}"
+    metrics.add_planner_message(conn, found["id"], "lead", at, line)
+    metrics.set_thread_archived(conn, found["id"], at, planner.APPROVED)
+    _resolve_items(conn, project_id, now, [thread])
+
+
+CLEAR_OUT = metrics.ONCE_STEPS[0]  # F55 D3: once per database
+_SETTLED_CARDS = ("ready", "building", "needs sign-off", "done")
+
+
+def _clear_out(repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime) -> list[str]:
+    """F55 D3, once: archive as approved each open card thread the owner settled before F31
+    D1 did it: its card ready, building, needing sign-off or done, or gone from main; the
+    lead's message its last; no proposal of its latest set open."""
+    known = planner.cards(repo)
+    asked = conn.execute(
+        "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id", (project_id,)
+    ).fetchall()
+    archived = []
+    for found in conn.execute(
+        "SELECT * FROM planner_threads WHERE project_id = ? AND archived IS NULL AND card != ?",
+        (project_id, planner.GENERAL),
+    ).fetchall():
+        card = str(found["card"])
+        said = metrics.planner_messages(conn, found["id"])
+        if not said or said[-1]["author"] != "lead":
+            continue
+        if card in known:
+            doc = milestone_file(repo, "milestones", full_key(repo, card))
+            if (
+                milestone.card(doc.stem, doc.read_text(encoding="utf-8")).state
+                not in _SETTLED_CARDS
+            ):
+                continue
+        lead = [m for m in said if m["author"] == "lead" and m["proposals"] not in (None, "", "[]")]
+        if lead and card in known:  # a gone card's proposals have nothing left to ask
+            since = datetime.fromisoformat(lead[-1]["at"])
+            later = [r for r in asked if datetime.fromisoformat(r["created"]) >= since]
+            listed = [p for p in json.loads(lead[-1]["proposals"]) if isinstance(p, dict)]
+            if not all(_settled(p, card, later, known) for p in listed):
+                continue
+        metrics.set_thread_archived(conn, found["id"], now.isoformat(), planner.APPROVED)
+        _resolve_items(conn, project_id, now, [card])
+        archived.append(card)
+    names = [planner.thread_name(c) for c in sorted(archived, key=lambda c: milestone_order(c))]
+    return [f"archived the settled threads of {', '.join(names)} (F55)"] if names else []
+
+
 def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[str]:
     """Apply the project's open requests, oldest first, after turning off the switches whose
     24 hours are over: one line per request done or left to wait, and per switch turned off.
@@ -1084,6 +1191,8 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
         if project is None:
             return []
         lines = _lapse(conn, project, state, now)
+        if metrics.once(conn, CLEAR_OUT, now.isoformat()):
+            lines += _clear_out(repo, conn, project, now)
         _settle_waits(conn, project, state, now)
         for row in metrics.open_requests(conn, project):
             if (why := _waits(repo, row["kind"])) is not None:
@@ -1092,6 +1201,8 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
             result = _apply(repo, db, conn, project, state, now, row)
             if metrics.finish_request(conn, row["id"], now.isoformat(), result):
                 lines.append(f"{_what(row)}: {result}")
+                if (thread := _settles(row, result)) is not None:
+                    _close_if_settled(repo, conn, project, now, thread, result)
         return lines
     finally:
         conn.close()

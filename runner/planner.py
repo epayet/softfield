@@ -672,3 +672,59 @@ def _proposal(proposal: object, known: Collection[str]) -> None:
         for card in merge_cards(proposal):
             if card not in known:
                 raise PlannerError(f"merge {name} names {card}, but {card} is no card")
+
+
+# --- a proposal's state (F31 D3): the desk, the thread and the runner read the same one -------
+
+OPEN, ON_ITS_WAY, APPROVED, SENT_BACK = "open", "on its way", "approved", "sent back"
+WORKED = ("queued for the lead", "approved", "accepted ", "planted ")  # a worked result's start
+_ADR_NUMBER = re.compile(r"docs/adr/(\d+)-")
+
+
+def _about(proposal: Mapping[str, Any], card: str) -> list[tuple[str, str, str | None]]:
+    """The requests that settle a proposal (F31 D1), each (kind, subject, value or None for
+    any value)."""
+    pid, kind = str(proposal.get("id")), proposal.get("kind")
+    if kind == "adr":
+        number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
+        return [("accept_adr", card, str(int(number[1])))] if number else []
+    if kind in ("plan", "mockup", REPLAN, MERGE):
+        return [("approve_plan", card, None)]
+    if kind == SEED:
+        return [("plant", f"{GENERAL}/{pid}", None)]
+    return []
+
+
+def _matches(
+    row: sqlite3.Row | Mapping[str, Any], about: Sequence[tuple[str, str, str | None]]
+) -> bool:
+    return any(
+        row["kind"] == kind
+        and row["subject"] == subject
+        and (value is None or str(row["value"] or "").strip() == value)
+        for kind, subject, value in about
+    )
+
+
+def proposal_state(
+    proposal: Mapping[str, Any], card: str, requests: Sequence[sqlite3.Row | Mapping[str, Any]]
+) -> str:
+    """Where a proposal of ``card``'s latest set stands, from the owner's requests made since
+    the lead's message: ``approved`` by a worked approval (or a merge the runner applied),
+    ``on its way`` while one is pending, ``sent back``, else ``open``. A refusal leaves it
+    open."""
+    if proposal.get(APPLIED):
+        return APPROVED
+    about = _about(proposal, card)
+    sent = [("send_back", f"{card}/{proposal.get('id')}", None)]
+    state = OPEN
+    for row in requests:
+        if row["done"] is not None and not str(row["result"] or "").startswith(WORKED):
+            continue  # refused
+        if _matches(row, about):
+            if row["done"] is not None:
+                return APPROVED
+            state = ON_ITS_WAY
+        elif _matches(row, sent) and state == OPEN:
+            state = SENT_BACK
+    return state

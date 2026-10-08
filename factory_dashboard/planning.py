@@ -25,6 +25,7 @@ from runner import metrics
 from runner.planner import (
     APPLIED,
     MERGE,
+    OPEN,
     PLANNER,
     PlannerError,
     cards,
@@ -35,14 +36,12 @@ from runner.planner import (
     message,
     plan_changes,
     plant_words,
+    proposal_state,
     thread_key,
 )
 from runner.requests import (
-    ACCEPT_ADR,
-    APPROVE_PLAN,
     DISMISS,
     PLANT,
-    QUEUED_FOR_THE_LEAD,
     SEND_BACK,
     WORDS,
     Words,
@@ -55,8 +54,6 @@ router = APIRouter()
 
 GENERAL = "general"
 # A request's result when it worked (D1's table); any other result is a refusal.
-# "approved: merged F12 into F10" too: a merge-only approval stayed open (2026-10-08)
-WORKED = (QUEUED_FOR_THE_LEAD, "approved", "accepted ", "planted ")
 _ADR_NUMBER = re.compile(r"docs/adr/(\d+)-")
 _TYPICAL = 20  # finished jobs of the running one's role and agent that make its typical length
 
@@ -127,21 +124,6 @@ def _answers_wanted(
     ]
 
 
-def _about(proposal: dict[str, object], card: str) -> list[tuple[str, str, str | None]]:
-    """The requests about a proposal (D6): (kind, subject, value or None for any value)."""
-    pid, kind = str(proposal.get("id")), proposal.get("kind")
-    about: list[tuple[str, str, str | None]] = [(SEND_BACK, f"{card}/{pid}", None)]
-    if kind == "adr":
-        number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
-        if number:
-            about.append((ACCEPT_ADR, card, str(int(number[1]))))
-    elif kind in ("plan", "mockup", "replan", MERGE):
-        about.append((APPROVE_PLAN, card, None))
-    elif kind == "seed":
-        about.append((PLANT, f"{GENERAL}/{pid}", None))
-    return about
-
-
 def _merge_words(proposal: dict[str, object]) -> str | None:
     """A ``merge`` proposal in words, ``merge F12 into F10``; None for another kind."""
     if proposal.get("kind") != MERGE:
@@ -150,19 +132,6 @@ def _merge_words(proposal: dict[str, object]) -> str | None:
         return merge_words(proposal)
     except PlannerError:
         return None
-
-
-def _settled(requests: list[sqlite3.Row], about: list[tuple[str, str, str | None]]) -> bool:
-    """An owner request about the proposal, pending or worked (a refusal leaves it open)."""
-    for r in requests:
-        for kind, subject, value in about:
-            if r["kind"] != kind or r["subject"] != subject:
-                continue
-            if value is not None and str(r["value"] or "").strip() != value:
-                continue
-            if r["done"] is None or str(r["result"] or "").startswith(WORKED):
-                return True
-    return False
 
 
 def _known_cards(repo: Path | None) -> set[str] | None:
@@ -206,7 +175,7 @@ def _open_proposals(
                 continue
             if proposal.get(APPLIED) or _gone_merge(proposal, known):
                 continue
-            if _settled(later, _about(proposal, row["card"])):
+            if proposal_state(proposal, row["card"], later) != OPEN:
                 continue
             points = proposal.get("key_points")
             words = f"{len(points)} key points" if isinstance(points, list) and points else ""
@@ -317,7 +286,7 @@ def archived(conn: sqlite3.Connection, project: str, now: datetime) -> list[Desk
         return []
     titles = _card_titles(conn, project_id)
     rows = conn.execute(
-        "SELECT card, archived FROM planner_threads"
+        "SELECT card, archived, archived_why FROM planner_threads"
         " WHERE project_id = ? AND archived IS NOT NULL ORDER BY archived DESC, id DESC",
         (project_id,),
     ).fetchall()
@@ -325,7 +294,9 @@ def archived(conn: sqlite3.Connection, project: str, now: datetime) -> list[Desk
         DeskItem(
             "archived",
             _thread_title(r["card"], titles),
-            f"archived {ago(now - _when(r['archived']))} ago",
+            " · ".join(
+                filter(None, [r["archived_why"], f"archived {ago(now - _when(r['archived']))} ago"])
+            ),
             f"/planning/{r['card']}",
         )
         for r in rows
@@ -586,7 +557,7 @@ def _proposals(
             str(p.get("kind") or ""),
             str(p.get("title") or p["id"]),
             _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
-            bool(p.get(APPLIED)) or _gone_merge(p, known) or _settled(requests, _about(p, thread)),
+            _gone_merge(p, known) or proposal_state(p, thread, requests) != OPEN,
             f"/planning/{thread}/proposals/{p['id']}",
         )
         for p in json.loads(lead[-1]["proposals"])
