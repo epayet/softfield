@@ -91,12 +91,12 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
     assert "hx-get" not in html
     # /running returns 404 (the endpoint was removed).
     assert client.get("/running").status_code == 404
-    # there are now three hx-get wrappers (needs-you, now, queue) on the main page.
+    # there are now four hx-get wrappers (needs-you, now, queue, allowance) on the main page.
     page_html = client.get("/?project=coucou").text.split("<main>")[
         1
     ]  # not base.html's notify poll
-    assert page_html.count('hx-get="/live?project=coucou"') == 3
-    assert page_html.count('hx-swap="innerHTML"') == 3
+    assert page_html.count('hx-get="/live?project=coucou"') == 4
+    assert page_html.count('hx-swap="innerHTML"') == 4
 
 
 def test_the_queue_item_goes_from_live_once_a_run_is_live(serve):
@@ -424,8 +424,10 @@ def allowance_rows(html: str) -> dict[str, str]:
     """The allowance panel's rows by their id (``claude-five_hour``…), each row's own text."""
     panel = re.search(r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>', html, re.S)
     assert panel, "no allowance section"
-    # Strip SVG elements so their text doesn't leak into row text.
+    # Strip SVG elements so their text doesn't leak into row text, and the reserve switches,
+    # which `switch_row` reads.
     text = re.sub(r"<svg[^>]*>.*?</svg>", "", panel.group(1), flags=re.S)
+    text = re.sub(r'<div class="switch[^"]*">.*?</div>', "", text, flags=re.S)
     parts = re.split(r'<div id="allow-([a-z_-]+)">', text)[1:]
     return {
         key: " ".join(re.sub(r"<[^>]+>", " ", text_part).split())
@@ -488,6 +490,115 @@ def test_a_reading_past_its_reset_says_reset_since_with_no_percentage(serve, db_
         conn.close()
     row = allowance_rows(client.get("/").text)["claude-five_hour"]
     assert row == "Claude 5-hour window reset since, no new reading kept for you from here"
+
+
+def allowance_client_with(db_path: Path, tmp_path: Path, switches: dict[str, str]):
+    """``allowance_client`` with the project's repo in ``tmp_path``: this repo's runner.toml
+    and a state.json holding ``switches``."""
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+    from tests.factory_dashboard.conftest import write_allowance
+
+    repo = tmp_path / "repo"
+    (repo / "workflow").mkdir(parents=True)
+    toml = Path(__file__).resolve().parents[2] / "workflow" / "runner.toml"
+    (repo / "workflow" / "runner.toml").write_text(toml.read_text(encoding="utf-8"))
+    (repo / "var" / "runs").mkdir(parents=True)
+    (repo / "var" / "runs" / "state.json").write_text(json.dumps({"switches": switches}))
+    conn = metrics.open_db(db_path)
+    try:
+        write_allowance(conn)
+        metrics.upsert_project(conn, PROJECT, repo=str(repo))
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def switch_row(html: str, row: str) -> tuple[str, dict[str, str] | None]:
+    """A meter row's reserve switch: its words, and what its button posts (None: no button)."""
+    found = re.search(rf'<div id="allow-{row}">(.*?)(?=<div id="allow-|</section>)', html, re.S)
+    assert found, row
+    switch = re.search(r'<div class="switch[^"]*">(.*?)</div>', found[1], re.S)
+    if switch is None:
+        return "", None
+    words = " ".join(unescape(re.sub(r"<[^>]+>", " ", switch[1])).split())
+    vals = re.search(r"hx-vals='([^']*)'", switch[1])
+    return words, json.loads(unescape(vals[1])) if vals else None
+
+
+def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_path):
+    """f8-06: the week's switch on (turned on 2.5 h ago, so until tomorrow 09:30) posts "off";
+    the 5-hour switch, absent from state.json, is off and posts "on"."""
+    client = allowance_client_with(db_path, tmp_path, {"week": "2026-10-02T09:30:00+00:00"})
+    html = client.get("/").text
+    assert switch_row(html, "claude-seven_day") == (
+        "Let the factory use the week's reserve: on until Sat 09:30 Turn off",
+        {"kind": "reserve", "project": PROJECT, "subject": "week", "value": "off"},
+    )
+    assert switch_row(html, "claude-five_hour") == (
+        "Let the factory use your 25% of the 5-hour window: off Turn on",
+        {"kind": "reserve", "project": PROJECT, "subject": "five_hour", "value": "on"},
+    )
+
+
+def test_a_switch_on_for_more_than_24_hours_shows_off(db_path, tmp_path):
+    client = allowance_client_with(db_path, tmp_path, {"five_hour": "2026-10-01T11:00:00+00:00"})
+    words, posts = switch_row(client.get("/").text, "claude-five_hour")
+    assert words.endswith(": off Turn on") and posts and posts["value"] == "on"
+
+
+def test_without_a_config_both_switches_are_off(allowance_client):
+    html = allowance_client.get("/").text
+    for row, subject in (("claude-five_hour", "five_hour"), ("claude-seven_day", "week")):
+        words, posts = switch_row(html, row)
+        assert words.endswith(": off Turn on")
+        assert posts == {"kind": "reserve", "project": PROJECT, "subject": subject, "value": "on"}
+
+
+def test_a_meter_of_another_agent_has_no_switch(allowance_client):
+    html = allowance_client.get("/").text
+    assert switch_row(html, "copilot-month") == ("", None)
+    assert switch_row(html, "ollama-ollama") == ("", None)
+
+
+def test_a_switch_asked_for_shows_on_its_way_with_no_button(db_path, tmp_path):
+    """The owner's request shows at once (owner, 2026-10-07), until the runner takes it."""
+    client = allowance_client_with(db_path, tmp_path, {})
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.add_request(conn, project, "reserve", "week", "on", NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    html = client.get("/").text
+    assert switch_row(html, "claude-seven_day") == (
+        "Let the factory use the week's reserve: asked: on",
+        None,
+    )
+    assert '<div class="switch on-its-way">' in html
+    assert switch_row(html, "claude-five_hour")[1] is not None
+
+
+def test_live_returns_the_allowance_panel_after_running(allowance_client):
+    html = allowance_client.get("/live").text
+    ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
+    assert "allowance" in ids and ids.index("allowance") > ids.index("now")
+    assert allowance_rows(html)["claude-five_hour"].startswith("Claude 5-hour window: 80%")
+
+
+def test_a_mark_has_a_title_equal_to_its_label(allowance_client):
+    html = allowance_client.get("/live").text
+    marks = re.findall(
+        r'<div id="allow-([a-z_-]+)">.*?<span class="mark"[^>]*title="([^"]*)"', html, re.S
+    )
+    assert marks == [
+        ("claude-five_hour", "kept for you from here"),
+        ("claude-seven_day", "reserve kept for the lead from here"),
+    ]
 
 
 def test_savings_are_for_the_current_milestone(client):

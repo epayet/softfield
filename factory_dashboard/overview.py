@@ -17,8 +17,9 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, ago, render
-from runner import metrics
-from runner.requests import owners_words
+from runner import loop, metrics
+from runner.requests import RESERVE, owners_words
+from runner.state import load_state
 from runner.tasks import milestone_order
 
 router = APIRouter()
@@ -559,6 +560,50 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
     return claude + copilot + ollama
 
 
+# Claude's windows each have the owner's reserve switch (f8 D4): allowance window -> switch
+SWITCH_OF = {"five_hour": loop.FIVE_HOUR, "seven_day": loop.WEEK}
+
+
+@dataclass
+class Switch:
+    """One reserve switch beside its Claude meter."""
+
+    name: str  # "week" or "five_hour": the reserve request's subject
+    label: str  # the runner's words for it (`loop.SWITCHES`)
+    until: str | None  # "Mon 21:40" while it is on, as `set_switch` words it; None when off
+    asked: str | None  # "on" or "off": the owner's latest request the runner hasn't taken
+
+
+def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Switch]:
+    """Each Claude window's switch, by allowance window, from the runner's state.json (in the
+    config's ``runs_dir``, found as ``line._config`` finds the config): no config or no file
+    and both are off. A switch asked for shows at once (owner, 2026-10-07)."""
+    from factory_dashboard.line import _config  # line.py imports LIVE from here
+
+    config = _config(conn, project)
+    try:
+        state = load_state(config.runs_dir / "state.json") if config else None
+    except (OSError, ValueError):  # unreadable: shown off, as the runner's own would be lost
+        state = None
+    asked = {
+        row["subject"]: row["value"]
+        for row in conn.execute(
+            "SELECT r.subject, r.value FROM owner_requests r"
+            " JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND r.done IS NULL AND r.kind = ? ORDER BY r.id",
+            (project, RESERVE),
+        )
+    }
+    switches = {}
+    for window, name in SWITCH_OF.items():
+        until = None
+        if state is not None and loop.switch_on(state, name, now):
+            ends = datetime.fromisoformat(state.switches[name])
+            until = f"{ends + timedelta(hours=loop.USE_RESERVE_HOURS):%a %H:%M}"
+        switches[window] = Switch(name, loop.SWITCHES[name], until, asked.get(name))
+    return switches
+
+
 def biggest_clog(clog: dict[str, Any]) -> str:
     """The line under "What clogged the line today" (f3 D11): the highest of the limit, the
     failed minutes, the most idle machine's minutes and the owner's, a tie to the first."""
@@ -629,6 +674,9 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         "drain": _drain(all_queued[0].milestone or "") if all_queued else None,
         "waits": waits,
         "queued_jobs": qjobs,
+        # Claude's allowance and its reserve switches, below Now (f8-06)
+        "allowance": agent_allowances(conn, now),
+        "switches": reserve_switches(conn, project, now),
     }
 
 
@@ -683,7 +731,6 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "choices": choices,
             **_live_context(conn, project, now),
             "verdict": last_verdict(conn, project),
-            "allowance": agent_allowances(conn, now),
             "milestone": milestone,
             "savings": queries.savings(conn, project, milestone["key"]) if milestone else None,
             "spend": spend_chart(conn, project),

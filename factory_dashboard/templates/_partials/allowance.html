@@ -1,0 +1,56 @@
+{# The agents' allowance (f2-13), in the live partial below Now (f8-06): each Claude meter has
+   the owner's reserve switch (f8 D4), which posts a reserve request; one asked for shows at once,
+   on its way (a dashed orange edge), until the runner takes it. #}
+<section id="allowance" class="panel">
+  <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+  <details class="legend"><summary>How to read the allowance</summary>
+    <span><i class="swatch under-mark"></i>green: under the mark</span>
+    <span><i class="swatch past-mark"></i>yellow: past the mark</span>
+    <span><i class="swatch nearly-out"></i>red: above 95%</span>
+    <span>the mark: the factory stops here; the rest of the window is the owner's</span>
+    <span>a dashed orange edge: a switch you turned, on its way to the runner</span>
+  </details>
+  <div class="allow">
+    {% for a in allowance %}
+    {% set no_data = a.value is none %}
+    {% set used = a.value or 0 %}
+    {% set fill = "under-mark" if no_data else ("nearly-out" if used > 0.95 else "past-mark" if a.mark is not none and used >= a.mark else "under-mark") %}
+    <div id="allow-{{ a.label | lower }}-{{ a.window }}">
+      <div class="line">
+        <span class="agent">{{ a.label }}</span>
+        <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span>
+      </div>
+      <div class="meter">
+        <span class="{{ fill }}" style="width:{{ '%.0f' | format((a.value or 0) * 100) }}%"></span>
+        {% if a.mark is not none %}
+        <span class="mark" style="left:{{ '%.0f' | format(a.mark * 100) }}%" title="{{ a.mark_label }}"></span>
+        {% endif %}
+      </div>
+      <div class="line">
+        {% if a.reset_label %}
+        <small>{{ a.reset_label }}</small>
+        {% elif a.status %}
+        <small class="warnline">{{ a.status }}</small>
+        {% endif %}
+        {% if a.mark_label %}
+        <small>{{ a.mark_label }}</small>
+        {% endif %}
+      </div>
+      {% set sw = switches.get(a.window) if a.label == "Claude" else none %}
+      {% if sw %}
+      <div class="switch{{ ' on-its-way' if sw.asked }}">
+        <span>{{ sw.label }}:</span>
+        {% if sw.asked %}
+        <b>asked: {{ sw.asked }}</b>
+        {% else %}
+        <b>{{ "on until " ~ sw.until if sw.until else "off" }}</b>
+        <button type="button" hx-post="/requests" hx-swap="none"
+          hx-vals='{"kind": "reserve", "project": {{ project | tojson }}, "subject": {{ sw.name | tojson }}, "value": {{ ("off" if sw.until else "on") | tojson }}}'
+          hx-on::before-request="this.closest('.switch').classList.add('on-its-way'); this.remove()">{{ "Turn off" if sw.until else "Turn on" }}</button>
+        {% endif %}
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</section>

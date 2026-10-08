@@ -19,44 +19,9 @@
 </div>
 
 <div class="row">
-  <section id="allowance" class="panel">
-    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
-    <details class="legend"><summary>How to read the allowance</summary>
-      <span><i class="swatch under-mark"></i>green: under the mark</span>
-      <span><i class="swatch past-mark"></i>yellow: past the mark</span>
-      <span><i class="swatch nearly-out"></i>red: above 95%</span>
-      <span>the mark: the factory stops here; the rest of the window is the owner's</span>
-    </details>
-    <div class="allow">
-      {% for a in allowance %}
-      {% set no_data = a.value is none %}
-      {% set used = a.value or 0 %}
-      {% set fill = "under-mark" if no_data else ("nearly-out" if used > 0.95 else "past-mark" if a.mark is not none and used >= a.mark else "under-mark") %}
-      <div id="allow-{{ a.label | lower }}-{{ a.window }}">
-        <div class="line">
-          <span class="agent">{{ a.label }}</span>
-          <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span>
-        </div>
-        <div class="meter">
-          <span class="{{ fill }}" style="width:{{ '%.0f' | format((a.value or 0) * 100) }}%"></span>
-          {% if a.mark is not none %}
-          <span class="mark" style="left:{{ '%.0f' | format(a.mark * 100) }}%"></span>
-          {% endif %}
-        </div>
-        <div class="line">
-          {% if a.reset_label %}
-          <small>{{ a.reset_label }}</small>
-          {% elif a.status %}
-          <small class="warnline">{{ a.status }}</small>
-          {% endif %}
-          {% if a.mark_label %}
-          <small>{{ a.mark_label }}</small>
-          {% endif %}
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-  </section>
+  <div id="live-allowance" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#allowance" hx-swap="innerHTML">
+    {% include "_partials/allowance.html" %}
+  </div>
 </div>
 
 {% include "_partials/line.html" %}

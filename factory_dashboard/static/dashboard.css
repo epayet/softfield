@@ -154,9 +154,15 @@ tbody tr:hover { background: var(--accent-wash); }
 .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
 .stat b { display: block; font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
 .stat span { color: var(--muted); font-size: 12.5px; }
-.meter { height: 10px; background: var(--grid); overflow: hidden; position: relative; }
-.meter > span { position: absolute; inset: 0 auto 0 0; background: var(--c, var(--a2)); }
-.meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+/* The fill is clipped, not the meter, so a mark overhangs it and reads in both themes (f8-06) */
+.meter { height: 10px; background: var(--grid); position: relative; }
+.meter > span { position: absolute; inset: 0 auto 0 0; max-width: 100%; background: var(--c, var(--a2)); }
+.meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
+  outline: 1px solid var(--surface); z-index: 1; }
+.allow .switch { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px;
+  margin-top: 4px; padding: 4px 6px; border: 1px solid transparent; }
+.allow .switch.on-its-way { border: 1px dashed var(--hazard); }
+.allow .switch button { min-height: 44px; }
 /* An allowance meter says how close it is (owner, 2026-10-02); the legend says it in words */
 .swatch.under-mark, .meter > .under-mark { background: var(--good); }
 .swatch.past-mark, .meter > .past-mark { background: var(--hazard); }
