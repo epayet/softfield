@@ -1,6 +1,6 @@
 # Review: F6, the planning room
 
-- **Status:** reviewed (round 1, 2026-10-08), waiting for the owner's sign-off
+- **Status:** done, signed off by the owner on 2026-10-08.
 - **Stop reason:** none. Round 1 found 3 should-fix points and 1 nit. The lead fixed the 3 should-fix points (all small) and put the nit in the backlog. No ADR is needed.
 
 ## Sign-off sheet
