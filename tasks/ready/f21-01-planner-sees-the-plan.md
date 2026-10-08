@@ -10,7 +10,7 @@ files:
 tests:
   - tests/runner/test_planner.py
   - tests/runner/test_loop.py
-priority: 0
+priority: 2
 ---
 
 ### Goal
