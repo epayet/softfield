@@ -32,3 +32,10 @@ Read `docs/milestones/f20-data-safety.md` (D1 is the decision: config, file name
 - `workflow/runner.toml` has the `[backup]` section with D1's defaults, and a config without it uses those defaults
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
