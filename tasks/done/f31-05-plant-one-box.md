@@ -30,3 +30,11 @@ Read `docs/milestones/f31-when-i-click-on-approve-plan.md` D7. In `runner/planne
 - the form has one text box; both buttons work at 390 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08), before f31-03, f13-01 and f14-01; the lead naming the card stays with f31-03, a change of a waiting plant with f14-01
+```

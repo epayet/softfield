@@ -574,6 +574,27 @@ def test_a_long_title_is_cut_at_a_word_and_kept_whole_in_the_thoughts():
     assert planner.planting(json.dumps({"title": "y" * 120})) == ("y" * 120, "", "factory")
 
 
+def test_a_one_box_note_is_its_heading_and_its_whole_text():
+    """F31 D7: a 300-character note, no title: its heading is its first words under 60
+    characters, its thoughts the whole text."""
+    note = ("the pause button did nothing the first time i pressed it, then later it worked " * 4)[
+        :300
+    ]
+    title, thoughts, area = planner.planting(json.dumps({"text": f" {note}\n", "area": None}))
+    assert len(title) < 60 and title.endswith("…") and note.startswith(title[:-1])
+    assert (thoughts, area) == (note.strip(), "factory")
+    assert planner.planting(json.dumps({"text": "Ducks\nrubber"}))[:2] == (
+        "Ducks rubber",
+        "Ducks\nrubber",
+    )
+    assert planner.plant_words(json.dumps({"text": note}), title, thoughts) == note.strip()
+    old = json.dumps({"title": "Ducks", "thoughts": "Rubber."})
+    assert planner.plant_words(old, "Ducks", "Rubber.") == "Ducks\n\nRubber."
+    for bad in ({"text": "  "}, {"text": 3}, {"text": "y" * 20_001}):
+        with pytest.raises(planner.PlannerError):
+            planner.planting(json.dumps(bad))
+
+
 def test_a_seed_card_is_an_idea_with_the_owners_words_under_notes():
     doc = planner.seed_card("f7", "One queue", "Why two?\nOne is enough.", "factory", "Planted.")
     assert milestone.card("f7-one-queue", doc) == milestone.Card("idea", 100, "factory")
@@ -678,6 +699,23 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     # the owner's words are also F7's first message, for the lead to answer (2026-10-07)
     assert _for_the_lead(repo) == [("f7", "Parallel planners\n\nTwo at once?\nMaybe.")]
     assert _apply(repo) == []  # finished once
+
+
+def test_a_one_box_note_plants_its_text_whole(repo):
+    """F31 D7: no title; the heading is the first words, the Notes and the thread's first
+    message the whole text, once."""
+    _f6(repo)
+    note = "Parallel planners: two at once?\nMaybe, if they each get their own branch."
+    _ask(repo, "plant", None, json.dumps({"text": note, "ask": True}))
+    [line] = _apply(repo)
+    stem = "f7-parallel-planners-two-at-once-maybe"
+    assert line == f"plant: planted docs/milestones/{stem}.md, queued for the lead"
+    doc = (repo / "docs" / "milestones" / f"{stem}.md").read_text()
+    assert doc.startswith(
+        "# Milestone F7: Parallel planners: two at once? Maybe, if they each get…\n"
+    )
+    assert doc.endswith(f"## Notes\n{note}\n")
+    assert _for_the_lead(repo) == [("f7", note)]
 
 
 def test_a_plant_not_asked_about_waits_as_a_seed(repo):

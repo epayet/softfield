@@ -694,8 +694,7 @@ def _plant(
         return f"planted {rel}"
     # "Plant and ask the lead": the owner's words are also the card thread's first message, so
     # the lead answers them (the owner, 2026-10-07 and 2026-10-08). It waits at a limit.
-    words = "\n\n".join(filter(None, [title, thoughts]))
-    said = json.dumps({"text": words, "comments": {}})
+    said = json.dumps({"text": planner.plant_words(value, title, thoughts), "comments": {}})
     at = now.isoformat()
     request_id = metrics.add_request(conn, project_id, PLAN_MESSAGE, key, said, at)
     asked = metrics.find_request(conn, request_id)
@@ -765,6 +764,8 @@ class Words:
 def _plant_words(data: object) -> Words | None:
     if not isinstance(data, dict):
         return None
+    if isinstance(text := data.get("text"), str):  # one box (F31 D7)
+        return Words(planner.heading(text), text.strip())
     title, thoughts = data.get("title") or "", data.get("thoughts") or ""
     if not (isinstance(title, str) and isinstance(thoughts, str)):
         return None

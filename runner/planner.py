@@ -284,6 +284,7 @@ SEED = "seed"  # the proposal kind a general thread's idea comes as
 SERIES = {"factory": "f", "product": "m"}  # an area's keys (ADR 19 item 2b)
 _PLANT_VALUE = "a plant request is JSON with a title, its thoughts and an area"
 _MAX_TITLE = 120
+_MAX_HEADING = 60  # a one-box note's heading, until the lead names the card (F31 D7)
 _MAX_THOUGHTS = 20_000
 _SLUG_WORDS = 6
 _TICKET_KEY_RE = re.compile(r"([a-z]+\d+)-\d")  # a ticket id's milestone, `f6` of `f6-04-…`
@@ -361,12 +362,46 @@ def _plant_data(value: object) -> dict[str, Any]:
     return data
 
 
+def heading(text: str) -> str:
+    """A one-box note's heading (F31 D7): its first words, cut at a word under 60 characters,
+    with an ellipsis when cut."""
+    words = " ".join(text.split())
+    if len(words) < _MAX_HEADING:
+        return words
+    cut = words[: _MAX_HEADING - 1]
+    cut = cut.rsplit(" ", 1)[0] if " " in cut else cut
+    return f"{cut.rstrip()}…"
+
+
+def _note_text(data: Mapping[str, Any]) -> str | None:
+    """A one-box plant's text (F31 D7, ``{"text", "area"}``), trimmed; None for the older
+    ``{"title", "thoughts"}``."""
+    if "text" not in data:
+        return None
+    text = data["text"]
+    if not isinstance(text, str) or not text.strip():
+        raise PlannerError("a note has some words")
+    if len(text.strip()) > _MAX_THOUGHTS:
+        raise PlannerError(f"a note is at most {_MAX_THOUGHTS} characters")
+    return text.strip()
+
+
 def planting(value: object) -> tuple[str, str, str]:
     """A ``plant`` request's value (f6 D1): the idea's title, its thoughts and its area
-    (factory unless given)."""
+    (factory unless given). A one-box note's title is its heading, and its thoughts the whole
+    text (F31 D7)."""
     data = _plant_data(value)
+    if (text := _note_text(data)) is not None:
+        return heading(text), text, _area(data)
     title, thoughts = _words(data.get("title"), data.get("thoughts") or "")
     return title, thoughts, _area(data)
+
+
+def plant_words(value: object, title: str, thoughts: str) -> str:
+    """What "Plant and ask the lead" sends on the card's thread: the note's text whole, or the
+    title and the thoughts."""
+    text = _note_text(_plant_data(value))
+    return text if text is not None else "\n\n".join(filter(None, [title, thoughts]))
 
 
 def asks(value: object) -> bool:

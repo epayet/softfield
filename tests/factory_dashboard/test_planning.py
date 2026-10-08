@@ -273,11 +273,11 @@ def _open(page, client: TestClient, path: str = "/planning") -> None:
 
 @pytest.mark.parametrize(("button", "ask"), [("#plant-only", False), ("#plant-ask", True)])
 def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve, button, ask):
-    """Planting asks the runner: a ``plant`` request, no subject, the title and the thoughts;
+    """Planting asks the runner: a ``plant`` request, no subject, the note's one box (F31 D7);
     "Plant and ask the lead" also sends it to the lead, "Plant" doesn't (the owner, 2026-10-08)."""
     _open(page, serve())
-    page.fill('#plant input[name="title"]', 'Memory "drift" on the frame')
-    page.fill('#plant textarea[name="thoughts"]', "It forgets.\nOn every reload.")
+    assert page.locator("#plant input, #plant textarea").count() == 2  # the box, the hidden ask
+    page.fill('#plant textarea[name="text"]', 'Memory "drift" on the frame\nIt forgets.')
     page.click(button)
     page.wait_for_selector("#plant-status >> text=Asked")
     conn = metrics.open_db(db_path)
@@ -286,7 +286,7 @@ def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve, bu
         asked = [(r["kind"], r["subject"], json.loads(r["value"])) for r in rows]
     finally:
         conn.close()
-    words = {"title": 'Memory "drift" on the frame', "thoughts": "It forgets.\nOn every reload."}
+    words = {"text": 'Memory "drift" on the frame\nIt forgets.'}
     assert asked == [("plant", None, {**words, "ask": ask})]
 
 
@@ -1534,8 +1534,9 @@ def test_try_again_on_a_plant_fills_the_plant_form_and_posts_nothing(
     asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
     _open(page, serve())
     page.click(f"#again-{asked}")
-    assert page.input_value('#plant input[name="title"]') == "Rubber ducks"
-    assert page.input_value('#plant textarea[name="thoughts"]') == "Yellow ones.\nFor Mum."
+    assert (
+        page.input_value('#plant textarea[name="text"]') == "Rubber ducks\n\nYellow ones.\nFor Mum."
+    )
     rows = sqlite3.connect(db_path).execute("SELECT count(*) FROM owner_requests").fetchone()
     assert rows[0] == 1
 

@@ -31,14 +31,11 @@
 
 <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
   <form id="plant" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
-    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({title: this.elements.title.value, thoughts: this.elements.thoughts.value, ask: this.elements.ask.value === "1"})}'
+    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1"})}'
     style="flex: 1 1 280px; min-width: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
     <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Plant an idea</h2>
-    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Title
-      <input type="text" name="title" required placeholder="Memory drift on the frame" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; min-height: 44px; box-sizing: border-box">
-    </label>
-    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Your thoughts, as rough as you like
-      <textarea name="thoughts" rows="3" placeholder="What it is, why, what worries you…" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
+    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">What's on your mind? As rough as you like: the lead names the card
+      <textarea name="text" rows="4" required placeholder="The pause button did nothing the first time…" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
     </label>
     <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
       <input type="hidden" name="ask" value="">
@@ -86,8 +83,8 @@
             {% if item.again %}
             <a id="again-{{ item.id }}" href="{{ item.again }}{{ q }}&amp;again={{ item.id }}#reply" style="display: inline-flex; align-items: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); padding: 0 14px; min-height: 44px">Try again</a>
             {% else %}
-            <button type="button" id="again-{{ item.id }}" data-title="{{ item.idea_title }}" data-thoughts="{{ item.text }}"
-              onclick="const f = document.getElementById('plant'); f.elements.title.value = this.dataset.title; f.elements.thoughts.value = this.dataset.thoughts; f.scrollIntoView(); f.elements.title.focus()"
+            <button type="button" id="again-{{ item.id }}" data-note="{{ item.note }}"
+              onclick="const f = document.getElementById('plant'); f.elements.text.value = this.dataset.note; f.scrollIntoView(); f.elements.text.focus()"
               style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Try again</button>
             {% endif %}
             <button type="button" id="dismiss-{{ item.id }}" hx-post="/requests" hx-target="#refused-status-{{ item.id }}" hx-swap="innerHTML"

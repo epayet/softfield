@@ -32,6 +32,7 @@ from runner.planner import (
     merge_words,
     message,
     plan_changes,
+    plant_words,
     thread_key,
 )
 from runner.requests import (
@@ -42,6 +43,7 @@ from runner.requests import (
     QUEUED_FOR_THE_LEAD,
     SEND_BACK,
     WORDS,
+    Words,
     owners_words,
     refused,
 )
@@ -71,7 +73,7 @@ class RefusedItem(DeskItem):
 
     id: int
     text: str  # an idea's thoughts, or the message with its comments by point
-    idea_title: str  # what Try again puts in the Plant form's title; "" for a message
+    note: str  # what Try again puts back in the Plant box (F31 D7); "" for a message
     again: str  # the thread whose reply box takes a message back; "" for an idea
 
 
@@ -242,6 +244,15 @@ def _message_thread(row: sqlite3.Row) -> str:
         return GENERAL
 
 
+def _plant_note(value: object, words: Words) -> str:
+    """A refused plant's words, whole, for the one Plant box: the note's text, or an older
+    plant's title and thoughts."""
+    try:
+        return plant_words(value, words.title, words.text)
+    except PlannerError:
+        return "\n\n".join(filter(None, [words.title, words.text]))
+
+
 def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) -> list[DeskItem]:
     """The owner's words the runner refused (F31 D9), until they dismiss them: a dismiss on
     its way takes one off at once."""
@@ -268,10 +279,9 @@ def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) 
             thread = _message_thread(r)
             title, again = f"Your message on {_thread_title(thread, titles)}", f"/planning/{thread}"
         reason = str(r["result"] or "")
+        note = _plant_note(r["value"], words) if r["kind"] == PLANT else ""
         items.append(
-            RefusedItem(
-                "refused", title, reason, "/planning", r["id"], words.text, words.title, again
-            )
+            RefusedItem("refused", title, reason, "/planning", r["id"], words.text, note, again)
         )
     return items
 
