@@ -154,7 +154,11 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
         ),
     )
     proposals = desk(db, PROJECT, NOW)[2].items
-    assert [p.link.rsplit("/", 1)[1] for p in proposals] == still_open
+    assert [p.link.rsplit("/", 1)[1] for p in proposals if not p.on_its_way] == still_open
+    # a pending one stays, dashed and on its way (the owner, 2026-10-08)
+    assert [p.link.rsplit("/", 1)[1] for p in proposals if p.on_its_way] == (
+        ["plan"] if kind == "approve_plan" and subject == "f6" and done is None else []
+    )
 
 
 def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
@@ -840,11 +844,14 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
             conn, planning, "approve_plan", "f9", None, NOW.isoformat()
         ),
     )
-    assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    assert item.on_its_way  # on its way until the runner's next pick, no longer waiting on you
 
 
 def _merges_on_the_desk(db: sqlite3.Connection) -> list[str]:
-    return [i.link for i in desk(db, PROJECT, NOW)[2].items if "/merge-" in i.link]
+    return [
+        i.link for i in desk(db, PROJECT, NOW)[2].items if "/merge-" in i.link and not i.on_its_way
+    ]
 
 
 def test_an_approved_merge_leaves_the_desk(planning, db_path, db):
@@ -1826,3 +1833,67 @@ def test_a_plans_ticket_rows_say_who_builds_them_and_colour_the_word(
         "tasks/later/f7-01-a.md": ("--good", "lead · difficulty 6"),
         "tasks/later/f7-02-b.md": ("--good", "developer · difficulty 2"),
     }
+
+
+# --- what the owner acted on shows on its way; Previous and Next (F35) -----------------------
+
+
+def test_an_archive_on_its_way_shows_dashed_and_counts_no_more(planning, db_path, db, serve):
+    """The owner (2026-10-08): after Archive, the thread still looked like it needed them.
+    Until the runner's next pick it is on its way, dashed, and out of the count."""
+    from factory_dashboard.app import top_bar
+
+    before = top_bar(db, PROJECT, NOW)["planning_count"]
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "archive", "general", "on", NOW.isoformat()
+        ),
+    )
+    [item] = [i for i in desk(db, PROJECT, NOW)[1].items if i.link == "/planning/general"]
+    assert item.on_its_way and item.words == "archiving at the runner's next pick"
+    assert top_bar(db, PROJECT, NOW)["planning_count"] == before - 1
+    html = _page(serve())
+    found = re.search(
+        r'<a href="/planning/general[^"]*" class="on-its-way-item"'
+        r' style="[^"]*dashed var\(--hazard\)',
+        html,
+    )
+    assert found, "no dashed item"
+
+
+def test_a_sign_off_on_its_way_shows_on_the_desk(planning, db_path, db):
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(conn, planning, "signoff", "m4", None, NOW.isoformat()),
+    )
+    [item] = [i for i in desk(db, PROJECT, NOW)[3].items if i.link == "/planning/m4"]
+    assert item.on_its_way and item.words == "signing off at the runner's next pick"
+
+
+def _trail(html: str) -> dict[str, str]:
+    nav = re.search(r'<nav id="desk-trail".*?</nav>', html, re.S)
+    assert nav, "no #desk-trail"
+    found = dict(re.findall(r'<a id="desk-(previous|next)" href="([^"?]+)', nav[0]))
+    found["words"] = _text(nav[0])
+    return found
+
+
+def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
+    """F35: from the general thread, Next is F6's ADR; from there Previous is back and Next is
+    F6's plan; a page already done with leads to the first one left."""
+    client = serve()
+    first = _trail(_thread(client, "general"))
+    assert first["next"] == "/planning/f6/proposals/adr-20" and "previous" not in first
+    assert "1 of " in first["words"] and "waiting for you" in first["words"]
+    middle = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
+    assert middle["previous"] == "/planning/general"
+    assert middle["next"] == "/planning/f6/proposals/plan"
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "archive", "general", "on", NOW.isoformat()
+        ),
+    )
+    done = _trail(_thread(client, "general"))  # archived: no longer waiting
+    assert done["next"] == "/planning/f6/proposals/adr-20" and "previous" not in done

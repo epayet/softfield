@@ -684,7 +684,7 @@ def _pause_held_planner(serve, serve_between, db_path):
     [
         (_running, "Running: f1-04-live", {"Pause": "pause"}),
         (_idle, "Idle: nothing to do", {"Pause": "pause"}),
-        (_pause_asked, "Pausing after this job", {"Resume": "resume"}),
+        (_pause_asked, "Pausing after f1-04-live", {"Resume": "resume"}),  # which job, still
         (_pause_held_client, "Paused by you since 11:40", {"Resume": "resume"}),
         (
             _pause_held_planner,
@@ -800,7 +800,7 @@ def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serv
     page.locator("#factory-status button", has_text="Pause").click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Pausing after this job'",
+        " === 'Pausing after f1-04-live'",
         timeout=1_000,
     )
     page.wait_for_function("document.querySelector('#factory-status button') === null")

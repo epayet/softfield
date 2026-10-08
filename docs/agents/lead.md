@@ -66,6 +66,8 @@ What developers pass at the first attempt, from results. Update it at each miles
 - Changes to protected paths get isolation tests in the same commit.
 - Every commit goes through the pre-commit hook, `uv run runner check-all` (`git config core.hooksPath workflow/hooks`; docs- and tasks-only commits skip it). Developers' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did). Never pipe a check through `| tail`: it hides the exit code.
 
+- **A terminal session beside a running runner works in its own worktree** (2026-10-08): the runner checks task and plan branches out in the main folder, so a lead's commits there land on whatever it has checked out. That day ten of them went onto a developer's `task/` branch, and its gates then failed on a protected path the lead had changed. Work in `git worktree add ../<repo>-lead -b lead/<topic> main`, and merge into main only while the runner is stopped (or paused on main), checking `git branch --show-current` first.
+
 ## Escalations (headless or interactive)
 - Read the task, `BLOCKED.md` or the gate logs, the last diff and **the developer's thinking** (`thinking-N.md`) in `var/runs/<run>/<task>/`. The thinking shows why an attempt failed where the gate logs don't (m4-06). At checkpoints and reviews, read the code; read the thinking only when a finding needs explaining.
 - Choose one ([ADR 15](../adr/15-allowance-aware-routing.md) items 7 and 8):

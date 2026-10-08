@@ -593,7 +593,10 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
     the run order)."""
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
-    from factory_dashboard.planning import desk  # planning.py imports from overview at module level
+    from factory_dashboard.planning import (  # planning.py imports from overview at module level
+        desk,
+        waiting_for_you,
+    )
 
     jobs = running_jobs(conn, project, now)
     all_queued = queue(conn, project, now)
@@ -603,7 +606,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     open_needs = needs_you(conn, project, now, jobs, all_queued)
     # the desk's entry stands for its answers wanted, so no lead reply shows on its own (f6-09)
     needs = [n for n in open_needs if n.kind != "planning"]
-    items = [item for group in desk(conn, project, now) for item in group.items]
+    items = waiting_for_you(desk(conn, project, now))  # what the owner acted on waits on no one
     if items:
         n = len(items)
         text = f"{n} thing{'s wait' if n != 1 else ' waits'} for you on your desk"

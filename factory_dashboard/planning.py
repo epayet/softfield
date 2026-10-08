@@ -12,7 +12,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -71,6 +71,9 @@ class DeskItem:
     title: str
     words: str
     link: str
+    # the owner acted on it and the runner hasn't yet: it shows dashed, on its way, and no
+    # longer counts as waiting for them (the owner, 2026-10-08)
+    on_its_way: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -182,7 +185,8 @@ def _open_proposals(
                 continue
             if proposal.get(APPLIED) or _gone_merge(proposal, known):
                 continue
-            if proposal_state(proposal, row["card"], later) != OPEN:
+            state = proposal_state(proposal, row["card"], later)
+            if state not in (OPEN, ON_ITS_WAY):
                 continue
             points = proposal.get("key_points")
             words = f"{len(points)} key points" if isinstance(points, list) and points else ""
@@ -192,8 +196,9 @@ def _open_proposals(
                 DeskItem(
                     "proposals",
                     str(proposal.get("title") or proposal["id"]),
-                    words or str(proposal.get("kind") or ""),
+                    _NEXT_PICK if state == ON_ITS_WAY else words or str(proposal.get("kind") or ""),
                     f"/planning/{row['card']}/proposals/{proposal['id']}",
+                    on_its_way=state == ON_ITS_WAY,
                 )
             )
     return items
@@ -375,6 +380,70 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
     return DeskGroup("coming", "Coming", "--hazard", items)
 
 
+_NEXT_PICK = "on its way · the runner applies it at its next pick"
+
+
+def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) -> list[DeskItem]:
+    """The owner's Archive, Sign off or Remove seed still waiting for the runner: the item
+    shows on its way, dashed, saying what is coming (the owner, 2026-10-08: an archived thread
+    still looked like it needed them)."""
+    pending = conn.execute(
+        "SELECT kind, subject, value FROM owner_requests WHERE project_id = ? AND done IS NULL"
+        " AND kind IN ('archive', 'signoff', 'drop_seed')",
+        (project_id,),
+    ).fetchall()
+    asked: dict[str, str] = {}
+    for r in pending:
+        subject = str(r["subject"] or "")
+        if r["kind"] == "archive" and r["value"] == "on":
+            asked[subject] = "archiving at the runner's next pick"
+        elif r["kind"] == "signoff":
+            asked[short_key(subject) if subject else subject] = (
+                "signing off at the runner's next pick"
+            )
+        elif r["kind"] == "drop_seed":
+            asked[subject] = "removing at the runner's next pick"
+    found = []
+    for item in items:
+        thread = item.link.removeprefix("/planning/").split("/")[0]
+        words = asked.get(thread) if "/proposals/" not in item.link else None
+        found.append(replace(item, words=words, on_its_way=True) if words else item)
+    return found
+
+
+def waiting_for_you(groups: list[DeskGroup]) -> list[DeskItem]:
+    """The desk's items still waiting for the owner, in desk order: the Planning tab's count,
+    Overview's Needs you and the arrows between pages (F35) read these."""
+    return [item for group in groups for item in group.items if not item.on_its_way]
+
+
+def desk_trail(
+    conn: sqlite3.Connection, project: str, now: datetime, path: str
+) -> dict[str, object]:
+    """F35, the owner's Previous and Next between what waits for them: the pages of the desk's
+    items still waiting, in desk order (what didn't go through stays on /planning). On one of
+    them, its neighbours; on a page already done with, the first one left."""
+    links = list(
+        dict.fromkeys(
+            item.link
+            for item in waiting_for_you(desk(conn, project, now))
+            if item.link.startswith("/planning/")
+        )
+    )
+    if path in links:
+        at = links.index(path)
+        return {
+            "previous": links[at - 1] if at > 0 else None,
+            "next": links[at + 1] if at + 1 < len(links) else None,
+            "words": f"{at + 1} of {len(links)} waiting for you",
+        }
+    return {
+        "previous": None,
+        "next": links[0] if links else None,
+        "words": f"{len(links)} waiting for you" if links else "Nothing else waits for you",
+    }
+
+
 def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
     """What waits for the owner (D6), in five groups in this order, empty ones included: what
     didn't go through first (F31 D9)."""
@@ -388,10 +457,10 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
     else:
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
-        answers = _answers_wanted(conn, project_id, titles, now)
+        answers = _acted_on(conn, project_id, _answers_wanted(conn, project_id, titles, now))
         proposals = _open_proposals(conn, project_id, _known_cards(_repo(conn, project)))
-        ripe = _ripe(conn, project, now)
-        seeds = _seeds(conn, project_id)
+        ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
+        seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
     return [
         DeskGroup("refused", "Didn't go through", "--hazard", refusals),
         DeskGroup("answers", "Your answers wanted", "--hazard", answers),
@@ -789,6 +858,7 @@ def thread_page(
             "archived_at": archived_at,
             "archiving": archiving,
             "review": review,
+            "trail": desk_trail(conn, project, now, request.url.path),
             "messages": messages,
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,
@@ -881,7 +951,7 @@ def _who(path: str, text: str | None) -> tuple[str, str]:
 
 @router.get("/planning/{thread}/proposals/{id}", response_class=HTMLResponse)
 def proposal_review(
-    request: Request, thread: str, id: str, conn: Db, project: Project
+    request: Request, thread: str, id: str, conn: Db, project: Project, now: Now
 ) -> HTMLResponse:
     """A proposal's review page: its key points, agreed by default, with Comment… on each,
     and Send back, Accept ADR, Approve plan or Plant it."""
@@ -923,5 +993,6 @@ def proposal_review(
             "changes": _plan_changes(repo, thread, kind),
             "word_color": _WORD_COLOR,
             "standing": _standing(conn, project_id, thread, proposal, lead, _known_cards(repo)),
+            "trail": desk_trail(conn, project, now, request.url.path),
         },
     )

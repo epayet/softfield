@@ -228,8 +228,10 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
         if any(j.live and j.role == "planner" for j in jobs):
             words += " · the lead is answering you"
         return Status(words, "warn", "resume")
-    if asked == "pause":
-        return Status("Pausing after this job", "warn asked", "resume")
+    if asked == "pause":  # which job, still (the owner, 2026-10-08: the bar lost it)
+        job = next((j for j in overview.running_jobs(conn, project, now) if j.live), None)
+        doing = f"{job.ticket or f'{job.role}, job {job.job}'}" if job else "this job"
+        return Status(f"Pausing after {doing}", "warn asked", "resume")
     waiting = next((r.waiting_until for r in runs if r.waiting_until), None)
     if waiting:
         return Status(f"Waiting for Claude until {_clock(waiting)}", "serious", "pause")
@@ -248,11 +250,11 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
 def top_bar(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Any]:
     """The top bar's live facts on every page (f6-16): the factory's status and the Planning
     tab's count. ``render`` adds them to each page's first paint; ``/live`` refreshes them."""
-    from factory_dashboard.planning import desk  # planning imports this module
+    from factory_dashboard.planning import desk, waiting_for_you  # planning imports this module
 
     return {
         "bar_status": factory_status(conn, project, now),
-        "planning_count": sum(len(group.items) for group in desk(conn, project, now)),
+        "planning_count": len(waiting_for_you(desk(conn, project, now))),
     }
 
 
