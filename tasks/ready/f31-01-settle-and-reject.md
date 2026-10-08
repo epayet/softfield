@@ -13,6 +13,7 @@ tests:
   - tests/runner/test_planner.py
   - tests/runner/test_requests.py
   - tests/factory_dashboard/test_planning.py
+priority: 0
 ---
 
 ### Goal
