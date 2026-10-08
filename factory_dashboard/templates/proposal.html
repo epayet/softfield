@@ -90,6 +90,8 @@
           hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
           style="{{ button }}{% if adr_waits %}; color: var(--muted); background: transparent; border: 1px dashed var(--muted){% endif %}">Approve plan</button>
         {% if adr_waits %}<span style="font-size: 12.5px; color: var(--muted)">Accept the card's ADR first: the plan builds on it.</span>{% endif %}
+        {% elif kind == "merge" and proposal.applied %}
+        <span id="merged-by-lead" style="font-size: 12.5px; color: var(--muted)">Done: the lead merged them. To undo it, say so on the kept card's thread.</span>
         {% elif kind == "merge" and merge %}
         <button type="button" id="approve-merge"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"

@@ -23,6 +23,7 @@ from factory_dashboard.line import live_line
 from factory_dashboard.overview import Running, agent_allowances, running_jobs
 from runner import metrics
 from runner.planner import (
+    APPLIED,
     MERGE,
     PLANNER,
     PlannerError,
@@ -180,7 +181,7 @@ def _open_proposals(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]
         for proposal in json.loads(row["proposals"]):
             if not isinstance(proposal, dict) or not proposal.get("id"):
                 continue
-            if _settled(later, _about(proposal, row["card"])):
+            if proposal.get(APPLIED) or _settled(later, _about(proposal, row["card"])):
                 continue
             points = proposal.get("key_points")
             words = f"{len(points)} key points" if isinstance(points, list) and points else ""
@@ -548,7 +549,7 @@ def _proposals(
             str(p.get("kind") or ""),
             str(p.get("title") or p["id"]),
             _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
-            _settled(requests, _about(p, thread)),
+            bool(p.get(APPLIED)) or _settled(requests, _about(p, thread)),
             f"/planning/{thread}/proposals/{p['id']}",
         )
         for p in json.loads(lead[-1]["proposals"])

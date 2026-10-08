@@ -331,11 +331,11 @@ def _merges(proposals: list[dict[str, object]]) -> list[tuple[str, str]]:
     return [
         planner.merge_cards(proposal)
         for proposal in proposals
-        if proposal.get("kind") == planner.MERGE
+        if proposal.get("kind") == planner.MERGE and not proposal.get(planner.APPLIED)
     ]
 
 
-def _merge(repo: Path, now: datetime, duplicate: str, kept: str) -> None:
+def _merge(repo: Path, now: datetime, duplicate: str, kept: str, by: str = "owner") -> None:
     """The duplicate's notes appended to the kept card's Notes, saying where they came from,
     and its doc removed (``git rm``), for the approval's one commit. A card with tickets isn't
     merged away: they would be left without their milestone."""
@@ -351,14 +351,18 @@ def _merge(repo: Path, now: datetime, duplicate: str, kept: str) -> None:
         )
     text = docs[0].read_text(encoding="utf-8")
     title = milestone.milestone_doc(text).get("title") or duplicate
-    source = f"From {names[0]}: {title} (merged by the owner on {now.date().isoformat()})"
+    source = f"From {names[0]}: {title} (merged by the {by} on {now.date().isoformat()})"
     doc = docs[1].read_text(encoding="utf-8")
     docs[1].write_text(planner.merged_card(doc, planner.card_notes(text), source), "utf-8")
     Git(repo).run("rm", "-q", "--", docs[0].relative_to(repo).as_posix())
 
 
 def _merged(
-    conn: sqlite3.Connection, project_id: int, now: datetime, merges: list[tuple[str, str]]
+    conn: sqlite3.Connection,
+    project_id: int,
+    now: datetime,
+    merges: list[tuple[str, str]],
+    by: str = "owner",
 ) -> None:
     """Each merged card's thread points to the kept card's, its reply's item is answered, and
     it leaves the board."""
@@ -367,7 +371,7 @@ def _merged(
         metrics.remove_cards(conn, project_id, gone=duplicate)
         name, there = planner.thread_name(duplicate), planner.thread_name(kept)
         text = (
-            f"The owner merged {name} into {there}: its notes are on {there}'s card now. "
+            f"The {by} merged {name} into {there}: its notes are on {there}'s card now. "
             f"The conversation goes on on {there}'s thread: /planning/{kept}"
         )
         thread_id = metrics.planner_thread(conn, project_id, duplicate, at)["id"]
@@ -382,6 +386,41 @@ def _resolve_items(
     for item in metrics.open_owner_items(conn, project_id):
         if item["kind"] == planner.PLANNING and item["subject"] in threads:
             metrics.resolve_owner_item(conn, item["id"], now.isoformat())
+
+
+def auto_merge(
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    now: datetime,
+    proposal: Mapping[str, object],
+) -> str | None:
+    """F49 D1, D2: a planner reply's ``merge``, applied by the runner straight after the job,
+    in one commit on main by the lead. None when it is applied (or its duplicate is gone
+    already); otherwise why not, main unchanged, and the proposal waits for the owner."""
+    try:
+        duplicate, kept = planner.merge_cards(proposal)
+    except planner.PlannerError as exc:
+        return str(exc)
+    if not milestone_file(repo, "milestones", full_key(repo, duplicate)).is_file():
+        return None
+    git = Git(repo)
+    name = planner.thread_name(duplicate)
+    branch = planner.plan_branch(duplicate)
+    if branch is not None and _has_branch(git, branch) and _drafts(git, branch):
+        return f"{name} has drafts on {branch}"
+    try:
+        _merge(repo, now, duplicate, kept, by="lead")
+        message = f"{name} merged into {planner.thread_name(kept)} by the lead"
+        git.commit_all(with_trailers(message, agent=loop.CLAUDE_HEADLESS_AGENT))
+    except planner.PlannerError as exc:
+        _undo(git)
+        return str(exc)
+    except Exception:
+        _undo(git)
+        raise
+    _merged(conn, project_id, now, [(duplicate, kept)], by="lead")
+    return None
 
 
 def _ready_changes(

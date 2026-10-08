@@ -34,3 +34,11 @@ Read `docs/milestones/f49-don-t-ask-me-to-merge.md` D1 and D2, and F6's D2 and D
 - the planner prompts no longer say a merge waits for the owner
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08), without f31-01: an applied merge is stored with `applied: true`
+```

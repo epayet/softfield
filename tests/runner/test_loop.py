@@ -4300,6 +4300,74 @@ def test_a_card_job_that_drafts_nothing_leaves_no_plan_branch(repo, fake_model, 
     assert git(repo, "branch", "--show-current").strip() == "main"
 
 
+MERGE_F12 = {
+    "id": "merge-f12",
+    "kind": "merge",
+    "title": "One queue, said twice",
+    "path": "docs/milestones/f12-queue-once.md",
+    "into": "f10",
+    "key_points": [{"n": 1, "title": "Notes", "text": "F12's notes go to F10.", "flag": False}],
+}
+
+
+def _twin_cards(repo: Path, ticket: bool = False) -> None:
+    docs = repo / "docs" / "milestones"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "f10-one-queue.md").write_text(
+        "# Milestone F10: one queue\n\n> **State:** idea\n\n## Notes\nOne queue for all.\n"
+    )
+    (docs / "f12-queue-once.md").write_text(
+        "# Milestone F12: queue once\n\n> **State:** idea\n\n## Notes\nA single line.\n"
+    )
+    if ticket:
+        write_task(repo / "tasks" / "later", "f12-01-a")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+
+
+@pytest.mark.parametrize("thread", ["f12", "general"])
+def test_a_merge_in_a_planner_reply_is_applied_at_once_by_the_lead(
+    repo, fake_model, monkeypatch, thread
+):
+    """F49 D1: no Approve for a merge. One commit on main, by the lead; the stored proposal is
+    applied, so the desk asks nothing."""
+    _twin_cards(repo)
+    head = git(repo, "rev-parse", "main").strip()
+    _plan_message(repo, thread, "Same as F10?")
+    block = json.dumps({"points": POINTS, "proposals": [MERGE_F12]})
+    _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```"], [])
+    _run(repo)
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+    assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+    doc = (repo / "docs" / "milestones" / "f10-one-queue.md").read_text()
+    assert "### From F12: queue once (merged by the lead on " in doc and "A single line." in doc
+    log = git(repo, "log", "--format=%s|%(trailers:key=Agent,valueonly)", f"{head}..main")
+    merges = [line for line in log.splitlines() if "merged into" in line]
+    assert merges == ["F12 merged into F10 by the lead|claude-headless"]
+    [reply] = [m for m in _messages(repo) if m["author"] == "lead" and m["proposals"]]
+    assert json.loads(str(reply["proposals"])) == [{**MERGE_F12, "applied": True}]
+    pointer = [m for m in _messages(repo) if "The lead merged F12 into F10" in str(m["text"])]
+    assert len(pointer) == 1
+
+
+def test_a_merge_the_runner_cant_apply_waits_for_the_owner(repo, fake_model, monkeypatch):
+    """F49 D2: the duplicate has a ticket, so it isn't merged away; the reply says why."""
+    _twin_cards(repo, ticket=True)
+    head = git(repo, "rev-parse", "main").strip()
+    _plan_message(repo, "general", "Same as F10?")
+    block = json.dumps({"points": POINTS, "proposals": [MERGE_F12]})
+    _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```"], [])
+    _run(repo)
+    assert "merged into" not in git(repo, "log", "--format=%s", f"{head}..main")
+    assert (repo / "docs" / "milestones" / "f12-queue-once.md").is_file()
+    [reply] = [m for m in _messages(repo) if m["author"] == "lead"]
+    assert json.loads(str(reply["proposals"])) == [MERGE_F12]
+    assert "F12 has tickets" in str(reply["text"]) and "waits for your Approve" in str(
+        reply["text"]
+    )
+
+
 def test_a_failed_planner_job_says_so_on_the_thread(repo, fake_model, monkeypatch):
     _plan_message(repo, "f7", "Why one queue?")
 

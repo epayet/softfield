@@ -305,9 +305,12 @@ Before answering, look for a repeat (f6-12): read the cards in docs/milestones/ 
 is idea, planning or ready, and think of the other threads. Other threads: {threads}. When \
 this idea or message repeats another card or thread, even in other words, say so as a point \
 and propose a `merge`: `path` the duplicate card's doc, `into` the short key of the card it \
-joins (`f10`), key points saying what moves where. Don't edit or remove either card \
-yourself: once the owner approves, the runner moves the duplicate's notes into the kept card, \
-removes the duplicate and points its thread to the kept one, where the conversation goes on.
+joins (`f10`), key points saying what moves where. Keep the more advanced card (ready over \
+planning over idea), else the older one. Don't edit or remove either card yourself: right \
+after your reply the runner applies the merge on its own: it moves the duplicate's notes into \
+the kept card, removes the duplicate and points its thread to the kept one, where the \
+conversation goes on. It can't when the duplicate has tickets or drafts on its plan branch: \
+then the merge waits for the owner.
 
 How to answer:
 - Answer their questions and comments first, then revise what they asked you to change.

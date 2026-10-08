@@ -815,6 +815,15 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
     assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
 
 
+def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
+    """F49 D1: the runner applied it after the job; no Approve, on the desk or its page."""
+    applied = {**_REVIEW_MERGE, "applied": True}
+    _write(db_path, lambda conn: _review(conn, planning, "f9", applied))
+    assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
+    assert 'id="approve-merge"' not in html and 'id="merged-by-lead"' in html
+
+
 def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     planning, db_path, serve, checkout
 ):

@@ -36,6 +36,7 @@ PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `me
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
 MERGE = "merge"  # a card that repeats another, closed into it once approved (f6-12)
+APPLIED = "applied"  # a merge the runner applied after the job: no button (F49 D1)
 REPLAN = "replan"  # a running milestone redirected: it may change its ready tickets (f6-13)
 PROPOSAL_KINDS = ("adr", "mockup", "plan", "seed", REPLAN, MERGE)
 _MAX_KEY = 64

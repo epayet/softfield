@@ -63,12 +63,14 @@ def test_the_general_thread_has_no_branch_and_proposes_seeds():
 @pytest.mark.parametrize("text", [prompts.PLANNER, prompts.PLANNER_GENERAL])
 def test_both_planner_prompts_look_for_duplicates_and_propose_a_merge(text):
     """f6-12: before answering, the cards in docs/milestones/ (idea, planning or ready) and the
-    other threads; a repeat is a point and a `merge` proposal, applied only once approved."""
+    other threads; a repeat is a point and a `merge` proposal, which the runner applies at
+    once (F49 D1), keeping the more advanced card (D2)."""
     looks = text.index("Before answering")
     assert "docs/milestones/" in text[looks:] and "idea, planning or ready" in text
     assert "{threads}" in text and "repeats another" in text
     assert "`merge`" in text and '"into"' in text.split("```json", 1)[1]
-    assert "once the owner approves" in text
+    assert "applies the merge on its own" in text and "once the owner approves" not in text
+    assert "ready over planning over idea" in text
     assert text.index("Before answering") < text.index("```json")
 
 

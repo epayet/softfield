@@ -3642,6 +3642,31 @@ def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool
         s.git.run("branch", "-q", "-D", branch)
 
 
+def _auto_merge(s: Session, reply: planner.Reply) -> planner.Reply:
+    """F49 D1: the reply's merges, applied on main now (the planner job left it there): each
+    one applied is stored as such, so the owner is never asked; one the runner can't apply
+    waits for the owner's Approve, and the reply says why."""
+    from runner.requests import auto_merge  # runner.requests imports this module
+
+    if s.db is None or s.project_id is None or s.git.current_branch() != MAIN:
+        return reply
+    proposals, why = [], []
+    for proposal in reply.proposals:
+        if proposal.get("kind") == planner.MERGE:
+            try:
+                refused = auto_merge(s.repo, s.db, s.project_id, now(), proposal)
+            except Exception as exc:  # a merge never stops the run: the owner can approve it
+                refused = f"{type(exc).__name__}: {exc}"
+            if refused is None:
+                proposal = {**proposal, planner.APPLIED: True}
+            else:
+                what = str(proposal.get("title") or proposal.get("id") or "a merge")
+                why.append(f"The runner didn't apply {what}: {refused}. It waits for your Approve.")
+        proposals.append(proposal)
+    text = "\n\n".join([reply.text.rstrip(), *why]) if why else reply.text
+    return replace(reply, text=text, proposals=tuple(proposals))
+
+
 def run_planner(s: Session, row: dispatch.Queued) -> None:
     """Answer one of the owner's messages (ADR 20 items 1–4, f6 D1–D3): a planner job on its
     thread's Claude session (a new one for a new thread), its reply's points and proposals
@@ -3702,6 +3727,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         reply = planner.Reply("", note=failed)
     if reply.note is not None:
         s.report.notes.append(f"The planner's reply on {row.subject}: {reply.note}.")
+    reply = _auto_merge(s, reply)
     if result.session_id:
         _record(s, metrics.set_thread_session, found["id"], result.session_id)
     _record(
