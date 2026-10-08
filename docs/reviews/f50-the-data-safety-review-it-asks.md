@@ -1,6 +1,6 @@
 # Review: F50, a finished card shows its review
 
-- **Status:** reviewed, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-08.
 
 ## Sign-off sheet
 

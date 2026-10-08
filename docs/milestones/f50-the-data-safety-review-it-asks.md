@@ -1,6 +1,7 @@
 # Milestone F50: a finished card shows its review
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** done · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-08. Base: git tag `f50-the-data-safety-review-it-asks-start`. Report: [`docs/reviews/f50-the-data-safety-review-it-asks.md`](../reviews/f50-the-data-safety-review-it-asks.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes
