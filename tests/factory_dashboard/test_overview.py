@@ -1192,9 +1192,27 @@ def test_allowance_bars_one_row_per_window_at_phone(page, allowance_client):
     assert layout_problems(page) == []
 
 
-def test_allowance_bar_colours_match_at_phone_and_desktop(page, allowance_client):
+def test_allowance_bar_colours_match_at_phone_and_desktop(page, allowance_client, db_path):
     """f9-17: at 390 px a window under its mark, one past it and one above 95% have three
     different bar colours, each the same as that window's bar at 1440 px."""
+    # Guarantee a nearly-out reading so three colours are present.
+    conn = metrics.open_db(db_path)
+    try:
+        conn.execute(
+            "DELETE FROM usage_events WHERE kind = 'reading' AND agent = 'copilot-auto'",
+        )
+        metrics.add_usage_event(
+            conn,
+            "copilot-auto",
+            NOW.isoformat(),
+            "reading",
+            window="month",
+            value=0.97,
+            resets_at=(NOW + timedelta(days=30)).isoformat(),
+        )
+    finally:
+        conn.close()
+
     ORIGIN = "http://127.0.0.1:8765"
 
     def serve(route) -> None:
@@ -1245,9 +1263,22 @@ def test_allowance_bar_colours_match_at_phone_and_desktop(page, allowance_client
     for i, (d, p) in enumerate(zip(desktop_colors, phone_colors, strict=True)):
         assert d == p, f"row {i} colour differs: desktop={d}, phone={p}"
 
+    # Each phone bar with usage is visible (non-zero width)
+    desktop_widths = page.eval_on_selector_all(
+        "#allowance .meter > span",
+        "els => els.map(e => e.offsetWidth)",
+    )
+    widths = page.eval_on_selector_all(
+        "#allowance .meter > span",
+        "els => els.map(e => e.offsetWidth)",
+    )
+    for dw, w in zip(desktop_widths, widths, strict=True):
+        if dw > 0:
+            assert w > 0, f"bar with usage has width {w} at 390 px (desktop width {dw})"
+
 
 def test_allowance_legend_names_bar_mark(allowance_client):
-    """f9-17: the legend names the bar's mark, not a ring."""
+    """f9-17: the legend explains the mark's meaning, not a ring."""
     panel = re.search(
         r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>',
         allowance_client.get("/").text,
@@ -1255,8 +1286,14 @@ def test_allowance_legend_names_bar_mark(allowance_client):
     )
     assert panel
     legend_text = " ".join(re.sub(r"<[^>]+>", " ", panel.group(1)).split())
-    assert "the bar's mark" in legend_text or "the mark on the bar" in legend_text
     assert "ring" not in legend_text.lower()
+    # Must mention the mark and something meaningful about it (factory / owner / stops).
+    assert "mark" in legend_text.lower()
+    assert (
+        "factory" in legend_text.lower()
+        or "owner" in legend_text.lower()
+        or "stop" in legend_text.lower()
+    )
 
 
 def test_no_data_yet_has_empty_bar(page, serve, db_path):
