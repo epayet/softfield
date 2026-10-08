@@ -9,6 +9,7 @@ files:
   - tests/runner/test_prompts.py
 tests:
   - tests/runner/test_prompts.py
+priority: 0
 ---
 
 ### Goal
