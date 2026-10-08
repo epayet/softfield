@@ -868,6 +868,29 @@ def test_a_merge_whose_card_left_main_asks_nothing(planning, db_path, db, checko
     assert _merges_on_the_desk(db) == ["/planning/f9/proposals/merge-f9"]
 
 
+@pytest.mark.parametrize(
+    ("thread", "proposal", "words"),
+    [
+        ("f6", "plan", "the card's plan branch goes"),
+        ("f9", "merge-f9", "only this proposal closes"),
+    ],
+)
+def test_reject_posts_a_reject_and_says_what_it_takes(
+    planning, db_path, serve, thread, proposal, words
+):
+    """F31 D2: Reject… opens, says what goes, and its button posts `reject` on the proposal."""
+    if thread == "f9":
+        _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    html = _review_page(serve(), f"/planning/{thread}/proposals/{proposal}")
+    fold = html.split('<details id="reject">', 1)[1].split("</details>", 1)[0]
+    assert words in _text(fold)
+    assert _posts(fold, "reject-button") == {
+        "kind": "reject",
+        "project": PROJECT,
+        "subject": f"{thread}/{proposal}",
+    }
+
+
 def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
     """F49 D1: the runner applied it after the job; no Approve, on the desk or its page."""
     applied = {**_REVIEW_MERGE, "applied": True}
@@ -875,6 +898,7 @@ def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
     assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert 'id="approve-merge"' not in html and 'id="merged-by-lead"' in html
+    assert 'id="reject"' not in html  # nothing left to reject
 
 
 def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(

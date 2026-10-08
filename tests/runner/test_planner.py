@@ -1229,3 +1229,93 @@ def test_the_general_threads_approved_merges_export_nothing(repo):
     assert _request(repo, asked)[1] == "approved: merged F12 into F10"
     assert not (repo / "docs" / "planning").exists()
     assert "docs/planning" not in git(repo, "show", "--name-only", "--format=", "HEAD")
+
+
+# --- proposal_state (F31 D3) --------------------------------------------------------------------
+
+
+def _row(
+    kind: str, subject: str, done: bool = True, result: str = "", value: str = ""
+) -> dict[str, Any]:
+    return {
+        "kind": kind,
+        "subject": subject,
+        "value": value,
+        "done": "x" if done else None,
+        "result": result,
+    }
+
+
+PLAN_P = {"id": "plan-f7", "kind": "plan"}
+ADR_P = {"id": "adr-30", "kind": "adr", "path": "docs/adr/30-one-queue.md"}
+SEED_P = {"id": "seed-1", "kind": "seed"}
+
+
+@pytest.mark.parametrize(
+    ("proposal", "card", "rows", "state"),
+    [
+        (PLAN_P, "f7", [], "open"),
+        (
+            PLAN_P,
+            "f7",
+            [_row("approve_plan", "f7", result="approved plan/f7: queued x")],
+            "approved",
+        ),
+        (PLAN_P, "f7", [_row("approve_plan", "f7", done=False)], "on its way"),
+        (
+            PLAN_P,
+            "f7",
+            [_row("approve_plan", "f7", result="plan/f7 clashes with main: not approved")],
+            "open",
+        ),
+        (
+            PLAN_P,
+            "f7",
+            [_row("send_back", "f7/plan-f7", result="queued for the lead")],
+            "sent back",
+        ),
+        (ADR_P, "f7", [_row("accept_adr", "f7", value="30", result="accepted ADR 30")], "approved"),
+        (
+            PLAN_P,
+            "f7",
+            [_row("reject", "f7/plan-f7", result="rejected the drafts on plan/f7 (plan-f7)")],
+            "rejected",
+        ),
+        # a reject on the plan takes the branch, so the ADR drafted on it too
+        (
+            ADR_P,
+            "f7",
+            [
+                _row(
+                    "reject",
+                    "f7/plan-f7",
+                    result="rejected the drafts on plan/f7 (adr-30, plan-f7)",
+                )
+            ],
+            "rejected",
+        ),
+        (PLAN_P, "f7", [_row("reject", "f7/plan-f7", done=False)], "on its way"),
+        (
+            PLAN_P,
+            "f7",
+            [
+                _row(
+                    "reject",
+                    "f7/plan-f7",
+                    result="F7's latest reply has no proposal x: not rejected",
+                )
+            ],
+            "open",
+        ),
+        (
+            SEED_P,
+            "general",
+            [_row("reject", "general/seed-1", result="rejected seed-1")],
+            "rejected",
+        ),
+        (SEED_P, "general", [_row("reject", "general/seed-2", result="rejected seed-2")], "open"),
+        ({**PLAN_P, "applied": True}, "f7", [], "approved"),
+    ],
+)
+def test_a_proposals_state_comes_from_the_owners_requests(proposal, card, rows, state):
+    assert planner.proposal_state(proposal, card, rows) == state

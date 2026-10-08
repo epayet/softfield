@@ -105,6 +105,20 @@
           style="{{ button }}">Plant it</button>
         {% endif %}
       </div>
+      {% if not (kind == "merge" and proposal.applied) %}
+      {# F31 D2: won't do, in two taps, saying what it takes with it #}
+      <details id="reject">
+        <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Reject…</summary>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-size: 13px">{% if kind in ("adr", "mockup", "plan", "replan") %}Won't do: the card's plan branch goes, with every draft on it. A card with nothing built goes too.{% else %}Won't do: only this proposal closes; nothing else changes.{% endif %}</span>
+          <button type="button" id="reject-button"
+            hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+            hx-vals='{"kind": "reject", "project": {{ project | tojson }}, "subject": {{ (thread ~ "/" ~ proposal.id) | tojson }}}'
+            hx-on::before-request="this.closest('details').remove()"
+            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: transparent; border: 1px solid var(--rule); min-height: 44px; width: 100%">Reject</button>
+        </div>
+      </details>
+      {% endif %}
       <span id="review-status" style="font-size: 12.5px; color: var(--muted)">Every point is agreed unless you comment on it.</span>
     </section>
     <section style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">

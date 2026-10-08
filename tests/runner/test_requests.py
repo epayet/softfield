@@ -6,6 +6,7 @@ import os
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -1781,3 +1782,145 @@ def test_the_checks_never_apply_requests(in_repo):  # noqa: F811
     asked = _ask(in_repo, "queue", "m4-12-a")
     cli.main(["check-layout"])
     assert _request(in_repo, asked) == (None, None)
+
+
+# --- reject: "won't do" (F31 D2) ---------------------------------------------------------------
+
+ADR_30: dict[str, Any] = {
+    "id": "adr-30",
+    "kind": "adr",
+    "title": "One queue",
+    "path": "docs/adr/30-one-queue.md",
+}
+PLAN_F7: dict[str, Any] = {"id": "plan-f7", "kind": "plan", "title": "F7 plan", "path": None}
+REPLAN_F7: dict[str, Any] = {
+    "id": "replan-f7",
+    "kind": "replan",
+    "title": "F7 redirected",
+    "path": None,
+}
+
+
+def _reply(repo: Path, thread: str, *proposals: dict[str, Any]) -> None:
+    """The lead's reply on ``thread`` listing ``proposals``, waiting for the owner's answers."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        found = metrics.planner_thread(conn, project, thread, NOW.isoformat())
+        metrics.add_planner_message(
+            conn, found["id"], "lead", NOW.isoformat(), "Here.", proposals=list(proposals)
+        )
+        metrics.upsert_owner_item(
+            conn, project, planner.PLANNING, thread, text="answers", created=NOW.isoformat()
+        )
+    finally:
+        conn.close()
+
+
+def _why(repo: Path, card: str) -> object:
+    conn = metrics.open_db(_db(repo))
+    try:
+        row = conn.execute(
+            "SELECT archived_why FROM planner_threads WHERE card = ?", (card,)
+        ).fetchone()
+        return None if row is None else row["archived_why"]
+    finally:
+        conn.close()
+
+
+def test_rejecting_a_plan_drops_its_drafts_and_an_unbuilt_card(repo):
+    """F7 is planning with no ticket: its branch goes (the ADR drafted on it with the plan),
+    its doc is removed in a commit of its own, and the thread closes as rejected."""
+    _card(repo)
+    _plan(
+        repo,
+        {"docs/adr/30-one-queue.md": "# ADR 30\n", "tasks/later/f7-01-a.md": _ticket("f7-01-a")},
+    )
+    _reply(repo, "f7", ADR_30, PLAN_F7)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "reject", "f7/plan-f7")
+    _apply(repo)
+    result = _request(repo, asked)[1]
+    assert result == "rejected the drafts on plan/f7 (adr-30, plan-f7); F7 removed"
+    assert git(repo, "branch", "--list", "plan/f7") == ""
+    assert not (repo / "docs" / "milestones" / "f7-one-queue.md").exists()
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7 rejected by the owner"
+    assert git(repo, "status", "--porcelain") == ""
+    assert _archived(repo, "f7") and _why(repo, "f7") == "rejected"
+    assert _thread(repo, "f7")[-1]["text"] == "Rejected by the owner on 2026-10-01: won't do"
+    assert _items(repo) == [(planner.PLANNING, "f7", None, False)]
+
+
+def test_rejecting_a_replan_keeps_a_building_card_and_its_tickets(repo):
+    _card(repo)
+    doc = repo / "docs" / "milestones" / "f7-one-queue.md"
+    doc.write_text(CARD.replace("planning", "building"))
+    write_task(repo / "tasks" / "ready", "f7-01-a")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "building")
+    _plan(repo, {"tasks/ready/f7-01-a.md": "changed\n"})
+    _reply(repo, "f7", REPLAN_F7)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "reject", "f7/replan-f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "rejected the drafts on plan/f7 (replan-f7)"
+    assert git(repo, "branch", "--list", "plan/f7") == ""
+    assert git(repo, "rev-parse", "HEAD") == head  # nothing committed
+    assert doc.is_file() and (repo / "tasks" / "ready" / "f7-01-a.md").is_file()
+    assert _why(repo, "f7") == "rejected"
+
+
+def test_rejecting_a_merge_commits_nothing_and_settles_it(repo):
+    head = _duplicates(repo)
+    asked = _ask(repo, "reject", "f12/merge-f12")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "rejected merge-f12"
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / "docs" / "milestones" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert _why(repo, "f12") == "rejected"
+
+
+@pytest.mark.parametrize(
+    ("subject", "result"),
+    [
+        ("f12/nope", "F12's latest reply has no proposal nope: not rejected"),
+        ("f12", "a reject names <thread>/<proposal id>, not 'f12'"),
+        ("f12/merge-f12", "merge-f12 is settled already: not rejected"),
+    ],
+)
+def test_a_reject_the_runner_cant_apply_changes_nothing(repo, subject, result):
+    head = _duplicates(repo)
+    if subject == "f12/merge-f12":  # rejected once already
+        _ask(repo, "reject", "f12/merge-f12")
+        _apply(repo)
+        conn = metrics.open_db(_db(repo))
+        try:  # open again, so only the reject's settling is left to refuse it
+            conn.execute("UPDATE planner_threads SET archived = NULL WHERE card = 'f12'")
+        finally:
+            conn.close()
+    asked = _ask(repo, "reject", subject)
+    _apply(repo)
+    assert _request(repo, asked)[1] == result
+    assert git(repo, "rev-parse", "HEAD") == head
+
+
+def test_one_proposal_approved_and_one_rejected_closes_as_approved(repo):
+    """The general thread lists a merge and a seed: approving the merge leaves the seed open;
+    rejecting the seed closes the thread, as approved since something was."""
+    _duplicates(repo, thread="general")
+    seed: dict[str, Any] = {
+        "id": "seed-1",
+        "kind": "seed",
+        "title": "Ducks",
+        "path": None,
+        "key_points": [],
+    }
+    _reply(repo, "general", MERGE, seed)
+    _ask(repo, "approve_plan", "general")
+    _apply(repo)
+    assert not _archived(repo, "general")
+    asked = _ask(repo, "reject", "general/seed-1")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "rejected seed-1"
+    assert _archived(repo, "general") and _why(repo, "general") == "approved"

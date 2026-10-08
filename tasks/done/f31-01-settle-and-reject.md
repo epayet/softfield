@@ -34,3 +34,11 @@ Read `docs/milestones/f31-when-i-click-on-approve-plan.md` D1, D2 and D3. The se
 - a thread with one proposal approved and the other rejected closes as `approved`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: built by the lead in a terminal session (owner, 2026-10-08), test-first, with the Reject button on the review page (from f31-02)
+```

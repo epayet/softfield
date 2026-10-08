@@ -677,7 +677,10 @@ def _proposal(proposal: object, known: Collection[str]) -> None:
 # --- a proposal's state (F31 D3): the desk, the thread and the runner read the same one -------
 
 OPEN, ON_ITS_WAY, APPROVED, SENT_BACK = "open", "on its way", "approved", "sent back"
-WORKED = ("queued for the lead", "approved", "accepted ", "planted ")  # a worked result's start
+REJECTED = "rejected"  # won't do (F31 D2)
+WORKED = ("queued for the lead", "approved", "accepted ", "planted ", REJECTED)  # its start
+DRAFTED = ("adr", "mockup", "plan", REPLAN)  # drafts on the plan branch: rejected together
+REJECTED_DRAFTS = "rejected the drafts on "  # a reject's result when the branch went
 _ADR_NUMBER = re.compile(r"docs/adr/(\d+)-")
 
 
@@ -711,16 +714,27 @@ def proposal_state(
 ) -> str:
     """Where a proposal of ``card``'s latest set stands, from the owner's requests made since
     the lead's message: ``approved`` by a worked approval (or a merge the runner applied),
-    ``on its way`` while one is pending, ``sent back``, else ``open``. A refusal leaves it
-    open."""
+    ``rejected`` by a worked reject (one on any draft of the set takes the branch, so all its
+    drafts), ``on its way`` while one is pending, ``sent back``, else ``open``. A refusal
+    leaves it open."""
     if proposal.get(APPLIED):
         return APPROVED
     about = _about(proposal, card)
-    sent = [("send_back", f"{card}/{proposal.get('id')}", None)]
+    own = f"{card}/{proposal.get('id')}"
+    sent = [("send_back", own, None)]
     state = OPEN
     for row in requests:
         if row["done"] is not None and not str(row["result"] or "").startswith(WORKED):
             continue  # refused
+        if row["kind"] == "reject" and str(row["subject"] or "").startswith(f"{card}/"):
+            drafts = proposal.get("kind") in DRAFTED and str(row["result"] or "").startswith(
+                REJECTED_DRAFTS
+            )
+            if row["subject"] == own or drafts:
+                if row["done"] is not None:
+                    return REJECTED
+                state = ON_ITS_WAY
+            continue
         if _matches(row, about):
             if row["done"] is not None:
                 return APPROVED
