@@ -486,6 +486,69 @@ def test_a_plan_touching_anything_but_drafts_is_refused_and_main_is_unchanged(re
     assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"  # kept, to fix
 
 
+ACCEPTED = ADR.replace("Proposed", "Accepted (by the owner, 2026-10-06)")
+
+
+@pytest.mark.parametrize(
+    ("on_main", "drafted", "gone"),
+    [
+        ({}, {"docs/adr/23-parallel-planners.md": ACCEPTED}, ()),  # a new ADR, accepted
+        (
+            {"docs/adr/23-parallel-planners.md": ADR},
+            {"docs/adr/23-parallel-planners.md": ACCEPTED},
+            (),
+        ),  # a Proposed one accepted
+        (
+            {"docs/adr/23-parallel-planners.md": ACCEPTED},
+            {"docs/adr/23-parallel-planners.md": ACCEPTED.replace("Accepted", "Superseded")},
+            (),
+        ),
+        ({"docs/adr/23-parallel-planners.md": ACCEPTED}, {}, ("docs/adr/23-parallel-planners.md",)),
+        (
+            {},
+            {
+                "docs/milestones/f7-one-queue.md": CARD.replace(
+                    "> **State:** planning", "> **State:** done"
+                )
+            },
+            (),
+        ),  # signed off
+    ],
+)
+def test_a_plan_setting_what_only_the_owner_sets_is_refused(
+    repo: Path, on_main: dict[str, str], drafted: dict[str, str], gone: tuple[str, ...]
+) -> None:
+    """An ADR's status changes only at accept_adr, and a card is done only at its sign-off."""
+    _card(repo)
+    for rel, text in on_main.items():
+        (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+        (repo / rel).write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "on main")
+    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a"), **drafted}, gone=gone)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    [path] = [*drafted, *gone]
+    assert _request(repo, asked)[1] == (
+        f"plan/f7 changes {path}, which only the owner sets (accept_adr, signoff): not approved"
+    )
+    _main_unchanged(repo, head)
+    assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"
+
+
+def test_a_plan_editing_an_adr_but_not_its_status_is_approved(repo):
+    _card(repo)
+    (repo / "docs" / "adr").mkdir()
+    (repo / "docs" / "adr" / "23-parallel-planners.md").write_text(ACCEPTED)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "adr")
+    _plan(repo, {"docs/adr/23-parallel-planners.md": ACCEPTED + "\nAs built: one planner.\n"})
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
+
+
 def test_a_plan_with_a_symlink_is_refused(repo):
     """A link in docs/ would let a later edit reach outside the drafts."""
     _card(repo)

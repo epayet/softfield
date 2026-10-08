@@ -1499,7 +1499,8 @@ def test_planning_row_shows_first_60_chars_and_title(client, db_path):
     planning_row = html.split("Planning:")[1].split("</div>")[0]
     assert 'href="/planning/f11"' in planning_row
     # Title attribute is on the <div>, find it from the full row
-    title_match = re.search(r'<div[^>]*title="([^"]*)"[^>]*>.*?Planning:', html)
+    next_html = html.split("Next in line", 1)[1]
+    title_match = re.search(r'<div class="next-row" title="([^"]*)"[^>]*>.*?Planning:', next_html)
     assert title_match
     assert title_match.group(1) == long_text
     # Visible text: first 60 chars + …
@@ -1538,7 +1539,8 @@ def test_planning_row_with_empty_text_shows_first_comment(client, db_path):
     next_section = queue_section.split("Next in line", 1)[1]
     assert "First comment." in next_section
     # Title attribute is on the <div>, find it from the full row
-    title_match = re.search(r'<div[^>]*title="([^"]*)"[^>]*>.*?Planning:', html)
+    next_html = html.split("Next in line", 1)[1]
+    title_match = re.search(r'<div class="next-row" title="([^"]*)"[^>]*>.*?Planning:', next_html)
     assert title_match
     assert title_match.group(1) == "First comment."
 

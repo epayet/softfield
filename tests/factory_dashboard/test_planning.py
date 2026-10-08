@@ -500,6 +500,21 @@ def test_an_open_plan_message_request_shows_sent_with_dashed_border(planning, db
     assert 'id="reply"' not in html
 
 
+def test_a_waiting_messages_comments_show_in_point_order(planning, db_path, serve):
+    """By number, as the runner keeps them: point 2's before point 10's."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    value = json.dumps({"text": "", "comments": {"10": "Ten.", "2": "Two.", "3": "  "}})
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "plan_message", "f6", value, _at(timedelta(minutes=5))
+        ),
+    )
+    text = _text(_thread(serve(), "f6"))
+    assert text.index("On 2:") < text.index("On 10:")
+    assert "On 3:" not in text  # a blank comment says nothing
+
+
 def test_a_done_plan_message_with_lead_reply_shows_once(planning, db_path, serve):
     """Once the request is done and the lead replies: the text shows once, with no \"Sent\" and
     no dashed border."""
@@ -819,6 +834,9 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     assert frame and frame[1] == "/planning/mockups/f6/docs/milestones/f6-mockup/index.html"
     served = client.get(frame[1])
     assert (served.status_code, served.text) == (200, "<p>the desk</p>")
+    # Opened on its own, outside the sandboxed frame, it still runs in an origin of its own,
+    # so its scripts can't post to /requests as the dashboard (ADR 18 item 3)
+    assert served.headers["content-security-policy"] == "sandbox allow-scripts"
     for refused in (
         "docs/milestones/f6-planning-room.md",
         "docs/adr/20-planning-room.md",

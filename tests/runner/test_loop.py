@@ -4313,6 +4313,8 @@ def test_a_failed_planner_job_says_so_on_the_thread(repo, fake_model, monkeypatc
     assert reply["text"] == "(the lead's job failed (timed out): send the message again.)"
     [thread] = _rows(repo, "planner_threads")
     assert thread["session_id"] is None  # nothing to resume
+    [item] = [i for i in _rows(repo, "owner_items") if i["kind"] == "planning"]
+    assert item["text"] == "The lead couldn't answer your message on F7: send it again."
 
 
 # --- support jobs are queued before they run (ADR 22 item 1, f8-03) --------------------------

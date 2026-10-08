@@ -28,6 +28,7 @@ from runner.planner import (
     draft,
     is_proposed,
     merge_words,
+    message,
     plan_changes,
 )
 from runner.requests import (
@@ -528,18 +529,11 @@ def thread_page(
             (project_id, thread),
         ).fetchall():
             pending = True
-            value = json.loads(req["value"]) if req["value"] else {}
-            value = json.loads(req["value"]) if req["value"] else {}
-            text = value.get("text", "") if isinstance(value, dict) else ""
-            comments_raw = value.get("comments", {}) if isinstance(value, dict) else {}
-            if isinstance(comments_raw, dict):
-                points = [
-                    {"n": int(n), "comment": c}
-                    for n, c in sorted(comments_raw.items())
-                    if isinstance(n, str) and n.isdigit() and isinstance(c, str) and c.strip()
-                ]
-            else:
-                points = []
+            try:  # as the runner will read it; one it will refuse shows empty
+                text, comments = message(req["value"])
+            except PlannerError:
+                text, comments = "", {}
+            points = [{"n": n, "comment": c} for n, c in comments.items()]
             messages.append(Message("owner", req["created"], text, points, False, waiting=True))
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
     return render(
@@ -592,12 +586,16 @@ def _adr_waits(repo: Path | None, proposals: list[dict[str, object]]) -> bool:
 @router.get("/planning/mockups/{thread}/{path:path}", response_class=HTMLResponse)
 def mockup_file(thread: str, path: str, conn: Db, project: Project) -> HTMLResponse:
     """A mock-up's file from the card's plan branch (``planner.draft``), for a sandboxed
-    ``<iframe>``; anything outside ``docs/milestones/*-mockup/`` is 404."""
+    ``<iframe>``; anything outside ``docs/milestones/*-mockup/`` is 404. Its CSP sandboxes it
+    when opened on its own too: an origin of its own, so it can't post to ``/requests``."""
     repo = _repo(conn, project)
     content = draft(repo, thread, path) if repo and _MOCKUP_RE.fullmatch(path) else None
     if content is None:
         raise HTTPException(404, "no such mock-up")
-    return HTMLResponse(content.decode("utf-8", errors="replace"))
+    return HTMLResponse(
+        content.decode("utf-8", errors="replace"),
+        headers={"Content-Security-Policy": "sandbox allow-scripts"},
+    )
 
 
 @dataclass(frozen=True)

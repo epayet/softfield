@@ -249,6 +249,41 @@ def _outside(
     return None
 
 
+_ADR_STATUS_RE = re.compile(r"^- \*\*Status:\*\*.*$", re.MULTILINE)  # as owner.decide_adr
+_CARD_DOC_RE = re.compile(r"docs/milestones/[^/]+\.md")
+
+
+def _owners_mark(path: str, before: str | None, after: str | None) -> bool:
+    """Whether a draft sets what only the owner sets: an ADR's status (a new ADR may only be
+    Proposed; ``accept_adr``), or a card's sign-off (``signoff``)."""
+    if path.startswith("docs/adr/"):
+        status = [_ADR_STATUS_RE.search(t or "") for t in (before, after)]
+        was, now = (m[0] if m else None for m in status)
+        return was != now and not (before is None and planner.is_proposed(after or ""))
+    if _CARD_DOC_RE.fullmatch(path) and after is not None:
+        done = [
+            t is not None and milestone.card(Path(path).stem, t).state == "done"
+            for t in (before, after)
+        ]
+        return done[1] and not done[0]
+    return False
+
+
+def _owners_marks(git: Git, branch: str, changes: list[tuple[str, str]]) -> str | None:
+    """Why the branch can't be merged, if a draft sets what only the owner sets."""
+    marked = []
+    for mode, path in changes:
+        on_main = Path(git.repo, path)
+        before = on_main.read_text(encoding="utf-8") if on_main.is_file() else None
+        after = None if mode == "000000" else git.run("show", f"{branch}:{path}")
+        if _owners_mark(path, before, after):
+            marked.append(path)
+    if not marked:
+        return None
+    said = ", ".join(marked)
+    return f"{branch} changes {said}, which only the owner sets (accept_adr, signoff): not approved"
+
+
 def _proposed(repo: Path, number: int) -> bool:
     found = sorted((repo / "docs" / "adr").glob(f"{number:02d}-*.md"))
     return bool(found) and planner.is_proposed(found[0].read_text(encoding="utf-8"))
@@ -396,6 +431,8 @@ def _approve_plan(
     if planned and branch is not None:
         changes = _drafts(git, branch)
         if (refused := _outside(branch, changes, thread, replan, running)) is not None:
+            return refused
+        if (refused := _owners_marks(git, branch, changes)) is not None:
             return refused
         added, changed, aside = _ready_changes(repo, changes)
         set_aside = {Path(path).name for path in aside}

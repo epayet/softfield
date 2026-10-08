@@ -3679,13 +3679,18 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         job_id=s.last_job_id,
     )
     name = planner.thread_name(thread)
+    item = (
+        f"The lead answered your message on {name}: your answers are wanted."
+        if result.ok
+        else f"The lead couldn't answer your message on {name}: send it again."
+    )
     _record(
         s,
         metrics.upsert_owner_item,
         s.project_id,
         planner.PLANNING,
         thread,
-        text=f"The lead answered your message on {name}: your answers are wanted.",
+        text=item,
         created=now().isoformat(),
     )
 
