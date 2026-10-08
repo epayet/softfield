@@ -37,3 +37,10 @@ attempts: 3
 tokens: 3998609
 logs: var/runs/20261008-204153/f9-17-phone-allowance-bars
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+note: the developer's attempt 3, merged by the lead in a terminal session (owner, 2026-10-08). Its gates had failed only on protected-paths: the lead's own commits had landed on its branch by mistake (lead.md, "Your own work").
+```
