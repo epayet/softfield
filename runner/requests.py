@@ -398,6 +398,25 @@ def _ready_changes(
     return added, changed, aside
 
 
+def _export(
+    repo: Path, conn: sqlite3.Connection, project_id: int, thread: str, doc: Path
+) -> Path | None:
+    """The card's thread written whole to ``docs/planning/<card's full key>.md`` (f20 D2), for
+    the approval's commit; the file, when the approval made it, for an undo to remove (``_undo``
+    restores one main had). None when the card has no thread."""
+    found = metrics.find_thread(conn, project_id, thread)
+    if found is None:
+        return None
+    title = milestone.milestone_doc(doc.read_text(encoding="utf-8")).get("title")
+    messages = metrics.planner_messages(conn, found["id"])
+    text = planner.export(planner.thread_name(thread), title, messages)
+    path = repo / "docs" / "planning" / f"{doc.stem}.md"
+    made = not path.exists()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path if made else None
+
+
 def _approve_plan(
     repo: Path,
     conn: sqlite3.Connection,
@@ -406,8 +425,9 @@ def _approve_plan(
     now: datetime,
     subject: object,
 ) -> str:
-    """Merge a card's plan branch into main, queue its tickets and set the card ready, and
-    apply the thread's ``merge`` proposals, in one commit; the branch then goes. Refused, with
+    """Merge a card's plan branch into main, queue its tickets and set the card ready, apply
+    the thread's ``merge`` proposals, and write the card's thread to docs/planning/ (``_export``),
+    in one commit; the branch then goes. Refused, with
     main as it was, when the branch changes more than drafts, clashes with main, a ticket fails
     pre-flight (the planner fixes it next), or a merge can't be applied. A thread with merges
     and no branch (the general one too) approves its merges alone.
@@ -457,6 +477,7 @@ def _approve_plan(
         except GitError:
             _undo(git)
             return f"{branch} clashes with {loop.MAIN}: not approved"
+    made: Path | None = None
     try:
         if planned:
             checked = sorted([*tickets, *added, *changed], key=lambda path: Path(path).name)
@@ -476,11 +497,14 @@ def _approve_plan(
             _merge(repo, now, duplicate, kept)
         merged = [words.replace(" into ", " merged into ", 1) for words in joined]
         if planned:
+            made = _export(repo, conn, project_id, thread, doc)
             git.commit_all("; ".join([f"{name} plan approved by the owner", *merged]))
         else:
             git.commit_all(f"{'; '.join(merged)} by the owner")
     except Exception:
         _undo(git)
+        if made is not None:  # untracked: the reset leaves it
+            made.unlink(missing_ok=True)
         raise
     _merged(conn, project_id, now, merges)
     said = [f"merged {words}" for words in joined]

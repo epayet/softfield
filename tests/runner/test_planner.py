@@ -1,6 +1,7 @@
 """The planning room's threads and replies (ADR 20 items 3 and 4, f6 D1–D3)."""
 
 import json
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
 
@@ -10,7 +11,18 @@ from runner import claude, loop, metrics, milestone, planner
 from runner.state import State
 from runner.tasks import milestone_key
 from tests.runner.conftest import git, write_task
-from tests.runner.test_requests import NOW, _apply, _ask, _db, _request
+from tests.runner.test_requests import (
+    NOW,
+    _apply,
+    _ask,
+    _card,
+    _db,
+    _duplicates,
+    _main_unchanged,
+    _plan,
+    _request,
+    _ticket,
+)
 
 POINTS = [
     {"n": 1, "title": "The switch", "answer": "Keep one per window.", "action": "Nothing"},
@@ -850,3 +862,135 @@ def test_an_archive_the_runner_cant_apply_says_why(repo, subject, value, result)
     _apply(repo)
     assert _request(repo, asked)[1] == result
     assert _thread_row(repo, "f7")["archived"] is None
+
+
+# --- the thread committed with its approved plan (f20 D2) ------------------------------------
+
+EXPORT = "docs/planning/f7-one-queue.md"
+MARKDOWN = "# x\n```\nAgreed otherwise, see `tasks/`.\nA line\n---"
+EXPORTED = """\
+# F7: one queue
+
+The planning thread behind F7's plan, oldest first, as it was when the owner approved it.
+
+## The owner, 2026-10-01 12:00
+
+> Why one queue?
+
+## The lead, 2026-10-01 12:05
+
+> Here is my answer.
+>
+> 1. **The switch**: Keep one per window.
+>    Action: Nothing
+> 2. **The queue**: Planner jobs go first.
+>    Action: A ticket
+>
+> Proposals:
+> - Parallel planners (adr)
+
+## The owner, 2026-10-01 12:10
+
+> # x
+> ```
+> Agreed otherwise, see `tasks/`.
+> A line
+> ---
+>
+> On point 2: Why first?
+"""
+
+
+def _said(repo: Path, card: str, author: str, minutes: int, text: str, **json_: Any) -> None:
+    """A message on ``card``'s thread, ``minutes`` after NOW."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        thread = metrics.planner_thread(conn, project, card, NOW.isoformat())
+        at = (NOW + timedelta(minutes=minutes)).isoformat()
+        metrics.add_planner_message(conn, thread["id"], author, at, text, **json_)
+    finally:
+        conn.close()
+
+
+def _talked_through(repo: Path) -> None:
+    """F7's thread: the owner asks, the lead answers with points and a proposal, and the
+    owner replies in Markdown with a comment on point 2."""
+    _said(repo, "f7", "owner", 0, "Why one queue?")
+    _said(repo, "f7", "lead", 5, "Here is my answer.", points=POINTS, proposals=[PROPOSAL])
+    _said(repo, "f7", "owner", 10, MARKDOWN, points=[{"n": 2, "comment": "Why first?"}])
+
+
+def _committed(repo: Path) -> list[str]:
+    return sorted(filter(None, git(repo, "show", "--name-only", "--format=", "HEAD").split("\n")))
+
+
+def test_approving_a_plan_commits_its_thread_with_its_drafts(repo):
+    _card(repo)
+    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _talked_through(repo)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-01-a"
+    assert (repo / EXPORT).read_text() == EXPORTED
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
+    assert _committed(repo) == [
+        "docs/milestones/f7-one-queue.md",
+        EXPORT,
+        "tasks/ready/f7-01-a.md",
+    ]
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_a_messages_markdown_cant_make_a_heading_of_the_export(repo):
+    _card(repo)
+    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _talked_through(repo)
+    _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    lines = (repo / EXPORT).read_text().splitlines()
+    # only the title and each message's heading; everything said sits in a quote
+    assert [line for line in lines if not line.startswith(">") and line.strip()] == [
+        "# F7: one queue",
+        "The planning thread behind F7's plan, oldest first, as it was when the owner approved it.",
+        "## The owner, 2026-10-01 12:00",
+        "## The lead, 2026-10-01 12:05",
+        "## The owner, 2026-10-01 12:10",
+    ]
+
+
+def test_a_second_approval_rewrites_the_export_with_the_whole_thread(repo):
+    _card(repo)
+    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _talked_through(repo)
+    _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    _said(repo, "f7", "owner", 20, "One more ticket, please.")
+    _plan(repo, {"tasks/later/f7-02-b.md": _ticket("f7-02-b")})
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-02-b"
+    more = "\n## The owner, 2026-10-01 12:20\n\n> One more ticket, please.\n"
+    assert (repo / EXPORT).read_text() == EXPORTED + more
+    assert EXPORT in _committed(repo)
+
+
+def test_a_refused_approval_writes_no_export(repo):
+    _card(repo)
+    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`.")})
+    _talked_through(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert str(_request(repo, asked)[1]).startswith("not approved: f7-01-a:")
+    _main_unchanged(repo, head)
+    assert not (repo / "docs" / "planning").exists()
+
+
+def test_the_general_threads_approved_merges_export_nothing(repo):
+    _duplicates(repo, thread="general")
+    asked = _ask(repo, "approve_plan", "general")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved: merged F12 into F10"
+    assert not (repo / "docs" / "planning").exists()
+    assert "docs/planning" not in git(repo, "show", "--name-only", "--format=", "HEAD")

@@ -13,6 +13,7 @@ import subprocess
 import unicodedata
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -486,6 +487,48 @@ def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]]) -> str:
     if not said:
         return ""
     return "\nWhat was said on this thread before, oldest first:\n\n" + "\n\n".join(said) + "\n"
+
+
+def _quoted(text: str) -> str:
+    """``text`` as a Markdown quote: a heading, a fence or an underline in it stays inside the
+    quote, so it can't break the file around it."""
+    return "\n".join(f"> {line}".rstrip() for line in text.splitlines())
+
+
+def _exported(message: sqlite3.Row | Mapping[str, Any]) -> str:
+    """One message for the export: its author and time as a heading, then what it said, quoted:
+    its text, the lead's points and proposals, or the owner's comments by point."""
+    who = "The owner" if message["author"] == "owner" else "The lead"
+    at = datetime.fromisoformat(str(message["at"])).strftime("%Y-%m-%d %H:%M")
+    points = json.loads(message["points"]) if message["points"] else []
+    proposals = json.loads(message["proposals"]) if message["proposals"] else []
+    parts = [str(message["text"]).strip()]
+    if message["author"] == "owner":
+        said = [f"On point {p.get('n')}: {p.get('comment')}" for p in points if "comment" in p]
+    else:
+        said = [
+            f"{p.get('n')}. **{p.get('title')}**: {p.get('answer')}\n   Action: {p.get('action')}"
+            for p in points
+        ]
+    parts.append("\n".join(said))
+    if proposals:
+        kinds = [f"- {p.get('title')} ({p.get('kind')})" for p in proposals]
+        parts.append("\n".join(["Proposals:", *kinds]))
+    body = "\n\n".join(part for part in parts if part)
+    return f"## {who}, {at}\n\n{_quoted(body)}\n"
+
+
+def export(
+    name: str, title: str | None, messages: Sequence[sqlite3.Row | Mapping[str, Any]]
+) -> str:
+    """A card's thread for a person reading the repo (f20 D2): a title, then every message
+    oldest first (``_exported``). ``history`` says the same to a planner job."""
+    heading = f"# {name}: {title}" if title else f"# {name}"
+    about = (
+        f"The planning thread behind {name}'s plan, oldest first,"
+        " as it was when the owner approved it."
+    )
+    return "\n".join([heading, "", about, "", *(_exported(m) for m in messages)])
 
 
 def prompt(
