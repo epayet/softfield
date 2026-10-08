@@ -27,3 +27,10 @@ Read `docs/milestones/f20-data-safety.md` (D2 is the file's content and when it 
 - a message holding Markdown (`# x`, a backtick) can't break the file's headings
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
