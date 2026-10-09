@@ -5,3 +5,6 @@
 
 ## Notes
 (none)
+
+### From F73: do i need to accecpt both the mockups and the plan for the… (merged by the lead on 2026-10-09)
+do i need to accecpt both the mockups and the plan for the plan to start? what happens if i only approve one of them?
