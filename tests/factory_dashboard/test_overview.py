@@ -39,6 +39,15 @@ def test_the_overview_shows_every_panel_in_order(client):
         "needs-you", "now", "queue", "allowance", "line-live", "away", "savings",
         "spend",
     ]  # fmt: skip
+    replay_html = re.search(r'<div class="panel replay" id="replay">', html)
+    assert replay_html, "no #replay div"
+    # #replay sits right after #line-live, outside it (htmx refreshes #line-live every 5 s).
+    line_pos = html.index('id="line-live"')
+    replay_pos = replay_html.start()
+    away_pos = html.index('id="away"')
+    assert line_pos < replay_pos < away_pos
+    between = html[line_pos:replay_pos].rstrip()
+    assert between.endswith("</section>"), "replay should be right after line-live's closing tag"
     assert "Next in line" not in section(html, "now")
     # The old #running section id is no longer present.
     assert 'id="running"' not in html
@@ -1367,6 +1376,43 @@ def test_allowance_bar_colours_match_at_phone_and_desktop(page, allowance_client
     for dw, w in zip(desktop_widths, widths, strict=True):
         if dw > 0:
             assert w > 0, f"bar with usage has width {w} at 390 px (desktop width {dw})"
+
+
+def test_replay_bar_is_just_below_the_floor_on_phone(page, serve, db_path):
+    """f9-26: at 390 px the replay bar's top is within 40 px of the floor's bottom."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve_route(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = serve().get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve_route)
+    page.set_viewport_size({"width": 390, "height": 1200})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#replay")
+
+    floor_box = page.locator("#floor-phone").bounding_box()
+    replay_box = page.locator("#replay").bounding_box()
+    assert floor_box and replay_box
+    gap = replay_box["y"] - (floor_box["y"] + floor_box["height"])
+    floor_bottom = floor_box["y"] + floor_box["height"]
+    assert gap < 40, (
+        f"replay top ({replay_box['y']}) should be "
+        f"within 40 px of floor bottom ({floor_bottom}), gap is {gap}"
+    )
 
 
 def test_allowance_legend_names_bar_mark(allowance_client):

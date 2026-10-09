@@ -338,15 +338,15 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor [data-station="stash"] .unit { stroke-dasharray: 6 4; }
 .floor .tile { fill: var(--bg); stroke: var(--a3); stroke-width: 1.5; }
 
-/* The replay bar (f3-07, after f1-factory-mockup's .replay): a sticky bar on a phone, every
-   control at least 44 px */
+/* The replay bar (f3-07, after f1-factory-mockup's .replay): every control at least 44 px */
 .replay, .replay-controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
 .replay-controls[hidden] { display: none; }
 .replay button, .replay select { min-width: 44px; min-height: 44px; padding: 8px 12px; }
 .replay .play { background: var(--accent); color: var(--surface); border-color: var(--accent); font-weight: 600; }
 .replay-readout { font: 12.5px var(--mono); color: var(--ink-2); }
 @media (max-width: 639px) {
-  .replay.replaying { position: sticky; bottom: 0; z-index: 5; gap: 8px; box-shadow: 0 -6px 16px rgba(0,0,0,.25);
+  #line-live + #replay:not(.replaying) { margin-top: -10px; }
+  .replay.replaying { gap: 8px;
     padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
   .replay-readout { flex-basis: 100%; order: -1; }
 }

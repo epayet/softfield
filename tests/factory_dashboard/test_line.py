@@ -1358,29 +1358,17 @@ def test_replay_draws_the_floor_at_since_and_back_to_live_draws_it_again(page, n
     assert page.evaluate(PAUSED) is False
 
 
-def test_on_a_phone_the_replay_bar_sticks_to_the_bottom_with_44_px_controls(page, night_db):
+def test_on_a_phone_the_replay_bar_sits_on_screen_with_44_px_controls(page, night_db):
     size = {"width": 390, "height": 844}
     open_line(page, night_client(night_db), size)
     bar = page.locator("#replay")
-    assert bar.evaluate("e => getComputedStyle(e).position") != "sticky"
-    # no element on the page has a 200vh inline height
-    no_200vh = page.evaluate("""
-        () => {
-            const els = document.querySelectorAll('[style*="200vh"]');
-            return els.length;
-        }
-    """)
-    assert no_200vh == 0
-    # make the page taller than the 844 px screen so sticky can stick
-    page.evaluate("document.body.style.height = '400vh'")
-    page.evaluate("window.scrollTo(0, 0)")
-    assert bar.evaluate("e => getComputedStyle(e).position") != "sticky"
     page.click("#replay-start")
     page.wait_for_selector("#replay-live", state="visible")
-    assert bar.evaluate("e => getComputedStyle(e).position") == "sticky"
+    # while replaying at 390 × 844, the whole bar is on screen
+    bar.scroll_into_view_if_needed()
     box = bar.bounding_box()
     assert box is not None
-    assert abs(box["y"] + box["height"] - size["height"]) <= 1
+    assert box["y"] + box["height"] <= size["height"] + 1
     controls = page.locator("#replay button, #replay select")
     assert controls.count() == 7  # Replay, its stretch, Play, ◀, ▶, the speed, Back to live
     for n in range(controls.count()):
@@ -1388,7 +1376,6 @@ def test_on_a_phone_the_replay_bar_sticks_to_the_bottom_with_44_px_controls(page
         assert found is not None and found["width"] >= 44 and found["height"] >= 44, n
     page.click("#replay-live")
     page.wait_for_selector("#replay-controls", state="hidden")
-    assert bar.evaluate("e => getComputedStyle(e).position") != "sticky"
 
 
 def test_reduced_motion_disables_animations(page, line_client):
