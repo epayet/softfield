@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F65 mock-up: a card's page after a review round</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .note { font-size: 12.5px; color: var(--muted); border: 1px dashed var(--rule); padding: 8px 12px; }
+  h1 { margin: 0; font: 600 20px var(--display); }
+  .meta { color: var(--muted); font-size: 13px; }
+  a { color: var(--sonnet); }
+  section.review { background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  h2 { margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  h3 { margin: 4px 0 0; font: 600 14px var(--display); color: var(--ink-2); }
+  .round h2 { color: var(--hazard); }
+  blockquote { margin: 0; padding: 8px 12px; background: var(--plate); border-left: 3px solid var(--opus); color: var(--ink-2); }
+  blockquote b { color: var(--fg); font-weight: 600; }
+  ul, ol { margin: 0; padding-left: 20px; }
+  .tickets { font-size: 13px; color: var(--muted); }
+  .tickets a { font-family: ui-monospace, monospace; }
+  details { border-top: 1px solid var(--rule); padding-top: 8px; }
+  summary { cursor: pointer; min-height: 44px; display: flex; align-items: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  button { min-height: 44px; padding: 0 18px; background: var(--good); color: #0d1a10; border: 0; font: 600 14px var(--display); cursor: pointer; }
+  .hint { font-size: 12.5px; color: var(--muted); }
+  .thread { background: var(--bay); border: 1px solid var(--rule); padding: 12px 16px; font-size: 14px; }
+  .thread p { margin: 4px 0; }
+  .who { font: 600 12px var(--display); color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+</style>
+</head>
+<body>
+<main>
+  <p class="note">Mock-up for F65 D3. Example data: F50 after one round, where you asked for the button to say what it does. The orange edge quotes your words; the yellow is the latest round.</p>
+
+  <header>
+    <h1>F50: a finished card shows its review</h1>
+    <div class="meta">Needs your sign-off · round 2 · reviewed 9 Oct, 14:10</div>
+  </header>
+
+  <section class="review">
+    <div class="round">
+      <h2>Round 2: what changed since your comment</h2>
+    </div>
+    <blockquote><b>You, 9 Oct 08:12:</b> “The sign off button doesn't say what it does, and I'd like to see the review even before it's ripe.”</blockquote>
+
+    <h3>What changed</h3>
+    <ul>
+      <li>Sign off now says what it does under it: <i>“Marks F50 done and tags it, at the runner's next pick.”</i></li>
+      <li>A card whose review is still running shows “Review under way, about 20 min” on its page, instead of nothing.</li>
+    </ul>
+
+    <h3>How to test it</h3>
+    <ol>
+      <li>Open <a href="#">/planning/f50</a> on your phone: the words sit under Sign off.</li>
+      <li>Open a card whose review is running (the floor's Review machine names it): its page says “Review under way”.</li>
+    </ol>
+
+    <p class="tickets">This round: <a href="#">f50-04-signoff-words</a> · <a href="#">f50-05-review-under-way</a> · <a href="#">the round's changes</a></p>
+
+    <details>
+      <summary>Earlier: round 1 (8 Oct)</summary>
+      <h3>What changed</h3>
+      <ul><li>A card reaches “Finished, to talk through” only once its review is written …</li></ul>
+      <h3>How to test</h3>
+      <ol><li>…</li></ol>
+    </details>
+
+    <a href="#">The whole review</a>
+    <div class="actions">
+      <button type="button">Sign off</button>
+      <span class="hint">Not happy yet? Reply below: the lead drafts round 3.</span>
+    </div>
+  </section>
+
+  <section class="thread">
+    <p class="who">You · 9 Oct 08:12</p>
+    <p>The sign off button doesn't say what it does, and I'd like to see the review even before it's ripe.</p>
+    <p class="who">The lead · 9 Oct 08:20</p>
+    <p>Two follow-up tickets drafted (round 2). Approve the plan to build them; the card comes back here with what changed.</p>
+  </section>
+</main>
+</body>
+</html>
