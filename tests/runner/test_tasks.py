@@ -607,7 +607,8 @@ def test_queued_tickets_name_only_what_exists_or_an_earlier_ticket_creates():
         created = _created_before(task, queued)
         for problem in preflight(task, repo):
             path = problem.removeprefix("referenced path does not exist: ")
-            # A tests-only ticket may wait here: pre-flight hands it to the lead when it runs.
-            if problem != TESTS_ONLY and path not in created:
+            # A tests-only ticket without `tests_only: true` fails here too: pre-flight would
+            # spend an escalation on it before any attempt (f9-30).
+            if path not in created:
                 problems.append(f"{task.id}: {problem}")
     assert problems == []
