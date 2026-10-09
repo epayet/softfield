@@ -32,3 +32,12 @@ Read the switch in `factory_dashboard/templates/_partials/allowance.html` (from 
 - the legend holds the "use reserve" line
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 8539
+gate_failures: ['task-tests', 'all-tests']
+tokens: 5464800
+```
