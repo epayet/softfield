@@ -2,7 +2,7 @@
 ``APIRouter``, its own SQL in plain functions that return data, a template extending
 ``base.html``, and a chart's data for ``static/charts.js`` (D5).
 
-Top to bottom: Needs you and Now (one htmx partial at ``/live``), the last verdict, the Claude
+Top to bottom: Needs you and Now (one htmx partial at ``/live``), the Claude
 allowance, savings for the current milestone and the Claude spend chart.
 """
 
@@ -10,7 +10,6 @@ import json
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -420,16 +419,7 @@ def needs_you(
     return found
 
 
-# --- the last verdict, the allowance, savings ---------------------------------------------
-
-
-@dataclass(frozen=True)
-class Verdict:
-    milestone: str | None
-    milestone_verdict: str | None
-    run_dir: str | None
-    run_verdict: str | None
-    run_ended: str | None
+# --- the allowance, savings ---------------------------------------------
 
 
 def current_milestone(conn: sqlite3.Connection, project: str) -> sqlite3.Row | None:
@@ -441,22 +431,6 @@ def current_milestone(conn: sqlite3.Connection, project: str) -> sqlite3.Row | N
         (project,),
     ).fetchone()
     return row
-
-
-def last_verdict(conn: sqlite3.Connection, project: str) -> Verdict:
-    m = current_milestone(conn, project)
-    run = conn.execute(
-        "SELECT r.run_dir, r.verdict, r.ended FROM runs r JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ? AND r.verdict IS NOT NULL ORDER BY r.ended DESC, r.id DESC LIMIT 1",
-        (project,),
-    ).fetchone()
-    return Verdict(
-        milestone=m["key"] if m else None,
-        milestone_verdict=m["verdict"] if m else None,
-        run_dir=run["run_dir"] if run else None,
-        run_verdict=run["verdict"] if run else None,
-        run_ended=run["ended"] if run else None,
-    )
 
 
 @dataclass(frozen=True)
@@ -605,24 +579,6 @@ def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> d
     return switches
 
 
-def biggest_clog(clog: dict[str, Any]) -> str:
-    """The line under "What clogged the line today" (f3 D11): the highest of the limit, the
-    failed minutes, the most idle machine's minutes and the owner's, a tie to the first."""
-    idle = max(clog["idle"], key=lambda i: i["minutes"], default=None)
-    minutes, label = max(
-        [
-            (clog["limit"], "Waiting for Claude's limit"),
-            (clog["failed"], "Failed attempts"),
-            (idle["minutes"] if idle else 0, f"Idle: {idle['name'] if idle else ''}"),
-            (clog["owner"], "Stopped for you"),
-        ],
-        key=lambda c: c[0],
-    )
-    if not minutes:
-        return "Nothing clogged the line today."
-    return f"Biggest clog: {label}, {minutes} min."
-
-
 def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] | list[float]]:
     """Claude's dollars per milestone, oldest first: the data of ``charts.js``'s ``spend``."""
     points = queries.trends(conn, project)
@@ -724,14 +680,12 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
         {
             "active": "/",
             "line": line,
-            "clog_biggest": biggest_clog(line["clog"]) if line["clog"] else None,
             "replay": url("/line/replay", since),
             "replay_day": url("/line/replay", local - timedelta(days=1)),
             "away": queries.away(conn, project, since, local),
             "since": since,
             "choices": choices,
             **_live_context(conn, project, now),
-            "verdict": last_verdict(conn, project),
             "milestone": milestone,
             "savings": queries.savings(conn, project, milestone["key"]) if milestone else None,
             "spend": spend_chart(conn, project),

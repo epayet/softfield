@@ -26,33 +26,6 @@
 
 {% include "_partials/line.html" %}
 
-{% if line.clog %}
-{% set clog = line.clog %}
-<section id="clog" class="panel">
-  <h2>What clogged the line today</h2>
-  <dl class="kv">
-    <dt>Waiting for Claude's limit</dt><dd class="mono">{{ clog.limit }} min</dd>
-    <dt>Failed attempts</dt><dd class="mono">{{ clog.failures }} · {{ clog.failed }} min</dd>
-    <dt>Machines idle while one job runs</dt><dd class="mono">{{ clog.idle | selectattr("minutes") | list | length }} of {{ clog.idle | length }}</dd>
-    <dt>Stopped for you</dt><dd class="mono">{{ clog.owner }} min</dd>
-  </dl>
-  <p class="sub">{{ clog_biggest }}</p>
-</section>
-{% endif %}
-
-<section id="verdict" class="panel">
-  <h2>Last verdict</h2>
-  <dl class="kv">
-    {% if verdict.milestone %}
-    <dt>Milestone</dt><dd><a href="/milestones/{{ verdict.milestone }}{{ q }}"><b>{{ verdict.milestone | upper }}</b></a>: {{ verdict.milestone_verdict or "no verdict yet" }}</dd>
-    {% endif %}
-    {% if verdict.run_dir %}
-    <dt>Last run</dt><dd><a class="mono" href="/runs/{{ verdict.run_dir }}{{ q }}">{{ verdict.run_dir }}</a>: {{ verdict.run_verdict }}</dd>
-    {% endif %}
-  </dl>
-  {% if not verdict.milestone and not verdict.run_dir %}<p class="sub">No verdict yet.</p>{% endif %}
-</section>
-
 {% include "_partials/away.html" %}
 
 <section id="savings" class="panel">
