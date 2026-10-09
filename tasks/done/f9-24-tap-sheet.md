@@ -27,3 +27,12 @@ Read `factory_dashboard/templates/_partials/line.html` (`#crate-card` after the 
 - the layout check passes at 390 px with the card open (mark the sheet `data-layout="overlay"`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2961
+gate_failures: []
+tokens: 2798515
+```
