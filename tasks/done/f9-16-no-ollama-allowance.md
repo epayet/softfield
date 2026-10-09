@@ -21,3 +21,12 @@ Read `agent_allowances` in `factory_dashboard/overview.py` (the `ollama` group) 
 - `/`'s allowance panel has Claude's 5-hour window, Claude's week and Copilot's month, and no Ollama row
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2513
+gate_failures: []
+tokens: 549381
+```
