@@ -1,7 +1,7 @@
 ---
 id: f9-15-away-who-did-it
 milestone: f9-line-polish
-depends_on: []
+depends_on: [f9-31-fix-away-swap-nests-section]
 difficulty: 4
 files:
   - factory_dashboard/templates/_partials/away.html
