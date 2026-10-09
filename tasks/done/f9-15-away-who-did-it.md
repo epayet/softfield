@@ -30,3 +30,12 @@ Read `away` and `AwayTicket` in `factory_dashboard/queries.py`, `factory_dashboa
 - with one blocked ticket, the summary line links it by id
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3432
+gate_failures: []
+tokens: 4135447
+```
