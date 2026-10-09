@@ -28,3 +28,12 @@ Read `factory_dashboard/templates/overview.html` (`{% include "_partials/line.ht
 - the f3-31 phone test in `test_line.py` says what's true now: at 390 × 844, while replaying, the whole bar is on screen at the top of the page and every control is at least 44 px (it no longer asserts sticky, nor that the bar's bottom meets the screen's bottom)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 9667
+gate_failures: ['all-tests', 'all-tests']
+tokens: 6449692
+```
