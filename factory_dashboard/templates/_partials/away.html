@@ -1,5 +1,5 @@
-{# While you were away (f3-21): what the factory did in the chosen span (the replay bar's), at
-   page load only. Blocked counts the tickets blocked now. #}
+{# While you were away (f3-21): what the factory did in the chosen span (the replay bar's).
+   Swapped in place by the #replay-span handler; always updated when the span changes. #}
 <section id="away" class="panel">
   <h2>While you were away <span class="src">since {{ since.strftime("%H:%M") }}</span></h2>
   {% if away.merged or away.failed or away.escalations or away.needs_you or away.claude_usd %}

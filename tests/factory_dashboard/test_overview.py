@@ -820,7 +820,7 @@ def open_overview(page, client) -> None:
         path = url.split("?", 1)[0]
         if path.startswith("/static/"):
             route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
-        elif path in ("/", "/live"):
+        elif path in ("/", "/live", "/away"):
             body = client.get(url).text
             route.fulfill(body=body, content_type="text/html; charset=utf-8")
         else:
@@ -1102,6 +1102,11 @@ def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):
     finally:
         conn.close()
     open_overview(page, serve())
+    # Capture the original since time.
+    original_away = page.locator("#away").inner_text()
+    original_since_match = re.search(r"since (\d{2}:\d{2})", original_away, re.I)
+    assert original_since_match, f"no since time in '{original_away}'"
+    original_since = original_since_match.group(1)
     # Set a value on window before the change.
     page.evaluate("window._kept = 'preserved'")
     # Choose 'the last hour' without navigation.
@@ -1111,18 +1116,35 @@ def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):
     qs = parse_qs(urlsplit(page.url).query)
     assert "since" in qs
     assert datetime.fromisoformat(qs["since"][0]) == NOW - timedelta(hours=1)
-    # #away's since time changed.
+    # Exactly one #away element (no nesting).
+    assert page.locator("#away").count() == 1, (
+        f"expected 1 #away element, got {page.locator('#away').count()}"
+    )
+    # #away's since time changed to the new time.
     away_section = page.locator("#away")
     away_text = away_section.inner_text()
-    assert "since" in away_text.lower()
+    new_since_match = re.search(r"since (\d{2}:\d{2})", away_text, re.I)
+    assert new_since_match, f"no since time in '{away_text}'"
+    new_since = new_since_match.group(1)
+    assert new_since != original_since, (
+        f"since time should have changed from {original_since} to something else, got {new_since}"
+    )
     # A value set on window before the change is kept.
     kept = page.evaluate("window._kept")
     assert kept == "preserved"
 
 
 def test_replay_asks_new_since_after_span_change(page, serve, client, db_path):
-    """f9-14: after choosing a span, the replay bar's data-replay has the new since."""
+    """f9-14: after choosing a span, the replay bar's data-replay has the new since,
+    and clicking Replay requests /line/replay with that new since."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
     open_overview(page, serve())
+    # Capture the original since from the page.
+    original_page = page.evaluate("document.querySelector('.page[data-since]').dataset.since")
     # Choose 'the last hour'.
     page.select_option("#replay-span", label="the last hour")
     page.wait_for_timeout(1000)
@@ -1131,6 +1153,28 @@ def test_replay_asks_new_since_after_span_change(page, serve, client, db_path):
     assert "since=" in new_since
     qs = parse_qs(urlsplit(new_since).query)
     assert datetime.fromisoformat(qs["since"][0]) == NOW - timedelta(hours=1)
+    # The page's data-since also updated.
+    page_since = page.evaluate("document.querySelector('.page[data-since]').dataset.since")
+    assert page_since != original_page
+    # Click Replay and capture the fetch URL.
+    replay_url = [None]
+
+    def handle_route(route):
+        url = route.request.url
+        if "/line/replay" in url:
+            replay_url[0] = url
+        route.fulfill(
+            status=200,
+            body='{"since":"2026-10-02T00:00:00+00:00","until":"2026-10-02T12:00:00+00:00","line":{},"events":[]}',
+        )
+
+    page.route("**/line/replay**", handle_route)
+    page.click("#replay-start")
+    page.wait_for_timeout(500)
+    assert replay_url[0] is not None, "Replay button did not trigger /line/replay"
+    replay_qs = parse_qs(urlsplit(replay_url[0]).query)
+    assert "since" in replay_qs
+    assert datetime.fromisoformat(replay_qs["since"][0]) == NOW - timedelta(hours=1)
 
 
 def test_the_legend_sits_collapsed_after_the_floor_svg(client):

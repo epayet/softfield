@@ -644,7 +644,10 @@
     // Swap the away section in place.
     const awayResp = await fetch(`/away?since=${encodeURIComponent(since)}`);
     if (awayResp.ok) {
-      document.getElementById("away").innerHTML = await awayResp.text();
+      const newAway = document.createElement("div");
+      newAway.innerHTML = await awayResp.text();
+      const oldAway = document.getElementById("away");
+      if (oldAway) oldAway.replaceWith(...newAway.childNodes);
     }
   });
   document.getElementById("replay-live")?.addEventListener("click", backToLive);
