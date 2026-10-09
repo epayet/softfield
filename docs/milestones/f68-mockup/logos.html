@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F68 mock-up: SoftField, four logos</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css): dark by default, light on the button */
+  :root, .dark {
+    --soft: #f2b10a;   /* "Soft" in yellow: the hazard yellow on the dark floor */
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405;
+    --opus: #ff9640; --copilot: #7aa7ff; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  :root.light, .light {
+    --soft: #8a5d00;   /* the hazard yellow is 1.8:1 on the pale floor: the light theme's --warn-ink, 5.2:1 */
+    --floor: #eceee9; --bay: #f7f8f5; --plate: #ffffff; --rule: #c3c8c0;
+    --fg: #16191d; --ink-2: #3f4650; --muted: #5b636d;
+    --copilot: #3f6fd6; --good: #2c9a46;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.45 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; margin: 0 0 4px; }
+  h2 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 30px 0 10px; }
+  p.lede { color: var(--ink-2); max-width: 780px; margin: 0 0 10px; }
+  .switch { font: 600 13px var(--display); background: var(--plate); color: var(--fg); border: 1px solid var(--rule);
+    padding: 8px 14px; cursor: pointer; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .card { background: var(--bay); border: 1px solid var(--rule); padding: 14px; }
+  .card h3 { font: 700 16px var(--display); margin: 0 0 4px; }
+  .card h3 .pick { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase;
+    background: var(--hazard); color: var(--hazard-ink); padding: 2px 6px; margin-left: 6px; vertical-align: 2px; }
+  .card p { margin: 6px 0 0; font-size: 14px; color: var(--ink-2); }
+  .sizes { display: flex; align-items: end; gap: 18px; margin: 8px 0 4px; }
+  .sizes figure { margin: 0; text-align: center; font: 11px var(--mono); color: var(--muted); }
+  .sizes svg { display: block; margin: 0 auto 4px; }
+
+  /* the top bar as drawn, with the brand a link to the Overview */
+  .bar { background: var(--floor); border: 1px solid var(--rule); margin-top: 10px; }
+  .bar-top { display: flex; align-items: center; gap: 8px 16px; padding: 8px 12px; }
+  a.brand { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--fg); text-decoration: none;
+    font: 700 22px/1.1 var(--display); letter-spacing: .02em; }
+  a.brand:hover .word { text-decoration: underline; text-decoration-thickness: 2px; text-underline-offset: 4px; }
+  a.brand svg { width: 30px; height: 30px; flex: none; }
+  a.brand .field { color: var(--good); }
+  a.brand.yellow .soft { color: var(--soft); }
+  .both { display: grid; gap: 6px; margin-top: 10px; }
+  .both .bar { margin-top: 0; }
+  .raw { color: #f2b10a; }
+  a.brand small { font: 400 12px var(--mono); color: var(--muted); margin-left: 4px; }
+  .project { margin-left: auto; font: 13px var(--body); background: var(--plate); color: var(--fg); border: 1px solid var(--rule); padding: 3px 6px; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  .tabs { display: flex; gap: 2px; padding: 0 8px; overflow: hidden; font: 600 12px var(--display);
+    letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .tabs span { padding: 8px 10px; white-space: nowrap; }
+  .tabs span.on { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* F17's dot and sign, as its mock-up draws them, to check the phone row fits */
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--copilot); margin: 0 6px; }
+  .sign { width: 44px; height: 44px; display: grid; place-items: center; background: var(--hazard); color: var(--hazard-ink);
+    border: 0; border-radius: 6px; font-size: 18px; }
+  .phone { width: 390px; max-width: 100%; }
+  .phone .bar-top { padding: 2px 6px; gap: 6px; }
+  .phone a.brand { font-size: 19px; gap: 6px; }
+  .phone a.brand svg { width: 26px; height: 26px; }
+  .phone a.brand small { display: none; }
+  .phone .status { margin-left: auto; display: flex; align-items: center; }
+  .phone .project { margin-left: 0; }
+
+  /* a browser tab, for the favicon */
+  .tab { display: inline-flex; align-items: center; gap: 8px; background: var(--plate); border: 1px solid var(--rule);
+    border-bottom: 0; border-radius: 8px 8px 0 0; padding: 7px 14px; font: 13px var(--body); }
+  .tab svg { width: 16px; height: 16px; }
+  .note { font-size: 13px; color: var(--muted); margin: 8px 0 0; }
+</style>
+</head>
+<body>
+
+<!-- The four logos, drawn once. Colours come from the tokens, so each follows the theme. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <pattern id="stripes" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+      <rect width="3.5" height="7" style="fill:var(--hazard)"/>
+    </pattern>
+  </defs>
+
+  <!-- A. The sprout in a crate: an idea planted in the factory's own crate -->
+  <symbol id="logo-a" viewBox="0 0 64 64">
+    <path d="M32 34V19" style="stroke:var(--good);fill:none" stroke-width="4" stroke-linecap="round"/>
+    <path d="M31 25C21 25 14 19 13 9C23 9 31 14 31 25Z" style="fill:var(--good)"/>
+    <path d="M33 21C42 21 49 15 51 6C41 6 33 11 33 21Z" style="fill:var(--good)"/>
+    <rect x="11" y="32" width="42" height="26" rx="3" style="fill:var(--hazard);stroke:var(--hazard-ink)" stroke-width="2.5"/>
+    <path d="M11 40.5H53M11 49.5H53" style="stroke:var(--hazard-ink)" stroke-width="2.5"/>
+  </symbol>
+
+  <!-- B. Rows of code: a field's furrows as indented lines, one of them sprouting -->
+  <symbol id="logo-b" viewBox="0 0 64 64">
+    <g style="stroke:var(--hazard)" stroke-width="5.5" stroke-linecap="round">
+      <path d="M8 14H40"/><path d="M20 26H54"/><path d="M20 38H44"/><path d="M8 50H28"/>
+    </g>
+    <path d="M42 51V42" style="stroke:var(--good)" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M41 45C35 45 32 41 32 35C38 35 41 39 41 45Z" style="fill:var(--good)"/>
+    <path d="M43 43C49 43 53 39 54 33C48 33 43 37 43 43Z" style="fill:var(--good)"/>
+  </symbol>
+
+  <!-- C. The cog flower: a sprout whose flower is a cog -->
+  <symbol id="logo-c" viewBox="0 0 64 64">
+    <path d="M32 60V30" style="stroke:var(--good)" stroke-width="4" stroke-linecap="round"/>
+    <path d="M31 50C23 50 17 45 16 37C24 37 31 42 31 50Z" style="fill:var(--good)"/>
+    <path d="M33 44C41 44 47 39 48 31C40 31 33 36 33 44Z" style="fill:var(--good)"/>
+    <g style="fill:var(--hazard)">
+      <rect x="28" y="1" width="8" height="38" rx="1.5"/>
+      <rect x="28" y="1" width="8" height="38" rx="1.5" transform="rotate(45 32 20)"/>
+      <rect x="28" y="1" width="8" height="38" rx="1.5" transform="rotate(90 32 20)"/>
+      <rect x="28" y="1" width="8" height="38" rx="1.5" transform="rotate(135 32 20)"/>
+      <circle cx="32" cy="20" r="14"/>
+    </g>
+    <circle cx="32" cy="20" r="5.5" style="fill:var(--floor)"/>
+  </symbol>
+
+  <!-- D. Hazard sunrise: the stripe's yellow rising over the furrows -->
+  <symbol id="logo-d" viewBox="0 0 64 64">
+    <path d="M9 34A23 23 0 0 1 55 34Z" style="fill:url(#stripes);stroke:var(--hazard)" stroke-width="2.5" stroke-linejoin="round"/>
+    <path d="M4 36H60" style="stroke:var(--good)" stroke-width="3.5" stroke-linecap="round"/>
+    <g style="stroke:var(--good)" stroke-width="3.5" stroke-linecap="round" fill="none">
+      <path d="M32 41V60"/><path d="M26 41L14 60"/><path d="M38 41L50 60"/><path d="M20 41L4 54"/><path d="M44 41L60 54"/>
+    </g>
+  </symbol>
+</svg>
+
+<h1>F68 · SoftField: four logos</h1>
+<p class="lede">The factory is renamed <b>SoftField</b>: a field where software grows. The dashboard already speaks of a field (the owner <i>plants</i> ideas, the floor has a Planting lane) and of a factory (crates, the hazard stripe). Each logo below joins the two: the factory's hazard yellow and the field's green, drawn from the dashboard's own colours, so it follows the theme (F69's switch). Under each: the logo at 64, 32 and 16 px (the favicon), the top bar on a wide screen, and the phone row with F17's dot and sign. The name and the logo together are one link to the Overview.</p>
+<button class="switch" type="button" onclick="document.documentElement.classList.toggle('light')">Switch light / dark</button>
+
+<h2>The four logos</h2>
+<div class="grid" id="cards"></div>
+
+<h2>The name: three looks, each on the dark and the light floor</h2>
+<div class="grid">
+  <div class="card">
+    <h3>Yellow and green <span class="pick">recommended</span></h3>
+    <div class="both">
+      <div class="bar dark"><div class="bar-top"><a class="brand yellow" href="#"><svg><use href="#logo-a"/></svg><span class="word"><span class="soft">Soft</span><span class="field">Field</span></span></a></div></div>
+      <div class="bar light"><div class="bar-top"><a class="brand yellow" href="#"><svg><use href="#logo-a"/></svg><span class="word"><span class="soft">Soft</span><span class="field">Field</span></span></a></div></div>
+    </div>
+    <p>The owner's idea (2026-10-09): "Soft" in the crate's yellow, "Field" in the sprout's green, so the name repeats logo A's two colours. Lively on the dark floor. On the light floor the hazard yellow is too pale to read (<span class="light" style="background:var(--floor);padding:0 4px"><b class="raw">Soft</b></span>, 1.8:1), so it turns the deeper amber the light theme already uses for yellow words.</p>
+  </div>
+  <div class="card">
+    <h3>Ink and green</h3>
+    <div class="both">
+      <div class="bar dark"><div class="bar-top"><a class="brand" href="#"><svg><use href="#logo-a"/></svg><span class="word">Soft<span class="field">Field</span></span></a></div></div>
+      <div class="bar light"><div class="bar-top"><a class="brand" href="#"><svg><use href="#logo-a"/></svg><span class="word">Soft<span class="field">Field</span></span></a></div></div>
+    </div>
+    <p>"Soft" in the ink, "Field" in the sprout's green: calmer, and the same in both themes, but only one of the logo's colours.</p>
+  </div>
+  <div class="card">
+    <h3>Capitals, as the bar is today</h3>
+    <div class="both">
+      <div class="bar dark"><div class="bar-top"><a class="brand" href="#" style="text-transform:uppercase;letter-spacing:.04em"><svg><use href="#logo-a"/></svg><span class="word">SoftField</span></a></div></div>
+      <div class="bar light"><div class="bar-top"><a class="brand" href="#" style="text-transform:uppercase;letter-spacing:.04em"><svg><use href="#logo-a"/></svg><span class="word">SoftField</span></a></div></div>
+    </div>
+    <p>Today's style (all capitals) turns it into SOFTFIELD: the capital F, the joint between the words, is lost.</p>
+  </div>
+</div>
+
+<template id="card">
+  <div class="card">
+    <h3></h3>
+    <div class="sizes">
+      <figure><svg width="64" height="64"><use/></svg>64</figure>
+      <figure><svg width="32" height="32"><use/></svg>32</figure>
+      <figure><svg width="16" height="16"><use/></svg>16</figure>
+      <figure><span class="tab"><svg><use/></svg>Overview · SoftField</span><br>tab</figure>
+    </div>
+    <div class="bar">
+      <div class="bar-top">
+        <a class="brand yellow" href="#" title="Back to the Overview"><svg><use/></svg><span class="word"><span class="soft">Soft</span><span class="field">Field</span></span><small>studio.local:8000</small></a>
+        <select class="project"><option>coucou</option></select>
+      </div>
+      <div class="hazard"></div>
+      <div class="tabs"><span>Overview</span><span class="on">Planning · 3</span><span>Milestones</span><span>Tickets</span><span>Jobs</span></div>
+    </div>
+    <div class="bar phone">
+      <div class="bar-top">
+        <a class="brand yellow" href="#"><svg><use/></svg><span class="word"><span class="soft">Soft</span><span class="field">Field</span></span></a>
+        <div class="status"><i class="dot"></i><button class="sign" type="button" aria-label="Pause after this job">⏸</button></div>
+        <select class="project"><option>coucou</option></select>
+      </div>
+      <div class="hazard"></div>
+    </div>
+    <p></p>
+  </div>
+</template>
+
+<script>
+  const logos = [
+    { id: "a", name: "A. The sprout in a crate", pick: true,
+      note: "An idea planted in one of the floor's own crates, growing out of it. The plainest link between the planting (the owner's ideas) and the factory (the crates on the line). Two shapes, two colours: it still reads at 16 px." },
+    { id: "b", name: "B. Rows of code",
+      note: "A field's furrows drawn as indented lines of code, the last one sprouting. Clever up close, but at 16 px it is four yellow bars, close to a generic \"menu\" icon." },
+    { id: "c", name: "C. The cog flower",
+      note: "A sprout whose flower is a cog. Friendly and says \"machine that grows\"; the cog's teeth blur into a sun at 16 px." },
+    { id: "d", name: "D. Hazard sunrise",
+      note: "The hazard stripe as a sun rising over the furrows. The most landscape-like and the most \"SoftField\"; the stripes turn to a yellow smudge at 16 px, so the favicon would drop them for a plain sun." },
+  ];
+  const into = document.getElementById("cards");
+  for (const logo of logos) {
+    const node = document.getElementById("card").content.cloneNode(true);
+    node.querySelector("h3").innerHTML = logo.name + (logo.pick ? ' <span class="pick">recommended</span>' : "");
+    for (const use of node.querySelectorAll("use")) use.setAttribute("href", "#logo-" + logo.id);
+    node.querySelector(".card > p").textContent = logo.note;
+    into.append(node);
+  }
+</script>
+</body>
+</html>
