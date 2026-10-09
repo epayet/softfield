@@ -1040,12 +1040,44 @@ def test_the_away_panel_says_when_nothing_happened(client):
     assert section(html, "away").endswith(f"Nothing happened since {since.astimezone():%H:%M}.")
 
 
-def test_choosing_a_span_reloads_the_overview_for_it(page, client):
-    open_overview(page, client)
-    with page.expect_navigation():
-        page.select_option("#replay-span", label="the last hour")
-    since = parse_qs(urlsplit(page.url).query)["since"][0]
-    assert datetime.fromisoformat(since) == NOW - timedelta(hours=1)
+def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):
+    """f9-14: choosing 'the last hour' changes #away's 'since' time, keeps a value set on
+    window before the change, and puts since in the address bar."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+    open_overview(page, serve())
+    # Set a value on window before the change.
+    page.evaluate("window._kept = 'preserved'")
+    # Choose 'the last hour' without navigation.
+    page.select_option("#replay-span", label="the last hour")
+    page.wait_for_timeout(1000)
+    # The address bar has since=.
+    qs = parse_qs(urlsplit(page.url).query)
+    assert "since" in qs
+    assert datetime.fromisoformat(qs["since"][0]) == NOW - timedelta(hours=1)
+    # #away's since time changed.
+    away_section = page.locator("#away")
+    away_text = away_section.inner_text()
+    assert "since" in away_text.lower()
+    # A value set on window before the change is kept.
+    kept = page.evaluate("window._kept")
+    assert kept == "preserved"
+
+
+def test_replay_asks_new_since_after_span_change(page, serve, client, db_path):
+    """f9-14: after choosing a span, the replay bar's data-replay has the new since."""
+    open_overview(page, serve())
+    # Choose 'the last hour'.
+    page.select_option("#replay-span", label="the last hour")
+    page.wait_for_timeout(1000)
+    # The page's data-replay has the new since.
+    new_since = page.evaluate("document.querySelector('.page[data-since]').dataset.replay")
+    assert "since=" in new_since
+    qs = parse_qs(urlsplit(new_since).query)
+    assert datetime.fromisoformat(qs["since"][0]) == NOW - timedelta(hours=1)
 
 
 def test_the_legend_sits_collapsed_after_the_floor_svg(client):

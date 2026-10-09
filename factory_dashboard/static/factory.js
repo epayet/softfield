@@ -615,7 +615,25 @@
   });
   addEventListener("resize", () => drawAll(document));  // a phone turned: the other floor
   document.getElementById("replay-start")?.addEventListener("click", startReplay);
-  document.getElementById("replay-span")?.addEventListener("change", (e) => { location.href = e.target.value; });
+  document.getElementById("replay-span")?.addEventListener("change", async (e) => {
+    const url = e.target.value;
+    const parsed = new URL(url, window.location.origin);
+    const since = parsed.searchParams.get("since");
+    if (!since) return;
+    // Update the address bar without reloading (f9-14).
+    window.history.pushState({ since }, "", `?since=${encodeURIComponent(since)}`);
+    // Update the page's data attributes for replay.
+    const page = document.querySelector(".page[data-since]");
+    if (page) {
+      page.dataset.since = since;
+      page.dataset.replay = `/line/replay?since=${encodeURIComponent(since)}`;
+    }
+    // Swap the away section in place.
+    const awayResp = await fetch(`/away?since=${encodeURIComponent(since)}`);
+    if (awayResp.ok) {
+      document.getElementById("away").innerHTML = await awayResp.text();
+    }
+  });
   document.getElementById("replay-live")?.addEventListener("click", backToLive);
   document.getElementById("replay-play")?.addEventListener("click", play);
   document.getElementById("replay-prev")?.addEventListener("click", () => { stop(); show(step - 1); });

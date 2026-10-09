@@ -706,3 +706,25 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
 def live(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
     """Needs you and Running now together, for htmx to swap in every 5 s."""
     return render(request, conn, project, "_partials/live.html", _live_context(conn, project, now))
+
+
+@router.get("/away", response_class=HTMLResponse)
+def away_partial(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
+    """The 'While you were away' section for a chosen ``since``, for in-place swap (f9-14)."""
+    from factory_dashboard.line import SEEN, overnight
+
+    local = now.astimezone()
+    try:
+        since = datetime.fromisoformat(request.query_params["since"]).astimezone(local.tzinfo)
+    except (KeyError, ValueError):
+        looked = overnight(local, request.cookies.get(SEEN))
+        since = looked
+    if since >= local:
+        since = looked
+    return render(
+        request,
+        conn,
+        project,
+        "_partials/away.html",
+        {"since": since, "away": queries.away(conn, project, since, local)},
+    )

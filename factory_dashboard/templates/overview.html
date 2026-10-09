@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Overview · {{ project }}{% endblock %}
 {% block content %}
-<div class="page" data-replay="{{ replay }}" data-replay-day="{{ replay_day }}">
+<div class="page" data-replay="{{ replay }}" data-replay-day="{{ replay_day }}" data-since="{{ since.isoformat() }}">
 
 {# Needs you and Now: each wrapper fetches /live every 5 s and swaps its own section into
    itself (innerHTML), so it keeps polling, and Needs you comes back after an empty spell (f3-16). #}
