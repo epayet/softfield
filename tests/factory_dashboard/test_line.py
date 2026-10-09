@@ -1788,6 +1788,35 @@ def test_planted_row_links_to_milestone_and_seeds_to_set_aside_tickets(page, lin
     assert page.url == "http://127.0.0.1:8765/tickets?project=coucou#later"
 
 
+def test_sprout_path_is_the_original_d_attribute(page, line_client):
+    """The sprout path must be exactly what it was before f9-03; a test would fail if it changes."""
+    page.clock.install()
+    open_line(page, line_client)
+    d = page.locator("svg#floor .sprout").first.get_attribute("d")
+    assert d is not None
+    # Check the curve commands (the relative part that defines the leaf shape)
+    assert "c-8 0-11-4-11-9 8 0 11 4 11 9" in d
+    assert "c0-7 3-10 10-10 0 7-3 10-10 10" in d
+
+
+def test_each_row_sits_inside_the_rows_station(page, line_client):
+    """Each [data-row] sits inside g[data-station="rows"] again: a link inside the station,
+    around the row group."""
+    page.clock.install()
+    open_line(page, line_client)
+    page.wait_for_selector("svg#floor [data-row]")
+    inside = page.evaluate("""() => {
+        const rows = document.querySelectorAll('svg#floor [data-row]');
+        return Array.from(rows).every((row) => {
+            const link = row.closest('a');
+            if (!link) return false;
+            const station = link.closest('[data-station="rows"]');
+            return station !== null;
+        });
+    }""")
+    assert inside
+
+
 # --- allowance rows layout (f4-34)---------------------------------------------------------------
 
 
