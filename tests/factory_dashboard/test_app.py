@@ -218,6 +218,36 @@ def test_the_top_bar_has_the_mockups_title_hazard_stripe_and_tab_segment(client)
     # the segment: the current tab is a hazard-yellow plate, as in the mock-up
     assert re.search(r'nav\.tabs a\[aria-current="page"\] \{[^}]*background: var\(--hazard\)', css)
     assert re.search(r"\.hazard \{[^}]*repeating-linear-gradient\(-45deg, var\(--hazard\)", css)
+    # f9-line-polish-C423-1: the mobile rule must not stack title and filter vertically
+    # Anchor on the "Phone top bar (f3-30)" comment block to avoid matching the first
+    # @media (max-width: 639px) at line 177 (the allowance block).
+    phone_start = css.find("Phone top bar (f3-30)")
+    assert phone_start != -1, "no Phone top bar (f3-30) comment"
+    # The .bar-top rule and .bar-top .filters label live within the next ~700 characters
+    mobile = css[phone_start : phone_start + 700]
+    bar_top_block = re.search(r"\.bar-top\s*\{([^}]*)\}", mobile)
+    assert bar_top_block, "no .bar-top in phone top bar block"
+    assert re.search(r"display:\s*grid", bar_top_block[1]), (
+        ".bar-top must use display: grid so title and filter share a line"
+    )
+    # the two columns: title on row 1 column 1, filter on row 1 column 2
+    assert re.search(
+        r"grid-template-columns:\s*minmax\s*\(\s*0,\s*1fr\s*\)\s*auto",
+        bar_top_block[1],
+    ), ".bar-top must have two columns (minmax(0, 1fr) auto)"
+    # .bar-top .filters label on row 1, column 2
+    # Split into lines to find the rule reliably
+    filters_block = None
+    for line in mobile.split("\n"):
+        if ".bar-top .filters label" in line and "{" in line:
+            start = line.index("{") + 1
+            end = line.index("}", start)
+            filters_block = (line[:start], line[start:end])
+            break
+    assert filters_block, "no .bar-top .filters label in phone top bar block"
+    assert re.search(r"grid-area:\s*1\s*/\s*2", filters_block[1]), (
+        ".bar-top .filters label must be on row 1, column 2"
+    )
 
 
 @pytest.mark.parametrize("scheme", ["dark", "light"])
