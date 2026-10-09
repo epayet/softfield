@@ -24,3 +24,12 @@ Found by the lead at a checkpoint, on the merge of `tasks/done/f8-11-fix-the-que
 - the test for it asserts the exact line (the count and the absence of "None" and "0 ticket") and would fail on main
 - the listed `tests:` pass
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2156
+gate_failures: []
+tokens: 919151
+```
