@@ -25,3 +25,12 @@ Read `factory_dashboard/milestones.py` (the list's query and `_sort_key`) and `t
 - a test fails if two done milestones come oldest first, or if a ready milestone with priority 2 comes after one with priority 5
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3888
+gate_failures: ['ruff']
+tokens: 4081317
+```
