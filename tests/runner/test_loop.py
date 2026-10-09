@@ -4610,14 +4610,15 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
         (repo_ / "coucou" / "part1.py").write_text("PART = 10\n")
 
     fake_model.append(fixes)
-    new = {**fix, "file": "coucou/thing.py", "summary": "PART shadows", "ticket": "m1-02-thing"}
+    # Claude doesn't file the stand-in's finding again, but a new one in the same file counts
+    new = {**fix, "summary": "PART shadows"}
 
     def recheck(job: ClaudeJob, repo_: Path) -> None:
         assert loop.now() > FIVE_RESETS
         for ticket in ("m1-01-thing", "m1-02-thing", "m1-03-fix-part-is-never-read"):
             assert f"- {ticket}: `git show " in job.prompt
         assert "m1-01-thing (coucou/part1.py)" in job.prompt  # what the stand-in filed
-        _checkpoint_writes(json.dumps({"findings": [{**fix, "route": "local"}, new]}))(job, repo_)
+        _checkpoint_writes(json.dumps({"findings": [new]}))(job, repo_)
 
     script.append(recheck)
     report = _with_sonnet(repo, **{"checkpoint-stand-in": (COPILOT.id,)})
@@ -4633,10 +4634,14 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     assert (claudes["agent"], claudes["outcome"]) == ("claude-sonnet", "passed")
     found = {f["key"]: f for f in _rows(repo, "findings")}
     key = f"m1-C{checkpoint['id']}-1"
-    # Claude's re-check rates the authors on its own finding; the stand-in's isn't filed twice
-    again = f"m1-C{claudes['id']}-2"
+    # Claude's re-check records its own finding, on the ticket and file the stand-in flagged
+    again = f"m1-C{claudes['id']}-1"
     assert set(found) == {key, f"m1-C{checkpoint['id']}-2", again}
-    assert (found[again]["summary"], found[again]["agent"]) == ("PART shadows", "claude-sonnet")
+    assert (found[again]["summary"], found[again]["agent"], found[again]["file"]) == (
+        "PART shadows",
+        "claude-sonnet",
+        "coucou/part1.py",
+    )
     assert (found[key]["route"], found[key]["agent"]) == ("local", "copilot-auto")
     assert found[f"m1-C{checkpoint['id']}-2"]["route"] == "backlog"
     # The fix ticket was written, queued and done by a developer
@@ -4649,6 +4654,26 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     assert (after.unchecked, after.recheck, after.recheck_filed) == ([], [], [])
     assert all(r["done"] is not None for r in _queue(repo))
     assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_checkpoints_finding_belongs_to_the_milestone_of_the_ticket_at_fault(repo):
+    """f8 review: a checkpoint run under F9's key filed F8's findings there, so F8's review
+    saw none. A finding on a ticket with no row stays the checkpoint's; a review's always do."""
+    s = loop.open_session(_config(repo))
+    conn = metrics.open_db(_config(repo).metrics_db)
+    try:
+        other = metrics.upsert_milestone(conn, s.project_id, "m2")
+        metrics.upsert_ticket(conn, s.project_id, "m2-01-elsewhere", milestone_id=other)
+        conn.commit()
+    finally:
+        conn.close()
+    elsewhere = Finding("1", "should-fix", "local", "Wrong", ticket="m2-01-elsewhere")
+    unknown = Finding("2", "should-fix", "local", "Also wrong", ticket="m9-01-gone")
+    loop.record_findings(s, "m1", [elsewhere, unknown], "claude", "m1-C7-", by_ticket=True)
+    loop.record_findings(s, "m1", [replace(elsewhere, id="F1")], "claude", "m1-")
+    keys = {m["id"]: m["key"] for m in _rows(repo, "milestones")}
+    found = {f["key"]: keys[f["milestone_id"]] for f in _rows(repo, "findings")}
+    assert found == {"m1-C7-1": "m2", "m1-C7-2": "m1", "m1-F1": "m1"}
 
 
 def test_two_stand_in_checkpoints_then_claude_free_make_one_claude_recheck_of_all_their_merges(

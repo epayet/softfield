@@ -79,6 +79,14 @@ def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
     assert "2 tickets waiting and the runner is idle" in needs
 
 
+def test_a_project_the_runner_never_ran_shows_an_empty_queue(client):
+    """f8 review: the queued jobs looked up the project's row, and a 500 replaced the page."""
+    assert client.get("/?project=nosuch").status_code == 200
+    live = client.get("/live?project=nosuch")
+    assert live.status_code == 200
+    assert "The queue is empty." in section(live.text, "queue")
+
+
 def test_the_live_partial_answers_on_its_own_for_htmx(client):
     response = client.get("/live?project=coucou")
     assert response.status_code == 200

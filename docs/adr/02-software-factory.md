@@ -317,6 +317,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the Sign off button copied Archive's pattern, and Archive's pattern predates the owner's 2026-10-07 rule: a press showed "Asked" in grey, not the dashed "Signing off" that the Done when named. The proposal page's `on-its-way` class is the pattern that meets the rule; the review fixed Sign off with it. When copying a button, copy the newest one.
 - **Decisions affected:** none.
 
+### F8 (2026-10-09): one visible queue ([review](../reviews/f8-one-queue.md))
+
+- **Q1:** 1 escalation (f8-06, implemented by Opus after 3 failed Qwen attempts), 2 directions, and the checkpoints after f8-07. 12 merged. All 8 lead tickets on the runner passed first time.
+- **Q3:** Qwen 2 of 4 first time. It passed the fix tickets and failed the page tickets (see lead.md, Known range).
+- **Q5:** $27.65 of Claude, net savings −$1.25.
+- **Anything else:** the metrics hid the checkpoints' work. A checkpoint files its findings under the milestone of the merge that queued it, so the four findings on F8's tickets went under F9, and F8's report said "Findings: none". The review fixed it (each finding goes under the milestone of the ticket at fault). Until then, per-milestone checkpoint numbers before F8 may be off where a checkpoint's merges spanned milestones. The review also found a re-check filter, added in F8 itself, that silently dropped real findings: a guard that duplicates a prompt instruction can cost more than the duplicates it prevents.
+- **Decisions affected:** none. ADR 22 holds as built.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

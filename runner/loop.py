@@ -2296,29 +2296,43 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
         enqueue(s, CHECKPOINT, task.milestone, reason, milestone=task.milestone)
 
 
-def _ticket_id(conn: sqlite3.Connection, project_id: int, ticket: str) -> int | None:
-    """A ticket's row, if it has one: a finding naming a ticket never adds one."""
+def _ticket_row(
+    conn: sqlite3.Connection, project_id: int, ticket: str
+) -> tuple[int, int | None] | None:
+    """A ticket's row and its milestone's, if it has one: a finding naming a ticket never adds
+    one."""
     row = conn.execute(
-        "SELECT id FROM tickets WHERE project_id = ? AND ticket = ?", (project_id, ticket)
+        "SELECT id, milestone_id FROM tickets WHERE project_id = ? AND ticket = ?",
+        (project_id, ticket),
     ).fetchone()
-    return int(row[0]) if row else None
+    return (int(row[0]), row[1]) if row else None
 
 
 def record_findings(
-    s: Session, milestone: str, findings: Iterable[Finding], agent: str, prefix: str = ""
+    s: Session,
+    milestone: str,
+    findings: Iterable[Finding],
+    agent: str,
+    prefix: str = "",
+    *,
+    by_ticket: bool = False,
 ) -> None:
-    """Findings on the last Claude job, keyed by ``prefix`` and their ids (ADR 14 item 13)."""
+    """Findings on the last Claude job, keyed by ``prefix`` and their ids (ADR 14 item 13).
+    With ``by_ticket`` (a checkpoint's), each is the milestone's of the ticket at fault, for
+    that milestone's review to judge: a checkpoint's merges may span milestones, and F8's
+    findings were all filed under F9's, so its review saw none (f8 review)."""
     if s.project_id is None:
         return
     milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
     if milestone_id is None:
         return
     for finding in findings:
-        ticket_id = _record(s, _ticket_id, s.project_id, finding.ticket) if finding.ticket else None
+        found = _record(s, _ticket_row, s.project_id, finding.ticket) if finding.ticket else None
+        ticket_id, at_fault = found or (None, None)
         _record(
             s,
             metrics.add_finding,
-            milestone_id,
+            at_fault if by_ticket and at_fault is not None else milestone_id,
             prefix + finding.id,
             job_id=s.last_job_id,
             ticket_id=ticket_id,
@@ -2751,7 +2765,6 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
         _park_support(s, CHECKPOINT, milestone, hold, milestone=milestone)
         _name_checkpoint(s)
         return
-    filed = {(ticket, file) for ticket, file in s.state.recheck_filed}
     out = out or s.run_dir / f"checkpoint-{len(s.report.claude_runs) + 1}.md"
     findings_out = out.with_suffix(".json")
     job = JobSpec(
@@ -2795,12 +2808,12 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
     except ReviewFileError as exc:
         s.report.notes.append(f"Checkpoint findings unusable: {exc}")
     else:
-        # A finding the stand-in filed (same ticket and file) isn't filed twice (f8-08)
-        findings = tuple(f for f in findings if (f.ticket, f.file) not in filed)
-        # Keyed by the checkpoint's job, unique in the milestone (the review judges them)
+        # Keyed by the checkpoint's job, unique in the milestone (the review judges them).
+        # Every one is recorded: the prompt names what a stand-in filed, and a filter on
+        # (ticket, file) dropped a new problem in a file it had flagged (f8 review).
         if s.last_job_id is not None:
             prefix = f"{milestone}-C{s.last_job_id}-"
-            record_findings(s, milestone, findings, routed.agent.id, prefix)
+            record_findings(s, milestone, findings, routed.agent.id, prefix, by_ticket=True)
     s.git.commit_all(
         with_trailers(
             "checkpoint after " + ", ".join(m.split()[0] for m in merged) + " (by Claude)",
@@ -2868,7 +2881,7 @@ def _shadow(s: Session, agent: Agent, job: JobSpec, milestone: str, out: Path, r
     what = "the checkpoint's shadow"
     _, findings, job_id = _read_only_review(s, agent, job, milestone, base, reason, what)
     if job_id is not None:
-        record_findings(s, milestone, findings, agent.id, f"{milestone}-S{job_id}-")
+        record_findings(s, milestone, findings, agent.id, f"{milestone}-S{job_id}-", by_ticket=True)
 
 
 def _read_only_review(
@@ -2973,7 +2986,7 @@ def stand_in_checkpoint(s: Session, milestone: str, merged: list[str], hold: "Ho
     written = list(dict.fromkeys(filed.values()))
     acted = [replace(f, route="local") if prefix + f.id in filed else f for f in findings]
     if job_id is not None:
-        record_findings(s, milestone, acted, agent.id, prefix)
+        record_findings(s, milestone, acted, agent.id, prefix, by_ticket=True)
     # Its merges wait for Claude's re-check (f8-08), with what it filed: checked ids only
     s.state.recheck = list(dict.fromkeys([*s.state.recheck, *merged]))
     for f in acted:

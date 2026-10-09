@@ -300,8 +300,9 @@ def queued_jobs(
     requests from ``owner_requests``."""
     from runner import dispatch
 
-    project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()["id"]
-    rows = metrics.open_jobs(conn, project_id)
+    found_project = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
+    # a project the runner never ran yet has no row, and nothing queued (f8 review)
+    rows = metrics.open_jobs(conn, found_project["id"]) if found_project else []
     # Leave out a row whose started_job is a job still running.
     running_jobs = {
         row["id"]
