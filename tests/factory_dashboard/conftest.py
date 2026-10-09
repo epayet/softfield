@@ -568,16 +568,59 @@ def write_milestone_detail_with_scores(conn: sqlite3.Connection) -> None:
 
 
 def write_milestones(conn: sqlite3.Connection) -> None:
-    """On top of ``write_fixture``: a milestone with no tickets yet (f2),
-    F1 with a status, and F10 (earlier than F2) for ordering tests."""
+    """On top of ``write_fixture``: two done milestones (f1, m4), two in-progress (f2, f10),
+    and two not-started (f5, f3) for ordering tests."""
     project = metrics.upsert_project(conn, PROJECT)
     metrics.upsert_milestone(
         conn,
         project,
         "f1",
         status="done",
+        ended="2026-10-01T10:00:00+02:00",
     )
     metrics.upsert_milestone(
+        conn,
+        project,
+        "m4",
+        status="done",
+        ended="2026-09-25T10:00:00+02:00",
+    )
+    f2 = metrics.upsert_milestone(
+        conn,
+        project,
+        "f2",
+        title="The factory reviews itself",
+        status="in progress",
+        started=_at(timedelta(days=1)),
+    )
+    f2_run = metrics.upsert_run(conn, project, "20261002-120000", command="milestone f2")
+    f2_ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f2-01-test",
+        milestone_id=f2,
+        kind="developer",
+        state="running",
+    )
+    f2_job = metrics.start_job(
+        conn,
+        f2_run,
+        ticket_id=f2_ticket,
+        milestone_id=f2,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-10-02T12:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        f2_job,
+        ended="2026-10-02T12:10:00+02:00",
+        outcome="passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
+    f10 = metrics.upsert_milestone(
         conn,
         project,
         "f10",
@@ -585,13 +628,50 @@ def write_milestones(conn: sqlite3.Connection) -> None:
         status="in progress",
         started=_at(timedelta(days=2)),
     )
+    f10_run = metrics.upsert_run(conn, project, "20261001-100000", command="milestone f10")
+    f10_ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f10-01-test",
+        milestone_id=f10,
+        kind="developer",
+        state="running",
+    )
+    f10_job = metrics.start_job(
+        conn,
+        f10_run,
+        ticket_id=f10_ticket,
+        milestone_id=f10,
+        role="developer",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-10-01T10:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        f10_job,
+        ended="2026-10-01T10:10:00+02:00",
+        outcome="passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
     metrics.upsert_milestone(
         conn,
         project,
-        "f2",
-        title="The factory reviews itself",
-        status="in progress",
-        started=_at(timedelta(days=1)),
+        "f5",
+        title="F5 milestone",
+        state="idea",
+        status="ready",
+        priority=10,
+    )
+    metrics.upsert_milestone(
+        conn,
+        project,
+        "f3",
+        title="F3 milestone",
+        state="idea",
+        status="ready",
+        priority=2,
     )
 
 

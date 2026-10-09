@@ -27,15 +27,15 @@ def test_milestones_page_answers_200(milestones_client):
     assert resp.status_code == 200
 
 
-def test_milestones_shows_newest_first(milestones_client):
-    """Milestones ordered by start date, newest first.
+def test_milestones_groups_and_sorts_correctly(milestones_client):
+    """In progress first (by latest job), then not started (by priority), then done (by end date).
 
-    F2 (2026-10-01) > F10 (2026-09-30) > F1 (2026-09-30) > M4 (2026-09-20).
-    F10 sorts before F1 because they share the same date and 'f10' < 'f1' in key order.
+    In progress: F2 (job 2026-10-02) before F10 (job 2026-10-01).
+    Not started: F3 (priority 2) before F5 (priority 10).
+    Done: F1 (ended 2026-10-01) before M4 (ended 2026-09-25).
     """
     html = milestones_client.get("/milestones").text
     rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
-    # Find rows by their exact key cell (first <td>).
     key_cells = []
     for row in rows:
         tds = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)
@@ -43,10 +43,56 @@ def test_milestones_shows_newest_first(milestones_client):
         if tds:
             key_cells.append(tds[0])
     f2_pos = key_cells.index("F2")
-    f1_pos = key_cells.index("F1")
     f10_pos = key_cells.index("F10")
+    f3_pos = key_cells.index("F3")
+    f5_pos = key_cells.index("F5")
+    f1_pos = key_cells.index("F1")
     m4_pos = key_cells.index("M4")
-    assert f2_pos < f10_pos < f1_pos < m4_pos
+    # In-progress group: F2 (more recent job) before F10.
+    assert f2_pos < f10_pos, (
+        "In-progress milestones should be ordered by latest job, most recent first"
+    )
+    # Not-started group: F3 (priority 2) before F5 (priority 10).
+    assert f3_pos < f5_pos, "Not-started milestones should be ordered by priority, lower first"
+    # Done group: F1 (ended 2026-10-01) before M4 (ended 2026-09-25).
+    assert f1_pos < m4_pos, "Done milestones should be ordered by end date, most recent first"
+    # Groups are in order: in-progress before not-started before done.
+    assert f10_pos < f3_pos, "In-progress milestones should come before not-started"
+    assert f5_pos < f1_pos, "Not-started milestones should come before done"
+
+
+def test_done_milestones_newest_first(milestones_client):
+    """Fails if two done milestones come oldest first."""
+    html = milestones_client.get("/milestones").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    key_cells = []
+    for row in rows:
+        tds = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)
+        tds = [re.sub(r"<[^>]+>", " ", c).strip() for c in tds]
+        if tds:
+            key_cells.append(tds[0])
+    f1_pos = key_cells.index("F1")
+    m4_pos = key_cells.index("M4")
+    assert f1_pos < m4_pos, (
+        "Done milestone F1 (ended 2026-10-01) should come before M4 (ended 2026-09-25)"
+    )
+
+
+def test_not_started_ordered_by_priority(milestones_client):
+    """Fails if a ready milestone with priority 2 comes after one with priority 5."""
+    html = milestones_client.get("/milestones").text
+    rows = re.findall(r"<tr>(.*?)</tr>", html, re.S)
+    key_cells = []
+    for row in rows:
+        tds = re.findall(r"<t[hd][^>]*>(.*?)</t[hd]>", row, re.S)
+        tds = [re.sub(r"<[^>]+>", " ", c).strip() for c in tds]
+        if tds:
+            key_cells.append(tds[0])
+    f3_pos = key_cells.index("F3")
+    f5_pos = key_cells.index("F5")
+    assert f3_pos < f5_pos, (
+        "Not-started milestone F3 (priority 2) should come before F5 (priority 10)"
+    )
 
 
 def test_milestone_with_no_tickets_shows_dashes(milestones_client):
@@ -214,10 +260,12 @@ def test_each_milestone_not_done_shows_its_priority_with_buttons_that_move_it(
 
     cells, row = _row_cells(html, "F2")
     assert cells[-1] == "5 ↑ ↓"
-    assert _posts(row) == [("↑", post("f2", "4")), ("↓", post("f2", "101"))]
+    # Run order includes F3(2), F2(5), F5(10), F10(100); F2's neighbors are F3 and F5
+    assert _posts(row) == [("↑", post("f2", "1")), ("↓", post("f2", "11"))]
     cells, row = _row_cells(html, "F10")
     assert cells[-1] == "100 ↑ ↓"
-    assert _posts(row) == [("↑", post("f10", "4")), ("↓", post("f10", "101"))]
+    # F10's neighbor above is F5(10)
+    assert _posts(row) == [("↑", post("f10", "9")), ("↓", post("f10", "101"))]
     for key in ("F1", "M4"):
         cells, row = _row_cells(html, key)
         assert cells[-1] == "–" and _posts(row) == []

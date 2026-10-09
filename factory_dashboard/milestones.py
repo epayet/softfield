@@ -69,26 +69,52 @@ def _with_moves(
 
 
 def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]:
-    """Every milestone's summary, newest first. Milestones with no tickets show dashes."""
+    """Every milestone's summary, grouped and sorted: in progress first (by latest job),
+    then not started (by priority), then done (by end date)."""
     # Lookup table for milestone status and dates.
     milestone_meta = conn.execute(
-        "SELECT m.key, m.status, m.started, m.ended FROM milestones m"
+        "SELECT m.key, m.status, m.started, m.ended, m.id FROM milestones m"
         " JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
         (project,),
     ).fetchall()
     meta: dict[str, dict[str, str | None]] = {}
+    milestone_ids: dict[str, int] = {}
     for row in milestone_meta:
         meta[row["key"]] = {
             "status": row["status"],
             "started": row["started"],
             "ended": row["ended"],
         }
-    # Milestones with data from trends (oldest first).
+        milestone_ids[row["key"]] = row["id"]
+
+    # Latest job start time per milestone.
+    latest_jobs: dict[int, str | None] = {}
+    for row in conn.execute(
+        "SELECT milestone_id, MAX(started) as latest_started FROM jobs"
+        " WHERE milestone_id IS NOT NULL GROUP BY milestone_id",
+    ):
+        latest_jobs[row["milestone_id"]] = row["latest_started"]
+
+    # Group milestone keys by status.
+    in_progress_keys: list[str] = []
+    not_started_keys: list[str] = []
+    done_keys: list[str] = []
+    for row in milestone_meta:
+        key = row["key"]
+        mid = row["id"]
+        status = row["status"]
+        if status == "done":
+            done_keys.append(key)
+        elif latest_jobs.get(mid):
+            in_progress_keys.append(key)
+        else:
+            not_started_keys.append(key)
+
+    # Milestones with data from trends.
     with_data: list[MilestoneRow] = []
     for trend in queries.trends(conn, project):
         r = trend.results
         s = trend.savings
-        # Skip milestones with no tickets (they show dashes, not zeros).
         if r.merged == 0:
             continue
         info = meta.get(r.key, {})
@@ -108,11 +134,12 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
                 net_savings=s.net,
             )
         )
+
     # Milestones without tickets (from the DB).
     no_data = conn.execute(
         "SELECT m.key, m.title, m.status, m.started, m.ended FROM milestones m"
         " JOIN projects p ON p.id = m.project_id WHERE p.name = ?"
-        " ORDER BY m.status IS 'done', m.started DESC, m.id DESC",
+        " ORDER BY m.key",
         (project,),
     ).fetchall()
     seen = {row.key for row in with_data}
@@ -135,15 +162,39 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
                     net_savings=0.0,
                 )
             )
-    # Merge and sort newest first by started date.
+
+    # Merge and sort: in progress → not started → done.
     all_rows: list[MilestoneRow] = [*with_data, *no_data_rows]
 
-    def _sort_key(r: MilestoneRow) -> tuple[int, float, str]:
-        started = r.started
-        ts = datetime.fromisoformat(started).timestamp() if started else 0.0
-        return (0 if started else 1, -ts, r.key)
+    def _ip_key(r: MilestoneRow) -> tuple[int, float, str]:
+        mid = milestone_ids.get(r.key)
+        latest = latest_jobs.get(mid) if mid else None
+        if latest and isinstance(latest, str):
+            ts = datetime.fromisoformat(latest).timestamp()
+        else:
+            ts = 0.0
+        return (0, -ts, r.key)
 
-    return _with_moves(conn, project, sorted(all_rows, key=_sort_key))
+    def _ns_key(r: MilestoneRow) -> tuple[int, int, str]:
+        p = r.priority if r.priority is not None else 100
+        return (1, p, r.key)
+
+    def _done_key(r: MilestoneRow) -> tuple[int, float, str]:
+        ended = r.ended
+        ts = datetime.fromisoformat(ended).timestamp() if ended and isinstance(ended, str) else 0.0
+        return (2, -ts, r.key)
+
+    in_progress = [r for r in all_rows if r.key in in_progress_keys]
+    not_started = [r for r in all_rows if r.key in not_started_keys]
+    done = [r for r in all_rows if r.key in done_keys]
+
+    result = (
+        sorted(in_progress, key=_ip_key)
+        + sorted(not_started, key=_ns_key)
+        + sorted(done, key=_done_key)
+    )
+
+    return _with_moves(conn, project, result)
 
 
 def _rate_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
