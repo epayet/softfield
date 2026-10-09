@@ -37,3 +37,12 @@ attempts: 3
 tokens: 1495691
 logs: var/runs/20261009-020915/f9-08-fix-the-phone-title-and
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 1964
+gate_failures: ['stopped', 'stopped']
+tokens: 302539
+```
