@@ -4662,8 +4662,10 @@ def test_a_checkpoints_finding_belongs_to_the_milestone_of_the_ticket_at_fault(r
     s = loop.open_session(_config(repo))
     conn = metrics.open_db(_config(repo).metrics_db)
     try:
-        other = metrics.upsert_milestone(conn, s.project_id, "m2")
-        metrics.upsert_ticket(conn, s.project_id, "m2-01-elsewhere", milestone_id=other)
+        pid = s.project_id
+        assert pid is not None
+        other = metrics.upsert_milestone(conn, pid, "m2")
+        metrics.upsert_ticket(conn, pid, "m2-01-elsewhere", milestone_id=other)
         conn.commit()
     finally:
         conn.close()

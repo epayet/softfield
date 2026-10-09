@@ -6,7 +6,7 @@ from html import unescape
 from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
-from factory_dashboard.overview import queue
+from factory_dashboard.overview import queue, queued_jobs
 from runner import metrics
 from tests.browser.conftest import layout_problems
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, SONNET
@@ -1490,6 +1490,112 @@ def test_queued_checkpoint_comes_before_tickets_and_shows_reason(client, db_path
     finally:
         conn.close()
     assert len(jobs) >= 1
+
+
+def test_queued_checkpoint_with_running_started_job_is_not_in_queue(client, db_path):
+    """f8-13: a queued job whose started_job is still running is left out of the queue."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        # Get a running job id from the fixture's database.
+        running_job = conn.execute(
+            "SELECT j.id FROM jobs j "
+            "JOIN runs r ON r.id = j.run_id "
+            "JOIN projects p ON p.id = r.project_id "
+            "WHERE p.name = ? AND j.outcome = 'running' "
+            "LIMIT 1",
+            (PROJECT,),
+        ).fetchone()
+        assert running_job, "no running job in fixture"
+        running_job_id = running_job["id"]
+        # Queue a checkpoint and set its started_job to the running job.
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        now_iso = NOW.isoformat()
+        metrics.queue_job(conn, project, "checkpoint", "f1", "Should not show", now_iso)
+        row = conn.execute(
+            "SELECT id FROM work_queue "
+            "WHERE kind = 'checkpoint' AND subject = 'f1' "
+            "AND done IS NULL"
+        ).fetchone()
+        conn.execute(
+            "UPDATE work_queue SET started_job = ? WHERE id = ?",
+            (running_job_id, row["id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    # The checkpoint should NOT appear in the queue.
+    assert "Should not show" not in next_section
+    assert "Checkpoint:" not in next_section
+
+    # queued_jobs also excludes it.
+    conn = metrics.open_db(db_path)
+    try:
+        jobs = queued_jobs(conn, PROJECT, NOW)
+    finally:
+        conn.close()
+    kinds = [j.kind for j in jobs]
+    assert "Checkpoint" not in kinds
+
+
+def test_queued_checkpoint_with_finished_started_job_is_in_queue(client, db_path):
+    """f8-13: a queued job whose started_job is finished is listed with its reason."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        # Get a passed (finished) job id from the fixture's database.
+        finished_job = conn.execute(
+            "SELECT j.id FROM jobs j "
+            "JOIN runs r ON r.id = j.run_id "
+            "JOIN projects p ON p.id = r.project_id "
+            "WHERE p.name = ? AND j.outcome = 'passed' "
+            "LIMIT 1",
+            (PROJECT,),
+        ).fetchone()
+        assert finished_job, "no passed job in fixture"
+        finished_job_id = finished_job["id"]
+        # Queue a checkpoint and set its started_job to the finished job.
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        now_iso = NOW.isoformat()
+        metrics.queue_job(conn, project, "checkpoint", "f1", "Should show", now_iso)
+        row = conn.execute(
+            "SELECT id FROM work_queue "
+            "WHERE kind = 'checkpoint' AND subject = 'f1' "
+            "AND done IS NULL"
+        ).fetchone()
+        conn.execute(
+            "UPDATE work_queue SET started_job = ? WHERE id = ?",
+            (finished_job_id, row["id"]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    html = client.get("/live").text
+    queue_section = section(html, "queue")
+    next_section = queue_section.split("Next in line", 1)[1]
+    # The checkpoint SHOULD appear in the queue with its reason.
+    assert "Should show" in next_section
+    assert "Checkpoint:" in next_section
+
+    # queued_jobs includes it.
+    conn = metrics.open_db(db_path)
+    try:
+        jobs = queued_jobs(conn, PROJECT, NOW)
+    finally:
+        conn.close()
+    kinds = [j.kind for j in jobs]
+    assert "Checkpoint" in kinds
 
 
 def test_escalation_comes_before_checkpoint(client, db_path):
