@@ -32,3 +32,12 @@ Read the `#allowance` section in `factory_dashboard/templates/overview.html`, an
 - assert within `#allowance` and `#lead-window`, on their text with tags stripped and entities unescaped (`_text` in `tests/factory_dashboard/test_planning.py`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 4257
+gate_failures: ['stopped', 'stopped']
+tokens: 2315947
+```
