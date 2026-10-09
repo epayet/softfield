@@ -28,3 +28,12 @@ Found by the lead at a checkpoint, on the merge of `tasks/done/f9-14-away-span-i
 - the tests for it fail on main
 - the listed `tests:` pass
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 6387
+gate_failures: ['task-tests', 'task-tests']
+tokens: 1868380
+```
