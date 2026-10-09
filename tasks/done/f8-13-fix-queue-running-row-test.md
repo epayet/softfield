@@ -27,3 +27,12 @@ The code is right and its test is missing: change only tests. They pass on main'
 - the same row whose `started_job` is a finished job is listed, with its reason
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass, mypy included
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 3732
+gate_failures: ['mypy', 'stopped']
+tokens: 2309200
+```
