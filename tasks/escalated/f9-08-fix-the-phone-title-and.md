@@ -23,3 +23,12 @@ A should-fix finding (f9-line-polish-C423-1) by copilot-auto, standing in for th
 - what the finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: tests-fail-on-main)
+attempts: 3
+tokens: 1495691
+logs: var/runs/20261009-020915/f9-08-fix-the-phone-title-and
+```
