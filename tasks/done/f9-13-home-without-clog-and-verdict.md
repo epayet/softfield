@@ -22,3 +22,12 @@ Read `factory_dashboard/templates/overview.html` (the `#clog` and `#verdict` sec
 - `/` has no `#clog` and no `#verdict` section; every other section is still there, in order
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2059
+gate_failures: []
+tokens: 1175078
+```
