@@ -35,3 +35,12 @@ Read `factory_dashboard/templates/_partials/line.html` (the heading and "How to 
 - the savings heading names the milestone with "so far"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 4830
+gate_failures: ['stopped', 'stopped']
+tokens: 6807849
+```
