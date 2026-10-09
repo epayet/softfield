@@ -720,8 +720,9 @@ def test_empty_queue_shows_message_once(serve):
 
 
 def test_queue_with_queued_jobs_says_how_many(queue_client, db_path):
-    """f9-line-polish-C467-1: when there are no tickets but queued jobs exist,
-    the queue section must NOT say "The queue is empty."."""
+    """f9-20: when there are no tickets but queued jobs exist,
+    the queue's first line names the jobs waiting by count, never says "0 tickets"
+    and never shows None."""
     # Remove all tickets from the queue so queue is empty
     conn = metrics.open_db(db_path)
     conn.execute("UPDATE tickets SET state = 'done' WHERE state = 'ready'")
@@ -739,6 +740,14 @@ def test_queue_with_queued_jobs_says_how_many(queue_client, db_path):
     queue_section = section(html, "queue")
     assert "The queue is empty." not in queue_section
     assert "Checkpoint:" in queue_section
+    # The first <p> in the queue section: count jobs, not tickets
+    p_match = re.search(r"<p[^>]*>(.*?)</p>", html.split('id="queue"')[1].split("</section>")[0])
+    assert p_match, "no <p> in queue section"
+    p_text = unescape(re.sub(r"<[^>]+>", " ", p_match.group(1)))
+    p_text = " ".join(p_text.split())
+    assert "1 job waiting" in p_text, f"expected '1 job waiting' in '{p_text}'"
+    assert "None" not in p_text
+    assert "0 ticket" not in p_text
 
 
 def test_the_live_part_pauses_while_the_owner_scrolls_or_selects(client):
