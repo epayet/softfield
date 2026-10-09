@@ -388,6 +388,25 @@ tbody tr:hover { background: var(--accent-wash); }
   color: var(--ink-2); font-size: 12px; }
 #crate-card .card-waits { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 #crate-card .card-waits::before { content: "after "; color: var(--muted); }
+#crate-card .card-close { display: none; }
+
+/* Phone: the card is a bottom sheet, full width, above the replay bar (f9-24) */
+@media (max-width: 639px) {
+  #crate-card {
+    position: fixed; left: 0; right: 0; bottom: 0;
+    max-width: 100%; border-radius: 12px 12px 0 0;
+    box-shadow: 0 -6px 16px rgba(0,0,0,.25);
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    z-index: 6;
+  }
+  #crate-card .card-close {
+    display: block; position: absolute; top: 8px; right: 8px;
+    min-width: 36px; min-height: 36px; padding: 6px 10px;
+    font: 600 14px var(--display); color: var(--ink-2);
+    background: var(--plate); border: 1px solid var(--rule);
+    border-radius: 6px; cursor: pointer;
+  }
+}
 
 /* The owner's desk: what is on its way, a dashed orange edge (f6-20) */
 .desk-coming { border: 1px dashed var(--hazard); }

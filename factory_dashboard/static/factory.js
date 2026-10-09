@@ -701,6 +701,12 @@
       if (info.title) parts.push(el("div", "card-title", info.title));
     }
     card.replaceChildren(...parts);
+    // Close button on phone (f9-24)
+    if (narrow()) {
+      const close = el("button", "card-close", "Close");
+      close.addEventListener("click", () => hideCard());
+      card.append(close);
+    }
     card.hidden = false;
   }
 

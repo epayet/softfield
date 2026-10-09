@@ -1547,6 +1547,50 @@ def test_tapping_a_crate_on_the_phone_floor_shows_the_card(page, line_client):
     assert first in card_href
 
 
+def test_at_390_the_card_is_a_bottom_sheet_without_scrolling(page, line_client):
+    """At 390 px, tapping a working crate shows the card inside the viewport without scrolling,
+    the ticket link is visible, the Close button hides it, and a tap outside also hides it."""
+    page.clock.install()
+    open_line(page, line_client, {"width": 390, "height": 1200})
+    page.wait_for_selector("svg#floor-phone [data-queue-crate]")
+    crate = page.locator("svg#floor-phone [data-queue-crate]").first
+    crate.click()
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    box = card.bounding_box()
+    assert box is not None
+    assert box["x"] >= 0
+    assert box["x"] + box["width"] <= 390 + 1
+    assert box["y"] + box["height"] <= 1200 + 1
+    assert card.locator("a").count() >= 1
+    assert card.locator("button.card-close").count() == 1
+    page.click("button.card-close")
+    assert card.is_hidden()
+    # Tap outside also hides it
+    page.locator("svg#floor-phone [data-queue-crate]").first.click()
+    assert not card.is_hidden()
+    page.mouse.click(0, 0)
+    assert card.is_hidden()
+
+
+def test_at_1440_the_card_is_under_the_floor(page, line_client):
+    """At 1440 px the card is under the floor, as before, with no Close button."""
+    page.clock.install()
+    open_line(page, line_client, {"width": 1440, "height": 900})
+    page.wait_for_selector("svg#floor [data-merged]")
+    merged_crates = page.eval_on_selector_all(
+        "svg#floor [data-merged]", "els => els.map(e => e.dataset.merged)"
+    )
+    page.click(f'svg#floor [data-merged="{merged_crates[0]}"]')
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    floor_box = page.locator("svg#floor").bounding_box()
+    card_box = card.bounding_box()
+    assert floor_box is not None and card_box is not None
+    assert card_box["y"] > floor_box["y"] + floor_box["height"]
+    assert card.locator("button.card-close").count() == 0
+
+
 def test_the_card_stays_open_across_a_live_refresh(page, line_client):
     """A refresh that redraws the floor leaves an open card open."""
     page.clock.install()
