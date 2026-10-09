@@ -522,17 +522,7 @@ def agent_allowances(conn: sqlite3.Connection, now: datetime) -> list[WindowAllo
         ],
         now,
     )
-    # Ollama reports no reading (ADR 15 item 2: used until refused), so its row says so.
-    ollama = _agent_allowances(
-        conn,
-        "ollama-",
-        "Ollama",
-        [
-            ("ollama", "allowance", None, None),
-        ],
-        now,
-    )
-    return claude + copilot + ollama
+    return claude + copilot
 
 
 # Claude's windows each have the owner's reserve switch (f8 D4): allowance window -> switch

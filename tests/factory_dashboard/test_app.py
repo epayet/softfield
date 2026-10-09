@@ -359,7 +359,6 @@ def test_an_allowance_meter_says_how_close_it_is(allowance_client):
         "claude-five_hour": "past-mark",
         "claude-seven_day": "under-mark",
         "copilot-month": "under-mark",
-        "ollama-ollama": "under-mark",
     }
     panel = re.search(r'id="allowance".*?</section>', allowance_client.get("/").text, re.S)
     assert panel

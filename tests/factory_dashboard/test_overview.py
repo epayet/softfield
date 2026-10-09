@@ -386,7 +386,6 @@ def test_each_allowance_row_shows_its_own_reading_and_reset(allowance_client):
         "claude-seven_day": "Claude week: 20% resets on Oct 9 12:00"
         " reserve kept for the lead from here",
         "copilot-month": "Copilot month: 2% resets on Nov 1 12:00",
-        "ollama-ollama": "Ollama allowance no data yet",
     }
 
 
@@ -405,7 +404,7 @@ def test_without_readings_every_row_says_no_data_yet(serve, db_path):
     finally:
         conn.close()
     rows = allowance_rows(client.get("/").text)
-    assert len(rows) == 4
+    assert len(rows) == 3
     assert all("no data yet" in row and "%" not in row for row in rows.values())
 
 
@@ -503,7 +502,6 @@ def test_without_a_config_both_switches_are_off(allowance_client):
 def test_a_meter_of_another_agent_has_no_switch(allowance_client):
     html = allowance_client.get("/").text
     assert switch_row(html, "copilot-month") == ("", None)
-    assert switch_row(html, "ollama-ollama") == ("", None)
 
 
 def test_a_switch_asked_for_shows_on_its_way_with_no_button(db_path, tmp_path):
