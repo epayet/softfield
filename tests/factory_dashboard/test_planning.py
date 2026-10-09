@@ -232,6 +232,25 @@ def test_the_lead_window_shows_the_75_line(planning, db_path, serve):
     assert re.search(r'class="mark"[^>]*style="left: 75%"', html)
 
 
+def test_the_lead_window_shows_the_week_row(planning, db_path, serve):
+    _write(
+        db_path,
+        lambda conn: metrics.add_usage_event(
+            conn,
+            OPUS,
+            NOW.isoformat(),
+            "reading",
+            window="seven_day",
+            value=0.6,
+            resets_at=(NOW + timedelta(days=2)).isoformat(),
+        ),
+    )
+    html = _page(serve())
+    tile = _tile(html, "lead-window")
+    assert "week 60%" in tile
+    assert re.search(r'class="under-mark" style="width: 60%"', html)
+
+
 def test_the_top_bar_has_a_planning_tab(client):
     html = client.get("/").text
     # the fixture's ripe milestone waits on the desk (f6-09)

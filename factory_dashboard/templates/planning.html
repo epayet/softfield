@@ -26,6 +26,14 @@
       <span class="mark" title="the factory stops here; the rest is yours" style="left: {{ '%.0f' | format(((window.mark if window else none) or 0.75) * 100) }}%"></span>
     </div>
     <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">5-hour window {{ window.percent if window and window.percent else "–" }} · planning may go past the 75% line, the factory stops there</p>
+    {% set wvalue = (week.value or 0) if week else 0 %}
+    <div class="meter">
+      <span class="{{ 'past-mark' if week and week.mark is not none and wvalue >= week.mark else 'under-mark' }}" style="width: {{ '%.0f' | format(wvalue * 100) }}%"></span>
+      {% if week and week.mark is not none %}
+      <span class="mark" title="{{ week.mark_label }}" style="left: {{ '%.0f' | format(week.mark * 100) }}%"></span>
+      {% endif %}
+    </div>
+    <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">week {{ week.percent if week and week.percent else "–" }}</p>
   </div>
 </section>
 

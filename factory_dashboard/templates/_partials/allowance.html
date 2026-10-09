@@ -3,13 +3,6 @@
    on its way (a dashed orange edge), until the runner takes it. #}
 <section id="allowance" class="panel">
   <h2>Agent allowance <span class="src">latest reading per window</span></h2>
-  <details class="legend"><summary>How to read the allowance</summary>
-    <span><i class="swatch under-mark"></i>green: under the mark</span>
-    <span><i class="swatch past-mark"></i>yellow: past the mark</span>
-    <span><i class="swatch nearly-out"></i>red: above 95%</span>
-    <span>the mark: the factory stops here; the rest of the window is the owner's</span>
-    <span>a dashed orange edge: a switch you turned, on its way to the runner</span>
-  </details>
   <div class="allow">
     {% for a in allowance %}
     {% set no_data = a.value is none %}
@@ -53,4 +46,11 @@
     </div>
     {% endfor %}
   </div>
+  <details class="legend"><summary>How to read the allowance</summary>
+    <span><i class="swatch under-mark"></i>green: under the mark</span>
+    <span><i class="swatch past-mark"></i>yellow: past the mark</span>
+    <span><i class="swatch nearly-out"></i>red: above 95%</span>
+    <span>the mark: the factory stops here; the rest of the window is the owner's</span>
+    <span>a dashed orange edge: a switch you turned, on its way to the runner</span>
+  </details>
 </section>

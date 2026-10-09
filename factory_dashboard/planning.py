@@ -565,6 +565,10 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
         (a for a in agent_allowances(conn, now) if a.label == "Claude" and a.window == "five_hour"),
         None,
     )
+    week = next(
+        (a for a in agent_allowances(conn, now) if a.label == "Claude" and a.window == "seven_day"),
+        None,
+    )
     c = coming(conn, project, now)
     return render(
         request,
@@ -575,6 +579,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "active": "/planning",
             "factory": factory_now(conn, project, now),
             "window": window,
+            "week": week,
             "coming": c,
             "groups": desk(conn, project, now),
             "archived": archived(conn, project, now),

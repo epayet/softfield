@@ -375,10 +375,11 @@ def allowance_rows(html: str) -> dict[str, str]:
     """The allowance panel's rows by their id (``claude-five_hour``…), each row's own text."""
     panel = re.search(r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>', html, re.S)
     assert panel, "no allowance section"
-    # Strip SVG elements so their text doesn't leak into row text, and the reserve switches,
-    # which `switch_row` reads.
+    # Strip SVG elements so their text doesn't leak into row text, the reserve switches,
+    # which `switch_row` reads, and the legend details block.
     text = re.sub(r"<svg[^>]*>.*?</svg>", "", panel.group(1), flags=re.S)
     text = re.sub(r'<div class="switch[^"]*">.*?</div>', "", text, flags=re.S)
+    text = re.sub(r'<details class="legend">.*?</details>', "", text, flags=re.S)
     parts = re.split(r'<div id="allow-([a-z_-]+)">', text)[1:]
     return {
         key: " ".join(re.sub(r"<[^>]+>", " ", text_part).split())
