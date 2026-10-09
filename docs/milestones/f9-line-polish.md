@@ -44,3 +44,7 @@
 | 29 | week-pace | L | 3 | 28 | Claude's week meter shows today's pace line and says "on pace" or "over pace: lead tickets wait" (owner, 2026-10-07) |
 
 **The owner's notes of 2026-10-06** (from using the line on the phone) are 17 and 21–27. Crates moving along the belts went to [F10](f10-crates.md).
+
+## Notes
+### From F64: I like to see the list of tickers that got done while I… (merged by the lead on 2026-10-09)
+I like to see the list of tickers that got done while I was away. Now I also want to see how long each task take, what time it got done, number of attempts. Like a mini report. It also.says who merged it, what does that mean?
