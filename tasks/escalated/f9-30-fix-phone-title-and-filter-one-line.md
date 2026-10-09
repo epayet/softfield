@@ -25,3 +25,12 @@ Found by the lead at a checkpoint, on the merge of `tasks/done/f9-08-fix-the-pho
 - the CSS-regex lines and the made-up finding id are removed from the old test
 - the listed `tests:` pass
 - all gates pass
+
+```yaml
+# --- runner ---
+result: escalated
+reason: pre-flight failed
+attempts: 0
+tokens: 0
+logs: var/runs/20261009-020915/f9-30-fix-phone-title-and-filter-one-line
+```
