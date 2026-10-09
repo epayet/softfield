@@ -1096,7 +1096,12 @@ def test_idle_lead_says_next_ticket(page, line_client):
     text_content = page.locator(
         f'svg#floor [data-machine="{lead_machine["id"]}"] text'
     ).all_text_contents()
-    assert any("next: fX-01" in t for t in text_content)
+    assert any("fX-01" in t for t in text_content)
+    link = page.locator(f'svg#floor [data-machine="{lead_machine["id"]}"] a')
+    assert link.count() == 1
+    href = link.get_attribute("href")
+    assert href is not None
+    assert "/tickets/fX-01-next" in href
 
 
 def test_idle_lead_with_merges_shows_next_ticket_and_merge_count(page, line_client):
@@ -1125,8 +1130,13 @@ def test_idle_lead_with_merges_shows_next_ticket_and_merge_count(page, line_clie
     text_content = page.locator(
         f'svg#floor [data-machine="{lead_machine["id"]}"] text'
     ).all_text_contents()
-    assert any("next: fX-01" in t for t in text_content), "lead must show next ticket"
+    assert any("fX-01" in t for t in text_content), "lead must show next ticket"
     assert any("5 merged today" in t for t in text_content), "lead must show merge count"
+    link = page.locator(f'svg#floor [data-machine="{lead_machine["id"]}"] a')
+    assert link.count() == 1
+    href = link.get_attribute("href")
+    assert href is not None
+    assert "/tickets/fX-01-next" in href
 
 
 # --- machines and belts (f3-20) ----------------------------------------------------------------
@@ -1786,6 +1796,97 @@ def test_planted_row_links_to_milestone_and_seeds_to_set_aside_tickets(page, lin
     with page.expect_navigation():
         page.click('svg#floor a[href*="/tickets"]')
     assert page.url == "http://127.0.0.1:8765/tickets?project=coucou#later"
+
+
+def test_stash_tiles_show_short_key_and_link_to_milestone(page, line_client):
+    """Each stash tile shows only its short key (before the first dash), fits inside 52 px,
+    links to its milestone with ?project=, and its <title> holds the full key."""
+    page.clock.install()
+    open_line(page, line_client, query="project=coucou")
+    page.wait_for_selector("svg#floor [data-stash]")
+    stash_tiles = page.eval_on_selector_all(
+        "svg#floor [data-stash]", "els => els.map(e => e.dataset.stash)"
+    )
+    assert len(stash_tiles) >= 2
+    for full_key in stash_tiles:
+        tile = page.locator(f'svg#floor [data-stash="{full_key}"]')
+        tile_box = tile.bounding_box()
+        assert tile_box is not None
+        assert tile_box["width"] <= 52
+        text_el = tile.locator("text")
+        text_content = text_el.first.text_content()
+        assert text_content is not None
+        assert text_content == full_key.split("-")[0].upper()
+        title_el = tile.locator("title")
+        title_content = title_el.first.text_content()
+        assert title_content == full_key.upper()
+        link = tile.locator("a")
+        assert link.count() == 1
+        href = link.get_attribute("href")
+        assert href is not None
+        assert f"/milestones/{full_key}?project=coucou" in href
+
+
+def test_ripe_lines_link_to_milestone(page, line_client):
+    """Each ripe line links to its milestone with ?project= kept."""
+    page.clock.install()
+    open_line(page, line_client, query="project=coucou")
+    page.wait_for_selector("svg#floor [data-ripe]")
+    ripe_keys = page.eval_on_selector_all(
+        "svg#floor [data-ripe]", "els => els.map(e => e.dataset.ripe)"
+    )
+    for key in ripe_keys:
+        ripe_line = page.locator(f'svg#floor [data-ripe="{key}"]')
+        link = ripe_line.locator("a")
+        assert link.count() == 1
+        href = link.get_attribute("href")
+        assert href is not None
+        assert f"/milestones/{key}?project=coucou" in href
+
+
+def test_planting_links_to_planning(page, line_client):
+    """Tapping the planting station opens the planning page with ?project= kept."""
+    page.clock.install()
+    open_line(page, line_client, query="project=coucou")
+    page.wait_for_selector("svg#floor [data-station='planting']")
+    planting_station = page.locator('svg#floor [data-station="planting"]')
+    link = planting_station.locator("a")
+    assert link.count() == 1
+    href = link.get_attribute("href")
+    assert href is not None
+    assert "/planning?project=coucou" in href
+
+
+def test_merged_crate_opens_card_with_ticket_link(page, line_client):
+    """Tapping a merged crate opens the crate card with its ticket's link."""
+    page.clock.install()
+    open_line(page, line_client)
+    page.wait_for_selector("svg#floor [data-merged]")
+    merged_crates = page.eval_on_selector_all(
+        "svg#floor [data-merged]", "els => els.map(e => e.dataset.merged)"
+    )
+    assert len(merged_crates) >= 1
+    first_merged = merged_crates[0]
+    page.click(f'svg#floor [data-merged="{first_merged}"]')
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    card_href = card.locator("a").get_attribute("href")
+    assert card_href is not None
+    assert "/tickets/" in card_href
+    assert first_merged in card_href
+    page.keyboard.press("Escape")
+
+
+def test_floor_links_layout_at_phone_and_display(page, line_client):
+    """Every link on the floor passes the layout check at 390 px and 1440 px."""
+    from tests.browser.conftest import layout_problems
+
+    # Phone size
+    open_line(page, line_client, {"width": 390, "height": 1200})
+    assert layout_problems(page) == []
+    # Display size
+    open_line(page, line_client, {"width": 1440, "height": 900})
+    assert layout_problems(page) == []
 
 
 def test_sprout_path_is_the_original_d_attribute(page, line_client):

@@ -141,14 +141,16 @@
   }
 
   function planting(svg, count, x, y, w, h) {
+    const query = project_query();
     const g = station(svg, "planting");
+    const link = make_link(g, `/planning${query}`);
     const mid = x + w / 2;
-    add(g, "rect", { x, y, width: w, height: h, class: "unit" });
-    add(g, "rect", { x: x + w - 38, y: y - 34, width: 22, height: 34, class: "unit" });
-    text(g, mid, y + 28, "PLANTING", "head", { "text-anchor": "middle" });
-    text(g, mid, y + 46, "ideas you're planning", "", { "text-anchor": "middle" });
-    text(g, mid, y + 60, "with the lead", "", { "text-anchor": "middle" });
-    text(g, mid, y + 86, `${count.planting} in talks`, "dim", { "text-anchor": "middle" });
+    add(link, "rect", { x, y, width: w, height: h, class: "unit" });
+    add(link, "rect", { x: x + w - 38, y: y - 34, width: 22, height: 34, class: "unit" });
+    text(link, mid, y + 28, "PLANTING", "head", { "text-anchor": "middle" });
+    text(link, mid, y + 46, "ideas you're planning", "", { "text-anchor": "middle" });
+    text(link, mid, y + 60, "with the lead", "", { "text-anchor": "middle" });
+    text(link, mid, y + 86, `${count.planting} in talks`, "dim", { "text-anchor": "middle" });
   }
 
   // The planted rows, the first four `step` apart, then how many tickets they feed `toward`.
@@ -270,7 +272,9 @@
       text(g, left, line + 16, `resets ${m.reset}`, "dim");
     } else if (m.state === "idle") {
       if (m.station === "lead" && m.next_ticket) {
-        text(g, left, line, `next: ${short(m.next_ticket)}`, "dim");
+        const link = make_link(g, `/tickets/${m.next_ticket}${project_query()}`);
+        text(link, 0, 16, short(m.next_ticket), "dim");
+        g.appendChild(link);
         if (m.merged_today && m.merged_today > 0) {
           text(g, left, line + 16, `${m.merged_today} merged today`, "dim");
         }
@@ -321,7 +325,7 @@
     text(g, x + 14, y + 22, `MERGED TODAY · ${count.merged}`, "head");
     doc.merged.slice(-6).forEach((crate, i) => {
       const cx = x + 14 + (i % cols) * 56, cy = y + 34 + Math.floor(i / cols) * 28;
-      const c = add(g, "g", { "data-merged": crate.ticket });
+      const c = add(g, "g", { "data-merged": crate.ticket, "data-crate": crate.ticket });
       add(c, "title", {}, `${crate.ticket}: ${crate.title || ""}`);
       add(c, "rect", { x: cx, y: cy, width: 50, height: 22, class: `crate ${crate.kind}` });
       text(c, cx + 25, cy + 15, short(crate.ticket), "on", { "text-anchor": "middle" });
@@ -329,25 +333,32 @@
   }
 
   function ripe(svg, doc, count, x, y, w, h) {
+    const query = project_query();
     const g = station(svg, "ripe");
     add(g, "rect", { x, y, width: w, height: h, class: "unit" });
     add(g, "circle", { cx: x + 26, cy: y + 30, r: 12, class: "unit" });
     text(g, x + 46, y + 28, `RIPE · ${count.ripe}`, "head big");
     text(g, x + 46, y + 44, "needs your sign-off", "");
-    doc.field.ripe.slice(0, 3).forEach((m, i) =>
-      text(g, x + 14, y + 72 + i * 18, cut(`${m.key.toUpperCase()} · ${m.title || ""}`, Math.floor((w - 28) / 7.2)), "name", { "data-ripe": m.key }));
+    doc.field.ripe.slice(0, 3).forEach((m, i) => {
+      const wrapper = add(g, "g", { "data-ripe": m.key });
+      const link = make_link(wrapper, `/milestones/${m.key}${query}`);
+      text(link, x + 14, y + 72 + i * 18, cut(`${m.key.toUpperCase()} · ${m.title || ""}`, Math.floor((w - 28) / 7.2)), "name");
+    });
   }
 
   // The harvest stash, latest first: `cols` tiles a row, as many rows as `h` holds.
   function stash(svg, doc, count, x, y, w, h, cols) {
+    const query = project_query();
     const g = station(svg, "stash");
     add(g, "rect", { x, y, width: w, height: h, class: "unit" });
     text(g, x + 14, y + 22, `HARVEST STASH · ${count.stash}`, "head");
     doc.field.stash.slice(0, cols * Math.floor((h - 60) / 30)).forEach((m, i) => {
       const tx = x + 14 + (i % cols) * 56, ty = y + 36 + Math.floor(i / cols) * 30;
       const tile = add(g, "g", { "data-stash": m.key });
-      add(tile, "rect", { x: tx, y: ty, width: 52, height: 26, class: "tile" });
-      text(tile, tx + 26, ty + 17, m.key.toUpperCase(), "name", { "text-anchor": "middle" });
+      add(tile, "title", {}, `${m.key.toUpperCase()}`);
+      const link = make_link(tile, `/milestones/${m.key}${query}`);
+      add(link, "rect", { x: tx, y: ty, width: 52, height: 26, class: "tile" });
+      text(link, tx + 26, ty + 17, m.key.split("-")[0].toUpperCase(), "name", { "text-anchor": "middle" });
     });
     text(g, x + 14, y + h - 10, "latest first", "dim");
   }
@@ -699,12 +710,14 @@
     cardCrate = null;
   }
 
-  // One listener on the floor wrapper finds the [data-crate] clicked
+  // One listener on the floor wrapper finds the [data-crate] or [data-merged] clicked
   document.addEventListener("click", (e) => {
     const crate = e.target.closest("[data-crate]");
     if (crate) { showCard(crate.dataset.crate); return; }
+    const merged = e.target.closest("[data-merged]");
+    if (merged) { showCard(merged.dataset.merged); return; }
     const card = document.getElementById("crate-card");
-    if (card && !card.hidden && !card.contains(e.target) && !e.target.closest("[data-crate]")) hideCard();
+    if (card && !card.hidden && !card.contains(e.target) && !e.target.closest("[data-crate]") && !e.target.closest("[data-merged]")) hideCard();
   });
 
   // Keyboard: Enter opens, Escape closes
@@ -714,6 +727,8 @@
     if (e.key !== "Enter") return;
     const crate = e.target.closest("[data-crate]");
     if (crate) { e.preventDefault(); showCard(crate.dataset.crate); }
+    const merged = e.target.closest("[data-merged]");
+    if (merged) { e.preventDefault(); showCard(merged.dataset.merged); }
   });
 
   drawAll(document);
