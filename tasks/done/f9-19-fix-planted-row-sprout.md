@@ -26,3 +26,12 @@ Found by the lead at a checkpoint, on the merge of `tasks/done/f9-03-field-links
 - the `?project=` query is built once, in one helper the seeds and rows both use
 - the listed `tests:` pass and the earlier tapping test still passes
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2171
+gate_failures: []
+tokens: 1095417
+```
