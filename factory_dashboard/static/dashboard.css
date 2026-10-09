@@ -33,7 +33,7 @@
   --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62; --oss: #4fd1a5; --nemo: #c3e06a;
   --copilot: #7aa7ff;
   --factory: #f2b10a; --product: #4fd1a5;     /* the board's areas: the factory, Mum's product */
-  --good: #5fd17a; --a7: #9085e9;
+   --good: #5fd17a; --dev: #5b9cf5; --a7: #9085e9;
   --good-ink: #5fd17a; --critical-ink: #ef6b6b;
   --accent-wash: #2a2416;
   --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255,255,255,.07) 5px 7px);
@@ -59,7 +59,7 @@
   --fail: #c9363b; --clog: #c9363b;
   --sonnet: #b8691f; --qwen: #4c9a26; --oss: #18977a; --nemo: #7d9a1d; --copilot: #3f6fd6;
   --product: #18977a;
-  --good: #2c9a46; --a7: #4a3aa7;
+   --good: #2c9a46; --dev: #3a6fd8; --a7: #4a3aa7;
   --good-ink: #0a6e0a; --critical-ink: #b02d2d;
   --accent-wash: #fbefd6;
   --warn-ink: #8a5d00; --serious-ink: #a4461f; --accent: #a4461f;
@@ -167,6 +167,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .swatch.under-mark, .meter > .under-mark { background: var(--good); }
 .swatch.past-mark, .meter > .past-mark { background: var(--hazard); }
 .swatch.nearly-out, .meter > .nearly-out { background: var(--fail); }
+.swatch.waits { background: var(--muted); border-style: dashed; }
 .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
 #allowance .legend { margin: 0 0 10px; }
 .allow { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
@@ -245,7 +246,7 @@ tbody tr:hover { background: var(--accent-wash); }
 /* The factory line (f3 D11): factory.js draws svg#floor; colours only from the tokens above */
 .line .legend { margin: 0 0 10px; }
 .line .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
-.swatch.lead { background: var(--a2); } .swatch.developer { background: var(--a3); }
+.swatch.lead { background: var(--a2); } .swatch.developer { background: var(--dev); }
 .swatch.carrying { background: var(--warn); }
 .floor-wrap { overflow-x: auto; }
 .line-narrow { display: none; }
@@ -281,7 +282,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor text.head { fill: var(--c, var(--ink)); font: 700 12px var(--sans); letter-spacing: .12em; }
 .floor text.big { font-size: 14px; }
 .floor text.name { fill: var(--ink); font-size: 12px; }
-.floor text.dim, .floor .belt text { fill: var(--muted); font-size: 10.5px; }
+.floor text.dim, .floor .belt text { fill: var(--muted); font-size: 10.5px; pointer-events: none; }
 .floor text.on { fill: var(--surface); font-weight: 700; font-size: 10px; }
 .floor .unit { fill: var(--surface); stroke: var(--c, var(--rule)); stroke-width: 2; }
 .floor .field-plot { fill: var(--surface); stroke: var(--rule); stroke-dasharray: 8 5; }
@@ -296,7 +297,8 @@ tbody tr:hover { background: var(--accent-wash); }
   .floor text.dim, .floor .belt text { fill: var(--ink-2); }
 }
 .floor [data-station="seeds"], .floor [data-station="rows"] { --c: var(--ink-2); }
-.floor [data-station="planting"], .floor .developers { --c: var(--a3); }
+.floor [data-station="planting"] { --c: var(--a3); }
+.floor .developers { --c: var(--dev); }
 .floor .lead { --c: var(--a2); }
 .floor .reviewers { --c: var(--a4); }
 .floor .reviewers.stand-in { --c: var(--a1); }
@@ -321,7 +323,7 @@ tbody tr:hover { background: var(--accent-wash); }
 }
 .floor .smoke { fill: var(--c); opacity: .3; transform-box: fill-box; transform-origin: center; } /* puffs grow in place, not from the floor's corner */
 .floor .crate { stroke: var(--ink); stroke-width: 1.2; }
-.floor .crate.lead { fill: var(--a2); } .floor .crate.developer { fill: var(--a3); }
+.floor .crate.lead { fill: var(--a2); } .floor .crate.developer { fill: var(--dev); }
 .floor .crate.batch { fill: var(--a4); }
 .floor .crate.waits { fill-opacity: .45; stroke-dasharray: 3 2; }
 .floor .belt .bed { fill: none; stroke: var(--grid); stroke-width: 18; }

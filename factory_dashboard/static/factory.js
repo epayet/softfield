@@ -109,7 +109,7 @@
     add(g, "path", { d: where.path, class: "bed", "stroke-width": width + 5 });
     add(g, "path", { d: where.path, class: "rollers", "stroke-width": width });
     const label = where.say || b.label;
-    const words = b.today === null ? (where.short ? "" : label) : where.short ? `${b.today}` : `${label} · ${b.today}`;
+    const words = b.today === null ? (where.short ? "" : label) : where.short ? `${b.today} today` : `${label} · ${b.today} today`;
     const [x, y] = where.at;
     const attrs = {};
     if (where.turn) attrs.transform = `rotate(-90 ${x} ${y})`;
@@ -146,9 +146,9 @@
     add(g, "rect", { x, y, width: w, height: h, class: "unit" });
     add(g, "rect", { x: x + w - 38, y: y - 34, width: 22, height: 34, class: "unit" });
     text(g, mid, y + 28, "PLANTING", "head", { "text-anchor": "middle" });
-    text(g, mid, y + 46, "the lead plans", "", { "text-anchor": "middle" });
-    text(g, mid, y + 60, "with you", "", { "text-anchor": "middle" });
-    text(g, mid, y + 86, `${count.planting} sprouting`, "dim", { "text-anchor": "middle" });
+    text(g, mid, y + 46, "ideas you're planning", "", { "text-anchor": "middle" });
+    text(g, mid, y + 60, "with the lead", "", { "text-anchor": "middle" });
+    text(g, mid, y + 86, `${count.planting} in talks`, "dim", { "text-anchor": "middle" });
   }
 
   // The planted rows, the first four `step` apart, then how many tickets they feed `toward`.
@@ -396,16 +396,16 @@
     "seeds→planting": { path: "M158 92 L196 92", at: [177, 82], middle: true, short: true },
     "planting→rows": { path: "M266 146 L266 176", at: [278, 166] },
     "rows→queue": { path: "M179 438 L179 492", at: [192, 470] },
-    "queue→lead": { path: "M125 592 L125 630", at: [114, 614], end: true },
-    "queue→developers": { path: "M248 552 L350 552 L350 782 L183 782 L183 940", at: [262, 540], say: "developer" },
-    "lead→checks": { path: "M26 700 L7 700 L7 1272 L134 1272", at: [30, 1262], say: "lead's work" },
+    "queue→lead": { path: "M125 592 L125 630", at: [114, 614], end: true, short: true },
+    "queue→developers": { path: "M248 552 L350 552 L350 782 L183 782 L183 940", at: [262, 540], say: "developer", short: true },
+    "lead→checks": { path: "M26 700 L7 700 L7 1272 L134 1272", at: [30, 1262], say: "lead's work", short: true },
     "developers→checks": { path: "M150 1156 L150 1196", at: [140, 1180], end: true },
-    "checks→developers": { path: "M208 1196 L208 1156", at: [218, 1180], back: true, thin: true },
-    "checks→lead": { path: "M134 1222 L19 1222 L19 740 L26 740", at: [30, 1212], back: true, thin: true, say: "back to the lead" },
-    "checks→merged": { path: "M179 1306 L179 1336", at: [192, 1325] },
+    "checks→developers": { path: "M208 1196 L208 1156", at: [218, 1180], back: true, thin: true, short: true },
+    "checks→lead": { path: "M134 1222 L19 1222 L19 740 L26 740", at: [30, 1212], back: true, thin: true, say: "back to the lead", short: true },
+    "checks→merged": { path: "M179 1306 L179 1336", at: [192, 1325], short: true },
     "merged→ripe": { path: "M100 1432 L100 1462", at: [112, 1451] },
     "ripe→stash": { path: "M100 1582 L100 1612", at: [112, 1601] },
-    "merged→reviewers": { path: "M340 1360 L351 1360 L351 868 L340 868", at: [338, 1252], end: true, back: true, thin: true },
+    "merged→reviewers": { path: "M340 1360 L351 1360 L351 868 L340 868", at: [338, 1252], end: true, back: true, thin: true, short: true },
   };
 
   function drawPhone(floor, doc) {

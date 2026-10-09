@@ -768,7 +768,7 @@ def test_the_floor_draws_one_machine_per_agent_and_the_queue_in_run_order(page, 
     assert carrying == ["queue→developers"]
     merged = belts(doc)["checks→merged"]["today"]  # from the server's own midnight
     assert page.locator('svg#floor [data-belt="checks→merged"] text').text_content() == (
-        f"merged · {merged}"
+        f"merged · {merged} today"
     )
 
 
@@ -828,7 +828,7 @@ def test_a_phone_draws_every_station_with_its_crates_and_belts(page, line_client
     assert phone_drawn(page, "[data-belt].carrying", "belt") == ["queue→developers"]
     merged = belts(doc)["checks→merged"]["today"]
     counted = page.locator('svg#floor-phone [data-belt="checks→merged"] text').text_content()
-    assert counted == f"merged · {merged}"
+    assert counted == f"{merged} today"
 
 
 def test_a_phones_queue_holds_its_first_six_crates_in_run_order(page, line_client):
@@ -1268,7 +1268,7 @@ def test_a_carrying_belt_keeps_rolling_across_a_refresh(page, line_client):
     refresh(page)
     counted = belts(doc)["checks→merged"]["today"] + 1
     assert page.locator('svg#floor [data-belt="checks→merged"] text').text_content() == (
-        f"merged · {counted}"
+        f"merged · {counted} today"
     )  # drawn again, in place
     assert rollers.evaluate(
         """e => {

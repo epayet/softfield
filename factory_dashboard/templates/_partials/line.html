@@ -1,6 +1,6 @@
 {# The floor (f3 D11): it stays in the page; every 5 s htmx fetches only its document from /line/live as JSON (f3-17), and static/factory.js draws svg#floor from it in place. #}
 <section id="line-live" class="panel line" hx-get="/line/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-swap="none" hx-headers='{"Accept": "application/json"}'>
-  <h2>From the field to the stash <span class="src">live · refreshes every 5 s</span></h2>
+  <h2>From the field to the stash <span class="src">live</span></h2>
   <svg id="floor-phone" class="floor floor-phone" viewBox="0 0 358 1140" role="img" aria-label="The factory floor, top to bottom: the field, the queue, the lead and the reviewers, the developer bay, checks, merged, ripe and the harvest stash."></svg>
   <div class="floor-wrap">
     <svg id="floor" class="floor" viewBox="0 0 1320 640" role="img" aria-label="The factory floor: the field plants milestones, tickets queue, the lead and the developers work them, checks merge them, milestones ripen and are harvested."></svg>
@@ -14,6 +14,8 @@
       <span><i class="swatch developer"></i>developer ticket</span>
       <span><i class="swatch carrying"></i>belt carrying now</span>
       <span>numbers on belts: how many went that way today</span>
+      <span><i class="swatch waits"></i>faded, dashed: waits for another ticket</span>
+      <span>a replay counts its own day</span>
     </div>
   </details>
 </section>

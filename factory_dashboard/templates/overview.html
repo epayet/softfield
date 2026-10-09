@@ -29,7 +29,7 @@
 {% include "_partials/away.html" %}
 
 <section id="savings" class="panel">
-  <h2>Savings from delegating{% if milestone %}, {{ milestone.key | upper }}{% endif %} <span class="src">API-equivalent dollars</span></h2>
+  <h2>Savings from delegating{% if milestone %} so far on {{ milestone.key | upper }}{% endif %} <span class="src">API-equivalent dollars</span></h2>
   {% if savings and savings.tickets %}
   <div class="stats money">
     <div class="stat"><b>{{ savings.doing_itself | usd }}</b><span>what Claude would have spent writing the developers' {{ "{:,}".format(savings.lines) }} lines itself (≈{{ savings.doing_itself_tokens | tokens }} token-equivalents)</span></div>
