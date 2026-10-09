@@ -162,8 +162,10 @@ def test_empty_milestone_returns_all_milestones(client_with_m1):
     html = client_with_m1.get("/timeline?milestone=").text
     data = charts(html)
     total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
-    # m1 has 1 job + f1 jobs from write_fixture (9) + write_live (1 running) + write_f1_run (2) = 12
     assert total_bars > 1
+    tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
+    assert "m1-01-test" in tickets
+    assert "f1-01-first" in tickets
 
 
 def test_milestone_filter_with_f2(client_with_f2):
@@ -181,16 +183,27 @@ def test_no_milestone_param_uses_default(client):
     html = client.get("/timeline").text
     data = charts(html)
     total_bars = sum(len(lane["bars"]) for lane in data["timeline"]["lanes"])
-    # Without the fix, ?milestone= (empty) would also fall back to f1, giving the same count.
-    # The fix ensures only None (no param) uses the default.
-    assert total_bars > 0
+    # Only f1 jobs (default milestone): 9 from write_fixture
+    # + 1 running from write_live + 2 from write_f1_run
+    assert total_bars == 12
+    tickets = {bar["ticket"] for lane in data["timeline"]["lanes"] for bar in lane["bars"]}
+    assert "f1-01-first" in tickets
+    assert "f1-02-escalated" in tickets
+    assert "m1-01-test" not in tickets
 
 
 def test_form_preserves_project(client):
     """The milestone filter form keeps the project parameter on submit."""
     html = client.get("/timeline").text
-    assert 'name="project"' in html
-    assert 'type="hidden"' in html
+    # Find the milestone filter form by its id=filters section
+    section_match = re.search(r'<section[^>]*id="filters"[^>]*>(.*?)</section>', html, re.S)
+    assert section_match, "filters section not found"
+    section_html = section_match.group(1)
+    form_match = re.search(r"<form[^>]*>(.*?)</form>", section_html, re.S)
+    assert form_match, "form not found in filters section"
+    form_html = form_match.group(1)
+    assert 'name="project"' in form_html
+    assert PROJECT in form_html
 
 
 def test_timeline_has_filter_form_and_jobs_table(client):
@@ -221,6 +234,20 @@ def test_timeline_milestone_select_shows_filter(client):
     assert selected_match, "no selected option in milestone select"
     selected_text = re.sub(r"<[^>]+>", " ", selected_match.group(1)).strip()
     assert selected_text == "F1"
+
+
+def test_timeline_milestone_select_non_default(client_with_m1):
+    """The milestone select shows the selected milestone
+    when filtering, and 'All milestones' is available."""
+    html = client_with_m1.get("/timeline?milestone=m1").text
+    select_match = re.search(r'<select[^>]*name="milestone"[^>]*>(.*?)</select>', html, re.S)
+    assert select_match, "milestone select not found"
+    select_html = select_match.group(1)
+    selected_match = re.search(r"<option[^>]*\bselected\b[^>]*>(.*?)</option>", select_html, re.S)
+    assert selected_match, "no selected option in milestone select"
+    selected_text = re.sub(r"<[^>]+>", " ", selected_match.group(1)).strip()
+    assert selected_text == "M1"
+    assert "All milestones" in select_html
 
 
 def test_timeline_run_filter(client):
