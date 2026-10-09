@@ -27,3 +27,12 @@ Read in `factory_dashboard/static/factory.js` `merged`, `stash`, `ripe`, `planti
 - every link keeps `?project=`, and the layout check passes at 390 px and 1440 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3246
+gate_failures: []
+tokens: 3135625
+```
