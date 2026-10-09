@@ -23,3 +23,12 @@ A should-fix finding (f9-line-polish-C423-2) by copilot-auto, standing in for th
 - what the finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2087
+gate_failures: []
+tokens: 1509381
+```
