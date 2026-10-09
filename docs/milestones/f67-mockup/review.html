@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F67 mock-up · key points by kind</title>
+<style>
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.45 var(--body); }
+  .page { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; padding: 14px; max-width: 1200px; margin: 0 auto; }
+  .main { flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .dock { flex: 1 1 300px; min-width: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  header { background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--opus); padding: 12px 16px; }
+  h1 { margin: 4px 0 0; font: 700 22px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+  h2 { margin: 6px 0 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .key { display: flex; flex-wrap: wrap; gap: 6px 16px; font: 12.5px var(--mono); color: var(--muted); }
+  .key i { display: inline-block; width: 10px; height: 10px; margin-right: 6px; vertical-align: -1px; }
+  .btn-link { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); background: none; border: 0; min-height: 44px; padding: 0 4px; cursor: pointer; }
+  /* info: a plain line */
+  .info { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; padding: 2px 4px; color: var(--ink-2); }
+  .info b.n { font: 700 13px var(--mono); color: var(--muted); min-width: 22px; }
+  .info .body { flex: 1 1 300px; min-width: 0; }
+  .info .body b { color: var(--fg); font-weight: 600; }
+  /* boxes */
+  .box { background: var(--plate); border: 1px solid var(--rule); border-left-width: 6px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .box.attention { border-left-color: var(--hazard); }
+  .box.choice { border-left-color: var(--opus); }
+  .box b.n { font: 700 13px var(--mono); color: var(--muted); min-width: 22px; }
+  .box .body { flex: 1 1 340px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .tag { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .attention .tag { color: var(--hazard); }
+  .choice .tag { color: var(--opus); }
+  .tag.earlier { color: var(--fg); background: var(--hazard); color: var(--hazard-ink); padding: 1px 6px; margin-left: 6px; }
+  .options { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+  .opt { flex: 1 1 200px; text-align: left; min-height: 44px; padding: 8px 10px; background: transparent; color: var(--fg); border: 1px solid var(--rule); font: 14px var(--body); cursor: pointer; display: flex; flex-direction: column; gap: 2px; }
+  .opt b { font: 600 13px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .opt small { color: var(--muted); font-size: 13px; }
+  .opt[aria-pressed="true"] { border: 2px solid var(--opus); background: rgba(255,150,64,.10); }
+  .pick { font: 600 10.5px var(--mono); color: var(--opus); }
+  textarea { flex-basis: 100%; width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px; }
+  .primary { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; min-height: 44px; width: 100%; }
+  .count { font: 12.5px var(--mono); color: var(--muted); }
+  .note { font-size: 13px; color: var(--muted); margin: 0; }
+  .sep { border: 0; border-top: 1px dashed var(--rule); margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="main">
+    <header>
+      <span style="font: 600 12px var(--mono); color: var(--muted)">Proposed by the lead</span>
+      <h1>Review F67: Key points say what they ask of you</h1>
+    </header>
+
+    <p class="note">Information first, then what needs a look, then your choices. Everything counts as agreed unless you comment or pick another option.</p>
+    <div class="key" aria-label="What the colours mean">
+      <span><i style="background: var(--muted)"></i>plain line: for your information</span>
+      <span><i style="background: var(--hazard)"></i>yellow edge: needs a look</span>
+      <span><i style="background: var(--opus)"></i>orange edge: your choice</span>
+    </div>
+
+    <h2>For your information</h2>
+    <div class="info"><b class="n">1</b><div class="body"><b>Three kinds of key point.</b> Each point says whether it's information, needs a look, or asks you to choose. Older proposals show as today.</div><button class="btn-link">Comment…</button></div>
+    <div class="info"><b class="n">2</b><div class="body"><b>No codes.</b> Key points stop citing "D2" or ticket numbers; they say what changes, in words.</div><button class="btn-link">Comment…</button></div>
+    <div class="info"><b class="n">3</b><div class="body"><b>Nothing changes in the runner.</b> A pick goes back as a normal comment ("Chose: …"), so send back and approve work as they do now.</div><button class="btn-link">Comment…</button></div>
+
+    <hr class="sep">
+    <h2>Needs a look</h2>
+    <div class="box attention">
+      <b class="n">4</b>
+      <div class="body">
+        <span><span class="tag">Needs a look</span></span>
+        <b>A different pick costs one more round</b>
+        <span style="color: var(--ink-2); font-size: 14px">The drafts follow the lead's pick. Picking another option sends the proposal back, and the lead redrafts it: one more Opus planner job, about as long as this one.</span>
+      </div>
+      <button class="btn-link">Comment…</button>
+    </div>
+    <div class="box attention">
+      <b class="n">5</b>
+      <div class="body">
+        <span><span class="tag">Needs a look</span><span class="tag earlier">Changes an earlier decision</span></span>
+        <b>The flag icon goes</b>
+        <span style="color: var(--ink-2); font-size: 14px">The ⚑ becomes the words "Changes an earlier decision", on a yellow "Needs a look" box.</span>
+      </div>
+      <button class="btn-link">Comment…</button>
+    </div>
+
+    <hr class="sep">
+    <h2>Your choices</h2>
+    <div class="box choice" data-point="6" data-pick="0">
+      <b class="n">6</b>
+      <div class="body">
+        <span class="tag">Your choice</span>
+        <b>Do thread points get choice buttons too?</b>
+        <span style="color: var(--ink-2); font-size: 14px">The thread's points (the boxes under the lead's reply) are F31's. Their questions could get the same buttons.</span>
+      </div>
+      <div class="options">
+        <button class="opt" aria-pressed="true" data-label="Later, after F31"><span class="pick">Lead's pick</span><b>Later, after F31</b><small>Proposals first; a small follow-up once f31-04 lands.</small></button>
+        <button class="opt" aria-pressed="false" data-label="Now, in F67"><b>Now, in F67</b><small>One more ticket here, touching the thread page F31 is still building.</small></button>
+        <button class="opt" aria-pressed="false" data-label="Never"><b>Never</b><small>Questions on threads stay as comments.</small></button>
+      </div>
+      <textarea rows="2" placeholder="Anything to add? (optional)" hidden></textarea>
+    </div>
+  </div>
+
+  <aside class="dock">
+    <h2 style="color: var(--fg)">Your review</h2>
+    <span class="count" id="count">6 agreed · 0 to change</span>
+    <button class="primary" id="approve">Approve plan</button>
+    <button class="primary" id="sendback" hidden>Send back</button>
+    <p class="note" id="status">Every point is agreed unless you comment on it or pick another option.</p>
+  </aside>
+</div>
+<script>
+  // The mock-up's only behaviour: a pick off the lead's counts as a change.
+  document.querySelectorAll('.box.choice').forEach(function (box) {
+    var opts = box.querySelectorAll('.opt'), pick = +box.dataset.pick, note = box.querySelector('textarea');
+    opts.forEach(function (opt, i) {
+      opt.addEventListener('click', function () {
+        opts.forEach(function (o) { o.setAttribute('aria-pressed', o === opt); });
+        box.dataset.changed = i !== pick ? opt.dataset.label : '';
+        note.hidden = i === pick;
+        update();
+      });
+    });
+  });
+  function update() {
+    var changed = Array.from(document.querySelectorAll('.box.choice')).filter(function (b) { return b.dataset.changed; });
+    var n = changed.length;
+    document.getElementById('approve').hidden = n > 0;
+    var sb = document.getElementById('sendback');
+    sb.hidden = n === 0;
+    sb.textContent = 'Send ' + n + (n === 1 ? ' change' : ' changes') + ' back';
+    document.getElementById('count').textContent = (6 - n) + ' agreed · ' + n + ' to change';
+    document.getElementById('status').textContent = n
+      ? 'Goes back as: ' + changed.map(function (b) { return 'point ' + b.dataset.point + ', "Chose: ' + b.dataset.changed + '"'; }).join('; ')
+      : 'Every point is agreed unless you comment on it or pick another option.';
+  }
+</script>
+</body>
+</html>
