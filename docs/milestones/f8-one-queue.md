@@ -28,6 +28,7 @@
 | 08 | claude-rechecks-stand-in | L | 6 | 03 | merges only a stand-in checked wait in one queued Claude re-check (owner, 2026-10-06) |
 | 09 | stand-in-fix-tickets | L | 6 | – | the stand-in's prompt and `fix_ticket`: one ticket per merged ticket and kind; test-only tickets for developers |
 | 10 | reserve-request-kind | L | 2 | 05 | the dashboard's guard takes `reserve` instead of `five_hour` (from the replan) |
+| 14 | reserve-lever | D | 3 | 06, f9-28 | each switch becomes a factory lever on its meter's line, "use reserve", its sentence in the legend; picture `f8-mockup/reserve-lever.html` (owner, 2026-10-09) |
 
 ## Replan
 f8-05 (2026-10-06), against what f8-01…04 merged (`65ed894`, `b667f74`, `6fb1b62`, `801a4b1`):
