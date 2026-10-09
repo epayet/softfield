@@ -54,6 +54,31 @@ def ago(delta: timedelta) -> str:
 
 templates.env.filters.update(usd=usd, pct=pct, tokens=short, ago=ago)
 
+# Cache by path -> (mtime, first 10 hex chars of sha256).
+_static_cache: dict[str, tuple[float, str]] = {}
+
+
+def static(path: str) -> str:
+    """Return ``/static/<path>?v=<first 10 hex of the file's sha256>``.
+
+    The hash is cached keyed by (path, mtime) so a merge that only changes
+    CSS still gives a new version (the server reloads its Python itself).
+    A path that isn't a file under ``factory_dashboard/static/`` raises at
+    render time, catching typos in templates.
+    """
+    full = HERE / "static" / path
+    mtime = full.stat().st_mtime
+    if path in _static_cache:
+        prev_mtime, prev_hash = _static_cache[path]
+        if prev_mtime == mtime:
+            return f"/static/{path}?v={prev_hash}"
+    h = hashlib.sha256(full.read_bytes()).hexdigest()[:10]
+    _static_cache[path] = (mtime, h)
+    return f"/static/{path}?v={h}"
+
+
+templates.env.globals["static"] = static
+
 
 def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     """The dashboard over the database at ``db``, showing ``project`` unless asked otherwise,

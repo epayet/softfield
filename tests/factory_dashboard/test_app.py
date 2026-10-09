@@ -74,7 +74,7 @@ def test_the_page_loads_its_scripts_and_styles_from_the_app(client):
         "/static/charts.js",
         "/static/dashboard.css",
     ):
-        assert f'"{path}"' in html
+        assert re.search(re.escape(path) + r"\?v=[0-9a-f]", html), f"{path} missing ?v="
         assert client.get(path).status_code == 200
     assert "https://" not in html  # vendored: no CDN
 
@@ -85,6 +85,17 @@ def test_no_page_or_stylesheet_names_a_third_party_host(client):
         text = client.get(path).text
         assert re.findall(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}", text) == [], path
         assert "@import" not in text, path
+
+
+def test_no_template_has_a_bare_static_link():
+    """Every /static/ link in the listed templates carries ``?v=`` (f48)."""
+    bare = re.compile(r'/static/[^"\'>]')
+    for template in (
+        STATIC.parent / "templates" / p
+        for p in ("base.html", "thread.html", "proposal.html", "line.html", "overview.html")
+    ):
+        html = template.read_text()
+        assert bare.search(html) is None, f"{template.name} has a bare /static/ link"
 
 
 FONTS = {  # family -> the weights the mock-ups use (f5-14)
@@ -477,7 +488,9 @@ def test_a_ready_ticket_is_work_left(serve_between, db_path):
 def test_every_page_has_the_notify_button_and_polls_live_whether_or_not_allowed(client):
     for path in PAGES:
         html = client.get(path).text
-        assert '<script src="/static/notify.js" defer></script>' in html, path
+        assert re.search(r'<script src="/static/notify\.js\?v=[0-9a-f]+" defer></script>', html), (
+            path
+        )
         bar = re.search(r'<header class="bar">(.*?)</header>', html, re.S)
         assert bar, path
         button = re.search(r'<button type="button" id="notify-me"[^>]*>([^<]*)</button>', bar[1])
@@ -490,6 +503,7 @@ def test_every_page_has_the_notify_button_and_polls_live_whether_or_not_allowed(
         assert 'hx-get="/live?project=coucou"' in poll[0] and "hidden" in poll[0]
         assert 'hx-trigger="every 5s"' in poll[0]
         assert 'hx-select="#live-facts"' in poll[0]
+    assert re.search(r"/static/notify\.js\?v=[0-9a-f]", html)
     assert client.get("/static/notify.js").status_code == 200
 
 
