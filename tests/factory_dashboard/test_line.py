@@ -1040,14 +1040,14 @@ def test_idle_machine_has_idle_class_and_working_does_not(page, line_client):
 
 
 def test_idle_machine_with_merges_says_merged_today(page, line_client):
-    """An idle machine with merges today shows "N merged today" under idle."""
+    """An idle machine with merges today shows "idle" with "N merged today" underneath."""
     page.clock.install()
     open_line(page, line_client)
     doc = block(line_client.get("/").text)
-    # Find an idle machine and give it merges today
+    # Find an idle non-stand-in machine and give it merges today
     idle_machine = None
     for m in doc["machines"]:
-        if m["state"] == "idle":
+        if m["state"] == "idle" and not m.get("stand_in"):
             idle_machine = m
             break
     assert idle_machine is not None
@@ -1063,7 +1063,12 @@ def test_idle_machine_with_merges_says_merged_today(page, line_client):
     text_content = page.locator(
         f'svg#floor [data-machine="{idle_machine["id"]}"] text'
     ).all_text_contents()
-    assert any("merged today" in t for t in text_content)
+    assert any("idle" in t for t in text_content), (
+        f"idle machine must show idle label, got: {text_content}"
+    )
+    assert any("merged today" in t for t in text_content), (
+        f"idle machine with merges must show count, got: {text_content}"
+    )
 
 
 def test_idle_lead_says_next_ticket(page, line_client):
@@ -1092,6 +1097,36 @@ def test_idle_lead_says_next_ticket(page, line_client):
         f'svg#floor [data-machine="{lead_machine["id"]}"] text'
     ).all_text_contents()
     assert any("next: fX-01" in t for t in text_content)
+
+
+def test_idle_lead_with_merges_shows_next_ticket_and_merge_count(page, line_client):
+    """The idle lead shows next ticket on the first line and merge count underneath."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    # Find the lead machine and make it idle with a next ticket
+    lead_machine = None
+    for m in doc["machines"]:
+        if m["station"] == "lead":
+            lead_machine = m
+            break
+    assert lead_machine is not None
+    lead_machine["state"] = "idle"
+    lead_machine["next_ticket"] = "fX-01-next"
+    lead_machine["merged_today"] = 5
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    text_content = page.locator(
+        f'svg#floor [data-machine="{lead_machine["id"]}"] text'
+    ).all_text_contents()
+    assert any("next: fX-01" in t for t in text_content), "lead must show next ticket"
+    assert any("5 merged today" in t for t in text_content), "lead must show merge count"
 
 
 # --- machines and belts (f3-20) ----------------------------------------------------------------

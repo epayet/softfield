@@ -269,10 +269,14 @@
     } else if (m.state === "idle") {
       if (m.station === "lead" && m.next_ticket) {
         text(g, left, line, `next: ${short(m.next_ticket)}`, "dim");
-      } else if (m.merged_today && m.merged_today > 0) {
-        text(g, left, line, `${m.merged_today} merged today`, "dim");
+        if (m.merged_today && m.merged_today > 0) {
+          text(g, left, line + 16, `${m.merged_today} merged today`, "dim");
+        }
       } else {
         text(g, left, line, m.stand_in ? "standing by" : "idle", "dim");
+        if (m.merged_today && m.merged_today > 0) {
+          text(g, left, line + 16, `${m.merged_today} merged today`, "dim");
+        }
       }
     } else {
       text(g, left, line, m.state === "off" ? "off: no role" : m.stand_in ? "standing by" : "idle", "dim");
