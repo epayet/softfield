@@ -26,3 +26,12 @@ Read the span choices in the route in `factory_dashboard/overview.py` (`spans`, 
 - Replay after the change asks `/line/replay` for the new `since`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2161
+gate_failures: []
+tokens: 3063647
+```
