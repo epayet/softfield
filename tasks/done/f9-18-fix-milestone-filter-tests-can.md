@@ -26,3 +26,12 @@ f9-line-polish-C467-3: Milestone-filter tests can pass without proving the reque
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3030
+gate_failures: []
+tokens: 2359259
+```
