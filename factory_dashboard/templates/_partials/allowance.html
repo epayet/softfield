@@ -12,6 +12,16 @@
       <div class="line">
         <span class="agent">{{ a.label }}</span>
         <span>{{ a.display }}{{ ": " ~ a.percent if a.percent else "" }}</span>
+        {% set sw = switches.get(a.window) if a.label == "Claude" else none %}
+        {% if sw %}
+        <button type="button" class="lever{{ ' on-its-way' if sw.asked }}" role="switch"
+          aria-checked="{{ 'true' if sw.until else 'false' }}"
+          aria-label="{{ sw.label }}"
+          title="{{ 'asked: ' ~ sw.asked if sw.asked else sw.label }}"
+          hx-post="/requests" hx-swap="none"
+          hx-vals='{"kind": "reserve", "project": {{ project | tojson }}, "subject": {{ sw.name | tojson }}, "value": {{ ("off" if sw.until else "on") | tojson }}}'
+          hx-on::before-request="this.classList.add('on-its-way'); this.disabled = true"{{ ' disabled' if sw.asked }}>use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+        {% endif %}
       </div>
       <div class="meter">
         <span class="{{ fill }}" style="width:{{ '%.0f' | format((a.value or 0) * 100) }}%"></span>
@@ -28,21 +38,10 @@
         {% if a.mark_label %}
         <small>{{ a.mark_label }}</small>
         {% endif %}
-      </div>
-      {% set sw = switches.get(a.window) if a.label == "Claude" else none %}
-      {% if sw %}
-      <div class="switch{{ ' on-its-way' if sw.asked }}">
-        <span>{{ sw.label }}:</span>
-        {% if sw.asked %}
-        <b>asked: {{ sw.asked }}</b>
-        {% else %}
-        <b>{{ "on until " ~ sw.until if sw.until else "off" }}</b>
-        <button type="button" hx-post="/requests" hx-swap="none"
-          hx-vals='{"kind": "reserve", "project": {{ project | tojson }}, "subject": {{ sw.name | tojson }}, "value": {{ ("off" if sw.until else "on") | tojson }}}'
-          hx-on::before-request="this.closest('.switch').classList.add('on-its-way'); this.remove()">{{ "Turn off" if sw.until else "Turn on" }}</button>
+        {% if sw and sw.until %}
+        <small class="until">on until {{ sw.until }}</small>
         {% endif %}
       </div>
-      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -51,6 +50,10 @@
     <span><i class="swatch past-mark"></i>yellow: past the mark</span>
     <span><i class="swatch nearly-out"></i>red: above 95%</span>
     <span>the mark: the factory stops here; the rest of the window is the owner's</span>
-    <span>a dashed orange edge: a switch you turned, on its way to the runner</span>
+    <span><span class="lever mini" aria-hidden="true" style="min-height:0"><span class="slot"><span class="knob"></span></span></span>
+      use reserve: let the factory work past the mark; on lasts 24 hours, then turns itself off</span>
+    <span><span class="lever mini" aria-hidden="true" aria-checked="true" style="min-height:0"><span class="slot" style="background:repeating-linear-gradient(135deg,var(--hazard) 0 5px,var(--hazard-ink) 5px 10px)"><span class="knob" style="left:24px"></span></span></span>
+      striped and lit: on</span>
+    <span>halfway, with a dashed orange edge: a lever you pulled, on its way to the runner</span>
   </details>
 </section>

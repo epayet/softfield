@@ -159,10 +159,30 @@ tbody tr:hover { background: var(--accent-wash); }
 .meter > span { position: absolute; inset: 0 auto 0 0; max-width: 100%; background: var(--c, var(--a2)); }
 .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
   outline: 1px solid var(--surface); z-index: 1; }
-.allow .switch { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px;
-  margin-top: 4px; padding: 4px 6px; border: 1px solid transparent; }
-.allow .switch.on-its-way { border: 1px dashed var(--hazard); }
-.allow .switch button { min-height: 44px; }
+/* The reserve lever (f8-14): a factory lever on the meter's own line */
+.lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+  border: 1px solid transparent; background: none; color: var(--ink-2); cursor: pointer;
+  font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+.lever .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--grid);
+  box-shadow: inset 0 0 0 1px var(--rule); }
+.lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate);
+  border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+.lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule);
+  transition: left .22s cubic-bezier(.3,1.6,.6,1); }
+.lever[aria-checked="true"] { color: var(--fg); }
+.lever[aria-checked="true"] .slot {
+  background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+.lever[aria-checked="true"] .knob { left: 24px; background: linear-gradient(#fff, var(--ink-2)); }
+.lever[aria-checked="true"] .lamp { background: var(--hazard); box-shadow: 0 0 6px var(--hazard); }
+/* asked: the knob halfway, the owner's dashed orange edge, until the runner takes it */
+.lever.on-its-way { border: 1px dashed var(--hazard); cursor: default; }
+.lever.on-its-way .knob { left: 13px; }
+.lever.on-its-way .lamp { animation: blink 1.2s steps(2) infinite; background: var(--hazard); }
+@keyframes blink { 50% { opacity: .2; } }
+@media (prefers-reduced-motion: reduce) { .lever .knob { transition: none; }
+  .lever.on-its-way .lamp { animation: none; } }
+.until { color: var(--hazard); font-family: var(--mono); }
 /* An allowance meter says how close it is (owner, 2026-10-02); the legend says it in words */
 .swatch.under-mark, .meter > .under-mark { background: var(--good); }
 .swatch.past-mark, .meter > .past-mark { background: var(--hazard); }
@@ -211,6 +231,7 @@ tbody tr:hover { background: var(--accent-wash); }
 /* Charts (f1 D5): charts.js draws into each [data-chart] */
 .chart { width: 100%; height: 180px; }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono); color: var(--ink-2); margin-top: 8px; }
+.legend .mini { display: inline-flex; vertical-align: middle; transform: scale(.7); transform-origin: left center; margin-right: -12px; }
 
 @media (max-width: 560px) { .steps li { grid-template-columns: 1fr; gap: 2px; } }
 @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2s ease-in-out infinite; } }

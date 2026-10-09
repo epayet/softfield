@@ -378,7 +378,7 @@ def allowance_rows(html: str) -> dict[str, str]:
     # Strip SVG elements so their text doesn't leak into row text, the reserve switches,
     # which `switch_row` reads, and the legend details block.
     text = re.sub(r"<svg[^>]*>.*?</svg>", "", panel.group(1), flags=re.S)
-    text = re.sub(r'<div class="switch[^"]*">.*?</div>', "", text, flags=re.S)
+    text = re.sub(r'<button[^>]*class="lever[^"]*"[^>]*>.*?</button>', "", text, flags=re.S)
     text = re.sub(r'<details class="legend">.*?</details>', "", text, flags=re.S)
     parts = re.split(r'<div id="allow-([a-z_-]+)">', text)[1:]
     return {
@@ -468,16 +468,31 @@ def allowance_client_with(db_path: Path, tmp_path: Path, switches: dict[str, str
     return TestClient(app, base_url="http://127.0.0.1:8765")
 
 
-def switch_row(html: str, row: str) -> tuple[str, dict[str, str] | None]:
-    """A meter row's reserve switch: its words, and what its button posts (None: no button)."""
+def switch_row(html: str, row: str) -> tuple[str, str | None, str | None, dict[str, str] | None]:
+    """A meter row's reserve switch: aria-label, aria-checked, status text ("on until ..."/"asked"),
+    and what its button posts (None: no button)."""
     found = re.search(rf'<div id="allow-{row}">(.*?)(?=<div id="allow-|</section>)', html, re.S)
     assert found, row
-    switch = re.search(r'<div class="switch[^"]*">(.*?)</div>', found[1], re.S)
-    if switch is None:
-        return "", None
-    words = " ".join(unescape(re.sub(r"<[^>]+>", " ", switch[1])).split())
-    vals = re.search(r"hx-vals='([^']*)'", switch[1])
-    return words, json.loads(unescape(vals[1])) if vals else None
+    button = re.search(r'<button[^>]*role="switch"[^>]*>(.*?)</button>', found[1], re.S)
+    if button is None:
+        return "", None, None, None
+    aria_label = re.search(r'aria-label="([^"]*)"', button.group(0))
+    aria_checked = re.search(r'aria-checked="([^"]*)"', button.group(0))
+    status = None
+    on_match = re.search(r'<small[^>]*class="until"[^>]*>on until (.*?)</small>', found[1], re.S)
+    if on_match:
+        status = "on until " + unescape(re.sub(r"<[^>]+>", " ", on_match[1])).strip()
+    else:
+        title_match = re.search(r'title="asked: (on|off)"', button.group(0))
+        if title_match:
+            status = "asked: " + title_match[1]
+    vals = re.search(r"hx-vals='([^']*)'", button.group(0))
+    return (
+        unescape(aria_label[1]) if aria_label else "",
+        aria_checked[1] if aria_checked else None,
+        status,
+        json.loads(unescape(vals[1])) if vals else None,
+    )
 
 
 def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_path):
@@ -485,33 +500,46 @@ def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_
     the 5-hour switch, absent from state.json, is off and posts "on"."""
     client = allowance_client_with(db_path, tmp_path, {"week": "2026-10-02T09:30:00+00:00"})
     html = client.get("/").text
-    assert switch_row(html, "claude-seven_day") == (
-        "Let the factory use the week's reserve: on until Sat 09:30 Turn off",
-        {"kind": "reserve", "project": PROJECT, "subject": "week", "value": "off"},
-    )
-    assert switch_row(html, "claude-five_hour") == (
-        "Let the factory use your 25% of the 5-hour window: off Turn on",
-        {"kind": "reserve", "project": PROJECT, "subject": "five_hour", "value": "on"},
-    )
+    label, checked, status, posts = switch_row(html, "claude-seven_day")
+    assert label == "Let the factory use the week's reserve"
+    assert checked == "true"
+    assert status == "on until Sat 09:30"
+    assert posts == {"kind": "reserve", "project": PROJECT, "subject": "week", "value": "off"}
+    label, checked, status, posts = switch_row(html, "claude-five_hour")
+    assert label == "Let the factory use your 25% of the 5-hour window"
+    assert checked == "false"
+    assert status is None
+    assert posts == {"kind": "reserve", "project": PROJECT, "subject": "five_hour", "value": "on"}
 
 
 def test_a_switch_on_for_more_than_24_hours_shows_off(db_path, tmp_path):
     client = allowance_client_with(db_path, tmp_path, {"five_hour": "2026-10-01T11:00:00+00:00"})
-    words, posts = switch_row(client.get("/").text, "claude-five_hour")
-    assert words.endswith(": off Turn on") and posts and posts["value"] == "on"
+    label, checked, status, posts = switch_row(client.get("/").text, "claude-five_hour")
+    assert label == "Let the factory use your 25% of the 5-hour window"
+    assert checked == "false"
+    assert status is None
+    assert posts and posts["value"] == "on"
 
 
 def test_without_a_config_both_switches_are_off(allowance_client):
     html = allowance_client.get("/").text
     for row, subject in (("claude-five_hour", "five_hour"), ("claude-seven_day", "week")):
-        words, posts = switch_row(html, row)
-        assert words.endswith(": off Turn on")
+        label, checked, status, posts = switch_row(html, row)
+        assert label.startswith("Let the factory")
+        assert checked == "false"
+        assert status is None
         assert posts == {"kind": "reserve", "project": PROJECT, "subject": subject, "value": "on"}
 
 
 def test_a_meter_of_another_agent_has_no_switch(allowance_client):
     html = allowance_client.get("/").text
-    assert switch_row(html, "copilot-month") == ("", None)
+    label, checked, status, posts = switch_row(html, "copilot-month")
+    assert label == ""
+    assert checked is None
+    assert status is None
+    assert posts is None
+    # No switch div left in the page.
+    assert 'class="switch"' not in html
 
 
 def test_a_switch_asked_for_shows_on_its_way_with_no_button(db_path, tmp_path):
@@ -525,12 +553,20 @@ def test_a_switch_asked_for_shows_on_its_way_with_no_button(db_path, tmp_path):
     finally:
         conn.close()
     html = client.get("/").text
-    assert switch_row(html, "claude-seven_day") == (
-        "Let the factory use the week's reserve: asked: on",
-        None,
+    # The asked switch button has on-its-way class, "asked: on" in its title, and is disabled.
+    label, _checked, status, posts = switch_row(html, "claude-seven_day")
+    assert label == "Let the factory use the week's reserve"
+    assert status == "asked: on"
+    assert posts == {"kind": "reserve", "project": PROJECT, "subject": "week", "value": "on"}
+    row = re.search(
+        r'<div id="allow-claude-seven_day">(.*?)(?=<div id="allow-|</section>)', html, re.S
     )
-    assert '<div class="switch on-its-way">' in html
-    assert switch_row(html, "claude-five_hour")[1] is not None
+    assert row
+    assert "disabled" in row[1]
+    btn = re.search(r'<button[^>]*class="lever on-its-way"[^>]*>', row[1])
+    assert btn, "asked switch should have on-its-way class"
+    assert 'title="asked: on"' in btn.group(0), "asked switch should have 'asked: on' title"
+    assert switch_row(html, "claude-five_hour")[3] is not None
 
 
 def test_live_returns_the_allowance_panel_after_running(allowance_client):
@@ -1433,6 +1469,19 @@ def test_allowance_legend_names_bar_mark(allowance_client):
         or "owner" in legend_text.lower()
         or "stop" in legend_text.lower()
     )
+
+
+def test_allowance_legend_has_use_reserve_line(allowance_client):
+    """f8-14: the legend includes the "use reserve" explanation."""
+    panel = re.search(
+        r'<section[^>]*\bid="allowance"[^>]*>(.*?)</section>',
+        allowance_client.get("/").text,
+        re.S,
+    )
+    assert panel
+    legend_text = " ".join(re.sub(r"<[^>]+>", " ", panel.group(1)).split())
+    assert "use reserve" in legend_text.lower()
+    assert "24 hours" in legend_text
 
 
 def test_no_data_yet_has_empty_bar(page, serve, db_path):
