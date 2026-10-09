@@ -36,3 +36,12 @@ attempts: 0
 tokens: 0
 logs: var/runs/20261009-020915/f9-30-fix-phone-title-and-filter-one-line
 ```
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2185
+gate_failures: []
+tokens: 449177
+```
