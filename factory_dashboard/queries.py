@@ -817,18 +817,24 @@ def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:
 
 @dataclass(frozen=True)
 class AwayTicket:
-    """A ticket that reached ``done`` in the span: its name (``/tickets/<ticket>``), title and
-    who merged it."""
+    """A ticket that reached ``done`` in the span: its name (``/tickets/<ticket>``), title,
+    who merged it, the display name of the merger, how many developer attempts it had,
+    the ticket kind, a context label, and the blocked ticket IDs."""
 
     ticket: str
     title: str | None
     merged_by: str | None
+    display_name: str | None = None
+    attempts: int = 0
+    kind: str | None = None
+    label: str = ""
+    blocked_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class Away:
     """What happened since ``since``: merged tickets, failed jobs, escalations,
-    blocked tickets, owner items created, and Claude spend."""
+    blocked tickets, owner items created, Claude spend, and the blocked ticket IDs."""
 
     merged: tuple[AwayTicket, ...]
     failed: int
@@ -836,6 +842,7 @@ class Away:
     blocked: int
     needs_you: int
     claude_usd: float
+    blocked_ids: tuple[str, ...] = ()
 
 
 def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime) -> Away:
@@ -860,8 +867,63 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
             at = _time(j["ended"])
             if j["ticket"] not in last or at > last[j["ticket"]][0]:
                 last[j["ticket"]] = (at, j)
+
+    # ticket kinds for the merged tickets
+    ticket_names: list[str] = [j["ticket"] for _, j in last.values() if j["ticket"]]
+    kinds: dict[str, str] = {}
+    if ticket_names:
+        marks = ",".join("?" for _ in ticket_names)
+        for row in conn.execute(
+            f"SELECT ticket, kind FROM tickets WHERE ticket IN ({marks})",  # noqa: S608
+            ticket_names,
+        ):
+            kinds[str(row["ticket"])] = row["kind"]
+
+    # developer attempts per ticket
+    attempts: dict[str, int] = {}
+    for j in jobs:
+        if j["ticket"] and j["role"] in LOCAL_ROLES:
+            attempts[j["ticket"]] = attempts.get(j["ticket"], 0) + 1
+
+    def _display_name(agent: str | None) -> str | None:
+        if not agent:
+            return None
+        if agent.startswith(LEAD_PREFIX):
+            return agent.removeprefix(LEAD_PREFIX).capitalize()
+        if agent.startswith("copilot-"):
+            return "Copilot"
+        return agent.removeprefix("local-").removeprefix("ollama-")
+
+    def _label(merged_by: str | None, kind: str | None, dev_attempts: int) -> str:
+        if not merged_by:
+            return ""
+        display = _display_name(merged_by)
+        if not display:
+            return ""
+        if merged_by == "claude-opus":
+            if kind == "lead":
+                return f"{display} \u00b7 lead ticket"
+            if dev_attempts > 0:
+                if dev_attempts == 1:
+                    return f"{display} \u00b7 1st try"
+                return f"{display} \u00b7 finished after {dev_attempts} developer attempts"
+            return display
+        if dev_attempts > 0:
+            if dev_attempts == 1:
+                return f"{display} \u00b7 1st try"
+            return f"{display} \u00b7 {dev_attempts} attempts"
+        return display
+
     merged = tuple(
-        AwayTicket(j["ticket"], j["title"], j["merged_by"])
+        AwayTicket(
+            j["ticket"],
+            j["title"],
+            j["merged_by"],
+            display_name=_display_name(j["merged_by"]),
+            attempts=attempts.get(j["ticket"], 0),
+            kind=kinds.get(j["ticket"]),
+            label=_label(j["merged_by"], kinds.get(j["ticket"]), attempts.get(j["ticket"], 0)),
+        )
         for at, j in sorted(last.values(), key=lambda found: found[0], reverse=True)
         if since <= at <= now
     )
@@ -877,6 +939,13 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
         (project,),
     ).fetchone()[0]
 
+    blocked_ids_rows = conn.execute(
+        "SELECT t.ticket FROM tickets t JOIN projects p ON p.id = t.project_id"
+        " WHERE p.name = ? AND t.state = 'blocked' ORDER BY t.ticket",
+        (project,),
+    ).fetchall()
+    blocked_ids = tuple(str(r["ticket"]) for r in blocked_ids_rows)
+
     return Away(
         merged=merged,
         failed=sum(  # as the clog counts them: not an attempt stopped short (f3-F4)
@@ -890,4 +959,5 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
         blocked=int(blocked),
         needs_you=sum(within(o["created"]) for o in owner),
         claude_usd=sum(dollars(j) for j in jobs if within(j["started"])),  # uncosted: its tokens
+        blocked_ids=blocked_ids,
     )

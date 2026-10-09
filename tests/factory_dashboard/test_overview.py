@@ -1004,6 +1004,269 @@ def test_away_counts_failures_and_claude_as_the_rest_of_the_dashboard(tmp_path):
     assert round(away.claude_usd, 2) == 4.0  # 1M token-equivalents at $4 per 1M
 
 
+def test_away_ticket_shows_agent_label_and_attempts(tmp_path):
+    """A merged ticket by local-qwen3.6-35b-a3b after two developer jobs shows a
+    "qwen3.6-35b-a3b" label and "2 attempts"; one by claude-opus in one job, "Opus"
+    and "1st try"."""
+    from factory_dashboard import queries
+
+    path = tmp_path / "away-label.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+
+        def ticket(
+            name: str, state: str, merged_by: str | None = None, kind: str = "developer"
+        ) -> int:
+            return metrics.upsert_ticket(
+                conn,
+                project,
+                name,
+                milestone_id=m,
+                title=f"Title of {name}.",
+                state=state,
+                merged_by=merged_by,
+                kind=kind,
+            )
+
+        def job(
+            ticket_id: int,
+            role: str,
+            agent: str,
+            attempt: int,
+            started: str,
+            ended: str,
+            outcome: str,
+        ) -> None:
+            jid = metrics.start_job(
+                conn,
+                run,
+                ticket_id=ticket_id,
+                milestone_id=m,
+                role=role,
+                agent=agent,
+                attempt=attempt,
+                started=f"2026-10-02T{started}",
+            )
+            metrics.finish_job(conn, jid, ended=f"2026-10-02T{ended}", outcome=outcome)
+
+        qwen_ticket = ticket("away-qwen", "done", LOCAL)
+        opus_ticket = ticket("away-opus", "done", OPUS)
+        opus_lead = ticket("away-lead", "done", OPUS, kind="lead")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "away-none",
+            milestone_id=m,
+            state="done",
+            title="No merge title.",
+        )
+
+        # qwen: 2 developer jobs
+        job(qwen_ticket, "developer", LOCAL, 1, "08:00:00", "08:10:00", "failed")
+        job(qwen_ticket, "developer", LOCAL, 2, "08:10:00", "08:20:00", "passed")
+
+        # opus: 1 developer job
+        job(opus_ticket, "developer", LOCAL, 1, "09:00:00", "09:10:00", "failed")
+        job(opus_ticket, "escalation", OPUS, 1, "09:30:00", "09:40:00", "passed")
+
+        # opus lead ticket: no developer jobs
+        job(opus_lead, "lead-ticket", OPUS, 1, "10:00:00", "10:10:00", "passed")
+
+        # away-none has no merged_by, so no label
+    finally:
+        conn.close()
+    conn = queries.connect(path)
+    try:
+        away = queries.away(conn, PROJECT, SINCE, NOW)
+    finally:
+        conn.close()
+
+    merged_map = {t.ticket: t for t in away.merged}
+
+    qwen = merged_map["away-qwen"]
+    assert qwen.display_name == "qwen3.6-35b-a3b"
+    assert qwen.attempts == 2
+    assert qwen.kind == "developer"
+    assert qwen.label == "qwen3.6-35b-a3b · 2 attempts"
+
+    opus = merged_map["away-opus"]
+    assert opus.display_name == "Opus"
+    assert opus.attempts == 1
+    assert opus.kind == "developer"
+    assert opus.label == "Opus · 1st try"
+
+    lead = merged_map["away-lead"]
+    assert lead.display_name == "Opus"
+    assert lead.attempts == 0
+    assert lead.kind == "lead"
+    assert lead.label == "Opus · lead ticket"
+
+
+def test_away_blocked_ids_links_in_summary(tmp_path):
+    """With one blocked ticket, the summary line links it by id."""
+    from factory_dashboard import queries
+
+    path = tmp_path / "away-blocked.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+
+        ticket_id = metrics.upsert_ticket(
+            conn,
+            project,
+            "away-x",
+            milestone_id=m,
+            state="done",
+            merged_by=LOCAL,
+        )
+        job_id = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket_id,
+            milestone_id=m,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started="2026-10-02T08:00:00+00:00",
+        )
+        metrics.finish_job(conn, job_id, ended="2026-10-02T08:10:00+00:00", outcome="passed")
+
+        # Add a blocked ticket
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f9-15-away-who-did-it",
+            milestone_id=m,
+            state="blocked",
+        )
+    finally:
+        conn.close()
+    conn = queries.connect(path)
+    try:
+        away = queries.away(conn, PROJECT, SINCE, NOW)
+    finally:
+        conn.close()
+
+    assert away.blocked == 1
+    assert away.blocked_ids == ("f9-15-away-who-did-it",)
+
+
+def test_away_no_merged_by_shows_no_label(client, db_path):
+    """A ticket with no merged_by shows no label in the HTML."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    away_text = section(html, "away")
+    # away-a has merged_by=LOCAL so it should show a label
+    assert "qwen3.6-35b-a3b" in away_text
+    # But no ticket with no merged_by should have an .agent span
+    # away-c is blocked so won't be in merged list
+
+
+def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
+    """A developer ticket merged by claude-opus after 3 developer jobs reads
+    'finished after 3 developer attempts'."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261002-050000", started="2026-10-02T05:00:00+00:00"
+        )
+        t = metrics.upsert_ticket(
+            conn,
+            project,
+            "away-opus-3",
+            milestone_id=f1,
+            state="done",
+            merged_by=OPUS,
+            kind="developer",
+            title="Opus merged after 3.",
+        )
+        for n in range(1, 4):
+            jid = metrics.start_job(
+                conn,
+                run,
+                ticket_id=t,
+                milestone_id=f1,
+                role="developer",
+                agent=LOCAL,
+                attempt=n,
+                started=f"2026-10-02T09:{n:02d}:00+00:00",
+            )
+            metrics.finish_job(
+                conn, jid, ended=f"2026-10-02T09:{n + 10:02d}:00+00:00", outcome="failed"
+            )
+        esc = metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=f1,
+            role="escalation",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T10:00:00+00:00",
+        )
+        metrics.finish_job(conn, esc, ended="2026-10-02T10:10:00+00:00", outcome="passed")
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    away_text = section(html, "away")
+    assert "Opus · finished after 3 developer attempts" in away_text
+
+
+def test_away_lead_ticket_shows_lead_ticket(client, db_path):
+    """A lead ticket merged by claude-opus reads 'Opus · lead ticket'."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261002-060000", started="2026-10-02T06:00:00+00:00"
+        )
+        t = metrics.upsert_ticket(
+            conn,
+            project,
+            "away-lead-opus",
+            milestone_id=f1,
+            state="done",
+            merged_by=OPUS,
+            kind="lead",
+            title="Lead ticket.",
+        )
+        jid = metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=f1,
+            role="lead-ticket",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T10:00:00+00:00",
+        )
+        metrics.finish_job(conn, jid, ended="2026-10-02T10:10:00+00:00", outcome="passed")
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    away_text = section(html, "away")
+    assert "Opus · lead ticket" in away_text
+
+
 def replay_since(html: str) -> datetime:
     """The ``since`` of the page's replay URL."""
     match = re.search(r'data-replay="([^"]+)"', html)
@@ -1060,7 +1323,7 @@ def test_the_away_panel_follows_since_and_links_each_merged_ticket(serve, db_pat
     assert chosen(html) == f"since {since.astimezone():%H:%M}"
     assert re.search(r'href="/tickets/away-b\?project=[^"]+">away-b</a>', html)
     away = section(html, "away")
-    assert "The away-b title. (merged by claude-opus)" in away
+    assert "The away-b title. Opus · 1st try" in away
     assert "away-a" not in away and "away-early" not in away  # merged before 10:00
     assert "Nothing happened" not in away
 

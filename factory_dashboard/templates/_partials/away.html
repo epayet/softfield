@@ -4,15 +4,18 @@
   <h2>While you were away <span class="src">since {{ since.strftime("%H:%M") }}</span></h2>
   {% if away.merged or away.failed or away.escalations or away.needs_you or away.claude_usd %}
   <p class="sub">
-    {{ away.merged | length }} merged, {{ away.failed }} failed attempt{{ "" if away.failed == 1 else "s" }}, {{ away.escalations }} escalation{{ "" if away.escalations == 1 else "s" }}, {{ away.needs_you }} new for you, {{ away.blocked }} blocked now, {{ "$%.2f" | format(away.claude_usd) }} on Claude
+    {{ away.merged | length }} merged, {{ away.failed }} failed attempt{{ "" if away.failed == 1 else "s" }}, {{ away.escalations }} escalation{{ "" if away.escalations == 1 else "s" }}, {{ away.needs_you }} new for you,
+    {% if away.blocked_ids %}blocked now:
+      {% for bid in away.blocked_ids %}<a href="/tickets/{{ bid }}">{{ bid }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ away.blocked }} blocked now{% endif %}, {{ "$%.2f" | format(away.claude_usd) }} on Claude
   </p>
   {% if away.merged %}
   <ul class="steps">
     {% for t in away.merged %}
     <li>
       <span class="what">
+        {% if t.display_name %}<span class="agent">{{ t.display_name }}</span>{% endif %}
         <a class="mono" href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a>
-        {{ t.title or "" }}{% if t.merged_by %} (merged by {{ t.merged_by }}){% endif %}
+        {{ t.title or "" }}{% if t.label %} {{ t.label }}{% endif %}
       </span>
     </li>
     {% endfor %}
