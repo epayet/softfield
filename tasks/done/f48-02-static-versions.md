@@ -31,3 +31,12 @@ Read `factory_dashboard/app.py` (`templates` and its `templates.env.filters`, an
 - no template has a bare `"/static/` link left (a test reads the templates)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2793
+gate_failures: []
+tokens: 1366134
+```
