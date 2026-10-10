@@ -12,6 +12,9 @@ If I answered but it's not picked yet, it should not behave as if it does. It sh
 ##### From F24: bug: when i answer a ticket in planning it is in both the "your desk" and "coming" sections (merged by the owner on 2026-10-07)
 side qouestion: how to call those things on the desk keeping the factory theme, i called it ticket but that's not quite that yet. seed?
 
+### From F105: In a group proposal where there is a bundle of an adr and… (merged by the lead on 2026-10-10)
+In a group proposal where there is a bundle of an adr and a plan. I currently can't approve the plan until I've approved the adr. Which is fine, but if the adr approval is on its way to it's runner pick next, I want the ability to approve the plan as well if we know the plan is on its way to being approved
+
 ## Outcome
 The desk, the Planning tab's count and the Overview's "Needs you" count only what the owner can do now (the owner, 2026-10-08):
 - A card with an ADR and a plan: before the ADR is accepted, the desk shows **one** item, the ADR, "then its plan". The plan isn't a second thing to do.
