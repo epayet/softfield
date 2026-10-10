@@ -23,3 +23,12 @@ In `factory_dashboard/static/factory.js` `machine`, the idle lead branch draws t
 - the `merged today` line still sits right under it
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3154
+gate_failures: []
+tokens: 1310221
+```
