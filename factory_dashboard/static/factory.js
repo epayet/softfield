@@ -273,8 +273,7 @@
     } else if (m.state === "idle") {
       if (m.station === "lead" && m.next_ticket) {
         const link = make_link(g, `/tickets/${m.next_ticket}${project_query()}`);
-        text(link, 0, 16, short(m.next_ticket), "dim");
-        g.appendChild(link);
+        text(link, left, line, `next: ${short(m.next_ticket)}`, "dim");
         if (m.merged_today && m.merged_today > 0) {
           text(g, left, line + 16, `${m.merged_today} merged today`, "dim");
         }

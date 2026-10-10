@@ -1139,6 +1139,119 @@ def test_idle_lead_with_merges_shows_next_ticket_and_merge_count(page, line_clie
     assert "/tickets/fX-01-next" in href
 
 
+def test_idle_lead_next_ticket_text_lies_inside_lead_machine_rect(page, line_client):
+    """The next-ticket link text is drawn inside the lead machine's box.
+
+    Not at absolute (0, 16) like the bug had it.
+    """
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    lead_machine = next(m for m in doc["machines"] if m["station"] == "lead")
+    lead_machine["state"] = "idle"
+    lead_machine["next_ticket"] = "fX-01-next"
+    lead_machine["merged_today"] = 3
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    # Verify the text is inside the lead machine's rect by computing expected bounds
+    # from AREAS and comparing screen coordinates converted to SVG space.
+    result = page.eval_on_selector(
+        "svg#floor",
+        """svg => {
+            const vb = svg.viewBox.baseVal;
+            const svgBox = svg.getBoundingClientRect();
+            const scaleX = svgBox.width / vb.width;
+            const scaleY = svgBox.height / vb.height;
+            const areas = {"lead": {"x": 560, "y": 120, "width": 230, "height": 170}};
+            const area = areas.lead;
+            const rectBox = [area.x, area.y, area.x + area.width, area.y + area.height];
+            // text at (left, line) where left = x + 10, line = y + 88
+            const textSvg = [area.x + 10, area.y + 88, area.x + 10 + 60, area.y + 88 + 14];
+            // Convert rect to screen coords
+            const rectScreen = [
+                svgBox.left + rectBox[0] * scaleX,
+                svgBox.top + rectBox[1] * scaleY,
+                svgBox.left + rectBox[2] * scaleX,
+                svgBox.top + rectBox[3] * scaleY,
+            ];
+            // Convert text to screen coords
+            const textScreen = [
+                svgBox.left + textSvg[0] * scaleX,
+                svgBox.top + textSvg[1] * scaleY,
+                svgBox.left + textSvg[2] * scaleX,
+                svgBox.top + textSvg[3] * scaleY,
+            ];
+            // Get actual text box
+            const textEl = svg.querySelector('[data-machine] text');
+            const actualBox = textEl.getBoundingClientRect();
+            const actualScreen = [actualBox.left, actualBox.top, actualBox.right, actualBox.bottom];
+            const inside = (a, b) =>
+                a[0] >= b[0] - 0.5 && a[1] >= b[1] - 0.5 &&
+                a[2] <= b[2] + 0.5 && a[3] <= b[3] + 0.5;
+            return {
+                expected: inside(textScreen, rectScreen),
+                actual: inside(actualScreen, rectScreen),
+                expectedBox: rectScreen,
+                actualBox: actualScreen,
+            };
+        }""",
+    )
+    assert result["expected"], "Expected text position should be inside lead rect"
+    assert result["actual"], (
+        f"Actual text box {result['actualBox']} not inside expected rect {result['expectedBox']}"
+    )
+
+
+def test_merged_today_sits_right_under_next_ticket(page, line_client):
+    """The 'merged today' line sits directly below the next-ticket text."""
+    page.clock.install()
+    open_line(page, line_client)
+    doc = block(line_client.get("/").text)
+    lead_machine = next(m for m in doc["machines"] if m["station"] == "lead")
+    lead_machine["state"] = "idle"
+    lead_machine["next_ticket"] = "fX-01-next"
+    lead_machine["merged_today"] = 3
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    text_content = page.locator(
+        f'svg#floor [data-machine="{lead_machine["id"]}"] text'
+    ).all_text_contents()
+    ticket_text = next(t for t in text_content if "next:" in t)
+    merge_text = next(t for t in text_content if "merged today" in t)
+    ticket_box = (
+        page.locator(f'svg#floor [data-machine="{lead_machine["id"]}"] text')
+        .filter(has_text=ticket_text)
+        .first.evaluate(
+            "e => { "
+            "const r = e.getBoundingClientRect(); "
+            "return [r.left, r.top, r.right, r.bottom]; }"
+        )
+    )
+    merge_box = (
+        page.locator(f'svg#floor [data-machine="{lead_machine["id"]}"] text')
+        .filter(has_text=merge_text)
+        .first.evaluate(
+            "e => { "
+            "const r = e.getBoundingClientRect(); "
+            "return [r.left, r.top, r.right, r.bottom]; }"
+        )
+    )
+    assert merge_box[1] > ticket_box[1], "merged today should be below the ticket text"
+    assert abs(merge_box[0] - ticket_box[0]) < 2, "merged today should align with the ticket text"
+
+
 # --- machines and belts (f3-20) ----------------------------------------------------------------
 
 
