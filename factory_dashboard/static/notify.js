@@ -1,11 +1,11 @@
-// Browser notifications while a dashboard page is open (f5-12, ADR 18 item 4). The top bar's
-// "Turn on notifications" asks permission, never on load, and hides once granted. base.html's
-// #live-poll fetches /live's #live-facts every 5 s (f6-16): the open Needs-you items (id ->
-// text) and whether all the work is done. Once allowed, after each swap this compares them
-// with what it saw last and notifies once per new item, and once when all done turns true.
-// What it saw is kept per project in localStorage, so moving to another page or a second tab
-// doesn't notify again. No service worker: nothing
-// shows once every dashboard page is closed (push to a closed page is in the roadmap).
+// Browser notifications while a dashboard page is open (f5-12, ADR 18 item 4).
+// The dashboard asks once with its own bar (f12-01, ADR 26 item 2) and uses a
+// service worker to show notifications on Android too (f12-01, ADR 26 item 3).
+// base.html's #live-poll fetches /live's #live-facts every 5 s (f6-16): the open
+// Needs-you items (id -> text) and whether all the work is done. Once allowed,
+// after each swap this compares them with what it saw last and notifies once per
+// new item, and once when all done turns true. What it saw is kept per project in
+// localStorage, so moving to another page or a second tab doesn't notify again.
 "use strict";
 
 (() => {
@@ -14,8 +14,17 @@
 
   window.notifyOn = () => supported && Notification.permission === "granted";
 
+  // The service worker registration (f12-01, ADR 26 item 3).
+  let registration = null;
+
   function show(title, body, tag) {
     try {
+      if (registration) {
+        registration.showNotification(title, { body, tag }).catch(() => {
+          new Notification(title, { body, tag }).onclick = () => window.focus();
+        });
+        return;
+      }
       const note = new Notification(title, { body, tag });
       note.onclick = () => window.focus();
     } catch (error) {
@@ -37,28 +46,79 @@
     if (done && !before.done) show("All work done", "The queue is empty and nothing runs.", "all-done");
   }
 
-  // The button: shown where the browser can notify; disabled, with the reason, where it can't.
-  function offer(button) {
-    if (!supported || Notification.permission === "granted") return;
-    button.hidden = false;
-    if (!window.isSecureContext) {
-      button.disabled = true;
-      button.title = "Browsers notify only over https or on this computer (127.0.0.1)";
-    } else if (Notification.permission === "denied") {
-      button.disabled = true;
-      button.title = "Blocked: allow notifications in the browser's site settings";
-    } else {
-      button.addEventListener("click", async () => {
+  // The notification permission bar (f12-01, ADR 26 item 2).
+  function setupBar() {
+    if (!supported) return;
+    if (Notification.permission !== "default") return;
+    if (localStorage.getItem("notify:asked")) return;
+
+    const bar = document.getElementById("notify-bar");
+    if (!bar) return;
+
+    if (window.isSecureContext) {
+      bar.querySelector("[role=body]").textContent =
+        "Get a notification when something needs you, or when all the work is done?";
+      bar.querySelector('[data-action="yes"]').addEventListener("click", async () => {
         await Notification.requestPermission();
-        button.hidden = Notification.permission === "granted";
-        if (Notification.permission === "denied") offer(button);
+        localStorage.setItem("notify:asked", "1");
+        bar.hidden = true;
       });
+      bar.querySelector('[data-action="no"]').addEventListener("click", () => {
+        localStorage.setItem("notify:asked", "1");
+        bar.hidden = true;
+      });
+    } else {
+      const origin = location.origin;
+      bar.querySelector("[role=body]").innerHTML =
+        "This address can&#39;t show notifications yet. In Chrome: " +
+        "1. open <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> " +
+        "<a class=\"copy-link\" data-copy=\"" +
+        encodeURIComponent("chrome://flags/#unsafely-treat-insecure-origin-as-secure") +
+        "\">Copy</a> " +
+        "in a new tab; " +
+        "2. paste this address in its box: <code class=\"origin-code\">" +
+        origin +
+        "</code> " +
+        "<a class=\"copy-link\" data-copy=\"" +
+        encodeURIComponent(origin) +
+        "\">Copy</a>; " +
+        "3. set it to Enabled and tap Relaunch. Then come back here.";
+      for (const link of bar.querySelectorAll(".copy-link")) {
+        link.addEventListener("click", async () => {
+          const text = decodeURIComponent(link.dataset.copy);
+          try {
+            await navigator.clipboard.writeText(text);
+          } catch (_) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+          }
+        });
+      }
+      bar.querySelector('[data-action="got-it"]').addEventListener("click", () => {
+        localStorage.setItem("notify:asked", "1");
+        bar.hidden = true;
+      });
+    }
+    bar.hidden = false;
+  }
+
+  // Register the service worker (f12-01, ADR 26 item 3).
+  async function registerSw() {
+    if (!navigator.serviceWorker) return;
+    try {
+      registration = await navigator.serviceWorker.register("/static/sw.js");
+    } catch (_) {
+      // Ignore: the SW may not be available.
     }
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    const button = document.getElementById("notify-me");
-    if (button) offer(button);
+    setupBar();
+    registerSw();
     document.body.addEventListener("htmx:afterSwap", (event) => {
       const facts = event.target.querySelector("#live-facts");
       if (facts && window.notifyOn()) compare(facts);

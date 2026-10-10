@@ -513,17 +513,16 @@ def test_a_ready_ticket_is_work_left(serve_between, db_path):
     assert _facts(client.get("/live").text) == ({}, "false")
 
 
-def test_every_page_has_the_notify_button_and_polls_live_whether_or_not_allowed(client):
+def test_every_page_has_the_notify_bar_and_polls_live_whether_or_not_allowed(client):
     for path in PAGES:
         html = client.get(path).text
         assert re.search(r'<script src="/static/notify\.js\?v=[0-9a-f]+" defer></script>', html), (
             path
         )
-        bar = re.search(r'<header class="bar">(.*?)</header>', html, re.S)
-        assert bar, path
-        button = re.search(r'<button type="button" id="notify-me"[^>]*>([^<]*)</button>', bar[1])
-        assert button, path
-        assert button[1] == "Turn on notifications" and " hidden" in button[0], path
+        # no #notify-me button
+        assert re.search(r'<button[^>]*id="notify-me"', html) is None, path
+        # notification bar is present (hidden)
+        assert re.search(r'<div id="notify-bar"[^>]*hidden', html), path
         # the top bar's status and Planning count refresh on every page (f6-16), so the poll no
         # longer waits for notifications; notify.js compares the facts only once they're on
         poll = re.search(r'<div id="live-poll"[^>]*>', html)
@@ -533,6 +532,7 @@ def test_every_page_has_the_notify_button_and_polls_live_whether_or_not_allowed(
         assert 'hx-select="#live-facts"' in poll[0]
     assert re.search(r"/static/notify\.js\?v=[0-9a-f]", html)
     assert client.get("/static/notify.js").status_code == 200
+    assert client.get("/static/sw.js").status_code == 200
 
 
 # A stand-in for the browser's Notification: it records what the page asks and shows.
@@ -554,15 +554,15 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
 ):
     page.add_init_script(FAKE_NOTIFICATION)
     open_overview(page, serve_between(activity="check-all on main"))
-    button = page.locator("#notify-me")
-    button.wait_for(state="visible")
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
     page.wait_for_timeout(6_000)  # another poll: nothing asked, nothing shown before it's on
     assert page.evaluate("window.asked") == 0
     assert page.evaluate("window.shown") == []
     assert page.evaluate("localStorage.getItem('notify:coucou')") is None  # nothing compared
-    button.click()
-    button.wait_for(state="hidden")
+    page.locator('[data-action="yes"]').click()
+    bar.wait_for(state="hidden", timeout=REFRESH)
     assert page.evaluate("window.asked") == 1
     page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
     assert page.evaluate("window.shown") == []  # what was there before isn't news
@@ -599,6 +599,139 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
     page.wait_for_timeout(6_000)
     shown = page.evaluate("window.shown")
     assert len(shown) == 2 and "done" in shown[1]["title"].lower()
+
+
+# --- notification bar (f12-01, ADR 26 item 2) ----------------------------------------------
+
+# A stand-in for the browser's Notification: it records what the page asks and shows.
+FAKE_NOTIFICATION_GRANTED = """
+window.shown = []; window.asked = 0;
+class FakeNotification {
+  constructor(title, options) { window.shown.push({ title, body: options && options.body }); }
+}
+FakeNotification.permission = "granted";
+FakeNotification.requestPermission = async () => {
+  window.asked += 1; FakeNotification.permission = "granted"; return "granted";
+};
+window.Notification = FakeNotification;
+"""
+
+FAKE_NOTIFICATION_DENIED = """
+window.shown = []; window.asked = 0;
+class FakeNotification {
+  constructor(title, options) { window.shown.push({ title, body: options && options.body }); }
+}
+FakeNotification.permission = "denied";
+FakeNotification.requestPermission = async () => {
+  window.asked += 1; FakeNotification.permission = "denied"; return "denied";
+};
+window.Notification = FakeNotification;
+"""
+
+
+def test_notification_bar_shows_when_permission_is_default(page, client):
+    """With permission 'default' and nothing stored, the bar shows."""
+    page.add_init_script(FAKE_NOTIFICATION)
+    page.set_viewport_size(DISPLAY)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
+    assert page.evaluate("localStorage.getItem('notify:asked')") is None
+
+
+def test_notification_bar_no_thanks_hides_it_and_stays_hidden(page, client):
+    """No thanks hides the bar and it stays hidden after a reload."""
+    page.add_init_script(FAKE_NOTIFICATION)
+    page.set_viewport_size(DISPLAY)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
+    page.locator('[data-action="no"]').click()
+    bar.wait_for(state="hidden", timeout=REFRESH)
+    assert page.evaluate("localStorage.getItem('notify:asked')") == "1"
+    # reload: bar should stay hidden
+    page.reload()
+    bar.wait_for(state="hidden", timeout=REFRESH)
+
+
+def test_notification_bar_yes_calls_request_permission_once(page, client):
+    """Yes calls requestPermission once."""
+    page.add_init_script(FAKE_NOTIFICATION)
+    page.set_viewport_size(DISPLAY)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
+    page.locator('[data-action="yes"]').click()
+    assert page.evaluate("window.asked") == 1
+    bar.wait_for(state="hidden", timeout=REFRESH)
+
+
+def test_notification_bar_never_shows_when_permission_granted(page, client):
+    """With permission 'granted' the bar never shows."""
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.set_viewport_size(DISPLAY)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="hidden", timeout=REFRESH)
+
+
+def test_notification_bar_never_shows_when_permission_denied(page, client):
+    """With permission 'denied' the bar never shows."""
+    page.add_init_script(FAKE_NOTIFICATION_DENIED)
+    page.set_viewport_size(DISPLAY)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="hidden", timeout=REFRESH)
 
 
 # --- the top bar's status, its button and the Planning count (f6-16) -------------------------

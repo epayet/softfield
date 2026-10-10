@@ -281,7 +281,6 @@ tbody tr:hover { background: var(--accent-wash); }
     gap: 4px 8px; padding: 2px 4px; }
   .bar-top .filters { display: contents; }
   .bar-top .filters label { grid-area: 1 / 2; font-size: 0; }  /* the select names the project */
-  #notify-me { grid-column: 1 / -1; justify-self: start; }
   .factory-status { grid-column: 1 / -1; flex-wrap: wrap; }
   .brand { font-size: 19px; white-space: nowrap; }
   .pill.big { font-size: 14px; }
@@ -396,6 +395,37 @@ tbody tr:hover { background: var(--accent-wash); }
 /* "New version of the dashboard: refresh" (app.py's /version poller) */
 .new-version { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent);
   border-radius: 4px; background: var(--accent-wash); color: var(--ink); }
+
+/* Notification permission bar (f12-01, ADR 26 item 2): under the top bar, every page */
+#notify-bar { margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--rule);
+  background: var(--bay); color: var(--ink); display: flex; flex-wrap: wrap;
+  align-items: center; gap: 12px 24px; font-size: 13px; }
+#notify-bar[hidden] { display: none; }
+#notify-bar [role=body] { flex: 1 1 auto; min-width: 0; }
+#notify-bar [role=body] code { font-family: var(--mono); font-size: 12px;
+  background: var(--plate); padding: 1px 5px; }
+#notify-bar [role=body] a.copy-link { font-family: var(--mono); font-size: 12px;
+  color: var(--accent); cursor: pointer; }
+#notify-bar [role=body] a.copy-link:hover { text-decoration: underline; }
+#notify-bar [role=actions] { display: flex; gap: 8px; flex-shrink: 0; }
+#notify-bar [role=actions] button { font: 600 12px var(--display); letter-spacing: .04em;
+  text-transform: uppercase; padding: 4px 12px; border: 1px solid var(--rule);
+  border-radius: 0; background: var(--plate); color: var(--ink); cursor: pointer; }
+#notify-bar [role=actions] button:hover { background: var(--accent-wash); }
+#notify-bar [role=actions] button[data-action="yes"] { background: var(--hazard);
+  color: var(--hazard-ink); border-color: var(--hazard); }
+#notify-bar [role=actions] button[data-action="yes"]:hover { opacity: .9; }
+#notify-bar [role=actions] button[data-action="no"] { color: var(--muted); }
+#notify-bar [role=actions] button[data-action="got-it"] { display: none; }
+#notify-bar [role=actions] button[data-action="got-it"]:not([hidden]) { display: inline-block; }
+#notify-bar .origin-code { font-family: var(--mono); font-size: 12px;
+  background: var(--plate); padding: 1px 5px; word-break: break-all; }
+@media (max-width: 639px) {
+  #notify-bar { flex-direction: column; align-items: stretch; gap: 8px; padding: 10px 14px; }
+  #notify-bar [role=body] { min-width: 0; }
+  #notify-bar [role=actions] { justify-content: stretch; }
+  #notify-bar [role=actions] button { flex: 1; text-align: center; }
+}
 
 /* Crate detail card (f3-19): shown under the floor when a crate is clicked */
 #crate-card { margin: 8px auto 0; padding: 10px 14px; border: 1px solid var(--rule);
