@@ -31,3 +31,12 @@ Read `docs/adr/26-notifications-on-the-home-wifi.md` items 2 and 3, `factory_das
 - in the browser test: with permission "default" and nothing stored, the bar shows; No thanks hides it and it stays hidden after a reload; Yes calls `requestPermission` once; with permission "granted" or "denied" the bar never shows; on a non-secure address the bar shows the steps with this page's own address
 - checked by hand at review: the bar on desktop and phone, and a notification on the phone once the address is trusted
 - the listed tests pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3533
+gate_failures: []
+tokens: 1951145
+```
