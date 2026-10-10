@@ -33,3 +33,12 @@ Read `factory_dashboard/static/factory.js` (`belt`, `PHONE_BELTS`), `tests/facto
 - the four extra checks above exist and fail without the f9-22 change
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3970
+gate_failures: ['stopped']
+tokens: 4122038
+```
