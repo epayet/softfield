@@ -693,7 +693,54 @@ def test_notification_bar_yes_calls_request_permission_once(page, client):
     bar.wait_for(state="visible", timeout=REFRESH)
     page.locator('[data-action="yes"]').click()
     assert page.evaluate("window.asked") == 1
+    assert page.evaluate("localStorage.getItem('notify:asked')") == "1"
     bar.wait_for(state="hidden", timeout=REFRESH)
+
+
+FAKE_INSECURE = """
+Object.defineProperty(window, 'isSecureContext', { value: false });
+window.shown = []; window.asked = 0;
+class FakeNotification {
+  constructor(title, options) { window.shown.push({ title, body: options && options.body }); }
+}
+FakeNotification.permission = "default";
+FakeNotification.requestPermission = async () => {
+  window.asked += 1; FakeNotification.permission = "granted"; return "granted";
+};
+window.Notification = FakeNotification;
+"""
+
+
+def test_notification_bar_shows_steps_on_insecure_origin(page, client):
+    """On a non-secure address the bar names the page origin, and Got it hides it."""
+    page.add_init_script(FAKE_INSECURE)
+    page.set_viewport_size(DISPLAY)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
+    body = bar.locator("[role=body]").text_content()
+    assert ORIGIN in body
+    assert "1." in body and "2." in body and "3." in body
+    page.locator('[data-action="got-it"]').click()
+    bar.wait_for(state="hidden", timeout=REFRESH)
+    assert page.evaluate("localStorage.getItem('notify:asked')") == "1"
+
+
+def test_sw_finds_open_dashboard_tab_on_notification_tap():
+    """sw.js uses includeUncontrolled so a tap focuses an open dashboard page."""
+    sw = (STATIC / "sw.js").read_text()
+    assert "includeUncontrolled" in sw
 
 
 def test_notification_bar_never_shows_when_permission_granted(page, client):
@@ -711,6 +758,7 @@ def test_notification_bar_never_shows_when_permission_granted(page, client):
 
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
     bar = page.locator("#notify-bar")
     bar.wait_for(state="hidden", timeout=REFRESH)
 
@@ -730,6 +778,7 @@ def test_notification_bar_never_shows_when_permission_denied(page, client):
 
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
     bar = page.locator("#notify-bar")
     bar.wait_for(state="hidden", timeout=REFRESH)
 

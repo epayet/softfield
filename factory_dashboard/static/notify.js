@@ -102,6 +102,7 @@
         localStorage.setItem("notify:asked", "1");
         bar.hidden = true;
       });
+      bar.querySelector('[data-action="got-it"]').removeAttribute("hidden");
     }
     bar.hidden = false;
   }

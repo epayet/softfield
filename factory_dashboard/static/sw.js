@@ -3,7 +3,7 @@
 self.addEventListener("notificationclick", (event) => {
   event.waitUntil(
     (async () => {
-      const clients = await self.clients.matchAll();
+      const clients = await self.clients.matchAll({ includeUncontrolled: true });
       for (const client of clients) {
         client.focus();
         return;
