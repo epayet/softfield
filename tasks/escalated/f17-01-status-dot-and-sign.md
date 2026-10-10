@@ -32,3 +32,12 @@ Read `factory_dashboard/app.py` (`class Status`, `def factory_status`), `factory
 - tapping ⏸ still shows "Pausing after this job" with the dashed edge at once, and posts one `pause`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: layout)
+attempts: 3
+tokens: 12701418
+logs: var/runs/20261010-085423/f17-01-status-dot-and-sign
+```
