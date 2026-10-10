@@ -1,7 +1,7 @@
 ---
 id: f9-25-seeds-and-planting
 milestone: f9-line-polish
-depends_on: [f9-24-tap-sheet, f9-32-fix-phone-belt-words]
+depends_on: [f9-24-tap-sheet, f9-32-fix-phone-belt-words, f9-33-phone-belts-keep-words]
 difficulty: 4
 files:
   - factory_dashboard/line.py
