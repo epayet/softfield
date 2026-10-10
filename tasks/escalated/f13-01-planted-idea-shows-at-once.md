@@ -31,3 +31,12 @@ Read `factory_dashboard/templates/planning.html`: the `#plant` form posts a `pla
 - a failed post (the request refused) leaves the textarea as typed and Coming as it was
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: layout)
+attempts: 3
+tokens: 2837235
+logs: var/runs/20261010-085423/f13-01-planted-idea-shows-at-once
+```
