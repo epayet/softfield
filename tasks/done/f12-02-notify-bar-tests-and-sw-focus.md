@@ -28,3 +28,12 @@ Read `factory_dashboard/static/notify.js` (`setupBar`), `factory_dashboard/stati
 - a tap on a notification focuses an open dashboard tab (`sw.js` finds the page's client)
 - the listed tests pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2137
+gate_failures: []
+tokens: 1539458
+```
