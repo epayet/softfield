@@ -25,3 +25,12 @@ Found by the lead at a checkpoint, on the merge of `tasks/done/f9-15-away-who-di
 - the no-`merged_by` test asserts that the ticket's row has no `.agent` span and no label text
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2916
+gate_failures: ['stopped']
+tokens: 1288956
+```
