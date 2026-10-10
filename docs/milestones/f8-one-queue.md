@@ -1,6 +1,6 @@
 # Milestone F8: one visible queue
 
-> **Status: planned** (2026-10-04, with the owner), on [ADR 22](../adr/22-one-visible-queue.md) (Accepted). **State:** building · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-10. Base: git tag `f8-one-queue-start`. Report: [`docs/reviews/f8-one-queue.md`](../reviews/f8-one-queue.md).
 > The owner (2026-10-04): "the runner should be just running jobs, and most work should be visible there, an escalation, a review, a replan, an answer to my question". F6's planner jobs build on its picker (f6-01 depends on f8-03).
 
 ## Outcome

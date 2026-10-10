@@ -1,6 +1,6 @@
 # Review: F8, one visible queue
 
-- **Status:** round 1 done, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-10.
 - **Stop reason:** none. Round 1 found 4 should-fix points and 3 nits. The lead fixed 3 should-fix points itself (two in protected runner code, one 3-line dashboard crash). The fourth, a missing test, is ticket f8-13 for a developer. The nits are in the backlog. No ADR is needed.
 
 ## Sign-off sheet
