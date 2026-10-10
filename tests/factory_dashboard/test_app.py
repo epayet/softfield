@@ -697,50 +697,84 @@ def test_notification_bar_yes_calls_request_permission_once(page, client):
     bar.wait_for(state="hidden", timeout=REFRESH)
 
 
-FAKE_INSECURE = """
-Object.defineProperty(window, 'isSecureContext', { value: false });
-window.shown = []; window.asked = 0;
-class FakeNotification {
-  constructor(title, options) { window.shown.push({ title, body: options && options.body }); }
-}
-FakeNotification.permission = "default";
-FakeNotification.requestPermission = async () => {
-  window.asked += 1; FakeNotification.permission = "granted"; return "granted";
-};
-window.Notification = FakeNotification;
-"""
+LAN = "http://192.168.1.20:8765"  # how the owner opens the dashboard: plain http, not trusted
 
 
-def test_notification_bar_shows_steps_on_insecure_origin(page, client):
-    """On a non-secure address the bar names the page origin, and Got it hides it."""
-    page.add_init_script(FAKE_INSECURE)
-    page.set_viewport_size(DISPLAY)
+def _open_at(page, client, origin: str) -> None:
+    """The overview at ``origin``, answered by the test client."""
 
     def route(r) -> None:
-        url = r.request.url.removeprefix(ORIGIN)
+        url = r.request.url.removeprefix(origin)
         path = url.split("?", 1)[0]
         if path.startswith("/static/"):
             r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
         else:
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
-    page.route(f"{ORIGIN}/**", route)
-    page.goto(ORIGIN + "/")
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    page.set_viewport_size(DISPLAY)
+    page.route(f"{origin}/**", route)
+    page.goto(origin + "/")
+
+
+def test_notification_bar_shows_steps_on_insecure_origin(page, client):
+    """On the LAN address, with Chrome's own Notification (no stand-in: there it answers
+    "denied", not "default"), the bar gives the steps with the page's address, and Got it
+    hides them for good without answering the question (f12 review, F1 to F3)."""
+    _open_at(page, client, LAN)
+    assert page.evaluate("[window.isSecureContext, Notification.permission]") == [False, "denied"]
     bar = page.locator("#notify-bar")
     bar.wait_for(state="visible", timeout=REFRESH)
     body = bar.locator("[role=body]").text_content()
-    assert ORIGIN in body
-    assert "1." in body and "2." in body and "3." in body
+    assert "can't show notifications yet" in body
+    assert "1. open chrome://flags/#unsafely-treat-insecure-origin-as-secure" in body
+    assert f"2. paste this address in its box: {LAN}" in body
+    assert "3. set it to Enabled and tap Relaunch" in body
+    assert bar.locator(".copy-link").count() == 2
+    # the question's buttons answer nothing here, so only Got it shows
+    assert bar.locator("button:visible").all_text_contents() == ["Got it"]
     page.locator('[data-action="got-it"]').click()
     bar.wait_for(state="hidden", timeout=REFRESH)
-    assert page.evaluate("localStorage.getItem('notify:asked')") == "1"
+    assert page.evaluate("localStorage.getItem('notify:steps')") == "1"
+    assert page.evaluate("localStorage.getItem('notify:asked')") is None
+    page.reload()
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    assert bar.is_hidden()
+
+
+def test_notification_bar_asks_after_got_it_once_the_address_is_trusted(page, client):
+    """Got it on the steps doesn't answer the question: on a secure address it is still asked."""
+    page.add_init_script(FAKE_NOTIFICATION)
+    page.add_init_script("localStorage.setItem('notify:steps', '1')")
+    _open_at(page, client, ORIGIN)
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
+    assert bar.locator("button:visible").all_text_contents() == ["Yes", "No thanks"]
+
+
+def test_notification_bar_asks_again_when_the_browser_prompt_was_closed(page, client):
+    """Yes, then Chrome's prompt closed without an answer: the bar goes, and comes back on the
+    next page, since nothing else can turn notifications on."""
+    page.add_init_script(
+        FAKE_NOTIFICATION.replace(
+            'FakeNotification.permission = "granted"; return "granted"', 'return "default"'
+        )
+    )
+    _open_at(page, client, ORIGIN)
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
+    page.locator('[data-action="yes"]').click()
+    bar.wait_for(state="hidden", timeout=REFRESH)
+    assert page.evaluate("[window.asked, Notification.permission]") == [1, "default"]
+    assert page.evaluate("localStorage.getItem('notify:asked')") is None
+    page.reload()
+    bar.wait_for(state="visible", timeout=REFRESH)
 
 
 def test_sw_finds_open_dashboard_tab_on_notification_tap():
     """sw.js uses includeUncontrolled so a tap focuses an open dashboard page."""
     sw = (STATIC / "sw.js").read_text()
     assert "includeUncontrolled" in sw
+    assert "event.notification.close()" in sw  # Android keeps a tapped notification otherwise
 
 
 def test_notification_bar_never_shows_when_permission_granted(page, client):

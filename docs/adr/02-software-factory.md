@@ -333,6 +333,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the card went from the owner's note (2026-10-07) to an approved plan the next morning, then waited two days at priority 6 behind F9's line work: for a two-line change, the queue was the whole delay. The plan's D2 said "four groups" and "the sum of their items"; by the time it was built the desk had five groups and left out cards on their way. Reusing the tab's number made the code right anyway, where a sum written from the plan would have been wrong: point a ticket at the value to reuse, not at a recipe to recompute.
 - **Decisions affected:** none.
 
+### F12 (2026-10-10): notifications asked once ([review](../reviews/f12-turn-on-notifications-little-feedback-button.md))
+
+- **Q1:** two developer tickets, both first time; one checkpoint, whose two findings were real and became the second ticket. No direction, no escalation.
+- **Q3:** Qwen 2 of 2 at difficulty 3–4 on one script with a worked example (a stand-in `Notification`), 59 and 36 min.
+- **Q5:** see the review's numbers.
+- **Anything else:** every gate and the checkpoint passed a feature that could not work on the owner's address, the one case the milestone exists for. The test made a state no browser has (not secure, permission "default"): Chrome answers "denied" there, so the steps never showed. The review found it by opening a real plain-http address in the test browser, which took three seconds. A stand-in for a browser API proves the code's logic, not the browser's behaviour: when a ticket is about what a browser does on some kind of address, its Done when must name one test with the real API. The review also left a scratch test file it could not delete; a headless job that needs a probe writes it inside an existing test file.
+- **Decisions affected:** none. ADR 26 holds; "Got it" no longer counts as the answer to the question (ADR 26 item 2 says the steps show once, not that they replace the question).
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

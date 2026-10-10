@@ -49,25 +49,30 @@
   // The notification permission bar (f12-01, ADR 26 item 2).
   function setupBar() {
     if (!supported) return;
-    if (Notification.permission !== "default") return;
-    if (localStorage.getItem("notify:asked")) return;
-
     const bar = document.getElementById("notify-bar");
     if (!bar) return;
 
     if (window.isSecureContext) {
+      if (Notification.permission !== "default") return;
+      if (localStorage.getItem("notify:asked")) return;
       bar.querySelector("[role=body]").textContent =
         "Get a notification when something needs you, or when all the work is done?";
       bar.querySelector('[data-action="yes"]').addEventListener("click", async () => {
-        await Notification.requestPermission();
-        localStorage.setItem("notify:asked", "1");
         bar.hidden = true;
+        // Chrome's prompt closed without an answer leaves "default": ask again on the next page
+        if ((await Notification.requestPermission()) !== "default") {
+          localStorage.setItem("notify:asked", "1");
+        }
       });
       bar.querySelector('[data-action="no"]').addEventListener("click", () => {
         localStorage.setItem("notify:asked", "1");
         bar.hidden = true;
       });
     } else {
+      // Chrome answers "denied" on an address it doesn't trust, so the steps don't wait for
+      // "default". "Got it" has its own key: the question still comes once the address is
+      // trusted (f12 review, F1 and F2).
+      if (localStorage.getItem("notify:steps")) return;
       const origin = location.origin;
       bar.querySelector("[role=body]").innerHTML =
         "This address can&#39;t show notifications yet. In Chrome: " +
@@ -99,9 +104,11 @@
         });
       }
       bar.querySelector('[data-action="got-it"]').addEventListener("click", () => {
-        localStorage.setItem("notify:asked", "1");
+        localStorage.setItem("notify:steps", "1");
         bar.hidden = true;
       });
+      bar.querySelector('[data-action="yes"]').hidden = true;
+      bar.querySelector('[data-action="no"]').hidden = true;
       bar.querySelector('[data-action="got-it"]').removeAttribute("hidden");
     }
     bar.hidden = false;

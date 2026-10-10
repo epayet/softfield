@@ -4,6 +4,10 @@ Nits from reviews and triaged discoveries that aren't scheduled yet. One bullet 
 
 <!-- e.g. - [m1-review nit] Rename `x` to `y` in coucou/ordering.py -->
 
+- [f12-review nit, f12-F9] The notification bar's parts are found by `role="body"` and `role="actions"` (`factory_dashboard/templates/base.html`, `notify.js`, `dashboard.css`), which aren't ARIA roles. Use classes next time the bar changes, and give the bar `role="status"` if a screen reader should hear it.
+- [f12-review nit, f12-F10] Six `test_notification_bar_*` tests in `tests/factory_dashboard/test_app.py` each carry the same `route` function; the review added `_open_at` for its own three. Move the others onto it next time they change.
+- [f12-review nit, f12-F11] `test_sw_finds_open_dashboard_tab_on_notification_tap` reads `sw.js` as text. A real check needs a registered worker and a tapped notification, which the routed test pages can't give; do it when the dashboard gets a browser test on its real server with a service worker (web push would need one).
+
 - [f41-review nit, f41-F3] `runner report` counts only the runner's merges, so tickets the lead builds in a terminal session read as "0 of 2 merged" (F41). Count a `tasks/done/` ticket whose runner footer says `result: done` and `agent: lead` as merged by the lead.
 - [m0] Exercise the headless Claude paths live. Escalation: done in calibration (2 runs, Pro login, cap counted). Still untested: the review loop (M1 review) and the usage-limit pause.
 - [m1-review nit, m1-F3] `seed_demo` finds the demo display by label, so renaming it and rerunning creates a second pending display; its "nothing changed" message also ignores `controllers.add(me)`.
