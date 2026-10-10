@@ -1006,8 +1006,8 @@ def test_away_counts_failures_and_claude_as_the_rest_of_the_dashboard(tmp_path):
 
 def test_away_ticket_shows_agent_label_and_attempts(tmp_path):
     """A merged ticket by local-qwen3.6-35b-a3b after two developer jobs shows a
-    "qwen3.6-35b-a3b" label and "2 attempts"; one by claude-opus in one job, "Opus"
-    and "1st try"."""
+    "qwen3.6-35b-a3b" label and "2 attempts"; one by claude-opus after a failed
+    developer job, "Opus" and "finished after 1 developer attempt"."""
     from factory_dashboard import queries
 
     path = tmp_path / "away-label.sqlite"
@@ -1098,7 +1098,7 @@ def test_away_ticket_shows_agent_label_and_attempts(tmp_path):
     assert opus.display_name == "Opus"
     assert opus.attempts == 1
     assert opus.kind == "developer"
-    assert opus.label == "Opus · 1st try"
+    assert opus.label == "Opus · finished after 1 developer attempt"
 
     lead = merged_map["away-lead"]
     assert lead.display_name == "Opus"
@@ -1172,8 +1172,16 @@ def test_away_no_merged_by_shows_no_label(client, db_path):
     away_text = section(html, "away")
     # away-a has merged_by=LOCAL so it should show a label
     assert "qwen3.6-35b-a3b" in away_text
-    # But no ticket with no merged_by should have an .agent span
-    # away-c is blocked so won't be in merged list
+    # But no ticket with no merged_by should have an .agent span or label text
+    from factory_dashboard import queries
+
+    conn = queries.connect(db_path)
+    try:
+        aw = queries.away(conn, PROJECT, since, NOW)
+    finally:
+        conn.close()
+    merged_names = {t.ticket for t in aw.merged}
+    assert "away-none" not in merged_names
 
 
 def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
@@ -1323,7 +1331,7 @@ def test_the_away_panel_follows_since_and_links_each_merged_ticket(serve, db_pat
     assert chosen(html) == f"since {since.astimezone():%H:%M}"
     assert re.search(r'href="/tickets/away-b\?project=[^"]+">away-b</a>', html)
     away = section(html, "away")
-    assert "The away-b title. Opus · 1st try" in away
+    assert "The away-b title. Opus · finished after 1 developer attempt" in away
     assert "away-a" not in away and "away-early" not in away  # merged before 10:00
     assert "Nothing happened" not in away
 

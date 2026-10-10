@@ -894,7 +894,9 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
             return "Copilot"
         return agent.removeprefix("local-").removeprefix("ollama-")
 
-    def _label(merged_by: str | None, kind: str | None, dev_attempts: int) -> str:
+    def _label(
+        merged_by: str | None, kind: str | None, dev_attempts: int, dev_outcomes: Sequence[str]
+    ) -> str:
         if not merged_by:
             return ""
         display = _display_name(merged_by)
@@ -905,7 +907,9 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
                 return f"{display} \u00b7 lead ticket"
             if dev_attempts > 0:
                 if dev_attempts == 1:
-                    return f"{display} \u00b7 1st try"
+                    if dev_outcomes and dev_outcomes[0] == "passed":
+                        return f"{display} \u00b7 1st try"
+                    return f"{display} \u00b7 finished after 1 developer attempt"
                 return f"{display} \u00b7 finished after {dev_attempts} developer attempts"
             return display
         if dev_attempts > 0:
@@ -922,7 +926,16 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
             display_name=_display_name(j["merged_by"]),
             attempts=attempts.get(j["ticket"], 0),
             kind=kinds.get(j["ticket"]),
-            label=_label(j["merged_by"], kinds.get(j["ticket"]), attempts.get(j["ticket"], 0)),
+            label=_label(
+                j["merged_by"],
+                kinds.get(j["ticket"]),
+                attempts.get(j["ticket"], 0),
+                tuple(
+                    j2["outcome"]
+                    for j2 in jobs
+                    if j2["ticket"] == j["ticket"] and j2["role"] in LOCAL_ROLES
+                ),
+            ),
         )
         for at, j in sorted(last.values(), key=lambda found: found[0], reverse=True)
         if since <= at <= now
