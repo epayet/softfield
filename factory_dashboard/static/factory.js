@@ -412,7 +412,7 @@
     "developers→checks": { path: "M150 1156 L150 1196", at: [140, 1180], end: true },
     "checks→developers": { path: "M208 1196 L208 1156", at: [218, 1180], back: true, thin: true, short: true },
     "checks→lead": { path: "M134 1222 L19 1222 L19 740 L26 740", at: [30, 1212], back: true, thin: true, say: "back to the lead", short: true },
-    "checks→merged": { path: "M179 1306 L179 1336", at: [192, 1325], short: true },
+    "checks→merged": { path: "M179 1306 L179 1336", at: [192, 1325] },
     "merged→ripe": { path: "M100 1432 L100 1462", at: [112, 1451] },
     "ripe→stash": { path: "M100 1582 L100 1612", at: [112, 1601] },
     "merged→reviewers": { path: "M340 1360 L351 1360 L351 868 L340 868", at: [338, 1252], end: true, back: true, thin: true, short: true },

@@ -828,7 +828,7 @@ def test_a_phone_draws_every_station_with_its_crates_and_belts(page, line_client
     assert phone_drawn(page, "[data-belt].carrying", "belt") == ["queue→developers"]
     merged = belts(doc)["checks→merged"]["today"]
     counted = page.locator('svg#floor-phone [data-belt="checks→merged"] text').text_content()
-    assert counted == f"{merged} today"
+    assert counted == f"merged · {merged} today"
 
 
 def test_a_phones_queue_holds_its_first_six_crates_in_run_order(page, line_client):
@@ -944,6 +944,47 @@ def test_phone_floor_belt_and_smoke_get_their_animation_classes(page, line_clien
         "svg#floor-phone [data-machine].on", "els => els.map(e => e.dataset.machine)"
     )
     assert LOCAL in phone_on
+
+
+def test_planting_says_ideas_with_lead_and_N_in_talks(page, line_client):
+    """Planting reads "ideas you're planning", "with the lead" and "N in talks" (N from the
+    document's planting count, not a fixed number)."""
+    doc = open_line(page, line_client, PHONE)
+    planting = page.locator('svg#floor-phone [data-station="planting"] text').all_text_contents()
+    assert "ideas you're planning" in planting
+    assert "with the lead" in planting
+    n = doc["field"]["planting"]
+    assert f"{n} in talks" in planting
+
+
+def test_legend_says_faded_dashed_and_replay_counts(page, line_client):
+    """The legend contains "faded, dashed: waits for another ticket" and "a replay counts its
+    own day"."""
+    open_line(page, line_client)
+    legend = re.search(
+        r'<div class="legend">(.*?)</div>', page.locator("#line-live").inner_html(), re.S
+    )
+    assert legend is not None
+    text = unescape(re.sub(r"<[^>]+>", " ", legend.group(1)))
+    assert "faded, dashed: waits for another ticket" in text
+    assert "a replay counts its own day" in text
+
+
+@pytest.mark.parametrize("scheme", ["light", "dark"])
+def test_developer_crate_fill_differs_from_lead_and_checks(page, line_client, scheme):
+    """A developer crate's computed fill differs from the lead crate's and from the checks
+    light's, in both themes."""
+    page.emulate_media(color_scheme=scheme)
+    open_line(page, line_client)
+    dev_fill = page.locator("svg#floor .crate.developer").first.evaluate(
+        "e => getComputedStyle(e).fill"
+    )
+    lead_fill = page.locator("svg#floor .crate.lead").first.evaluate(
+        "e => getComputedStyle(e).fill"
+    )
+    light_fill = page.locator("svg#floor .light").first.evaluate("e => getComputedStyle(e).fill")
+    assert dev_fill != lead_fill
+    assert dev_fill != light_fill
 
 
 def test_css_motion_query_targets_floor_phone_for_belt_and_smoke_animations():

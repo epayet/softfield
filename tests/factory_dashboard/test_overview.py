@@ -596,6 +596,21 @@ def test_savings_are_for_the_current_milestone(client):
     assert "15k" in savings  # token-equivalents underneath
 
 
+def test_savings_heading_says_so_far_on_milestone(client):
+    """The overview savings heading reads "so far on F6" for a milestone."""
+    savings = section(client.get("/").text, "savings")
+    assert "so far" in savings.lower()
+
+
+def test_floor_heading_has_no_refreshes(client):
+    """The floor's heading has no "refreshes"."""
+    html = client.get("/").text
+    line_live = re.search(r'<section[^>]*\bid="line-live"[^>]*>(.*?)</section>', html, re.S)
+    assert line_live is not None
+    text = unescape(re.sub(r"<[^>]+>", " ", line_live.group(1)))
+    assert "refreshes" not in text.lower()
+
+
 def test_the_spend_chart_holds_each_milestones_claude_dollars(serve):
     html = serve(live=False).get("/").text
     assert charts(html) == {"spend": {"labels": ["M4", "F1"], "dollars": [2.0, 7.8]}}
