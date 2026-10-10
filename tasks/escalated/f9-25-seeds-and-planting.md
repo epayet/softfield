@@ -27,3 +27,12 @@ Read `_field` in `factory_dashboard/line.py` (its `seeds` count and `"planting":
 - a title holding `<b>` shows as text
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 964324
+logs: var/runs/20261010-030258/f9-25-seeds-and-planting
+```
