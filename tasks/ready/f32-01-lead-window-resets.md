@@ -18,11 +18,11 @@ Read `#lead-window` in `factory_dashboard/templates/planning.html` (its 5-hour r
 - Words only from those two fields: no new strings.
 - The existing assertion on "5-hour window 80% · planning may go past the 75% line" will change with the new text; keep the 75% line's sentence in the tile.
 
-### The branch so far (the lead read it, 2026-10-10)
-Your branch already holds the whole change: both rows in the template print their reset or status, and the tests cover today's reset, a later day's (on the week row), a past reset and no reading. Don't start again and don't re-read everything.
-- The `layout` gate failed on `tests/factory_dashboard/test_probe_tmp.py`. That file was never yours: a review left it on main. This ticket now waits for the ticket that removes it (f12-03), so that gate is clean when you start. Don't touch that file.
-- `test_the_lead_window_shows_reset_when_not_past` asserts the same line as `test_the_lead_window_shows_the_75_line` now does: keep one of the two.
-- The past-reset and no-reading tests only look for the status words anywhere in the tile. Assert the whole row instead, from its name to its status, so each proves which row said it (the percent is "–" when there is no reading).
+### The branch so far (the lead read it again, 2026-10-10)
+Your branch holds nearly all of it, and your `BLOCKED.md` was right: the `layout` gate failed on `tests/factory_dashboard/test_probe_tmp.py`, a file a review left on main, and it was still there on your last attempt. This ticket waits for the ticket that removes it (f12-03), so the file is gone when you start. Don't start again and don't re-read everything. Two small things are left:
+- In `factory_dashboard/templates/planning.html`, the 5-hour row now writes the words "no data yet" itself, for when `window` is missing. That is a new string, and it never prints: `_agent_allowances` in `factory_dashboard/overview.py` makes one row for every window it is given, reading or not, so `planning` always finds Claude's `five_hour` and `seven_day` rows, and a row without a reading already carries `status` "no data yet". Make the 5-hour row's condition the same as the week row's, two lines below it.
+- In `tests/factory_dashboard/test_planning.py`, `test_the_lead_window_shows_reset_when_not_past` asserts the same line as `test_the_lead_window_shows_the_75_line`: remove it. Keep the other tests as they are: the past-reset and no-reading tests now assert the whole row.
+- The fixture's `NOW` is 12:00, so your tests' "resets at 14:00" is right; the "17:00" below is only an example.
 - The full `check-all` runs the whole test suite and takes several minutes: it is slow, not stuck. Run the listed test file first, then `check-all` once, and wait for it.
 
 ### Done when
@@ -31,6 +31,7 @@ Your branch already holds the whole change: both rows in the template print thei
 - the week row shows its own reset the same way
 - with the 5-hour reset already past, the row reads "reset since, no new reading"; with no reading, "no data yet"
 - the tile still says "planning may go past the 75% line, the factory stops there"
+- the template holds neither "no data yet" nor "reset since": both come from `status`
 - assert within `#lead-window`, on its text with tags stripped and entities unescaped (`_text` in `tests/factory_dashboard/test_planning.py`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
