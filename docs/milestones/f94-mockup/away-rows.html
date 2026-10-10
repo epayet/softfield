@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F94 mock-up: the rows of While you were away</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card adds */
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  .legend .new { padding: 0 4px; }
+  [hidden] { display: none !important; }
+
+  /* ---- the panel as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .sub { color: var(--ink-2); margin: 2px 0 8px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .agent { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { padding: 7px 0; border-bottom: 1px solid var(--grid); }
+  .steps li:last-child { border-bottom: 0; }
+  .steps .what { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; min-width: 0; }
+
+  /* ---- proposed: the facts on the first line, the title always on its own ---- */
+  .steps .how { color: var(--ink-2); font-size: 13.5px; }
+  .steps .title { flex-basis: 100%; }
+</style>
+</head>
+<body>
+<h1>F94: the rows of While you were away</h1>
+<p class="lede">Each finished ticket's row on the Overview. The f9-25 row is the one from the owner's note; the other two rows, and every finish time and duration, are examples.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<!-- Today: copied from factory_dashboard/templates/_partials/away.html -->
+<div data-version="today" hidden>
+  <h3>Wide screen</h3>
+  <section class="panel">
+    <h2>While you were away <span class="src">since 07:00</span></h2>
+    <p class="sub">3 merged, 4 failed attempts, 1 escalation, 2 new for you, 0 blocked now, $3.10 on Claude</p>
+    <ul class="steps">
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f12-01-notifications-asked-once</a> The dashboard asks about notifications once. Opus · lead ticket</span></li>
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f9-25-seeds-and-planting</a> The field's first two stations show real things: Planting counts the cards being planned with the owner, and tapping the seeds opens the sheet with the set-aside tickets listed, each a link. Opus · finished after 3 developer attempts</span></li>
+      <li><span class="what"><span class="agent">qwen3.6-35b-a3b</span> <a class="mono" href="#">f9-14-away-span-in-place</a> Choosing a stretch redraws While you were away without a reload. qwen3.6-35b-a3b · 2 attempts</span></li>
+    </ul>
+  </section>
+  <h3>Phone</h3>
+  <section class="panel phone">
+    <h2>While you were away <span class="src">since 07:00</span></h2>
+    <ul class="steps">
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f12-01-notifications-asked-once</a> The dashboard asks about notifications once. Opus · lead ticket</span></li>
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f9-25-seeds-and-planting</a> The field's first two stations show real things: Planting counts the cards being planned with the owner, and tapping the seeds opens the sheet with the set-aside tickets listed, each a link. Opus · finished after 3 developer attempts</span></li>
+    </ul>
+  </section>
+  <p class="legend">The name is said twice, and a short title runs into one line with everything else.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>Wide screen</h3>
+  <section class="panel">
+    <h2>While you were away <span class="src">since 07:00</span></h2>
+    <p class="sub">3 merged, 4 failed attempts, 1 escalation, 2 new for you, 0 blocked now, $3.10 on Claude</p>
+    <ul class="steps">
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f12-01-notifications-asked-once</a>
+        <span class="how">lead ticket · <span class="new">finished 11:48 · took 14 min</span></span>
+        <span class="title">The dashboard asks about notifications once.</span></span></li>
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f9-25-seeds-and-planting</a>
+        <span class="how">finished after 3 developer attempts · <span class="new">finished 10:32 · took 2.6 h</span></span>
+        <span class="title">The field's first two stations show real things: Planting counts the cards being planned with the owner, and tapping the seeds opens the sheet with the set-aside tickets listed, each a link.</span></span></li>
+      <li><span class="what"><span class="agent">qwen3.6-35b-a3b</span> <a class="mono" href="#">f9-14-away-span-in-place</a>
+        <span class="how">2 attempts · <span class="new">finished 9 Oct 23:05 · took 58 min</span></span>
+        <span class="title">Choosing a stretch redraws While you were away without a reload.</span></span></li>
+    </ul>
+  </section>
+  <h3>Phone</h3>
+  <section class="panel phone">
+    <h2>While you were away <span class="src">since 07:00</span></h2>
+    <ul class="steps">
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f12-01-notifications-asked-once</a>
+        <span class="how">lead ticket · <span class="new">finished 11:48 · took 14 min</span></span>
+        <span class="title">The dashboard asks about notifications once.</span></span></li>
+      <li><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">f9-25-seeds-and-planting</a>
+        <span class="how">finished after 3 developer attempts · <span class="new">finished 10:32 · took 2.6 h</span></span>
+        <span class="title">The field's first two stations show real things: Planting counts the cards being planned with the owner, and tapping the seeds opens the sheet with the set-aside tickets listed, each a link.</span></span></li>
+    </ul>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. The name is said once, the facts sit on the first line, and the title always starts its own line. "took" runs from the ticket's first job to its finish, waits included. A ticket finished on another day shows the day too.</p>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
