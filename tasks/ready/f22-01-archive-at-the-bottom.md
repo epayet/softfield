@@ -2,7 +2,7 @@
 id: f22-01-archive-at-the-bottom
 milestone: f22-move-archive-button-on-planning-desk
 difficulty: 2
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/thread.html
 tests:

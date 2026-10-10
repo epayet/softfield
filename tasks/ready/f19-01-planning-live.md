@@ -2,7 +2,7 @@
 id: f19-01-planning-live
 milestone: f19-will-i-need-to-refresh-planning
 difficulty: 4
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/base.html
   - factory_dashboard/templates/planning.html

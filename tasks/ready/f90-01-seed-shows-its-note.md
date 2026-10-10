@@ -2,7 +2,7 @@
 id: f90-01-seed-shows-its-note
 milestone: f90-editing-seeds-that-i-ve-planted
 difficulty: 3
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/planning.py
   - factory_dashboard/templates/thread.html

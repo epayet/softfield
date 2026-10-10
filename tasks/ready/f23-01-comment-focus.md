@@ -2,7 +2,7 @@
 id: f23-01-comment-focus
 milestone: f23-when-i-click-comment-on-the
 difficulty: 2
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/thread.html
 tests:

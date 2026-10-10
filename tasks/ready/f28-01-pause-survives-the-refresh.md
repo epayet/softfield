@@ -2,7 +2,7 @@
 id: f28-01-pause-survives-the-refresh
 milestone: f28-the-first-time-i-clicked-on
 difficulty: 4
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/base.html
 tests:

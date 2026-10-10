@@ -2,7 +2,7 @@
 id: f30-01-thread-latest-first
 milestone: f30-on-conversations-i-want-to-the
 difficulty: 3
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/thread.html
   - factory_dashboard/planning.py

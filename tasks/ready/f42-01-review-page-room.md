@@ -2,7 +2,7 @@
 id: f42-01-review-page-room
 milestone: f42-the-space-for-me-to-scroll
 difficulty: 3
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/proposal.html
   - factory_dashboard/static/dashboard.css

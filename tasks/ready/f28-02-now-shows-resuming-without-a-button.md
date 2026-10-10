@@ -2,7 +2,7 @@
 id: f28-02-now-shows-resuming-without-a-button
 milestone: f28-the-first-time-i-clicked-on
 difficulty: 2
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/_partials/running.html
   - factory_dashboard/overview.py

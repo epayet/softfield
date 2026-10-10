@@ -2,7 +2,7 @@
 id: f63-01-desk-order
 milestone: f63-i-want-to-see-cards-in
 difficulty: 2
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/planning.py
   - factory_dashboard/templates/planning.html

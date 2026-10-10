@@ -2,7 +2,7 @@
 id: f69-01-theme-button
 milestone: f69-i-want-a-button-to-switch
 difficulty: 3
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/templates/base.html
   - factory_dashboard/static/dashboard.css

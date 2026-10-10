@@ -2,7 +2,7 @@
 id: f51-01-desk-counts-what-waits-on-you
 milestone: f51-when-a-plan-depends-on-an
 difficulty: 3
-depends_on: []
+depends_on: [f12-03-remove-review-probe]
 files:
   - factory_dashboard/planning.py
 tests:
