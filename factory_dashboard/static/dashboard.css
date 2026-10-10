@@ -410,6 +410,14 @@ tbody tr:hover { background: var(--accent-wash); }
 #crate-card .card-waits { margin-top: 6px; font-size: 12px; color: var(--ink-2); }
 #crate-card .card-waits::before { content: "after "; color: var(--muted); }
 #crate-card .card-close { display: none; }
+/* The seeds' card: the set-aside tickets, scrolling inside it when they are many (f9-25) */
+#crate-card .card-head { color: var(--muted); font-size: 12px; margin-right: 76px; }
+#crate-card .card-list { list-style: none; margin: 6px 0; padding: 0; max-height: 50vh;
+  overflow-y: auto; }
+#crate-card .card-list li { padding: 5px 0; border-top: 1px solid var(--rule); }
+#crate-card .card-list a, #crate-card .card-all { display: block; padding: 4px 0; }
+#crate-card .card-list .card-title { display: block; margin: 0; }
+[data-seeds], [data-crate], [data-merged] { cursor: pointer; }
 
 /* Phone: the card is a bottom sheet, full width, above the replay bar (f9-24) */
 @media (max-width: 639px) {
@@ -420,6 +428,7 @@ tbody tr:hover { background: var(--accent-wash); }
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     z-index: 6;
   }
+  #crate-card .card-head { min-height: 38px; }  /* the list starts under the Close button */
   #crate-card .card-close {
     display: block; position: absolute; top: 8px; right: 8px;
     min-width: 36px; min-height: 36px; padding: 6px 10px;

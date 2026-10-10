@@ -11,6 +11,7 @@ import json
 import re
 from datetime import datetime, timedelta, timezone
 from html import unescape
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
@@ -276,9 +277,87 @@ def test_the_field_rows_ripe_and_stash_match_the_milestones(line_db):
     assert [m["key"] for m in field["ripe"]] == ["f8"]
     assert [m["key"] for m in field["stash"]] == ["f7", "m4"]  # latest first
     assert (field["seeds"], field["planting"]) == (1, 0)  # f9-04, set aside
+    assert field["later"] == [{"ticket": "f9-04-later", "title": "Goal of f9-04-later."}]
     counts = {s["id"]: s["count"] for s in doc["stations"]}
     assert (counts["seeds"], counts["planting"], counts["rows"]) == (1, 0, 3)
     assert (counts["ripe"], counts["stash"], counts["merged"], counts["queue"]) == (1, 2, 2, 4)
+
+
+def planning_cards(db: Path, cards: list[tuple[str, str | None, bool, str | None]]) -> None:
+    """Each card as (key, state, a thread about it, a ticket of its own in that state)."""
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for key, state, thread, ticket in cards:
+            card = metrics.upsert_milestone(conn, project, key, title=key, state=state)
+            if thread:
+                metrics.planner_thread(conn, project, key.split("-")[0], NOW.isoformat())
+            if ticket:
+                name = f"{key.split('-')[0]}-01-own"
+                metrics.upsert_ticket(
+                    conn, project, name, milestone_id=card, state=ticket, title=f"Goal of {name}."
+                )
+    finally:
+        conn.close()
+
+
+def test_planting_counts_the_cards_being_planned_once_each(line_db):
+    """The owner, 2026-10-06: Planting said "0 in talks" whatever was being planned; the count
+    was a placeholder. A card building with a ticket of its own is past planting, thread or
+    not."""
+    planning_cards(
+        line_db,
+        [
+            ("f20-first-idea", "idea", False, None),
+            ("f21-second-idea", "idea", False, None),
+            ("f22-in-talks", "planning", True, None),  # its state and its thread: counted once
+            ("f23-building", "building", True, "done"),
+        ],
+    )
+    doc = document(line_db)
+    assert doc["field"]["planting"] == 3
+    assert {s["id"]: s["count"] for s in doc["stations"]}["planting"] == 3
+
+
+def test_a_thread_about_a_card_with_no_ticket_yet_is_planting(line_db):
+    """A thread is enough, whatever the card's state, until the card has a ticket; the general
+    thread is about no card, and an archived thread is no longer a talk."""
+    planning_cards(line_db, [("f24-asked-about", None, True, None)])
+    conn = metrics.open_db(line_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.planner_thread(conn, project, "general", NOW.isoformat())
+        metrics.planner_thread(conn, project, "f9", NOW.isoformat())  # f9 has tickets
+    finally:
+        conn.close()
+    assert document(line_db)["field"]["planting"] == 1
+    conn = metrics.open_db(line_db)
+    try:
+        thread = metrics.find_thread(conn, metrics.upsert_project(conn, PROJECT), "f24")
+        assert thread is not None
+        metrics.set_thread_archived(conn, thread["id"], NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+    assert document(line_db)["field"]["planting"] == 0
+
+
+def test_later_lists_the_set_aside_tickets_by_id_and_seeds_counts_them(line_db):
+    planning_cards(line_db, [("f23-building", "building", False, "later")])
+    conn = metrics.open_db(line_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-90-untitled", milestone_id=f1, state="later")
+    finally:
+        conn.close()
+    field = document(line_db)["field"]
+    assert field["later"] == [
+        {"ticket": "f1-90-untitled", "title": None},
+        {"ticket": "f9-04-later", "title": "Goal of f9-04-later."},
+        {"ticket": "f23-01-own", "title": "Goal of f23-01-own."},
+    ]
+    assert field["seeds"] == 3
 
 
 def test_a_card_ripens_only_once_its_review_is_written(line_db):
@@ -2001,9 +2080,110 @@ def test_the_card_reads_the_document_the_floor_drew_last(page, line_client):
     assert card.locator(".card-title").text_content() == "Queued later."
 
 
+def set_aside(page, later: list[dict[str, Any]]) -> None:
+    """Redraw the floor with ``later`` as the field's set-aside tickets."""
+    page.evaluate(
+        "(later) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  const cur = JSON.parse(el.textContent); "
+        "  const field = { ...cur.field, later, seeds: later.length }; "
+        "  el.textContent = JSON.stringify({ ...cur, field }); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        later,
+    )
+
+
+def test_tapping_the_seeds_on_a_phone_lists_the_set_aside_tickets_in_the_sheet(page, line_client):
+    """The owner, 2026-10-06: "the seeds set aside are not really navigable on mobile": the tap
+    left the floor for the whole tickets page. Now it opens the sheet, one link per ticket."""
+    page.clock.install()
+    open_line(page, line_client, PHONE, query="project=coucou")
+    later: list[dict[str, Any]] = [
+        {"ticket": "f9-04-later", "title": "Goal of f9-04-later."},
+        {"ticket": "f9-05-markup", "title": "Fix <b>x</b> & y"},
+        {"ticket": "f9-06-untitled", "title": None},
+    ]
+    set_aside(page, later)
+    page.locator('svg#floor-phone [data-station="seeds"]').click()
+    assert page.url == f"{ORIGIN}/?project=coucou"  # still on the floor
+    card = page.locator("#crate-card")
+    assert not card.is_hidden()
+    links = card.locator("a")
+    assert [links.nth(n).get_attribute("href") for n in range(links.count())] == [
+        "/tickets/f9-04-later?project=coucou",
+        "/tickets/f9-05-markup?project=coucou",
+        "/tickets/f9-06-untitled?project=coucou",
+        "/tickets?project=coucou#later",
+    ]
+    assert links.all_text_contents() == [
+        "f9-04-later",
+        "f9-05-markup",
+        "f9-06-untitled",
+        "All set-aside tickets",
+    ]
+    assert card.locator("li .card-title").all_text_contents() == [
+        "Goal of f9-04-later.",
+        "Fix <b>x</b> & y",  # as written: text, never markup (f3-F1)
+    ]
+    assert card.locator("b").count() == 0
+    box = card.bounding_box()
+    assert box is not None and box["y"] >= 0 and box["y"] + box["height"] <= PHONE["height"] + 1
+    # The sheet covers the floor, so the page's layout check can't run with it open: each
+    # link is on screen, on its own line, clear of the Close button.
+    close = page.locator("button.card-close").bounding_box()
+    boxes = [links.nth(n).bounding_box() for n in range(links.count())]
+    assert close is not None and all(b is not None for b in boxes)
+    for above, below in pairwise(boxes):
+        assert above["y"] + above["height"] <= below["y"] + 0.5
+    for b in boxes:
+        assert b["x"] >= 0 and b["x"] + b["width"] <= PHONE["width"] and b["height"] >= 24
+        assert b["y"] >= close["y"] + close["height"] or b["x"] + b["width"] <= close["x"]
+    # A refresh that changes the list changes the open sheet, and Close shuts it
+    set_aside(page, later[:1])
+    assert card.locator("li").count() == 1
+    page.click("button.card-close")
+    assert card.is_hidden()
+    set_aside(page, later)
+    assert card.is_hidden()
+
+
+def test_a_long_list_of_seeds_scrolls_inside_the_sheet(page, line_client):
+    page.clock.install()
+    open_line(page, line_client, {"width": 390, "height": 700})
+    set_aside(page, [{"ticket": f"f9-{n}-later", "title": f"Goal {n}."} for n in range(40, 100)])
+    page.locator('svg#floor-phone [data-station="seeds"]').click()
+    card = page.locator("#crate-card")
+    box = card.bounding_box()
+    assert box is not None and box["y"] >= 0 and box["y"] + box["height"] <= 701
+    last = card.locator("a", has_text="All set-aside tickets")
+    last.scroll_into_view_if_needed()
+    assert last.is_visible()
+    end = last.bounding_box()
+    assert end is not None and box["y"] <= end["y"] and end["y"] + end["height"] <= 701
+
+
+def test_the_seeds_card_keeps_markup_in_the_project_as_text(page, line_client):
+    """As the crate card's link (f3-F1): ``?project=`` is the address's, so it could hold markup."""
+    page.clock.install()
+    hostile = '"><img src=x onerror="window.pwned=1">'
+    open_line(page, line_client, query=urlencode({"project": hostile}))
+    set_aside(page, [{"ticket": "f9-04-later", "title": "Goal."}])
+    page.click('svg#floor [data-station="seeds"]')
+    card = page.locator("#crate-card")
+    assert card.locator("img").count() == 0
+    assert page.evaluate("() => window.pwned") is None
+    links = card.locator("a")
+    assert [links.nth(n).get_attribute("href") for n in range(links.count())] == [
+        f"/tickets/f9-04-later?{urlencode({'project': hostile})}",
+        f"/tickets?{urlencode({'project': hostile})}#later",
+    ]
+
+
 def test_planted_row_links_to_milestone_and_seeds_to_set_aside_tickets(page, line_client):
-    """Tapping a planted row opens its milestone's page, and tapping the seeds opens the Set aside
-    tickets. Both keep the page's ``?project=`` query, as the crate card's link does."""
+    """Tapping a planted row opens its milestone's page. The seeds open the card under the floor
+    (Enter too, and a click outside closes it), whose last link opens the Set aside tickets. Both
+    keep the page's ``?project=`` query, as the crate card's link does."""
     page.clock.install()
     open_line(page, line_client, query="project=coucou")
     page.wait_for_selector("svg#floor [data-row]")
@@ -2017,8 +2197,23 @@ def test_planted_row_links_to_milestone_and_seeds_to_set_aside_tickets(page, lin
     # Re-open the line page and click the seeds
     open_line(page, line_client, query="project=coucou")
     page.wait_for_selector("svg#floor [data-station='seeds']")
+    seeds = page.locator("svg#floor [data-station='seeds']")
+    card = page.locator("#crate-card")
+    seeds.focus()
+    seeds.press("Enter")
+    assert not card.is_hidden()
+    page.mouse.click(0, 0)
+    assert card.is_hidden()
+    seeds.click()
+    floor_box = page.locator("svg#floor").bounding_box()
+    card_box = card.bounding_box()
+    assert floor_box is not None and card_box is not None
+    assert card_box["y"] > floor_box["y"] + floor_box["height"]
+    assert card.locator("button.card-close").count() == 0
+    assert card.locator("li a").all_text_contents() == ["f9-04-later"]
+    assert card.locator("li a").get_attribute("href") == "/tickets/f9-04-later?project=coucou"
     with page.expect_navigation():
-        page.click('svg#floor a[href*="/tickets"]')
+        card.locator("a", has_text="All set-aside tickets").click()
     assert page.url == "http://127.0.0.1:8765/tickets?project=coucou#later"
 
 

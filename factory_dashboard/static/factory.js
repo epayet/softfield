@@ -125,11 +125,13 @@
   }
 
   // The seeds' hopper, `w` wide at its top; its words go under it, or `inside` its top.
+  // A tap opens the card listing them (`showSeeds`), as a crate's does.
   function seeds(svg, doc, count, x, y, w, inside = false) {
-    const query = project_query();
-    const link = make_link(svg, `/tickets${query}#later`);
-    add(link, "title", {}, "Set aside tickets");
-    const g = station(link, "seeds");
+    const g = station(svg, "seeds");
+    g.setAttribute("data-seeds", "");
+    g.setAttribute("tabindex", "0");
+    g.setAttribute("role", "button");
+    add(g, "title", {}, "Set-aside tickets");
     const h = 106, mid = x + w / 2;
     add(g, "path", { d: `M${x} ${y} L${x + w} ${y} L${x + w - 18} ${y + h} L${x + 18} ${y + h} Z`, class: "unit" });
     const spots = [[-15, 80], [3, 88], [19, 78], [-5, 66], [13, 60], [-23, 66], [27, 64], [5, 50]];
@@ -443,6 +445,7 @@
 
   let shownDoc = null;  // the document the floor last drew, live or replayed: the card's
   let cardCrate = null;  // the crate the card shows; null: closed. A redraw shows it again
+  const SEEDS = Symbol("seeds");  // as `cardCrate`: the card lists the set-aside tickets
 
   function drawFloor(doc) {
     const svg = document.getElementById("floor");
@@ -452,7 +455,8 @@
     if (narrow()) drawPhone(phone, doc);
     else draw(svg, doc);
     shownDoc = doc;
-    if (cardCrate) showCard(cardCrate);
+    if (cardCrate === SEEDS) showSeeds();
+    else if (cardCrate) showCard(cardCrate);
   }
 
   let drawn = null;  // the live document last drawn, and on which floor; null: draw it again
@@ -702,6 +706,10 @@
       parts.push(el("span", "card-ticket", info.role || "batch"));
       if (info.title) parts.push(el("div", "card-title", info.title));
     }
+    fillCard(card, parts);
+  }
+
+  function fillCard(card, parts) {
     card.replaceChildren(...parts);
     // Close button on phone (f9-24)
     if (narrow()) {
@@ -710,6 +718,26 @@
       card.append(close);
     }
     card.hidden = false;
+  }
+
+  // The seeds' card (f9-25): every set-aside ticket as a link, then the Tickets page's list.
+  function showSeeds() {
+    const card = document.getElementById("crate-card");
+    if (!card || !shownDoc) return;
+    cardCrate = SEEDS;
+    const query = project_query();
+    const list = el("ul", "card-list");
+    for (const seed of shownDoc.field.later || []) {
+      const item = el("li");
+      const link = el("a", "card-ticket", seed.ticket);
+      link.setAttribute("href", `/tickets/${encodeURIComponent(seed.ticket)}${query}`);
+      item.append(link);
+      if (seed.title) item.append(el("span", "card-title", seed.title));
+      list.append(item);
+    }
+    const all = el("a", "card-all", "All set-aside tickets");
+    all.setAttribute("href", `/tickets${query}#later`);
+    fillCard(card, [el("div", "card-head", `${plural(list.children.length, "ticket", "tickets")} set aside`), list, all]);
   }
 
   function hideCard() {
@@ -724,8 +752,9 @@
     if (crate) { showCard(crate.dataset.crate); return; }
     const merged = e.target.closest("[data-merged]");
     if (merged) { showCard(merged.dataset.merged); return; }
+    if (e.target.closest("[data-seeds]")) { showSeeds(); return; }
     const card = document.getElementById("crate-card");
-    if (card && !card.hidden && !card.contains(e.target) && !e.target.closest("[data-crate]") && !e.target.closest("[data-merged]")) hideCard();
+    if (card && !card.hidden && !card.contains(e.target)) hideCard();
   });
 
   // Keyboard: Enter opens, Escape closes
@@ -737,6 +766,7 @@
     if (crate) { e.preventDefault(); showCard(crate.dataset.crate); }
     const merged = e.target.closest("[data-merged]");
     if (merged) { e.preventDefault(); showCard(merged.dataset.merged); }
+    if (e.target.closest("[data-seeds]")) { e.preventDefault(); showSeeds(); }
   });
 
   drawAll(document);

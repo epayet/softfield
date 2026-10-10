@@ -13,7 +13,8 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
   ``carrying`` while a live job's crate came on it.
 - **The field**, until f3-08 brings the board's cards: rows are milestones with ready or
   running tickets, ripe ones have every ticket merged and wait for the owner's sign-off, the
-  stash holds signed-off ones, seeds are tickets set aside (``later``).
+  stash holds signed-off ones, seeds are tickets set aside (``later``, which lists them),
+  planting counts the cards being planned with the owner (``_planting``).
 - **Any moment** (f3-06): ``live_line(..., at=t)`` applies the same rules to the jobs whose
   times cover ``t`` (an unfinished one until its run's last heartbeat) and to each ticket's
   state then, rebuilt from its trips. ``replay`` is the document at ``since`` and every event
@@ -21,6 +22,7 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
 """
 
 import json
+import re
 import sqlite3
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -486,6 +488,26 @@ def _machines(
     return sorted(found, key=lambda m: MACHINE_STATIONS.index(m["station"]))
 
 
+def _natural(ticket: str) -> list[tuple[int, str]]:
+    """Sorts f9-04 before f23-01, and f9-4 before f9-10."""
+    return [(int(p), "") if p.isdigit() else (-1, p) for p in re.split(r"(\d+)", ticket)]
+
+
+def _planting(conn: sqlite3.Connection, project: str, rows: Iterable[sqlite3.Row]) -> set[str]:
+    """The cards being planned with the owner, by short key: an idea or a card in planning,
+    and any card an open thread is about that has no ticket yet. The general thread is about
+    no card."""
+    rows = list(rows)
+    ticketed = {short_key(r["key"]) for r in rows if r["ticket"]}
+    cards = {short_key(r["key"]) for r in rows if r["state"] in ("idea", "planning")}
+    threads = conn.execute(
+        "SELECT t.card FROM planner_threads t JOIN projects p ON p.id = t.project_id"
+        " WHERE p.name = ? AND t.archived IS NULL AND t.card != 'general'",
+        (project,),
+    )
+    return cards | {r["card"] for r in threads if r["card"] not in ticketed}
+
+
 def _field(
     conn: sqlite3.Connection, project: str, ticket_states: dict[str, str], at: datetime
 ) -> dict[str, Any]:
@@ -493,8 +515,8 @@ def _field(
     and its review is written (its sign-off sheet stored, F50 D1), in the stash once signed
     off."""
     rows = conn.execute(
-        "SELECT m.key, m.title, m.status, m.started, m.ended, m.signoff, t.ticket"
-        " FROM milestones m"
+        "SELECT m.key, m.title, m.status, m.state, m.started, m.ended, m.signoff, t.ticket,"
+        " t.title AS goal FROM milestones m"
         " JOIN projects p ON p.id = m.project_id LEFT JOIN tickets t ON t.milestone_id = m.id"
         " WHERE p.name = ?",
         (project,),
@@ -535,9 +557,12 @@ def _field(
         elif states and all(s == "done" for s in states):
             ripe.append(m)
     stash.sort(key=lambda m: _when(m["ended"]) if m["ended"] else _LONG_AGO, reverse=True)
+    later = sorted((t for t, state in ticket_states.items() if state == "later"), key=_natural)
+    goals = {r["ticket"]: r["goal"] for r in rows if r["ticket"]}
     return {
-        "seeds": sum(state == "later" for state in ticket_states.values()),
-        "planting": 0,
+        "seeds": len(later),
+        "later": [{"ticket": t, "title": goals.get(t)} for t in later],
+        "planting": len(_planting(conn, project, rows)),
         "rows": planted,
         "ripe": [{"key": m["key"], "title": m["title"]} for m in ripe],
         "stash": [{"key": m["key"], "title": m["title"], "ended": m["ended"]} for m in stash],
