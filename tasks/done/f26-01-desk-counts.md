@@ -29,3 +29,12 @@ Read `factory_dashboard/templates/planning.html` and `coming` and `desk` in `fac
 - the tests assert the exact heading text, and would fail on main
 - the listed `tests:` pass
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2434
+gate_failures: []
+tokens: 2214745
+```
