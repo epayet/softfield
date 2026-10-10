@@ -831,6 +831,45 @@ def test_a_phone_draws_every_station_with_its_crates_and_belts(page, line_client
     assert counted == f"merged · {merged} today"
 
 
+def test_phone_belts_with_say_show_their_word_and_count(page, line_client):
+    """On the phone, queue→developers reads "developer · N today", lead→checks reads
+    "lead's work · N today" and checks→lead reads "back to the lead · N today";
+    only seeds→planting reads "N today" (short)."""
+    open_line(page, line_client, PHONE)
+    doc = block(line_client.get("/").text)
+    for belt in doc["belts"]:
+        if belt["id"] == "queue→developers":
+            belt["today"] = 7
+        elif belt["id"] == "lead→checks":
+            belt["today"] = 3
+        elif belt["id"] == "checks→lead":
+            belt["today"] = 5
+    page.evaluate(
+        "(doc) => { "
+        "  const el = document.getElementById('factory-line'); "
+        "  el.textContent = JSON.stringify(doc); "
+        "  document.dispatchEvent(new CustomEvent('htmx:load', { detail: { elt: document } })); "
+        "}",
+        doc,
+    )
+    assert (
+        page.locator('svg#floor-phone [data-belt="queue→developers"] text').text_content()
+        == "developer · 7 today"
+    )
+    assert (
+        page.locator('svg#floor-phone [data-belt="lead→checks"] text').text_content()
+        == "lead's work · 3 today"
+    )
+    assert (
+        page.locator('svg#floor-phone [data-belt="checks→lead"] text').text_content()
+        == "back to the lead · 5 today"
+    )
+    seeds_planting = page.locator(
+        'svg#floor-phone [data-belt="seeds→planting"] text'
+    ).text_content()
+    assert " · " not in seeds_planting
+
+
 def test_a_phones_queue_holds_its_first_six_crates_in_run_order(page, line_client):
     doc = open_line(page, line_client, PHONE)
     crates = [dict(doc["queue"][0], ticket=f"f6-{n:02}-crate", number=n) for n in range(1, 10)]
