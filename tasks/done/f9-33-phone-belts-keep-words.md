@@ -31,3 +31,12 @@ Read `belt`, `PHONE_BELTS` and `drawPhone` in `factory_dashboard/static/factory.
 - a test checks the three belts' text from the document's count, and `test_no_phone_label_overlaps_another_or_leaves_its_station` passes unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5302
+gate_failures: ['task-tests', 'stopped']
+tokens: 1821704
+```
