@@ -34,3 +34,12 @@ Your branch already holds the whole change: both rows in the template print thei
 - assert within `#lead-window`, on its text with tags stripped and entities unescaped (`_text` in `tests/factory_dashboard/test_planning.py`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: needs-file
+attempts: 3
+tokens: 3191863
+logs: var/runs/20261010-085423/f32-01-lead-window-resets
+```
