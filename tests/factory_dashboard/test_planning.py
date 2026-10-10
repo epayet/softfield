@@ -1418,6 +1418,90 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
     assert _needs_you_count(client.get("/").text) == base_needs
 
 
+def test_coming_heading_shows_the_item_count(planning, db_path, serve):
+    """With two Coming items, the heading reads "Coming · 2"."""
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, value, created)"
+            " VALUES (?, 'plant', ?, ?)",
+            (
+                planning,
+                json.dumps({"title": "First idea", "thoughts": "One."}),
+                _at(timedelta(minutes=10)),
+            ),
+        ),
+    )
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+    html = _page(serve())
+    assert "Coming · 2" in _coming(html)
+
+
+def test_desk_heading_shows_the_planning_count(planning, db_path, serve):
+    """With items in several desk groups, the desk heading reads "Your desk · N" where N
+    equals the Planning tab's count on the same page."""
+    client = serve()
+    html = _page(client)
+    # The fixture has items in answers, proposals, ripe and seeds groups
+    planning_tab = re.search(
+        r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
+    )
+    count = int(planning_tab[1]) if planning_tab else 0
+    assert count > 0
+    assert f"Your desk · {count}" in html
+
+
+def test_empty_desk_heading_has_no_number_and_nothing_waits(tmp_path: Path, db_path):
+    """With an empty desk, the heading reads "Your desk" with no number and "Nothing waits
+    for you." still shows."""
+    from factory_dashboard.app import create_app, get_now
+
+    # Create a fresh database with only the project row (no desk items)
+    fresh_db = tmp_path / "empty.sqlite"
+    conn = metrics.open_db(fresh_db)
+    try:
+        metrics.upsert_project(conn, PROJECT)
+    finally:
+        conn.close()
+
+    app = create_app(fresh_db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+
+    response = client.get("/planning")
+    assert response.status_code == 200
+    html = response.text
+
+    # Desk heading without number
+    desk_section = re.search(r'<section id="desk"(.*?)</section>', html, re.S)
+    assert desk_section is not None
+    heading = re.search(r"<h2[^>]*>(.*?)</h2>", desk_section[1], re.S)
+    assert heading is not None
+    heading_text = unescape(re.sub(r"<[^>]+>", "", heading[1]))
+    # Should be "Your desk" with no " · " (no number)
+    assert heading_text == "Your desk"
+    # "Nothing waits for you." should still appear
+    assert "Nothing waits for you." in html
+
+
+def test_group_headings_get_no_number(planning, serve):
+    """The groups' own headings ("Your answers wanted", …) get no number."""
+    html = _page(serve())
+    groups = _groups(html)
+    for key in groups:
+        # Group headings should not contain " · " pattern like "Your desk · N"
+        group_div = groups[key]
+        h3_match = re.search(r"<h3[^>]*>(.*?)</h3>", group_div, re.S)
+        assert h3_match is not None
+        h3_text = unescape(re.sub(r"<[^>]+>", "", h3_match[1]))
+        assert " · " not in h3_text, f"group {key} heading has a number: {h3_text}"
+
+
 # --- archiving a thread (the owner, 2026-10-07) ---------------------------------------------
 
 

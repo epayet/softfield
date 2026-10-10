@@ -55,7 +55,7 @@
 
   {% if coming.items %}
   <section id="desk-coming" class="desk-coming" aria-label="Coming" style="flex: 999 1 420px; min-width: 0; background: var(--bay)">
-    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">Coming</h2>
+    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">Coming · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
     <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
       {% if item.link %}
@@ -75,7 +75,7 @@
   {% endif %}
 
   <section id="desk" aria-label="Your desk" style="flex: 999 1 420px; min-width: 0; background: var(--bay); border: 1px solid var(--rule)">
-    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk</h2>
+    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk{% if planning_count %} · {{ planning_count }}{% endif %}</h2>
     {% for group in groups if group.items %}
     <div id="desk-{{ group.key }}" style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
       <h3 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var({{ group.color }})">{{ group.name }}</h3>
