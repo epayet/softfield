@@ -1502,6 +1502,31 @@ def test_group_headings_get_no_number(planning, serve):
         assert " · " not in h3_text, f"group {key} heading has a number: {h3_text}"
 
 
+def test_desk_heading_leaves_out_what_is_on_its_way(planning, db_path, serve):
+    """D2: the heading counts what still waits for the owner, as the tab does. An item on its
+    way stays listed, dashed, and is counted no more."""
+
+    def heading_and_tab(html: str) -> tuple[str, str]:
+        heading = re.search(r'<section id="desk"[^>]*>\s*<h2[^>]*>(.*?)</h2>', html, re.S)
+        tab = re.search(r'id="planning-tab">(.*?)</a>', html, re.S)
+        assert heading and tab
+        return unescape(heading[1]), unescape(tab[1])
+
+    html = _page(serve())
+    cards = sum(len(re.findall(r"<a href=", group)) for group in _groups(html).values())
+    assert cards > 1
+    assert heading_and_tab(html) == (f"Your desk · {cards}", f"Planning · {cards}")
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "archive", "general", "on", NOW.isoformat()
+        ),
+    )
+    html = _page(serve(live=False))
+    assert sum(len(re.findall(r"<a href=", g)) for g in _groups(html).values()) == cards
+    assert heading_and_tab(html) == (f"Your desk · {cards - 1}", f"Planning · {cards - 1}")
+
+
 # --- archiving a thread (the owner, 2026-10-07) ---------------------------------------------
 
 

@@ -325,6 +325,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the metrics hid the checkpoints' work. A checkpoint files its findings under the milestone of the merge that queued it, so the four findings on F8's tickets went under F9, and F8's report said "Findings: none". The review fixed it (each finding goes under the milestone of the ticket at fault). Until then, per-milestone checkpoint numbers before F8 may be off where a checkpoint's merges spanned milestones. The review also found a re-check filter, added in F8 itself, that silently dropped real findings: a guard that duplicates a prompt instruction can cost more than the duplicates it prevents.
 - **Decisions affected:** none. ADR 22 holds as built.
 
+### F26 (2026-10-10): numbers on the desk ([review](../reviews/f26-i-want-to-see-numbers-next.md))
+
+- **Q1:** one developer ticket, first time, with no escalation, direction or checkpoint (it was the run's last merge, so only the review read it, as with f2-13).
+- **Q3:** Qwen 1 of 1 at difficulty 2: two template lines on a worked example in the same file, 41 min.
+- **Q5:** see the review's numbers; the ticket itself cost no Claude.
+- **Anything else:** the card went from the owner's note (2026-10-07) to an approved plan the next morning, then waited two days at priority 6 behind F9's line work: for a two-line change, the queue was the whole delay. The plan's D2 said "four groups" and "the sum of their items"; by the time it was built the desk had five groups and left out cards on their way. Reusing the tab's number made the code right anyway, where a sum written from the plan would have been wrong: point a ticket at the value to reuse, not at a recipe to recompute.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
