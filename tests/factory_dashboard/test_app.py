@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import re
 import sqlite3
 from datetime import timedelta
@@ -88,14 +89,38 @@ def test_no_page_or_stylesheet_names_a_third_party_host(client):
 
 
 def test_no_template_has_a_bare_static_link():
-    """Every /static/ link in the listed templates carries ``?v=`` (f48)."""
+    """Every /static/ link in a template, the partials too, goes through ``static`` (F48 D4)."""
     bare = re.compile(r'/static/[^"\'>]')
-    for template in (
-        STATIC.parent / "templates" / p
-        for p in ("base.html", "thread.html", "proposal.html", "line.html", "overview.html")
-    ):
+    found = sorted((STATIC.parent / "templates").rglob("*.html"))
+    assert len(found) > 5
+    for template in found:
         html = template.read_text()
         assert bare.search(html) is None, f"{template.name} has a bare /static/ link"
+
+
+def test_a_static_links_version_follows_the_files_content(tmp_path, monkeypatch, client):
+    """F48 D4: the version is the content's hash, so a file rewritten while the server runs is
+    a new URL and an unchanged one keeps its own; a path that isn't a file fails the render."""
+    link = app_module.static("dashboard.css")
+    assert re.fullmatch(r"/static/dashboard\.css\?v=[0-9a-f]{10}", link)
+    assert client.get(link).content == (STATIC / "dashboard.css").read_bytes()
+    monkeypatch.setattr(app_module, "HERE", tmp_path)
+    monkeypatch.setattr(app_module, "_static_cache", {})
+    (tmp_path / "static").mkdir()
+    one, other = tmp_path / "static" / "one.css", tmp_path / "static" / "other.css"
+    one.write_text("a")
+    other.write_text("b")
+    first = app_module.static("one.css")
+    assert first == f"/static/one.css?v={hashlib.sha256(b'a').hexdigest()[:10]}"
+    assert app_module.static("one.css") == first
+    assert app_module.static("other.css").partition("?")[2] != first.partition("?")[2]
+    one.write_text("changed")
+    os.utime(one, (1, one.stat().st_mtime + 1))  # a later write, whatever the clock's grain
+    assert app_module.static("one.css") == (
+        f"/static/one.css?v={hashlib.sha256(b'changed').hexdigest()[:10]}"
+    )
+    with pytest.raises(FileNotFoundError):
+        app_module.static("missing.css")
 
 
 FONTS = {  # family -> the weights the mock-ups use (f5-14)

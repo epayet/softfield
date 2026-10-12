@@ -349,6 +349,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** two findings of one kind. The milestone gave an existing thing a new meaning and one older reader or writer of it wasn't told: Reject settled a merge, but Approve plan still applied every merge of the thread; "the latest list of proposals" began to decide which buttons show and when a thread closes, but the planner prompt still asked for only the proposals changed this turn. When a ticket changes what a stored field means, its Context should name every reader and writer of that field, the prompts among them. The start tag was five days and 309 files old, so the review read the card's commits, not the milestone diff.
 - **Decisions affected:** none.
 
+### F48 (2026-10-13): Try again plants a note, once ([review](../reviews/f48-the-didnt-go-through-cards-try.md))
+
+- **Q1:** two tickets, both first time: one by Qwen, one by a headless lead job whose branch was landed by hand after a red main. One checkpoint, no finding. No escalation or direction.
+- **Q3:** Qwen 1 of 1 at difficulty 2 (a Jinja global and five templates, 35 min); its tests covered two of the ticket's five Done-when lines, and the checkpoint passed them.
+- **Q5:** see the review's numbers.
+- **Anything else:** about an hour of building took four days to land: two and a half waiting for the weekly reserve, then a red main. It is the third review running (F26, F12, F48) where the review, not the checkpoint, found the missing test: a checkpoint should be given the ticket's Done-when lines and asked for the test behind each.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
