@@ -966,7 +966,6 @@ def test_two_ideas_planted_at_one_pick_take_two_keys(repo):
     [
         (None, "an idea", "a plant request is JSON with a title, its thoughts and an area"),
         (None, _plant("x", area="garden"), "an idea's area is factory or product, not 'garden'"),
-        (None, _plant("Planning room"), "planning-room is a card already: f6-planning-room"),
         (
             None,
             _plant("**State:** done"),
@@ -1038,8 +1037,9 @@ def test_approving_a_general_threads_seed_plants_it_the_same_way(repo):
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
     assert _for_the_lead(repo) == []  # the lead wrote the seed: nothing to answer
     again = _ask(repo, "plant", "general/seed-1")
-    _apply(repo)
-    assert _request(repo, again)[1] == ("parallel-planners is a card already: f7-parallel-planners")
+    _apply(repo)  # F48 D1: the card holds the seed's words, so nothing is written
+    assert _request(repo, again)[1] == "planted already: docs/milestones/f7-parallel-planners.md"
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
 
 
 # --- archiving a thread (the owner, 2026-10-07) ---------------------------------------------

@@ -35,3 +35,11 @@ Read `docs/milestones/f48-the-didnt-go-through-cards-try.md` (the Notes say what
 result: blocked
 reason: check-all failed; the work is on task/f48-01-retry-plants-once
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: its work from task/f48-01-retry-plants-once, landed in a terminal session on 2026-10-12 once check-all passed again
+```

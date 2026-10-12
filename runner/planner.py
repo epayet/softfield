@@ -433,10 +433,23 @@ def seed_area(value: object) -> str:
     return "factory" if value in (None, "") else _area(_plant_data(value))
 
 
+def _notes(thoughts: str) -> str:
+    return re.sub(r"^>", r"\\>", thoughts, flags=re.MULTILINE)
+
+
+def holds(doc: str, title: str, thoughts: str) -> bool:
+    """Whether a card's doc holds a note's words already (F48 D1): its title, and its thoughts
+    as ``seed_card`` writes them, whitespace collapsed. A cut title's ellipsis isn't the
+    owner's: the lead may have named the card since."""
+    text = " ".join(doc.split())
+    words = (title.removesuffix("…"), _notes(thoughts))
+    return all(" ".join(said.split()) in text for said in words)
+
+
 def seed_card(key: str, title: str, thoughts: str, area: str, note: str) -> str:
     """A planted card's milestone doc: an idea at the default priority, the owner's words
     under Notes. A quoted line in them is escaped: a sign-off is read from one anywhere."""
-    notes = re.sub(r"^>", r"\\>", thoughts, flags=re.MULTILINE) or "(none)"
+    notes = _notes(thoughts) or "(none)"
     header = f"> **State:** {IDEA} · **Priority:** {DEFAULT_PRIORITY} · **Area:** {area}"
     said = f"\n> {note}" if note else ""
     return f"# Milestone {key.upper()}: {title}\n\n{header}{said}\n\n## Notes\n{notes}\n"

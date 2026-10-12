@@ -1465,6 +1465,109 @@ def test_refused_means_done_without_its_kinds_worked_result(kind, done, result, 
     assert requests.refused(row) is refused
 
 
+# --- a taken name never refuses a note (F48 D1), and `again` is the desk's alone (D2) --------
+
+DUCKS_CARD = (
+    "# Milestone F3: Rubber ducks\n\n> **State:** ready · **Priority:** 2 · **Area:** factory\n\n"
+    "## Notes\nYellow ones.\nFor Mum.\n\\> not a sign-off\n\n## Outcome\n- A duck on the key.\n"
+)
+SAME_DUCKS = "Yellow  ones.\n\nFor Mum.\n> not a sign-off"  # as the owner typed them again
+
+
+def _ducks(repo: Path) -> str:
+    """F3's card on main, planned since its note was planted; main's head."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "f3-rubber-ducks.md").write_text(DUCKS_CARD)
+    git(repo, "add", "docs")
+    git(repo, "commit", "-q", "-m", "f3")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def _idea(title: str, thoughts: str = "", **more: object) -> str:
+    return json.dumps({"title": title, "thoughts": thoughts, **more})
+
+
+def test_a_note_whose_slug_a_card_has_with_other_words_plants_a_second_card(repo):
+    """Two notes that only start alike: each its own card, `-2` then `-3`, asked about too."""
+    _ducks(repo)
+    second = _ask(repo, "plant", None, _idea("Rubber ducks", "Blue ones this time."))
+    third = _ask(repo, "plant", None, _idea("Rubber ducks", "And a red one?", ask=True))
+    _apply(repo)
+    assert _request(repo, second)[1] == "planted docs/milestones/f4-rubber-ducks-2.md"
+    assert _request(repo, third)[1] == (
+        "planted docs/milestones/f5-rubber-ducks-3.md, queued for the lead"
+    )
+    assert not requests.refused(_row(repo, second)) and not requests.refused(_row(repo, third))
+    milestones = repo / "docs" / "milestones"
+    assert (milestones / "f3-rubber-ducks.md").read_text() == DUCKS_CARD  # the taken card stays
+    assert (
+        (milestones / "f4-rubber-ducks-2.md")
+        .read_text()
+        .endswith("## Notes\nBlue ones this time.\n")
+    )
+    assert (milestones / "f5-rubber-ducks-3.md").read_text().endswith("## Notes\nAnd a red one?\n")
+    assert [m["text"] for m in _thread(repo, "f5")] == ["Rubber ducks\n\nAnd a red one?"]
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+@pytest.mark.parametrize(
+    ("value", "stem"),
+    [
+        (_idea("Rubber ducks", SAME_DUCKS, ask=True), "f3-rubber-ducks"),
+        (_idea("Rubber ducks"), "f3-rubber-ducks"),  # a title alone, and the card holds it
+        (_idea("Rubber ducks", "Blue ones this time."), "f4-rubber-ducks-2"),  # the second card's
+    ],
+)
+def test_the_same_words_again_are_planted_already_and_write_nothing(repo, value, stem):
+    """A retried note that was planted in the meantime: its card is named, nothing is written,
+    no message is sent, and the result is a worked one, so it never lands on the desk."""
+    _ducks(repo)
+    _ask(repo, "plant", None, _idea("Rubber ducks", "Blue ones this time."))
+    _apply(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "plant", None, value)
+    assert _apply(repo) == [f"plant: planted already: docs/milestones/{stem}.md"]
+    assert _request(repo, asked) == (NOW.isoformat(), f"planted already: docs/milestones/{stem}.md")
+    assert not requests.refused(_row(repo, asked))
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    assert sorted(p.name for p in (repo / "docs" / "milestones").glob("*.md")) == [
+        "f3-rubber-ducks.md",
+        "f4-rubber-ducks-2.md",
+    ]
+    assert _queued(repo) == []
+
+
+def test_a_one_box_note_cut_for_its_heading_is_planted_already_under_another_title(repo):
+    """F31 D7: the lead names the card, so the cut heading is gone from it; the note's words
+    under Notes still say it is the same note."""
+    note = "The didnt go through cards try again " + "and again " * 8 + "until they are dismissed."
+    _ducks(repo)
+    _ask(repo, "plant", None, json.dumps({"text": note}))
+    [line] = _apply(repo)
+    rel = line.removeprefix("plant: planted ")
+    doc = (repo / rel).read_text()
+    title = doc.splitlines()[0]
+    assert title.endswith("…")
+    (repo / rel).write_text(doc.replace(title, "# Milestone F4: Try again plants a note, once"))
+    git(repo, "commit", "-q", "-am", "the lead names the card")
+    asked = _ask(repo, "plant", None, json.dumps({"text": note, "again": "1"}))
+    _apply(repo)
+    assert _request(repo, asked)[1] == f"planted already: {rel}"
+
+
+def test_the_runner_reads_nothing_from_again(repo):
+    """F48 D2: the retried request's id rides in the value for the desk; a plant and a message
+    carrying it are applied as any other."""
+    _ducks(repo)
+    planted = _ask(repo, "plant", None, _idea("Parallel planners", again="7"))
+    said = _ask(repo, "plan_message", "f3", json.dumps({"text": "Go.", "again": "8"}))
+    _apply(repo)
+    assert _request(repo, planted)[1] == "planted docs/milestones/f4-parallel-planners.md"
+    assert _request(repo, said)[1] == "queued for the lead"
+    assert [m["text"] for m in _thread(repo, "f3")] == ["Go."]
+
+
 # --- a `replan` edits its running milestone's ready tickets (f6-13) ----------------------------
 
 BUILDING = CARD.replace("planning", "building")

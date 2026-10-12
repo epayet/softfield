@@ -258,9 +258,32 @@ def _plant_note(value: object, words: Words) -> str:
         return "\n\n".join(filter(None, [words.title, words.text]))
 
 
+def _retried(conn: sqlite3.Connection, project_id: int) -> set[int]:
+    """The requests a later one with the owner's words names as ``again`` (F48 D2): Try again
+    sent their words anew, and that retry, pending or done, stands for them."""
+    rows = conn.execute(
+        "SELECT id, value FROM owner_requests WHERE project_id = ? AND kind IN (?, ?, ?)",
+        (project_id, *WORDS),
+    ).fetchall()
+    found = set()
+    for r in rows:
+        try:
+            data = json.loads(r["value"] or "")
+        except json.JSONDecodeError:
+            continue
+        named = data.get("again") if isinstance(data, dict) else None
+        if type(named) is int:
+            named = str(named)
+        if not (isinstance(named, str) and named.isascii() and named.isdigit()):
+            continue
+        if len(named) <= _MAX_REQUEST_ID and int(named) < r["id"]:
+            found.add(int(named))
+    return found
+
+
 def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) -> list[DeskItem]:
     """The owner's words the runner refused (F31 D9), until they dismiss them: a dismiss on
-    its way takes one off at once."""
+    its way takes one off at once, and so does a retry (``_retried``)."""
     rows = conn.execute(
         "SELECT * FROM owner_requests WHERE project_id = ? AND done IS NOT NULL"
         " AND dismissed IS NULL AND kind IN (?, ?, ?) ORDER BY id",
@@ -273,10 +296,11 @@ def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) 
             (project_id, DISMISS),
         ).fetchall()
     }
+    retried = _retried(conn, project_id)
     items: list[DeskItem] = []
     for r in rows:
         words = owners_words(r)
-        if words is None or not refused(r) or str(r["id"]) in dismissing:
+        if words is None or not refused(r) or str(r["id"]) in dismissing or r["id"] in retried:
             continue
         if r["kind"] == PLANT:
             title, again = words.title or "Your idea", ""
@@ -784,13 +808,15 @@ _MAX_REQUEST_ID = 12
 
 def _again(conn: sqlite3.Connection, project_id: int | None, thread: str, again: str) -> str:
     """The words of the refused message ``again`` names, for the thread's reply box; "" for
-    anything else."""
+    anything else, and for one retried already (F48 D2)."""
     if project_id is None or not (again.isascii() and again.isdigit()):
         return ""
     if len(again) > _MAX_REQUEST_ID:
         return ""
     row = metrics.find_request(conn, int(again))
     if row is None or row["project_id"] != project_id or row["kind"] == PLANT:
+        return ""
+    if row["id"] in _retried(conn, project_id):
         return ""
     words = owners_words(row)
     if words is None or not refused(row) or _message_thread(row) != thread:
@@ -849,13 +875,15 @@ def thread_page(
             points = [{"n": n, "comment": c} for n, c in comments.items()]
             messages.append(Message("owner", req["created"], text, points, False, waiting=True))
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
+    words = _again(conn, project_id, thread, again)
     return render(
         request,
         conn,
         project,
         "thread.html",
         {
-            "again": _again(conn, project_id, thread, again),
+            "again": words,
+            "again_id": str(int(again)) if words else "",  # the reply's hidden field (F48 D2)
             "active": "/planning",
             "thread": thread,
             "card_title": title,

@@ -59,7 +59,9 @@ _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
 _PLAIN = ("100644", "100755", "000000")  # a draft's mode: a file, or none (deleted)
 _MAX_DIFF = 1000  # parse_task needs one; pre-flight doesn't read it
-WORDS = (PLANT, PLAN_MESSAGE, SEND_BACK)  # the kinds that carry the owner's words (F31 D9)
+# The kinds that carry the owner's words (F31 D9). Their value may name, as `again`, the refused
+# request Try again sent anew (F48 D2): the desk reads it, the runner doesn't.
+WORDS = (PLANT, PLAN_MESSAGE, SEND_BACK)
 # Each one's result when it worked (F6 D1's table): any other is a refusal
 _WORKED = {PLANT: "planted ", PLAN_MESSAGE: QUEUED_FOR_THE_LEAD, SEND_BACK: QUEUED_FOR_THE_LEAD}
 _MAX_REQUEST_ID = 12
@@ -660,7 +662,8 @@ def _plant(
 ) -> str:
     """Write the idea's seed card and commit it alone (f6 D5): the next free key in its
     area's series, the slug from its title, the owner's words under Notes. No Claude, so it
-    goes on at a limit. The board has the card at once."""
+    goes on at a limit. The board has the card at once. The value's ``again`` (F48 D2) is the
+    desk's: nothing here reads it."""
     subject, value = row["subject"], row["value"]
     if subject:
         title, thoughts, source = _seed(conn, project_id, str(subject))
@@ -668,9 +671,16 @@ def _plant(
     else:
         title, thoughts, area = planner.planting(value)
         source = ""
-    name = planner.slug(title)
-    if (taken := planner.card_named(repo, name)) is not None:
-        return f"{name} is a card already: {taken}"
+    # A taken slug is no refusal (F48 D1): the same words again are planted already, and a
+    # note that only starts like a card takes the slug's first free -2, -3, …
+    slug = name = planner.slug(title)
+    n = 1
+    while (taken := planner.card_named(repo, name)) is not None:
+        there = repo / "docs" / "milestones" / f"{taken}.md"
+        if planner.holds(there.read_text(encoding="utf-8"), title, thoughts):
+            return f"planted already: {there.relative_to(repo).as_posix()}"
+        n += 1
+        name = f"{slug}-{n}"
     key = planner.next_key(repo, area)
     full = f"{key}-{name}"
     note = " ".join(filter(None, [f"Planted by the owner on {now.date().isoformat()}", source]))

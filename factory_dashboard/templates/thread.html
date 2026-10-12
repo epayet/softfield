@@ -123,8 +123,10 @@
     <p id="waiting" style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted)">Next for the lead · {{ next_reply }}</p>
     {% else %}
     <form id="reply" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
-      hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim()))})}'
+      hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim())), again: this.elements.again.value || undefined})}'
       class="dock" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      {# F48 D2: the refused message Try again brought here; the send names it, once #}
+      <input type="hidden" name="again" value="{{ again_id }}">
       {% if points %}<span id="progress" data-points="{{ points }}" style="font: 12px var(--mono); color: var(--muted)">{{ points }} points · 0 comments</span>{% endif %}
       <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted)">{{ "Anything else? A question, a new thought" if has_thread else "What should the lead look at? It reads the card too." }}
         <textarea name="text" rows="2" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ again }}</textarea>
@@ -141,8 +143,13 @@
         const n = Array.from(document.querySelectorAll("textarea.comment")).filter(t => t.value.trim()).length;
         progress.textContent = `${progress.dataset.points} points · ${n} comment${n === 1 ? "" : "s"}`;
       });
+      // The box emptied: what comes next is a new message, and the refused one keeps its card
+      document.getElementById("reply").elements.text.addEventListener("input", (event) => {
+        if (!event.target.value.trim()) event.target.form.elements.again.value = "";
+      });
       document.getElementById("reply").addEventListener("htmx:afterRequest", (event) => {
         if (event.detail.successful) {
+          if (event.detail.elt === event.currentTarget) event.currentTarget.elements.again.value = "";
           setTimeout(() => {
             htmx.ajax("GET", window.location.href, {
               target: "#conversation",

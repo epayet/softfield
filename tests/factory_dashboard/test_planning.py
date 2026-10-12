@@ -299,7 +299,8 @@ def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve, bu
     """Planting asks the runner: a ``plant`` request, no subject, the note's one box (F31 D7);
     "Plant and ask the lead" also sends it to the lead, "Plant" doesn't (the owner, 2026-10-08)."""
     _open(page, serve())
-    assert page.locator("#plant input, #plant textarea").count() == 2  # the box, the hidden ask
+    # the box, the hidden ask, and the hidden again: empty, so the value doesn't carry it
+    assert page.locator("#plant input, #plant textarea").count() == 3
     page.fill('#plant textarea[name="text"]', 'Memory "drift" on the frame\nIt forgets.')
     page.click(button)
     page.wait_for_selector("#plant-status >> text=Asked")
@@ -1801,6 +1802,160 @@ def test_dismiss_takes_the_item_off_at_once_and_a_reload_keeps_it_off(
         conn.close()
     page.reload()
     assert page.locator(f"#refused-{asked}").count() == 0
+
+
+# --- Try again carries what it retries: one card per note (F48 D2) ---------------------------
+
+
+def _retry(value: str, again: object) -> str:
+    return json.dumps({**json.loads(value), "again": again})
+
+
+MESSAGE = json.dumps({"text": "Make it calm.", "comments": {}})
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "why", "retried_as"),
+    [
+        ("plant", None, DUCKS, TAKEN, "plant"),
+        ("plan_message", "f6", MESSAGE, "the thread is gone", "plan_message"),
+        ("send_back", "f6/plan", MESSAGE, "F6 has no proposal plan", "plan_message"),
+        ("send_back", "f6/plan", MESSAGE, "F6 has no proposal plan", "send_back"),
+    ],
+)
+@pytest.mark.parametrize("again", [str, int], ids=["as the form sends it", "a number"])
+def test_a_retried_request_leaves_the_desk_and_a_retry_refused_shows_alone(
+    planning, db_path, serve, kind, subject, value, why, retried_as, again
+):
+    """Pending, the retry stands for the refused request it names; refused too, it shows as
+    the one card for the note; worked, neither shows."""
+    other = _finished(db_path, planning, "plant", None, DUCKS, "an idea has a title, on one line")
+    asked = _finished(db_path, planning, kind, subject, value, why)
+    assert list(_refused_items(_page(serve()))) == [str(other), str(asked)]
+    to = subject if retried_as == "send_back" else subject and "f6"
+    retry = _finished(db_path, planning, retried_as, to, _retry(value, again(asked)), None)
+    assert list(_refused_items(_page(serve()))) == [str(other)]
+    _write(db_path, lambda conn: metrics.finish_request(conn, retry, NOW.isoformat(), why))
+    assert list(_refused_items(_page(serve()))) == [str(other), str(retry)]
+    # the retry dismissed: the note it stood for stays off the desk
+    _write(db_path, lambda conn: metrics.dismiss_request(conn, retry, NOW.isoformat()))
+    assert list(_refused_items(_page(serve()))) == [str(other)]
+
+
+@pytest.mark.parametrize(
+    ("kind", "value"),
+    [
+        ("plant", lambda asked: _retry(DUCKS, asked + 1)),  # another request's retry
+        ("plant", lambda asked: _retry(DUCKS, f"{asked} ")),
+        ("plant", lambda asked: _retry(DUCKS, [asked])),
+        ("plant", lambda asked: _retry(DUCKS, True)),
+        ("plant", lambda asked: f"again {asked}"),
+        ("plant", lambda asked: json.dumps([{"again": asked}])),
+        ("dismiss", lambda asked: json.dumps({"again": asked})),  # not a kind with words
+    ],
+)
+def test_only_a_request_naming_it_as_again_takes_a_refused_one_off(
+    planning, db_path, serve, kind, value
+):
+    asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    _finished(db_path, planning, kind, None, value(asked), "x" if kind == "dismiss" else None)
+    assert str(asked) in _refused_items(_page(serve()))
+
+
+def test_an_earlier_or_another_projects_request_takes_nothing_off(planning, db_path, serve):
+    """``again`` names a request made before it, in its own project: a value can't hide a
+    refusal that comes later, or another project's."""
+    found: list[int] = []
+    _write(db_path, lambda conn: found.append(metrics.upsert_project(conn, "elsewhere")))
+    early = _finished(db_path, planning, "plant", None, _retry(DUCKS, "3"), None)
+    theirs = _finished(db_path, found[0], "plant", None, _retry(DUCKS, "3"), None)
+    asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    assert (early, theirs, asked) == (1, 2, 3)
+    assert list(_refused_items(_page(serve()))) == [str(asked)]
+
+
+def _reply_box(html: str) -> tuple[str, str]:
+    """The reply form's hidden ``again`` and the words waiting in its box."""
+    form = html.split('<form id="reply"', 1)[1].split("</form>", 1)[0]
+    again = re.search(r'<input type="hidden" name="again" value="([^"]*)">', form)
+    box = re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', form, re.S)
+    assert again and box
+    return again[1], unescape(box[1])
+
+
+def test_the_reply_form_carries_the_refused_message_it_retries_until_it_is_retried(
+    planning, db_path, serve
+):
+    asked = _finished(db_path, planning, "plan_message", "f6", MESSAGE, "the thread is gone")
+    client = serve()
+    assert _reply_box(_thread(client, "f6")) == ("", "")
+    assert _reply_box(_thread(client, f"f6?again={asked}")) == (str(asked), "Make it calm.")
+    # one that isn't a refused message of this thread's names nothing
+    assert _reply_box(_thread(client, f"f6?again={asked + 5}")) == ("", "")
+    assert _reply_box(_thread(client, f"general?again={asked}")) == ("", "")
+    # retried, and that retry refused: the old link's words are no longer waiting
+    _finished(db_path, planning, "plan_message", "f6", _retry(MESSAGE, str(asked)), "still gone")
+    assert _reply_box(_thread(client, f"f6?again={asked}")) == ("", "")
+
+
+def _values(db_path: Path, kind: str) -> list[dict[str, Any]]:
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT value FROM owner_requests WHERE kind = ? ORDER BY id", (kind,))
+        return [json.loads(r["value"]) for r in rows]
+    finally:
+        conn.close()
+
+
+def test_try_again_then_plant_sends_one_retry_and_its_card_leaves_at_once(
+    page, planning, db_path, serve
+):
+    """The retry names the request it retries; its card goes with the send, the other stays;
+    the next plant from the same form is a note of its own."""
+    asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    kept = _finished(db_path, planning, "plant", None, DUCKS, "an idea has a title, on one line")
+    _open(page, serve())
+    page.click(f"#again-{asked}")
+    assert page.input_value('#plant input[name="again"]') == str(asked)
+    page.click("#plant-only")
+    page.wait_for_selector("#plant-status >> text=Asked")
+    page.wait_for_selector(f"#refused-{asked}", state="detached")
+    assert page.locator(f"#refused-{kept}").is_visible()
+    assert page.input_value('#plant input[name="again"]') == ""
+    words = {"text": "Rubber ducks\n\nYellow ones.\nFor Mum.", "ask": False}
+    assert _values(db_path, "plant")[2:] == [{**words, "again": str(asked)}]
+    page.fill('#plant textarea[name="text"]', "Another thought")
+    page.click("#plant-only")
+    for _ in range(50):  # until the second plant is written
+        if len(_values(db_path, "plant")) == 4:
+            break
+        page.wait_for_timeout(100)
+    assert _values(db_path, "plant")[3:] == [{"text": "Another thought", "ask": False}]
+    page.reload()
+    assert page.locator(f"#refused-{asked}").count() == 0
+    assert page.locator(f"#refused-{kept}").is_visible()
+
+
+def test_the_last_retried_card_takes_its_group_with_it(page, planning, db_path, serve):
+    asked = _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    _open(page, serve())
+    page.click(f"#again-{asked}")
+    page.click("#plant-ask")
+    page.wait_for_selector("#desk-refused", state="detached")
+    assert page.locator("#desk-seeds").is_visible()
+
+
+def test_a_message_retried_from_its_reply_box_names_what_it_retries(page, planning, db_path, serve):
+    asked = _finished(db_path, planning, "plan_message", "f6", MESSAGE, "the thread is gone")
+    client = serve()
+    _open(page, client, f"/planning/f6?again={asked}")
+    assert page.input_value('#reply textarea[name="text"]') == "Make it calm."
+    page.click('#reply button[type="submit"]')
+    page.wait_for_selector("#reply", state="hidden")
+    assert _values(db_path, "plan_message")[1:] == [
+        {"text": "Make it calm.", "comments": {}, "again": str(asked)}
+    ]
+    assert _refused_items(_page(client)) == {}
 
 
 # --- a finished card shows its review, and Sign off (F50) ------------------------------------
