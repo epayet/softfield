@@ -27,3 +27,9 @@ Read `docs/milestones/f21-lead-briefs.md` (D3) and `docs/agents/owner.md`.
 - the diff removes only explanations, examples and history, never a "do" or "don't"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the lead ticket changed nothing
+```
