@@ -40,6 +40,9 @@ MERGE = "merge"  # a card that repeats another, closed into it once approved (f6
 APPLIED = "applied"  # a merge the runner applied after the job: no button (F49 D1)
 REPLAN = "replan"  # a running milestone redirected: it may change its ready tickets (f6-13)
 PROPOSAL_KINDS = ("adr", "mockup", "plan", "seed", REPLAN, MERGE)
+# What a point leads to (F31 D4): `info` asks nothing of the owner, `question` wants their answer
+OUTCOMES = ("info", "ticket", "adr", "mockup", "roadmap", MERGE, "question")
+_MAX_CARD_TITLE = 80  # the title the lead gives a card still an idea (F31 D7)
 _MAX_KEY = 64
 _BLOCK_RE = re.compile(r"```json[ \t]*\n(.*?)\n?```", re.DOTALL)
 
@@ -51,12 +54,15 @@ class PlannerError(ValueError):
 @dataclass(frozen=True)
 class Reply:
     """A planner job's reply: its free text, and the block's points and proposals. ``note``
-    says why there are none when the block was missing or broken."""
+    says why there are none when the block was missing or broken. ``title`` is the block's
+    name for a card still an idea (F31 D7); ``ignored`` says why when it can't be one."""
 
     text: str
     points: tuple[dict[str, Any], ...] = ()
     proposals: tuple[dict[str, Any], ...] = ()
     note: str | None = None
+    title: str | None = None
+    ignored: str | None = None
 
 
 def thread_key(subject: object) -> str:
@@ -683,20 +689,48 @@ def prompt(
 
 
 def parse_reply(text: str, known: Collection[str] = ()) -> Reply:
-    """A reply's free text and its last ``json`` block's points and proposals (f6 D2). A
-    ``merge`` must name ``known`` cards (``cards``). A reply whose block is missing or broken
-    is all text, with a note saying why."""
+    """A reply's free text and its last ``json`` block's points and proposals (f6 D2), with
+    the block's ``title`` if it gives one (F31 D7). A ``merge`` must name ``known`` cards
+    (``cards``). A reply whose block is missing or broken is all text, with a note saying
+    why."""
     whole = text.strip()
     blocks = list(_BLOCK_RE.finditer(whole))
     if not blocks:
         return Reply(whole, note="the reply has no json block, so its points weren't read")
     block = blocks[-1]
     try:
-        points, proposals = _checked(block[1], known)
+        points, proposals, given = _checked(block[1], known)
     except PlannerError as exc:
         return Reply(whole, note=f"the reply's json block was not read: {exc}")
     around = [whole[: block.start()].strip(), whole[block.end() :].strip()]
-    return Reply("\n\n".join(part for part in around if part), points, proposals)
+    title, ignored = _title(given)
+    said = "\n\n".join(part for part in around if part)
+    return Reply(said, points, proposals, title=title, ignored=ignored)
+
+
+def _title(given: object) -> tuple[str | None, str | None]:
+    """The block's ``title`` as a card's heading (F31 D7), or why it is ignored: not text, on
+    several lines or over 80 characters. The block is read either way."""
+    if given is None:
+        return None, None
+    if not isinstance(given, str):
+        return None, "the reply's title is not text, so it was ignored"
+    title = given.strip()
+    if len(title.splitlines()) > 1 or len(title) > _MAX_CARD_TITLE:
+        limit = f"one line of at most {_MAX_CARD_TITLE} characters"
+        return None, f"the reply's title is not {limit}, so it was ignored"
+    return title or None, None
+
+
+_CARD_HEADING_RE = re.compile(r"# Milestone \w+: ")
+
+
+def named_card(doc: str, title: str) -> str | None:
+    """A card's milestone doc with ``title`` in its heading (F31 D7): its first line,
+    ``# Milestone F32: <title>``, and nothing else. None when it doesn't start with one."""
+    first, sep, rest = doc.partition("\n")
+    heading = _CARD_HEADING_RE.match(first)
+    return f"{heading[0]}{title}{sep}{rest}" if heading else None
 
 
 def stored_text(reply: Reply) -> str:
@@ -706,7 +740,8 @@ def stored_text(reply: Reply) -> str:
 
 def _checked(
     block: str, known: Collection[str]
-) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...]]:
+) -> tuple[tuple[dict[str, Any], ...], tuple[dict[str, Any], ...], object]:
+    """The block's points and proposals, each field checked, and its ``title`` as given."""
     try:
         data = json.loads(block)
     except json.JSONDecodeError as exc:
@@ -722,7 +757,33 @@ def _checked(
     _numbered(points, "point", ("title", "answer", "action"))
     for proposal in proposals:
         _proposal(proposal, known)
-    return tuple(points), tuple(proposals)
+    points = _outcomes(points, [proposal["id"] for proposal in proposals])
+    return tuple(points), tuple(proposals), data.get("title")
+
+
+def _outcomes(points: list[dict[str, Any]], ids: Sequence[str]) -> list[dict[str, Any]]:
+    """F31 D4: a point's ``outcome``, when given, is one of ``OUTCOMES``, and its ``proposal``
+    the id of a proposal in the same block. A null is one not given, and is left out: a point
+    without an outcome shows as before."""
+    read = []
+    for point in points:
+        n = point["n"]
+        point = {
+            key: value
+            for key, value in point.items()
+            if not (key in ("outcome", "proposal") and value is None)
+        }
+        if "outcome" in point and point["outcome"] not in OUTCOMES:
+            outcomes = ", ".join(OUTCOMES)
+            raise PlannerError(
+                f"point {n}'s outcome is one of {outcomes}, not {point['outcome']!r}"
+            )
+        if "proposal" in point and point["proposal"] not in ids:
+            raise PlannerError(
+                f"point {n}'s proposal is an id in this block, not {point['proposal']!r}"
+            )
+        read.append(point)
+    return read
 
 
 def _numbered(items: list[Any], what: str, texts: tuple[str, ...]) -> None:

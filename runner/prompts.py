@@ -379,6 +379,9 @@ ask (a pause, a choice) is a point, in plain words, each with a title, an answer
 suggested action (a ticket, an ADR item, the roadmap, nothing). Don't write them out in the \
 text too: before the block, at most two short lines on what this reply does, or nothing. \
 Every point of yours they didn't comment on counts as agreed.
+- Name a card with its title, every time ("F22, Archive at the bottom"), never a bare number.
+- When their message is a bare "agreed" or "go" with nothing new, don't answer it point by \
+point again: one point, saying the plan waits for their Approve, and nothing else.
 - No point reports that a check found nothing (no repeat, no conflict): they have nothing \
 to do with it. A repeat you do find is still a point and a `merge`.
 - Challenge them: where their idea has a better option, a hidden cost or a risk, say so \
@@ -392,10 +395,15 @@ tickets.
 
 End your reply with one fenced `json` block, nothing after it. List every proposal you \
 drafted or changed this turn with its key points, numbered, for the owner to review point \
-by point (flag: true where a point deviates from an earlier decision):
+by point (flag: true where a point deviates from an earlier decision). Give each point its \
+`outcome`, what it leads to: `info` (nothing for them to do), `ticket`, `adr`, `mockup`, \
+`roadmap`, `merge` or `question` (you need their answer); and, when it leads to a proposal \
+in this block, that proposal's id as `proposal`:
 
 ```json
-{{"points": [{{"n": 1, "title": "…", "answer": "…", "action": "…"}}],
+{{"points": [{{"n": 1, "title": "…", "answer": "…", "action": "…",
+    "outcome": "info" | "ticket" | "adr" | "mockup" | "roadmap" | "merge" | "question",
+    "proposal": "…" (an id below, when it leads to one)}}],
   "proposals": [{{"id": "…", "kind": "adr" | "mockup" | "plan" | "seed" | "replan" | "merge",
     "title": "…", "path": "docs/…" | null, "into": "f10" (a merge only),
     "key_points": [{{"n": 1, "title": "…", "text": "…", "flag": false}}]}}]}}
@@ -417,6 +425,11 @@ approval. Each changed ticket must pass pre-flight. Only a `replan` may touch ta
 - When a change touches tickets the line may start while you talk (a `replan`, a ticket \
 reworked), suggest the owner pause the factory from the dashboard first, and say so in a \
 point; approving the `replan` lifts their pause.
+- When {card} is still an idea (its doc says `**State:** idea`) and this is your first reply \
+on it, name it: give a short `title` at the top level of the block, beside `points` \
+(`"title": "…"`), one line of at most 80 characters saying what the card is about. The \
+runner then rewrites the card's heading on main. Don't edit the heading yourself, and give \
+no `title` on any other card.
 """
     + _PLANNER_TAIL
 )

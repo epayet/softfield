@@ -37,3 +37,11 @@ Read `docs/milestones/f31-when-i-click-on-approve-plan.md` D4, D6 and D7 (the `t
 result: blocked
 reason: check-all failed; the work is on task/f31-03-point-outcomes
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: its work from task/f31-03-point-outcomes, landed in a terminal session on 2026-10-12 once check-all passed again
+```

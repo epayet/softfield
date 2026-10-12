@@ -4635,6 +4635,119 @@ def test_a_merge_the_runner_cant_apply_waits_for_the_owner(repo, fake_model, mon
     assert "F12 has tickets" not in str(reply["text"])
 
 
+F12_DOC = "docs/milestones/f12-queue-once.md"
+
+
+def _titled(title: object) -> str:
+    return f"Here.\n```json\n{json.dumps({'points': POINTS, 'title': title})}\n```"
+
+
+def _naming_commits(repo: Path, head: str) -> list[str]:
+    log = git(repo, "log", "--format=%H|%s|%(trailers:key=Agent,valueonly)", f"{head}..main")
+    return [line for line in log.splitlines() if "named by the lead" in line]
+
+
+def test_a_title_in_the_reply_names_an_idea_card_in_a_commit_of_its_own(
+    repo, fake_model, monkeypatch
+):
+    """F31 D7: the lead's `title` rewrites the card's heading on main and its board row; the
+    file and the key stay, and the heading is the only line of main that changes."""
+    _twin_cards(repo)
+    before = (repo / F12_DOC).read_text()
+    head = git(repo, "rev-parse", "main").strip()
+    _plan_message(repo, "f12", "What about it?")
+    _planner_replies(monkeypatch, [_titled("The queue, shown once")], [])
+    report = _run(repo)
+    assert git(repo, "branch", "--show-current").strip() == "main"
+    assert git(repo, "status", "--porcelain") == ""
+    doc = (repo / F12_DOC).read_text()
+    assert doc == before.replace(
+        "# Milestone F12: queue once\n", "# Milestone F12: The queue, shown once\n"
+    )
+    assert sorted(p.name for p in (repo / "docs" / "milestones").glob("f12*")) == [
+        "f12-queue-once.md"
+    ]
+    [commit] = _naming_commits(repo, head)
+    sha, subject, agent = commit.split("|")
+    assert (subject, agent) == ("F12 named by the lead", "claude-headless")
+    assert git(repo, "show", "--format=", "--name-only", sha).split() == [F12_DOC]
+    assert git(repo, "show", "--format=", "--numstat", sha).split() == ["1", "1", F12_DOC]
+    # No other card moved
+    cards = git(repo, "diff", "--name-only", head, "main", "--", "docs/milestones")
+    assert cards.split() == [F12_DOC]
+    [row] = [m for m in _rows(repo, "milestones") if m["key"] == "f12-queue-once"]
+    assert row["title"] == "The queue, shown once"
+    assert not [m for m in _rows(repo, "milestones") if m["key"] == "f12"]  # the key stays
+    assert not [n for n in report.notes if "title" in n]
+    [reply] = [m for m in _messages(repo) if m["author"] == "lead"]
+    assert json.loads(str(reply["points"])) == POINTS and reply["text"] == "Here."
+
+
+@pytest.mark.parametrize(
+    ("state", "title", "note"),
+    [
+        ("ready", "The queue, shown once", None),  # not an idea: ignored
+        ("planning", "The queue, shown once", None),
+        ("idea", "x" * 81, "at most 80 characters"),
+        ("idea", "Once\nand again", "one line"),
+        # A title can't set the card: its state, what it waits for, its area
+        ("idea", "**State:** done", "can't be F12's heading"),
+        ("idea", "After: f10 signed off", "can't be F12's heading"),
+        ("idea", "**Area:** product", "can't be F12's heading"),
+    ],
+)
+def test_a_title_changes_nothing_on_another_card_or_when_it_cant_be_a_heading(
+    repo, fake_model, monkeypatch, state, title, note
+):
+    _twin_cards(repo)
+    path = repo / F12_DOC
+    path.write_text(path.read_text().replace("**State:** idea", f"**State:** {state}"))
+    git(repo, "commit", "-q", "--allow-empty", "-am", "state")
+    before = path.read_text()
+    head = git(repo, "rev-parse", "main").strip()
+    _plan_message(repo, "f12", "What about it?")
+    _planner_replies(monkeypatch, [_titled(title)], [])
+    report = _run(repo)
+    assert path.read_text() == before
+    assert _naming_commits(repo, head) == []
+    assert git(repo, "status", "--porcelain") == ""
+    assert not [m for m in _rows(repo, "milestones") if m["title"] == title]
+    said = [n for n in report.notes if "title" in n]
+    assert (said == []) if note is None else (len(said) == 1 and note in said[0])
+    # The reply is read all the same: a title never costs the owner their points
+    [reply] = [m for m in _messages(repo) if m["author"] == "lead"]
+    assert json.loads(str(reply["points"])) == POINTS
+
+
+def test_a_title_on_the_general_thread_or_a_card_without_a_doc_is_ignored(
+    repo, fake_model, monkeypatch
+):
+    _twin_cards(repo)
+    head = git(repo, "rev-parse", "main").strip()
+    _plan_message(repo, "general", "An idea.")
+    _plan_message(repo, "f7", "And this one?")
+    _planner_replies(monkeypatch, [_titled("A title"), _titled("A title")], [])
+    _run(repo)
+    assert _naming_commits(repo, head) == []
+    assert git(repo, "diff", "--name-only", head, "main", "--", "docs/milestones") == ""
+
+
+def test_a_reply_that_merges_its_card_away_names_nothing(repo, fake_model, monkeypatch):
+    """The merge removes the duplicate first: there is no heading left to rewrite."""
+    _twin_cards(repo)
+    head = git(repo, "rev-parse", "main").strip()
+    _plan_message(repo, "f12", "Same as F10?")
+    block = json.dumps({"points": POINTS, "proposals": [MERGE_F12], "title": "Queue once"})
+    _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```"], [])
+    _run(repo)
+    assert not (repo / F12_DOC).exists()
+    assert _naming_commits(repo, head) == []
+    assert (
+        "# Milestone F10: one queue\n"
+        in (repo / "docs" / "milestones" / "f10-one-queue.md").read_text()
+    )
+
+
 def test_a_failed_planner_job_says_so_on_the_thread(repo, fake_model, monkeypatch):
     _plan_message(repo, "f7", "Why one queue?")
 

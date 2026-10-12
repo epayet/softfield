@@ -113,6 +113,133 @@ def test_a_broken_block_leaves_the_whole_reply_as_text_with_a_note(text, why):
     assert reply.note is not None and why in reply.note
 
 
+# --- a point's outcome and the card's title (F31 D4, D7) -------------------------------------
+
+
+def _point(n: int, **more: object) -> dict[str, Any]:
+    return {"n": n, "title": f"Point {n}", "answer": "So.", "action": "Nothing", **more}
+
+
+def test_a_block_whose_points_carry_each_outcome_is_read():
+    """D4: every outcome, and a point that leads to a proposal names it by its id."""
+    points = [_point(n, outcome=outcome) for n, outcome in enumerate(planner.OUTCOMES, 1)]
+    points.append(_point(8, outcome="adr", proposal="adr-23"))
+    reply = planner.parse_reply(_reply({"points": points, "proposals": [PROPOSAL]}))
+    assert reply.note is None and reply.points == tuple(points)
+    assert [p["outcome"] for p in reply.points[:7]] == [
+        "info",
+        "ticket",
+        "adr",
+        "mockup",
+        "roadmap",
+        "merge",
+        "question",
+    ]
+    assert reply.points[7]["proposal"] == "adr-23"
+
+
+@pytest.mark.parametrize(
+    ("more", "why"),
+    [
+        ({"outcome": "essay"}, "point 1's outcome is one of info, ticket"),
+        ({"outcome": ["adr"]}, "point 1's outcome"),
+        ({"outcome": ""}, "point 1's outcome"),
+        ({"outcome": "adr", "proposal": "adr-99"}, "point 1's proposal is an id in this block"),
+        ({"proposal": ["adr-23"]}, "point 1's proposal"),
+        ({"proposal": "Parallel planners"}, "point 1's proposal"),  # its title is not its id
+    ],
+)
+def test_an_unknown_outcome_or_a_proposal_not_in_the_block_leaves_it_unread(more, why):
+    text = _reply({"points": [_point(1, **more)], "proposals": [PROPOSAL]})
+    reply = planner.parse_reply(text)
+    assert reply.points == () and reply.proposals == () and reply.title is None
+    assert reply.text == text.strip()
+    assert reply.note is not None and why in reply.note
+
+
+def test_a_proposal_named_with_no_proposals_in_the_block_leaves_it_unread():
+    reply = planner.parse_reply(_reply({"points": [_point(1, proposal="adr-23")]}))
+    assert reply.points == () and reply.note is not None and "adr-23" in reply.note
+
+
+def test_a_null_outcome_or_proposal_reads_as_a_point_without_one():
+    """A point without an outcome shows as today (D4), so a null is no outcome at all."""
+    block = {"points": [_point(1, outcome=None, proposal=None), _point(2, outcome="info")]}
+    reply = planner.parse_reply(_reply(block))
+    assert reply.note is None
+    assert reply.points == (_point(1), _point(2, outcome="info"))
+
+
+def test_a_reply_without_a_title_or_outcomes_reads_as_before():
+    reply = planner.parse_reply(_reply({"points": POINTS, "proposals": [PROPOSAL]}))
+    assert reply == planner.Reply("Here is my answer.", tuple(POINTS), (PROPOSAL,))
+    assert reply.title is None and reply.ignored is None
+    assert not [p for p in reply.points if "outcome" in p or "proposal" in p]
+
+
+@pytest.mark.parametrize("given", ["Archive at the bottom", "  Archive at the bottom \n"])
+def test_a_blocks_title_is_the_replys(given):
+    reply = planner.parse_reply(_reply({"points": POINTS, "title": given}))
+    assert reply.title == "Archive at the bottom" and reply.ignored is None
+    assert reply.note is None and reply.points == tuple(POINTS)
+
+
+@pytest.mark.parametrize(
+    ("given", "why"),
+    [
+        ("x" * 81, "at most 80 characters"),
+        ("Archive\nat the bottom", "one line"),
+        ("Archive\rat the bottom", "one line"),
+        ("Archive\u2028at the bottom", "one line"),
+        (7, "not text"),
+        (["Archive"], "not text"),
+    ],
+)
+def test_a_title_too_long_or_on_two_lines_is_ignored_with_a_note_and_the_block_is_read(given, why):
+    reply = planner.parse_reply(_reply({"points": POINTS, "title": given}))
+    assert reply.title is None
+    assert reply.ignored is not None and why in reply.ignored
+    assert reply.note is None and reply.points == tuple(POINTS)  # the block is still read
+
+
+@pytest.mark.parametrize("given", [None, "", "  "])
+def test_an_empty_title_is_no_title(given):
+    reply = planner.parse_reply(_reply({"points": POINTS, "title": given}))
+    assert (reply.title, reply.ignored, reply.note) == (None, None, None)
+
+
+def test_a_title_of_80_characters_is_kept():
+    reply = planner.parse_reply(_reply({"points": POINTS, "title": "x" * 80}))
+    assert reply.title == "x" * 80
+
+
+SEED_DOC = (
+    "# Milestone F32: when i click on approve plan it looks…\n\n"
+    "> **State:** idea · **Priority:** 100 · **Area:** factory\n"
+    "> Planted by the owner on 2026-10-08.\n\n"
+    "## Notes\n# Milestone F32: not this line\nwhen i click on approve plan\n"
+)
+
+
+def test_naming_a_card_rewrites_its_heading_and_nothing_else():
+    """D7: the heading is the only line that changes; the key in it stays."""
+    named = planner.named_card(SEED_DOC, "Proposals close the loop")
+    assert named is not None
+    first, rest = named.split("\n", 1)
+    assert first == "# Milestone F32: Proposals close the loop"
+    assert rest == SEED_DOC.split("\n", 1)[1]
+    # Text a regex would read as a group or an escape is the title as written
+    literal = planner.named_card(SEED_DOC, r"A \1 and \g<0>")
+    assert literal is not None and literal.startswith("# Milestone F32: A \\1 and \\g<0>\n")
+
+
+@pytest.mark.parametrize(
+    "doc", ["", "Some words.\n# Milestone F32: later\n", "# F32\n", "## Milestone F32: x\n"]
+)
+def test_a_doc_whose_first_line_is_no_card_heading_is_not_named(doc):
+    assert planner.named_card(doc, "A title") is None
+
+
 # --- a `merge`: one card repeats another (f6-12, D2) ----------------------------------------------
 
 MERGE = {

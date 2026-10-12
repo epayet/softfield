@@ -3779,6 +3779,46 @@ def work_stands(
     return planner.where_it_stands(state.in_flight, listed, _all_cards(cfg.repo), minutes)
 
 
+def _name_card(s: Session, thread: str, title: str) -> None:
+    """F31 D7: the lead's ``title`` for a card still an idea on main: its doc's heading alone,
+    rewritten in a commit of its own, and its board row's title; the file and the key stay.
+    On any other card, nothing. A title that would set the card (its state, its area, what it
+    waits for) is ignored, with a note. The heading is the only line of main a planner's reply
+    changes."""
+    from runner.milestone import card, milestone_after, milestone_doc  # it imports this module
+
+    if thread == planner.GENERAL or s.git.current_branch() != MAIN:
+        return
+    path = milestone_file(s.repo, "milestones", full_key(s.repo, thread))
+    if not path.is_file():
+        return
+    before = path.read_text(encoding="utf-8")
+    was = card(path.stem, before)
+    if was.state != planner.IDEA:
+        return
+    doc = planner.named_card(before, title)
+    if doc is None or doc == before:
+        return
+    name = planner.thread_name(thread)
+    same = card(path.stem, doc) == was and milestone_after(doc) == milestone_after(before)
+    if not same or milestone_doc(doc).get("title") != title:
+        s.report.notes.append(f"The lead's title {title!r} can't be {name}'s heading: ignored.")
+        return
+    rel = _rel(s, path)
+    path.write_text(doc, encoding="utf-8")
+    try:
+        s.git.run("add", "--", rel)
+        message = with_trailers(f"{name} named by the lead", agent=CLAUDE_HEADLESS_AGENT)
+        s.git.run("commit", "-q", "--no-verify", "-m", message, "--", rel)
+    except GitError as exc:  # a name never stops the run: the card keeps its heading
+        s.git.run("reset", "-q", "--", rel, check=False)
+        path.write_text(before, encoding="utf-8")
+        s.report.notes.append(f"The lead's title for {name} wasn't committed: {exc}.")
+        return
+    if s.project_id is not None:
+        _record(s, metrics.upsert_milestone, s.project_id, path.stem, title=title)
+
+
 def run_planner(s: Session, row: dispatch.Queued) -> None:
     """Answer one of the owner's messages (ADR 20 items 1–4, f6 D1–D3): a planner job on its
     thread's Claude session (a new one for a new thread), its reply's points and proposals
@@ -3849,6 +3889,10 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     if reply.note is not None:
         s.report.notes.append(f"The planner's reply on {row.subject}: {reply.note}.")
     reply = _auto_merge(s, reply)
+    if reply.ignored is not None:
+        s.report.notes.append(f"The planner's reply on {row.subject}: {reply.ignored}.")
+    if reply.title is not None:  # after the merges: a card merged away has no heading left
+        _name_card(s, thread, reply.title)
     if result.session_id:
         _record(s, metrics.set_thread_session, found["id"], result.session_id)
     _record(

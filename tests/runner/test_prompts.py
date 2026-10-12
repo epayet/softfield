@@ -156,6 +156,42 @@ def test_the_lead_prompts_no_longer_point_at_lead_md_or_owner_md(role):
             assert any(h == name or h.startswith(name + " (") for h in prompts.SECTIONS[role])
 
 
+@pytest.mark.parametrize("text", [prompts.PLANNER, prompts.PLANNER_GENERAL])
+def test_both_planner_prompts_ask_for_outcomes_short_prose_and_named_cards(text):
+    """F31 D4 and D6: each point says what it leads to; two lines of prose at most; a card
+    goes by its title; a bare "agreed" gets one point, not a round of answers."""
+    block = text.split("```json", 1)[1]
+    assert '"outcome"' in block and '"proposal"' in block
+    rule = text[text.index("`outcome`") : text.index("```json")]
+    for outcome in ("info", "ticket", "adr", "mockup", "roadmap", "merge", "question"):
+        assert f"`{outcome}`" in rule
+    assert "`proposal`" in rule and "in this block" in rule
+    assert "at most two short lines" in text
+    assert "F22, Archive at the bottom" in text and "never a bare number" in text
+    assert '"agreed" or "go"' in text and "nothing new" in text
+    assert "one point" in text and "waits for their Approve" in text
+    assert text.index("How to answer") < text.index('"agreed" or "go"') < text.index("```json")
+
+
+def test_a_cards_planner_names_a_seed_card_in_its_first_reply_and_the_general_one_doesnt():
+    """F31 D7: `title`, top level, on a card still an idea; the runner rewrites the heading."""
+    text = prompts.PLANNER
+    [rule] = [bullet for bullet in text.split("\n- ") if "`title`" in bullet]
+    assert "still an idea" in rule and "first reply" in rule
+    assert '"title": "…"' in rule and "beside `points`" in rule
+    assert "at most 80 characters" in rule and "one line" in rule
+    assert "Don't edit the heading yourself" in rule
+    assert text.index("`title`") < text.index("```json")
+    assert "`title`" not in prompts.PLANNER_GENERAL
+
+
+def test_the_planner_prompts_still_fill_in():
+    """The new rules add no stray brace: both prompts format with the same fields."""
+    for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):
+        text = template.format(thread="F7", card="f7", comments="", text="Hi", threads="none")
+        assert '{"points": [{"n": 1' in text and "{card}" not in text
+
+
 def _prompt_texts() -> list[str]:
     texts: list[str] = []
     for value in vars(prompts).values():
