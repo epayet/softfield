@@ -29,3 +29,9 @@ Read `docs/milestones/f21-lead-briefs.md` (D2: the role-to-sections table, the m
 - a heading missing from lead.md: the job runs with what was found, and the session report has a note
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: blocked
+reason: check-all failed; the work is on task/f21-02-sections-in-prompts
+```
