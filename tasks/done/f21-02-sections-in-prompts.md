@@ -35,3 +35,11 @@ Read `docs/milestones/f21-lead-briefs.md` (D2: the role-to-sections table, the m
 result: blocked
 reason: check-all failed; the work is on task/f21-02-sections-in-prompts
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: its work from task/f21-02-sections-in-prompts, landed in a terminal session on 2026-10-12 once check-all passed again
+```

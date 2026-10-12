@@ -1692,6 +1692,147 @@ def test_a_session_that_cant_resume_starts_afresh_told_about_its_partial_work(re
     assert prompt.startswith("Do the ticket.") and "git diff" in prompt
 
 
+OWNER_MD = "# The owner\n\n- Low ceremony.\n"
+# lead.md's `## ` headings, as the real one has them
+LEAD_HEADINGS = (
+    "The owner",
+    "Authority",
+    "Phases: plan, then one command",
+    "Plan",
+    "Planning room",
+    "Tickets",
+    "Known range",
+    "Your own work",
+    "Escalations (headless or interactive)",
+    "Review",
+    "Sign-off sheet",
+    "Reporting",
+    "Developers' notes",
+    "ADRs",
+)
+ESCALATIONS = "Escalations (headless or interactive)"
+ROLE_SECTIONS = {
+    "planner": ["Authority", "Plan", "Planning room", "Tickets"],
+    "lead-ticket": ["Your own work", "Tickets"],
+    "escalation": ["Known range", ESCALATIONS, "Your own work"],
+    "direction": ["Known range", ESCALATIONS, "Your own work"],
+    "checkpoint": ["Review", "Sign-off sheet", "Reporting"],
+    "review": ["Review", "Sign-off sheet", "Reporting"],
+}
+
+
+def _lead_docs(repo: Path, without: str | None = None) -> None:
+    """The owner's preferences and a lead.md with every real heading (but ``without``)."""
+    (repo / "docs" / "agents").mkdir(parents=True)
+    (repo / "docs" / "agents" / "owner.md").write_text(OWNER_MD)
+    body = "".join(f"## {h}\nWhat {h} says.\n\n" for h in LEAD_HEADINGS if h != without)
+    (repo / "docs" / "agents" / "lead.md").write_text("# The lead\n\nThe model.\n\n" + body)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the lead's docs")
+
+
+def _headings(prompt: str) -> list[str]:
+    return re.findall(r"^## (.+)$", prompt, re.MULTILINE)
+
+
+@pytest.mark.parametrize("role", sorted(ROLE_SECTIONS))
+def test_a_lead_job_starts_with_owner_md_and_exactly_its_roles_sections(repo, monkeypatch, role):
+    """f21 D2: pasted in, first, the same text for every job of the role."""
+    _lead_docs(repo)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    calls = _limited_then(monkeypatch, done, done)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, JobSpec(role, "Do the job.", timeout=1), "m1", "m1-first")
+    loop.call_claude(s, JobSpec(role, "Do the other job.", timeout=1), "m1", "m1-second")
+    [(first, _), (second, _)] = calls
+    assert first.startswith(OWNER_MD)
+    assert _headings(first) == ROLE_SECTIONS[role]
+    for heading in ROLE_SECTIONS[role]:
+        assert f"## {heading}\nWhat {heading} says.\n" in first
+    assert "The model." not in first and first.endswith("\n\nDo the job.")
+    # the same start, so jobs close together share the prompt cache
+    assert second.removesuffix("Do the other job.") == first.removesuffix("Do the job.")
+    assert not [note for note in s.report.notes if "went without" in note]
+
+
+def test_a_job_that_is_not_the_leads_gets_no_sections(repo, monkeypatch):
+    _lead_docs(repo)
+    calls = _limited_then(monkeypatch, JobResult(ok=True, text="", duration_s=1.0))
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, JobSpec("narrative", "Tell it.", timeout=1), "m1", "narrative")
+    assert calls[0][0] == "Tell it."
+
+
+def test_a_resumed_session_gets_no_sections_and_one_that_cant_resume_gets_them(repo, monkeypatch):
+    """f21 D2: the session has them. Lost, it starts again as a new one would."""
+    _lead_docs(repo)
+    lost = JobResult(ok=False, text="No conversation found", duration_s=1.0, num_turns=0)
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    calls = _limited_then(monkeypatch, done, lost, done)
+    s = loop.open_session(_config(repo))
+    job = JobSpec("planner", "The owner's message.", timeout=1, resume="s1")
+    loop.call_claude(s, job, "m1", "f7:1")
+    loop.call_claude(s, job, "m1", "f7:2")
+    assert calls[0] == ("The owner's message.", "s1")
+    assert calls[1] == ("The owner's message.", "s1")
+    prompt, resume = calls[2]
+    assert resume is None and prompt.startswith(OWNER_MD)
+    assert _headings(prompt) == ROLE_SECTIONS["planner"]
+
+
+def test_a_heading_missing_from_lead_md_is_a_report_note_and_the_job_runs(repo, monkeypatch):
+    _lead_docs(repo, without="Tickets")
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    calls = _limited_then(monkeypatch, done, done)
+    s = loop.open_session(_config(repo))
+    assert loop.call_claude(s, _job(), "m1", "m1-01-lead") is done
+    assert loop.call_claude(s, _job(), "m1", "m1-02-lead") is done
+    prompt, _ = calls[0]
+    assert prompt.startswith(OWNER_MD) and _headings(prompt) == ["Your own work"]
+    assert prompt.endswith("Do the ticket.")
+    notes = [note for note in s.report.notes if "went without" in note]
+    assert len(notes) == 1  # said once, however many jobs
+    assert "lead-ticket" in notes[0] and "Tickets" in notes[0]
+
+
+def test_a_lead_tickets_prompt_starts_with_the_brief_then_names_its_ticket(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _lead_docs(repo)
+    _lead_task(repo, "m1-01-lead")
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    _run(repo)
+    prompt = jobs[0].prompt
+    assert prompt.startswith(OWNER_MD) and _headings(prompt) == ROLE_SECTIONS["lead-ticket"]
+    after = prompt.split("## Tickets\nWhat Tickets says.", 1)[1]
+    assert "tasks/ready/m1-01-lead.md" in after and '"Your own work" above' in after
+
+
+def test_a_planners_first_job_gets_the_sections_and_the_next_on_its_session_none(
+    repo, fake_model, monkeypatch
+):
+    """f21 D2: owner.md, then Authority, Plan, Planning room and Tickets, once per session."""
+    _lead_docs(repo)
+    _plan_message(repo, "f7", "Why one queue?")
+    _plan_message(repo, "f7", "And the switches?")
+    prompts: list[tuple[str | None, str]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        prompts.append((resume, job.prompt))
+        return JobResult(ok=True, text="Yes.", duration_s=1.0, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    _run(repo)
+    [(new, first), (resumed, second)] = prompts
+    assert new is None and first.startswith(OWNER_MD)
+    assert _headings(first) == ["Authority", "Plan", "Planning room", "Tickets"]
+    assert first.index("## Tickets") < first.index("Why one queue?")
+    assert resumed == "s1" and "And the switches?" in second
+    assert _headings(second) == [] and "Low ceremony" not in second
+
+
 def test_an_unrecognised_limit_is_retried_a_few_times_then_fails(repo, monkeypatch):
     unsure = UsageLimited(None, certain=False)
     calls = _limited_then(monkeypatch, unsure, unsure, unsure, unsure)

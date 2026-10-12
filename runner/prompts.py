@@ -1,6 +1,64 @@
 """Prompts for the local model and headless Claude. Kept in one place so they're reviewable."""
 
+from pathlib import Path
+
 from runner.tasks import Task
+
+# f21 D2: every lead job's prompt starts with the owner's preferences and the lead.md sections
+# its role needs, pasted in: a pointer was skipped (neither planner job of 2026-10-07 opened
+# lead.md). Sections are named by their `## ` heading; tests/runner/test_prompts.py reads the
+# real lead.md, so a renamed heading fails at commit.
+OWNER_DOC = "docs/agents/owner.md"
+LEAD_DOC = "docs/agents/lead.md"
+_PLANS = ("Authority", "Plan", "Planning room", "Tickets")
+_SUPPORTS = ("Known range", "Escalations (headless or interactive)", "Your own work")
+_REVIEWS = ("Review", "Sign-off sheet", "Reporting")
+SECTIONS: dict[str, tuple[str, ...]] = {
+    "planner": _PLANS,
+    "lead-ticket": ("Your own work", "Tickets"),
+    "escalation": _SUPPORTS,
+    "direction": _SUPPORTS,
+    "checkpoint": _REVIEWS,
+    "review": _REVIEWS,
+}
+_BRIEF_SECTIONS = "From docs/agents/lead.md, the sections this job needs:\n\n"
+_BRIEF_END = "---\n\n"
+
+
+def sections(text: str) -> dict[str, str]:
+    """A document's `## ` sections by heading, each from its heading to the next one."""
+    found: dict[str, list[str]] = {}
+    current: list[str] | None = None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            current = found.setdefault(line[3:].strip(), [])
+        if current is not None:
+            current.append(line)
+    return {heading: "\n".join(lines).strip() for heading, lines in found.items()}
+
+
+def brief(repo: Path, role: str) -> tuple[str, list[str]]:
+    """What goes first in a lead job's prompt (f21 D2): owner.md, then the lead.md sections
+    ``role`` needs, the same text for every job of the role, so jobs close together share
+    Claude's prompt cache. Also what the map names and wasn't found: the job goes with the
+    rest. Empty for a role with no sections, and in a repo without a lead.md."""
+    lead = repo / LEAD_DOC
+    if role not in SECTIONS or not lead.is_file():
+        return "", []
+    missing: list[str] = []
+    parts: list[str] = []
+    owner = repo / OWNER_DOC
+    if owner.is_file():
+        parts.append(owner.read_text(encoding="utf-8").strip() + "\n\n")
+    else:
+        missing.append(OWNER_DOC)
+    found = sections(lead.read_text(encoding="utf-8"))
+    missing += [name for name in SECTIONS[role] if name not in found]
+    wanted = [found[name] + "\n\n" for name in SECTIONS[role] if name in found]
+    if wanted:
+        parts += [_BRIEF_SECTIONS, *wanted]
+    return "".join(parts) + _BRIEF_END if parts else "", missing
+
 
 # The developer's prompt stays short: it drops instructions from long prompts (ADR 01).
 LOCAL = """\
@@ -109,7 +167,7 @@ DIRECTION = (
     """\
 You are the lead. A developer (a local model) has failed task {id} twice; it gets one last
 attempt, which builds on its work on the branch. Give it direction (ADR 12 item 6; ADR 15
-item 7; docs/agents/lead.md, Escalations).
+item 7), as "Escalations" above says.
 
 - Task: {task}
 - Its work: branch task/{id} (`git diff main...task/{id}`) and {logs}/last.diff
@@ -132,7 +190,7 @@ can't do), also write {logs}/ticket.md: the whole corrected ticket, frontmatter 
 ESCALATION = (
     """\
 You are the lead, handling an escalated task in the Coucou repo. Follow
-docs/agents/lead.md (Escalations).
+"Escalations" above.
 
 - Task: tasks/escalated/{id}.md
 - Why it was escalated: {reason}
@@ -151,7 +209,7 @@ Do exactly one of:
    the task to tasks/ready/{id}.md (as in 2, about the branch).
 4. implemented: if the task is hard or protected, implement it yourself on main and make
    `uv run pytest -q tests/unit tests/integration tests/runner` pass.
-5. owner: only for what docs/agents/lead.md reserves for the owner: draft an ADR in
+5. owner: only for what the owner is asked for (their preferences, above): draft an ADR in
    docs/adr/ (status Proposed). The task and its dependants wait for the owner's decision.
 
 Code you change must pass `uv run runner check-all`; if it doesn't, none of it reaches main.
@@ -160,7 +218,8 @@ Then write {logs}/decision.json as
 "reset": true, and for "owner" also {{"adr": "docs/adr/NN-slug.md", "question": "<one line
 for the owner>"}}, and {logs}/escalation.md: 3-6 lines on what happened, what the local
 model got wrong, and the lesson. Turn the lesson into a check, an example or a line in
-docs/agents/developer.md (its budget is in lead.md), and say which. """
+docs/agents/developer.md (its budget is in docs/agents/lead.md ("Developers' notes")), and
+say which. """
     + PROCESS_NOTE
     + """\
 Read-only git (diff, log, show) is fine; don't commit and don't edit tasks/escalated/: the
@@ -170,7 +229,7 @@ runner commits and moves files.
 
 LEAD_TICKET = """\
 You are the lead, doing your own ticket in the Coucou repo: {task}. Follow
-docs/agents/lead.md ("Your own work"): test-first, isolation tests for protected paths, and
+"Your own work" above: test-first, isolation tests for protected paths, and
 docs/security.md for anything security-related. You are on branch task/{id}.
 
 When it's done, `uv run runner check-all --fix --task {id}` must pass. Don't commit: the runner
@@ -183,7 +242,7 @@ You are the lead, doing a checkpoint in the middle of a milestone (ADR 12 item 8
 Developers (a local model) just merged these tickets:
 {merges}
 
-Read those diffs, code and tests, as in docs/agents/lead.md (Review): does the screen show
+Read those diffs, code and tests, as "Review" above says: does the screen show
 what the ticket asks, do the tests act as a person would and check content, not presence,
 is anything masked instead of fixed? Don't read the developer's thinking unless a finding needs
 explaining. Then do what helps the next tickets most, any of:
@@ -191,7 +250,7 @@ explaining. Then do what helps the next tickets most, any of:
 - a fix ticket in tasks/ready/ (docs/task-format.md, `finding:` in the frontmatter), and add
   its id to `depends_on` of the ready tickets that build on the problem
 - tighten upcoming tickets in tasks/ready/ with what you saw (facts, not solutions)
-- one line in docs/agents/developer.md (its budget is in lead.md)
+- one line in docs/agents/developer.md (its budget is in docs/agents/lead.md ("Developers' notes"))
 
 If you wrote or changed a ticket, run `uv run pytest -q tests/runner/test_tasks.py` and fix
 what it reports: it checks the tickets' format and that every path they name exists
@@ -244,8 +303,8 @@ empty list if none):
 """
 
 REVIEW = """\
-You are the lead, reviewing milestone {milestone} of Coucou. Follow docs/agents/lead.md
-(Review) and docs/workflow.md (Milestone review loop).
+You are the lead, reviewing milestone {milestone} of Coucou. Follow "Review" above and
+docs/workflow.md (Milestone review loop).
 
 Round {round} of at most {max_rounds}. {scope}
 
@@ -257,8 +316,9 @@ Grade each finding blocking / should-fix / nit and route it:
   frontmatter. Findings listed as recurring must NOT go to the local model.
 - claude: fix it yourself now, keeping `uv run pytest -q tests/unit tests/integration
   tests/runner` green.
-- adr: only for what lead.md reserves for the owner. Draft an ADR (status Proposed) and set
-  "stop": "adr-needed". Decide everything else yourself; never park a finding for the owner.
+- adr: only for what the owner is asked for (their preferences, above). Draft an ADR (status
+  Proposed) and set "stop": "adr-needed". Decide everything else yourself; never park a
+  finding for the owner.
 - backlog: nits and should-fix points about untouched code go to docs/backlog.md.
 Recurring findings (fix these yourself): {recurring}
 
@@ -280,7 +340,7 @@ Write {out} as:
 Keep ids stable across rounds; mark findings fixed since the last round "resolved": true.
 Give checkpoint_verdicts and score every round, as they stand: the last round's are kept.
 Also create or update docs/reviews/{milestone}.md. It starts with the owner's sign-off
-sheet (lead.md, "Sign-off sheet"), ending with "6. What next": your product and factory
+sheet ("Sign-off sheet" above), ending with "6. What next": your product and factory
 suggestions. Then what was built, findings and resolutions, backlog and workflow
 observations. The numbers come from `uv run runner report {milestone}`, between the
 `<!-- runner report -->` markers: leave that block as it is and don't recount them.
@@ -291,8 +351,8 @@ Read-only git (diff, log, show) is fine; don't commit: the runner does.
 # 2026-10-02/03. A card's thread drafts on its plan branch; the general thread only talks.
 _PLANNER_HEAD = """\
 You are the lead, planning with the owner in the planning room \
-(docs/adr/20-planning-room.md). Plan as docs/agents/owner.md and docs/agents/lead.md \
-(Plan, Tickets) say. \
+(docs/adr/20-planning-room.md). Plan as the owner's preferences and the lead's "Plan" and \
+"Tickets" sections say: both were pasted at the start of this session. \
 This is their message on {thread}.
 {comments}
 The owner's message:

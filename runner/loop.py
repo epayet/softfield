@@ -1323,6 +1323,20 @@ def _process_note(path: Path | None) -> str | None:
     return path.read_text(encoding="utf-8", errors="replace").strip()[:PROCESS_NOTE_MAX] or None
 
 
+def _brief(s: Session, role: str) -> str:
+    """What a new lead session starts with (f21 D2, `prompts.brief`). A section that isn't
+    there is a note in the session report, once, and the job goes with the rest."""
+    text, missing = prompts.brief(s.repo, role)
+    if missing:
+        note = (
+            f"The {role} prompt went without {', '.join(missing)}: not found in docs/agents/"
+            " (`SECTIONS` in runner/prompts.py names the lead.md headings)."
+        )
+        if note not in s.report.notes:
+            s.report.notes.append(note)
+    return text
+
+
 def call_claude(
     s: Session,
     job: JobSpec,
@@ -1362,7 +1376,10 @@ def call_claude(
     note. A ticket's direction and escalation share its logs, so an earlier job's is removed
     first, unless this job resumes and may have written its own.
 
-    A ``job.resume`` session carries on an earlier job's with ``job.prompt``: one more turn."""
+    A ``job.resume`` session carries on an earlier job's with ``job.prompt``: one more turn.
+
+    A new session's prompt starts with the owner's preferences and the lead.md sections its
+    role needs (f21 D2); a resumed one has them already."""
     attempt = unsure = transient = 0
     resume = job.resume
     interrupted = False
@@ -1421,7 +1438,10 @@ def call_claude(
             claude_live_update(s, job_id, progress)
 
     while True:
-        prompt = resume_prompt if resume else job.prompt + (partial_note if interrupted else "")
+        if resume:
+            prompt = resume_prompt
+        else:
+            prompt = _brief(s, job.role) + job.prompt + (partial_note if interrupted else "")
         resume_prompt = RESUME_PROMPT  # a later resume follows a pause for a limit
         log = s.run_dir / f"{base}{f'-retry{attempt}' if attempt else ''}.log"
         if attempt:

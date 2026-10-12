@@ -74,6 +74,88 @@ def test_both_planner_prompts_look_for_duplicates_and_propose_a_merge(text):
     assert text.index("Before answering") < text.index("```json")
 
 
+ROOT = Path(__file__).resolve().parents[2]
+LEAD_PROMPTS = {
+    "planner": (prompts.PLANNER, prompts.PLANNER_GENERAL),
+    "lead-ticket": (prompts.LEAD_TICKET,),
+    "escalation": (prompts.ESCALATION,),
+    "direction": (prompts.DIRECTION,),
+    "checkpoint": (prompts.CHECKPOINT,),
+    "review": (prompts.REVIEW,),
+}
+
+
+def _lead_doc(repo: Path, headings: tuple[str, ...]) -> None:
+    (repo / "docs" / "agents").mkdir(parents=True, exist_ok=True)
+    (repo / prompts.OWNER_DOC).write_text("# The owner\n\n- Low ceremony.\n")
+    body = "".join(f"## {h}\nWhat {h} says.\n- ### not a section\n\n" for h in headings)
+    (repo / prompts.LEAD_DOC).write_text("# The lead\n\nThe model.\n\n" + body)
+
+
+def test_every_section_a_lead_role_needs_is_a_heading_of_the_real_lead_md():
+    """f21 D2: a renamed section fails here, at commit, not in a run."""
+    assert set(prompts.SECTIONS) == set(LEAD_PROMPTS)
+    headings = set(prompts.sections((ROOT / prompts.LEAD_DOC).read_text(encoding="utf-8")))
+    for role, names in prompts.SECTIONS.items():
+        assert names and set(names) <= headings, role
+        text, missing = prompts.brief(ROOT, role)
+        assert missing == []
+        assert text.startswith((ROOT / prompts.OWNER_DOC).read_text(encoding="utf-8").strip())
+
+
+def test_the_roles_get_the_sections_f21_d2_lists():
+    escalations, review = "Escalations (headless or interactive)", "Review"
+    assert {
+        "planner": ("Authority", "Plan", "Planning room", "Tickets"),
+        "lead-ticket": ("Your own work", "Tickets"),
+        "escalation": ("Known range", escalations, "Your own work"),
+        "direction": ("Known range", escalations, "Your own work"),
+        "checkpoint": (review, "Sign-off sheet", "Reporting"),
+        "review": (review, "Sign-off sheet", "Reporting"),
+    } == prompts.SECTIONS
+
+
+def test_a_brief_is_owner_md_then_the_roles_sections_and_no_other(tmp_path: Path):
+    _lead_doc(tmp_path, ("Plan", "Tickets", "Review", "Your own work", "Known range"))
+    text, missing = prompts.brief(tmp_path, "lead-ticket")
+    assert missing == []
+    assert text.startswith("# The owner\n\n- Low ceremony.\n")
+    # in the map's order, each whole, up to the next `## ` heading
+    assert text.index("## Your own work\nWhat Your own work says.\n- ### not a section") < (
+        text.index("## Tickets\nWhat Tickets says.")
+    )
+    assert text.count("\n## ") == 2 and "The model." not in text
+    assert text.endswith("\n") and prompts.brief(tmp_path, "lead-ticket") == (text, [])
+
+
+def test_a_brief_goes_with_what_it_found_and_names_what_is_missing(tmp_path: Path):
+    _lead_doc(tmp_path, ("Plan", "Tickets"))
+    text, missing = prompts.brief(tmp_path, "planner")
+    assert missing == ["Authority", "Planning room"]
+    assert "## Plan\n" in text and "## Tickets\n" in text and text.count("\n## ") == 2
+    (tmp_path / prompts.OWNER_DOC).unlink()
+    text, missing = prompts.brief(tmp_path, "planner")
+    assert missing == [prompts.OWNER_DOC, "Authority", "Planning room"]
+    assert "## Plan\n" in text
+
+
+def test_a_role_without_sections_or_a_repo_without_lead_md_gets_no_brief(tmp_path: Path):
+    assert prompts.brief(tmp_path, "planner") == ("", [])
+    _lead_doc(tmp_path, ("Plan",))
+    assert prompts.brief(tmp_path, "narrative") == ("", [])
+    assert prompts.brief(tmp_path, "checkpoint-shadow") == ("", [])
+
+
+@pytest.mark.parametrize("role", sorted(LEAD_PROMPTS))
+def test_the_lead_prompts_no_longer_point_at_lead_md_or_owner_md(role):
+    """f21 D2: the text is in the prompt. One pointer stays, to a section no role is given."""
+    kept = 'docs/agents/lead.md ("Developers\' notes")'
+    for text in LEAD_PROMPTS[role]:
+        assert "lead.md" not in text.replace(kept, "") and "owner.md" not in text
+        for name in re.findall(r'"([^"\n]+)"[ \n]+above', text):
+            assert any(h == name or h.startswith(name + " (") for h in prompts.SECTIONS[role])
+
+
 def _prompt_texts() -> list[str]:
     texts: list[str] = []
     for value in vars(prompts).values():
