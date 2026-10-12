@@ -16,8 +16,8 @@ default_max_diff = 1000                 # a backstop against rewritten files, no
 
 [timeouts]  # seconds
 warmup = 300
-opencode = 2700                         # M4: attempts took 15–30 min; 8 of m4-06's 9 hit 1800
-claude = 1800
+opencode = 3600                         # F71 (2026-10-12): attempts finished at 40–45 min, just under the 2700 cut
+claude = 2700                           # F71: a lead job runs check-all once or twice, 12 min each (f31-03 hit 1800)
 review = 3600                           # a milestone review: F6's (30 tickets) hit 1800 twice, 2026-10-08
 gate = 900
 
