@@ -29,3 +29,9 @@ Read `docs/milestones/f48-the-didnt-go-through-cards-try.md` (the Notes say what
 - the same for a refused message retried from its thread's reply box
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: blocked
+reason: check-all failed; the work is on task/f48-01-retry-plants-once
+```
