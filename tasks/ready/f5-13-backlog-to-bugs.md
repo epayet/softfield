@@ -1,6 +1,7 @@
 ---
 id: f5-13-backlog-to-bugs
 milestone: f5-board
+priority: 3
 depends_on: [f5-05-bug-tickets]
 agent: lead
 difficulty: 3
