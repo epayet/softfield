@@ -31,3 +31,9 @@ Read `docs/milestones/f31-when-i-click-on-approve-plan.md` D4, D6 and D7 (the `t
 - the prompts hold the new rules (the tests read each)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: blocked
+reason: check-all failed; the work is on task/f31-03-point-outcomes
+```
