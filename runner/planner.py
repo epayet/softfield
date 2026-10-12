@@ -9,6 +9,7 @@ The lead's reply ends with a fenced ``json`` block (D2), checked here before it 
 import json
 import re
 import sqlite3
+import statistics
 import subprocess
 import unicodedata
 from collections.abc import Collection, Mapping, Sequence
@@ -525,6 +526,93 @@ def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]]) -> str:
     return "\nWhat was said on this thread before, oldest first:\n\n" + "\n\n".join(said) + "\n"
 
 
+# --- where the work stands (F21 D1): the runner's own order, written into the prompt ----------
+
+_MAX_READY = 25  # ready tickets listed; the rest are a count
+_CARD_STATES = ("building", "needs sign-off", "ready", "planning", "idea", "done")  # busiest first
+
+
+@dataclass(frozen=True)
+class ReadyTicket:
+    """A ready ticket as the block lists it: its milestone, who does it (``lead`` or
+    ``developer``), its priority and what it waits for, if anything."""
+
+    id: str
+    milestone: str
+    who: str
+    priority: int
+    waits: str | None = None
+
+    def __str__(self) -> str:
+        return f"{self.id} ({self.milestone}, {self.who}, priority {self.priority})"
+
+
+def _in_flight(job: Mapping[str, Any] | None, ready: Mapping[str, ReadyTicket]) -> str:
+    if job is None:
+        return "In flight: nothing."
+    ticket = job.get("ticket")
+    other = ticket or f"{job.get('kind')} {job.get('subject') or ''}".strip()
+    what = ready.get(str(ticket)) or other
+    return f"In flight: {what}, now with {job.get('agent')}."
+
+
+def _card_lines(cards: Collection[tuple[str, str, int]]) -> list[str]:
+    """Each state's cards on one line, lower priority first: ``- building: F8 (1), F7 (3)``."""
+    states = [*_CARD_STATES, *sorted({state for _, state, _ in cards} - set(_CARD_STATES))]
+    lines = []
+    for state in states:
+        found = sorted(
+            (
+                (priority, milestone_order(key), key)
+                for key, named, priority in cards
+                if named == state
+            )
+        )
+        if found:
+            named = ", ".join(f"{thread_name(key)} ({priority})" for priority, _, key in found)
+            lines.append(f"- {state}: {named}")
+    return lines
+
+
+def where_it_stands(
+    in_flight: Mapping[str, Any] | None,
+    ready: Sequence[ReadyTicket],
+    cards: Collection[tuple[str, str, int]],
+    minutes: Sequence[float],
+) -> str:
+    """The "Where the work stands" block of a planner job's prompt (F21 D1), from what the
+    runner gives it: the job ``in_flight`` (state.json's entry), the ``ready`` tickets in the
+    runner's order (past 25, a count), every card as (short key, state, priority) and the
+    ``minutes`` the last merged tickets took, as their median. About 40 lines at most."""
+    running = (in_flight or {}).get("ticket")
+    lines = [_in_flight(in_flight, {t.id: t for t in ready})]
+    waiting = [t for t in ready if t.id != running]
+    if waiting:
+        lines.append(
+            f"Ready ({len(waiting)}), in the order the runner takes them;"
+            " one that waits is passed over until it no longer does:"
+        )
+    else:
+        lines.append("Ready: no ticket.")
+    for n, ticket in enumerate(waiting[:_MAX_READY], 1):
+        lines.append(f"{n}. {ticket}" + (f": {ticket.waits}" if ticket.waits else ""))
+    if (more := len(waiting) - _MAX_READY) > 0:
+        lines.append(f"… and {more} more ready ticket{'s' if more > 1 else ''}.")
+    if cards:
+        lines.append("Cards by state, each with its priority (lower goes first):")
+        lines += _card_lines(cards)
+    if minutes:
+        usual = max(1, round(statistics.median(minutes)))
+        lines.append(
+            f"A ticket takes about {usual} minute{'s' if usual > 1 else ''} of work lately"
+            f" (the median of the last {len(minutes)} merged)."
+        )
+    else:
+        lines.append("No ticket has merged yet, so there is no usual duration.")
+    head = "\nWhere the work stands, from the runner as this job starts (answer from it):\n"
+    return head + "\n".join(lines) + "\n"
+
+
 def _quoted(text: str) -> str:
     """``text`` as a Markdown quote: a heading, a fence or an underline in it stays inside the
     quote, so it can't break the file around it."""
@@ -573,12 +661,15 @@ def prompt(
     comments: Mapping[int, str],
     threads: Collection[str] = (),
     earlier: str = "",
+    stands: str = "",
 ) -> str:
     """The planner job's prompt for one message: a card's drafts on its plan branch, none on
     the general thread (``prompts.PLANNER``); the other threads named, to spot a repeat;
-    ``earlier`` the thread's ``history`` when the job has no session to resume."""
+    ``earlier`` the thread's ``history`` when the job has no session to resume; ``stands``
+    where the work stands now (``where_it_stands``)."""
     lines = "".join(f"- On your point {n}: {comment}\n" for n, comment in comments.items())
-    said = earlier + (f"\nTheir comments on your last points:\n{lines}" if lines else "")
+    said = stands + earlier
+    said += f"\nTheir comments on your last points:\n{lines}" if lines else ""
     others = [t for t in threads if t not in (thread, GENERAL)]
     others += [GENERAL] if GENERAL in threads and thread != GENERAL else []
     template = prompts.PLANNER_GENERAL if thread == GENERAL else prompts.PLANNER

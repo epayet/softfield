@@ -3712,6 +3712,73 @@ def _auto_merge(s: Session, reply: planner.Reply) -> planner.Reply:
     return replace(reply, text=text, proposals=tuple(proposals))
 
 
+MERGED_LATELY = 20  # the merged tickets whose durations give the planner its median (F21 D1)
+
+
+def ticket_minutes(conn: sqlite3.Connection, project_id: int) -> list[float]:
+    """The minutes of work each of the project's last 20 merged tickets took, the latest
+    first: its finished jobs added up (attempts, directions, escalations). A read."""
+    rows = conn.execute(
+        "SELECT j.ticket_id, j.started, j.ended FROM jobs j"
+        " JOIN tickets t ON t.id = j.ticket_id"
+        " WHERE t.project_id = ? AND t.state = 'done'"
+        " AND j.started IS NOT NULL AND j.ended IS NOT NULL"
+        " ORDER BY j.ended DESC, j.id DESC",
+        (project_id,),
+    ).fetchall()
+    minutes: dict[int, float] = {}
+    for row in rows:
+        ticket = row["ticket_id"]
+        if ticket not in minutes and len(minutes) == MERGED_LATELY:
+            continue
+        took = (_at(row["ended"]) - _at(row["started"])).total_seconds() / 60
+        minutes[ticket] = minutes.get(ticket, 0.0) + took
+    return list(minutes.values())
+
+
+def _all_cards(repo: Path) -> list[tuple[str, str, int]]:
+    """Every milestone doc's card as (short key, state, priority), as `sync_cards` reads them."""
+    from runner.milestone import card  # runner.milestone imports this module
+
+    found = []
+    for path in sorted((repo / "docs" / "milestones").glob("*.md")):
+        try:
+            key = milestone_key(path.stem)
+            text = path.read_text(encoding="utf-8")
+        except (TaskError, OSError, UnicodeDecodeError):
+            continue
+        if key != BUGS:
+            read = card(key, text)
+            found.append((short_key(key), read.state, read.priority))
+    return found
+
+
+def work_stands(
+    cfg: Config, state: State, minutes: Sequence[float], behind: Mapping[str, str] | None = None
+) -> str:
+    """Where the work stands, for a planner job's prompt (F21 D1), from `dry_run_plan`'s
+    inputs: the job in flight, the ready tickets in run order with what each waits for
+    (``behind`` its queued direction or escalation), every card, and ``minutes``
+    (`ticket_minutes`). It reads tasks/ and docs/milestones/ and writes nothing."""
+    tasks = cfg.repo / "tasks"
+    ready = load_dir(tasks / "ready", cfg.default_max_diff)
+    done = task_ids(tasks / "done")
+    paused = blocked_ids(ready, stopped_ids(tasks))
+    by_id = {t.id: t for t in ready}
+    listed = [
+        planner.ReadyTicket(
+            ticket.id,
+            by_id[ticket.id].milestone,
+            "lead" if ticket.lead else "developer",
+            ticket.priority,
+            # a dependency in the block's words: "waits for <id>"
+            ticket.waits and ticket.waits.replace("waiting on ", "waits for ", 1),
+        )
+        for ticket in _dispatch_tickets(cfg.repo, ready, done, paused, state.parked, now(), behind)
+    ]
+    return planner.where_it_stands(state.in_flight, listed, _all_cards(cfg.repo), minutes)
+
+
 def run_planner(s: Session, row: dispatch.Queued) -> None:
     """Answer one of the owner's messages (ADR 20 items 1–4, f6 D1–D3): a planner job on its
     thread's Claude session (a new one for a new thread), its reply's points and proposals
@@ -3744,9 +3811,18 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         while said and said[-1]["author"] == "owner":
             said.pop()
         earlier = planner.history(said)
+    try:  # on main, before the plan branch: the runner's order, not a draft's
+        ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
+        minutes = _record(s, ticket_minutes, s.project_id) or []
+        stands = work_stands(s.cfg, s.state, minutes, waiting_rows(s, ready))
+    except Exception as exc:  # the block never costs the owner their answer
+        s.report.notes.append(
+            f"The planner's {row.subject} ran without where the work stands: {exc}."
+        )
+        stands = ""
     job = JobSpec(
         role=PLANNER,
-        prompt=planner.prompt(thread, text, comments, threads, earlier),
+        prompt=planner.prompt(thread, text, comments, threads, earlier, stands),
         timeout=s.cfg.claude_timeout,
         # A card's drafts, on its plan branch only; the general thread only talks (f6 D4)
         edit=planner.drafts(thread) if branch else (),

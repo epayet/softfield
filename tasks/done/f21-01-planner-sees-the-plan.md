@@ -35,3 +35,11 @@ Read `docs/milestones/f21-lead-briefs.md` (D1 is what the block holds and its si
 result: blocked
 reason: check-all failed; the work is on task/f21-01-planner-sees-the-plan
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: its work from task/f21-01-planner-sees-the-plan, landed in a terminal session on 2026-10-12 once check-all passed again
+```

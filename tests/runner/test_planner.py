@@ -243,6 +243,78 @@ def test_a_job_with_no_session_reads_what_was_said_on_its_thread_before():
     assert planner.history([]) == ""
 
 
+def _ready(n: int) -> list[planner.ReadyTicket]:
+    return [planner.ReadyTicket(f"f7-{i:02}-t", "f7-one-queue", "developer", 3) for i in range(n)]
+
+
+def test_the_block_lists_the_ticket_in_flight_then_the_ready_ones_in_the_order_given():
+    """F21 D1: the one in flight is named once, with who has it; the others keep their order,
+    each with its milestone, who does it, its priority and what it waits for."""
+    ready = [
+        planner.ReadyTicket("f8-01-x", "f8-the-line", "lead", 1),
+        planner.ReadyTicket("f7-01-a", "f7-one-queue", "developer", 3),
+        planner.ReadyTicket("f7-02-b", "f7-one-queue", "developer", 3, "waits for f7-01-a"),
+    ]
+    in_flight = {"kind": "local", "ticket": "f7-01-a", "agent": "local-qwen"}
+    lines = planner.where_it_stands(in_flight, ready, [], []).splitlines()
+    assert "In flight: f7-01-a (f7-one-queue, developer, priority 3), now with local-qwen." in lines
+    assert "1. f8-01-x (f8-the-line, lead, priority 1)" in lines
+    assert "2. f7-02-b (f7-one-queue, developer, priority 3): waits for f7-01-a" in lines
+    assert not any(line.startswith(("1. f7-01-a", "2. f7-01-a", "3.")) for line in lines)
+    assert lines.index("1. f8-01-x (f8-the-line, lead, priority 1)") > lines.index(
+        "In flight: f7-01-a (f7-one-queue, developer, priority 3), now with local-qwen."
+    )
+
+
+def test_the_block_says_when_nothing_is_in_flight_or_ready_and_names_another_job():
+    idle = planner.where_it_stands(None, [], [], []).splitlines()
+    assert "In flight: nothing." in idle and "Ready: no ticket." in idle
+    job = {"kind": "checkpoint", "ticket": None, "subject": "f7", "agent": "claude-sonnet"}
+    assert "In flight: checkpoint f7, now with claude-sonnet." in planner.where_it_stands(
+        job, [], [], []
+    )
+
+
+def test_the_block_shows_every_card_with_its_state_and_priority():
+    cards = [("f9", "idea", 100), ("f7", "building", 3), ("f8", "building", 1), ("m4", "done", 100)]
+    lines = planner.where_it_stands(None, [], cards, []).splitlines()
+    assert "- building: F8 (1), F7 (3)" in lines  # lower goes first
+    assert "- idea: F9 (100)" in lines and "- done: M4 (100)" in lines
+    assert lines.index("- building: F8 (1), F7 (3)") < lines.index("- idea: F9 (100)")
+    assert sum(line.startswith("- ") for line in lines) == 3  # a state with no card has no line
+
+
+def test_the_block_gives_the_median_duration_in_minutes_or_says_none_merged():
+    block = planner.where_it_stands(None, [], [], [10.0, 31.4, 240.0])
+    assert "about 31 minutes" in block and "the last 3 merged" in block
+    assert "about 20 minutes" in planner.where_it_stands(None, [], [], [10.0, 30.0])
+    assert "about 1 minute " in planner.where_it_stands(None, [], [], [0.2])
+    none = planner.where_it_stands(None, [], [], [])
+    assert "No ticket has merged yet" in none and "minutes" not in none
+
+
+def test_past_25_ready_tickets_the_rest_are_a_count_and_the_block_stays_short():
+    cards = [(f"f{i}", state, i) for i, state in enumerate(["idea", "ready", "done"] * 40)]
+    lines = planner.where_it_stands(None, _ready(31), cards, [5.0]).splitlines()
+    assert "25. f7-24-t (f7-one-queue, developer, priority 3)" in lines
+    assert not any("f7-25-t" in line for line in lines)
+    assert "… and 6 more ready tickets." in lines
+    assert len(lines) <= 40
+    exact = planner.where_it_stands(None, _ready(25), [], []).splitlines()
+    assert "25. f7-24-t (f7-one-queue, developer, priority 3)" in exact
+    assert not any("more ready ticket" in line for line in exact)
+    assert "… and 1 more ready ticket." in planner.where_it_stands(None, _ready(26), [], [])
+
+
+def test_the_prompt_carries_where_the_work_stands_before_the_message():
+    stands = planner.where_it_stands(None, _ready(2), [("f7", "building", 3)], [12.0])
+    for thread in ("f7", "general"):
+        prompt = planner.prompt(thread, "When is F7 done?", {1: "Why?"}, stands=stands)
+        assert stands in prompt and "On your point 1: Why?" in prompt
+        assert prompt.index("Where the work stands") < prompt.index("When is F7 done?")
+    assert "Where the work stands" not in planner.prompt("f7", "When is F7 done?", {})
+
+
 def test_the_prompt_names_the_other_threads_to_check_for_duplicates():
     prompt = planner.prompt("f12", "Go on.", {}, threads=["general", "f10", "f12"])
     assert "Other threads: F10, the general thread." in prompt
