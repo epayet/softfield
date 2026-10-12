@@ -2094,6 +2094,21 @@ def test_a_settled_proposal_shows_its_word_and_the_runners_result(
     assert ('class="change-btn"' in html) is buttons
 
 
+def test_a_sent_back_proposal_says_so_with_no_buttons(planning, db_path, serve):
+    """f31-02's Done when: sent back shows its word, with no button, no Reject and no
+    Comment…, on its page and on the thread's card."""
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    said = json.dumps({"text": "", "comments": {"1": "Keep both."}})
+    _finished(db_path, planning, "send_back", "f9/merge-f9", said, "queued for the lead")
+    html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
+    dock = _text(html.split('id="actions"', 1)[1].split("</section>", 1)[0])
+    assert "Sent back" in dock
+    for gone in ('id="approve-merge"', 'id="send-back"', 'id="reject"', 'class="change-btn"'):
+        assert gone not in html
+    thread = _thread(serve(), "f9")
+    assert re.findall(r'<span class="state">([^<]*)</span>', thread) == ["sent back"]
+
+
 def test_a_proposal_from_an_older_reply_is_replaced(planning, db_path, serve):
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
     newer = {**_REVIEW_MERGE, "id": "merge-f9-again"}

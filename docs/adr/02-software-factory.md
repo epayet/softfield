@@ -341,6 +341,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** every gate and the checkpoint passed a feature that could not work on the owner's address, the one case the milestone exists for. The test made a state no browser has (not secure, permission "default"): Chrome answers "denied" there, so the steps never showed. The review found it by opening a real plain-http address in the test browser, which took three seconds. A stand-in for a browser API proves the code's logic, not the browser's behaviour: when a ticket is about what a browser does on some kind of address, its Done when must name one test with the real API. The review also left a scratch test file it could not delete; a headless job that needs a probe writes it inside an existing test file.
 - **Decisions affected:** none. ADR 26 holds; "Got it" no longer counts as the answer to the question (ADR 26 item 2 says the steps show once, not that they replace the question).
 
+### F31 (2026-10-12): proposals close the loop ([review](../reviews/f31-when-i-click-on-approve-plan.md))
+
+- **Q1:** five tickets, one merged by the runner first time (a headless lead ticket), three built by the lead in a terminal with the owner, one done headless then landed by hand after two days behind the weekly reserve and a red main. No escalation, direction or checkpoint. A sixth ticket waits in `tasks/later/` for a mock-up.
+- **Q3:** no developer work: four tickets are protected runner code, and the one developer ticket was built by the lead.
+- **Q5:** see the review's numbers.
+- **Anything else:** two findings of one kind. The milestone gave an existing thing a new meaning and one older reader or writer of it wasn't told: Reject settled a merge, but Approve plan still applied every merge of the thread; "the latest list of proposals" began to decide which buttons show and when a thread closes, but the planner prompt still asked for only the proposals changed this turn. When a ticket changes what a stored field means, its Context should name every reader and writer of that field, the prompts among them. The start tag was five days and 309 files old, so the review read the card's commits, not the milestone diff.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -492,7 +492,13 @@ def _approve_plan(
     thread = planner.thread_key(subject)
     branch = planner.plan_branch(thread)
     git = Git(repo)
-    proposals = metrics.latest_proposals(conn, project_id, thread)
+    # Won't do holds (F31 D2): a merge the owner rejected is not applied with the plan
+    rejected = _rejected(conn, project_id, thread)
+    proposals = [
+        proposal
+        for proposal in metrics.latest_proposals(conn, project_id, thread)
+        if proposal.get("id") not in rejected
+    ]
     merges = _merges(proposals)
     # A duplicate whose card left the repo was merged (or dropped) already: approving its merge
     # again settles it rather than refusing it forever (F24, F45, F47 on 2026-10-08)
@@ -1136,8 +1142,9 @@ def _close_if_settled(
     states = [planner.proposal_state(p, thread, asked) for p in listed]
     if all(state == planner.REJECTED for state in states):  # nothing taken: won't do
         why, line = planner.REJECTED, f"Rejected by the owner on {now.date().isoformat()}: won't do"
-    else:
-        why, line = planner.APPROVED, f"Approved by the owner on {now.date().isoformat()}: {result}"
+    else:  # a reject that closes a thread with approvals isn't called one
+        said = "Settled" if result.startswith(planner.REJECTED) else "Approved"
+        why, line = planner.APPROVED, f"{said} by the owner on {now.date().isoformat()}: {result}"
     metrics.add_planner_message(conn, found["id"], "lead", at, line)
     metrics.set_thread_archived(conn, found["id"], at, why)
     _resolve_items(conn, project_id, now, [thread])
@@ -1165,6 +1172,15 @@ def _latest(
         if datetime.fromisoformat(r["created"]) >= since
     ]
     return listed, asked
+
+
+def _rejected(conn: sqlite3.Connection, project_id: int, thread: str) -> set[object]:
+    """The ids of the thread's latest proposals the owner rejected (F31 D2)."""
+    found = metrics.find_thread(conn, project_id, thread)
+    if found is None:
+        return set()
+    listed, asked = _latest(conn, project_id, found["id"])
+    return {p["id"] for p in listed if planner.proposal_state(p, thread, asked) == planner.REJECTED}
 
 
 def _reject(

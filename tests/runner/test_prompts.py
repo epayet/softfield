@@ -173,6 +173,19 @@ def test_both_planner_prompts_ask_for_outcomes_short_prose_and_named_cards(text)
     assert text.index("How to answer") < text.index('"agreed" or "go"') < text.index("```json")
 
 
+@pytest.mark.parametrize(
+    "text", [prompts.PLANNER, prompts.PLANNER_GENERAL], ids=["card", "general"]
+)
+def test_both_planner_prompts_say_a_new_list_of_proposals_replaces_the_last(text):
+    """F31 D3: only the latest list's proposals keep their buttons, and the thread closes
+    once they are settled, so the lead lists again what still waits: one it left unchanged,
+    and one the owner sent back that it keeps as it is."""
+    rule = text[text.index("End your reply") : text.index("```json")]
+    assert "replaces your last one" in rule
+    assert "still waits for them" in rule and "unchanged" in rule
+    assert "sent back" in rule and "list it again" in rule
+
+
 def test_a_cards_planner_names_a_seed_card_in_its_first_reply_and_the_general_one_doesnt():
     """F31 D7: `title`, top level, on a card still an idea; the runner rewrites the heading."""
     text = prompts.PLANNER

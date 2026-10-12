@@ -2027,3 +2027,37 @@ def test_one_proposal_approved_and_one_rejected_closes_as_approved(repo):
     _apply(repo)
     assert _request(repo, asked)[1] == "rejected seed-1"
     assert _archived(repo, "general") and _why(repo, "general") == "approved"
+    # the closing line doesn't call the reject an approval
+    assert _thread(repo, "general")[-1]["text"] == (
+        "Settled by the owner on 2026-10-01: rejected seed-1"
+    )
+
+
+def test_approving_a_plan_leaves_a_rejected_merge_alone(repo):
+    """Won't do (F31 D2) holds: a later Approve plan on the thread doesn't merge the cards
+    the owner rejected the merge of. F12 keeps its card."""
+    head = _duplicates(repo)
+    _ask(repo, "reject", "f12/merge-f12")
+    _apply(repo)
+    asked = _ask(repo, "approve_plan", "f12")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "there is no plan/f12 to approve"
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert (repo / "docs" / "milestones" / "f12-queue-once.md").read_text() == DUPLICATE
+
+
+def test_approving_a_plan_still_applies_the_merges_not_rejected(repo):
+    """The general thread lists two merges: the rejected one stays, the other is applied."""
+    _duplicates(repo, thread="general")
+    docs = repo / "docs" / "milestones"
+    (docs / "f13-queue-twice.md").write_text(DUPLICATE.replace("F12: queue once", "F13: twice"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f13")
+    other = {**MERGE, "id": "merge-f13", "path": "docs/milestones/f13-queue-twice.md"}
+    _reply(repo, "general", MERGE, other)
+    _ask(repo, "reject", "general/merge-f12")
+    asked = _ask(repo, "approve_plan", "general")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved: merged F13 into F10"
+    assert (docs / "f12-queue-once.md").read_text() == DUPLICATE
+    assert not (docs / "f13-queue-twice.md").exists()

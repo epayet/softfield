@@ -395,7 +395,12 @@ tickets.
 
 End your reply with one fenced `json` block, nothing after it. List every proposal you \
 drafted or changed this turn with its key points, numbered, for the owner to review point \
-by point (flag: true where a point deviates from an earlier decision). Give each point its \
+by point (flag: true where a point deviates from an earlier decision). A new list replaces \
+your last one (F31 D3): only its proposals keep their buttons, and the thread closes once \
+they are settled. So also list, as it was, each earlier proposal that still waits for them \
+unchanged; and when they sent one back and you keep it as it is, list it again, or they \
+can't approve it. With nothing drafted or changed and nothing sent back, list none: the \
+last list stands. Give each point its \
 `outcome`, what it leads to: `info` (nothing for them to do), `ticket`, `adr`, `mockup`, \
 `roadmap`, `merge` or `question` (you need their answer); and, when it leads to a proposal \
 in this block, that proposal's id as `proposal`:
