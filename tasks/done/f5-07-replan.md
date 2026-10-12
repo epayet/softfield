@@ -31,3 +31,10 @@ Read `docs/milestones/f5-board.md` (Decisions D1–D6), the diffs of f5-01 to f5
 - every backticked path and named function in tickets f5-08 to f5-11 and f5-15 to f5-17 exists
 - `uv run pytest -q tests/runner/test_tasks.py` passes
 - the milestone doc has its Replan section
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
