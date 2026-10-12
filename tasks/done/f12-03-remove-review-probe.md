@@ -25,3 +25,11 @@ The scratch file the F12 review left in the tests is gone, so the `layout` gate 
 ### Done when
 - `tests/factory_dashboard/test_probe_tmp.py` no longer exists
 - `uv run runner check-all --task f12-03-remove-review-probe` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: done in a terminal session on 2026-10-12, in 119a206
+```
