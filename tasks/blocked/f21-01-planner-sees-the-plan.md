@@ -29,3 +29,9 @@ Read `docs/milestones/f21-lead-briefs.md` (D1 is what the block holds and its si
 - a planner job's prompt carries the block (a `run_planner` test, as `test_a_thread_with_replies_but_no_session_gives_the_lead_its_history` in `tests/runner/test_loop.py` does)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: blocked
+reason: check-all failed; the work is on task/f21-01-planner-sees-the-plan
+```
