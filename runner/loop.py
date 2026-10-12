@@ -530,7 +530,11 @@ def sync_cards(s: Session) -> None:
     """Every milestone doc's card (f5 D4) and title, as ``sync_tickets`` does for tickets: an
     idea with no tickets yet is on the board too. A doc not named by a key is left out, and a
     card whose doc is gone (merged away, dropped, deleted) leaves the board (f6-17)."""
-    from runner.milestone import card, milestone_doc  # runner.milestone imports this module
+    from runner.milestone import (  # runner.milestone imports this module
+        card,
+        milestone_doc,
+        signoff_sections,
+    )
 
     if s.project_id is None:
         return
@@ -546,6 +550,13 @@ def sync_cards(s: Session) -> None:
         except (OSError, UnicodeDecodeError):
             continue
         found = card(key, text)
+        # A review's sheet too: the desk lists a milestone for sign-off once it is stored, and
+        # one written outside a review job (or unread when it was written) would never be
+        review = milestone_file(s.repo, "reviews", key)
+        try:
+            sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
+        except (OSError, UnicodeDecodeError):
+            sheet = {}
         _record(
             s,
             metrics.upsert_milestone,
@@ -555,11 +566,14 @@ def sync_cards(s: Session) -> None:
             state=found.state,
             priority=found.priority,
             area=found.area,
+            signoff=sheet or None,
         )
     _record(s, metrics.remove_cards, s.project_id, present=present)
 
 
 PICKING = "picking the next ticket"
+# A planner job checks its drafted tickets as Approve will (`runner check-tickets`, read-only)
+CHECK_TICKETS = "uv run runner check-tickets"
 
 
 def set_activity(s: Session, activity: str | None, waiting_until: datetime | None = None) -> None:
@@ -3866,7 +3880,10 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         timeout=s.cfg.claude_timeout,
         # A card's drafts, on its plan branch only; the general thread only talks (f6 D4)
         edit=planner.drafts(thread) if branch else (),
-        commands=(*GIT_READ_COMMANDS, *((f"git checkout {branch}",) if branch else ())),
+        commands=(
+            *GIT_READ_COMMANDS,
+            *((CHECK_TICKETS, f"git checkout {branch}") if branch else ()),
+        ),
         resume=found["session_id"] or None,
         title=f"planning: {row.reason}",
     )

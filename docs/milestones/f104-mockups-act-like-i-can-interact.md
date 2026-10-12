@@ -1,6 +1,6 @@
 # Milestone F104: Mockups act like I can interact with but I can't, f54 is…
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-10.
 
 ## Notes

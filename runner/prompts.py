@@ -421,7 +421,10 @@ don't commit: the runner commits the branch after your reply.
 change {card}'s waiting tickets, tasks/ready/{card}-*.md: edit one, add one, or set one \
 aside (move it to tasks/later/). Never another milestone's ticket, never the one in \
 progress (`in_flight` in var/runs/state.json names it), never tasks/done/: the runner refuses the \
-approval. Each changed ticket must pass pre-flight. Only a `replan` may touch tasks/ready/.
+approval. Each changed ticket must pass pre-flight: after writing or changing tickets, run \
+`uv run runner check-tickets` (every draft in tasks/later/; or name files) and fix what it \
+reports, since Approve refuses the plan for the same problems. Only a `replan` may touch \
+tasks/ready/.
 - When a change touches tickets the line may start while you talk (a `replan`, a ticket \
 reworked), suggest the owner pause the factory from the dashboard first, and say so in a \
 point; approving the `replan` lifts their pause.

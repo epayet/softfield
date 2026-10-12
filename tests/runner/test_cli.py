@@ -548,3 +548,22 @@ def test_github_get_refuses_a_write(in_repo, monkeypatch, capsys):
     assert ran == []
     assert cli.main(["github-get", "/user"]) == 0
     assert ran == [["gh", "api", "--method", "GET", "/user"]]
+
+
+def test_check_tickets_says_what_approve_would_refuse(in_repo, capsys):
+    """The planner's check of its drafts (2026-10-12): the same problems Approve finds, read
+    from the files, changing nothing."""
+    good = write_task(in_repo / "tasks" / "later", "m4-12-a")
+    bad = write_task(in_repo / "tasks" / "later", "m4-13-b")
+    bad.write_text(
+        bad.read_text().replace("### Context\n", "### Context\nRead `templates/gone.html`.\n")
+    )
+    before = git(in_repo, "status", "--porcelain")
+    assert cli.main(["check-tickets", good.relative_to(in_repo).as_posix()]) == 0
+    assert "tickets OK" in capsys.readouterr().out
+    assert cli.main(["check-tickets"]) == 1  # every ticket in tasks/later/
+    out = capsys.readouterr().out
+    assert "m4-13-b: referenced path does not exist: templates/gone.html" in out
+    assert "m4-12-a" not in out
+    assert cli.main(["check-tickets", "tasks/later/none.md"]) == 1
+    assert git(in_repo, "status", "--porcelain") == before

@@ -1,6 +1,6 @@
 # Milestone F22: move archive button on planning desk at the bottom rather than the top
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-07.
 
 ## Notes

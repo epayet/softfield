@@ -2,6 +2,7 @@
 
 import re
 import sqlite3
+import textwrap
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -179,6 +180,11 @@ def _write_metrics(s: Session, milestone: str, base: str, rounds: list[int], sto
 
 _TITLE_RE = re.compile(r"^# (?:Milestone \w+: )?(.+?)\s*$", re.MULTILINE)
 _SUBHEADING_RE = re.compile(r"^### (?:\d+\. )?(.+?)[ \t]*\n(.*?)(?=^#{1,3} |\Z)", re.M | re.S)
+# The same sheet as a numbered list, `1. **What changed**`, with a colon or words after the
+# title: F26's and F12's reviews wrote it so, as lead.md lays it out, and nothing was stored.
+_LIST_ITEM_RE = re.compile(
+    r"^\d+\. \*\*(.+?):?\*\*:?[ \t]*(.*?)(?=^\d+\. \*\*|^#{1,3} |\Z)", re.M | re.S
+)
 # The sign-off sheet's sections (lead.md, "Sign-off sheet"; f1 D8) and their keys.
 SIGNOFF_SECTIONS = {
     "What changed": "changed",
@@ -288,13 +294,29 @@ def waits_for(repo: Path, milestones: Iterable[str]) -> dict[str, str]:
 
 
 def signoff_sections(text: str) -> dict[str, str]:
-    """The sign-off sheet of a review report by key; a heading missing leaves its key out."""
+    """The sign-off sheet of a review report by key; a heading missing leaves its key out.
+    Its sections are `### 1. What changed` headings, or, in a report with none of them, the
+    items of a numbered list, `1. **What changed**`."""
     found = {}
     for match in _SUBHEADING_RE.finditer(text):
         key = SIGNOFF_SECTIONS.get(match.group(1))
         if key and key not in found:
             found[key] = match.group(2).strip()
+    if found:
+        return found
+    for match in _LIST_ITEM_RE.finditer(text):  # no heading at all: the list form
+        key = SIGNOFF_SECTIONS.get(match.group(1))
+        if key and key not in found:
+            found[key] = textwrap.dedent(_first_line_in(match.group(2))).strip()
     return found
+
+
+def _first_line_in(body: str) -> str:
+    """A list item's body with the words after its title indented like the lines under it,
+    so one dedent brings both to the margin."""
+    first, sep, rest = body.partition("\n")
+    indent = re.match(r"[ \t]*", rest)
+    return f"{indent[0] if indent and rest.strip() else ''}{first}{sep}{rest}"
 
 
 def _record_milestone_doc(s: Session, milestone: str) -> None:

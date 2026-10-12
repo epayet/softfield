@@ -4519,11 +4519,15 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     report = _run(repo)
     reads = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
     edits = ("Edit(docs/**)", "Edit(tasks/later/**)", "Edit(tasks/ready/f7-*)")
-    drafts = (*edits, *reads, "Bash(git checkout plan/f7:*)")
+    # the check Approve runs, for the drafts' tickets (2026-10-12: F75's approval was refused
+    # twice and F71's would have been, for tickets the planner had no way to check)
+    check = "Bash(uv run runner check-tickets:*)"
+    drafts = (*edits, *reads, check, "Bash(git checkout plan/f7:*)")
     assert [(on, tools[-len(drafts) :]) for on, tools in seen[:2]] == [("plan/f7", drafts)] * 2
     [(on, general)] = seen[2:]
     assert on == "main" and general[-len(reads) :] == reads  # the general thread only talks
     assert not [tool for tool in general if tool.startswith(("Edit", "Write", "Bash(git checkout"))]
+    assert check not in general
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain") == ""
     # Main has none of it; the plan branch has the drafts and nothing else

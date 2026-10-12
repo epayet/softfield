@@ -1,6 +1,6 @@
 # Milestone F21: the lead's briefs
 
-> **Status: planned** (2026-10-07, with the owner, in a terminal session). **State:** ready · **Priority:** 1 · **Area:** factory
+> **Status: planned** (2026-10-07, with the owner, in a terminal session). **State:** ready · **Priority:** 3 · **Area:** factory
 > The owner planted questions (F12–F19) that went unanswered, then asked whether the lead checks the plan and reads lead.md when it answers. The planner logs of 2026-10-07 say no: neither planner job opened `docs/agents/lead.md`, and only one looked at `tasks/` and `state.json`. Prompts name lead.md's sections but don't give them.
 
 ## Outcome
@@ -22,7 +22,7 @@
   - Sections are found by their `## ` heading. A heading the map names that is missing fails a test, not a run: the job then goes with what was found and a report note.
   - A planner job resuming its thread's session gets none: the session has them.
   - The prompts' "as docs/agents/lead.md says (…)" pointers go: the text is there.
-- **D3 Trim owner.md:** the lead rewrites `docs/agents/owner.md` so each preference is one rule with its date, and the story behind it goes (the incident that taught it stays in the milestone or review doc it came from). No rule is dropped or changed in meaning. Target: under 800 words (1,300 today). The owner reads the diff at F21's review.
+- **D3 Trim owner.md:** the lead rewrites `docs/agents/owner.md` so each preference is one rule with its date, and the story behind it goes (the incident that taught it stays in the milestone or review doc it came from). No rule is dropped or changed in meaning. Target: under 1,200 words (1,380 today). It was 800 until 2026-10-12: f21-03's first run showed that cutting only the stories gives 1,157, and that going lower means dropping or rewording rules, which is the owner's to ask for. The owner reads the diff at F21's review.
 
 ## Tickets
 | # | Ticket | Who | d | Depends on | What |

@@ -213,6 +213,68 @@ def test_the_sign_off_sections_leave_a_missing_heading_out():
     assert signoff_sections("# nothing\n") == {}
 
 
+LIST_SHEET = """\
+# Review: F26 numbers
+
+- **Status:** reviewed; waiting for the owner's sign-off.
+
+## Sign-off sheet
+
+1. **What changed**
+   - The two headings carry a number.
+   - With nothing waiting, "Your desk" alone.
+2. **How to test it yourself** (on the phone)
+   1. Open `/planning`.
+   2. Plant an idea.
+3. **Left for later**
+   - The numbers change on a reload.
+4. **Decisions waiting for you:** none.
+5. **How the work went**
+   - One ticket, first attempt.
+6. **What next**
+   - **Factory:** run F19 next.
+7. **What clogged the factory line**
+   - A two-line card waited two days.
+
+## What was built
+One template.
+"""
+
+
+def test_the_sign_off_sheet_is_read_as_a_numbered_list_too():
+    """F26's and F12's reviews wrote the sheet as lead.md lays it out, a numbered list with
+    bold titles: nothing was stored, so neither showed on the owner's desk for sign-off
+    (2026-10-12). A sheet is never dropped for its form."""
+    assert signoff_sections(LIST_SHEET) == {
+        "changed": '- The two headings carry a number.\n- With nothing waiting, "Your desk" alone.',
+        "how_to_test": "(on the phone)\n1. Open `/planning`.\n2. Plant an idea.",
+        "later": "- The numbers change on a reload.",
+        "decisions": "none.",
+        "lessons": "- One ticket, first attempt.",
+        "what_next": "- **Factory:** run F19 next.",
+        "clogged": "- A two-line card waited two days.",
+    }
+    # a numbered step inside a section is no section, and headings win where both are there
+    assert signoff_sections(REVIEW_DOC)["how_to_test"] == "1. Send a photo."
+    both = REVIEW_DOC.replace("Mum sees photos.", "1. **What next**\n   Not this.")
+    assert "what_next" not in signoff_sections(both)
+
+
+def test_a_review_written_outside_a_review_job_reaches_the_desk_at_session_start(repo):
+    """The desk lists a milestone for sign-off once its sheet is stored (F50 D1). A sheet
+    written by hand, or one the runner couldn't read when it was written, is stored at the
+    next session's start, as the card is."""
+    (repo / "docs" / "milestones").mkdir(parents=True)
+    (repo / "docs" / "reviews").mkdir(parents=True)
+    (repo / "docs" / "milestones" / "m1.md").write_text(MILESTONE_DOC)
+    (repo / "docs" / "reviews" / "m1.md").write_text(LIST_SHEET)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a review")
+    close_session(open_session(_config(repo)))
+    [row] = [r for r in _rows(repo, "milestones") if r["key"] == "m1"]
+    assert json.loads(row["signoff"])["later"] == "- The numbers change on a reload."
+
+
 def test_the_sign_off_sheet_has_what_clogged_the_factory_line():
     """Item 7 of lead.md's sheet (the owner, 2026-10-02)."""
     clogged = REVIEW_DOC.replace(

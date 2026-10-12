@@ -284,7 +284,8 @@ def shell_note(allowed_tools: tuple[str, ...]) -> str:
     return (
         "\n\nShell: you are already at the repo root. Run one command per Bash call, starting"
         f" with one of {allowed}; no `cd`, `git -C`, pipes, `;` or `&&`, or it is denied."
-        " Use Read, Grep and Glob for everything else."
+        " Use Read, Grep and Glob for everything else. Run every check in the foreground and"
+        " wait for its result: nothing started in the background can be watched from here."
     )
 
 

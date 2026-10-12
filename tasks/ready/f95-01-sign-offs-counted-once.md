@@ -1,6 +1,7 @@
 ---
 id: f95-01-sign-offs-counted-once
 milestone: f95-overview-currently-says-i-have-2
+priority: 2
 depends_on: []
 difficulty: 3
 files:

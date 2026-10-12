@@ -1,6 +1,6 @@
 # Milestone F79: when a task times out on the first attempt, is the second…
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 1 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

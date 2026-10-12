@@ -1,6 +1,6 @@
 # Milestone F67: Key points say what they ask of you
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

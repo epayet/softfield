@@ -1,6 +1,6 @@
 # Milestone F74: when i reply to a 'your answers wanted' thread, there's a…
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

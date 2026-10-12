@@ -1,6 +1,6 @@
 # Milestone F30: on conversations, i want to the latest answer first so that i don't have to scroll
 
-> **Status: planned** (2026-10-07, with the owner, in the planning room). **State:** ready · **Priority:** 100 · **Area:** factory
+> **Status: planned** (2026-10-07, with the owner, in the planning room). **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-07.
 
 ## Notes

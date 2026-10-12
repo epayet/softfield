@@ -300,7 +300,7 @@ def _proposed(repo: Path, number: int) -> bool:
     return bool(found) and planner.is_proposed(found[0].read_text(encoding="utf-8"))
 
 
-def _ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
+def ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
     """Each merged ticket's pre-flight problems, and an ADR it relies on that is still
     Proposed, by ticket: one in tasks/later/ to be queued, or a ready one a replan changed."""
     problems = []
@@ -308,7 +308,7 @@ def _ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
         path = repo / rel
         try:
             task = parse_task(path, _MAX_DIFF)
-        except (ValueError, yaml.YAMLError) as exc:  # TaskError, or a file that won't read
+        except (ValueError, yaml.YAMLError, OSError) as exc:  # TaskError, or one that won't read
             problems.append(f"{path.stem}: {exc}")
             continue
         found = preflight(task, repo)
@@ -545,7 +545,7 @@ def _approve_plan(
     try:
         if planned:
             checked = sorted([*tickets, *added, *changed], key=lambda path: Path(path).name)
-            if problems := _ticket_problems(repo, checked):
+            if problems := ticket_problems(repo, checked):
                 _undo(git)
                 return "not approved: " + "; ".join(problems)
             doc = milestone_file(repo, "milestones", full_key(repo, thread))

@@ -217,6 +217,10 @@ def test_a_job_with_bash_is_told_how_to_call_it():
     assert "one command per Bash call" in note
     assert "`uv run pytest`, `git diff`" in note
     assert shell_note(("Read", "Edit")) == ""
+    # f31-03 (2026-10-12): it ran check-all in the background, couldn't watch it (Monitor is
+    # denied in a headless job) and ended its turn before the result
+    assert "in the foreground" in note
+    assert "background" in note
 
 
 def test_run_claude_appends_the_shell_note(tmp_path, monkeypatch):

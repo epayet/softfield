@@ -40,6 +40,8 @@ Format: [`docs/task-format.md`](../task-format.md). Craft: [`docs/task-writing.m
 - About 1–2 of your steps per ticket. Write all of a milestone's tickets in one pass.
 - A ticket that needs your part is queued only once that part is on main.
 - A headless job can't delete a file: Bash is limited to its prefixes and Edit only writes. A lead ticket that deletes or renames one names it in `commands:` (`rm docs/old.md`); f1-16 was blocked on this.
+- **A ticket that repairs main goes first, and everything waits for it** (2026-10-12): give it `priority: 0` (lower goes first; 100 is last) and add it to the `depends_on` of every ready ticket, the lead's too. f12-03 had `priority: 100`: four lead tickets ran before it, finished their work and were blocked by the file it was there to remove.
+- **A blocked lead ticket whose work is good is landed from its branch, never requeued** (2026-10-12): a lead ticket starts again from main (`run_lead_task`), so a requeue pays for the work twice. Merge main into `task/<id>`, run `check-all --task <id>`, squash it in.
 - Run `uv run runner run --dry-run` before committing tickets: it shows what runs next and each ticket's pre-flight problems. Checkpoints too: in f1 a checkpoint queued f1-36 with bare names (`conftest.py`), `tests/runner/test_tasks.py` went red on main and f1-35 burnt two attempts on it; f1-37 did it again and cost f1-29 two attempts, so headless checkpoints now run `tests/runner/test_tasks.py` (their commits skip the hook). Write repo-relative paths in Context.
 
 ## Known range
@@ -101,7 +103,7 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
 - Add the milestone's entry to [ADR 02](../adr/02-software-factory.md)'s learnings log, and update "Known range" above.
 
 ## Sign-off sheet
-When the review loop stops, write this at the top of `docs/reviews/mN.md`, in plain language, without being asked:
+When the review loop stops, write this at the top of `docs/reviews/mN.md`, in plain language, without being asked, each item under its own heading, `### 1. What changed` (the runner stores the sheet from them, and the desk lists a milestone for sign-off only once it is stored):
 1. **What changed:** what the owner and Mum will notice.
 2. **How to test it yourself:** numbered steps on real devices.
 3. **Left for later:** deferred items and the backlog.

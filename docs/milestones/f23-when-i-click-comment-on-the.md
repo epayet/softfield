@@ -1,6 +1,6 @@
 # Milestone F23: when i click comment on the planning desk ticket, i want it to focus on the text box
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-07.
 
 ## Notes

@@ -34,6 +34,7 @@ from runner.milestone import (
     run_due_review,
     run_milestone,
 )
+from runner.requests import ticket_problems
 from runner.state import load_state, save_state
 from runner.tasks import TaskError, milestone_arg
 
@@ -106,7 +107,7 @@ def _review(cfg: Config, repo: Path, key: str) -> None:
 
 # The checks never apply the owner's requests: they run inside jobs, on task branches, and as
 # the pre-commit hook, in the middle of someone else's commit.
-_NO_REQUESTS = ("check-all", "check-layout", "check-i18n")
+_NO_REQUESTS = ("check-all", "check-layout", "check-i18n", "check-tickets")
 
 
 def _apply_requests(cfg: Config, db: Path) -> None:
@@ -185,6 +186,12 @@ def main(argv: list[str] | None = None) -> int:
     check_all.add_argument("--hook", action="store_true", help="as the pre-commit hook")
     sub.add_parser("check-layout", help="check unit test file naming")
     sub.add_parser("check-i18n", help="check every user-facing string has a French translation")
+    check_tickets = sub.add_parser(
+        "check-tickets", help="what Approve would refuse in drafted tickets (read-only)"
+    )
+    check_tickets.add_argument(
+        "tickets", nargs="*", help="ticket files (default: every one in tasks/later/)"
+    )
     copilot_review = sub.add_parser(
         "copilot-review", help="one read-only Copilot prompt (f1's probes; capped per day)"
     )
@@ -418,6 +425,13 @@ def main(argv: list[str] | None = None) -> int:
             if args.lan:
                 print("Open that address on your phone, on the same Wi-Fi.")
             app.serve(db, repo.name, port=args.port, host=host)
+        elif args.command == "check-tickets":
+            given = args.tickets or sorted(
+                p.relative_to(repo).as_posix() for p in (repo / "tasks" / "later").glob("*.md")
+            )
+            problems = ticket_problems(repo, given)
+            print("\n".join(problems) or "tickets OK")
+            return 1 if problems else 0
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
