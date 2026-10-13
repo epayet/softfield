@@ -37,3 +37,10 @@ Read the board mock-up (`docs/milestones/f5-board-mockup/Main.dc.html`, `docs/mi
 - the layout check passes at phone and desktop sizes (`layout_problems` in `tests/browser/conftest.py`, as `tests/factory_dashboard/test_planning.py` uses it)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
