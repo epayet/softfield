@@ -28,3 +28,12 @@ Read `docs/milestones/f3.md` D11 ("The field counts come from the board"), the d
 - every existing assertion on `doc["field"]` still passes unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 401997
+logs: var/runs/20261013-001220/f3-08-field-cards
+```
