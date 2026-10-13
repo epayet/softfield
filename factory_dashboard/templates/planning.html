@@ -38,6 +38,7 @@
 </section>
 
 <div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
+  <div id="plant-row">
   <form id="plant" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
     hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1", again: this.elements.again.value || undefined})}'
     style="flex: 1 1 280px; min-width: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
@@ -75,6 +76,7 @@
     {% endfor %}
   </section>
   {% endif %}
+  </div>
 
   <section id="desk" aria-label="Your desk" style="flex: 999 1 420px; min-width: 0; background: var(--bay); border: 1px solid var(--rule)">
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk{% if planning_count %} · {{ planning_count }}{% endif %}</h2>
@@ -122,19 +124,25 @@
 <script>
   // F48 D2: a retry sent takes the card it retries off the desk at once (its group too, when
   // it was the last), and the form names it no more. The status's own polls bubble here too.
-  document.getElementById("plant").addEventListener("htmx:afterRequest", (event) => {
-    const form = event.currentTarget;
+  // Both listeners sit on the document: the form is drawn again after each plant (F13).
+  document.addEventListener("htmx:afterRequest", (event) => {
+    const form = document.getElementById("plant");
     if (event.detail.elt !== form || !event.detail.successful) return;
     const card = document.getElementById(`refused-${form.elements.again.value}`);
     form.elements.again.value = "";
-    if (!card) return;
-    const group = card.parentElement;
-    card.remove();
-    if (!group.querySelector(".refused")) group.remove();
+    if (card) {
+      const group = card.parentElement;
+      card.remove();
+      if (!group.querySelector(".refused")) group.remove();
+    }
+    // F13: the idea shows in Coming at once and the form comes back empty; htmx draws the
+    // new form, so its next send is a post too. The Desk stays, so the page doesn't jump.
+    htmx.ajax("GET", window.location.href, {target: "#plant-row", select: "#plant-row", swap: "outerHTML"});
   });
   // The box emptied: what comes next is a new note, and the refused one keeps its card
-  document.getElementById("plant").elements.text.addEventListener("input", (event) => {
-    if (!event.target.value.trim()) event.target.form.elements.again.value = "";
+  document.addEventListener("input", (event) => {
+    const form = document.getElementById("plant");
+    if (event.target === form.elements.text && !event.target.value.trim()) form.elements.again.value = "";
   });
 </script>
 

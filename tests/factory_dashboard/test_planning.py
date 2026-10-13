@@ -303,7 +303,7 @@ def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve, bu
     assert page.locator("#plant input, #plant textarea").count() == 3
     page.fill('#plant textarea[name="text"]', 'Memory "drift" on the frame\nIt forgets.')
     page.click(button)
-    page.wait_for_selector("#plant-status >> text=Asked")
+    page.wait_for_selector("#desk-coming")
     conn = metrics.open_db(db_path)
     try:
         rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
@@ -312,6 +312,89 @@ def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve, bu
         conn.close()
     words = {"text": 'Memory "drift" on the frame\nIt forgets.'}
     assert asked == [("plant", None, {**words, "ask": ask})]
+
+
+def test_a_plant_shows_the_idea_in_coming_at_once(page, planning, db_path, serve):
+    """With nothing in Coming (#desk-coming absent), typing a note and pressing Plant shows
+    #desk-coming holding that note as its title and "planting at the runner's next pick",
+    without a reload; the textarea is empty afterwards."""
+    _open(page, serve())
+    assert page.locator("#desk-coming").count() == 0
+    page.fill('#plant textarea[name="text"]', "A note about the frame")
+    page.click("#plant-only")
+    page.wait_for_selector("#desk-coming")
+    pick = "planting at the runner's next pick"
+    assert _coming_lines(page) == ["COMING · 1", "A note about the frame", pick]
+    assert page.input_value('#plant textarea[name="text"]') == ""
+    assert page.locator("#plant-row").count() == 1
+    assert page.locator("#plant").count() == 1
+    assert page.locator("#desk-coming").count() == 1
+
+
+def _coming_lines(page) -> list[str]:
+    """Coming as the browser shows it, line by line (its heading is drawn in capitals)."""
+    return [line for line in page.inner_text("#desk-coming").splitlines() if line.strip()]
+
+
+def test_a_second_plant_adds_a_second_row(page, planning, db_path, serve):
+    """Two plants from the same page, no reload: the form drawn again after the first still
+    posts, and Coming holds the two notes in order under "Coming · 2", once each."""
+    _open(page, serve())
+    page.fill('#plant textarea[name="text"]', "First note")
+    page.click("#plant-only")
+    page.wait_for_selector("#desk-coming >> text=First note")
+    page.fill('#plant textarea[name="text"]', "Second note")
+    page.click("#plant-ask")
+    page.wait_for_selector("#desk-coming >> text=Second note")
+    pick = "planting at the runner's next pick"
+    assert _coming_lines(page) == ["COMING · 2", "First note", pick, "Second note", pick]
+    assert page.url.endswith("/planning")  # still the same page: no form went out as a GET
+    assert _values(db_path, "plant") == [
+        {"text": "First note", "ask": False},
+        {"text": "Second note", "ask": True},
+    ]
+    assert page.locator("#plant-row").count() == 1
+    assert page.locator("#plant").count() == 1
+    assert page.locator("#desk-coming").count() == 1
+
+
+def test_a_failed_post_leaves_textarea_and_coming_as_they_were(page, planning, db_path, serve):
+    """Start with one idea already planted, so "as it was" is one row; type a note, press Plant;
+    the request is refused: the test waits for the refused answer, then the textarea is as typed
+    and Coming is as it was."""
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, value, created)"
+            " VALUES (?, 'plant', ?, ?)",
+            (
+                planning,
+                json.dumps({"title": "Existing note", "thoughts": "Before."}),
+                _at(timedelta(minutes=10)),
+            ),
+        ),
+    )
+    _open(page, serve())
+    before = _coming_lines(page)
+    assert before == ["COMING · 1", "Existing note", "planting at the runner's next pick"]
+    fetched: list[str] = []
+
+    def refuse(route) -> None:
+        route.fulfill(status=400, body="Bad request")
+
+    page.route("**/requests", refuse)
+    page.on("request", lambda request: fetched.append(request.url))
+    page.fill('#plant textarea[name="text"]', "The new note")
+
+    with page.expect_response("**/requests") as response_info:
+        page.click("#plant-only")
+    response = response_info.value
+    assert response.status == 400
+    page.wait_for_timeout(300)  # a re-fetch, if one wrongly followed, would have landed
+
+    assert not [url for url in fetched if "/planning" in url]
+    assert page.input_value('#plant textarea[name="text"]') == "The new note"
+    assert _coming_lines(page) == before
 
 
 @pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
@@ -1950,7 +2033,7 @@ def test_try_again_then_plant_sends_one_retry_and_its_card_leaves_at_once(
     page.click(f"#again-{asked}")
     assert page.input_value('#plant input[name="again"]') == str(asked)
     page.click("#plant-only")
-    page.wait_for_selector("#plant-status >> text=Asked")
+    page.wait_for_selector("#desk-coming")
     page.wait_for_selector(f"#refused-{asked}", state="detached")
     assert page.locator(f"#refused-{kept}").is_visible()
     assert page.input_value('#plant input[name="again"]') == ""
@@ -1974,6 +2057,7 @@ def test_the_last_retried_card_takes_its_group_with_it(page, planning, db_path, 
     page.click(f"#again-{asked}")
     page.click("#plant-ask")
     page.wait_for_selector("#desk-refused", state="detached")
+    page.wait_for_selector("#desk-coming")
     assert page.locator("#desk-seeds").is_visible()
 
 

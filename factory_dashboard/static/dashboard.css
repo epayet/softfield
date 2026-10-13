@@ -119,6 +119,7 @@ nav.tabs a[aria-current="page"]:hover { color: var(--hazard-ink); background: va
 main { max-width: 1240px; margin: 0 auto; padding: 14px 16px 48px; }
 .page { display: grid; gap: 14px; }
 .row, .cols { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
+#plant-row { display: contents; }
 .panel { background: var(--surface); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
 .panel.needs { border-color: var(--warn); }
 .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--ink);
