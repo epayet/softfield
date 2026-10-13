@@ -25,3 +25,12 @@ Read `docs/milestones/f22-move-archive-button-on-planning-desk.md` (D1, D2) and 
 - an archive on its way still shows its dashed "Archiving at the runner's next pick" pill in the new place, with no button
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2775
+gate_failures: []
+tokens: 2386810
+```
