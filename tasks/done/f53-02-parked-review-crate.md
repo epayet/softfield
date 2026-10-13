@@ -39,3 +39,9 @@ attempts: 3
 tokens: 6551359
 logs: var/runs/20261013-072250/f53-02-parked-review-crate
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
