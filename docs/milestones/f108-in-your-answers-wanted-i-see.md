@@ -1,4 +1,4 @@
-# Milestone F108: In 'your answers wanted', I see when the lead replied (2…
+# Milestone F108: Desk boxes say when: proposals and sign-offs show their time too
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-13.
