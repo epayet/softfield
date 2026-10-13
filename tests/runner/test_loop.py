@@ -4650,17 +4650,24 @@ def test_a_merge_in_a_planner_reply_is_applied_at_once_by_the_lead(
     head = git(repo, "rev-parse", "main").strip()
     _plan_message(repo, thread, "Same as F10?")
     block = json.dumps({"points": POINTS, "proposals": [MERGE_F12]})
-    _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```"], [])
+    carried = 'On F10.\n```json\n{"points": []}\n```'
+    events: list[tuple[str, str | None, datetime]] = []
+    _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```", carried], events)
     _run(repo)
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain") == ""
     assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+    # f49-03: the lead carries on on F10's thread with F12's note, in the same run
+    assert [kind for kind, _, _ in events] == ["planner", "planner"]
+    [kept] = [t for t in _rows(repo, "planner_threads") if t["card"] == "f10"]
+    said = [(m["author"], m["text"]) for m in _messages(repo) if m["thread_id"] == kept["id"]]
+    assert said == [("owner", "From F12, merged here:\nA single line."), ("lead", "On F10.")]
     doc = (repo / "docs" / "milestones" / "f10-one-queue.md").read_text()
     assert "### From F12: queue once (merged by the lead on " in doc and "A single line." in doc
     log = git(repo, "log", "--format=%s|%(trailers:key=Agent,valueonly)", f"{head}..main")
     merges = [line for line in log.splitlines() if "merged into" in line]
     assert merges == ["F12 merged into F10 by the lead|claude-headless"]
-    [reply] = [m for m in _messages(repo) if m["author"] == "lead" and m["proposals"]]
+    [reply] = [m for m in _messages(repo) if m["text"] == "Yes."]
     assert json.loads(str(reply["proposals"])) == [{**MERGE_F12, "applied": True}]
     pointer = [m for m in _messages(repo) if "The lead merged F12 into F10" in str(m["text"])]
     assert len(pointer) == 1
@@ -4792,7 +4799,8 @@ def test_a_reply_that_merges_its_card_away_names_nothing(repo, fake_model, monke
     head = git(repo, "rev-parse", "main").strip()
     _plan_message(repo, "f12", "Same as F10?")
     block = json.dumps({"points": POINTS, "proposals": [MERGE_F12], "title": "Queue once"})
-    _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```"], [])
+    carried = 'On F10.\n```json\n{"points": []}\n```'  # f49-03: the lead carries on there
+    _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```", carried], [])
     _run(repo)
     assert not (repo / F12_DOC).exists()
     assert _naming_commits(repo, head) == []

@@ -12,7 +12,7 @@ import sqlite3
 import statistics
 import subprocess
 import unicodedata
-from collections.abc import Collection, Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -307,11 +307,13 @@ def slug(title: str) -> str:
     return "-".join(words)
 
 
-def next_key(repo: Path, area: str) -> str:
-    """The next free short key in the area's series: one past the highest a milestone doc or a
-    ticket uses (``f7`` after ``f6-planning-room``)."""
+def next_key(repo: Path, area: str, taken: Iterable[str] = ()) -> str:
+    """The next free short key in the area's series: one past the highest a milestone doc, a
+    ticket or ``taken`` uses (``f7`` after ``f6-planning-room``). ``taken`` is the threads'
+    cards (f109-02): a card merged away keeps its key, and its thread, to itself."""
     prefix = SERIES[area]
     keys = [path.stem for path in (repo / "docs" / "milestones").glob("*.md")]
+    keys += [key for key in taken if key != GENERAL]
     for path in (repo / "tasks").glob("*/*.md"):
         if found := _TICKET_KEY_RE.match(path.stem):
             keys.append(found[1])
@@ -523,6 +525,18 @@ def merged_card(doc: str, notes: str, source: str) -> str:
     body = section[0].rstrip("\n")
     after = doc[section.end() :]
     return f"{doc[: section.start()]}{body}\n\n{block}" + (f"\n{after}" if after else "")
+
+
+_MERGED_RE = re.compile(
+    r"^#{3,} From ([A-Z]+\d+): .*\(merged by the (?:lead|owner) on \d{4}-\d{2}-\d{2}\)[ \t]*$",
+    re.MULTILINE,
+)
+
+
+def merged_keys(doc: str) -> list[str]:
+    """The short keys of the cards merged into this one, from the headings ``merged_card``
+    wrote, in the doc's order; a chain's too, whose headings ``card_notes`` moved down."""
+    return [found[1].lower() for found in _MERGED_RE.finditer(doc)]
 
 
 def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]]) -> str:

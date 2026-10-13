@@ -1518,3 +1518,33 @@ SEED_P = {"id": "seed-1", "kind": "seed"}
 )
 def test_a_proposals_state_comes_from_the_owners_requests(proposal, card, rows, state):
     assert planner.proposal_state(proposal, card, rows) == state
+
+
+def test_a_key_that_has_a_thread_is_never_given_again(tmp_path):
+    """f109-02: F64 was planted and merged three times, F73 and F107 twice: the merged card's
+    doc left main and the next plant took its key, and its thread with it."""
+    docs = tmp_path / "docs" / "milestones"
+    docs.mkdir(parents=True)
+    for name in ("f2", "f8-one-queue", "m4"):
+        (docs / f"{name}.md").write_text("# x\n")
+    assert planner.next_key(tmp_path, "factory", ["f9"]) == "f10"
+    assert planner.next_key(tmp_path, "factory", ["general", "m9", "f3"]) == "f9"
+    assert planner.next_key(tmp_path, "product", ["general", "f9"]) == "m5"
+    assert planner.next_key(tmp_path, "factory", []) == planner.next_key(tmp_path, "factory")
+
+
+def test_a_plant_passes_over_the_key_of_a_card_merged_away(repo):
+    """f109-02: F7's card is gone from main, its thread is not."""
+    _f6(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        metrics.planner_thread(conn, project, "f7", NOW.isoformat())
+        metrics.planner_thread(conn, project, "general", NOW.isoformat())
+    finally:
+        conn.close()
+    _ask(repo, "plant", None, _plant("One"))
+    _ask(repo, "plant", None, _plant("Two"))
+    _apply(repo)
+    found = sorted(p.name for p in (repo / "docs" / "milestones").glob("f*.md"))
+    assert found == ["f6-planning-room.md", "f8-one.md", "f9-two.md"]

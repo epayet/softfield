@@ -2061,3 +2061,109 @@ def test_approving_a_plan_still_applies_the_merges_not_rejected(repo):
     assert _request(repo, asked)[1] == "approved: merged F13 into F10"
     assert (docs / "f12-queue-once.md").read_text() == DUPLICATE
     assert not (docs / "f13-queue-twice.md").exists()
+
+
+def _say(repo: Path, thread: str, text: str) -> int:
+    return _ask(repo, "plan_message", thread, json.dumps({"text": text, "comments": {}}))
+
+
+def _owner_said(repo: Path, card: str) -> list[str]:
+    return [str(m["text"]) for m in _thread(repo, card) if m["author"] == "owner"]
+
+
+def test_after_a_merge_the_lead_carries_on_on_the_kept_card(repo):
+    """f49-03 (the owner, 2026-10-13, after F107): the duplicate's note is the kept thread's
+    next message from the owner and a planner job is queued there, so the answer and the plan
+    come on the kept card with no "go" to write on another page."""
+    _duplicates(repo)
+    _ask(repo, "approve_plan", "f12")
+    _apply(repo)
+    [said] = _owner_said(repo, "f10")
+    assert said.startswith("From F12, merged here:") and "A single line." in said
+    [(kind, subject, reason, done)] = _queued(repo)
+    assert (kind, reason, done) == ("planner", "your message on F10", None)
+    assert str(subject).startswith("f10#")
+    assert not _archived(repo, "f10")
+    assert _owner_said(repo, "f12") == []  # the duplicate's thread only points on
+
+
+def test_a_merge_proposed_on_the_kept_cards_thread_queues_nothing_more(repo):
+    """f49-03: the lead is already on the kept card, with the plan the owner approved."""
+    _duplicates(repo, KEPT_PLANNED, thread="f10")
+    _plan(repo, {"tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
+    _ask(repo, "approve_plan", "f10")
+    _apply(repo)
+    assert _queued(repo) == [] and _owner_said(repo, "f10") == []
+
+
+def _merged_away(repo: Path) -> None:
+    """F12 merged into F10 and the lead's job on F10 done: nothing queued."""
+    _duplicates(repo)
+    _ask(repo, "approve_plan", "f12")
+    _apply(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        conn.execute("UPDATE work_queue SET done = ?", (NOW.isoformat(),))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_a_message_on_a_merged_away_thread_goes_to_the_kept_card(repo):
+    """The owner wrote "Go" on F107, whose card was merged away, and the lead could only
+    answer "F107 has no card" (2026-10-13): the message is the kept thread's, and the old
+    thread says where it went."""
+    _merged_away(repo)
+    asked = _say(repo, "f12", "Go.")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "queued for the lead on F10, where F12 was merged"
+    assert _owner_said(repo, "f10")[-1] == "Go."
+    assert _owner_said(repo, "f12") == []
+    pointer = _thread(repo, "f12")[-1]
+    assert pointer["author"] == "lead" and "/planning/f10" in str(pointer["text"])
+    assert "Your message went to F10" in str(pointer["text"])
+    assert _archived(repo, "f12") and not _archived(repo, "f10")
+    [subject] = [s for kind, s, _, done in _queued(repo) if kind == "planner" and done is None]
+    assert str(subject).startswith("f10#")
+
+
+def test_a_message_on_a_key_merged_into_two_cards_or_planted_again_stays_there(repo):
+    """Before f109-02 a key was reused (F64, F73, F107): with two kept cards the runner can't
+    tell which the owner means, and a key with a card again is that card's thread."""
+    _merged_away(repo)
+    docs = repo / "docs" / "milestones"
+    other = planner.merged_card(
+        KEPT.replace("F10", "F11"), "x", "From F12: y (merged by the lead on 2026-10-02)"
+    )
+    (docs / "f11-other.md").write_text(other)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a second merge of F12")
+    asked = _say(repo, "f12", "Which one?")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "queued for the lead"
+    assert _owner_said(repo, "f12") == ["Which one?"]
+    (docs / "f11-other.md").unlink()
+    (docs / "f12-again.md").write_text(DUPLICATE)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "F12 planted again")
+    asked = _say(repo, "f12", "And now?")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "queued for the lead"
+    assert _owner_said(repo, "f12")[-1] == "And now?"
+
+
+def test_the_merges_a_card_holds_are_read_from_the_headings_merged_card_writes():
+    doc = planner.merged_card(KEPT, "a", "From F12: queue once (merged by the lead on 2026-10-01)")
+    doc = planner.merged_card(doc, "b", "From F64: again (merged by the owner on 2026-10-02)")
+    moved = planner.merged_card(
+        KEPT, planner.card_notes(doc), "From F10: one (merged by the lead on 2026-10-03)"
+    )
+    assert planner.merged_keys(doc) == ["f12", "f64"]
+    assert planner.merged_keys(moved) == ["f10", "f12", "f64"]  # a chain: headings moved down
+    assert planner.merged_keys(KEPT) == []
+    assert (
+        planner.merged_keys(
+            "## Notes\nFrom F12: said in a line (merged by the lead on 2026-10-01)\n"
+        )
+        == []
+    )

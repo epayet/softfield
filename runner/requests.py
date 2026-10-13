@@ -121,15 +121,52 @@ def _pause(conn: sqlite3.Connection, state: State, now: datetime, kind: str) -> 
     return "resumed"
 
 
+def _kept_card(repo: Path, thread: str) -> str | None:
+    """The one card ``thread``'s was merged into, when it has none on main any more: read from
+    the headings the merges wrote (F109 D2). None with a card on main, with no merge, or with
+    two kept cards (a key planted twice before f109-02: the runner can't tell which is meant)."""
+    if thread == planner.GENERAL:
+        return None
+    if milestone_file(repo, "milestones", full_key(repo, thread)).is_file():
+        return None
+    kept = set()
+    for path in (repo / "docs" / "milestones").glob("*.md"):
+        if thread in planner.merged_keys(path.read_text(encoding="utf-8")):
+            try:
+                kept.add(planner.thread_key(path.stem))
+            except planner.PlannerError:  # a README
+                continue
+    return kept.pop() if len(kept) == 1 else None
+
+
 def _plan_message(
-    conn: sqlite3.Connection, project_id: int, now: datetime, row: sqlite3.Row
+    conn: sqlite3.Connection,
+    project_id: int,
+    now: datetime,
+    row: sqlite3.Row,
+    repo: Path | None = None,
 ) -> str:
     """The owner's message on a thread (ADR 20 items 3 and 9): kept on the thread with its
     comments by point, and queued as its own ``planner`` row (ADR 22 item 1); the thread's
-    reply that waited for these answers is answered."""
+    reply that waited for these answers is answered. Written on the thread of a card merged
+    away (F107, 2026-10-13), it is the kept card's thread's: a job there could only answer
+    that it has no card."""
     thread = planner.thread_key(row["subject"])
     text, comments = planner.message(row["value"])
     at = now.isoformat()
+    sent_on = ""
+    if repo is not None and (kept := _kept_card(repo, thread)) is not None:
+        name, there = planner.thread_name(thread), planner.thread_name(kept)
+        old = metrics.planner_thread(conn, project_id, thread, at)
+        pointer = (
+            f"Your message went to {there}'s thread, where {name} was merged: /planning/{kept}"
+        )
+        metrics.add_planner_message(conn, old["id"], "lead", at, pointer)
+        if old["archived"] is None:
+            metrics.set_thread_archived(conn, old["id"], at, planner.APPROVED)
+        _resolve_items(conn, project_id, now, [thread])
+        sent_on = f" on {there}, where {name} was merged"
+        thread = kept
     found = metrics.planner_thread(conn, project_id, thread, at)
     thread_id = found["id"]
     if found["archived"] is not None:  # the owner's message opens an archived thread again
@@ -142,7 +179,23 @@ def _plan_message(
     for item in metrics.open_owner_items(conn, project_id):
         if item["kind"] == planner.PLANNING and item["subject"] == thread:
             metrics.resolve_owner_item(conn, item["id"], at)
-    return QUEUED_FOR_THE_LEAD
+    return QUEUED_FOR_THE_LEAD + sent_on
+
+
+def _carry_on(
+    conn: sqlite3.Connection, project_id: int, now: datetime, duplicate: str, kept: str, notes: str
+) -> None:
+    """f49-03 (the owner, 2026-10-13): after a merge the lead carries on on the kept card. The
+    duplicate's notes are the kept thread's next message from the owner, queued for the lead
+    as any message is, so the answer and the plan come there and no "go" is asked for."""
+    said = f"From {planner.thread_name(duplicate)}, merged here:\n{notes}"
+    value = json.dumps({"text": said, "comments": {}})
+    at = now.isoformat()
+    request_id = metrics.add_request(conn, project_id, PLAN_MESSAGE, kept, value, at)
+    asked = metrics.find_request(conn, request_id)
+    if asked is None:  # just written
+        raise planner.PlannerError(f"the message for {planner.thread_name(kept)} is gone")
+    metrics.finish_request(conn, request_id, at, _plan_message(conn, project_id, now, asked))
 
 
 def _archive(
@@ -338,10 +391,10 @@ def _merges(proposals: list[dict[str, object]]) -> list[tuple[str, str]]:
     ]
 
 
-def _merge(repo: Path, now: datetime, duplicate: str, kept: str, by: str = "owner") -> None:
+def _merge(repo: Path, now: datetime, duplicate: str, kept: str, by: str = "owner") -> str:
     """The duplicate's notes appended to the kept card's Notes, saying where they came from,
-    and its doc removed (``git rm``), for the approval's one commit. A card with tickets isn't
-    merged away: they would be left without their milestone."""
+    and its doc removed (``git rm``), for the approval's one commit; the notes moved. A card
+    with tickets isn't merged away: they would be left without their milestone."""
     names = (planner.thread_name(duplicate), planner.thread_name(kept))
     docs = [milestone_file(repo, "milestones", full_key(repo, key)) for key in (duplicate, kept)]
     for name, path in zip(names, docs, strict=True):
@@ -356,8 +409,10 @@ def _merge(repo: Path, now: datetime, duplicate: str, kept: str, by: str = "owne
     title = milestone.milestone_doc(text).get("title") or duplicate
     source = f"From {names[0]}: {title} (merged by the {by} on {now.date().isoformat()})"
     doc = docs[1].read_text(encoding="utf-8")
-    docs[1].write_text(planner.merged_card(doc, planner.card_notes(text), source), "utf-8")
+    notes = planner.card_notes(text)
+    docs[1].write_text(planner.merged_card(doc, notes, source), "utf-8")
     Git(repo).run("rm", "-q", "--", docs[0].relative_to(repo).as_posix())
+    return notes
 
 
 def _merged(
@@ -402,10 +457,12 @@ def auto_merge(
     project_id: int,
     now: datetime,
     proposal: Mapping[str, object],
+    thread: str | None = None,
 ) -> str | None:
     """F49 D1, D2: a planner reply's ``merge``, applied by the runner straight after the job,
     in one commit on main by the lead. None when it is applied (or its duplicate is gone
-    already); otherwise why not, main unchanged, and the proposal waits for the owner."""
+    already); otherwise why not, main unchanged, and the proposal waits for the owner. The
+    lead then carries on on the kept card (f49-03), unless ``thread``, the reply's, is it."""
     try:
         duplicate, kept = planner.merge_cards(proposal)
     except planner.PlannerError as exc:
@@ -418,7 +475,7 @@ def auto_merge(
     if branch is not None and _has_branch(git, branch) and _drafts(git, branch):
         return f"{name} has drafts on {branch}"
     try:
-        _merge(repo, now, duplicate, kept, by="lead")
+        notes = _merge(repo, now, duplicate, kept, by="lead")
         message = f"{name} merged into {planner.thread_name(kept)} by the lead"
         git.commit_all(with_trailers(message, agent=loop.CLAUDE_HEADLESS_AGENT))
     except planner.PlannerError as exc:
@@ -428,6 +485,8 @@ def auto_merge(
         _undo(git)
         raise
     _merged(conn, project_id, now, [(duplicate, kept)], by="lead")
+    if kept != thread:
+        _carry_on(conn, project_id, now, duplicate, kept, notes)
     return None
 
 
@@ -563,8 +622,7 @@ def _approve_plan(
                 doc.write_text(planner.ready_card(text), encoding="utf-8")
             for rel in tickets:
                 git.move(repo / rel, repo / "tasks" / "ready" / Path(rel).name)
-        for duplicate, kept in merges:
-            _merge(repo, now, duplicate, kept)
+        moved = {(d, kept): _merge(repo, now, d, kept) for d, kept in merges}
         merged = [words.replace(" into ", " merged into ", 1) for words in joined]
         if planned:
             made = _export(repo, conn, project_id, thread, doc)
@@ -578,6 +636,9 @@ def _approve_plan(
         raise
     _merged(conn, project_id, now, merges)
     _resolve_items(conn, project_id, now, gone)
+    for (duplicate, kept), notes in moved.items():
+        if kept != thread:  # there the lead is on the kept card already
+            _carry_on(conn, project_id, now, duplicate, kept, notes)
     said = [f"merged {words}" for words in joined] + already
     if not planned:
         return f"approved: {'; '.join(said)}"
@@ -687,7 +748,7 @@ def _plant(
             return f"planted already: {there.relative_to(repo).as_posix()}"
         n += 1
         name = f"{slug}-{n}"
-    key = planner.next_key(repo, area)
+    key = planner.next_key(repo, area, metrics.thread_cards(conn, project_id))
     full = f"{key}-{name}"
     note = " ".join(filter(None, [f"Planted by the owner on {now.date().isoformat()}", source]))
     doc = planner.seed_card(key, title, thoughts, area, note + ".")
@@ -1032,7 +1093,7 @@ def _apply(
         if kind in (PAUSE, RESUME):
             return _pause(conn, state, now, kind)
         if kind == PLAN_MESSAGE:
-            return _plan_message(conn, project_id, now, row)
+            return _plan_message(conn, project_id, now, row, repo)
         if kind == SEND_BACK:
             return _send_back(conn, project_id, now, row)
         if kind == APPROVE_PLAN:

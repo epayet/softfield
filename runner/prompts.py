@@ -372,7 +372,11 @@ planning over idea), else the older one. Don't edit or remove either card yourse
 after your reply the runner applies the merge on its own: it moves the duplicate's notes into \
 the kept card, removes the duplicate and points its thread to the kept one, where the \
 conversation goes on. It can't when the duplicate has tickets or drafts on its plan branch: \
-then the merge waits for the owner.
+then the merge waits for the owner. On a duplicate, say only which card it repeats and why \
+that one is kept, in one or two points, and draft nothing: the runner brings their note to \
+the kept card's thread and queues you there, and your full answer and the plan come on that \
+thread (a card merged away can hold no plan). Never ask the owner to write "go", or anything \
+else, on another page: what you need from them, ask here.
 
 How to answer:
 - Answer their questions and comments first, then revise what they asked you to change.

@@ -231,3 +231,14 @@ def test_nothing_in_the_runner_or_opencode_names_junior_md():
     instructions = json.loads((root / "opencode.json").read_text())["instructions"]
     assert "docs/agents/developer.md" in instructions
     assert not [i for i in instructions if "junior" in i]
+
+
+@pytest.mark.parametrize("text", [prompts.PLANNER, prompts.PLANNER_GENERAL])
+def test_on_a_duplicate_the_planner_only_merges_and_never_sends_the_owner_elsewhere(text):
+    """f49-03 (the owner, 2026-10-13): F107's replies answered in full on a page with no card,
+    then asked for a "go" on F73's and F95's. The runner brings the note to the kept card and
+    queues the lead there, so the answer and the plan come on that thread."""
+    looks = text[text.index("Before answering") : text.index("How to answer")]
+    assert "say only which card it repeats" in looks
+    assert "brings their note to the kept card's thread and queues you there" in looks
+    assert "Never ask the owner to write" in looks and "on another page" in looks

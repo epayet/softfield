@@ -3707,7 +3707,7 @@ def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool
         s.git.run("branch", "-q", "-D", branch)
 
 
-def _auto_merge(s: Session, reply: planner.Reply) -> planner.Reply:
+def _auto_merge(s: Session, reply: planner.Reply, thread: str) -> planner.Reply:
     """F49 D1: the reply's merges, applied on main now (the planner job left it there): each
     one applied is stored as such, so the owner is never asked; one the runner can't apply
     waits for the owner's Approve, and the reply says why."""
@@ -3719,7 +3719,7 @@ def _auto_merge(s: Session, reply: planner.Reply) -> planner.Reply:
     for proposal in reply.proposals:
         if proposal.get("kind") == planner.MERGE:
             try:
-                refused = auto_merge(s.repo, s.db, s.project_id, now(), proposal)
+                refused = auto_merge(s.repo, s.db, s.project_id, now(), proposal, thread)
             except Exception as exc:  # a merge never stops the run: the owner can approve it
                 refused = f"{type(exc).__name__}: {exc}"
             if refused is None:
@@ -3923,7 +3923,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         reply = planner.Reply("", note=failed)
     if reply.note is not None:
         s.report.notes.append(f"The planner's reply on {row.subject}: {reply.note}.")
-    reply = _auto_merge(s, reply)
+    reply = _auto_merge(s, reply, thread)
     if reply.ignored is not None:
         s.report.notes.append(f"The planner's reply on {row.subject}: {reply.ignored}.")
     if reply.title is not None:  # after the merges: a card merged away has no heading left

@@ -947,7 +947,7 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
     client = serve()
     html = _review_page(client, "/planning/f6/proposals/mockup")
-    frame = re.search(r'<iframe id="mockup" src="([^"?]+)[^"]*" sandbox ', html)
+    frame = re.search(r'<iframe id="mockup" src="([^"?]+)[^"]*" sandbox="allow-scripts" ', html)
     assert frame and frame[1] == "/planning/mockups/f6/docs/milestones/f6-mockup/index.html"
     served = client.get(frame[1])
     assert (served.status_code, served.text) == (200, "<p>the desk</p>")
@@ -961,6 +961,38 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
         "docs/milestones/f6-mockup/",
     ):
         assert client.get(f"/planning/mockups/f6/{refused}").status_code == 404, refused
+
+
+_MOCKUP_WITH_A_SCRIPT = """<p id="out">dead</p>
+<script>
+  var seen;
+  try { seen = parent.document.title; } catch (e) { seen = "refused"; }
+  document.getElementById("out").textContent = "alive " + window.origin + " " + seen;
+</script>"""
+
+
+def test_a_mockups_scripts_run_in_the_review_pages_frame_as_no_one(
+    page, planning, db_path, serve, checkout
+):
+    """F104 D1, D2 (the owner, 2026-10-10: "Mockups act like I can interact with but I can't"):
+    the frame lets the mock-up's scripts run and nothing else. Its origin is its own, so it
+    can't read the page around it or post as the dashboard. Only the browser says what a
+    sandbox allows, so this runs in Chromium."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    mockup = checkout / "docs" / "milestones" / "f6-mockup" / "index.html"
+    mockup.parent.mkdir(parents=True, exist_ok=True)
+    mockup.write_text(_MOCKUP_WITH_A_SCRIPT)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    page.set_viewport_size({"width": 1024, "height": 800})
+    _open(page, serve(), "/planning/f6/proposals/mockup")
+    out = page.frame_locator("#mockup").locator("#out")
+    out.filter(has_text="alive").wait_for(timeout=5000)
+    assert out.inner_text() == "alive null refused"
+    # exactly this: allow-same-origin would make a mock-up's script the dashboard itself
+    assert page.locator("#mockup").get_attribute("sandbox") == "allow-scripts"
 
 
 _REVIEW_REPLAN: dict[str, Any] = {

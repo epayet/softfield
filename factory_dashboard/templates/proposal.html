@@ -26,7 +26,7 @@
     </header>
 
     {% if mockup %}
-    <iframe id="mockup" src="{{ mockup }}{{ q }}" sandbox title="{{ proposal.title }}" style="width: 100%; height: 480px; border: 1px solid var(--rule); background: var(--plate)"></iframe>
+    <iframe id="mockup" src="{{ mockup }}{{ q }}" sandbox="allow-scripts" title="{{ proposal.title }}" style="width: 100%; height: 480px; border: 1px solid var(--rule); background: var(--plate)"></iframe>
     {% endif %}
 
     <p style="margin: 0; color: var(--ink-2)">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
