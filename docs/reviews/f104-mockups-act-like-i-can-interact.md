@@ -1,6 +1,6 @@
 # Review: F104, a mock-up answers in the review page's frame
 
-- **Status:** round 1 done; nothing left to fix. Ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-13.
 
 ## Sign-off sheet
 

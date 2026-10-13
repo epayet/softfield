@@ -1,6 +1,7 @@
 # Milestone F104: Mockups act like I can interact with but I can't, f54 is…
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** done · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-13. Base: git tag `f104-mockups-act-like-i-can-interact-start`. Report: [`docs/reviews/f104-mockups-act-like-i-can-interact.md`](../reviews/f104-mockups-act-like-i-can-interact.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes
