@@ -492,6 +492,73 @@ def test_a_due_review_heads_the_queue_as_a_batch_crate(line_db):
     assert {s["id"]: s["count"] for s in doc["stations"]}["queue"] == 5
 
 
+def _review_of_f8(line_db: Path, status: str, until: datetime | None) -> dict[str, Any]:
+    """The line's document with F8 at ``status`` and, given ``until``, its review's queued row
+    waiting until then."""
+    conn = metrics.open_db(line_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(conn, project, "f8", status=status)
+        if until:
+            metrics.queue_job(
+                conn,
+                project,
+                "review",
+                "f8",
+                "F8's tickets are all done",
+                (LINE_NOW - timedelta(hours=2)).isoformat(),
+                until.isoformat(),
+            )
+    finally:
+        conn.close()
+    return document(line_db)
+
+
+@pytest.mark.parametrize("status", [metrics.REVIEW_DUE, "review"])
+def test_a_parked_review_waits_behind_the_tickets_that_can_run(line_db, status):
+    """f53-02: the runner parked it until Claude's reset, and developer tickets run meanwhile;
+    between two rounds its milestone is under `review`, not `review due`."""
+    until = LINE_NOW + timedelta(hours=1)
+    doc = _review_of_f8(line_db, status, until)
+    reset = f"Claude's reset at {until.astimezone():%H:%M}"
+    assert [(c["ticket"] or c["title"], c["number"], c["waits"]) for c in doc["queue"]] == [
+        ("f1-09-early", 1, []),
+        ("f5-03-next", 2, []),
+        ("review F8", 3, [reset]),
+        ("f5-04-after", 4, ["f5-03-next"]),
+        ("f5-05-stuck", 5, ["f5-06-escalated"]),
+    ]
+    assert doc["queue"][2] == {
+        "ticket": None,
+        "role": "review",
+        "title": "review F8",
+        "kind": "batch",
+        "milestone": "f8",
+        "number": 3,
+        "waits": [reset],
+    }
+
+
+def test_a_review_whose_wait_is_over_heads_the_queue(line_db):
+    doc = _review_of_f8(line_db, metrics.REVIEW_DUE, LINE_NOW - timedelta(minutes=1))
+    assert [(c["ticket"] or c["title"], c["waits"]) for c in doc["queue"]][:2] == [
+        ("review F8", []),
+        ("f1-09-early", []),
+    ]
+    assert [c["number"] for c in doc["queue"]] == [1, 2, 3, 4, 5]
+
+
+@pytest.mark.parametrize("until", [None, LINE_NOW - timedelta(minutes=1)])
+def test_a_milestone_under_review_with_no_parked_row_has_no_crate(line_db, until):
+    doc = _review_of_f8(line_db, "review", until)
+    assert [c["ticket"] for c in doc["queue"]] == [
+        "f1-09-early",
+        "f5-03-next",
+        "f5-04-after",
+        "f5-05-stuck",
+    ]
+
+
 def test_a_project_whose_repo_cant_be_read_falls_back_to_its_jobs(line_db):
     conn = metrics.open_db(line_db)
     try:

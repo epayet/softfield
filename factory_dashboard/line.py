@@ -587,15 +587,26 @@ def _tickets(conn: sqlite3.Connection, project: str) -> dict[str, sqlite3.Row]:
     }
 
 
-def _due_reviews(conn: sqlite3.Connection, project: str) -> list[dict[str, Any]]:
-    """The reviews `runner run` takes before its next ticket (f4-20), as batch crates."""
+def _due_reviews(conn: sqlite3.Connection, project: str, now: datetime) -> list[dict[str, Any]]:
+    """The reviews `runner run` takes before its next ticket (f4-20), as batch crates. One
+    the runner parked until Claude's reset (F53) says so in `waits`, the hour in local time;
+    parked between two rounds, its milestone is under `review` and gets its crate all the
+    same."""
+    parked: dict[str, datetime] = {}
+    row = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
+    for job in metrics.open_jobs(conn, row["id"]) if row else []:
+        if job["kind"] == "review" and job["not_before"]:
+            until = _when(job["not_before"])
+            if until > now:
+                parked[job["subject"]] = until
     keys = [
         r["key"]
         for r in conn.execute(
-            "SELECT m.key FROM milestones m JOIN projects p ON p.id = m.project_id"
-            " WHERE p.name = ? AND m.status = ?",
+            "SELECT m.key, m.status FROM milestones m JOIN projects p ON p.id = m.project_id"
+            " WHERE p.name = ? AND m.status IN (?, 'review')",
             (project, metrics.REVIEW_DUE),
         )
+        if r["status"] == metrics.REVIEW_DUE or r["key"] in parked
     ]
     return [
         {
@@ -604,7 +615,9 @@ def _due_reviews(conn: sqlite3.Connection, project: str) -> list[dict[str, Any]]
             "title": f"review {short_key(key).upper()}",
             "kind": "batch",
             "milestone": key,
-            "waits": [],
+            "waits": (
+                [f"Claude's reset at {parked[key].astimezone():%H:%M}"] if key in parked else []
+            ),
         }
         for key in sorted(keys, key=milestone_order)
     ]
@@ -665,10 +678,16 @@ def live_line(
         tickets_next, queries.moves([u.priority for u in upcoming]), strict=True
     ):
         crate.update(up=up, down=down)
-    queue = [
-        {**crate, "number": n}
-        for n, crate in enumerate([*_due_reviews(conn, project), *tickets_next], start=1)
+    # a parked review goes behind the last ticket that can run; the run order is kept
+    reviews = _due_reviews(conn, project, now)
+    free = max((n for n, t in enumerate(tickets_next, start=1) if not t["waits"]), default=0)
+    ordered = [
+        *(r for r in reviews if not r["waits"]),
+        *tickets_next[:free],
+        *(r for r in reviews if r["waits"]),
+        *tickets_next[free:],
     ]
+    queue = [{**crate, "number": n} for n, crate in enumerate(ordered, start=1)]
 
     counts: dict[str, int | None] = {belt: sum(belt in t.belts for t in today) for belt in BELTS}
     counts.update(dict.fromkeys(FIELD_BELTS))

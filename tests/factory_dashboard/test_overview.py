@@ -689,6 +689,30 @@ def test_next_in_line_names_a_due_review_first(client, db_path):
     assert "2 f1-05-first" in rows
 
 
+def test_next_in_line_says_what_a_parked_review_waits_for(client, db_path):
+    """f53-02: parked until Claude's reset, it comes behind the tickets that can run."""
+    until = NOW + timedelta(hours=1)
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()
+        metrics.upsert_milestone(conn, project["id"], "f1", status=metrics.REVIEW_DUE)
+        metrics.queue_job(
+            conn,
+            project["id"],
+            "review",
+            "f1",
+            "F1's tickets are all done",
+            (NOW - timedelta(hours=1)).isoformat(),
+            until.isoformat(),
+        )
+    finally:
+        conn.close()
+    rows = section(client.get("/").text, "queue").split("Next in line", 1)[1]
+    assert rows.index("1 f1-05-first") < rows.index("2 f1-06-second") < rows.index("3 review F1")
+    reset = f"Claude's reset at {until.astimezone():%H:%M}"
+    assert rows.endswith(f"3 review F1 · a batch · waits for {reset}")
+
+
 def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path):
     now = section(queue_client.get("/").text, "queue")
     rows = now.split("Next in line", 1)[1]
