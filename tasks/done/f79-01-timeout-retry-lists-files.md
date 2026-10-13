@@ -27,3 +27,10 @@ A retry after a timed-out attempt names the files that attempt changed, so the d
 - A retry after an ordinary gate failure is unchanged.
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
