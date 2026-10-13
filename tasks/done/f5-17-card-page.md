@@ -37,3 +37,10 @@ Read `docs/milestones/f5-board-mockup/Card.dc.html` (the picture: read its marku
 - the page links to the card's planning thread
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
