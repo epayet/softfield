@@ -365,6 +365,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the last support job that slept instead of parking now parks: on 2026-10-08 that sleep cost 3 h 30 with about 40 tickets ready. Two findings of one kind, both from the ticket's wording. It said which tests to "replace", and one covered code that still runs under another command; the plan's Done when named two places (the console and the queue) and the ticket carried one. A ticket that replaces a test says whether the old behaviour is gone or moved, and a Done-when line that names two places is checked against both.
 - **Decisions affected:** none. ADR 16 item 4 now holds for every support job; ADR 22's "a due review keeps its place" holds whenever Claude can take it.
 
+### F79 (2026-10-13): a retry after a timeout names the branch's files ([review](../reviews/f79-when-a-task-times-out-on.md))
+
+- **Q1:** one ticket, a headless lead job on protected runner code, merged first time in 24 minutes. No escalation, direction or checkpoint. The review fixed two small things itself and filed no ticket.
+- **Q3:** no developer work.
+- **Q5:** see the review's numbers.
+- **Anything else:** the card was a question the owner planted; the answer from the code found one real gap, which became a 16-line ticket. The review's diff was 890 lines because a terminal session's commits for three other milestones sat between the merge and the review: a round-1 review should be pointed at its own merges when that happens (backlog, f79-F3). Whether the list saves retries isn't measured yet.
+- **Decisions affected:** none. ADR 12 item 5's retry line gains one sentence; `docs/workflow.md` says so.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

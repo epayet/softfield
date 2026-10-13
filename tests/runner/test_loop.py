@@ -723,7 +723,7 @@ def test_a_retry_after_a_timeout_says_so(repo, fake_model):
     assert report.tasks[0].result == "done"
 
 
-FILES_LINE = "Files it changed:"
+FILES_LINE = "Files changed on this branch so far:"
 
 
 def test_a_retry_after_a_timeout_lists_the_files_it_changed(repo, fake_model):
