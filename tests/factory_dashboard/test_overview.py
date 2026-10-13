@@ -2305,3 +2305,52 @@ def test_done_plant_shows_no_row(client, db_path):
     queue_section = section(html, "queue")
     next_section = queue_section.split("Next in line", 1)[1]
     assert "Done plant" not in next_section
+
+
+def _next_in_line(client) -> str:
+    html: str = client.get("/live").text
+    return html.split("Next in line", 1)[1].split("</section>", 1)[0]
+
+
+def _plants(db_path: Path, *changes: tuple[int, str]) -> None:
+    """Two open plants, and a ``change`` on the first (0) or the second (1) for each given."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        ids = [
+            metrics.add_request(conn, project, "plant", None, value, NOW.isoformat())
+            for value in (
+                json.dumps({"text": "Calm colours", "ask": True}),
+                json.dumps({"title": "Rubber ducks", "thoughts": "Yellow ones."}),
+            )
+        ]
+        for which, value in changes:
+            metrics.add_request(conn, project, "change", str(ids[which]), value, NOW.isoformat())
+    finally:
+        conn.close()
+
+
+def _plant_rows(markup: str) -> list[str]:
+    rows = re.findall(r'<div class="next-row">(.*?)</div>', markup, re.S)
+    return [" ".join(unescape(re.sub(r"<[^>]+>", " ", r)).split()) for r in rows if "Plant:" in r]
+
+
+def test_an_edited_plant_shows_its_new_title_in_next_in_line(client, db_path):
+    """F14: the Now page shows the change as the desk does; the other plant is as it was."""
+    _plants(db_path, (0, json.dumps({"text": "Calmer colours"})))
+    markup = _next_in_line(client)
+    assert _plant_rows(markup) == [
+        "Plant: Calmer colours · changed · at the runner's next pick",
+        "Plant: Rubber ducks · at the runner's next pick",
+    ]
+    assert "<s>" not in markup
+
+
+def test_a_cancelled_plant_is_struck_through_in_next_in_line(client, db_path):
+    _plants(db_path, (1, '{"cancel": true}'))
+    markup = _next_in_line(client)
+    assert _plant_rows(markup) == [
+        "Plant: Calm colours · at the runner's next pick",
+        "Plant: Rubber ducks · cancelling at the runner's next pick",
+    ]
+    assert re.findall(r"<s>(.*?)</s>", markup) == ["Rubber ducks"]

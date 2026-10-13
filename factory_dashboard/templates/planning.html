@@ -66,11 +66,52 @@
         <span style="font-size: 14px">{{ item.title }}</span>
         {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
       </a>
-      {% else %}
-      <div style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
-        <span style="font-size: 14px">{{ item.title }}</span>
-        {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
+      {% elif item.change %}
+      {# F14: a change on a waiting plant is on its way, dashed orange; the row opens no more #}
+      <div class="on-its-way-item" id="waiting-{{ item.id }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px dashed var(--hazard); color: var(--fg); min-height: 44px; box-sizing: border-box">
+        <span style="font-size: 14px{% if item.cancelled %}; text-decoration: line-through{% endif %}">{{ item.title }}</span>
+        <span style="font: 11.5px var(--mono); color: var(--hazard)">{{ item.words }}</span>
+        {% with asked = {"id": item.change, "done": none} %}{% include "_partials/request.html" %}{% endwith %}
       </div>
+      {% else %}
+      {# F14: a waiting plant opens in place, to edit or cancel it before the runner takes it #}
+      <details class="waiting-plant" id="waiting-{{ item.id }}">
+        <summary style="display: block; cursor: pointer">
+          <div style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+            <span style="font-size: 14px">{{ item.title }}</span>
+            {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
+          </div>
+        </summary>
+        <div style="display: flex; flex-direction: column; gap: 8px; padding: 9px; border: 1px solid var(--rule); border-top: 0">
+          {% if not item.seed %}
+          <form id="edit-{{ item.id }}" hx-post="/requests" hx-target="#waiting-status-{{ item.id }}" hx-swap="innerHTML"
+            hx-vals='js:{kind: "change", project: {{ project | tojson }}, subject: "{{ item.id }}", value: JSON.stringify({% if item.titled %}{title: this.elements.title.value, thoughts: this.elements.thoughts.value}{% else %}{text: this.elements.text.value}{% endif %})}'
+            style="display: flex; flex-direction: column; gap: 8px">
+            {% if item.titled %}
+            <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Title
+              <input name="title" required value="{{ item.title }}" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; min-height: 44px; box-sizing: border-box">
+            </label>
+            <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Thoughts
+              <textarea name="thoughts" rows="4" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ item.text }}</textarea>
+            </label>
+            {% else %}
+            <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Your note
+              <textarea name="text" rows="4" required style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ item.text }}</textarea>
+            </label>
+            {% endif %}
+          </form>
+          {% endif %}
+          <p style="margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+            {% if not item.seed %}
+            <button type="submit" form="edit-{{ item.id }}" id="save-{{ item.id }}" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Save</button>
+            {% endif %}
+            <button type="button" id="cancel-{{ item.id }}" hx-post="/requests" hx-target="#waiting-status-{{ item.id }}" hx-swap="innerHTML"
+              hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ item.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'
+              style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Cancel it</button>
+            <span id="waiting-status-{{ item.id }}" style="font-size: 12.5px; color: var(--muted)"></span>
+          </p>
+        </div>
+      </details>
       {% endif %}
     </div>
     {% endfor %}
@@ -127,6 +168,14 @@
   // Both listeners sit on the document: the form is drawn again after each plant (F13).
   document.addEventListener("htmx:afterRequest", (event) => {
     const form = document.getElementById("plant");
+    // F14: Save or Cancel it on a waiting plant shows the change at once. Only Coming is
+    // drawn again: a note half typed in the Plant box stays.
+    const plant = event.detail.elt.closest(".waiting-plant");
+    if (plant && event.detail.successful) {
+      const coming = plant.closest("section");
+      htmx.ajax("GET", window.location.href, {target: coming, select: `#${coming.id}`, swap: "outerHTML"});
+      return;
+    }
     if (event.detail.elt !== form || !event.detail.successful) return;
     const card = document.getElementById(`refused-${form.elements.again.value}`);
     form.elements.again.value = "";

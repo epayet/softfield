@@ -24,7 +24,13 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, ago, render
 from factory_dashboard.line import live_line
 from factory_dashboard.milestones import _to_html
-from factory_dashboard.overview import Running, agent_allowances, running_jobs
+from factory_dashboard.overview import (
+    CANCELLING,
+    Running,
+    agent_allowances,
+    open_changes,
+    running_jobs,
+)
 from runner import metrics
 from runner.planner import (
     APPLIED,
@@ -85,6 +91,19 @@ class RefusedItem(DeskItem):
     text: str  # an idea's thoughts, or the message with its comments by point
     note: str  # what Try again puts back in the Plant box (F31 D7); "" for a message
     again: str  # the thread whose reply box takes a message back; "" for an idea
+
+
+@dataclass(frozen=True)
+class WaitingPlant(DeskItem):
+    """A plant the runner hasn't taken (F14): its row opens to edit or cancel it, until a
+    change is on its way; then it shows that change, whose status polls."""
+
+    id: int
+    text: str  # what the editor's box holds: the note, or an older plant's thoughts
+    titled: bool  # written as a title and thoughts, and edited as the two; else one note
+    seed: bool  # a seed's words are the lead's: Cancel it only
+    cancelled: bool = False
+    change: int | None = None  # the open change's request
 
 
 @dataclass(frozen=True)
@@ -340,6 +359,27 @@ def archived(conn: sqlite3.Connection, project: str, now: datetime) -> list[Desk
     ]
 
 
+def _titled(value: object) -> bool:
+    """Whether a plant was written as a title and thoughts (the older form); a one-box note
+    (F31 D7), like a value that won't read, is edited as one text."""
+    try:
+        data = json.loads(value) if isinstance(value, str) else None
+    except json.JSONDecodeError:
+        return False
+    return isinstance(data, dict) and "text" not in data
+
+
+def _taken_plant(conn: sqlite3.Connection, project_id: int, subject: str) -> sqlite3.Row | None:
+    """The plant an open change names, once the runner has finished it; None for anything
+    else (a message's change is its thread's to show)."""
+    if not (subject.isascii() and subject.isdigit() and len(subject) <= _MAX_REQUEST_ID):
+        return None
+    row = metrics.find_request(conn, int(subject))
+    if row is None or row["project_id"] != project_id or row["kind"] != PLANT:
+        return None
+    return row if row["done"] is not None else None
+
+
 def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
     """What is on its way: pending plants and threads waiting for the lead's reply."""
     project_id = metrics.find_project(conn, project)
@@ -352,14 +392,48 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
             " WHERE project_id = ? AND kind = 'plant' AND done IS NULL ORDER BY id",
             (project_id,),
         ).fetchall()
+        changes = open_changes(conn, project_id)
         for r in plant_rows:
             words = owners_words(r)  # leniently: the dashboard stores any value
+            plant = WaitingPlant(
+                "coming",
+                (words.title if words else "") or "Your idea",
+                "planting at the runner's next pick",
+                "",
+                id=r["id"],
+                text=words.text if words else "",
+                titled=bool(words and words.title) and _titled(r["value"]),
+                seed=bool(r["subject"]),
+            )
+            change = changes.pop(str(r["id"]), None)
+            if change is not None and change.cancel:
+                plant = replace(plant, words=CANCELLING, cancelled=True)
+            elif change is not None:
+                plant = replace(
+                    plant, title=change.title or plant.title, words=f"changed · {plant.words}"
+                )
+            if change is not None:
+                plant = replace(plant, change=change.id, on_its_way=True)
+            items.append(plant)
+        # A change made from a page drawn before the runner took its plant: its row stays,
+        # for the runner's "too late" to show where the owner asked (F14 D2)
+        for subject, change in changes.items():
+            late = _taken_plant(conn, project_id, subject)
+            if late is None:
+                continue
+            words = owners_words(late)
             items.append(
-                DeskItem(
+                WaitingPlant(
                     "coming",
                     (words.title if words else "") or "Your idea",
-                    "planting at the runner's next pick",
+                    "your change came too late: the runner had taken it",
                     "",
+                    id=late["id"],
+                    text="",
+                    titled=False,
+                    seed=bool(late["subject"]),
+                    change=change.id,
+                    on_its_way=True,
                 )
             )
 

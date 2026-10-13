@@ -19,7 +19,7 @@
     {% set truncated = j.message | length > 60 %}
     <div class="next-row" title="{{ j.message }}"><b class="mono">{{ j.kind }}: <a href="/planning/{{ thread }}">{{ thread | upper }}</a></b> · {% if truncated %}"{{ preview }}…"{% else %}"{{ preview }}"{% endif %}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
     {% elif j.kind == "Plant" %}
-    <div class="next-row"><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}</div>
+    <div class="next-row"><b class="mono">{{ j.kind }}: {% if j.cancelled %}<s>{{ j.subject }}</s>{% else %}{{ j.subject }}{% endif %}</b> · {{ j.reason }}</div>
     {% else %}
     <div class="next-row"><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
     {% endif %}

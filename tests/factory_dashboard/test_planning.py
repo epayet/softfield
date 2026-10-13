@@ -2383,3 +2383,198 @@ def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
     )
     done = _trail(_thread(client, "general"))  # archived: no longer waiting
     assert done["next"] == "/planning/f6/proposals/adr-20" and "previous" not in done
+
+
+# --- a waiting plant is edited or cancelled from Coming (F14) --------------------------------
+
+NOTE = json.dumps({"text": "Calm colours", "ask": True})
+PICK = "planting at the runner's next pick"
+ASKED = "Asked: the runner will do it."
+
+
+def _waiting(html: str, request_id: int) -> tuple[str, str]:
+    """A plant's row in Coming: its tag (``details`` while it opens, ``div`` once a change is
+    on its way) and its markup."""
+    found = re.search(
+        rf'<(details|div) class="[^"]*" id="waiting-{request_id}".*?</\1>', _coming(html), re.S
+    )
+    assert found, f"no row for request {request_id}"
+    return found[1], found[0]
+
+
+def _asked_changes(db_path: Path) -> list[tuple[str | None, dict[str, Any]]]:
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE kind = 'change' ORDER BY id")
+        return [(r["subject"], json.loads(r["value"])) for r in rows]
+    finally:
+        conn.close()
+
+
+def test_a_waiting_plant_opens_with_its_words_save_and_cancel_it(planning, db_path, serve):
+    """A one-box note opens as its one text, an older plant as its title and thoughts; each
+    row holds its own words only."""
+    note = _finished(db_path, planning, "plant", None, NOTE, None)
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    html = _page(serve())
+    tag, row = _waiting(html, note)
+    assert tag == "details" and "on-its-way-item" not in row
+    assert re.search(r'<textarea name="text"[^>]*>Calm colours</textarea>', row)
+    assert 'name="title"' not in row and "Rubber ducks" not in row
+    assert f'id="save-{note}"' in row and f'id="cancel-{note}"' in row
+    tag, row = _waiting(html, ducks)
+    assert tag == "details"
+    assert re.search(r'<input name="title" required value="Rubber ducks"', row)
+    assert re.search(r'<textarea name="thoughts"[^>]*>Yellow ones.\nFor Mum.</textarea>', row)
+    assert 'name="text"' not in row and "Calm colours" not in row
+
+
+def test_an_edit_on_its_way_shows_the_new_title_and_the_row_opens_no_more(planning, db_path, serve):
+    """The plant with an open change shows it, dashed, its status polling; the other plant's
+    row is as it was: it still opens, with its own title."""
+    note = _finished(db_path, planning, "plant", None, NOTE, None)
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    edit = json.dumps({"text": "Calmer colours\nNothing bright."})
+    change = _finished(db_path, planning, "change", str(note), edit, None)
+    html = _page(serve())
+    tag, row = _waiting(html, note)
+    assert tag == "div" and "on-its-way-item" in row and "1px dashed var(--hazard)" in row
+    assert _text(row) == f"Calmer colours Nothing bright. changed · {PICK} {ASKED}"
+    assert f'hx-get="/requests/{change}"' in row
+    assert "<details" not in row and "<form" not in row and "<button" not in row
+    tag, row = _waiting(html, ducks)
+    assert tag == "details" and _text(row).startswith(f"Rubber ducks {PICK} ")
+    assert _coming_items(html) == [("", "Calmer colours Nothing bright."), ("", "Rubber ducks")]
+
+
+def test_a_cancel_on_its_way_strikes_the_plant_through(planning, db_path, serve):
+    """A cancel wins over an edit made before or after it, as the runner applies them."""
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    _finished(db_path, planning, "change", str(ducks), json.dumps({"title": "Geese"}), None)
+    cancel = _finished(db_path, planning, "change", str(ducks), '{"cancel": true}', None)
+    _finished(db_path, planning, "change", str(ducks), json.dumps({"title": "Swans"}), None)
+    tag, row = _waiting(_page(serve()), ducks)
+    assert tag == "div" and "1px dashed var(--hazard)" in row
+    assert re.search(r'<span style="[^"]*text-decoration: line-through">Rubber ducks</span>', row)
+    assert _text(row) == f"Rubber ducks cancelling at the runner's next pick {ASKED}"
+    assert f'hx-get="/requests/{cancel}"' in row and "<button" not in row
+
+
+def test_a_change_the_runner_finished_shows_no_more(planning, db_path, serve):
+    """Only an open change counts: once the runner has applied or refused it, the plant
+    (still waiting, say the change was refused) opens again."""
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    _finished(db_path, planning, "change", str(ducks), '{"cancel": true}', "a change is JSON")
+    tag, row = _waiting(_page(serve()), ducks)
+    assert tag == "details" and "line-through" not in row
+
+
+def test_a_seeds_plant_offers_cancel_it_only(planning, db_path, serve):
+    """The runner refuses an edit of a seed's words (they are the lead's)."""
+    seed = _finished(db_path, planning, "plant", "general/seed-1", None, None)
+    tag, row = _waiting(_page(serve()), seed)
+    assert tag == "details" and f'id="cancel-{seed}"' in row
+    assert "<form" not in row and f'id="save-{seed}"' not in row
+
+
+def test_a_change_that_came_too_late_keeps_a_row_for_the_runners_word(planning, db_path, serve):
+    """The page was drawn before the runner took the plant, and the owner saved from it: the
+    plant has left Coming, and the change's row stays with its status, where "too late:
+    already planted" shows. A change on a message isn't the desk's."""
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, "planted f9-rubber-ducks")
+    said = _finished(db_path, planning, "plan_message", "general", MESSAGE, "sent")
+    change = _finished(db_path, planning, "change", str(ducks), '{"cancel": true}', None)
+    _finished(db_path, planning, "change", str(said), '{"cancel": true}', None)
+    _finished(db_path, planning, "change", "no such request", '{"cancel": true}', None)
+    client = serve()
+    html = _page(client)
+    assert "Coming · 1" in _coming(html)
+    tag, row = _waiting(html, ducks)
+    assert tag == "div" and "line-through" not in row and "<button" not in row
+    assert _text(row) == f"Rubber ducks your change came too late: the runner had taken it {ASKED}"
+    assert f'hx-get="/requests/{change}"' in row
+    _write(
+        db_path,
+        lambda conn: metrics.finish_request(
+            conn, change, NOW.isoformat(), "too late: already planted"
+        ),
+    )
+    assert _text(client.get(f"/requests/{change}").text) == "too late: already planted"
+
+
+def test_save_posts_a_change_and_the_row_shows_it_at_once(page, planning, db_path, serve):
+    """On a phone: the row opens in place, Save and Cancel it 44 px high; Save posts one
+    change naming the plant, with the new words; Coming alone is drawn again, so the other
+    plant still opens and a note half typed in the Plant box stays."""
+    note = _finished(db_path, planning, "plant", None, NOTE, None)
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    page.set_viewport_size(PHONE)
+    _open(page, serve())
+    assert _coming_lines(page) == ["COMING · 2", "Calm colours", PICK, "Rubber ducks", PICK]
+    assert not page.locator(f"#save-{note}").is_visible()
+    page.click(f"#waiting-{note} summary")
+    assert page.url.endswith("/planning")
+    assert page.input_value(f'#edit-{note} textarea[name="text"]') == "Calm colours"
+    for button in (f"#save-{note}", f"#cancel-{note}"):
+        assert page.locator(button).is_visible()
+        assert page.locator(button).evaluate("e => e.offsetHeight") >= 44
+    page.fill('#plant textarea[name="text"]', "Half a new note")
+    page.fill(f'#edit-{note} textarea[name="text"]', "Calmer colours")
+    page.click(f"#save-{note}")
+    page.wait_for_selector(f"div#waiting-{note}")
+    changed = ["Calmer colours", f"changed · {PICK}", ASKED]
+    assert _coming_lines(page) == ["COMING · 2", *changed, "Rubber ducks", PICK]
+    assert page.locator(f"#waiting-{note} summary, #save-{note}, #cancel-{note}").count() == 0
+    assert page.locator(f"details#waiting-{ducks}").count() == 1
+    assert page.input_value('#plant textarea[name="text"]') == "Half a new note"
+    assert _asked_changes(db_path) == [(str(note), {"text": "Calmer colours"})]
+    assert _values(db_path, "plant") == [json.loads(NOTE), json.loads(DUCKS)]  # never edited
+    page.reload()
+    assert _coming_lines(page) == ["COMING · 2", *changed, "Rubber ducks", PICK]
+
+
+def test_save_on_an_older_plant_posts_its_title_and_thoughts(page, planning, db_path, serve):
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    _open(page, serve())
+    page.click(f"#waiting-{ducks} summary")
+    assert page.input_value(f'#edit-{ducks} input[name="title"]') == "Rubber ducks"
+    thoughts = "Yellow ones.\nFor Mum."
+    assert page.input_value(f'#edit-{ducks} textarea[name="thoughts"]') == thoughts
+    page.fill(f'#edit-{ducks} input[name="title"]', 'Rubber "duck" keys')
+    page.click(f"#save-{ducks}")
+    page.wait_for_selector(f"div#waiting-{ducks}")
+    assert _coming_lines(page) == ["COMING · 1", 'Rubber "duck" keys', f"changed · {PICK}", ASKED]
+    words = {"title": 'Rubber "duck" keys', "thoughts": thoughts}
+    assert _asked_changes(db_path) == [(str(ducks), words)]
+
+
+def test_cancel_it_posts_a_cancel_and_the_row_is_struck_through_at_once(
+    page, planning, db_path, serve
+):
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    _open(page, serve())
+    page.click(f"#waiting-{ducks} summary")
+    page.click(f"#cancel-{ducks}")
+    page.wait_for_selector(f"div#waiting-{ducks}")
+    cancelling = "cancelling at the runner's next pick"
+    assert _coming_lines(page) == ["COMING · 1", "Rubber ducks", cancelling, ASKED]
+    struck = page.locator(f"#waiting-{ducks} span").first
+    assert struck.inner_text() == "Rubber ducks"
+    assert "line-through" in struck.evaluate("e => getComputedStyle(e).textDecorationLine")
+    assert page.locator(f"#waiting-{ducks} summary, #cancel-{ducks}").count() == 0
+    assert _asked_changes(db_path) == [(str(ducks), {"cancel": True})]
+
+
+def test_a_change_that_isnt_stored_leaves_the_row_open(page, planning, db_path, serve):
+    """The post is refused: nothing is drawn again, and the editor keeps what was typed."""
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
+    _open(page, serve())
+    page.route("**/requests", lambda route: route.fulfill(status=400, body="Bad request"))
+    page.click(f"#waiting-{ducks} summary")
+    page.fill(f'#edit-{ducks} input[name="title"]', "Geese")
+    with page.expect_response("**/requests"):
+        page.click(f"#save-{ducks}")
+    page.wait_for_timeout(300)  # a re-fetch, if one wrongly followed, would have landed
+    assert page.input_value(f'#edit-{ducks} input[name="title"]') == "Geese"
+    assert page.locator(f"details#waiting-{ducks}[open]").count() == 1
+    assert _asked_changes(db_path) == []

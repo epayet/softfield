@@ -14,8 +14,11 @@ tests:
 A message the owner sent on a thread, still waiting for the runner's pick, has Edit and Cancel it.
 
 ### Context
-Read `docs/milestones/f14-coming-planted-ideas-not-clickable.md` (Done when, D5) and `thread_page` in `factory_dashboard/planning.py`: open `plan_message` requests become `Message`s with `waiting=True`, shown in `factory_dashboard/templates/thread.html`. Follow the desk's editor from f14-02 for the look and the posts.
-- A change is a `change` request: `subject` the message's request id, `value` `{"text", "comments"}` or `{"cancel": true}` (f14-01).
+Read `docs/milestones/f14-coming-planted-ideas-not-clickable.md` (Done when, D5) and `thread_page` in `factory_dashboard/planning.py`: open `plan_message` requests become `Message`s with `waiting=True`, shown in `factory_dashboard/templates/thread.html`. Follow the desk's editor from f14-02 for the look and the posts: `factory_dashboard/templates/planning.html` lines 69–114 (a row with a change on its way, then the `<details class="waiting-plant">` editor with Save and Cancel it), and its tests at the end of `tests/factory_dashboard/test_planning.py` (from "a waiting plant is edited or cancelled from Coming").
+- A change is a `change` request: `subject` the message's request id as text, `value` `{"text", "comments"}` or `{"cancel": true}` (f14-01).
+- `open_changes(conn, project_id)` in `factory_dashboard/overview.py` gives the open changes by the id of the request each names: `.id` (the change's own request), `.cancel`, and `.title`, which is read as a plant's words. It holds no message text: an edit's new text is in the change's `value`, read with `message(...)` as `thread_page` reads a waiting message's.
+- `Message` has no request id yet; the buttons' `subject` needs the `plan_message` request's `id`.
+- The desk draws its row again after the post from the script at the bottom of `factory_dashboard/templates/planning.html` (the `.waiting-plant` lines). `factory_dashboard/templates/thread.html` has its own listener, bound to `#reply`; what it does for `#reply` stays, and no existing test loses an assertion.
 - **Only a message with `waiting=True` gets the buttons; a message the runner has taken is on the thread for good.**
 
 ### Done when

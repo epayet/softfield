@@ -17,7 +17,7 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, ago, render
 from runner import loop, metrics
-from runner.requests import RESERVE, owners_words
+from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import load_state
 from runner.tasks import milestone_order
 
@@ -287,6 +287,42 @@ class QueuedJob:
     waits: str | None = None
     message: str | None = None  # truncated message preview for Planning rows
     title: str | None = None  # plant title for Plant rows
+    cancelled: bool = False  # a plant the owner cancelled, the runner yet to take it (F14)
+
+
+CANCELLING = "cancelling at the runner's next pick"
+
+
+@dataclass(frozen=True)
+class Change:
+    """An open ``change`` on a waiting request (F14 D1), as its row shows it at once."""
+
+    id: int  # the change's own request: its status polls
+    cancel: bool
+    title: str  # an edit's new title; "" for a cancel, or for words that give none
+
+
+def open_changes(conn: sqlite3.Connection, project_id: int) -> dict[str, Change]:
+    """The open changes by the id of the request each names. The runner applies them in
+    order (F14 D2): a cancel wins, then the latest edit."""
+    rows = conn.execute(
+        "SELECT id, subject, value FROM owner_requests"
+        " WHERE project_id = ? AND kind = ? AND done IS NULL ORDER BY id",
+        (project_id, CHANGE),
+    ).fetchall()
+    found: dict[str, Change] = {}
+    for r in rows:
+        subject = str(r["subject"] or "")
+        if subject in found and found[subject].cancel:
+            continue
+        try:
+            cancel = json.loads(r["value"] or "") == {"cancel": True}
+        except json.JSONDecodeError:
+            cancel = False
+        # an edit carries a plant's words: read as leniently as the plant's own
+        words = owners_words({"kind": PLANT, "subject": None, "value": r["value"]})
+        found[subject] = Change(r["id"], cancel, words.title if words and not cancel else "")
+    return found
 
 
 def queued_jobs(
@@ -359,10 +395,18 @@ def queued_jobs(
         " ORDER BY owner_requests.id",
         (project,),
     ).fetchall()
+    changes = open_changes(conn, found_project["id"]) if found_project else {}
     for pr in plant_rows:
         words = owners_words(pr)  # leniently: the dashboard stores any value
         title = (words.title if words else "") or "Your idea"
-        found.append(QueuedJob("Plant", title, "at the runner's next pick", title=title))
+        change = changes.get(str(pr["id"]))
+        if change is not None and change.cancel:
+            found.append(QueuedJob("Plant", title, CANCELLING, title=title, cancelled=True))
+            continue
+        reason = "at the runner's next pick"
+        if change is not None:
+            title, reason = change.title or title, f"changed · {reason}"
+        found.append(QueuedJob("Plant", title, reason, title=title))
     return found
 
 
