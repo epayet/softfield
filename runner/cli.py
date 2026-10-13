@@ -15,6 +15,7 @@ from runner import (
     checks,
     copilot,
     i18n,
+    look,
     loop,
     metrics,
     owner,
@@ -110,8 +111,9 @@ def _review(cfg: Config, repo: Path, key: str) -> None:
 
 
 # The checks never apply the owner's requests: they run inside jobs, on task branches, and as
-# the pre-commit hook, in the middle of someone else's commit.
-_NO_REQUESTS = ("check-all", "check-layout", "check-i18n", "check-tickets")
+# the pre-commit hook, in the middle of someone else's commit. Nor does a look (ADR 28 item
+# 3): it runs inside a planner or a review job and writes nothing.
+_NO_REQUESTS = ("check-all", "check-layout", "check-i18n", "check-tickets", "look")
 
 
 def _apply_requests(cfg: Config, db: Path) -> None:
@@ -196,6 +198,19 @@ def main(argv: list[str] | None = None) -> int:
     check_tickets.add_argument(
         "tickets", nargs="*", help="ticket files (default: every one in tasks/later/)"
     )
+    look_cmd = sub.add_parser(
+        "look",
+        help="read-only: a SELECT on the metrics database, or a dashboard page as text (ADR 28)",
+    )
+    look_what = look_cmd.add_subparsers(dest="what", required=True)
+    look_sql = look_what.add_parser(
+        "sql", help="the rows of one SELECT; `PRAGMA table_list` and `table_info(<table>)` too"
+    )
+    look_sql.add_argument("query", help="one statement, in quotes")
+    look_page = look_what.add_parser(
+        "page", help="a dashboard page as plain text, or its data as is (/line/live)"
+    )
+    look_page.add_argument("address", help="its path, e.g. /, /planning or /milestones/f95")
     copilot_review = sub.add_parser(
         "copilot-review", help="one read-only Copilot prompt (f1's probes; capped per day)"
     )
@@ -437,6 +452,11 @@ def main(argv: list[str] | None = None) -> int:
             problems = ticket_problems(repo, given)
             print("\n".join(problems) or "tickets OK")
             return 1 if problems else 0
+        elif args.command == "look":
+            if args.what == "sql":
+                print(look.sql(cfg.metrics_db, args.query))
+            else:
+                print(look.page(cfg.metrics_db, repo.name, args.address))
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")
@@ -447,6 +467,7 @@ def main(argv: list[str] | None = None) -> int:
         TaskError,
         copilot.CopilotError,
         report.ReportError,
+        look.LookError,
     ) as exc:
         print(f"runner: {exc}", file=sys.stderr)
         return 1

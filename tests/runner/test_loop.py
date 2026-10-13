@@ -54,6 +54,7 @@ AGENTS = (
     Agent("claude-opus", "claude", "opus", 9),
     Agent("claude-sonnet", "claude", "sonnet", 7),
 )
+LOOK = "Bash(uv run runner look:*)"  # ADR 28: the planner's and the review's, nobody else's
 ROLES = {
     "developer": ("local-m",),
     "last-attempt": ("local-m",),
@@ -1000,6 +1001,7 @@ def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fa
     # must be able to run the pre-flight test itself.
     assert "Bash(uv run pytest:*)" in jobs[0].allowed_tools
     assert "Edit(docs/agents/developer.md)" in jobs[0].allowed_tools  # ADR 14 item 1
+    assert LOOK not in jobs[0].allowed_tools  # ADR 28 item 4: planner and review jobs only
     assert "tests/runner/test_tasks.py" in jobs[0].prompt
     assert "Checkpoint: Sound. Tightened m1-03." in report.notes
 
@@ -1509,6 +1511,7 @@ def test_an_escalation_can_finish_the_work_on_the_branch(repo, fake_model, fake_
 
     def finish(job, repo_):
         assert "Bash(git checkout task/m1-01-thing:*)" in job.allowed_tools
+        assert LOOK not in job.allowed_tools  # ADR 28 item 4
         assert job.prompt.index("finish") < job.prompt.index("requeue")
         git(repo_, "checkout", "-q", "task/m1-01-thing")
         # The branch has caught up with main: the escalated ticket is there.
@@ -3914,6 +3917,7 @@ def _claude_developer(kinds: list[str]):
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         kinds.append(f"{job.kind} {job.model}")
+        assert LOOK not in job.allowed_tools  # ADR 28 item 4: no developer, no checkpoint
         if job.kind == "developer":
             secret = repo_ / "coucou" / "secret.py"
             if secret.is_file():
@@ -4642,10 +4646,12 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     # the check Approve runs, for the drafts' tickets (2026-10-12: F75's approval was refused
     # twice and F71's would have been, for tickets the planner had no way to check)
     check = "Bash(uv run runner check-tickets:*)"
-    drafts = (*edits, *reads, check, "Bash(git checkout plan/f7:*)")
+    # ADR 28: every planner job may look at the database and the dashboard's pages, read-only
+    drafts = (*edits, *reads, LOOK, check, "Bash(git checkout plan/f7:*)")
     assert [(on, tools[-len(drafts) :]) for on, tools in seen[:2]] == [("plan/f7", drafts)] * 2
     [(on, general)] = seen[2:]
-    assert on == "main" and general[-len(reads) :] == reads  # the general thread only talks
+    talks = (*reads, LOOK)
+    assert on == "main" and general[-len(talks) :] == talks  # the general thread only talks
     assert not [tool for tool in general if tool.startswith(("Edit", "Write", "Bash(git checkout"))]
     assert check not in general
     assert git(repo, "branch", "--show-current").strip() == "main"

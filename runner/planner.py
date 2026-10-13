@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from runner import prompts
+from runner import look, prompts
 from runner.tasks import (
     AREAS,
     BUGS,
@@ -688,6 +688,14 @@ def export(
     return "\n".join([heading, "", about, "", *(_exported(m) for m in messages)])
 
 
+# ADR 28 item 5: all a prompt says about `runner look`, in one line
+_LOOK = (
+    f'\nYou can read the metrics database with `{look.COMMAND} sql "<one SELECT>"` and any'
+    f" dashboard page as text with `{look.COMMAND} page <address>` (`/`, `/planning`,"
+    " `/planning/f95`), both read-only: look before answering what the owner sees.\n"
+)
+
+
 def prompt(
     thread: str,
     text: str,
@@ -701,7 +709,7 @@ def prompt(
     ``earlier`` the thread's ``history`` when the job has no session to resume; ``stands``
     where the work stands now (``where_it_stands``)."""
     lines = "".join(f"- On your point {n}: {comment}\n" for n, comment in comments.items())
-    said = stands + earlier
+    said = _LOOK + stands + earlier
     said += f"\nTheir comments on your last points:\n{lines}" if lines else ""
     others = [t for t in threads if t not in (thread, GENERAL)]
     others += [GENERAL] if GENERAL in threads and thread != GENERAL else []

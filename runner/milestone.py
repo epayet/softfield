@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from runner import console, metrics, prompts
+from runner import console, look, metrics, prompts
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
 from runner.config import Config
 from runner.gates import GateResult
@@ -640,7 +640,8 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
             ),
             timeout=cfg.review_timeout,
             edit=(ANY,),
-            commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS),
+            # ADR 28: its times and counts from the database, read-only
+            commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, look.COMMAND),
         )
         since = s.git.head()
         if s.project_id is not None:  # under way: off the line's queue (f4-20)

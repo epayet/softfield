@@ -25,6 +25,7 @@ from runner import (
     checks,
     console,
     dispatch,
+    look,
     messages,
     metrics,
     planner,
@@ -3976,6 +3977,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         edit=planner.drafts(thread) if branch else (),
         commands=(
             *GIT_READ_COMMANDS,
+            look.COMMAND,  # ADR 28: the database and the dashboard's pages, read-only
             *((CHECK_TICKETS, f"git checkout {branch}") if branch else ()),
         ),
         resume=found["session_id"] or None,
