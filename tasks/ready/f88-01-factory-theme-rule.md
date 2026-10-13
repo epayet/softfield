@@ -4,7 +4,7 @@ milestone: f88-add-to-lead-memory-that-new
 depends_on: [f72-01-mockup-by-default]
 agent: lead
 difficulty: 2
-priority: 100
+priority: 1
 area: factory
 files:
   - docs/agents/owner.md

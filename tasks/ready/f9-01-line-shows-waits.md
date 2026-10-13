@@ -4,6 +4,7 @@ milestone: f9-line-polish
 depends_on: []
 agent: lead
 difficulty: 4
+priority: 1
 files:
   - factory_dashboard/line.py
   - factory_dashboard/static/factory.js

@@ -15,7 +15,7 @@
   --floor: #12161b; --bay: #181e25; --plate: #1f2730; --rule: #303b47;
   --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
   --hazard: #f2b10a; --hazard-ink: #1a1405; --way: #ff9640; --opus: #ff9640;
-  --factory: #f2b10a; --product: #4fd1a5; --accent: #ffc48a; --new: #5fd17a;
+  --factory: #f2b10a; --product: #4fd1a5; --accent: #ffc48a; --new: #5fd17a; --leaf: #8ccf62;
   --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
   --body: "Barlow", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
@@ -25,14 +25,14 @@
   --floor: #eceee9; --bay: #f7f8f5; --plate: #ffffff; --rule: #c3c8c0;
   --fg: #16191d; --ink-2: #3f4650; --muted: #5b636d;
   --hazard: #f2b10a; --hazard-ink: #1a1405; --way: #a4461f; --opus: #c8641a;
-  --factory: #b98600; --product: #18977a; --accent: #a4461f; --new: #2c9a46;
+  --factory: #b98600; --product: #18977a; --accent: #a4461f; --new: #2c9a46; --leaf: #4c9a26;
 } }
 :root[data-theme="light"] {
   color-scheme: light;
   --floor: #eceee9; --bay: #f7f8f5; --plate: #ffffff; --rule: #c3c8c0;
   --fg: #16191d; --ink-2: #3f4650; --muted: #5b636d;
   --hazard: #f2b10a; --hazard-ink: #1a1405; --way: #a4461f; --opus: #c8641a;
-  --factory: #b98600; --product: #18977a; --accent: #a4461f; --new: #2c9a46;
+  --factory: #b98600; --product: #18977a; --accent: #a4461f; --new: #2c9a46; --leaf: #4c9a26;
 }
 * { box-sizing: border-box; }
 body { background: var(--floor); color: var(--fg); font: 15px/1.4 var(--body); padding-inline: 16px; padding-block: 14px 110px; }
@@ -47,7 +47,7 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .lede { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 70ch; }
 .changes { margin: 0; padding: 10px 12px 10px 28px; background: var(--bay); border: 1px dashed var(--new); font-size: 13.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; }
 .changes b { color: var(--new); font-weight: 600; }
-.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }  /* Today's stand-in: the real page stacks all six stages */
 .chips button { flex: none; min-height: 44px; padding: 0 12px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
 .chips button[aria-pressed="true"] { border-color: var(--hazard); color: var(--fg); box-shadow: inset 0 -3px 0 var(--hazard); }
 .chips span { font: 500 12px var(--mono); color: var(--muted); margin-left: 4px; }
@@ -90,8 +90,23 @@ button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid 
 .sheet .row button { text-align: center; padding: 0 4px; }
 .sheet small { color: var(--muted); font-size: 12px; }
 .toast { font-size: 12.5px; color: var(--new); min-height: 18px; margin: 0; }
+/* The field: six plots in growth order, three to a row on a phone, joined by a belt */
+.plots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding: 12px; background: var(--bay); border: 1px solid var(--rule);
+  background-image: repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--hazard) 9%, transparent) 10px 12px); }
+.plot { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); grid-template-rows: auto auto; column-gap: 6px; align-items: center; min-height: 64px; padding: 6px 8px; background: var(--plate); border: 1px solid var(--rule); color: var(--ink-2); cursor: pointer; text-align: left; }
+.plot svg { grid-row: 1 / 3; width: 44px; height: 40px; color: var(--muted); }
+.plot b { font: 600 20px/1 var(--display); color: var(--fg); align-self: end; }
+.plot span { font: 600 10.5px var(--display); letter-spacing: .06em; text-transform: uppercase; align-self: start; overflow-wrap: anywhere; }
+.plot::after { content: "›"; position: absolute; right: -12px; top: 50%; translate: 0 -50%; font: 600 16px var(--mono); color: var(--hazard); }
+.plot:nth-child(3n)::after { content: none; }
+.plot::before { content: ""; position: absolute; left: -1px; top: -1px; width: 8px; height: 8px; border-left: 2px solid var(--muted); border-top: 2px solid var(--muted); }
+.plot[aria-pressed="true"] { border-color: var(--hazard); box-shadow: inset 0 -4px 0 var(--hazard); color: var(--fg); }
+.plot[aria-pressed="true"]::before { border-color: var(--hazard); }
+.plot.ripe b { color: var(--hazard); }
 @media (min-width: 900px) {
   .chips { display: none; }
+  .plots { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .plot:nth-child(3n)::after { content: "›"; } .plot:last-child::after { content: none; }
   .stages { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .stage[hidden] { display: flex; }
   .sheet-back { align-items: center; }
@@ -131,7 +146,8 @@ const nat = k => [k.replace(/\d+.*/, ""), parseInt(k.replace(/^\D+/, ""), 10) ||
 const byKey = (a, b) => { const [x, n] = nat(a.key), [y, m] = nat(b.key); return x < y ? -1 : x > y ? 1 : n - m; };
 
 let mode = "proposed", shown = "planted";
-let cols, base, moved = new Set(), sent = new Set(), state = "idle";  // idle | moved | sent
+let cols, base, sentOrder = null, moved = new Set(), sent = new Set(), state = "idle";  // idle | moved | sent
+let planted = false;
 
 function proposedColumns() {
   const c = {}; STAGES.forEach(s => c[s] = TODAY[s].map(x => ({ ...x })));
@@ -142,8 +158,35 @@ function proposedColumns() {
   c.seed = [...c.seed, ...back].sort((a, b) => a.p - b.p || byKey(a, b));
   return c;
 }
-function reset() { cols = proposedColumns(); base = snapshot(); moved.clear(); sent.clear(); state = "idle"; }
+function reset() { cols = proposedColumns(); base = snapshot(); sentOrder = null; work(); }
+/* The cards out of place between two orders: those outside their longest common run. A card
+   put back where it was is not moved, and neither are the cards it passed. */
+function outOfPlace(from, to) {
+  const n = from.length, m = to.length, t = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) t[i][j] = from[i] === to[j] ? t[i + 1][j + 1] + 1 : Math.max(t[i + 1][j], t[i][j + 1]);
+  const kept = new Set(); let i = 0, j = 0;
+  while (i < n && j < m) { if (from[i] === to[j]) { kept.add(from[i]); i++; j++; } else if (t[i + 1][j] >= t[i][j + 1]) i++; else j++; }
+  return to.filter(k => !kept.has(k));
+}
+function work() {
+  const now = snapshot(); moved = new Set(); sent = new Set();
+  ORDERED.forEach(s => {
+    outOfPlace((sentOrder || base)[s], now[s]).forEach(k => moved.add(k));
+    if (sentOrder) outOfPlace(base[s], sentOrder[s]).forEach(k => { if (!moved.has(k)) sent.add(k); });
+  });
+  state = moved.size ? "moved" : sent.size ? "sent" : "idle";
+}
 function snapshot() { const s = {}; STAGES.forEach(k => s[k] = cols[k].map(c => c.key)); return s; }
+/* A plot's plant, drawn taller stage by stage; the last one is a crate. Our own drawing. */
+function plant(i) {
+  const soil = '<path d="M4 40h40" stroke="currentColor" stroke-width="2" stroke-dasharray="5 3"/>';
+  if (i === 5) return `<svg viewBox="0 0 48 44" aria-hidden="true"><path d="M10 16h28v24H10z M10 24h28 M19 16v24 M29 16v24" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 12l8-7 8 7" fill="none" stroke="var(--leaf)" stroke-width="2"/></svg>`;
+  const h = [0, 9, 16, 24, 30][i], top = 40 - h;
+  let d = i === 0 ? '<ellipse cx="24" cy="37" rx="5" ry="3" fill="var(--leaf)"/>' : `<path d="M24 40V${top}" stroke="var(--leaf)" stroke-width="2.5" fill="none"/>`;
+  for (let k = 0; k < i; k++) { const y = 40 - (k + 1) * (h / (i + .2)), side = k % 2 ? 1 : -1; d += `<path d="M24 ${y}q${side * 9} -7 ${side * 13} 1q${side * -7} 5 ${side * -13} -1z" fill="var(--leaf)"/>`; }
+  if (i === 4) d += `<circle cx="24" cy="${top - 2}" r="5.5" fill="var(--hazard)"/>`;
+  return `<svg viewBox="0 0 48 44" aria-hidden="true">${soil}${d}</svg>`;
+}
 const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 function toast(text) { document.getElementById("toast").textContent = text; }
 
@@ -183,20 +226,20 @@ function render() {
   const ch = document.getElementById("changes"); ch.hidden = !proposed; ch.replaceChildren();
   if (proposed) [["Order", "a grip and a place (#1, #2…) on each card, in place of P numbers."], ["One send", "moves wait in the bar at the bottom until you send them."],
     ["Actions", "⋯ on a card: move, open its conversation, set aside, sign off."], ["Sprouting", "only open conversations, saying who they wait for; six archived ones are seeds again."],
-    ["Ripe", "\"Read the review and sign off\" in place of a terminal command."], ["Plant", "an idea straight from the Seeds stage."]]
+    ["Ripe", "\"Read the review and sign off\" in place of a terminal command."], ["The field", "the six stages as one growing row; tap a plot to open it. Nothing scrolls sideways."]]
     .forEach(([b, t]) => { const li = el("li"); li.append(el("b", "", b + ": "), t); ch.append(li); });
   const chips = document.getElementById("chips"); chips.replaceChildren();
-  STAGES.forEach(s => { const b = el("button", "", WORDS[s][0]); b.type = "button"; b.append(el("span", "", String(data[s].length))); b.setAttribute("aria-pressed", String(s === shown)); b.addEventListener("click", () => { shown = s; render(); }); chips.append(b); });
+  chips.className = proposed ? "plots" : "chips";
+  STAGES.forEach((s, i) => {
+    const b = el("button", proposed ? "plot" : ""); b.type = "button"; b.setAttribute("aria-pressed", String(s === shown)); b.addEventListener("click", () => { shown = s; render(); });
+    if (proposed) { b.innerHTML = plant(i); b.append(el("b", "", String(data[s].length)), el("span", "", WORDS[s][0])); if (s === "ripe" && data[s].length) b.classList.add("ripe"); }
+    else { b.textContent = WORDS[s][0]; b.append(el("span", "", String(data[s].length))); }
+    chips.append(b);
+  });
   const host = document.getElementById("stages"); host.replaceChildren();
   STAGES.forEach(s => {
     const sec = el("section", "stage"); sec.hidden = s !== shown; sec.dataset.stage = s;
     const head = el("div", "stage-head"); head.append(el("h2", "", WORDS[s][0]), el("span", "", `${WORDS[s][1]} · ${data[s].length}`)); sec.append(head);
-    if (proposed && s === "seed") {
-      const f = el("form", "plant"), inp = el("input"); inp.id = "plant-idea"; inp.placeholder = "Plant an idea…"; inp.setAttribute("aria-label", "Plant an idea");
-      const go = el("button", "", "Plant"); f.append(inp, go);
-      f.addEventListener("submit", e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; cols.seed.unshift({ key: "new", title: t, area: "factory", bug: false, p: 100, note: "planted · on its way, at the runner's next pick" }); sent.add("new"); render(); });
-      sec.append(f);
-    }
     const list = el("div", "cards"); data[s].forEach((c, i) => list.append(card(c, s, i))); sec.append(list); host.append(sec);
   });
   bar();
@@ -208,18 +251,18 @@ function bar() {
   const p = el("p"), btn = (cls, text, fn) => { const x = el("button", cls, text); x.type = "button"; x.addEventListener("click", fn); return x; };
   if (state === "moved") {
     p.textContent = `${moved.size} card${moved.size === 1 ? "" : "s"} moved. Nothing is sent yet.`;
-    b.append(p, btn("", "Cancel", () => { reset(); toast("Moves cancelled."); render(); }),
-      btn("go", "Send new order", () => { moved.forEach(k => sent.add(k)); moved.clear(); state = "sent"; toast(""); render(); }));
+    b.append(p, btn("", "Cancel", () => { const back = sentOrder || base; ORDERED.forEach(s => cols[s].sort((a, b) => back[s].indexOf(a.key) - back[s].indexOf(b.key))); work(); toast("Moves cancelled."); render(); }),
+      btn("go", "Send new order", () => { sentOrder = snapshot(); work(); toast(""); render(); }));
   } else {
     p.textContent = "New order sent. The runner applies it at its next pick; the job running now is not interrupted. You can still move cards and send again.";
-    b.append(p, btn("demo", "Mock-up only: runner's next pick", () => { sent.clear(); cols.seed.forEach(c => { if (c.key === "new") { c.key = "F111"; c.note = ""; } }); base = snapshot(); state = "idle"; toast("Applied by the runner in one commit. The dashed edges are gone and the order stays."); render(); }));
+    b.append(p, btn("demo", "Mock-up only: runner's next pick", () => { base = sentOrder; sentOrder = null; work(); toast("Applied by the runner in one commit. The dashed edges are gone and the order stays."); render(); }));
   }
 }
 
 function place(stage, key, to) {
   const list = cols[stage], from = list.findIndex(c => c.key === key);
   to = Math.max(0, Math.min(list.length - 1, to)); if (from < 0 || from === to) return;
-  const [c] = list.splice(from, 1); list.splice(to, 0, c); moved.add(key); sent.delete(key); state = "moved"; toast(""); render();
+  const [c] = list.splice(from, 1); list.splice(to, 0, c); work(); toast(state === "idle" ? "Back where it was: nothing to send." : ""); render();
 }
 
 function sheet(c, stage) {
