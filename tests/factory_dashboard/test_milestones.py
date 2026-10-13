@@ -3,9 +3,12 @@ import json
 import re
 
 import pytest
+from fastapi.testclient import TestClient
 
 from runner import metrics
-from tests.factory_dashboard.conftest import NOW, PROJECT
+from tests.browser.conftest import DISPLAY, PHONE, layout_problems
+from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT
+from tests.factory_dashboard.test_planning import _open as open_page
 
 
 def section(html: str, name: str) -> str:
@@ -416,6 +419,230 @@ def test_milestone_scores_detail(milestone_detail_with_scores_client):
     html10 = resp10.text
     results10 = section(html10, "results")
     assert "–" in results10
+
+
+# --- the card's page (f5-17) ---------------------------------------------------------------
+
+
+@pytest.fixture
+def card_client(board_db):
+    """A client over ``write_board``'s rows, plus on ``f24-growing``: a lead ticket that goes
+    first (``priority: 0``) and a developer one that waits for ``f24-03-next``."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        growing = metrics.upsert_milestone(conn, project, "f24-growing")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f24-06-lead",
+            milestone_id=growing,
+            kind="lead",
+            state="ready",
+            title="Goal of f24-06-lead.",
+            body="---\npriority: 0\n---\n",
+        )
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f24-07-waits",
+            milestone_id=growing,
+            kind="developer",
+            state="ready",
+            title="Goal of f24-07-waits.",
+            depends_on=["f24-03-next"],
+        )
+    finally:
+        conn.close()
+    app = create_app(board_db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def _words(markup: str) -> str:
+    return " ".join(html.unescape(re.sub(r"<[^>]+>", " ", markup)).split())
+
+
+def _card_head(page: str) -> str:
+    """The words of the card's header."""
+    match = re.search(r'<header id="card-head"[^>]*>(.*?)</header>', page, re.S)
+    assert match, "no card header"
+    return _words(match.group(1))
+
+
+def _grew(page: str) -> list[tuple[str, bool, bool, str]]:
+    """How it grew: each stage's name, whether it's the current one, whether it's dimmed as
+    a later one, and its words after the name."""
+    match = re.search(r'<section[^>]*\bid="grew"[^>]*>(.*?)</section>', page, re.S)
+    assert match, "no How it grew"
+    found = []
+    for attrs, inner in re.findall(r"<li([^>]*)>(.*?)</li>", match.group(1), re.S):
+        name, _, rest = _words(inner).partition(" ")
+        classes = re.search(r'class="([^"]*)"', attrs)
+        later = "not-yet" in (classes.group(1).split() if classes else [])
+        found.append((name, 'aria-current="step"' in attrs, later, rest))
+    return found
+
+
+def _ticket_rows(page: str) -> list[list[str]]:
+    """The Tickets section's rows: each one's cells, as words."""
+    match = re.search(r'<section[^>]*\bid="tickets"[^>]*>(.*?)</section>', page, re.S)
+    assert match, "no Tickets"
+    rows = re.findall(r"<tr>(.*?)</tr>", match.group(1), re.S)
+    cells = [[_words(c) for c in re.findall(r"<td[^>]*>(.*?)</td>", r, re.S)] for r in rows]
+    return [c for c in cells if c]
+
+
+def test_the_header_shows_the_card_s_stage_priority_and_area(card_client):
+    head = _card_head(card_client.get("/milestones/f24-growing").text)
+    assert head.startswith("F24 · f24-growing Growing")  # its keys, then its title
+    assert "Stage Growing: in the factory" in head
+    assert "Priority P1" in head
+    assert "Area factory" in head
+    assert "Tickets 1 of 5 done · 1 set aside" in head
+
+    seed = _card_head(card_client.get("/milestones/f20-duck-pond").text)
+    assert "Stage Seed: idea or set aside" in seed
+    assert "Priority P30" in seed
+    assert "Area product" in seed
+    assert "Tickets none yet" in seed
+
+
+def test_the_header_s_stage_is_the_board_s_not_the_doc_s_status(card_client, board_db):
+    """``f25-unreviewed`` has every ticket done: growing until the review's sheet is stored,
+    then ripe, whatever its ``status`` says."""
+    assert "Stage Growing" in _card_head(card_client.get("/milestones/f25-unreviewed").text)
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(
+            conn, project, "f25-unreviewed", status="in progress", signoff={"changed": "It."}
+        )
+    finally:
+        conn.close()
+    head = _card_head(card_client.get("/milestones/f25-unreviewed").text)
+    assert "Stage Ripe: needs your sign-off" in head
+    assert "in progress" not in head
+
+
+def test_how_it_grew_marks_the_current_stage_and_dims_the_later_ones(card_client):
+    grew = _grew(card_client.get("/milestones/f24-growing").text)
+    assert [name for name, *_ in grew] == [
+        "Seed",
+        "Sprouting",
+        "Planted",
+        "Growing",
+        "Ripe",
+        "Harvested",
+    ]
+    assert [name for name, current, _, _ in grew if current] == ["Growing"]
+    assert [name for name, _, later, _ in grew if later] == ["Ripe", "Harvested"]
+
+    seed = _grew(card_client.get("/milestones/f20-duck-pond").text)
+    assert [name for name, current, _, _ in seed if current] == ["Seed"]
+    assert [name for name, _, later, _ in seed if later] == [
+        "Sprouting",
+        "Planted",
+        "Growing",
+        "Ripe",
+        "Harvested",
+    ]
+
+    harvested = _grew(card_client.get("/milestones/m3").text)
+    assert [name for name, current, _, _ in harvested if current] == ["Harvested"]
+    assert not any(later for _, _, later, _ in harvested)
+
+
+def test_how_it_grew_dates_growing_and_harvested_where_the_database_has_them(card_client, board_db):
+    words = {name: rest for name, _, _, rest in _grew(card_client.get("/milestones/m3").text)}
+    assert words["Harvested"] == "15 Sep 12:00"  # ``milestones.ended``
+    assert words["Growing"] == ""  # no ``started`` stored: no date made up
+    assert words["Seed"] == words["Sprouting"] == words["Planted"] == ""
+
+    # f1 started on 2026-09-30 and is ripe: growing has its date, harvested none yet
+    words = {name: rest for name, _, _, rest in _grew(card_client.get("/milestones/f1").text)}
+    assert words["Growing"] == "30 Sep 09:00"
+    assert words["Harvested"] == ""
+
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for key in ("f23-planted", "f24-growing"):
+            metrics.upsert_milestone(conn, project, key, started="2026-10-01T08:30:00+02:00")
+    finally:
+        conn.close()
+    growing = _grew(card_client.get("/milestones/f24-growing").text)
+    assert [(name, rest) for name, current, _, rest in growing if current] == [
+        ("Growing", "since 1 Oct 08:30")
+    ]
+    # a card not growing yet shows no growing date, even with one stored
+    planted = _grew(card_client.get("/milestones/f23-planted").text)
+    assert [(name, rest) for name, current, _, rest in planted if current] == [("Planted", "")]
+    assert all(rest == "" for *_, rest in planted)
+
+
+def test_the_tickets_come_in_run_order_with_who_works_on_each(card_client):
+    """Done, then what's being worked on, then the ready ones as the runner will take them
+    (priority, then id; one that waits after those it can take), then the set-aside ones. A
+    removed ticket (``f24-05-gone``) is left out."""
+    rows = _ticket_rows(card_client.get("/milestones/f24-growing").text)
+    assert rows == [
+        ["f24-01-merged", "Goal of f24-01-merged.", LOCAL, "done"],
+        ["f24-02-working", "Goal of f24-02-working.", LOCAL, "running"],
+        ["f24-06-lead", "Goal of f24-06-lead.", "the lead", "ready"],
+        ["f24-03-next", "Goal of f24-03-next.", "a developer", "ready"],
+        ["f24-07-waits", "Goal of f24-07-waits.", "a developer", "waits for f24-03-next"],
+        ["f24-04-later", "Goal of f24-04-later.", "a developer", "set aside"],
+    ]
+
+
+def test_a_ticket_s_who_is_its_last_job_s_agent(milestone_detail_client):
+    """``f1-02-escalated`` went from the local model to Opus: its last job's agent shows."""
+    from tests.factory_dashboard.conftest import OPUS
+
+    rows = {r[0]: r for r in _ticket_rows(milestone_detail_client.get("/milestones/f1").text)}
+    assert rows["f1-01-first"][2:] == [LOCAL, "done"]
+    assert rows["f1-02-escalated"][2:] == [OPUS, "done"]
+
+
+def test_the_page_links_to_the_card_s_planning_thread(card_client):
+    page = card_client.get("/milestones/f24-growing").text
+    assert re.search(r'<a[^>]*href="/planning/f24\?project=coucou"', page)
+    assert card_client.get("/planning/f24").status_code == 200
+
+
+def test_a_milestone_s_page_lights_the_board_tab_and_leads_back_to_the_board(card_client):
+    page = card_client.get("/milestones/f24-growing").text
+    tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', page, re.S)[0]
+    assert re.findall(r'<a href="([^"?]*)\?[^"]*" aria-current="page"', tabs) == ["/board"]
+    crumbs = re.findall(r'<nav class="crumbs"[^>]*>(.*?)</nav>', page, re.S)[0]
+    assert re.search(r'<a href="/board\?project=coucou">Board</a>', crumbs)
+
+
+@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
+def test_the_card_s_page_lays_out_at_phone_and_display_sizes(page, card_client, size):
+    page.set_viewport_size(size)
+    open_page(page, card_client, "/milestones/f24-growing")
+    page.evaluate("() => document.fonts.ready")
+    # the tabs scroll sideways on a phone by design, as test_planning.py's layout test has it
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    problems = layout_problems(page)
+    assert problems == [], "\n".join(problems)
+    if size is PHONE:
+        # the header, with the card's stage, is what the phone shows first
+        assert page.locator("#card-head .stage-name").bounding_box()["y"] < size["height"]
+        link = page.locator("#card-head .card-thread").bounding_box()
+        assert link["height"] >= 44
+
+
+def test_a_removed_card_s_page_still_answers_without_a_stage(card_client):
+    """``f26-gone`` left the repo, so the board has no card for it; an old link still opens."""
+    response = card_client.get("/milestones/f26-gone")
+    assert response.status_code == 200
+    assert "Stage" not in _card_head(response.text)
+    assert not any(current for _, current, _, _ in _grew(response.text))
 
 
 def test_a_ripe_milestone_shows_its_signoff_button(signoff_button_client):

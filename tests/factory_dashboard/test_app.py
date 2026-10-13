@@ -24,11 +24,10 @@ from tests.factory_dashboard.test_overview import REFRESH, lead_replies, open_ov
 STATIC = Path(app_module.__file__).parent / "static"
 VENDOR = STATIC / "vendor"
 
-PAGES = [
+TABS = [
     "/",
     "/planning",
     "/board",
-    "/milestones",
     "/tickets",
     "/jobs",
     "/runs",
@@ -36,6 +35,7 @@ PAGES = [
     "/agents",
     "/bench",
 ]
+PAGES = [*TABS, "/milestones"]  # the list has no tab since the board (f5-17), and still answers
 
 
 def test_the_app_refuses_to_write(db_path):
@@ -55,7 +55,7 @@ def test_the_app_refuses_to_write(db_path):
 def test_the_top_bar_has_a_tab_per_page_that_keeps_the_project(client):
     html = client.get(f"/?project={OTHER}").text
     tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)[0]
-    assert re.findall(r'href="([^"?]*)\?project=other"', tabs) == PAGES
+    assert re.findall(r'href="([^"?]*)\?project=other"', tabs) == TABS
     assert 'href="/?project=other" aria-current="page"' in tabs
     # the filter lists every project, the one shown selected
     assert re.search(r'<option value="other" selected>', html)
@@ -321,7 +321,7 @@ def test_desktop_bar_unchanged_at_1440(client):
         "host address hidden on desktop"
     )
     assert re.search(r'<nav class="tabs"[^>]*>.*?href="/\?', html, re.S)
-    assert re.search(r'href="/milestones\?', html)
+    assert re.search(r'href="/board\?', html)
     assert re.search(r'href="/tickets\?', html)
     assert re.search(r'href="/jobs\?', html)
     assert re.search(r'href="/runs\?', html)

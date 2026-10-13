@@ -526,8 +526,8 @@ main:has(.board) { max-width: 1360px; }
 .stage-head h3 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
 .stage-head span { font: 12px var(--mono); color: var(--muted); }
 /* a stage's colour, for its icon: greener as it grows, orange in the factory, yellow for you */
-#stage-sprouting { --stage: var(--qwen); } #stage-planted { --stage: var(--product); }
-#stage-growing { --stage: var(--opus); } #stage-ripe { --stage: var(--warn-ink); }
+#stage-sprouting, .at-sprouting { --stage: var(--qwen); } #stage-planted, .at-planted { --stage: var(--product); }
+#stage-growing, .at-growing { --stage: var(--opus); } #stage-ripe, .at-ripe { --stage: var(--warn-ink); }
 #stage-ripe h3 { color: var(--warn-ink); }
 .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
 .cards .none { margin: 0; color: var(--muted); font-size: 12.5px; }
@@ -560,6 +560,35 @@ main:has(.board) { max-width: 1360px; }
 .field-foot a { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
 .swatch.factory { background: var(--factory); } .swatch.product { background: var(--product); }
 .swatch.bug { background: repeating-linear-gradient(-45deg, var(--fail) 0 3px, var(--plate) 3px 6px); }
+/* A card's page (f5-17, after f5-board-mockup/Card.dc.html). The header's left edge is its
+   area's colour and its icon its stage's, as on the board. In "How it grew" the card's own
+   stage is outlined in its colour and the ones still to come are dimmed. Each part may shrink,
+   so on a phone the tickets scroll sideways in their own box and the page doesn't. */
+.card-page > * { min-width: 0; }
+#card-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; background: var(--bay);
+  border: 1px solid var(--rule); border-left: 6px solid var(--c, var(--muted)); padding: 14px 16px; min-width: 0; }
+#card-head.factory { --c: var(--factory); } #card-head.product { --c: var(--product); }
+#card-head svg { flex: none; color: var(--stage, var(--ink-2)); }
+.card-name { display: flex; flex-direction: column; gap: 2px; flex: 1 1 320px; min-width: 0; }
+.card-name h1 { font-size: 24px; line-height: 1.15; text-transform: uppercase; overflow-wrap: anywhere; }
+#card-head dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; font: 13px var(--mono); }
+#card-head dt { color: var(--muted); } #card-head dd { margin: 0; min-width: 0; }
+#card-head .stage-name { color: var(--stage, var(--fg)); font-weight: 600; }
+.card-thread { flex: 1 1 100%; display: inline-flex; align-items: center; min-height: 44px;
+  font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.grew { list-style: none; margin: 0 0 8px; padding: 0; display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px; background: var(--rule);
+  border: 1px solid var(--rule); }
+.grew li { background: var(--plate); padding: 8px 10px; display: flex; flex-direction: column; min-height: 52px; }
+.grew b { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--stage, var(--ink-2)); }
+.grew span { font: 12px var(--mono); color: var(--muted); }
+.grew .now { outline: 2px solid var(--stage, var(--ink-2)); outline-offset: -2px; }
+.grew .not-yet { background: var(--bay); } .grew .not-yet b { color: var(--muted); }
+.card-tickets .who, .card-tickets .state { font: 12px var(--mono); white-space: nowrap; color: var(--muted); }
+.card-tickets .state { font-weight: 600; }
+.card-tickets .is-done { color: var(--qwen); } .card-tickets .is-running { color: var(--serious-ink); }
+.card-tickets .is-ready { color: var(--fg); }
 /* Phone: the stages stack, what needs the owner and what runs first (the owner, 2026-10-03);
    the heads carry the counts, so the totals go, and so does a stage with no card */
 @media (max-width: 639px) {

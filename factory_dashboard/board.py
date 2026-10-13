@@ -1,7 +1,7 @@
 """The board's cards (f5 D4–D6, ADR 19 items 1–4): every milestone and every bug ticket, in
 its growth stage. ``board`` returns plain data; ``/board`` (f5-16) draws it, read-only: a
 column per stage, the totals, and a plain GET form for the search and the kind (``?q=``,
-``?kind=``).
+``?kind=``). ``milestone_card`` is one milestone's card, for its page (f5-17).
 
 - **A milestone's stage** is derived from its thread and its tickets (D4), the first that
   holds: signed off → harvested; an idea no planning thread is about → seed, as the desk's
@@ -119,15 +119,9 @@ def _matches(card: Card, q: str | None, kind: str | None) -> bool:
     return not word or word in card.key.lower() or word in (card.title or "").lower()
 
 
-def board(
-    conn: sqlite3.Connection,
-    project: str,
-    now: datetime,
-    q: str | None = None,
-    kind: str | None = None,
-) -> Board:
-    """The project's cards by stage. ``q`` keeps the cards whose key or title contains it,
-    whatever the case; ``kind`` is one of ``KINDS``. ``now`` tells which jobs are live."""
+def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[Card, datetime]]:
+    """Every card of the project's, with when it was harvested. ``now`` tells which jobs are
+    live."""
     milestones = conn.execute(
         "SELECT m.* FROM milestones m JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
         (project,),
@@ -208,7 +202,25 @@ def board(
             running=running(counted) if stage == "growing" else None,
         )
         found.append((card, _when(m["ended"]) if m["ended"] else _LONG_AGO))
+    return found
 
+
+def milestone_card(conn: sqlite3.Connection, project: str, now: datetime, key: str) -> Card | None:
+    """The card of the milestone with this full key, for its page (f5-17); None for a removed
+    one. The board keeps only the latest harvested cards; this finds any."""
+    return next((c for c, _ in _cards(conn, project, now) if not c.bug and c.full_key == key), None)
+
+
+def board(
+    conn: sqlite3.Connection,
+    project: str,
+    now: datetime,
+    q: str | None = None,
+    kind: str | None = None,
+) -> Board:
+    """The project's cards by stage. ``q`` keeps the cards whose key or title contains it,
+    whatever the case; ``kind`` is one of ``KINDS``. ``now`` tells which jobs are live."""
+    found = _cards(conn, project, now)
     kept = [(card, at) for card, at in found if _matches(card, q, kind)]
     stages: dict[str, list[Card]] = {stage: [] for stage in STAGES}
     for card, _ in sorted(kept, key=lambda c: (c[0].priority, _natural(c[0].key.lower()))):

@@ -1,12 +1,42 @@
 {% extends "base.html" %}
 {% block title %}{{ milestone.key | upper }} · Milestone · {{ project }}{% endblock %}
+{# A milestone's page is its card's (f5-17, after docs/milestones/f5-board-mockup/Card.dc.html):
+   the header and "How it grew" carry the board's stage, then what the page showed before. #}
+{% from "_partials/stage_icon.html" import icon %}
 {% block crumbs %}
-<a href="/milestones{{ q }}">Milestones</a>
+<a href="/board{{ q }}">Board</a>
 <span aria-hidden="true">&rsaquo;</span>
 <span>{{ milestone.key | upper }}</span>
 {% endblock %}
 {% block content %}
-<div class="page">
+<div class="page card-page">
+
+<header id="card-head" class="card-head{% if card %} at-{{ card.stage }} {{ card.area }}{% endif %}">
+  {% if card %}{{ icon(card.stage, 48) }}{% endif %}
+  <div class="card-name">
+    <span class="card-meta">{{ thread | upper }} · {{ milestone.key }}</span>
+    <h1>{{ milestone.title or milestone.key }}</h1>
+  </div>
+  {% if card %}
+  <dl>
+    <dt>Stage</dt><dd class="stage-name">{{ words[card.stage][0] }}: {{ words[card.stage][1] }}</dd>
+    <dt>Priority</dt><dd>{% if card.stage in ("ripe", "harvested") %}–{% else %}P{{ card.priority }}{% endif %}</dd>
+    <dt>Area</dt><dd>{{ card.area }}</dd>
+    <dt>Tickets</dt><dd>{% if card.total %}{{ card.done }} of {{ card.total }} done{% else %}none yet{% endif %}{% if card.set_aside %} · {{ card.set_aside }} set aside{% endif %}</dd>
+  </dl>
+  {% endif %}
+  <a class="card-thread" href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a>
+</header>
+
+<section id="grew" class="panel">
+  <h2>How it grew</h2>
+  <ol class="grew">
+    {% for g in grew %}
+    <li class="at-{{ g.stage }}{% if g.current %} now{% elif g.later %} not-yet{% endif %}"{% if g.current %} aria-current="step"{% endif %}><b>{{ g.name }}</b><span>{{ g.when }}</span></li>
+    {% endfor %}
+  </ol>
+  {% if card %}<p class="sub">The outlined stage is where the card is now; the dimmed ones are still to come.</p>{% endif %}
+</section>
 
 <section id="outcome">
   <h2>Outcome and Done when</h2>
@@ -145,13 +175,13 @@
 </section>
 
 <section id="tickets">
-  <h2>Tickets</h2>
+  <h2>Tickets <span class="src">in run order</span></h2>
   {% if milestone.tickets %}
-  <div class="scroll"><table>
-    <thead><tr><th>Ticket</th><th>Kind</th><th>State</th><th class="num">Difficulty</th></tr></thead>
+  <div class="scroll"><table class="card-tickets">
+    <thead><tr><th>Ticket</th><th>Goal</th><th>Who</th><th>State</th></tr></thead>
     <tbody>
       {% for t in milestone.tickets %}
-      <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td>{{ t.kind or "–" }}</td><td>{{ t.state or "–" }}</td><td class="num">{{ t.difficulty or "–" }}</td></tr>
+      <tr><td class="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td><td>{{ t.goal or "–" }}</td><td class="who">{{ t.who }}</td><td class="state{% if t.mark %} is-{{ t.mark }}{% endif %}">{{ t.state }}</td></tr>
       {% endfor %}
     </tbody>
   </table></div>

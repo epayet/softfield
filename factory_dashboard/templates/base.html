@@ -50,8 +50,8 @@
   </div>
   <div class="hazard" aria-hidden="true"></div>
   <nav class="tabs" aria-label="Pages">
-    {# Milestones stays until f5-17's card page carries a milestone's details; Board then replaces it (the owner, 2026-10-06) #}
-    {% for path, label in [("/", "Overview"), ("/planning", "Planning"), ("/board", "Board"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
+    {# Board replaced Milestones (the owner, 2026-10-06): it links to the list, and a milestone's page lights it (f5-17) #}
+    {% for path, label in [("/", "Overview"), ("/planning", "Planning"), ("/board", "Board"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
     <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}{% if path == "/planning" %} id="planning-tab"{% endif %}>{{ label }}{% if path == "/planning" and planning_count %} · {{ planning_count }}{% endif %}</a>
     {% endfor %}
   </nav>

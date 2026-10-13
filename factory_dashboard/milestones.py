@@ -3,7 +3,12 @@
 One row per milestone: key (a link to ``/milestones/{key}``), title, status, dates,
 tickets merged, first-attempt pass rate, escalations, review rounds, Claude dollars,
 net savings. Trends below: first-attempt rate, escalations, Claude dollars per merged
-ticket and savings per milestone, as small charts (D5).
+ticket and savings per milestone, as small charts (D5). The list has no tab since the board
+(f5-17): the board links to it.
+
+``/milestones/{key}`` is the milestone's card's page (f5-17, after
+``docs/milestones/f5-board-mockup/Card.dc.html``): its stage on the board, priority and area,
+how far it has grown, then what the page showed before, its tickets now in run order.
 """
 
 import re
@@ -17,6 +22,8 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
+from factory_dashboard.board import STAGES, WORDS, Card, milestone_card
+from factory_dashboard.line import _natural
 from runner import metrics
 from runner.tasks import milestone_order, short_key
 
@@ -245,7 +252,7 @@ def milestones_list(request: Request, conn: Db, project: Project, now: Now) -> H
         project,
         "milestones.html",
         {
-            "active": "/milestones",
+            "active": "/board",  # where its link is, now it has no tab (f5-17)
             "milestones": rows,
             "rate": _rate_chart(conn, project),
             "esc": _esc_chart(conn, project),
@@ -285,6 +292,90 @@ def _to_html(text: str | None) -> str:
 
 
 @dataclass(frozen=True)
+class TicketRow:
+    """A ticket on its card's page (f5-17)."""
+
+    ticket: str
+    goal: str | None
+    who: str  # its last job's agent, else who will take it
+    state: str  # in the page's words: "set aside", "waits for f4-04-…"
+    mark: str  # the row's class: its state in the database
+
+
+_WHO = {"lead": "the lead", "developer": "a developer"}
+# the page's order: done, being worked on, ready (as the runner will take them), set aside
+_GROUPS = {"done": 0, "running": 1, "escalated": 1, "blocked": 1, "ready": 2, "later": 4}
+
+
+def ticket_rows(conn: sqlite3.Connection, project: str, milestone_id: int) -> list[TicketRow]:
+    """The card's tickets in run order, each with who did or will do it and its state. The
+    ready ones come as ``run_order`` has them; removed ones are left out."""
+    tickets = [t for t in queries._tickets(conn, milestone_id) if t["state"] != metrics.REMOVED]
+    last: dict[int, str] = {}  # each ticket's last job's agent
+    for job in conn.execute(
+        "SELECT j.ticket_id, j.agent FROM jobs j JOIN runs r ON r.id = j.run_id"
+        " WHERE j.milestone_id = ? AND j.ticket_id IS NOT NULL AND j.agent IS NOT NULL"
+        " AND coalesce(r.command, '') != 'bench' ORDER BY j.id",
+        (milestone_id,),
+    ):
+        last[job["ticket_id"]] = job["agent"]
+    upcoming = {u.ticket: (n, u) for n, u in enumerate(queries.run_order(conn, project))}
+
+    def order(t: sqlite3.Row) -> tuple[int, int, list[tuple[int, str]]]:
+        turn = upcoming[t["ticket"]][0] if t["ticket"] in upcoming else 0
+        return (_GROUPS.get(t["state"], 3), turn, _natural(t["ticket"]))
+
+    rows: list[TicketRow] = []
+    for t in sorted(tickets, key=order):
+        state = t["state"] or "–"
+        if state == "later":
+            state = "set aside"
+        elif t["ticket"] in upcoming and upcoming[t["ticket"]][1].waits:
+            state = "waits for " + ", ".join(upcoming[t["ticket"]][1].waits)
+        rows.append(
+            TicketRow(
+                ticket=t["ticket"],
+                goal=t["title"],
+                who=last.get(t["id"]) or _WHO.get(t["kind"], "–"),
+                state=state,
+                mark=t["state"] or "",
+            )
+        )
+    return rows
+
+
+@dataclass(frozen=True)
+class Grown:
+    """A stage in "How it grew"."""
+
+    stage: str
+    name: str
+    current: bool
+    later: bool  # after the card's own: dimmed
+    when: str  # its date, where the database has one
+
+
+def _date(at: str) -> str:
+    moment = datetime.fromisoformat(at)
+    return f"{moment.day} {moment:%b %H:%M}"
+
+
+def how_it_grew(card: Card | None, started: str | None, ended: str | None) -> list[Grown]:
+    """The six stages, the card's own marked and the later ones dimmed. Only two have a date
+    in the database: ``started`` on growing, ``ended`` on harvested."""
+    at = STAGES.index(card.stage) if card else -1
+    grown: list[Grown] = []
+    for n, stage in enumerate(STAGES):
+        when = ""
+        if stage == "growing" and started and at >= n:
+            when = ("since " if at == n else "") + _date(started)
+        if stage == "harvested" and ended and at == n:
+            when = _date(ended)
+        grown.append(Grown(stage, WORDS[stage][0], current=at == n, later=at < n, when=when))
+    return grown
+
+
+@dataclass(frozen=True)
 class MilestoneDetail:
     key: str
     title: str | None
@@ -298,7 +389,7 @@ class MilestoneDetail:
     owner_score: float | None
     results: queries.MilestoneResults | None
     savings: queries.Savings | None
-    tickets: list[sqlite3.Row]
+    tickets: list[TicketRow]
     runs: list[sqlite3.Row]
     findings: dict[str, int]
 
@@ -311,7 +402,7 @@ def get_milestone_detail(
         return None
     results = queries.milestone_results(conn, project, key)
     savings = queries.savings(conn, project, key)
-    tickets = queries._tickets(conn, m["id"])
+    tickets = ticket_rows(conn, project, m["id"])
     # A milestone's runs are the runs of its jobs (runs has no milestone_id).
     runs = conn.execute(
         "SELECT DISTINCT r.run_dir FROM runs r"
@@ -373,14 +464,19 @@ def milestone_detail(
 
     project_id = metrics.find_project(conn, project)
     review = None if project_id is None else _review(conn, project, project_id, short_key(key), now)
+    card = milestone_card(conn, project, now, key)  # None for a removed one: no stage
     return render(
         request,
         conn,
         project,
         "milestone.html",
         {
-            "active": "/milestones",
+            "active": "/board",  # the board is how a milestone is found (f5-17)
             "milestone": detail,
+            "card": card,
+            "words": WORDS,
+            "grew": how_it_grew(card, detail.started, detail.ended),
+            "thread": short_key(key),
             "outcome_html": _to_html(detail.outcome),
             "done_when_html": _to_html(detail.done_when),
             "signoff_html": signoff_html,

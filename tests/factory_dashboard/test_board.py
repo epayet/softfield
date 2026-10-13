@@ -13,7 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from factory_dashboard.app import create_app, get_now
-from factory_dashboard.board import STAGES, Board, Card, board
+from factory_dashboard.board import STAGES, Board, Card, board, milestone_card
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
@@ -441,11 +441,56 @@ def test_the_top_bar_has_a_board_tab_right_after_planning(board_client):
     tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', board_client.get("/").text, re.S)[0]
     paths = re.findall(r'href="([^"?]*)\?', tabs)
     assert paths[:3] == ["/", "/planning", "/board"]
-    assert "/milestones" in paths  # until f5-17's card page carries a milestone's details
     assert re.search(r'<a href="/board\?project=coucou">Board</a>', tabs)
     assert re.search(
         r'<a href="/board\?project=coucou" aria-current="page">Board</a>', _page(board_client)
     )
+
+
+def test_the_board_replaces_the_milestones_tab_and_links_to_the_list(board_client):
+    """The owner, 2026-10-06: the board is how milestones are found (f5-17). The list keeps
+    each card's ↑ and ↓ and the trends, so it still answers and the board links to it."""
+    html = _page(board_client)
+    tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)[0]
+    assert "/milestones" not in re.findall(r'href="([^"?]*)\?', tabs)
+    assert "Milestones" not in tabs
+    assert board_client.get("/milestones").status_code == 200
+    main = html.split("<main>", 1)[1]
+    assert re.search(
+        r'<a href="/milestones\?project=coucou">\s*All milestones and their trends ›\s*</a>', main
+    )
+
+
+def test_a_milestone_s_card_is_found_by_its_full_key_however_old(db_path):
+    """The board keeps the latest four harvested cards; a milestone's page finds its own."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        for day, key in enumerate(("m4", "f1", "f30", "f31", "f32", "f33"), start=1):
+            metrics.upsert_milestone(
+                conn, p, key, status="done", ended=f"2026-09-{day:02d}T12:00:00+02:00"
+            )
+        metrics.upsert_milestone(conn, p, "f26-gone", state=metrics.REMOVED)
+
+    write(db_path, change)
+    assert "M4" not in keys(read(db_path), "harvested")
+    conn = connect(db_path)
+    try:
+        oldest = milestone_card(conn, PROJECT, NOW, "m4")
+        assert oldest is not None
+        assert (oldest.key, oldest.stage, oldest.area) == ("M4", "harvested", "product")
+        assert milestone_card(conn, PROJECT, NOW, "f26-gone") is None  # a removed card
+        assert milestone_card(conn, PROJECT, NOW, "nowhere") is None
+    finally:
+        conn.close()
+
+
+def test_a_bug_s_ticket_id_is_no_milestone_s_card(board_db):
+    conn = connect(board_db)
+    try:
+        assert milestone_card(conn, PROJECT, NOW, "bug-01-duck-count") is None
+        assert milestone_card(conn, PROJECT, NOW, "bugs") is None
+    finally:
+        conn.close()
 
 
 @pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
