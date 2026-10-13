@@ -61,3 +61,9 @@ attempts: 3
 tokens: 6817779
 logs: var/runs/20261013-135255/f13-01-planted-idea-shows-at-once
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
