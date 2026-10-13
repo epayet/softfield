@@ -32,3 +32,10 @@ Read `docs/milestones/f14-coming-planted-ideas-not-clickable.md` (D1 to D4), and
 - a plant waiting for main can still be cancelled while the repo is on another branch
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
