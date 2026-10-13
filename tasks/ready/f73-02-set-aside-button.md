@@ -1,7 +1,7 @@
 ---
 id: f73-02-set-aside-button
 milestone: f73-i-want-to-be-able-to
-difficulty: 3
+difficulty: 4
 depends_on: [f73-01-set-aside-list, f42-01-review-page-room]
 files:
   - factory_dashboard/templates/proposal.html
@@ -20,12 +20,14 @@ Read `docs/milestones/f73-i-want-to-be-able-to.md` (D2, D4, D5). In `factory_das
 - It sets the whole conversation aside, not one proposal: the drafts of a reply live together on the card's branch.
 - On its way: after the press the block is marked as the other buttons mark it (`on-its-way` on `#actions`) and the button is disabled.
 - No button on a proposal already approved, rejected or applied, nor when the thread is archived already.
-- **The stale note:** the page function in `factory_dashboard/planning.py` gives the template the days since the lead's message that holds this proposal. From 3 days on, a line beside Approve reads "Drafted N days ago: the code may have moved. Ask the lead to refresh it before approving." Under 3 days, nothing.
+- **Refresh:** a second quiet button, `#refresh-button`, "Refresh against main", on a plan, mock-up or replan still open. It posts what Send back posts (kind `send_back`, the same subject) with the fixed text "Check this against main as it is now: renumber what is taken, drop what is done or gone, and update the tickets." and no comments, so the lead revises the drafts without the owner typing. It shows on its way as Send back does.
+- **The stale note:** the page function in `factory_dashboard/planning.py` gives the template the days since the lead's message that holds this proposal. From 3 days on, a line beside Approve reads "Drafted N days ago: the code may have moved. Refresh it before approving.", beside the Refresh button Under 3 days, nothing.
 
 ### Done when
 - an open plan's review page has `#set-aside-button`, whose `hx-vals` hold kind `archive`, the thread as subject and value `on`
 - in Chromium, pressing it posts one `archive` request and the button can't be pressed again
 - a proposal already approved, and one on an archived thread, have no `#set-aside-button`
+- an open plan's page has `#refresh-button`, whose values are kind `send_back`, the proposal's subject and the fixed text; pressing it in Chromium posts one request; an ADR's and a merge's pages have none
 - a proposal whose message is 5 days old shows "Drafted 5 days ago"; one from today shows no such line
 - at 390 px the button is at least 44 px tall and inside the page's width
 - the listed `tests:` pass, and fail without the change

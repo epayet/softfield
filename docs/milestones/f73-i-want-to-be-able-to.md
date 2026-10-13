@@ -25,10 +25,11 @@ Agreed with the owner on F107's thread (2026-10-13), planned in the terminal ses
 - **D2 The whole conversation, not one proposal.** A reply's drafts live together on the card's plan branch, so they are set aside together.
 - **D3 "Set aside", not "Later".** The Tickets page already has a Set aside table, and F106's button for a blocked ticket uses the same words. The list sits just above Archived, closed, and counts in no "needs you".
 - **D4 A stale draft says so.** From three days on, beside Approve: "Drafted N days ago: the code may have moved. Ask the lead to refresh it before approving." Approve stays; the runner's own pre-flight still refuses a plan that no longer applies.
+- **D6 "Refresh against main", one press** (the owner, 2026-10-13: "would a 'update/recheck plan with latest' be useful?"). A button on an open plan, mock-up or replan that sends it back with a fixed request to recheck it against main. No new request and nothing in the runner: it is Send back with the words written. Called Refresh, not Replan: a replan already means changing a card's queued tickets.
 - **D5 Cards already in the queue are left out.** Setting aside a card whose tickets are queued means taking them out and bringing them back in order, which is runner code. The board's order (F15) and F106's button for one blocked ticket cover it for now.
 
 ## Tickets
 | # | Ticket | Who | d | Depends on | What |
 |---|---|---|---|---|---|
 | 01 | set-aside-list | D | 4 | f22-01, f26-02 | D1, D3: the "Set aside" list on the desk, apart from Archived |
-| 02 | set-aside-button | D | 3 | 01, f42-01 | D2, D4: the button on every proposal's page, and the stale note |
+| 02 | set-aside-button | D | 4 | 01, f42-01 | D2, D4, D6: Set aside and Refresh on a proposal's page, and the stale note |
