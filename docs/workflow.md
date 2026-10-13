@@ -27,6 +27,8 @@ All coordination goes through files in the repo. Run logs go to `var/runs/<times
 
 `uv run runner run`, the standing command (ADR 17), works through every milestone's tickets in `tasks/ready/`. When a milestone has every ticket in `done/` (one set aside in `later/` doesn't count), isn't signed off and has no review yet, the run reviews it before its next ticket, as step 2 does, and records the verdict. Then it goes back to the queue. It waits for a parked checkpoint or escalation first. With no `<key>-start` tag, the review tags the commit that added the milestone's doc. The line's queue, Now's "Next in line" and `--dry-run` show the due review as "review F3". `uv run runner review --milestone N` runs only the review loop.
 
+**The standing command stays up** (F101). With nothing it can run, `runner run` no longer ends: it holds and says why on the console and in Now, each cause once, for example "Idle: 22 tickets wait for Claude's reserve · the week resets Mon 17:00", "Idle: nothing is ready", or what waits for the owner by kind. Every 5 seconds it applies the dashboard's requests, checks the backup and picks again, so a switch turned on, an approved plan's tickets or the week's reset start work with no terminal. The hold starts no job itself. To end the run, press Ctrl-C: while idle it writes the session report first. An idle run that has work to report also closes its session at the first poll of a new day and opens the next, so a run up for a week leaves a report per day worked and none for an empty day. `runner run --once`, `--dry-run` and `runner milestone` end as before.
+
 ## Per-task loop
 
 1. Pick the next `tasks/ready/*.md` whose `depends_on` are all in `done/`.

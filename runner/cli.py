@@ -281,9 +281,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if session is not None and session.restart:
                     _restart()  # `runner run` is the standing command (ADR 17): it carries on
-                if session is None or session.review is None:
+                if session is None or (session.review is None and not session.idle):
                     break
-                _review(cfg, repo, session.review)  # then back to the queue (f4-20)
+                if session.review is not None:
+                    _review(cfg, repo, session.review)  # then back to the queue (f4-20)
         elif args.command == "milestone":
             key = milestone_arg(repo, args.number)
             owner.rerun_started(repo, key, db=cfg.metrics_db)

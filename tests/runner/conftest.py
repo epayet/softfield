@@ -58,6 +58,17 @@ def _no_outer_git(monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _idle_run_is_ended(monkeypatch):
+    """`runner run` holds when it has nothing to run (F101): here the owner ends it at its
+    first idle poll (Ctrl-C), unless a test scripts the polls."""
+
+    def ctrl_c() -> None:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("runner.loop._idle_wait", ctrl_c)
+
+
 @pytest.fixture
 def repo(tmp_path: Path) -> Path:
     """A tiny git repo shaped like coucou, on main, with one commit."""

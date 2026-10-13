@@ -5590,3 +5590,214 @@ def test_the_stand_in_prompt_asks_for_the_kind_of_fix_with_a_real_example_path()
     [example] = re.findall(r'"file": "([^"]+)"', prompt)
     assert (Path(__file__).parents[2] / example).is_file()
     assert "one entry per merged ticket and kind" in prompt
+
+
+# --- F101: `runner run` holds when it has nothing to run -------------------------------------
+
+
+def _idles(monkeypatch, *polls: Callable[[], object]) -> None:
+    """The idle hold's polls: at each, the next of ``polls`` happens meanwhile; after the last,
+    the owner ends the run (Ctrl-C)."""
+    left = list(polls)
+
+    def wait() -> None:
+        if not left:
+            raise KeyboardInterrupt
+        left.pop(0)()
+
+    monkeypatch.setattr(loop, "_idle_wait", wait)
+
+
+def _says(repo: Path) -> object:
+    """What the run shows while it holds: it waits for the owner, so until no time."""
+    activity, until = _activity(repo)
+    assert until is None
+    return activity
+
+
+RESERVE_LINE = "wait for Claude's reserve · the week resets Mon 16:00"
+
+
+def test_every_ticket_at_the_reserve_holds_the_run_which_says_what_waits_once(
+    repo, fake_lead, fake_clock, at_the_keyboard, monkeypatch, capsys
+):
+    """2026-10-10: 22 lead tickets waited for the week's reserve, the run ended after 2.9
+    minutes, and for two days nothing the owner asked from the dashboard was applied."""
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    _lead_task(repo, "m1-02-lead")
+    _, jobs = fake_lead
+    seen: list[object] = []
+
+    def a_day_passes() -> None:  # nothing ran: no report at midnight (D3)
+        seen.append(_says(repo))
+        fake_clock[0] += timedelta(days=1)
+
+    _idles(monkeypatch, lambda: seen.append(_says(repo)), a_day_passes, a_day_passes)
+    report = _run(repo)
+    line = f"Idle: 2 tickets {RESERVE_LINE}"
+    assert seen == [line, line, line]  # three polls: the queue didn't return
+    assert jobs == [] and report.tasks == [] and not report.idle  # and it spent no Claude
+    assert capsys.readouterr().out.count(line) == 1
+    assert not (repo / "docs" / "sessions").exists()
+
+
+def test_the_reserve_switch_turned_on_while_the_run_is_idle_runs_the_tickets(
+    repo, fake_lead, fake_clock, at_the_keyboard, monkeypatch
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    _lead_task(repo, "m1-02-lead")
+    script, jobs = fake_lead
+    script.extend([_lead_implements, lambda job, repo_: _lead_writes(repo_, "second")])
+    _passes(monkeypatch)
+    ran_before: list[int] = []
+
+    def phone() -> None:
+        ran_before.append(len(jobs))
+        _ask_from_the_dashboard(repo, "reserve", "week", "on")
+
+    _idles(monkeypatch, phone)
+    report = _run(repo)
+    assert ran_before == [0]
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-01-lead", "done"),
+        ("m1-02-lead", "done"),
+    ]
+    assert _state(repo).parked == {}
+
+
+def test_the_weeks_reset_while_the_run_is_idle_runs_the_ticket_by_itself(
+    repo, fake_lead, fake_clock, monkeypatch
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+
+    def the_week_resets() -> None:
+        fake_clock[0] = MONDAY + timedelta(minutes=1)
+
+    _idles(monkeypatch, the_week_resets)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-lead", "done")]
+
+
+def test_with_nothing_ready_the_run_holds_and_picks_a_ticket_that_appears(
+    repo, fake_model, fake_clock, monkeypatch, capsys
+):
+    """An approved plan's tickets reach tasks/ready/ while the run is up."""
+    fake_model.append(_implement)
+    seen: list[object] = []
+
+    def a_plan_is_approved() -> None:
+        seen.append(_says(repo))
+        _add_task(repo, "m1-01-thing")
+
+    _idles(monkeypatch, a_plan_is_approved)
+    report = _run(repo)
+    assert seen == ["Idle: nothing is ready"]
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
+    assert "[runner] Idle: nothing is ready" in capsys.readouterr().out
+
+
+def test_the_idle_line_is_logged_again_when_what_it_waits_for_changes(
+    repo, fake_lead, fake_clock, monkeypatch, capsys
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    seen: list[object] = []
+
+    def look() -> None:
+        seen.append(_says(repo))
+
+    def a_sign_off_is_asked() -> None:
+        look()
+        conn = metrics.open_db(_config(repo).metrics_db)
+        try:
+            project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+            for kind, subject in (
+                ("signoff", "m0"),
+                ("blocked", "m0-01-a"),
+                ("blocked", "m0-02-b"),
+            ):
+                metrics.upsert_owner_item(
+                    conn,
+                    project,
+                    kind,
+                    subject,
+                    text="…",
+                    command="…",
+                    created=THURSDAY.isoformat(),
+                )
+        finally:
+            conn.close()
+
+    _idles(monkeypatch, look, a_sign_off_is_asked, look, look)
+    _run(repo)
+    first = f"Idle: 1 ticket {RESERVE_LINE.replace('wait ', 'waits ')}"
+    second = f"{first} · waiting for you: 1 sign-off, 2 blocked tickets"
+    assert seen == [first, first, second, second]
+    out = capsys.readouterr().out
+    assert out.count(f"{first}\n") == 1 and out.count(f"{second}\n") == 1
+
+
+def test_tickets_behind_a_blocked_one_are_named_in_the_idle_line(repo, fake_clock, monkeypatch):
+    write_task(repo / "tasks" / "blocked", "m1-01-thing")
+    write_task(repo / "tasks" / "ready", "m1-02-other", "[m1-01-thing]")
+    _add_task(repo, "m1-03-more", "[m1-02-other]")
+    seen: list[object] = []
+    _idles(monkeypatch, lambda: seen.append(_says(repo)))
+    report = _run(repo)
+    assert seen == ["Idle: 2 tickets wait behind a blocked or escalated one"]
+    assert report.notes == ["Paused (dependency escalated): m1-02-other, m1-03-more"]
+
+
+def test_once_and_a_milestones_queue_end_with_nothing_to_run_as_before(
+    repo, fake_lead, fake_clock, monkeypatch
+):
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-01-lead")
+    monkeypatch.setattr(loop, "_idle_wait", lambda: pytest.fail("it held"))
+    s = loop.open_session(_config(repo))
+    assert loop.work_queue(s, reviews=True, once=True) is False
+    assert loop.work_queue(s, milestone="m1") is False
+    assert _state(repo).parked["m1-01-lead"]["kind"] == "reserve"
+
+
+def _one_merges_and_one_waits_for_the_reserve(repo: Path, fake_model) -> None:
+    """A developer ticket to merge, and a lead ticket that keeps M1's review from being due."""
+    _readings_at(repo, 0.79)
+    _lead_task(repo, "m1-02-lead")
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+
+
+def test_an_idle_run_with_work_done_ends_its_session_at_midnight_to_report_it(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch
+):
+    """D3: a run that never ends still reports each day's work; `runner run` then goes on."""
+    _one_merges_and_one_waits_for_the_reserve(repo, fake_model)
+
+    def midnight_passes() -> None:
+        fake_clock[0] += timedelta(hours=13)
+
+    _idles(monkeypatch, midnight_passes, lambda: pytest.fail("it held past midnight"))
+    report = _run(repo)
+    assert report.idle and report.review is None
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
+    assert len(list((repo / "docs" / "sessions").glob("*.md"))) == 1
+
+
+def test_a_ctrl_c_while_idle_ends_the_run_with_its_session_report(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch, capsys
+):
+    _one_merges_and_one_waits_for_the_reserve(repo, fake_model)
+    _idles(monkeypatch)
+    report = _run(repo)
+    assert not report.idle and report.review is None
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
+    assert len(list((repo / "docs" / "sessions").glob("*.md"))) == 1
+    assert "[runner] Ended by you." in capsys.readouterr().out
+    assert _rows(repo, "runs")[-1]["ended"] is not None

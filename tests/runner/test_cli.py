@@ -153,6 +153,18 @@ def test_runner_run_without_a_runner_change_just_ends(in_repo, monkeypatch):
     assert cli.main(["run"]) == 0
 
 
+def test_runner_run_goes_on_after_an_idle_session_ended_at_midnight(in_repo, monkeypatch):
+    """F101 D3: the idle run closed its session to report the day; the command stays up."""
+    sessions = [
+        SessionReport(started=datetime.now(UTC), idle=True),
+        SessionReport(started=datetime.now(UTC)),
+    ]
+    monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: sessions.pop(0))
+    monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
+    assert cli.main(["run"]) == 0
+    assert sessions == []
+
+
 def test_runner_run_reviews_a_finished_milestone_then_goes_on(in_repo, monkeypatch, capsys):
     """f4-20: F9's last ticket merges while F10 still has tickets. The run reviews F9 as
     `runner milestone` would, records its verdict, then runs F10's next ticket."""

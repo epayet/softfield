@@ -8,6 +8,7 @@ import re
 import sqlite3
 import threading
 import time
+from collections import Counter
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -4263,6 +4264,83 @@ def _hold_for_the_owner(s: Session) -> bool:
     return True
 
 
+IDLE = "Idle: "
+# An open owner item's kind, in the idle line's words; the two switches' items are left out:
+# the tickets parked for them are named already.
+OWNER_WAITS = {
+    "adr": "decision",
+    "escalated": "escalated ticket",
+    "blocked": "blocked ticket",
+    "review-stop": "review",
+    "signoff": "sign-off",
+    "planning": "planning reply",
+}
+
+
+def _counted(count: int, what: str) -> str:
+    return f"{count} {what}" if count == 1 else f"{count} {what}s"
+
+
+def _tickets_wait(count: int, what: str) -> str:
+    return f"{_counted(count, 'ticket')} {'waits' if count == 1 else 'wait'} {what}"
+
+
+def _idle_line(s: Session, ready: list[Task], paused: set[str], held: Mapping[str, str]) -> str:
+    """Why the run has nothing to run (F101 D2), each cause once, from what the pick knows:
+    the tickets parked for Claude with the earliest reset, those behind a blocked or escalated
+    one or a sign-off, and the open owner items by kind."""
+    at = now()
+    causes = []
+    parked = [s.state.parked[t.id] for t in ready if t.id in s.state.parked]
+    parked = [entry for entry in parked if not _due(entry, at)]
+    if parked:
+        resets = min(_resets(entry) for entry in parked).astimezone(at.tzinfo)
+        when = f"{resets:%a %H:%M}"
+        if all(entry["kind"] == RESERVE_KIND for entry in parked):
+            what = f"for Claude's reserve · the week resets {when}"
+        else:
+            what = f"for Claude until {when}"
+        causes.append(_tickets_wait(len(parked), what))
+    if paused:
+        causes.append(_tickets_wait(len(paused), "behind a blocked or escalated one"))
+    if held:
+        causes.append(_tickets_wait(len(held), "for a sign-off"))
+    items = [] if s.project_id is None else _record(s, metrics.open_owner_items, s.project_id)
+    kinds = Counter(row["kind"] for row in items or [])
+    asked = [
+        _counted(count, OWNER_WAITS.get(kind, kind))
+        for kind, count in kinds.items()
+        if kind not in (RESERVE_KIND, FIVE_HOUR_KIND)
+    ]
+    if asked:
+        causes.append("waiting for you: " + ", ".join(asked))
+    if not ready:
+        causes.insert(0, "nothing is ready")
+    return IDLE + (" · ".join(causes) or "nothing can run yet")
+
+
+def _idle_wait() -> None:
+    """One poll of the idle hold. The owner's Ctrl-C ends it."""
+    time.sleep(HOLD_POLL_S)
+
+
+def _idle_holds(s: Session) -> bool:
+    """With nothing to run, the standing `runner run` holds instead of ending (F101 D1): one
+    ``HOLD_POLL_S`` here, then the queue's next turn applies the owner's requests, checks the
+    backup, reads Claude's windows and picks again. The hold starts no job itself. False to
+    end the session: the owner's Ctrl-C, or the first idle poll of a new day when the session
+    has work to report (D3: ``report.idle``, and the command starts the next session)."""
+    if now().date() != s.report.started.date() and (s.report.tasks or s.report.claude_runs):
+        s.report.idle = True
+        return False
+    try:
+        _idle_wait()
+    except KeyboardInterrupt:
+        s.log(f"[{RUNNER_AGENT}] Ended by you.")
+        return False
+    return True
+
+
 def _planning_goes(s: Session) -> bool:
     """Whether a planner job could run now, paused or not (`dispatch.plan`)."""
     rows = [row for row in open_rows(s) if row.kind == PLANNER]
@@ -4357,9 +4435,15 @@ def work_queue(
     the command to review. One Claude can't take now parks instead, and the queue goes on
     (F53 D1). Without ``escalate``, no escalation is queued or run. With
     ``once``, it stops after one ticket and the jobs that ticket queued.
+
+    With ``reviews`` and without ``once`` (the standing `runner run`), it doesn't return with
+    nothing to run: it holds, saying what it waits for (`_idle_line`), and each turn applies
+    the owner's requests and picks again (F101). It returns for a due review, the owner's
+    Ctrl-C, or the day's report (`_idle_holds`).
     """
     code = _runner_code(s.repo)
     ran = False  # a ticket ran, for ``once``
+    idle: str | None = None  # the idle line the run shows while it holds (F101)
     while True:
         if _runner_code(s.repo) != code:
             # m4-07: Python keeps the old modules, so a runner fix made by an escalation
@@ -4367,7 +4451,8 @@ def work_queue(
             s.report.notes.append(RESTART_NOTE)
             set_activity(s, "restarting after a runner change")
             return True
-        set_activity(s, PICKING)
+        if idle is None:
+            set_activity(s, PICKING)
         apply_owner_requests(s)
         check_backup(s)
         fresh_reading(s)
@@ -4394,11 +4479,22 @@ def work_queue(
                 return False
             if _wait_for_reset(s, ready, rows):
                 continue
+            if reviews and not once:  # the standing command holds (F101 D1)
+                line = _idle_line(s, ready, paused, held)
+                if line != idle:
+                    idle = line
+                    s.log(f"[{RUNNER_AGENT}] {line}")
+                    set_activity(s, line)
+                if _idle_holds(s):
+                    continue
             if paused:
                 s.report.notes.append("Paused (dependency escalated): " + ", ".join(sorted(paused)))
             if held:
                 s.report.notes.append("Waiting: " + _waits_text(held))
             return False
+        if idle is not None:
+            idle = None
+            set_activity(s, PICKING)
         if job.kind == REVIEW:
             if park_review(s, job.subject):  # the line goes on meanwhile (F53 D1)
                 continue
@@ -4441,7 +4537,8 @@ def _dispatch_ticket(s: Session, task: Task, ready: list[Task]) -> dispatch.Tick
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
-    """`runner run`: the queue, until it is empty or a milestone's review is due (f4-20)."""
+    """`runner run`: the queue, until a milestone's review is due (f4-20) or the owner ends
+    it; with nothing to run it holds (F101). With ``once``, until it is empty."""
     if dry_run:
         dry_run_plan(cfg)
         return None
