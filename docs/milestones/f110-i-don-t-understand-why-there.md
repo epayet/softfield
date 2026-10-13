@@ -1,4 +1,4 @@
-# Milestone F110: I don't understand why there are ripe tickets in the new…
+# Milestone F110: Ripe on the board but no Sign off button: one rule for both
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-13.
