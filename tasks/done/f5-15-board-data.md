@@ -51,3 +51,10 @@ Read `docs/adr/19-feature-board.md` (items 1–4), `docs/milestones/f5-board.md`
 - for the fixture, the ripe cards are the line's field's ripe ones (`live_line`), and the harvested ones its stash
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
