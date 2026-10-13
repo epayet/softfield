@@ -26,3 +26,10 @@ Read F72's Decisions D1–D4 in `docs/milestones/f72-i-really-like-the-mock-up.m
 - `lead.md`'s Planning room gets one line on it; `owner.md`'s "Mock-ups before UI tickets" is widened to D1, dated 2026-10-09. Keep both short.
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
