@@ -17,7 +17,8 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
-from runner.tasks import milestone_order
+from runner import metrics
+from runner.tasks import milestone_order, short_key
 
 router = APIRouter()
 
@@ -349,6 +350,7 @@ def milestone_detail(
     request: Request,
     conn: Db,
     project: Project,
+    now: Now,
 ) -> HTMLResponse:
     detail = get_milestone_detail(conn, project, key)
     if detail is None:
@@ -366,6 +368,11 @@ def milestone_detail(
         ):
             if k in detail.signoff:
                 signoff_html[k] = _to_html(detail.signoff[k])
+    # the planning page's Sign off, by the same rule (F50 D1); planning imports this module
+    from factory_dashboard.planning import _review
+
+    project_id = metrics.find_project(conn, project)
+    review = None if project_id is None else _review(conn, project, project_id, short_key(key), now)
     return render(
         request,
         conn,
@@ -377,5 +384,6 @@ def milestone_detail(
             "outcome_html": _to_html(detail.outcome),
             "done_when_html": _to_html(detail.done_when),
             "signoff_html": signoff_html,
+            "review": review,
         },
     )

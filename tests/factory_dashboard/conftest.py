@@ -1888,3 +1888,87 @@ def write_planning(conn: sqlite3.Connection) -> int:
 
     metrics.planner_thread(conn, project, "f7", _at(timedelta(hours=1)))
     return project
+
+
+def write_signoff_button(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: a ripe milestone with a signoff sheet but no
+    signoff request, one with its ticket done and no sheet, and one already signed
+    off (a sheet, a done ticket, status ``done`` and an ``ended`` date before ``NOW``)."""
+    project = metrics.upsert_project(conn, PROJECT)
+    bare = metrics.upsert_milestone(
+        conn,
+        project,
+        "bare1",
+        title="Review not written",
+        status="review",
+        started=_at(timedelta(days=2)),
+    )
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "bare1-01",
+        milestone_id=bare,
+        kind="developer",
+        state="done",
+        merged_by=LOCAL,
+        commit="b" * 40,
+        lines_changed=10,
+    )
+    # Ripe milestone: all tickets done, has signoff sheet, status not "done"
+    ripe_m = metrics.upsert_milestone(
+        conn,
+        project,
+        "ripe1",
+        title="Ripe milestone",
+        status="review",
+        signoff={"changed": "Ripe milestone."},
+        started=_at(timedelta(days=2)),
+    )
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "ripe1-01",
+        milestone_id=ripe_m,
+        kind="developer",
+        state="done",
+        merged_by=LOCAL,
+        commit="r" * 40,
+        lines_changed=10,
+    )
+    # Signed off milestone
+    signed = metrics.upsert_milestone(
+        conn,
+        project,
+        "signed1",
+        title="Already signed off",
+        status="done",
+        signoff={"changed": "Done."},
+        ended="2026-09-21T12:00:00+02:00",
+    )
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "signed1-01",
+        milestone_id=signed,
+        kind="developer",
+        state="done",
+        merged_by=LOCAL,
+        commit="s" * 40,
+        lines_changed=10,
+    )
+
+
+@pytest.fixture
+def signoff_button_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_signoff_button``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_signoff_button(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")

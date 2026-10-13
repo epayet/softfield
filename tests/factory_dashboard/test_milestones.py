@@ -1,7 +1,11 @@
+import html
 import json
 import re
 
 import pytest
+
+from runner import metrics
+from tests.factory_dashboard.conftest import NOW, PROJECT
 
 
 def section(html: str, name: str) -> str:
@@ -412,3 +416,68 @@ def test_milestone_scores_detail(milestone_detail_with_scores_client):
     html10 = resp10.text
     results10 = section(html10, "results")
     assert "–" in results10
+
+
+def test_a_ripe_milestone_shows_its_signoff_button(signoff_button_client):
+    """A ripe milestone's page has the button, and the request it posts (its ``hx-vals``,
+    parsed as JSON) is ``signoff`` with the milestone's full key as subject."""
+    page = signoff_button_client.get("/milestones/ripe1").text
+    match = re.search(r'id="signoff-button"[^>]*hx-vals=\'([^\']*)\'', page)
+    assert match, "no Sign off button"
+    assert json.loads(html.unescape(match.group(1))) == {
+        "kind": "signoff",
+        "project": PROJECT,
+        "subject": "ripe1",
+    }
+
+
+def test_a_milestone_with_a_ready_ticket_shows_no_button(serve):
+    """A milestone with a ready ticket (f1) shows no button."""
+    html = serve().get("/milestones/f1").text
+    assert 'id="signoff-button"' not in html
+
+
+def test_a_milestone_with_no_review_shows_no_button(signoff_button_client):
+    """Every ticket done but the review's sheet not written (bare1): no button."""
+    html = signoff_button_client.get("/milestones/bare1").text
+    assert 'id="signoff-button"' not in html
+
+
+def test_a_signed_off_milestone_shows_no_button(signoff_button_client):
+    """A milestone already signed off shows no button."""
+    html = signoff_button_client.get("/milestones/signed1").text
+    assert 'id="signoff-button"' not in html
+
+
+def _ask_signoff(db_path, subject: str) -> int:
+    """A ``signoff`` request for the milestone, not done yet; its id."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        return metrics.add_request(conn, project, "signoff", subject, None, NOW.isoformat())
+    finally:
+        conn.close()
+
+
+def test_a_milestone_with_a_signoff_request_underway_shows_status_line(serve, db_path):
+    """With a ``signoff`` request not done yet, the page says
+    \"Signing off at the runner's next pick\" and shows no button."""
+    _ask_signoff(db_path, "m4")
+    html = serve().get("/milestones/m4").text
+    assert "Signing off at the runner's next pick" in section(html, "review")
+    assert 'id="signoff-button"' not in html
+
+
+def test_a_refused_sign_off_keeps_its_word_under_the_milestones_button(serve, db_path):
+    """A done request on a milestone still ripe was refused: the button is back, with the
+    runner's words under it."""
+    asked = _ask_signoff(db_path, "m4")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.finish_request(conn, asked, NOW.isoformat(), "main has uncommitted changes")
+    finally:
+        conn.close()
+    html = serve().get("/milestones/m4").text
+    assert 'id="signoff-button"' in html
+    assert "The runner said: main has uncommitted changes" in section(html, "review")
