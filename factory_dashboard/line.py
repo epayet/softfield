@@ -17,6 +17,8 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
   with the owner (``_planting``). Its five stations' counts come from the board's cards
   (``board.py``): seed, sprouting, planted plus growing, ripe, harvested; at a past ``at``,
   which the board doesn't know, from ``field``.
+- **A wait** (f9-01): while the live run waits instead of working, ``wait`` names the one
+  machine or station it waits at and says for what (``_wait``); the floor draws it clogged.
 - **Any moment** (f3-06): ``live_line(..., at=t)`` applies the same rules to the jobs whose
   times cover ``t`` (an unfinished one until its run's last heartbeat) and to each ticket's
   state then, rebuilt from its trips. ``replay`` is the document at ``since`` and every event
@@ -38,8 +40,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.jobs import _failed_gate
-from factory_dashboard.overview import LIVE
-from runner import metrics
+from factory_dashboard.overview import LIVE, live_runs
+from runner import dispatch, loop, metrics
 from runner.config import Config, load_config
 from runner.tasks import milestone_order, short_key
 
@@ -759,7 +761,89 @@ def live_line(
         "field": field,
         "now": {"working": now_working, "next": queue[:3]},
         "clog": _clog(conn, project, machines, midnight, at),
+        "wait": _wait(conn, project, machines, queue, field, now) if live else None,
     }
+
+
+# What the run says while it waits (``loop.set_activity``): `wait_for_claude`'s words, with the
+# job it waits for, and the two causes `_idle_line` gives for Claude.
+_CLAUDE_WAIT = re.compile(
+    re.escape(loop.WAITING_FOR_CLAUDE) + r"(?: · (?P<what>.+?))?(?: until \d\d:\d\d)?"
+)
+_IDLE_CLAUDE = re.compile(
+    r"for Claude(?P<reserve>'s reserve · the week resets| until) (?P<when>\S+ \d\d:\d\d)"
+)
+_FOR_YOU = "waiting for you: "
+
+
+def _short(ticket: str) -> str:
+    return "-".join(ticket.split("-")[:2])
+
+
+def _nothing_ready(queue: Sequence[dict[str, Any]]) -> str:
+    """The queue's own clog: the first milestone whose tickets wait, and on which ticket."""
+    stuck = [c for c in queue if c["ticket"] and c["waits"]]
+    if not stuck:
+        return "nothing ready: " + ("no ticket can run yet" if queue else "the queue is empty")
+    first = stuck[0]
+    key = first["milestone"]
+    many = sum(c["milestone"] == key for c in stuck) > 1
+    whose = f"{short_key(key).upper()}'s" if key else "the"
+    waits = "next tickets wait" if many else "next ticket waits"
+    return f"nothing ready: {whose} {waits} on {_short(first['waits'][0])}"
+
+
+def _wait(
+    conn: sqlite3.Connection,
+    project: str,
+    machines: Sequence[dict[str, Any]],
+    queue: Sequence[dict[str, Any]],
+    field: dict[str, Any],
+    now: datetime,
+) -> dict[str, Any] | None:
+    """What the runner waits for instead of working (f9-01), from its live run's activity and
+    ``waiting_until``; None while it works. One clog at a time, at the machine the wait names:
+    Claude's for its reset, a job parked for it or its reserve, the lead's desk for the owner
+    (their pause, a sign-off, an open item), else the queue, with what its tickets wait on."""
+    claude = next((m for m in machines if m["id"].startswith(queries.LEAD_PREFIX)), None)
+    desk = next((m for m in machines if m["station"] == "lead"), None)
+
+    def at(kind: str, machine: dict[str, Any] | None, words: str) -> dict[str, Any]:
+        return {
+            "kind": kind,
+            "station": machine["station"] if machine else "queue",
+            "machine": machine["id"] if machine else None,
+            "words": words,
+        }
+
+    for run in live_runs(conn, project, now):
+        activity = run.activity or ""
+        if found := _CLAUDE_WAIT.fullmatch(activity):
+            limited = _limit(conn, queries.LEAD_PREFIX, now) is not None
+            until = run.waiting_until if limited else None  # a retry's own minute says little
+            what = found["what"]
+            parts = (
+                "waiting for Claude's reset" if limited else "waiting for Claude",
+                f"{_when(until).astimezone(now.tzinfo):%H:%M}" if until else None,
+                _short(what) if what and " " not in what else what,
+            )
+            return at("claude", claude, " · ".join(p for p in parts if p))
+        if activity == dispatch.PAUSED:
+            return at("owner", desk, _FOR_YOU + "the factory is paused")
+        if not activity.startswith(loop.IDLE):
+            continue
+        if found := _IDLE_CLAUDE.search(activity):
+            reserve = "reserve" in found["reserve"]
+            words = "reserve · the week resets" if reserve else "reset ·"
+            return at("claude", claude, f"waiting for Claude's {words} {found['when']}")
+        asked = activity.partition(_FOR_YOU)[2]
+        if asked or "for a sign-off" in activity:
+            ripe = [short_key(m["key"]).upper() for m in field["ripe"]]
+            if ripe and "sign-off" in activity:
+                asked = "sign off " + ", ".join(ripe[:3])
+            return at("owner", desk, _FOR_YOU + (asked or "a sign-off"))
+        return at("queue", None, _nothing_ready(queue))
+    return None
 
 
 def _clog(

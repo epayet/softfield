@@ -329,6 +329,16 @@ tbody tr:hover { background: var(--accent-wash); }
 .floor .machine.idle { --c: var(--muted); opacity: 0.55; }
 .floor-phone .machine.off, .floor-phone .machine.waiting { --c: var(--muted); }
 .floor-phone .machine.idle { --c: var(--muted); opacity: 0.55; }
+/* A wait (f9-01): the unit the runner waits at takes the clog colour and wears a warning sign,
+   its words beside it; the sign pulses, and is still under reduced motion */
+.floor .machine.clogged, .floor .station.clogged { --c: var(--clog); opacity: 1; }
+.floor .clog .sign { fill: var(--clog); }
+.floor .clog text.mark { fill: var(--surface); font: 700 9px var(--sans); pointer-events: none; }
+.floor .clog text.clog-words { fill: var(--ink); }
+.floor .clog .clog-plate { fill: var(--surface); stroke: var(--clog); stroke-width: 1.5; }
+@media (prefers-reduced-motion: no-preference) {
+  .floor .clog .sign { animation: pulse 2s ease-in-out infinite; }
+}
 .floor .plate { fill: var(--c); }
 .floor .plate.local { fill: var(--ink); }  /* the f1 mock-up's plates: solid LOCAL, outlined CLOUD */
 .floor .plate.cloud { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }

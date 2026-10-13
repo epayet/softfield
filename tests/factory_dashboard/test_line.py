@@ -22,7 +22,7 @@ from fastapi.testclient import TestClient
 from factory_dashboard.board import HARVESTED, board
 from factory_dashboard.line import BELTS, STATIONS, live_line, overnight, replay, trips
 from factory_dashboard.queries import connect
-from runner import metrics
+from runner import dispatch, loop, metrics
 from tests.factory_dashboard.conftest import LINE_NOW, LOCAL, NOW, OPUS, PROJECT, SONNET
 
 STATIC = Path(__file__).resolve().parents[2] / "factory_dashboard" / "static"
@@ -273,6 +273,127 @@ def test_claude_waits_for_its_limit_until_the_reset(line_db):
     assert found[COPILOT]["state"] == "idle"
     later = machines(document(line_db, datetime.fromisoformat("2026-10-02T15:30:00+02:00")))
     assert (later[OPUS]["state"], later[OPUS]["reset"]) == ("idle", None)
+
+
+def waiting(db: Path, activity: str | None, until: str | None = None, **run: Any) -> Any:
+    """The document's ``wait`` once the live run says it does ``activity``, until ``until``."""
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        row = metrics.upsert_run(conn, project, "20261002-090000", **run)
+        metrics.update_run_activity(conn, row, activity, until)
+    finally:
+        conn.close()
+    return document(db)["wait"]
+
+
+RESET = "2026-10-02T13:00:00+00:00"  # 15:00 on the line's clock
+
+
+def test_a_wait_for_claudes_reset_clogs_claudes_machine_until_the_reset(line_db):
+    """The owner, 2026-10-04: "factory line doesn't [look] clogged when it's waiting on
+    something"."""
+    assert waiting(line_db, "waiting for Claude until 15:00", RESET) == {
+        "kind": "claude",
+        "station": "lead",
+        "machine": OPUS,
+        "words": "waiting for Claude's reset · 15:00",
+    }
+
+
+def test_a_wait_behind_a_parked_claude_job_names_it(line_db):
+    found = waiting(line_db, "waiting for Claude · f5-04-after until 15:00", RESET)
+    assert (found["machine"], found["words"]) == (
+        OPUS,
+        "waiting for Claude's reset · 15:00 · f5-04",
+    )
+    found = waiting(line_db, "waiting for Claude · review f8 until 15:00", RESET)
+    assert found["words"] == "waiting for Claude's reset · 15:00 · review f8"
+
+
+def test_a_wait_for_claude_with_no_limit_open_names_no_reset(line_db):
+    """A passing error: the runner tries Claude again in a moment."""
+    conn = metrics.open_db(line_db)
+    try:
+        conn.execute("DELETE FROM usage_events WHERE kind = 'refusal'")
+        conn.commit()
+    finally:
+        conn.close()
+    found = waiting(line_db, "waiting for Claude · f5-04-after until 14:05")
+    assert (found["kind"], found["words"]) == ("claude", "waiting for Claude · f5-04")
+
+
+def test_a_pause_by_the_owner_clogs_the_leads_desk(line_db):
+    assert waiting(line_db, dispatch.PAUSED) == {
+        "kind": "owner",
+        "station": "lead",
+        "machine": OPUS,
+        "words": "waiting for you: the factory is paused",
+    }
+
+
+def test_an_idle_runner_waiting_for_a_sign_off_names_the_ripe_milestone(line_db):
+    idle = loop.IDLE + "1 ticket waits for a sign-off · waiting for you: 1 sign-off"
+    assert waiting(line_db, idle) == {
+        "kind": "owner",
+        "station": "lead",
+        "machine": OPUS,
+        "words": "waiting for you: sign off F8",
+    }
+
+
+def test_an_idle_runner_waiting_for_the_owner_says_for_what(line_db):
+    found = waiting(line_db, loop.IDLE + "nothing is ready · waiting for you: 1 decision")
+    assert (found["station"], found["words"]) == ("lead", "waiting for you: 1 decision")
+
+
+def test_an_idle_runner_waiting_for_claudes_reserve_clogs_claudes_machine(line_db):
+    idle = loop.IDLE + "2 tickets wait for Claude's reserve · the week resets Tue 09:00"
+    found = waiting(line_db, idle + " · waiting for you: 1 planning reply")
+    assert (found["kind"], found["machine"]) == ("claude", OPUS)
+    assert found["words"] == "waiting for Claude's reserve · the week resets Tue 09:00"
+
+
+def test_an_idle_runner_with_nothing_runnable_clogs_the_queue(line_db):
+    idle = loop.IDLE + "2 tickets wait behind a blocked or escalated one"
+    assert waiting(line_db, idle) == {
+        "kind": "queue",
+        "station": "queue",
+        "machine": None,
+        "words": "nothing ready: F5's next tickets wait on f5-03",
+    }
+
+
+def test_an_idle_runner_with_an_empty_queue_says_so(line_db):
+    conn = metrics.open_db(line_db)
+    try:
+        conn.execute("UPDATE tickets SET state = 'later' WHERE state = 'ready'")
+        conn.commit()
+    finally:
+        conn.close()
+    found = waiting(line_db, loop.IDLE + "nothing is ready")
+    assert (found["station"], found["words"]) == ("queue", "nothing ready: the queue is empty")
+
+
+@pytest.mark.parametrize("activity", [None, "f9-01-working", loop.PICKING, "gates · f9-01-working"])
+def test_a_working_runner_has_no_wait(line_db, activity):
+    assert waiting(line_db, activity) is None
+
+
+def test_a_runner_that_stopped_has_no_wait(line_db):
+    """Its last activity stays in its row; nothing waits once it no longer beats."""
+    stale = (NOW - timedelta(hours=1)).isoformat()
+    assert waiting(line_db, "waiting for Claude until 15:00", RESET, heartbeat=stale) is None
+
+
+def test_a_past_moment_has_no_wait(line_db):
+    waiting(line_db, "waiting for Claude until 15:00", RESET)
+    conn = connect(line_db)
+    try:
+        doc = live_line(conn, PROJECT, LINE_NOW, at=LINE_NOW - timedelta(hours=1))
+    finally:
+        conn.close()
+    assert doc["wait"] is None
 
 
 def test_machines_say_how_many_trips_they_merged_today(line_db):
@@ -1628,6 +1749,105 @@ def test_under_reduced_motion_the_lights_stay_lit_and_still(page, line_client):
     open_line(page, line_client)
     assert page.eval_on_selector_all("svg#floor .led", PLAYING) == [""] * 3
     assert page.eval_on_selector_all("svg#floor .led", STYLE.format("opacity")) == ["1"] * 3
+
+
+CLOG = "rgb(236, 84, 88)"  # --clog, dark
+CLOG_BOXES = """svg => {
+    const box = (e) => ((r) => [r.left, r.top, r.right, r.bottom])(e.getBoundingClientRect());
+    const unit = [...svg.querySelectorAll(".clogged > .unit")].pop();  // after a chimney
+    return {
+        floor: box(svg),
+        unit: box(unit),
+        stroke: getComputedStyle(unit).stroke,
+        sign: box(svg.querySelector("[data-clog] .sign")),
+        plate: ((e) => e && box(e))(svg.querySelector("[data-clog] .clog-plate")),
+        words: [...svg.querySelectorAll("[data-clog] text.clog-words")].map(
+            (e) => ({ words: e.textContent, box: box(e) })),
+        others: [...svg.querySelectorAll(".clogged text")].filter((e) => !e.closest("[data-clog]"))
+            .map((e) => ({ words: e.textContent, box: box(e) })),
+    };
+}"""
+WAITS = {
+    "claude": ("waiting for Claude · f5-04-after until 15:00", f'[data-machine="{OPUS}"]'),
+    "owner": (dispatch.PAUSED, f'[data-machine="{OPUS}"]'),
+    "queue": (
+        loop.IDLE + "2 tickets wait behind a blocked or escalated one",
+        '[data-station="queue"]',
+    ),
+}
+
+
+@pytest.mark.parametrize("kind", list(WAITS))
+@pytest.mark.parametrize("floor", ["floor", "floor-phone"])
+def test_a_wait_shows_the_clog_sign_and_its_words_where_the_runner_waits(
+    page, line_db, line_client, floor, kind
+):
+    """On desktop and phone: the unit turns the clog colour and wears one sign, whose words
+    stay on the floor and clear of the unit's other words."""
+    activity, unit = WAITS[kind]
+    waiting(line_db, activity, RESET if kind == "claude" else None)
+    page.emulate_media(color_scheme="dark", reduced_motion="reduce")
+    doc = open_line(page, line_client, PHONE if floor == "floor-phone" else None)
+    wait = doc["wait"]  # the reset's hour is on the server's own clock
+    assert wait["kind"] == kind
+    svg = f"svg#{floor}"
+    assert page.locator(f"{svg} [data-clog]").count() == 1
+    assert page.locator(f"{svg} {unit}.clogged [data-clog]").get_attribute("data-clog") == kind
+    assert page.locator(f"{svg} [data-clog] title").text_content() == wait["words"]
+    found = page.eval_on_selector(svg, CLOG_BOXES)
+    assert " ".join(line["words"] for line in found["words"]) == wait["words"]
+    assert found["stroke"] == CLOG
+    # a machine holds its words; the queue's are on a plate hung on its hopper
+    holder = found["plate"] if kind == "queue" else found["unit"]
+    assert inside(holder, found["floor"]), (holder, found["floor"])
+    for shape in (found["sign"], *(line["box"] for line in found["words"])):
+        assert inside(shape, holder), (shape, holder)
+        for other in found["others"]:
+            assert not overlaps(shape, other["box"]), (shape, other)
+
+
+def test_a_clogged_machine_neither_smokes_nor_blinks(page, line_db, line_client):
+    waiting(line_db, "waiting for Claude until 15:00", RESET)
+    open_line(page, line_client)
+    machine = f'svg#floor [data-machine="{OPUS}"]'
+    assert page.locator(f"{machine} [data-clog]").count() == 1
+    assert page.locator(f"{machine} .smoke").count() == 0
+    assert page.locator(f"{machine} .led").count() == 0
+    assert "limit reached" not in (page.locator(machine).text_content() or "")
+
+
+def test_a_working_floor_has_no_clog_sign(page, line_client):
+    open_line(page, line_client)
+    page.wait_for_selector("svg#floor [data-machine]")
+    assert page.locator("svg#floor [data-clog], svg#floor .clogged").count() == 0
+
+
+@pytest.mark.parametrize(("motion", "playing"), [("no-preference", ["running"]), ("reduce", [""])])
+def test_the_clog_sign_pulses_and_is_still_under_reduced_motion(
+    page, line_db, line_client, motion, playing
+):
+    waiting(line_db, loop.IDLE + "nothing is ready")
+    page.emulate_media(reduced_motion=motion)
+    open_line(page, line_client)
+    sign = "svg#floor [data-clog] .sign"
+    assert page.eval_on_selector_all(sign, PLAYING) == playing
+    if motion == "reduce":
+        assert page.eval_on_selector_all(sign, STYLE.format("opacity")) == ["1"]
+
+
+def test_the_clog_sign_stays_the_same_node_across_a_refresh(page, line_db, line_client):
+    """Its pulse runs on: a redraw of the same wait keeps the sign."""
+    waiting(line_db, dispatch.PAUSED)
+    page.clock.install()
+    doc = open_line(page, line_client, live=[later(line_client, merged=1)])
+    sign = page.locator("svg#floor [data-clog] .sign")
+    sign.evaluate("e => { window.sign = e; }")
+    refresh(page)
+    counted = belts(doc)["checks→merged"]["today"] + 1
+    assert page.locator('svg#floor [data-belt="checks→merged"] text').text_content() == (
+        f"merged · {counted} today"
+    )  # drawn again, in place
+    assert sign.evaluate("e => e === window.sign && e.isConnected")
 
 
 def test_belts_roll_yellow_where_work_went_today(page, line_client):

@@ -78,6 +78,30 @@
     return project ? `?${new URLSearchParams({ project })}` : "";
   };
 
+  // `words` on lines of at most `n` characters, broken at its spaces.
+  function wrap(words, n) {
+    const lines = [];
+    for (const word of words.split(" ")) {
+      const last = lines.length - 1;
+      if (last >= 0 && lines[last].length + 1 + word.length <= n) lines[last] += ` ${word}`;
+      else lines.push(word);
+    }
+    return lines;
+  }
+
+  // The clog sign (f9-01): where the runner waits instead of working (the document's `wait`),
+  // a warning triangle and what it waits for, from (x, y) on lines `width` wide; on a `plate`
+  // where no unit is behind the words.
+  function clog(parent, wait, x, y, width, plate = false) {
+    const g = add(parent, "g", { class: "clog", "data-clog": wait.kind });
+    add(g, "title", {}, wait.words);
+    const lines = wrap(wait.words, Math.floor((width - 20) / 6.7));
+    if (plate) add(g, "rect", { x: x - 6, y: y - 12, width: width + 12, height: lines.length * 12 + 7, class: "clog-plate" });
+    add(g, "path", { d: `M${x + 7} ${y - 10} l7 12 h-14 Z`, class: "sign" });
+    text(g, x + 7, y + 1, "!", "mark", { "text-anchor": "middle" });
+    lines.forEach((words, n) => text(g, x + 20, y + n * 12, words, "clog-words"));
+  }
+
   // --- the belts: where each D11 belt runs, and where its words go -------------------------
 
   let _prev = null;  // the checks' counts last drawn; null until the first draw sets them
@@ -195,11 +219,16 @@
 
   function queue(svg, doc, x, y, w, h, fit = QUEUE) {
     const g = station(svg, "queue");
+    const wait = doc.wait && doc.wait.station === "queue" ? doc.wait : null;
+    if (wait) g.setAttribute("class", "station clogged");
     const mid = x + w / 2;
     add(g, "path", { d: `M${x} ${y} L${x + w} ${y} L${x + w - 18} ${y + h} L${x + 18} ${y + h} Z`, class: "unit" });
     text(g, mid, fit.inside ? y + 20 : y - 10, `QUEUE · ${doc.queue.length}`, "head", { "text-anchor": "middle" });
     const left = mid - (fit.cols * fit.pitch - (fit.pitch - fit.width)) / 2;
-    doc.queue.slice(0, fit.most).forEach((crate, i) => {
+    // the clog's plate takes "in run order"'s place; inside the hopper, the upper rows' too
+    if (wait && fit.inside) clog(g, wait, mid - 151, y + 35, 302, true);
+    else if (wait) clog(g, wait, mid - 95, y + h + 20, 190, true);
+    doc.queue.slice(0, wait && fit.inside ? fit.cols : fit.most).forEach((crate, i) => {
       const col = i % fit.cols, row = Math.floor(i / fit.cols);
       const cx = left + col * fit.pitch, cy = y + h - fit.bottom - row * fit.rise;
       // A due review (f4-20) is a batch crate: no ticket, its role names it
@@ -212,11 +241,11 @@
       text(c, cx + fit.width / 2, cy + 14, String(crate.number), "on", { "text-anchor": "middle" });
     });
     if (fit.inside) {
-      text(g, mid, y + 38, "in run order", "dim", { "text-anchor": "middle" });
+      if (!wait) text(g, mid, y + 38, "in run order", "dim", { "text-anchor": "middle" });
       return;
     }
     if (doc.queue.length > fit.most) text(g, mid, y + 22, `+ ${doc.queue.length - fit.most} more`, "dim", { "text-anchor": "middle" });
-    text(g, mid, y + h + 20, "in run order", "dim", { "text-anchor": "middle" });
+    if (!wait) text(g, mid, y + h + 20, "in run order", "dim", { "text-anchor": "middle" });
   }
 
   // --- the machines -------------------------------------------------------------------------
@@ -227,14 +256,16 @@
     developers: { x: 562, y: 404, width: 402, height: 108, gap: 12, most: 128, bay: { x: 548, y: 326, width: 430, height: 246 } },
   };
 
-  function machine(svg, m, x, y, w, h) {
-    const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : "", m.state === "working" ? "on" : "", m.state === "idle" ? "idle" : ""].join(" ").trim();
+  // `wait`: the runner waits at this machine, which then stands still under the clog sign
+  function machine(svg, m, x, y, w, h, wait = null) {
+    const working = m.state === "working" && !wait;
+    const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : "", working ? "on" : "", m.state === "idle" ? "idle" : "", wait ? "clogged" : ""].filter(Boolean).join(" ");
     const g = add(svg, "g", { class: cls, "data-machine": m.id });
-    add(g, "title", {}, `${m.name} · ${m.where} · ${m.state}${m.rating !== "" ? ` · rated ${m.rating}` : ""}`);
+    add(g, "title", {}, `${m.name} · ${m.where} · ${wait ? wait.words : m.state}${m.rating !== "" ? ` · rated ${m.rating}` : ""}`);
     const tall = Math.round(30 * m.scale);
     if (m.station !== "reviewers") {
       add(g, "rect", { x: x + w - 34, y: y - tall, width: 18, height: tall, class: "unit" });
-      if (m.state === "working") {
+      if (working) {
         add(g, "circle", { cx: x + w - 25, cy: y - tall - 10, r: 6, class: "smoke" });
         add(g, "circle", { cx: x + w - 18, cy: y - tall - 22, r: 8, class: "smoke" });
       }
@@ -257,10 +288,12 @@
       text(g, left + 6, line + 17.5, words, `ptext ${wh}`);
       line += 42;
     }
-    if (m.state === "working") {  // three lights under the chimney, blinking in turn
+    if (working) {  // three lights under the chimney, blinking in turn
       for (let k = 0; k < 3; k++) add(g, "rect", { x: x + w - 38 + k * 9, y: y + 6, width: 6, height: 4, class: "led" });
     }
-    if (m.state === "working" && m.crate) {
+    if (wait) {
+      clog(g, wait, left, line, w - 20);
+    } else if (working && m.crate) {
       const c = m.crate;
       const crate = add(g, "g", { "data-crate": c.ticket || c.role,
         tabindex: "0", role: "button" });
@@ -304,7 +337,8 @@
       }
       if (!own.length) continue;
       const each = Math.min(area.most || area.width, (area.width - area.gap * (own.length - 1)) / own.length);
-      own.forEach((m, i) => machine(g, m, area.x + i * (each + area.gap), area.y, each, area.height));
+      own.forEach((m, i) => machine(g, m, area.x + i * (each + area.gap), area.y, each, area.height,
+        doc.wait && doc.wait.machine === m.id ? doc.wait : null));
     }
   }
 
