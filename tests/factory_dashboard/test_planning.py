@@ -1737,6 +1737,7 @@ def test_an_archive_on_its_way_shows_at_once_and_its_button_goes(planning, db_pa
     )
     html = _thread(serve(), "general")
     assert "Archiving at the runner's next pick" in _text(html)
+    assert html.index('id="reply"') < html.index("Archiving at the runner")  # F22: at the bottom
     assert 'id="archive-button"' not in html
 
 
@@ -1779,6 +1780,24 @@ def test_archive_posts_once_and_the_button_goes(page, planning, db_path, serve):
     finally:
         conn.close()
     assert asked == [("archive", "general", "on")]
+
+
+def test_on_a_phone_archive_shows_under_send_at_the_end_of_the_page(page, planning, db_path, serve):
+    """F22 D1: Send sticks at the bottom while the thread is read, the Archive row out of
+    view; scrolled to the end, the row shows under Send, not behind it."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    short = {"width": PHONE["width"], "height": 500}
+    page.set_viewport_size(short)
+    _open(page, serve(), "/planning/f6")
+    send, archive = page.locator("#reply"), page.locator("#archive-button")
+    box, button = send.bounding_box(), archive.bounding_box()
+    assert box and button
+    assert box["y"] + box["height"] <= short["height"] + 1 <= button["y"] + 1
+    page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
+    box, button = send.bounding_box(), archive.bounding_box()
+    assert box and button
+    assert box["y"] + box["height"] <= button["y"] + 1
+    assert button["y"] + button["height"] <= short["height"] + 1
 
 
 # --- "Didn't go through": the owner's words a request refused (F31 D9) -----------------------

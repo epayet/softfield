@@ -405,6 +405,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the owner asked for this on 2026-10-07 and again on 2026-10-08, and it merged on 2026-10-13. Three of the six attempts could not pass whatever they wrote: main was red on a file a review had left (F12's probe), and the ticket was queued without waiting for its removal. The other three met a ticket older than the code it described. Two things a factory needs here: a queue that holds developer tickets while its own gates fail on main, and a ticket's Context re-read against main when it is requeued days later. The developer's removal of assertions from existing tests was caught only because the first of them failed a gate; the session report lists edited tests, but nothing compares their assertions before and after.
 - **Decisions affected:** none.
 
+### F22 (2026-10-14): Archive sits at the bottom of a thread ([review](../reviews/f22-move-archive-button-on-planning-desk.md))
+
+- **Q1:** one developer ticket, difficulty 2: two blocks of a template moved as they were. Merged at the first attempt, with no direction, escalation or checkpoint finding. The review added one browser test and filed no ticket.
+- **Q3:** Qwen 1/1 first time, 31 minutes of model and 15 of gates, 2.4M tokens read for 59 changed lines. The code was right; its tests compared positions in the HTML text and left the phone's sticky box, the reason for the design, to the review.
+- **Q5:** see the review's numbers.
+- **Anything else:** a one-sentence request waited six days (planted 2026-10-07, merged 2026-10-13), none of them in the work: it queued behind a red main (f12-03) and its turn. The cheapest work in a factory is also the easiest to leave waiting; a queue could let a difficulty-2 ticket with one file pass ahead when a developer is free. The review again read other work (31 files for one commit): bug-01.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
