@@ -1,4 +1,4 @@
-# Milestone F114: I want to be notified only for things that need my…
+# Milestone F114: Notifications only for what needs me, one per bundle, opening its page
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-13.
