@@ -128,6 +128,8 @@ TIMED_OUT = """
 Your previous attempt ran out of time. Keep what works and finish the smallest remaining piece
 first.
 """
+# f79-01: what that attempt left on the branch, for a developer that never runs `git diff`.
+TIMED_OUT_FILES = "Files it changed: {files}\n"
 
 # ADR 12 item 4: an attempt that changed nothing, by cause.
 EMPTY = {

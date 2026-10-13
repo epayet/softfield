@@ -1604,10 +1604,11 @@ def _prompt(
     direction: str = "",
     reset: str = "",
     earlier: Collection[str] = (),
+    kept: Collection[str] = (),
 ) -> str:
     """The developer's prompt. A retry builds on the branch unless ``reset`` says why it was
     reset (`prompts.RESET`); a requeued ticket's first attempt lists the ``earlier`` run's
-    files left on its branch."""
+    files left on its branch, and a retry after a timeout the files ``kept`` on it."""
     if last is None:
         extra = prompts.EARLIER.format(files=", ".join(earlier)) if earlier else ""
         return prompts.local_prompt(task, extra)
@@ -1621,9 +1622,12 @@ def _prompt(
         gate=last.name, hint=hint, output=last.output, direction=direction, branch=branch
     )
     # After a reset there is nothing of the timed-out attempt left to keep
-    return prompts.local_prompt(
-        task, (prompts.TIMED_OUT if timed_out and not reset else "") + extra
-    )
+    cut_short = ""
+    if timed_out and not reset:
+        cut_short = prompts.TIMED_OUT
+        if kept:
+            cut_short += prompts.TIMED_OUT_FILES.format(files=", ".join(kept))
+    return prompts.local_prompt(task, cut_short + extra)
 
 
 RESET_LINE = "reset: true"
@@ -2081,13 +2085,15 @@ def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None)
             reset = _start_attempt(s, branch, reset)
         what = f"attempt {attempt}/{s.cfg.max_attempts}"
         role = "last-attempt" if direction else "developer"
+        timed_out = bool(timeouts and timeouts[-1])
         prompt = _prompt(
             task,
             last,
-            timed_out=bool(timeouts and timeouts[-1]),
+            timed_out=timed_out,
             direction=direction,
             reset=reset,
             earlier=earlier,
+            kept=s.git.changed_files(MAIN) if timed_out and not reset else (),
         )
         agent, run, job_id, context_limit = _develop(
             s,

@@ -723,6 +723,56 @@ def test_a_retry_after_a_timeout_says_so(repo, fake_model):
     assert report.tasks[0].result == "done"
 
 
+FILES_LINE = "Files it changed:"
+
+
+def test_a_retry_after_a_timeout_lists_the_files_it_changed(repo, fake_model):
+    """f79-01: a developer that never runs `git diff` still sees what its attempt left."""
+    _add_task(repo, "m1-01-thing")
+
+    def cut_short(repo, prompt):
+        (repo / "coucou" / "progress.py").write_text("X = 1\n")
+        (repo / "coucou" / "secret.py").write_text("X = 1\n")
+        return _timed_out(repo, prompt)
+
+    def fix(repo, prompt):
+        assert "Your previous attempt ran out of time" in prompt
+        assert f"{FILES_LINE} coucou/progress.py, coucou/secret.py\n" in prompt
+        (repo / "coucou" / "progress.py").unlink()
+        (repo / "coucou" / "secret.py").unlink()
+        _implement(repo, prompt)
+
+    fake_model.extend([cut_short, fix])
+    report = _run(repo, once=True)
+    assert report.tasks[0].result == "done"
+
+
+def test_a_retry_after_a_timeout_before_the_first_edit_lists_no_files(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+
+    def fix(repo, prompt):
+        assert "before its first edit, so the branch has been reset" in prompt
+        assert FILES_LINE not in prompt
+        _implement(repo, prompt)
+
+    fake_model.extend([_timed_out, fix])
+    report = _run(repo, once=True)
+    assert report.tasks[0].result == "done"
+
+
+def test_a_retry_after_a_gate_failure_lists_no_files(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+
+    def fix(repo, prompt):
+        assert "ran out of time" not in prompt and FILES_LINE not in prompt
+        (repo / "coucou" / "secret.py").unlink()
+        _implement(repo, prompt)
+
+    fake_model.extend([_stray, fix])
+    report = _run(repo, once=True)
+    assert report.tasks[0].result == "done"
+
+
 def _repeating(repo: Path, prompt: str) -> OpencodeRun:
     (repo / "coucou" / "thing.py").write_text("def thing() -> int:\n    return 0\n")
     return OpencodeRun(
