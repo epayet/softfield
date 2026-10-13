@@ -1958,6 +1958,95 @@ def write_signoff_button(conn: sqlite3.Connection) -> None:
     )
 
 
+def write_board(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture`` (``f1`` and ``m4`` are ripe), at ``NOW``, the board's cards:
+    - ``f20-duck-pond`` (an idea, priority 30, area product): no thread, a seed;
+    - ``f21-parallel`` (an idea a thread is about) and ``f22-research`` (planning): sprouting;
+    - ``f23-planted`` (ready, priority 5): two tickets, both ready;
+    - ``f24-growing`` (ready, priority 1): ``f24-01-merged`` done, ``f24-02-working`` on Qwen
+      (attempt 2, the run beat 30 s ago), ``f24-03-next`` ready, ``f24-04-later`` set aside,
+      ``f24-05-gone`` removed;
+    - ``f25-unreviewed`` (no state, priority or area): its one ticket done, no sheet stored;
+    - ``f26-gone``: a removed card;
+    - ``m3`` signed off on 2026-09-15;
+    - the ``bugs`` row and its tickets: ``bug-01-duck-count`` set aside (factory),
+      ``bug-02-stale`` ready (product, its own priority 7), ``bug-03-working`` running,
+      ``bug-04-stuck`` escalated, ``bug-05-fixed`` done (its last job ended 2026-09-30 10:10)
+      and ``bug-06-gone`` removed.
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    run = metrics.upsert_run(
+        conn,
+        project,
+        "20261002-113500",
+        command="run",
+        started=_at(timedelta(minutes=25)),
+        heartbeat=_at(timedelta(seconds=30)),
+    )
+
+    def milestone(key: str, title: str, **values: Any) -> int:
+        return metrics.upsert_milestone(conn, project, key, title=title, **values)
+
+    def ticket(name: str, state: str, m: int, **values: Any) -> int:
+        values.setdefault("kind", "developer")
+        return metrics.upsert_ticket(
+            conn, project, name, milestone_id=m, state=state, title=f"Goal of {name}.", **values
+        )
+
+    milestone("f20-duck-pond", "The duck pond", state="idea", priority=30, area="product")
+    milestone("f21-parallel", "Parallel developers", state="idea", priority=20, area="factory")
+    metrics.planner_thread(conn, project, "f21", _at(timedelta(hours=1)))
+    milestone("f22-research", "Research", state="planning", priority=10, area="factory")
+
+    planted = milestone("f23-planted", "Planted", state="ready", priority=5, area="factory")
+    ticket("f23-01-first", "ready", planted)
+    ticket("f23-02-second", "ready", planted)
+
+    growing = milestone("f24-growing", "Growing", state="ready", priority=1, area="factory")
+    merged = ticket("f24-01-merged", "done", growing)
+    _job(conn, run, growing, merged, "developer", LOCAL, 1, "passed")
+    working = ticket("f24-02-working", "running", growing)
+    metrics.start_job(
+        conn,
+        run,
+        ticket_id=working,
+        milestone_id=growing,
+        role="developer",
+        agent=LOCAL,
+        attempt=2,
+        started=_at(timedelta(minutes=12)),
+    )
+    ticket("f24-03-next", "ready", growing)
+    ticket("f24-04-later", "later", growing)
+    ticket("f24-05-gone", metrics.REMOVED, growing)
+
+    unreviewed = milestone("f25-unreviewed", "Review not written")
+    ticket("f25-01-only", "done", unreviewed)
+
+    milestone("f26-gone", "Left the repo", state=metrics.REMOVED)
+    milestone("m3", "Display app", status="done", ended="2026-09-15T12:00:00+02:00")
+
+    bugs = milestone("bugs", "Bugs", state="building")
+    ticket("bug-01-duck-count", "later", bugs, area="factory")
+    ticket("bug-02-stale", "ready", bugs, area="product", body="---\npriority: 7\n---\n")
+    ticket("bug-03-working", "running", bugs, area="factory")
+    ticket("bug-04-stuck", "escalated", bugs, area="factory")
+    fixed = ticket("bug-05-fixed", "done", bugs, area="product")
+    _job(conn, run, bugs, fixed, "developer", LOCAL, 1, "passed")
+    ticket("bug-06-gone", metrics.REMOVED, bugs, area="factory")
+
+
+@pytest.fixture
+def board_db(db_path: Path) -> Path:
+    """The fixture plus ``write_board``'s rows."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_board(conn)
+    finally:
+        conn.close()
+    return db_path
+
+
 @pytest.fixture
 def signoff_button_client(db_path: Path) -> TestClient:
     """A client over the fixture plus ``write_signoff_button``'s rows."""
