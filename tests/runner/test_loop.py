@@ -5801,3 +5801,42 @@ def test_a_ctrl_c_while_idle_ends_the_run_with_its_session_report(
     assert len(list((repo / "docs" / "sessions").glob("*.md"))) == 1
     assert "[runner] Ended by you." in capsys.readouterr().out
     assert _rows(repo, "runs")[-1]["ended"] is not None
+
+
+def _ctrl_c_at_the_owners_requests(monkeypatch, when: Callable[[], object]) -> None:
+    """A Ctrl-C that lands outside the poll's sleep: as the run reads the owner's requests."""
+    real = loop.apply_owner_requests
+
+    def interrupted(s: loop.Session) -> None:
+        if when():
+            raise KeyboardInterrupt
+        real(s)
+
+    monkeypatch.setattr(loop, "apply_owner_requests", interrupted)
+
+
+def test_a_ctrl_c_between_two_idle_polls_ends_the_run_with_its_session_report_too(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch, capsys
+):
+    """f101-F1: the hold is 5 s of sleep, then the pick's reads; the Ctrl-C may land there."""
+    _one_merges_and_one_waits_for_the_reserve(repo, fake_model)
+    polls: list[int] = []
+    _idles(monkeypatch, lambda: polls.append(1), lambda: pytest.fail("it held on"))
+    _ctrl_c_at_the_owners_requests(monkeypatch, lambda: polls)
+    report = _run(repo)
+    assert not report.idle and not report.restart
+    assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
+    assert len(list((repo / "docs" / "sessions").glob("*.md"))) == 1
+    assert "[runner] Ended by you." in capsys.readouterr().out
+    assert _rows(repo, "runs")[-1]["ended"] is not None
+
+
+def test_a_ctrl_c_while_the_run_isnt_idle_is_still_an_interrupt(repo, fake_clock, monkeypatch):
+    """Only the idle hold ends quietly: mid-work, the command's exit ends the run as before."""
+    _add_task(repo, "m1-01-thing")
+    _ctrl_c_at_the_owners_requests(monkeypatch, lambda: True)
+    with pytest.raises(KeyboardInterrupt):
+        _run(repo)
+    assert not (repo / "docs" / "sessions").exists()
+    loop.end_open_runs()
+    assert _rows(repo, "runs")[-1]["verdict"] == "interrupted"

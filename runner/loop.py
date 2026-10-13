@@ -4439,7 +4439,7 @@ def work_queue(
     With ``reviews`` and without ``once`` (the standing `runner run`), it doesn't return with
     nothing to run: it holds, saying what it waits for (`_idle_line`), and each turn applies
     the owner's requests and picks again (F101). It returns for a due review, the owner's
-    Ctrl-C, or the day's report (`_idle_holds`).
+    Ctrl-C, or the day's report (`_idle_holds`). A Ctrl-C between two polls is `run_session`'s.
     """
     code = _runner_code(s.repo)
     ran = False  # a ticket ran, for ``once``
@@ -4544,7 +4544,15 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         return None
     s = open_session(cfg)
     check_backup(s)  # the run's start; each pick checks again (F20 D1)
-    restart = work_queue(s, escalate=escalate, once=once, reviews=True)
+    try:
+        restart = work_queue(s, escalate=escalate, once=once, reviews=True)
+    except KeyboardInterrupt:
+        # Between two idle polls (the pick's reads, the owner's requests) the run still shows
+        # its idle line: the Ctrl-C ends it as one in the poll does, with its report (F101).
+        if not (s.activity or "").startswith(IDLE):
+            raise
+        s.log(f"[{RUNNER_AGENT}] Ended by you.")
+        restart = False
     report = close_session(s)
     report.restart = restart
     return report

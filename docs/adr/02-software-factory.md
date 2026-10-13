@@ -389,6 +389,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** an owner's preference ("this should be the default") became a paragraph in the planner's brief, a line each in `lead.md` and `owner.md`, and a test on the brief. The plan named an example mock-up (F17's) written before the format it asks for existed, and the brief copied it; the review pointed the brief at F94's, which has the switch. When a brief names an example, check the example does what the sentence before it says. Whether planners follow the rule shows only on the next frontend card.
 - **Decisions affected:** none. F72 D3 replaces "iterate the mock-up, then write the tickets" with both in one reply.
 
+### F101 (2026-10-13): the standing runner holds instead of ending ([review](../reviews/f101-uv-runner-run-command-stopped-when.md))
+
+- **Q1:** one ticket, a headless lead job on protected runner code, merged first time in 41 minutes. No escalation, direction or checkpoint. The review made one small fix itself and filed a developer ticket and a bug ticket.
+- **Q3:** no developer work yet; f101-02 (the dashboard's wording) is the first.
+- **Q5:** see the review's numbers.
+- **Anything else:** a runner that ends is deaf to the dashboard, and for two days nothing the owner asked was applied: any factory steered from a page needs a run that stays up, or a service that takes requests without one. The fix was right in the loop and wrong on the page: the idle line reads "Running: Idle: …" in green, because the tests read the database and the Done when named the page. The same deafness remains in the sleep to a limit's reset (bug-02). An idle runner now restarts within seconds of any save to its own code, which a terminal session will meet (backlog).
+- **Decisions affected:** ADR 17's standing command now never ends by itself; `docs/workflow.md` says so. None changed.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
