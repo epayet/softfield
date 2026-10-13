@@ -30,3 +30,12 @@ Since F53 the runner parks a due review Claude can't take: its `work_queue` row 
 - on the overview, Next in line's batch row for a parked review ends with "· waits for Claude's reset at HH:MM"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 6551359
+logs: var/runs/20261013-072250/f53-02-parked-review-crate
+```
