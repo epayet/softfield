@@ -37,3 +37,10 @@ Read `docs/adr/28-lead-jobs-can-look.md` (every item), `runner/cli.py` (`main`, 
 - the planner's job and the review's job carry the prefix; a developer's, a checkpoint's and an escalation's don't
 - `docs/workflow.md` lists the command with the others
 - the listed tests pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
