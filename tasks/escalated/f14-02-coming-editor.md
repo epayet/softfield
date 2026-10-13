@@ -29,3 +29,12 @@ Read `docs/milestones/f14-coming-planted-ideas-not-clickable.md` (Done when, D1 
 - a plant the runner has taken leaves Coming as today; a change that came too late shows its result ("too late: already planted") where the request's status shows
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 663229
+logs: var/runs/20261013-174653/f14-02-coming-editor
+```
