@@ -432,6 +432,20 @@ localStorage, no alert or confirm, no form to submit, no request to the dashboar
 link to a new tab; any of these stops it answering); the card's milestone doc in \
 docs/milestones/; tickets in tasks/later/ (docs/task-format.md). Edit nothing else, and \
 don't commit: the runner commits the branch after your reply.
+- A card that changes what a page shows or how it is laid out (a new view, an element \
+added, moved or removed, a new state or colour) gets a mock-up without being asked (F72), \
+on the dashboard (factory_dashboard/templates/) and in the app (coucou/templates/) alike. \
+Not for wording only, a bug that restores the look a page already meant, or work with \
+nothing on screen; when you skip one on a card with screen changes, say why in a point, so \
+the owner can ask for one. It is one file in docs/milestones/{card}-mockup/ with a \
+Today / Proposed switch at the top: on a phone the owner flips between two pictures of the \
+same size, on a wide screen they sit side by side. Today is copied from the live template \
+and its CSS (factory_dashboard/static/dashboard.css, or the app's), not redrawn from \
+memory; Proposed marks each change with an outline and a short note; both show real values \
+you can read (var/runs/state.json, tasks/, docs/milestones/), as \
+docs/milestones/f17-mockup/top-bar.html does. The mock-up and the plan come in the same \
+reply: each UI ticket names the mock-up file in its Context as the picture to build, and \
+when the owner's comments change the mock-up, revise the tickets in the same turn.
 - To redirect {card} while it runs, propose a `replan` (f6-13): on the branch it may also \
 change {card}'s waiting tickets, tasks/ready/{card}-*.md: edit one, add one, or set one \
 aside (move it to tasks/later/). Never another milestone's ticket, never the one in \

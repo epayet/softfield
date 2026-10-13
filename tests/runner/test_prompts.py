@@ -201,6 +201,24 @@ def test_a_cards_planner_names_a_seed_card_in_its_first_reply_and_the_general_on
     assert "`title`" not in prompts.PLANNER_GENERAL
 
 
+def test_a_card_that_changes_a_page_gets_a_today_proposed_mockup_unasked():
+    """f72-01: the mock-up is the default for a card with screen changes (F72 D1–D3)."""
+    text = prompts.PLANNER
+    start = text.index("- A card that changes what a page shows or how it is laid out")
+    paragraph = text[start : text.index("\n- ", start)]
+    assert start < text.index("```json")
+    # When (D1): without being asked, with the exceptions, and a point when skipped
+    assert "without being asked" in paragraph and "wording only" in paragraph
+    assert "say why in a point" in paragraph
+    # What it shows (D2): one file, a Today / Proposed switch, Today copied, real values
+    assert "Today / Proposed" in paragraph and "docs/milestones/{card}-mockup/" in paragraph
+    assert "copied from the live template" in paragraph and "real values" in paragraph
+    # Order (D3): with the plan, and the UI tickets point at it
+    assert "in the same reply" in paragraph and "in its Context" in paragraph
+    # The general thread drafts nothing, so it asks for none (D4)
+    assert "mock-up" not in prompts.PLANNER_GENERAL and "Today" not in prompts.PLANNER_GENERAL
+
+
 def test_the_planner_prompts_still_fill_in():
     """The new rules add no stray brace: both prompts format with the same fields."""
     for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):
