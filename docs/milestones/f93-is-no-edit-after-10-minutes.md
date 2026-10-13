@@ -1,4 +1,4 @@
-# Milestone F93: is no edit after 10 minutes rule too harsh? look at recent…
+# Milestone F93: Developer attempts get 20 minutes before the no-edit stop
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-10.
