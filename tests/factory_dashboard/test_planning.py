@@ -745,6 +745,7 @@ def test_only_a_seeds_thread_has_remove_seed(planning, serve):
     client = serve()
     html = _thread(client, "f9")
     assert "Remove seed" in html and "Remove F9? Its notes go too." in _text(html)
+    assert html.index('id="reply"') < html.index('id="drop-seed"')
     assert _posts(html, "drop-seed") == {"kind": "drop_seed", "project": PROJECT, "subject": "f9"}
     for other in ("f6", "general"):
         page = _thread(client, other)
@@ -1705,8 +1706,13 @@ def test_the_archived_list_shows_the_most_recently_archived_first(planning, db_p
 
 
 def test_a_threads_button_archives_it_and_an_archived_ones_opens_it_again(planning, db_path, serve):
+    """The archive row sits after the reply box, not in the card header."""
     client = serve()
     html = _thread(client, "general")
+    assert html.index('id="reply"') < html.index('id="archive-button"')
+    header = html.split('<header id="card"', 1)[1].split("</header>", 1)[0]
+    assert 'id="archive-button"' not in header
+    assert 'id="remove-seed"' not in header
     assert _posts(html, "archive-button") == {
         "kind": "archive",
         "project": PROJECT,
@@ -1732,6 +1738,28 @@ def test_an_archive_on_its_way_shows_at_once_and_its_button_goes(planning, db_pa
     html = _thread(serve(), "general")
     assert "Archiving at the runner's next pick" in _text(html)
     assert 'id="archive-button"' not in html
+
+
+def test_the_archive_row_still_shows_when_a_reply_waits(planning, db_path, serve):
+    """While a reply waits (``id="waiting"`` instead of the form), the Archive row
+    still shows after it."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn,
+            planning,
+            "plan_message",
+            "general",
+            json.dumps({"text": "Waiting.", "comments": {}}),
+            _at(timedelta(minutes=5)),
+        ),
+    )
+    html = _thread(serve(), "general")
+    assert '<p id="waiting"' in html
+    assert 'id="reply"' not in html
+    assert 'id="archive-button"' in html
+    assert html.index('id="waiting"') < html.index('id="archive"')
 
 
 def test_a_card_with_no_thread_has_no_archive_button(planning, serve):

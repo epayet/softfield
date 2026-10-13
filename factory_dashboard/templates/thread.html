@@ -10,36 +10,6 @@
     <header id="card" style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column">
       {% if card_meta %}<span style="font: 600 12px var(--mono); color: var(--muted)">{{ card_meta }}</span>{% endif %}
       <h2 style="margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">{{ card_title }}</h2>
-      {% if seed %}
-      <details id="remove-seed">
-        <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Remove seed</summary>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
-          <span>Remove {{ thread | upper }}? Its notes go too.</span>
-          <button type="button" id="drop-seed"
-            hx-post="/requests" hx-target="#drop-status" hx-swap="innerHTML"
-            hx-vals='{"kind": "drop_seed", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
-            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Remove</button>
-          <span id="drop-status" style="font-size: 12.5px; color: var(--muted)"></span>
-        </div>
-      </details>
-      {% endif %}
-      {% if has_thread %}
-      {# Archive (the owner, 2026-10-07): what was asked shows at once, on its way, and the
-         button goes; the runner applies it at its next pick. A reply opens the thread again. #}
-      <div id="archive" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px">
-        {% if archiving %}
-        <span class="pill" style="border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px">{{ "Archiving" if archiving == "on" else "Opening again" }} at the runner's next pick</span>
-        {% else %}
-        {% if archived_at %}<span class="pill" style="font: 600 12px var(--mono); color: var(--muted)">Archived {{ archived_at[:10] }}</span>{% endif %}
-        <button type="button" id="archive-button"
-          hx-post="/requests" hx-target="#archive-status" hx-swap="innerHTML"
-          hx-vals='{"kind": "archive", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if archived_at else "on") | tojson }}}'
-          hx-on::before-request="this.remove()"
-          style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">{{ "Unarchive" if archived_at else "Archive" }}</button>
-        <span id="archive-status" style="font-size: 12.5px; color: var(--muted)">{% if archived_at %}Or just reply: a message opens it again.{% else %}It leaves your desk; Planning lists it under Archived.{% endif %}</span>
-        {% endif %}
-      </div>
-      {% endif %}
     </header>
 
     {% if review %}
@@ -162,6 +132,37 @@
     </script>
     {% endif %}
     </div>
+
+    {% if seed %}
+    <details id="remove-seed">
+      <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Remove seed</summary>
+      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+        <span>Remove {{ thread | upper }}? Its notes go too.</span>
+        <button type="button" id="drop-seed"
+          hx-post="/requests" hx-target="#drop-status" hx-swap="innerHTML"
+          hx-vals='{"kind": "drop_seed", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
+          style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Remove</button>
+        <span id="drop-status" style="font-size: 12.5px; color: var(--muted)"></span>
+      </div>
+    </details>
+    {% endif %}
+    {% if has_thread %}
+    {# Archive (the owner, 2026-10-07): what was asked shows at once, on its way, and the
+       button goes; the runner applies it at its next pick. A reply opens the thread again. #}
+    <div id="archive" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px">
+      {% if archiving %}
+      <span class="pill" style="border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px">{{ "Archiving" if archiving == "on" else "Opening again" }} at the runner's next pick</span>
+      {% else %}
+      {% if archived_at %}<span class="pill" style="font: 600 12px var(--mono); color: var(--muted)">Archived {{ archived_at[:10] }}</span>{% endif %}
+      <button type="button" id="archive-button"
+        hx-post="/requests" hx-target="#archive-status" hx-swap="innerHTML"
+        hx-vals='{"kind": "archive", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if archived_at else "on") | tojson }}}'
+        hx-on::before-request="this.remove()"
+        style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">{{ "Unarchive" if archived_at else "Archive" }}</button>
+      <span id="archive-status" style="font-size: 12.5px; color: var(--muted)">{% if archived_at %}Or just reply: a message opens it again.{% else %}It leaves your desk; Planning lists it under Archived.{% endif %}</span>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 
   {% if proposals %}
