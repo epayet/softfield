@@ -1,6 +1,7 @@
 # Milestone F72: I really like the mock up feature, especially to see…
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-13. Base: git tag `f72-i-really-like-the-mock-up-start`. Report: [`docs/reviews/f72-i-really-like-the-mock-up.md`](../reviews/f72-i-really-like-the-mock-up.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes
