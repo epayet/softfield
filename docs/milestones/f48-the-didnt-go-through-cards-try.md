@@ -1,6 +1,7 @@
 # Milestone F48: Try again plants a note, once
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** done · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-13. Base: git tag `f48-the-didnt-go-through-cards-try-start`. Report: [`docs/reviews/f48-the-didnt-go-through-cards-try.md`](../reviews/f48-the-didnt-go-through-cards-try.md).
 > Planted by the owner on 2026-10-08 as "the didnt go through cards try again don't work or dismiss".
 
 ## Notes
