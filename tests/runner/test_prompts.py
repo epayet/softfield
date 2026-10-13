@@ -213,6 +213,10 @@ def test_a_card_that_changes_a_page_gets_a_today_proposed_mockup_unasked():
     # What it shows (D2): one file, a Today / Proposed switch, Today copied, real values
     assert "Today / Proposed" in paragraph and "docs/milestones/{card}-mockup/" in paragraph
     assert "copied from the live template" in paragraph and "real values" in paragraph
+    # The example it names for the switch has one (F72's review: f17's has none)
+    example = "docs/milestones/f94-mockup/away-rows.html"
+    assert example in paragraph
+    assert 'data-show="today"' in (ROOT / example).read_text(encoding="utf-8")
     # Order (D3): with the plan, and the UI tickets point at it
     assert "in the same reply" in paragraph and "in its Context" in paragraph
     # The general thread drafts nothing, so it asks for none (D4)

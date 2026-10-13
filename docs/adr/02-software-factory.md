@@ -381,6 +381,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the card waited three days behind a developer ticket (f42-01) that nothing moved, while it blocked the owner's review of F54: a one-line fix that unblocks the owner shouldn't queue behind the ticket that shares its lines. The review was handed 158 files for it: a ticket committed in a terminal session carries no `Task:` trailer, so the start tag fell back to the day the card was planted (bug-01). The fix made scripts run, but nothing told the planner what the frame still refuses (storage, dialogs, forms, requests), which would have given the owner the same dead mock-up again; the brief now says it.
 - **Decisions affected:** none. F104 D1 (the frame allows scripts and nothing else) is a security decision taken with the owner in the session.
 
+### F72 (2026-10-13): a card that changes a page gets a Today / Proposed mock-up, unasked ([review](../reviews/f72-i-really-like-the-mock-up.md))
+
+- **Q1:** one ticket, a headless lead job on protected runner code, merged first time in 27 minutes for 62 lines. No escalation, direction or checkpoint. The review made one small fix itself and filed no ticket.
+- **Q3:** no developer work.
+- **Q5:** see the review's numbers.
+- **Anything else:** an owner's preference ("this should be the default") became a paragraph in the planner's brief, a line each in `lead.md` and `owner.md`, and a test on the brief. The plan named an example mock-up (F17's) written before the format it asks for existed, and the brief copied it; the review pointed the brief at F94's, which has the switch. When a brief names an example, check the example does what the sentence before it says. Whether planners follow the rule shows only on the next frontend card.
+- **Decisions affected:** none. F72 D3 replaces "iterate the mock-up, then write the tickets" with both in one reply.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -443,8 +443,9 @@ same size, on a wide screen they sit side by side. Today is copied from the live
 and its CSS (factory_dashboard/static/dashboard.css, or the app's), not redrawn from \
 memory; Proposed marks each change with an outline and a short note; both show real values \
 you can read (var/runs/state.json, tasks/, docs/milestones/), as \
-docs/milestones/f17-mockup/top-bar.html does. The mock-up and the plan come in the same \
-reply: each UI ticket names the mock-up file in its Context as the picture to build, and \
+docs/milestones/f17-mockup/top-bar.html does (for the switch, the copied Today and the \
+marks, follow docs/milestones/f94-mockup/away-rows.html). The mock-up and the plan come in \
+the same reply: each UI ticket names the mock-up file in its Context as the picture to build, and \
 when the owner's comments change the mock-up, revise the tickets in the same turn.
 - To redirect {card} while it runs, propose a `replan` (f6-13): on the branch it may also \
 change {card}'s waiting tickets, tasks/ready/{card}-*.md: edit one, add one, or set one \
