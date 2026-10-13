@@ -26,7 +26,14 @@
         <tr data-ticket="{{ t.ticket }}">
           <td class="id" data-col="id"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></td>
           <td data-col="goal">{{ t.title or "–" }}</td>
-          <td data-col="queue"><code>uv run runner queue {{ t.ticket }}</code></td>
+          <td data-col="queue">
+            <button type="button" class="btn" hx-post="/requests" hx-swap="outerHTML"
+              hx-target="#answer-{{ t.ticket }}"
+              hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ t.ticket | tojson }}}'
+              hx-on::before-request="this.disabled = true">Queue</button>
+            <code>uv run runner queue {{ t.ticket }}</code>
+          </td>
+          <td><div id="answer-{{ t.ticket }}"></div></td>
         </tr>
         {% endfor %}
       </tbody>

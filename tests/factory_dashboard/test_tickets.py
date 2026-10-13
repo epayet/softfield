@@ -1,5 +1,6 @@
 """Tests for the tickets list and ticket detail pages (f1-10, f1-36)."""
 
+import json
 import re
 from datetime import timedelta
 from pathlib import Path
@@ -299,6 +300,61 @@ def test_later_tickets_panel_shows_ticket_with_title_and_queue_command(later_cli
     assert "f1-99-later" in id_cell
     assert row["goal"] == "A set-aside ticket."
     assert "uv run runner queue f1-99-later" in row["queue"]
+    # Queue button's request (hx-vals parsed as JSON) is queue with that ticket's id as subject
+    btn = re.search(
+        r'<button[^>]*hx-post="/requests"[^>]*>Queue</button>',
+        row["queue"],
+        re.S,
+    )
+    assert btn is not None, "Queue button not found"
+    vals = re.search(r'hx-vals=[\'"]\{([^}]*)\}[\'"]', btn.group(0), re.S)
+    assert vals is not None
+    parsed = json.loads("{" + vals.group(1) + "}")
+    assert parsed["kind"] == "queue"
+    assert parsed["subject"] == "f1-99-later"
+
+
+def test_each_queue_button_answers_in_its_own_row(db_path, later_client):
+    """With two set-aside tickets, each button's answer goes to a place in its own row."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-98-later",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="Another set-aside ticket.",
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets").text
+    later_section = section_raw(html, "later")
+
+    for ticket in ("f1-99-later", "f1-98-later"):
+        row = later_row(later_section, ticket)
+        btn = re.search(
+            r'<button[^>]*hx-post="/requests"[^>]*>Queue</button>',
+            row["queue"],
+            re.S,
+        )
+        assert btn is not None, f"Queue button for {ticket} not found"
+        vals = re.search(r'hx-vals=[\'"]\{([^}]*)\}[\'"]', btn.group(0), re.S)
+        assert vals is not None
+        parsed = json.loads("{" + vals.group(1) + "}")
+        assert parsed["kind"] == "queue"
+        assert parsed["subject"] == ticket
+        answer = re.search(r'id="answer-' + re.escape(ticket) + r'"', later_section)
+        assert answer is not None, f"answer div for {ticket} not found"
+
+    # The answer divs are not shared between rows
+    answer_ids = re.findall(r'id="answer-([^"]+)"', later_section)
+    assert len(answer_ids) == len(set(answer_ids))
 
 
 def test_later_tickets_panel_absent_when_no_later_tickets(tickets_client):
