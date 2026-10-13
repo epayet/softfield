@@ -45,6 +45,9 @@ def test_the_planner_prompt_names_the_block_the_branch_and_the_approval_rule():
     for folder in ("docs/adr/", "docs/milestones/{card}-mockup/", "tasks/later/"):
         assert folder in text
     assert "self-contained HTML" in text and "don't commit" in text
+    # The frame the owner reads a mock-up in runs its scripts and nothing else (F104 D1)
+    for refused in ("no localStorage", "no alert or confirm", "no request to the dashboard"):
+        assert refused in text
     # The approval rule (item 7): nothing queued until the owner approves; only a replan's
     # branch touches tasks/ready/ (f6-13)
     assert "Nothing is queued without their approval" in text

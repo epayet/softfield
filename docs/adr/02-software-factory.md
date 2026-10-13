@@ -373,6 +373,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the card was a question the owner planted; the answer from the code found one real gap, which became a 16-line ticket. The review's diff was 890 lines because a terminal session's commits for three other milestones sat between the merge and the review: a round-1 review should be pointed at its own merges when that happens (backlog, f79-F3). Whether the list saves retries isn't measured yet.
 - **Decisions affected:** none. ADR 12 item 5's retry line gains one sentence; `docs/workflow.md` says so.
 
+### F104 (2026-10-13): a mock-up answers in the review page's frame ([review](../reviews/f104-mockups-act-like-i-can-interact.md))
+
+- **Q1:** one ticket, built by the lead with the owner in a terminal session: one attribute and a Chromium test. No runner job, escalation or checkpoint. The review added one sentence to the planner's brief and filed one bug ticket.
+- **Q3:** no developer work.
+- **Q5:** see the review's numbers.
+- **Anything else:** the card waited three days behind a developer ticket (f42-01) that nothing moved, while it blocked the owner's review of F54: a one-line fix that unblocks the owner shouldn't queue behind the ticket that shares its lines. The review was handed 158 files for it: a ticket committed in a terminal session carries no `Task:` trailer, so the start tag fell back to the day the card was planted (bug-01). The fix made scripts run, but nothing told the planner what the frame still refuses (storage, dialogs, forms, requests), which would have given the owner the same dead mock-up again; the brief now says it.
+- **Decisions affected:** none. F104 D1 (the frame allows scripts and nothing else) is a security decision taken with the owner in the session.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

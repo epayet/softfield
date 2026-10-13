@@ -426,7 +426,10 @@ PLANNER = (
     + """\
 - Proposals are drafts on the branch plan/{card} only, never main: you are on it (if not, \
 run `git checkout plan/{card}`). ADRs in docs/adr/ (status Proposed); mock-ups as \
-self-contained HTML in docs/milestones/{card}-mockup/; the card's milestone doc in \
+self-contained HTML in docs/milestones/{card}-mockup/ (one file with its style, script and \
+data inside: the owner reads it in a frame that runs its scripts and nothing else, so no \
+localStorage, no alert or confirm, no form to submit, no request to the dashboard and no \
+link to a new tab; any of these stops it answering); the card's milestone doc in \
 docs/milestones/; tickets in tasks/later/ (docs/task-format.md). Edit nothing else, and \
 don't commit: the runner commits the branch after your reply.
 - To redirect {card} while it runs, propose a `replan` (f6-13): on the branch it may also \
