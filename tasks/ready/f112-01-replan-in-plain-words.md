@@ -26,7 +26,8 @@ Read `docs/milestones/f112-plain-words-for-replan.md` (D1, D2). In `factory_dash
 
 ### Done when
 - a thread with a replan proposal shows "CHANGE TO QUEUED TICKETS" in its box and no "REPLAN"; a plan still shows "PLAN"
-- a replan's review page reads "Approving this applies the ticket changes" and counts its changes ("1 changed, 1 set aside" for the fixture of the test to follow); the word "replan" is nowhere in the page's text outside attributes
+- a replan's review page reads "Approving this applies the ticket changes" and counts its changes: "1 changed, 1 added, 1 set aside" for the fixture of the test to follow (`_replanned`: one ticket changed, one set aside, one added)
+- none of that page's own labels or sentences says "replan" (the ticket texts it shows, such as "the replan's a", and its address still do): assert on the tab's label, the "What happens next" steps and the count line
 - an open replan with no key points shows "Change to queued tickets" as its words on the desk
 - in Next in line a ready ticket `f1-07-replan` is followed by "plan check"; `f1-05-first` is not
 - the buttons still post the same requests (the existing tests of Approve and Send back pass unchanged)
