@@ -32,3 +32,10 @@ Read `docs/milestones/f101-uv-runner-run-command-stopped-when.md` (D1 to D3), th
 - `docs/workflow.md` says the standing command stays up and how to end it
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
