@@ -11,10 +11,12 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
   lead ticket going back to the queue) simply moves the crate.
 - **Today**: each belt counts its trips since local midnight (``now``'s own midnight), and is
   ``carrying`` while a live job's crate came on it.
-- **The field**, until f3-08 brings the board's cards: rows are milestones with ready or
-  running tickets, ripe ones have every ticket merged and wait for the owner's sign-off, the
-  stash holds signed-off ones, seeds are tickets set aside (``later``, which lists them),
-  planting counts the cards being planned with the owner (``_planting``).
+- **The field**: rows are milestones with ready or running tickets, ripe ones have every
+  ticket merged and wait for the owner's sign-off, the stash holds signed-off ones, seeds are
+  tickets set aside (``later``, which lists them), planting counts the cards being planned
+  with the owner (``_planting``). Its five stations' counts come from the board's cards
+  (``board.py``): seed, sprouting, planted plus growing, ripe, harvested; at a past ``at``,
+  which the board doesn't know, from ``field``.
 - **Any moment** (f3-06): ``live_line(..., at=t)`` applies the same rules to the jobs whose
   times cover ``t`` (an unfinished one until its run's last heartbeat) and to each ticket's
   state then, rebuilt from its trips. ``replay`` is the document at ``since`` and every event
@@ -614,6 +616,7 @@ def live_line(
     """D11's document at ``at`` (default ``now``): stations, machines with their state and
     crate, belts with that day's count (since ``at``'s midnight) and ``carrying``, Now and the
     queue in run order. The jobs working are those whose times cover ``at``."""
+    live = at is None  # the board knows only the present
     at = at or now
     midnight = at.replace(hour=0, minute=0, second=0, microsecond=0)
     tickets = _tickets(conn, project)
@@ -703,6 +706,18 @@ def live_line(
         "stash": len(field["stash"]),
         **{s: sum(m["station"] == s for m in machines) for s in MACHINE_STATIONS},
     }
+    if live:
+        from factory_dashboard.board import board  # board.py imports from this module
+
+        cards = board(conn, project, now)
+        stages = {stage: len(found) for stage, found in cards.stages.items()}
+        count.update(
+            seeds=stages["seed"],
+            planting=stages["sprouting"],
+            rows=stages["planted"] + stages["growing"],
+            ripe=stages["ripe"],
+            stash=stages["harvested"] + cards.more_harvested,
+        )
     return {
         "at": at.isoformat(),
         "stations": [

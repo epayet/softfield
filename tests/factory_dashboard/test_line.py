@@ -19,6 +19,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 import pytest
 from fastapi.testclient import TestClient
 
+from factory_dashboard.board import HARVESTED, board
 from factory_dashboard.line import BELTS, STATIONS, live_line, overnight, replay, trips
 from factory_dashboard.queries import connect
 from runner import metrics
@@ -47,6 +48,42 @@ def document(db: Path, now: datetime = LINE_NOW, project: str = PROJECT) -> dict
         return live_line(conn, project, now)
     finally:
         conn.close()
+
+
+FIELD = ("seeds", "planting", "rows", "ripe", "stash")
+
+
+def field_counts(doc: dict[str, Any]) -> dict[str, int]:
+    """The five field stations' counts."""
+    return {s["id"]: s["count"] for s in doc["stations"] if s["id"] in FIELD}
+
+
+def listed_counts(field: dict[str, Any]) -> dict[str, int]:
+    """The same five counts from the document's ``field``, as a past moment has them."""
+    return {
+        "seeds": field["seeds"],
+        "planting": field["planting"],
+        "rows": len(field["rows"]),
+        "ripe": len(field["ripe"]),
+        "stash": len(field["stash"]),
+    }
+
+
+def board_counts(db: Path, now: datetime = LINE_NOW) -> dict[str, int]:
+    """What the board says each field station holds, from its own cards."""
+    conn = connect(db)
+    try:
+        found = board(conn, PROJECT, now)
+    finally:
+        conn.close()
+    cards = {stage: len(found.stages[stage]) for stage in found.stages}
+    return {
+        "seeds": cards["seed"],
+        "planting": cards["sprouting"],
+        "rows": cards["planted"] + cards["growing"],
+        "ripe": cards["ripe"],
+        "stash": cards["harvested"] + found.more_harvested,
+    }
 
 
 def machines(doc: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -279,8 +316,48 @@ def test_the_field_rows_ripe_and_stash_match_the_milestones(line_db):
     assert (field["seeds"], field["planting"]) == (1, 0)  # f9-04, set aside
     assert field["later"] == [{"ticket": "f9-04-later", "title": "Goal of f9-04-later."}]
     counts = {s["id"]: s["count"] for s in doc["stations"]}
-    assert (counts["seeds"], counts["planting"], counts["rows"]) == (1, 0, 3)
-    assert (counts["ripe"], counts["stash"], counts["merged"], counts["queue"]) == (1, 2, 2, 4)
+    assert field_counts(doc) == board_counts(line_db)  # the board's cards, not the lists above
+    assert (counts["merged"], counts["queue"]) == (2, 4)
+
+
+def test_the_field_stations_count_the_board_s_cards(board_db):
+    """D11: two ideas, a set-aside bug, sprouting cards, a growing card and harvested ones.
+    For the board an idea no thread is about is a seed and a set-aside ticket of an ordinary
+    card is none, so its counts aren't the field's."""
+    doc = document(board_db, NOW)
+    expected = board_counts(board_db, NOW)
+    assert field_counts(doc) == expected
+    assert all(expected.values())  # every stage holds a card: no count agrees by being empty
+    listed = listed_counts(doc["field"])
+    assert expected["planting"] != listed["planting"] and expected["rows"] != listed["rows"]
+
+
+def test_the_stash_counts_the_harvested_cards_the_board_doesn_t_list(board_db):
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for n in range(30, 30 + HARVESTED):
+            metrics.upsert_milestone(conn, project, f"f{n}-old", title="Old", status="done")
+    finally:
+        conn.close()
+    conn = connect(board_db)
+    try:
+        found = board(conn, PROJECT, NOW)
+    finally:
+        conn.close()
+    assert found.more_harvested > 0
+    assert field_counts(document(board_db, NOW))["stash"] == HARVESTED + found.more_harvested
+
+
+def test_at_a_past_moment_the_field_stations_count_the_field_s_lists(board_db):
+    """The board knows only the present: a replay keeps the counts of ``field``."""
+    conn = connect(board_db)
+    try:
+        doc = live_line(conn, PROJECT, NOW, at=NOW - timedelta(hours=1))
+    finally:
+        conn.close()
+    assert field_counts(doc) == listed_counts(doc["field"])
+    assert field_counts(doc) != board_counts(board_db, NOW)
 
 
 def planning_cards(db: Path, cards: list[tuple[str, str | None, bool, str | None]]) -> None:
@@ -316,7 +393,9 @@ def test_planting_counts_the_cards_being_planned_once_each(line_db):
     )
     doc = document(line_db)
     assert doc["field"]["planting"] == 3
-    assert {s["id"]: s["count"] for s in doc["stations"]}["planting"] == 3
+    # the station counts the board's sprouting cards: an idea no thread is about is a seed
+    assert field_counts(doc) == board_counts(line_db)
+    assert field_counts(doc)["planting"] < doc["field"]["planting"]
 
 
 def test_a_thread_about_a_card_with_no_ticket_yet_is_planting(line_db):
