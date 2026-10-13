@@ -103,3 +103,32 @@ The planning thread behind F95's plan, oldest first, as it was when the owner ap
 > Proposals:
 > - F95: sign-offs counted once, and the lead can look (plan)
 > - ADR 28: Planning and review jobs can look at the database and the dashboard (adr)
+
+## The lead, 2026-10-12 19:08
+
+> Approved by the owner on 2026-10-12: approved plan/f95: queued f95-01-sign-offs-counted-once, f95-02-lead-jobs-can-look
+
+## The owner, 2026-10-13 18:11
+
+> From F115, merged here:
+> I may have asked this before but why are there things to to sign off in overview needs you but nothing on my desk
+
+## The lead, 2026-10-13 18:12
+
+> You did ask before, twice, and both fixes are planned but neither is built yet. I drafted a replan that moves F95's two tickets up; both pass pre-flight, and nothing changes until you approve.
+>
+> 1. **Yes, you asked before, and the answer is the same cause**: Twice: here on F95, Sign-offs counted once and the lead can look, and on F110, Ripe on the board but no Sign off button. Needs you on the Overview lists sign-off rows the runner stored when it gave each milestone's verdict, and they stay until that milestone is signed off. Your desk works it out fresh each time, with a stricter rule. So a milestone that got new tickets after its verdict, or has a ticket set aside, keeps its row on the Overview and is absent from your desk.
+>    Action: Nothing new to plan: the two fixes below already exist.
+> 2. **Why you still see it: neither fix is built**: Both tickets are still waiting in the queue. `f110-01-ripe-is-one-rule` makes the desk list a finished card that has a ticket set aside (F31, When I click on Approve plan, is one). `f95-01-sign-offs-counted-once` then removes the stored rows from Needs you, and it waits for the first, so that no sign-off ends up showing in neither place. F95 sat at priority 3, behind about a dozen priority 1 tickets that can run now, at about 30 minutes each.
+>    Action: The replan below moves F95's tickets up.
+> 3. **The look ticket goes first, as you asked on F110**: On F110 you said to prioritise the ticket that lets me read the database. It never got a priority of its own, so it stayed at F95's 3. I set `f95-02-lead-jobs-can-look` to priority 0: with nothing in flight, it is the next ticket the runner takes. It is a lead ticket on Opus.
+>    Action: In the replan. Once it is merged I can name which milestones are behind the rows you see, on this thread.
+> 4. **The sign-off fix moves up too, but waits for F110's ticket**: I set `f95-01-sign-offs-counted-once` to priority 1, from 2. It still can't run before `f110-01-ripe-is-one-rule`, which belongs to F110, Ripe on the board but no Sign off button, and which I can't change from this thread. That one is already at priority 1 and takes its turn among the priority 1 tickets. I'd keep the wait: dropping it risks a finished card showing nowhere for a few hours.
+>    Action: In the replan. If you want it sooner still, say so here and I'll plan the order change for F110's ticket where it can be made.
+> 5. **I still can't tell you which milestones they are**: For the same reason as last time: this job can't read the database until the look ticket is built. From the code, the likely ones are cards that were ready for sign-off once and then got more tickets, or have a ticket set aside. That is a guess, not a reading.
+>    Action: Fixed by point 3.
+> 6. **Pause the factory before approving**: The replan changes two waiting tickets, and the line is idle now, so it may pick one up while you read. Pause it from the dashboard first; approving the replan lifts your pause.
+>    Action: Pause, then approve.
+>
+> Proposals:
+> - F95, Sign-offs counted once and the lead can look: both tickets move up (replan)

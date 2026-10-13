@@ -1,6 +1,7 @@
 ---
 id: f95-02-lead-jobs-can-look
 milestone: f95-overview-currently-says-i-have-2
+priority: 0
 depends_on: []
 difficulty: 10
 agent: lead

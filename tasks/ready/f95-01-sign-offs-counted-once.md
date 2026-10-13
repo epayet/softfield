@@ -1,7 +1,7 @@
 ---
 id: f95-01-sign-offs-counted-once
 milestone: f95-overview-currently-says-i-have-2
-priority: 2
+priority: 1
 depends_on: [f110-01-ripe-is-one-rule]
 difficulty: 3
 files:
