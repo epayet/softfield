@@ -25,3 +25,12 @@ Read the "Set aside" panel in `factory_dashboard/templates/tickets.html` (f4-18)
 - with two set-aside tickets, each button's answer goes to a place in its own row
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2671
+gate_failures: []
+tokens: 2677546
+```
