@@ -41,3 +41,9 @@ attempts: 3
 tokens: 7360683
 logs: var/runs/20261013-001220/f5-08-signoff-button
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
