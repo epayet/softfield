@@ -1,6 +1,6 @@
 # Review: F79, a retry after a timeout names the files on its branch
 
-- **Status:** round 1 done; nothing left to fix. Ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-13.
 
 ## Sign-off sheet
 

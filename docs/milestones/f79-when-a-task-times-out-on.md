@@ -1,6 +1,7 @@
 # Milestone F79: when a task times out on the first attempt, is the second…
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-13. Base: git tag `f79-when-a-task-times-out-on-start`. Report: [`docs/reviews/f79-when-a-task-times-out-on.md`](../reviews/f79-when-a-task-times-out-on.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes
