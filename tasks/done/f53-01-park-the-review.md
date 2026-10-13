@@ -31,3 +31,10 @@ Read `docs/milestones/f53-why-is-milestone-diff-review-waiting.md` (D1), `review
 - `wait_for_room` has no caller left in `runner run`'s path
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
