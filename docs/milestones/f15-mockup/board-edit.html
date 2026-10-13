@@ -208,8 +208,9 @@ function card(c, stage, i) {
   }
   if (c.note) b.append(el("span", "note", c.note));
   if (stage === "ripe" && !c.bug) b.append(proposed ? el("span", "note go", "Read the review and sign off ›") : el("code", "", `uv run runner signoff ${c.key.toLowerCase()}`));
-  if (moved.has(c.key)) b.append(el("span", "way", "moved · not sent yet"));
-  if (sent.has(c.key)) b.append(el("span", "way", "on its way · at the runner's next pick"));
+  const was = from => { const n = from[stage].indexOf(c.key); return n < 0 ? "" : `was #${n + 1} · `; };
+  if (moved.has(c.key)) b.append(el("span", "way", `moved · ${was(sentOrder || base)}not sent yet`));
+  if (sent.has(c.key)) b.append(el("span", "way", `on its way · ${was(base)}at the runner's next pick`));
   a.append(b);
   if (proposed && stage !== "harvested") { const m = el("button", "more", "⋯"); m.type = "button"; m.setAttribute("aria-label", `Actions for ${c.key}`); m.addEventListener("click", () => sheet(c, stage)); a.append(m); }
   else a.append(el("span"));
