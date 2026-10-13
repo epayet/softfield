@@ -5101,15 +5101,67 @@ def test_two_stand_in_checkpoints_then_claude_free_make_one_claude_recheck_of_al
     assert (s.state.unchecked, s.state.recheck) == ([], [])
 
 
-def test_a_review_at_80_percent_waits_for_the_reset_with_the_switch_off(
-    repo, fake_clock, at_the_keyboard, capsys
+def _a_due_review_and_two_tickets(repo: Path) -> None:
+    """F9's tickets are all done, so its review is due; F10 has two developer tickets."""
+    _two_milestones(repo)
+    git(repo, "mv", "tasks/ready/f9-02-last.md", "tasks/done/f9-02-last.md")
+    path = write_task(repo / "tasks" / "ready", "f10-02-after")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: f10\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f9 done")
+
+
+def _review_row(repo: Path) -> dict[str, object]:
+    [row] = [row for row in _rows(repo, "work_queue") if row["kind"] == "review"]
+    return row
+
+
+def test_a_review_at_80_percent_parks_and_a_developer_ticket_runs_meanwhile(
+    repo, fake_clock, at_the_keyboard, monkeypatch, capsys
 ):
-    """Nothing else runs during the review, so it waits rather than parks (ADR 16 item 4)."""
+    """F53 D1: on 2026-10-08 the runner slept 3 h 30 in `wait_for_room` with about 40
+    developer tickets ready. The review parks its row, as a checkpoint does (ADR 16 item 4)."""
+    _a_due_review_and_two_tickets(repo)
     _claude_at(repo, 0.80)
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+    monkeypatch.setattr(loop, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
     s = loop.open_session(_config(repo))
-    loop.wait_for_room(s, "the review")
-    assert "[y/N]" not in capsys.readouterr().out
-    assert fake_clock[0] > FIVE_RESETS
+    assert loop.work_queue(s, reviews=True, once=True) is False
+    assert ran == ["f10-01-next"] and s.report.review is None
+    assert fake_clock[0] == THURSDAY  # nothing slept
+    row = _review_row(repo)
+    assert (row["subject"], row["done"], row["not_before"]) == ("f9", None, FIVE_RESETS.isoformat())
+    out = capsys.readouterr().out
+    assert "[y/N]" not in out
+    assert "⏸ [runner] the review of f9 waits for Claude · resumes 14:00 (in 2 h" in out
+    assert "Parked the review of f9: claude: 5-hour window 80% used" in s.report.notes[0]
+    assert _state(repo).review_stop == {}  # parked is no stop: the milestone stays due
+    # After the reset the review goes before the next ticket
+    fake_clock[0] = FIVE_RESETS + timedelta(minutes=1)
+    assert loop.work_queue(s, reviews=True, once=True) is False
+    assert ran == ["f10-01-next"] and s.report.review == "f9"
+    assert _review_row(repo)["done"] is None  # the review loop finishes it
+
+
+def test_with_no_ticket_left_the_queue_sleeps_to_the_parked_reviews_reset(
+    repo, fake_clock, at_the_keyboard, monkeypatch
+):
+    """The run doesn't end while a review waits for Claude: it is next after the reset."""
+    _a_due_review_and_two_tickets(repo)
+    _claude_at(repo, 0.80)
+    ran: list[tuple[str, bool]] = []
+    merge = _merge_any(repo, [])
+
+    def run_task(s, task):
+        ran.append((task.id, loop.now() < FIVE_RESETS))
+        return merge(s, task)
+
+    monkeypatch.setattr(loop, "run_task", run_task)
+    s = loop.open_session(_config(repo))
+    assert loop.work_queue(s, reviews=True) is False
+    assert ran == [("f10-01-next", True), ("f10-02-after", True)]
+    assert s.report.review == "f9" and fake_clock[0] > FIVE_RESETS
 
 
 def test_the_5_hour_switch_lets_the_review_go_at_once(repo, fake_clock, at_the_keyboard):
@@ -5119,24 +5171,33 @@ def test_the_5_hour_switch_lets_the_review_go_at_once(repo, fake_clock, at_the_k
     assert fake_clock[0] == THURSDAY
 
 
-def test_the_5_hour_switch_turned_on_during_the_reviews_wait_ends_it(
+def test_the_5_hour_switch_turned_on_while_the_review_is_parked_makes_it_the_next_pick(
     repo, fake_clock, at_the_keyboard, monkeypatch
 ):
+    _a_due_review_and_two_tickets(repo)
+    _claude_at(repo, 0.80)
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+    s = loop.open_session(_config(repo))
+    loop.work_queue(s, reviews=True, once=True)
+    assert ran == ["f10-01-next"] and s.report.review is None
+    _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")  # the owner, from their phone
+    assert loop.work_queue(s, reviews=True, once=True) is False
+    assert ran == ["f10-01-next"] and s.report.review == "f9"
+    assert fake_clock[0] == THURSDAY
+    assert loop.switch_on(_state(repo), "five_hour", loop.now())
+
+
+def test_a_review_parked_for_the_owners_share_keeps_no_lead_work_from_claude(repo, fake_clock):
+    """A review parked for the owner's 25% is no limit: the switch may yet free it. One parked
+    for a real limit is, as a parked checkpoint is."""
     _claude_at(repo, 0.80)
     s = loop.open_session(_config(repo))
-    slept: list[float] = []
-    clock_sleep = time.sleep  # fake_clock's
-
-    def phone(seconds: float) -> None:
-        if not slept:  # the review waits: the owner turns the switch on
-            _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")
-        slept.append(seconds)
-        clock_sleep(seconds)
-
-    monkeypatch.setattr("time.sleep", phone)
-    loop.wait_for_room(s, "the review")
-    assert slept == [loop.SWITCH_POLL_S] and fake_clock[0] < FIVE_RESETS
-    assert loop.switch_on(_state(repo), "five_hour", loop.now())
+    assert loop.park_review(s, "f9") is True
+    assert loop._limits_ahead(s, loop.now(), five_hour=False) == []
+    assert loop._limits_ahead(s, loop.now()) == [FIVE_RESETS]
+    loop.park_row(s, "review", "f9", FIVE_RESETS)
+    assert loop._limits_ahead(s, loop.now(), five_hour=False) == [FIVE_RESETS]
 
 
 def _source_ticket(repo: Path) -> None:

@@ -1,10 +1,11 @@
 import json
 import re
 import sqlite3
+from datetime import datetime, timedelta
 
 import pytest
 
-from runner import claude, metrics, milestone, owner
+from runner import claude, cli, loop, metrics, milestone, owner
 from runner.agents import JobResult
 from runner.gates import GateResult
 from runner.loop import close_session, open_session
@@ -18,10 +19,11 @@ from runner.milestone import (
     milestone_summary,
     signoff_sections,
 )
-from runner.state import State
+from runner.report import TaskRecord
+from runner.state import State, load_state
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
-from tests.runner.test_loop import _config
+from tests.runner.test_loop import FIVE_RESETS, THURSDAY, _claude_at, _config
 
 
 def test_footer_fields_reads_the_last_footer(tmp_path):
@@ -651,7 +653,8 @@ def test_a_due_review_diffs_from_the_plans_commit(repo, monkeypatch):
     git(repo, "commit", "-q", "-m", "f9-01-a merged")
     seen: list[tuple[str, str]] = []
 
-    def review(cfg, key, base):
+    def review(cfg, key, base, *, park):
+        assert park  # `runner run` has a queue to go back to (F53 D1)
         seen.append((key, base))
         return "clean"
 
@@ -679,6 +682,153 @@ def test_a_replanned_milestones_review_diffs_from_its_first_merge(repo, monkeypa
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "f9-01-a: the first\n\nTask: f9-01-a")
     git(repo, "commit", "-q", "--allow-empty", "-m", "f9-02-b: the second\n\nTask: f9-02-b")
-    monkeypatch.setattr(milestone, "review_milestone", lambda cfg, key, base: "clean")
+    monkeypatch.setattr(milestone, "review_milestone", lambda cfg, key, base, **kw: "clean")
     milestone.run_due_review(_config(repo), "f9")
     assert git(repo, "rev-parse", "f9-start^{commit}").strip() == before
+
+
+# --- a review Claude can't take now (F53 D1) ------------------------------------------------
+
+
+@pytest.fixture
+def clock(monkeypatch) -> list[datetime]:
+    """`test_loop`'s fake clock: a sleep moves it on."""
+    at = [THURSDAY]
+    monkeypatch.setattr(loop, "now", lambda: at[0])
+    monkeypatch.setattr("time.sleep", lambda s: at.__setitem__(0, at[0] + timedelta(seconds=s)))
+    monkeypatch.setattr(loop, "fresh_reading", lambda s: None)  # no real `claude -p`
+    return at
+
+
+def _review_writes(job, repo_, findings: list[dict[str, object]]) -> None:
+    out = re.search(r"Write (\S+) as:", job.prompt)
+    assert out
+    (repo_ / out[1]).write_text(json.dumps({"findings": findings, "stop": None}))
+    (repo_ / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
+
+
+LEAK: dict[str, object] = {
+    "id": "f9-F1",
+    "severity": "should-fix",
+    "route": "local",
+    "summary": "Leak",
+}
+
+
+def test_a_named_milestones_review_still_waits_for_claude(repo, monkeypatch, clock):
+    """`runner milestone` has no queue to go back to: its review sleeps to the reset, before
+    its e2e run."""
+    _milestone_repo(repo)
+    _claude_at(repo, 0.80)
+    events: list[tuple[str, bool]] = []
+
+    def run_e2e(*a):
+        events.append(("e2e", loop.now() > FIVE_RESETS))
+        return GateResult("e2e", True, "")
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        events.append(("review", loop.now() > FIVE_RESETS))
+        _review_writes(job, repo_, [])
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", run_e2e)
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
+    assert events == [("e2e", True), ("review", True)]
+    [row] = _rows(repo, "work_queue")
+    assert row["done"] is not None and row["not_before"] is None
+
+
+def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
+    repo, monkeypatch, clock, capsys
+):
+    """F53 D1, through `runner run`: round 1 leaves Claude at 80%, so round 2 parks. A ticket
+    of another milestone merges meanwhile; after the reset round 2 runs, not round 1 again,
+    and its prompt names the fix merge of its own milestone only."""
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    milestone_ticket(repo, "ready", "f10-01-next", "f10")
+    (repo / "workflow" / "runner.toml").write_text("")  # `cli._repo` looks for it
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    events: list[str] = []
+    merges: dict[str, str] = {}
+    prompts: list[str] = []
+
+    def run_task(s, task):
+        events.append(f"{task.id} at {loop.now():%H:%M}")
+        git(repo, "mv", f"tasks/ready/{task.path.name}", f"tasks/done/{task.path.name}")
+        git(repo, "commit", "-q", "-m", f"{task.id}: done\n\nAgent: local-m\nTask: {task.id}")
+        merges[task.id] = git(repo, "rev-parse", "HEAD").strip()
+        return TaskRecord(id=task.id, milestone=task.milestone, result="done")
+
+    def run_e2e(*a):
+        events.append("e2e")
+        return GateResult("e2e", True, "")
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        prompts.append(job.prompt)
+        found = re.search(r"milestone (\S+) of Coucou.*Round (\d)", job.prompt, re.S)
+        assert found
+        key, round_no = found.groups()
+        events.append(f"{key} round {round_no}")
+        if len(prompts) == 1:  # F9's round 1 files a fix ticket and uses up Claude's room
+            milestone_ticket(repo_, "ready", "f9-02-fix", "f9")
+            _claude_at(repo_, 0.80)
+            _review_writes(job, repo_, [LEAK])
+        else:
+            _review_writes(job, repo_, [{**LEAK, "resolved": True}] if key == "f9" else [])
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    record = owner.record_verdict
+
+    def record_verdict(repo_, text):
+        events.append("verdict")
+        return record(repo_, text)
+
+    monkeypatch.chdir(repo)
+    monkeypatch.setattr(cli, "load_config", lambda repo_: _config(repo))
+    monkeypatch.setattr(loop, "run_task", run_task)
+    monkeypatch.setattr(milestone, "run_e2e", run_e2e)
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(owner, "record_verdict", record_verdict)
+    monkeypatch.setattr(milestone, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
+    assert cli.main(["run"]) == 0
+    assert events == [
+        "e2e",
+        "f9 round 1",
+        "f9-02-fix at 12:00",
+        # round 2 parks, with no e2e run and no verdict: the line goes on
+        "f10-01-next at 12:00",
+        "e2e",
+        "f9 round 2",
+        "verdict",
+        "e2e",
+        "f10 round 1",
+        "verdict",
+    ]
+    assert clock[0] > FIVE_RESETS
+    assert "the review of f9 waits for Claude · resumes 14:00" in capsys.readouterr().out
+    again = prompts[1]
+    assert f"- f9-02-fix: `git show {merges['f9-02-fix'][:9]}`" in again
+    assert "f10-01-next" not in again and merges["f10-01-next"][:9] not in again
+    state = load_state(_config(repo).runs_dir / "state.json")
+    assert state.review_counts["f9"] == [1, 0] and state.review_stop["f9"] == "clean"
+    assert all(row["done"] is not None for row in _rows(repo, "work_queue"))
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_later_round_with_only_its_own_merges_reads_the_diff_since_the_last_round(repo):
+    """Nothing else merged between the rounds: the fix diffs, as before F53."""
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "review f9 round 1 (by Claude)")
+    since = git(repo, "rev-parse", "HEAD").strip()
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f9-01-a: a fix\n\nTask: f9-01-a")
+    s = open_session(_config(repo), None)
+    assert milestone._last_round(s.git, "f9", 1, "f9-start") == f"{since}^"
+    assert milestone._last_round(s.git, "f9", 0, "f9-start") == "f9-start"
+    assert milestone._last_round(s.git, "f9", 2, "f9-start") == "f9-start"  # no such commit
+    scope = milestone._fix_scope(s, "f9", since)
+    assert scope.startswith(f"Re-review only the fix diffs `git diff {since}..main`")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f10-01-x: other\n\nTask: f10-01-x")
+    assert "`git diff" not in milestone._fix_scope(s, "f9", since)

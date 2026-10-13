@@ -3487,7 +3487,8 @@ def _parked_ahead(
         and not _due(entry, at)
     ]
     for row in open_rows(s) if rows is None else rows:
-        if row.kind not in QUEUED or row.not_before is None or _at(row.not_before) <= at:
+        parks = row.kind in QUEUED or row.kind == REVIEW  # a review's row parks too (F53 D1)
+        if not parks or row.not_before is None or _at(row.not_before) <= at:
             continue
         if five_hour or not s.state.queued.get(row_key(row), {}).get(FIVE_HOUR_HELD):
             found.append((_at(row.not_before), _row_name(row)))
@@ -3650,6 +3651,17 @@ def _park_support(s: Session, role: str, name: str, hold: Hold, /, **resume: str
     park_row(s, role, name, hold.until, hold.five_hour, **resume)
     s.report.notes.append(f"Parked the {what}: {hold.reason}.")
     s.log(console.paused(RUNNER_AGENT, f"the {what} waits for Claude", hold.until, now()))
+
+
+def park_review(s: Session, milestone: str) -> bool:
+    """Before a round of a review `runner run` started (F53 D1): when Claude can't take it
+    now, its row parks until the hold ends, as a checkpoint's does, and the queue goes on with
+    the developers' tickets. Returns whether it parked. A parked review is no stop: its rounds
+    stay in ``State.review_counts``, for it to go on from the round it was at."""
+    if (hold := claude_hold(s, now())) is None:
+        return False
+    _park_support(s, REVIEW, milestone, hold)
+    return True
 
 
 def _plan_branch(s: Session, branch: str) -> bool:
@@ -3987,9 +3999,10 @@ def after_ticket(s: Session, task: Task, rec: TaskRecord, *, escalate: bool) -> 
 
 
 def wait_for_room(s: Session, what: str) -> None:
-    """Before a support job nothing else waits behind (the review): while Claude can't take
-    it, wait for the reset (ADR 16 items 3 and 4). When only the owner's share holds it, the
-    5-hour switch turned on meanwhile ends the wait."""
+    """Before a support job with no queue to go back to (a review under `runner milestone`):
+    while Claude can't take it, wait for the reset (ADR 16 items 3 and 4). When only the
+    owner's share holds it, the 5-hour switch turned on meanwhile ends the wait. `runner run`
+    parks its reviews instead (`park_review`)."""
     while (hold := claude_hold(s, now())) is not None:
         at = now()
         wait = max(60.0, (hold.until - at).total_seconds() + 60)
@@ -4335,7 +4348,8 @@ def work_queue(
 
     With ``reviews`` (`runner run`, f4-20), a milestone whose tickets are all done queues its
     review, which stops the queue before its next ticket: ``s.report.review`` names it, for
-    the command to review. Without ``escalate``, no escalation is queued or run. With
+    the command to review. One Claude can't take now parks instead, and the queue goes on
+    (F53 D1). Without ``escalate``, no escalation is queued or run. With
     ``once``, it stops after one ticket and the jobs that ticket queued.
     """
     code = _runner_code(s.repo)
@@ -4380,6 +4394,8 @@ def work_queue(
                 s.report.notes.append("Waiting: " + _waits_text(held))
             return False
         if job.kind == REVIEW:
+            if park_review(s, job.subject):  # the line goes on meanwhile (F53 D1)
+                continue
             s.log(f"[runner] {review_reason(job.subject)}: its review is next.")
             s.report.review = job.subject
             return False

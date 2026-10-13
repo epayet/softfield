@@ -27,6 +27,7 @@ from runner.gates import layout_problems
 from runner.gitops import Git
 from runner.loop import RunnerError, local_agent, run_session
 from runner.milestone import (
+    PARKED,
     RESTART,
     milestone_metrics,
     milestone_summary,
@@ -95,10 +96,13 @@ def _restart() -> None:
 
 def _review(cfg: Config, repo: Path, key: str) -> None:
     """A review `runner run` found due (f4-20), and its verdict, as `runner milestone` gives
-    them. A review that changes runner/ restarts the command; state.json keeps its rounds."""
+    them. A review that changes runner/ restarts the command; state.json keeps its rounds.
+    One parked for Claude is no stop and has no verdict yet: back to the queue (F53 D1)."""
     stop = run_due_review(cfg, key)
     if stop == RESTART:
         _restart()
+    if stop == PARKED:
+        return
     state = load_state(cfg.runs_dir / "state.json")
     _, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
     owner.record_verdict(repo, text)

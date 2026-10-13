@@ -15,7 +15,7 @@ from runner import console, metrics, prompts
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
 from runner.config import Config
 from runner.gates import GateResult
-from runner.gitops import Git, GitError, with_trailers
+from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
     CLAUDE_HEADLESS_AGENT,
     MAIN,
@@ -31,6 +31,7 @@ from runner.loop import (
     finish_row,
     now,
     open_session,
+    park_review,
     rate_verdicts,
     record_findings,
     review_reason,
@@ -543,20 +544,71 @@ def run_due_review(cfg: Config, milestone: str) -> str:
     git = Git(cfg.repo)
     if not git.run("tag", "--list", base).strip():
         git.run("tag", base, _plan_commit(git, cfg.repo, milestone))
-    return review_milestone(cfg, milestone, base)
+    return review_milestone(cfg, milestone, base, park=True)
 
 
-def review_milestone(cfg: Config, milestone: str, base: str) -> str:
+def _last_round(git: Git, milestone: str, rounds: int, base: str) -> str:
+    """Where a review that goes on (parked, restarted) left off: the commit before its last
+    round's, as a round under way keeps it; ``base`` with no round yet or no such commit."""
+    if not rounds:
+        return base
+    subject = f"review {milestone} round {rounds} (by Claude)"
+    found = git.run("log", "-1", "-F", f"--grep={subject}", "--format=%H", MAIN).strip()
+    return f"{found}^" if found else base
+
+
+def _fix_scope(s: Session, milestone: str, since: str) -> str:
+    """What a later round re-reads: the fix diffs since the last round. When another
+    milestone's ticket merged meanwhile (a review parked between rounds, F53 D1), its own
+    milestone's merges by name instead, so it doesn't read the others' as its fixes."""
+    log = s.git.run("log", "--reverse", "--format=%H%x1f%B%x1e", f"{since}..{MAIN}")
+    merges = []
+    for entry in log.split("\x1e"):
+        sha, _, body = entry.strip().partition("\x1f")
+        if ticket := parse_trailers(body).get("Task"):
+            merges.append((ticket, sha))
+    mine = set(_done_tickets(s.repo, milestone))
+    own = [(ticket, sha) for ticket, sha in merges if ticket in mine]
+    if len(own) == len(merges):
+        return (
+            f"Re-review only the fix diffs `git diff {since}..{MAIN}` and whether each"
+            " earlier finding is resolved. New should-fix points about untouched code go to"
+            " the backlog."
+        )
+    listed = "\n".join(f"- {ticket}: `git show {sha[:9]}`" for ticket, sha in own)
+    return (
+        "Re-review only this milestone's fix merges since the last round and whether each"
+        " earlier finding is resolved. Other milestones' tickets merged meanwhile: leave them"
+        " out. New should-fix points about untouched code go to the backlog. The fix merges:\n"
+        + (listed or "none")
+    )
+
+
+PARKED = "parked"  # no stop: the review waits in the queue for Claude (F53 D1)
+
+
+def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = False) -> str:
     """Run review rounds until a stop rule fires. Returns the stop reason. The review is a
     queued job (ADR 22 item 1): `runner run` queued it, else it is queued here, and its row
-    is done with its last round's job once the loop stops (a restart's carries on)."""
+    is done with its last round's job once the loop stops (a restart's carries on).
+
+    Claude's room is checked before each round, e2e run included. With ``park`` (`runner
+    run`), a round Claude can't take now parks the review's row and returns PARKED: no stop
+    is recorded, and it goes on from that round once the queue picks it again (F53 D1).
+    Without, there is no queue to go back to: it waits for the reset."""
     s = open_session(cfg, f"review {milestone}")
     s.running_row = row = enqueue(s, REVIEW, milestone, review_reason(milestone))
     rounds = s.state.review_counts.setdefault(milestone, [])
     seen = s.state.finding_seen
-    since = base
+    since = _last_round(s.git, milestone, len(rounds), base)
     stop = "not started"
     for round_no in range(len(rounds) + 1, cfg.review_rounds + 1):
+        if park and park_review(s, milestone):
+            s.running_row = None
+            close_session(s)
+            return PARKED
+        if not park:
+            wait_for_room(s, "the review")
         s.log("")
         s.log(
             console.ticket_header(
@@ -573,9 +625,7 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
         scope = (
             f"Review the whole milestone diff: `git diff {base}..{MAIN}`."
             if round_no == 1
-            else f"Re-review only the fix diffs `git diff {since}..{MAIN}` and whether each"
-            " earlier finding is resolved. New should-fix points about untouched code go to"
-            " the backlog."
+            else _fix_scope(s, milestone, since)
         )
         job = JobSpec(
             role="review",
@@ -593,7 +643,6 @@ def review_milestone(cfg: Config, milestone: str, base: str) -> str:
             commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS),
         )
         since = s.git.head()
-        wait_for_room(s, "the review")  # nothing else runs: it waits rather than parks
         if s.project_id is not None:  # under way: off the line's queue (f4-20)
             _record(s, metrics.upsert_milestone, s.project_id, milestone, status="review")
         call_claude(s, job, milestone, f"{milestone}-review-r{round_no}")
