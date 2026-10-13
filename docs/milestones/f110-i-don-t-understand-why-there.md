@@ -1,6 +1,6 @@
 # Milestone F110: Ripe on the board but no Sign off button: one rule for both
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** ready · **Priority:** 1 · **Area:** factory
 > Planted by the owner on 2026-10-13.
 
 ## Notes
@@ -19,7 +19,9 @@ I don't understand why there are ripe tickets in the new board view but no sign 
 - **D1: the board's rule is the right one.** A ticket set aside (`later`) or removed counts for no stage (`_OFF` in `factory_dashboard/board.py`), and `runner signoff` doesn't refuse for one either (`_UNFINISHED` in `runner/owner.py` is ready and stopped tickets only). The line's field (`_field` in `factory_dashboard/line.py`) counted them as unfinished, so such a card was ripe on the board and nowhere else. The button on the card's page and the desk's item both read the field, so the field changes; the board and the runner don't.
 - **D2: no Sign off button on the board itself.** The sign-off sits beside the review's sheet (F50 D2), so the owner reads what changed before marking it done. The board's card leads there in one tap.
 - **D3: the Overview's extra sign-offs are F95's.** `f95-01-sign-offs-counted-once` removes the stored rows from Needs you; nothing here repeats it.
+- **D4: sprouting is a live conversation** (the owner, 2026-10-13: "sprouting but their conversation are archived or have nothing going on"). The board took any thread, archived or not, as planning: F11, F15, F18 and F105 sprouted with archived conversations. Only an open thread counts, and the card says who it waits for ("waits for your answer since 9 Oct", "the lead is answering"); an idea whose thread is archived is a seed again.
 
 ## Tickets
 - `f110-01-ripe-is-one-rule` (developer): the line's field leaves set-aside and removed tickets out when it decides a card is ripe.
 - `f110-02-ripe-card-leads-to-sign-off` (developer): the board's ripe card says "Read the review and sign off" and opens the page at the button, in place of the command.
+- `f110-03-sprouting-is-a-live-conversation` (developer): D4, after `f110-02` (both change the board's card).

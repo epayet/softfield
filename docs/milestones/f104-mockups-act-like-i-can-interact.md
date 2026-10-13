@@ -25,7 +25,7 @@ Mockups act like I can interact with but I can't, f54 is blocked because of that
 ## Tickets
 | # | id | who | diff | depends | what |
 |---|----|-----|------|---------|------|
-| 01 | f104-01-mockup-frame-runs-scripts | lead | 2 | f42-01 | D1 and D2 |
+| 01 | f104-01-mockup-frame-runs-scripts | lead | 2 | – | D1 and D2. Done by the lead with the owner, 2026-10-13 (`eda0843`), before f42-01 and not after it (D3): the owner was blocked on F54's mock-up |
 
 ## Done when
 - On a wide screen, open F54's mock-up proposal: press "A · stays in place", then ↑ on a row; the tab changes and the row answers, inside the review page.

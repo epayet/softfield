@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body style="margin:0">
+<title>Board You Can Edit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Chakra+Petch:wght@600&family=JetBrains+Mono:wght@500;600&display=swap">
+<style>
+/* Layout: the dashboard's own board. Phone: one stage at a time, picked from a row of chips;
+   wide: the stages side by side. A bar at the bottom holds the moves until they are sent. */
+:root {
+  color-scheme: dark;
+  --floor: #12161b; --bay: #181e25; --plate: #1f2730; --rule: #303b47;
+  --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+  --hazard: #f2b10a; --hazard-ink: #1a1405; --way: #ff9640; --opus: #ff9640;
+  --factory: #f2b10a; --product: #4fd1a5; --accent: #ffc48a; --new: #5fd17a;
+  --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+  --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  color-scheme: light;
+  --floor: #eceee9; --bay: #f7f8f5; --plate: #ffffff; --rule: #c3c8c0;
+  --fg: #16191d; --ink-2: #3f4650; --muted: #5b636d;
+  --hazard: #f2b10a; --hazard-ink: #1a1405; --way: #a4461f; --opus: #c8641a;
+  --factory: #b98600; --product: #18977a; --accent: #a4461f; --new: #2c9a46;
+} }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --floor: #eceee9; --bay: #f7f8f5; --plate: #ffffff; --rule: #c3c8c0;
+  --fg: #16191d; --ink-2: #3f4650; --muted: #5b636d;
+  --hazard: #f2b10a; --hazard-ink: #1a1405; --way: #a4461f; --opus: #c8641a;
+  --factory: #b98600; --product: #18977a; --accent: #a4461f; --new: #2c9a46;
+}
+* { box-sizing: border-box; }
+body { background: var(--floor); color: var(--fg); font: 15px/1.4 var(--body); padding-inline: 16px; padding-block: 14px 110px; }
+h1 { font: 600 20px var(--display); letter-spacing: .06em; text-transform: uppercase; margin: 0; }
+button { font: inherit; color: inherit; }
+button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1360px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; }
+.switch { display: inline-flex; border: 1px solid var(--rule); }
+.switch button { min-height: 44px; padding: 0 16px; background: var(--plate); border: 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); cursor: pointer; }
+.switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+.lede { margin: 0; color: var(--muted); font-size: 13.5px; max-width: 70ch; }
+.changes { margin: 0; padding: 10px 12px 10px 28px; background: var(--bay); border: 1px dashed var(--new); font-size: 13.5px; color: var(--ink-2); display: flex; flex-direction: column; gap: 3px; }
+.changes b { color: var(--new); font-weight: 600; }
+.chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.chips button { flex: none; min-height: 44px; padding: 0 12px; background: var(--plate); border: 1px solid var(--rule); font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
+.chips button[aria-pressed="true"] { border-color: var(--hazard); color: var(--fg); box-shadow: inset 0 -3px 0 var(--hazard); }
+.chips span { font: 500 12px var(--mono); color: var(--muted); margin-left: 4px; }
+.stages { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+.stage { background: var(--bay); min-width: 0; display: flex; flex-direction: column; }
+.stage[hidden] { display: none; }
+.stage-head { padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+.stage-head h2 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.stage-head span { font: 12px var(--mono); color: var(--muted); }
+.cards { display: flex; flex-direction: column; gap: 6px; padding: 8px; min-height: 60px; }
+.card { position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--c, var(--muted)); }
+.card.factory { --c: var(--factory); } .card.product { --c: var(--product); }
+.card.bug { border-left-style: double; }
+.card .body { padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.meta { font: 600 11px var(--mono); color: var(--muted); }
+.meta b { color: var(--fg); }
+.title { font: 600 14px/1.25 var(--body); overflow-wrap: anywhere; }
+.note { font-size: 12.5px; color: var(--muted); }
+.note.go { color: var(--accent); }
+.card code { align-self: flex-start; font: 11.5px var(--mono); background: var(--floor); color: var(--hazard); padding: 4px 6px; overflow-wrap: anywhere; }
+.meter { height: 6px; background: var(--floor); } .meter i { display: block; height: 100%; background: var(--c, var(--muted)); }
+.grip, .more { width: 44px; min-height: 44px; background: transparent; border: 0; color: var(--muted); cursor: grab; display: grid; place-items: center; font: 600 18px var(--mono); }
+.grip { touch-action: none; border-right: 1px solid var(--rule); }
+.more { cursor: pointer; border-left: 1px solid var(--rule); }
+.card.moved, .card.sent { border-style: dashed; border-color: var(--way); border-left-style: solid; border-left-color: var(--c, var(--muted)); }
+.card.dragging { opacity: .85; outline: 2px solid var(--hazard); z-index: 2; box-shadow: 0 8px 20px rgba(0,0,0,.35); }
+.way { font: 600 11.5px var(--mono); color: var(--way); }
+.plant { display: flex; gap: 6px; padding: 8px 8px 0; }
+.plant input { flex: 1; min-width: 0; min-height: 44px; padding: 0 10px; background: var(--floor); color: var(--fg); border: 1px solid var(--rule); font: 14px var(--body); }
+.plant button, .bar button, .sheet button { min-height: 44px; padding: 0 14px; border: 1px solid var(--rule); background: var(--plate); font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--bay); border-top: 2px solid var(--way); display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; z-index: 5; }
+.bar p { margin: 0; font-size: 13.5px; min-width: 0; flex: 1 1 200px; }
+.bar .go { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+.bar .demo { border-style: dashed; color: var(--muted); }
+.sheet-back { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 8; display: grid; align-items: end; }
+.sheet { background: var(--bay); border-top: 1px solid var(--rule); padding: 12px 16px calc(14px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; gap: 6px; max-width: 520px; width: 100%; margin: 0 auto; }
+.sheet h3 { margin: 0 0 4px; font: 600 14px var(--body); }
+.sheet .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.sheet button { text-align: left; width: 100%; }
+.sheet .row button { text-align: center; padding: 0 4px; }
+.sheet small { color: var(--muted); font-size: 12px; }
+.toast { font-size: 12.5px; color: var(--new); min-height: 18px; margin: 0; }
+@media (min-width: 900px) {
+  .chips { display: none; }
+  .stages { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .stage[hidden] { display: flex; }
+  .sheet-back { align-items: center; }
+  .sheet { border: 1px solid var(--rule); }
+}
+@media (prefers-reduced-motion: no-preference) { .card { transition: border-color .15s; } }
+</style>
+<div class="wrap">
+  <div class="head">
+    <h1>The board</h1>
+    <div class="switch" role="group" aria-label="Which picture">
+      <button type="button" id="see-today" aria-pressed="false">Today</button>
+      <button type="button" id="see-proposed" aria-pressed="true">Proposed</button>
+    </div>
+  </div>
+  <p class="lede" id="lede"></p>
+  <ul class="changes" id="changes"></ul>
+  <div class="chips" id="chips" role="group" aria-label="Stage"></div>
+  <p class="toast" id="toast" role="status"></p>
+  <div class="stages" id="stages"></div>
+</div>
+<div class="bar" id="bar" hidden></div>
+<div id="sheet-host"></div>
+<script>
+const TODAY = {"seed": [{"key": "F35", "title": "when i'm reviewing what's on my desk, i want to click next to keep reviewing everything that needs my attention right…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F36", "title": "whenever the planner is planning and answering my questions and when tickets need to be made, i want to know if it's a…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F37", "title": "in planning mode it tends to be lots of mentions of F numbers, like F22 or F53, i don't know what these are these are…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F38", "title": "the refresh prompt causes layout shifting, i wonder if there's a way to subtely suggest that from the header perhaps,…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F39", "title": "Limits on tickets per milestone", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F40", "title": "Need back up code asap", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F59", "title": "periodic review of the factory", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F60", "title": "suggest improvements to ai workflow", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F61", "title": "on claude usage page there is an estimation on when usage will likely run out", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F62", "title": "claude-opus review on overview does not say what it reviews", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F66", "title": "the number of key points under a proposal in the list is…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F76", "title": "the refresh popup does layout shifting of the whole page…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F77", "title": "the bars in the agent allowance are not the same size", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F78", "title": "remove 'planning may go past the 75% line, the factory…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F80", "title": "developer rating could be more tailored to the type of…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F81", "title": "assess the current UI state of the factory and share…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F82", "title": "the plant idea text box is quite small and doesn't expand…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F83", "title": "is the planning conversation efficient atm, in terms of…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F84", "title": "when the planner is replying to a thread or working on a…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F85", "title": "when i sign off a task, i want, whenever relevant i would…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F86", "title": "idea: tracking time the human spent on a project", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F87", "title": "I want a daily report of how the factory is doing. Open to…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F89", "title": "does allowance refresh at the beginning and end of each…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F91", "title": "the proposals and mockups and adrs make sense in the…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F92", "title": "Claude per milestone on overview is not super useful…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F93", "title": "is no edit after 10 minutes rule too harsh? look at recent…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F96", "title": "I want threads in 'your answers wanted' and likely others…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F97", "title": "Given that the planning board has notification number that…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F98", "title": "If I have slow internet and I click plant it looks like…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F99", "title": "When a proposal has bundled things like both a mock-up and…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F100", "title": "If I replied to a conversation and it has related plans.…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F102", "title": "I want conversations that don't have a proposal yet to…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F103", "title": "The number of things in planning number in tab should not…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}], "sprouting": [{"key": "F11", "title": "test", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F15", "title": "Reprioritising tickets", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F18", "title": "Arrow to reprioririse queue", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F27", "title": "when i pause the factory, i don't want planner tasks to be paused", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F43", "title": "What happens when a proposal has tabs like a mock-up and a plan and I only approve part of it like just the mock up", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F54", "title": "the reprioritise up down arrows do nothing when i click them", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F73", "title": "I want to be able to mark a proposal as parked for now", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F105", "title": "do planted ideas disappear if the runner didn't pick up…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}], "planted": [{"key": "F101", "title": "the runner waits instead of ending when it has nothing to run", "area": "factory", "bug": false, "p": 1, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F106", "title": "where do blocked tickets go for me to review", "area": "factory", "bug": false, "p": 1, "done": 0, "total": 6, "aside": 0, "note": "", "running": null}, {"key": "F14", "title": "Coming planted ideas not clickable", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 3, "aside": 0, "note": "", "running": null}, {"key": "F19", "title": "Will I need to refresh planning page when my questions get answered on planning", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F22", "title": "move archive button on planning desk at the bottom rather than the top", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F23", "title": "when i click comment on the planning desk ticket, i want it to focus on the text box", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F28", "title": "the first time i clicked on the pause button nothing happened, but then eventually it worked", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F30", "title": "on conversations, i want to the latest answer first so that i don't have to scroll", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F42", "title": "The space for me to scroll on a planning proposal card is very small", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F51", "title": "when a plan depends on an adr i have approved but is waiting for planner", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F63", "title": "I want to see cards in planning by order of importance.…", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F65", "title": "review rounds until you sign off", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 3, "aside": 0, "note": "", "running": null}, {"key": "F67", "title": "Key points say what they ask of you", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F72", "title": "I really like the mock up feature, especially to see…", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F74", "title": "when i reply to a 'your answers wanted' thread, there's a…", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F90", "title": "editing seeds that i've planted but not sent to the lead…", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F104", "title": "Mockups act like I can interact with but I can't, f54 is…", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F110", "title": "Ripe on the board but no Sign off button: one rule for both", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F25", "title": "whenever i plant something, does it check the current state of things in case the seed is not relevant anymore?", "area": "factory", "bug": false, "p": 3, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F95", "title": "overview currently says i have 2 things to sign off, but i…", "area": "factory", "bug": false, "p": 3, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F10", "title": "crates on the belts", "area": "factory", "bug": false, "p": 5, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F29", "title": null, "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F33", "title": "overview now check-all how long", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F44", "title": null, "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F58", "title": "when i ask the lead a question through planting an idea", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F68", "title": "I want the factory to be renamed SoftField. That should be…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F69", "title": "I want a button to switch from light to night theme", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F71", "title": "I suspect we might need to increase the timeouts as the…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F75", "title": "I believe right now, when a plan gets approved or…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F88", "title": "add to lead memory that new software factory features…", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F94", "title": "While you were away: who, when and how long, said once", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F107", "title": null, "area": "factory", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}, {"key": "F108", "title": "Desk boxes say when: proposals and sign-offs show their time too", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F109", "title": "Merged cards link to each other, both ways", "area": "factory", "bug": false, "p": 100, "done": 0, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "M0", "title": "Foundations (Claude only)", "area": "product", "bug": false, "p": 100, "done": 0, "total": 0, "aside": 0, "note": "", "running": null}], "growing": [{"key": "F5", "title": "steer from the phone, and the board", "area": "factory", "bug": false, "p": 1, "done": 16, "total": 18, "aside": 1, "note": "", "running": null}, {"key": "F79", "title": "when a task times out on the first attempt, is the second…", "area": "factory", "bug": false, "p": 1, "done": 1, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F13", "title": "Planting idea UI feedback", "area": "factory", "bug": false, "p": 2, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F26", "title": "I want to see numbers next to \"Coming\" and \"Your desk\" to have a sense of how many there are", "area": "factory", "bug": false, "p": 2, "done": 1, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F17", "title": "Tighter running and pause presence in menu", "area": "factory", "bug": false, "p": 3, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F21", "title": "the lead's briefs", "area": "factory", "bug": false, "p": 3, "done": 2, "total": 3, "aside": 0, "note": "", "running": null}, {"key": "F32", "title": "the 5 hour lead's window gauge on planning does'n say when it resets", "area": "factory", "bug": false, "p": 3, "done": 0, "total": 1, "aside": 0, "note": "", "running": null}, {"key": "F49", "title": "don't ask me to merge conversations, just do it and keep context from both in a smart way", "area": "factory", "bug": false, "p": 3, "done": 1, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F9", "title": "line polish", "area": "factory", "bug": false, "p": 4, "done": 32, "total": 36, "aside": 5, "note": "", "running": null}, {"key": "F12", "title": "Turn on notifications  little feedback button", "area": "factory", "bug": false, "p": 100, "done": 3, "total": 5, "aside": 0, "note": "", "running": null}], "ripe": [{"key": "F31", "title": "Proposals close the loop", "area": "factory", "bug": false, "p": 1, "done": 5, "total": 5, "aside": 1, "note": "", "running": null}, {"key": "F53", "title": "a review waiting for Claude doesn't stop the line", "area": "factory", "bug": false, "p": 1, "done": 2, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "M4", "title": "Sender app", "area": "product", "bug": false, "p": 100, "done": 11, "total": 11, "aside": 1, "note": "", "running": null}], "harvested": [{"key": "F48", "title": "Try again plants a note, once", "area": "factory", "bug": false, "p": 2, "done": 2, "total": 2, "aside": 0, "note": "", "running": null}, {"key": "F8", "title": "one visible queue", "area": "factory", "bug": false, "p": 100, "done": 14, "total": 14, "aside": 0, "note": "", "running": null}, {"key": "F50", "title": "a finished card shows its review", "area": "factory", "bug": false, "p": 2, "done": 3, "total": 3, "aside": 0, "note": "", "running": null}, {"key": "F55", "title": "Clear out the threads already settled", "area": "factory", "bug": false, "p": 100, "done": 1, "total": 1, "aside": 0, "note": "", "running": null}]}
+;
+const WORDS = {
+  seed: ["Seed", "idea or set aside"], sprouting: ["Sprouting", "being planned"],
+  planted: ["Planted", "tickets ready"], growing: ["Growing", "in the factory"],
+  ripe: ["Ripe", "needs your sign-off"], harvested: ["Harvested", "signed off or fixed"],
+};
+const STAGES = Object.keys(WORDS);
+const ORDERED = ["seed", "sprouting", "planted", "growing"];   // the stages you can reorder
+const ARCHIVED = ["F11", "F15", "F18", "F43", "F73", "F105"];   // ideas whose conversation is archived
+const WAITS = { F27: "waits for your answer since 8 Oct", F54: "waits for your answer since 9 Oct" };
+const nat = k => [k.replace(/\d+.*/, ""), parseInt(k.replace(/^\D+/, ""), 10) || 0];
+const byKey = (a, b) => { const [x, n] = nat(a.key), [y, m] = nat(b.key); return x < y ? -1 : x > y ? 1 : n - m; };
+
+let mode = "proposed", shown = "planted";
+let cols, base, moved = new Set(), sent = new Set(), state = "idle";  // idle | moved | sent
+
+function proposedColumns() {
+  const c = {}; STAGES.forEach(s => c[s] = TODAY[s].map(x => ({ ...x })));
+  const back = c.sprouting.filter(x => ARCHIVED.includes(x.key));
+  c.sprouting = c.sprouting.filter(x => !ARCHIVED.includes(x.key));
+  c.sprouting.forEach(x => { if (WAITS[x.key]) x.note = WAITS[x.key]; });
+  back.forEach(x => x.note = "conversation archived");
+  c.seed = [...c.seed, ...back].sort((a, b) => a.p - b.p || byKey(a, b));
+  return c;
+}
+function reset() { cols = proposedColumns(); base = snapshot(); moved.clear(); sent.clear(); state = "idle"; }
+function snapshot() { const s = {}; STAGES.forEach(k => s[k] = cols[k].map(c => c.key)); return s; }
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+function toast(text) { document.getElementById("toast").textContent = text; }
+
+function card(c, stage, i) {
+  const proposed = mode === "proposed", can = proposed && ORDERED.includes(stage);
+  const a = el("div", `card ${c.area}${c.bug ? " bug" : ""}`); a.dataset.key = c.key;
+  if (moved.has(c.key)) a.classList.add("moved");
+  if (sent.has(c.key)) a.classList.add("sent");
+  if (can) { const g = el("button", "grip", "⠿"); g.type = "button"; g.setAttribute("aria-label", `Drag ${c.key}`); g.addEventListener("pointerdown", e => startDrag(e, a, stage)); a.append(g); }
+  else a.append(el("span"));
+  const b = el("div", "body"), meta = el("span", "meta");
+  const place = can ? `#${i + 1}` : (!proposed && !["ripe", "harvested"].includes(stage) ? `P${c.p}` : "");
+  if (place) { meta.append(el("b", "", place), " "); }
+  meta.append(`${c.key} · ${c.bug ? "bug · " : ""}${c.area}`);
+  b.append(meta, el("span", "title", c.title || c.key));
+  if (c.total && stage !== "harvested") {
+    const m = el("span", "meter"), bar = el("i"); bar.style.width = Math.round(100 * c.done / c.total) + "%"; m.append(bar);
+    b.append(m, el("span", "note", `${c.done} of ${c.total} ticket${c.total === 1 ? "" : "s"}${c.aside ? ` · ${c.aside} set aside` : ""}`));
+  }
+  if (c.note) b.append(el("span", "note", c.note));
+  if (stage === "ripe" && !c.bug) b.append(proposed ? el("span", "note go", "Read the review and sign off ›") : el("code", "", `uv run runner signoff ${c.key.toLowerCase()}`));
+  if (moved.has(c.key)) b.append(el("span", "way", "moved · not sent yet"));
+  if (sent.has(c.key)) b.append(el("span", "way", "on its way · at the runner's next pick"));
+  a.append(b);
+  if (proposed && stage !== "harvested") { const m = el("button", "more", "⋯"); m.type = "button"; m.setAttribute("aria-label", `Actions for ${c.key}`); m.addEventListener("click", () => sheet(c, stage)); a.append(m); }
+  else a.append(el("span"));
+  return a;
+}
+
+function render() {
+  const proposed = mode === "proposed", data = proposed ? cols : TODAY;
+  document.getElementById("see-today").setAttribute("aria-pressed", String(!proposed));
+  document.getElementById("see-proposed").setAttribute("aria-pressed", String(proposed));
+  document.getElementById("lede").textContent = proposed
+    ? "Drag a card by its grip, or use ⋯, to change the order inside a stage. Nothing is sent until you press Send new order; the runner follows it from its next pick."
+    : "The board as it is today: read-only. Order is changed with ↑ and ↓ on other pages, one press at a time.";
+  const ch = document.getElementById("changes"); ch.hidden = !proposed; ch.replaceChildren();
+  if (proposed) [["Order", "a grip and a place (#1, #2…) on each card, in place of P numbers."], ["One send", "moves wait in the bar at the bottom until you send them."],
+    ["Actions", "⋯ on a card: move, open its conversation, set aside, sign off."], ["Sprouting", "only open conversations, saying who they wait for; six archived ones are seeds again."],
+    ["Ripe", "\"Read the review and sign off\" in place of a terminal command."], ["Plant", "an idea straight from the Seeds stage."]]
+    .forEach(([b, t]) => { const li = el("li"); li.append(el("b", "", b + ": "), t); ch.append(li); });
+  const chips = document.getElementById("chips"); chips.replaceChildren();
+  STAGES.forEach(s => { const b = el("button", "", WORDS[s][0]); b.type = "button"; b.append(el("span", "", String(data[s].length))); b.setAttribute("aria-pressed", String(s === shown)); b.addEventListener("click", () => { shown = s; render(); }); chips.append(b); });
+  const host = document.getElementById("stages"); host.replaceChildren();
+  STAGES.forEach(s => {
+    const sec = el("section", "stage"); sec.hidden = s !== shown; sec.dataset.stage = s;
+    const head = el("div", "stage-head"); head.append(el("h2", "", WORDS[s][0]), el("span", "", `${WORDS[s][1]} · ${data[s].length}`)); sec.append(head);
+    if (proposed && s === "seed") {
+      const f = el("form", "plant"), inp = el("input"); inp.id = "plant-idea"; inp.placeholder = "Plant an idea…"; inp.setAttribute("aria-label", "Plant an idea");
+      const go = el("button", "", "Plant"); f.append(inp, go);
+      f.addEventListener("submit", e => { e.preventDefault(); const t = inp.value.trim(); if (!t) return; cols.seed.unshift({ key: "new", title: t, area: "factory", bug: false, p: 100, note: "planted · on its way, at the runner's next pick" }); sent.add("new"); render(); });
+      sec.append(f);
+    }
+    const list = el("div", "cards"); data[s].forEach((c, i) => list.append(card(c, s, i))); sec.append(list); host.append(sec);
+  });
+  bar();
+}
+
+function bar() {
+  const b = document.getElementById("bar"); b.replaceChildren(); b.hidden = mode !== "proposed" || state === "idle";
+  if (b.hidden) return;
+  const p = el("p"), btn = (cls, text, fn) => { const x = el("button", cls, text); x.type = "button"; x.addEventListener("click", fn); return x; };
+  if (state === "moved") {
+    p.textContent = `${moved.size} card${moved.size === 1 ? "" : "s"} moved. Nothing is sent yet.`;
+    b.append(p, btn("", "Cancel", () => { reset(); toast("Moves cancelled."); render(); }),
+      btn("go", "Send new order", () => { moved.forEach(k => sent.add(k)); moved.clear(); state = "sent"; toast(""); render(); }));
+  } else {
+    p.textContent = "New order sent. The runner applies it at its next pick; the job running now is not interrupted. You can still move cards and send again.";
+    b.append(p, btn("demo", "Mock-up only: runner's next pick", () => { sent.clear(); cols.seed.forEach(c => { if (c.key === "new") { c.key = "F111"; c.note = ""; } }); base = snapshot(); state = "idle"; toast("Applied by the runner in one commit. The dashed edges are gone and the order stays."); render(); }));
+  }
+}
+
+function place(stage, key, to) {
+  const list = cols[stage], from = list.findIndex(c => c.key === key);
+  to = Math.max(0, Math.min(list.length - 1, to)); if (from < 0 || from === to) return;
+  const [c] = list.splice(from, 1); list.splice(to, 0, c); moved.add(key); sent.delete(key); state = "moved"; toast(""); render();
+}
+
+function sheet(c, stage) {
+  const host = document.getElementById("sheet-host"), back = el("div", "sheet-back"), s = el("div", "sheet");
+  const close = () => host.replaceChildren();
+  const act = (text, fn) => { const b = el("button", "", text); b.type = "button"; b.addEventListener("click", () => { close(); fn(); }); return b; };
+  s.append(el("h3", "", `${c.key} · ${c.title || ""}`));
+  if (ORDERED.includes(stage)) {
+    const i = cols[stage].findIndex(x => x.key === c.key), row = el("div", "row");
+    row.append(act("Top", () => place(stage, c.key, 0)), act("Up", () => place(stage, c.key, i - 1)), act("Down", () => place(stage, c.key, i + 1)), act("Bottom", () => place(stage, c.key, cols[stage].length - 1)));
+    s.append(el("small", "", "Move in this stage"), row);
+  }
+  const say = t => () => toast(t);
+  if (stage === "ripe") s.append(act("Read the review and sign off", say(`In the real page: ${c.key}'s review, at its Sign off button.`)));
+  if (!c.bug) s.append(act("Open its conversation", say(`In the real page: the planning thread of ${c.key}.`)));
+  if (["seed", "sprouting"].includes(stage)) s.append(act("Set aside", say(`${c.key} set aside: it leaves the board's open stages and waits under Set aside in Planning.`)));
+  s.append(act("Open the card", say(`In the real page: ${c.key}'s own page, with its tickets.`)), act("Close", () => {}));
+  back.append(s); back.addEventListener("click", e => { if (e.target === back) close(); }); host.replaceChildren(back);
+}
+
+/* Drag: the card follows the finger; a line shows where it will land; the page scrolls near its edges. */
+let drag = null;
+function startDrag(e, node, stage) {
+  e.preventDefault();
+  drag = { node, stage, y0: e.clientY, s0: window.scrollY, y: e.clientY, to: null };
+  node.classList.add("dragging");
+  window.addEventListener("pointermove", onMove); window.addEventListener("pointerup", endDrag); window.addEventListener("pointercancel", endDrag);
+  requestAnimationFrame(tick);
+}
+function onMove(e) { if (drag) { drag.y = e.clientY; e.preventDefault(); } }
+function tick() {
+  if (!drag) return;
+  const edge = 90, h = window.innerHeight;
+  if (drag.y < edge) window.scrollBy(0, -Math.ceil((edge - drag.y) / 6)); else if (drag.y > h - edge - 40) window.scrollBy(0, Math.ceil((drag.y - (h - edge - 40)) / 6));
+  drag.node.style.transform = `translateY(${drag.y - drag.y0 + window.scrollY - drag.s0}px)`;
+  const others = [...drag.node.parentNode.children].filter(n => n !== drag.node);
+  others.forEach(n => n.style.boxShadow = "");
+  const after = others.find(n => { const r = n.getBoundingClientRect(); return drag.y < r.top + r.height / 2; });
+  if (after) after.style.boxShadow = "0 -4px 0 var(--hazard)"; else if (others.length) others[others.length - 1].style.boxShadow = "0 4px 0 var(--hazard)";
+  drag.to = after ? after.dataset.key : null;
+  requestAnimationFrame(tick);
+}
+function endDrag() {
+  if (!drag) return;
+  const { node, stage, to } = drag; drag = null;
+  window.removeEventListener("pointermove", onMove); window.removeEventListener("pointerup", endDrag); window.removeEventListener("pointercancel", endDrag);
+  const key = node.dataset.key, list = cols[stage].filter(c => c.key !== key);
+  const at = to === null ? list.length : list.findIndex(c => c.key === to);
+  const now = cols[stage].findIndex(c => c.key === key);
+  if (at === now) { render(); return; }
+  place(stage, key, at);
+}
+
+document.getElementById("see-today").addEventListener("click", () => { mode = "today"; render(); });
+document.getElementById("see-proposed").addEventListener("click", () => { mode = "proposed"; render(); });
+reset(); render();
+</script>
+</body>
+</html>

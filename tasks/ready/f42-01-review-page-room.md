@@ -19,6 +19,7 @@ Read `factory_dashboard/templates/proposal.html` (the `#mockup` iframe and the `
   - under 640 px the iframe is not shown, only the link;
   - from 640 px the iframe stays, `height: max(480px, calc(100dvh - 220px))`, with the link above it.
 - **The dock, under 640 px only:** the count and the button side by side on one row; its `h2` hidden; `#review-status` hidden while it holds its standing sentence, shown again once a request's answer is swapped into it. From 640 px the dock is as today.
+- The frame already carries `sandbox="allow-scripts"` (f104-01, tested in `test_a_mockups_scripts_run_in_the_review_pages_frame_as_no_one`): keep it exactly, and keep that test passing at 1024 px.
 - Keep every id the tests and scripts use (`#send-back`, `#primary`, `#review-count`, `#review-status`).
 
 ### Done when

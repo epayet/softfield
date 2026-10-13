@@ -26,9 +26,11 @@ Plant two ideas that say the same thing ("the try again button does nothing" and
 - **D4 The duplicate's thread is kept:** exported to `docs/planning/` (as `_export` does on approval, f20 D2) and its history (`planner.history`) added to the kept thread's next planner prompt, once, as "From F44's thread, merged here:". The duplicate's thread then points to the kept one, as today.
 - **D5 No new card from both** (the owner's "or make a new one"): a new card means a new key, so links, tickets, branches and the board's place of the kept card would all change, for the same result. Merging into the kept card already holds all the information.
 - **D6 Undo by asking:** no Undo button. A wrong merge is undone by telling the lead on the kept thread; it proposes a `seed` that plants the card again with its notes and summary, from the merge commit. Merges should be rare and visible enough that a button isn't worth its ticket.
+- **D7 The lead carries on on the kept card** (the owner, 2026-10-13, after F107: every reply on a merged-away page ended in "write go on F73"). When a merge is applied, the duplicate's notes become the kept thread's next message from the owner ("From F107, merged here: …") and a planner job is queued there (`_carry_on` in `runner/requests.py`), unless the merge was proposed on the kept card's own thread. A message written on a merged-away thread goes to the kept card's thread (`_kept_card`, read from the merge headings). The planner's brief: on a duplicate, say only which card it repeats, and never ask the owner to write on another page.
 
 ## Tickets
 | # | Ticket | Agent | Difficulty | Depends on | What |
 |---|---|---|---|---|---|
 | 01 | auto-merge | lead | 7 | f31-01 | D1, D2: the runner applies a reply's merges after the planner job; the prompt says so |
 | 02 | merge-context | lead | 6 | 01 | D3, D4: the `summary` field, the export, the kept thread's line and its next prompt |
+| 03 | lead-carries-on-after-merge | lead | 4 | 01 | D7: the note follows the merge and the lead answers on the kept card. Done by the lead with the owner, 2026-10-13 (`eda0843`) |

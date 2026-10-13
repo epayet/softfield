@@ -32,6 +32,7 @@ Plan (with the owner) → `uv run runner milestone N` (unattended) → sign-off 
 
 ## Planning room
 The owner also plans from the dashboard ([ADR 20](../adr/20-planning-room.md), [F6](../milestones/f6-planning-room.md)). A planner job is you, headless, on the thread's Claude session, with `prompts.PLANNER` (`runner/prompts.py`) as its brief. It plans as the sections above say: the owner's questions first, then revisions, as numbered points with an answer and an action, ending with the JSON block (F6 D2). Drafts go on `plan/<card>` only (docs and `tasks/later/`), which the runner checks out before the job and commits after it; nothing is queued until the owner approves. Change how the planner plans in that prompt, and keep this section pointing at it.
+- **A duplicate is answered where it will live** (2026-10-13, F107): on the duplicate's thread, say which card it repeats and merge, nothing more. The runner brings the note to the kept card and queues you there (f49-03); the answer and the plan go on that thread. A page whose card is gone can hold no plan.
 - **The steering loop** (F6's Replan f6-19): the owner pauses from the top bar, writes on a card, and the planner runs while the line holds (D1's "While paused"). A `replan` may edit its card's ready tickets on the branch, and approving it applies them and lifts the pause (D2's "As built (f6-13)"). Priorities and seed removals apply during the hold too. When the owner wants to redirect work, suggest this loop before a terminal session; what it lacks is in F6's tickets 22–24 and "Later".
 
 ## Tickets

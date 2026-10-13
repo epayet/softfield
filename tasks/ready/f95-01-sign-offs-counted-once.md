@@ -2,7 +2,7 @@
 id: f95-01-sign-offs-counted-once
 milestone: f95-overview-currently-says-i-have-2
 priority: 2
-depends_on: []
+depends_on: [f110-01-ripe-is-one-rule]
 difficulty: 3
 files:
   - factory_dashboard/overview.py
@@ -18,6 +18,7 @@ Read `factory_dashboard/overview.py` (`needs_you`, `_live_context`) and `factory
 - Needs you draws two things about a sign-off today: the desk's entry ("N things wait for you on your desk", which counts the desk's "Finished, to talk through" items) and one row per open `owner_items` row of kind `signoff`, which the runner stored at the milestone's verdict.
 - The stored row can outlive the desk's item (the milestone got new tickets after its verdict, or has no review sheet), so the Overview showed two sign-offs while the desk listed one (F95).
 - `_live_context` already leaves the `planning` items out of `needs` because the desk's entry stands for them (f6-09). Do the same for `signoff`: the desk is the one place a sign-off shows.
+- It waits for f110-01: until the desk lists a reviewed card whose only unfinished tickets are set aside (F31, 2026-10-13), dropping the stored row would leave that sign-off on neither page.
 - Leave `notify` as it is (built from every open item), and leave `needs_you` itself and the runner alone.
 
 ### Done when
