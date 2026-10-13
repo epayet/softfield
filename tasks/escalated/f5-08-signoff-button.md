@@ -32,3 +32,12 @@ Read `factory_dashboard/milestones.py` (the `/milestones/{key}` route), `factory
 - with a `signoff` request not done yet, the page says "Signing off at the runner's next pick" and shows no button
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: mypy)
+attempts: 3
+tokens: 7360683
+logs: var/runs/20261013-001220/f5-08-signoff-button
+```
