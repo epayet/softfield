@@ -6,6 +6,10 @@
 ## Notes
 I believe this feature will be availaible as part of the board view. That view is not available yet, when will it be?
 
+### From F18: Arrow to reprioririse queue (merged by the owner on 2026-10-13)
+Once we have a proper board to prioritise, I don't think this will be useful? You can only do so on the top 3 items in the queue. And it gets tricky if a task depends on another. 
+When will the initial board view be done? I forgot if we planned it
+
 ## Edit the board (planned with the owner, 2026-10-13)
 The board (`/board`, F5) is read-only. The owner wants to reorder and act from it, and dislikes the ↑ ↓ arrows of Next in line: "do all the changes and once I'm happy I send go and the re-order gets picked up later". This card now covers F18 (the arrows) and F54 (an arrow press shows nothing): once the board orders cards, the arrows go and F54's plan is not needed.
 
@@ -26,7 +30,7 @@ The board (`/board`, F5) is read-only. The owner wants to reorder and act from i
 - **D3 One send.** A moved card says where it was ("moved · was #7"), so it can be put back (the owner, 2026-10-13). A card put back where it was is not moved, nor are the cards it passed (the owner, 2026-10-13): what is out of place is worked out from the order, not from what was touched. Moves stay on the page, dashed orange "moved · not sent yet", with a bar at the bottom: "3 cards moved · Cancel · Send new order". Sending makes one request, `reorder`, whose value is the open cards and bug tickets in the order shown.
 - **D4 On its way at once.** The board draws the sent order from the open request, dashed orange "at the runner's next pick", on any device, until the runner has applied it; sending again replaces it.
 - **D5 The runner applies it at its next pick,** in one commit: it sets the cards' `Priority:` (and the bug tickets' `priority:`) so the order holds, changing as few files as it can. The job running is not interrupted. A ticket's own `priority:` still wins over its card's. A lead ticket (`runner/requests.py` is protected); no new ADR, as ADR 19 item 4 foresaw moves from the board as ADR 18 requests.
-- **D6 Dependencies: later.** A card moved up whose tickets wait for another card's should say "waits for …". Not drawn and not in these tickets; Next in line already says it per ticket. A ticket once the board's order is in use.
+- **D6 A card says what it waits for** (the owner, 2026-10-13: "'wait for fxx' sounds like a good mvp approach"). A planted or growing card none of whose ready tickets can start says "waits for F22", naming the other cards. It never refuses a move: the runner skips a waiting ticket whatever its place.
 - **D7 Actions on a card** (⋯): open its conversation, set aside (F73), read the review and sign off (F110), open the card. Planting stays on the planning desk (the lead's recommendation, in the mock-up the owner approved): the desk is what waits for the owner, in order of importance; the board is every card and their order. Both read one rule for what is ripe and what is being planned (F110).
 - **D8 The arrows go** from Next in line and the Milestones page once D5 is built.
 - **D9 The drag code is our own:** the mock-up's pointer code, in `factory_dashboard/static/board.js`. It worked on the owner's phone, and a vendored library would be one more protected file for forty lines.
@@ -42,9 +46,10 @@ The board (`/board`, F5) is read-only. The owner wants to reorder and act from i
 | 05 | replan | L | 3 | 04 | 06 and 07 checked against what 01 to 04 built |
 | 06 | card-actions | D | 3 | 05, f73-02 | D7: conversation, sign-off, set aside, the card |
 | 07 | arrows-go | L | 3 | 05 | D8: the arrows leave Next in line and the Milestones page (it removes a file) |
+| 08 | card-says-what-it-waits-for | D | 3 | 02 | D6: "waits for F22" on a card whose tickets can't start |
 
 Who builds: 01 is protected; 02 to 04 are a new module, a new script and a phone layout, the kind the local model has not passed (F6, F8, F3's `factory.js`); 06 is one template on a lead-written menu.
 
 ## Folded in
-- **F18, Arrow to reprioritise queue:** answered by D8.
+- **F18, Arrow to reprioritise queue:** answered by D8; merged here by the owner on 2026-10-13 (its notes are above).
 - **F54, the reprioritise up down arrows do nothing:** not needed once the arrows go. Its draft plan and mock-up are still on its thread: press Reject there.
