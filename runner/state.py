@@ -29,6 +29,9 @@ class State:
     # Claude job, resumed on its next run ("" when no session id was known)
     interrupted: dict[str, dict[str, str]] = field(default_factory=dict)
     timed_out: dict[str, int] = field(default_factory=dict)  # task id -> attempts cut off
+    # task id -> {"attempt", "agent", "job_id"}: an attempt that had finished when the stop came,
+    # during its gates; the next run gates it again instead of running a developer (2026-10-13)
+    regate: dict[str, dict[str, Any]] = field(default_factory=dict)
     # task id -> {"kind", "branch", "session_id", "resets_at", …}: a ticket parked while Claude
     # is limited (its job's kind, resumed first after the reset) or at its reserve ("reserve",
     # with the owner's "text"; asked again by the next command). ADR 15 items 5 and 10. A

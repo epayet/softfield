@@ -360,8 +360,8 @@ def _free_branch(git: Git, name: str) -> str:
 def _recover(git: Git, state: State, state_path: Path) -> str:
     """Put away what an interrupted job left: its changes committed to its branch (or to
     ``interrupted/…`` when it ran on main), main checked out clean. A Claude job keeps its
-    session id for its next run; a local attempt counts as timed out. Returns the console
-    line that says what was recovered."""
+    session id for its next run; a local attempt counts as timed out, unless it had finished:
+    then its gates run again. Returns the console line that says what was recovered."""
     job = state.in_flight or {}
     kind, ticket, branch = str(job["kind"]), job.get("ticket"), str(job["branch"])
     agent = str(job.get("agent") or RUNNER_AGENT)
@@ -376,12 +376,28 @@ def _recover(git: Git, state: State, state_path: Path) -> str:
         git.checkout(branch)  # the tree's changes come along
     if kind == "local":
         what = f"attempt {job.get('attempt', '?')} of {ticket}"
-        message = f"wip {ticket} attempt {job.get('attempt', '?')} (interrupted)"
-        kept = git.commit_all(
-            with_trailers(message, agent=LOCAL_MODEL_AGENT), author=LOCAL_MODEL_AUTHOR
+        done = f"wip {ticket} attempt {job.get('attempt', '?')}"
+        # The attempt's own commit at the tip of a clean branch: it had finished, and the stop
+        # came during its gates. f19-01's third attempt passed its own check-all at minute 57,
+        # was stopped 13 minutes into the gates, and would have been run again (2026-10-13).
+        finished = git.is_clean() and git.run("log", "-1", "--format=%s").strip() in (
+            done,
+            f"{done} (formatted)",
         )
-        state.timed_out[str(ticket)] = state.timed_out.get(str(ticket), 0) + 1
-        after = "it counts as timed out"
+        kept = finished or git.commit_all(
+            with_trailers(f"{done} (interrupted)", agent=LOCAL_MODEL_AGENT),
+            author=LOCAL_MODEL_AUTHOR,
+        )
+        if finished:
+            state.regate[str(ticket)] = {
+                "attempt": job.get("attempt"),
+                "agent": agent,
+                "job_id": job.get("job_id"),
+            }
+            after = "it had finished, so only its gates run again"
+        else:
+            state.timed_out[str(ticket)] = state.timed_out.get(str(ticket), 0) + 1
+            after = "it counts as timed out"
     else:
         what = f"{kind} {name}"
         message = WIP_INTERRUPTED.format(name=ticket or kind)
@@ -1999,6 +2015,55 @@ def _develop(
     raise AssertionError("unreachable: itertools.count never ends")
 
 
+def _regate(
+    s: Session,
+    task: Task,
+    rec: TaskRecord,
+    logs: Path,
+    protected: tuple[str, ...],
+    entry: Mapping[str, Any],
+) -> GateResult | None:
+    """The gates a stop cut off, on the finished attempt's branch: the gate that failed, or
+    None when they all pass. The attempt's job, ended as interrupted, gets its real outcome."""
+    attempt = entry["attempt"]
+    started = time.monotonic()
+    if changed := s.git.changed_files(MAIN):
+        if autoformat(s.repo, changed, s.cfg.gate_timeout):
+            local_wip_commit(s, f"wip {task.id} attempt {attempt} (formatted)")
+        context = GateContext(s.repo, s.git, task, MAIN, protected, s.cfg.gate_timeout)
+        with doing(s, f"gates · {task.id}"):
+            results = run_gates(context)
+    else:
+        results = [GateResult(NO_CHANGES, False, "The attempt changed no file.")]
+    rec.gates_s += time.monotonic() - started
+    gates_log = logs / f"gates-{attempt}.txt"
+    gates_log.write_text(
+        "\n\n".join(f"## {r.name}: {'ok' if r.ok else 'FAIL'}\n{r.output}" for r in results),
+        encoding="utf-8",
+    )
+    failed = next((r for r in results if not r.ok), None)
+    outcome = "passed" if failed is None else f"failed gate {failed.name}"
+    s.log(f"↺ [{entry['agent']}] attempt {attempt} of {task.id}, gates run again: {outcome}")
+    if entry.get("job_id") is not None and s.run_id is not None:
+        _record(
+            s,
+            metrics.regate_job,
+            entry["job_id"],
+            outcome="passed" if failed is None else "failed",
+            gates=[
+                {
+                    "name": r.name,
+                    "ok": r.ok,
+                    "seconds": round(r.seconds, 1),
+                    "log": _rel(s, gates_log),
+                }
+                for r in results
+            ],
+            note="gates run again after a stop",
+        )
+    return failed
+
+
 def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None) -> TaskRecord:
     """One ticket. Its result is "parked" when it waits for Claude (a limit, the reserve, or
     its turn behind the support work a yes to the 5-hour question freed) or behind its queued
@@ -2056,7 +2121,17 @@ def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None)
             rec.sessions = [""] * rec.attempts
     # A requeued ticket continues the branch its escalation kept (ADR 15 item 7).
     resumed = not rec.attempts and _has_branch(s.git, branch)
-    _start_attempt(s, branch, "")
+    regate = s.state.regate.pop(task.id, None)
+    if regate is not None:
+        save_state(s.state, s.state_path)
+    reset_at_start = _start_attempt(s, branch, "")
+    if regate is not None and not reset_at_start and isinstance(regate.get("attempt"), int):
+        rec.attempts, timeouts = regate["attempt"], [False] * regate["attempt"]
+        last = _regate(s, task, rec, logs, protected, regate)
+        if last is None:
+            _merge(s, task, rec, str(regate["agent"]))
+            return rec
+        rec.gate_failures.append(last.name)
     earlier = s.git.changed_files(MAIN) if resumed and s.git.current_branch() == branch else []
     direction = ""
     pending = str(directing.get("reset") or "") if directing is not None else ""

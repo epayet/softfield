@@ -18,6 +18,7 @@ Find where the test suite's time goes and propose steps that make it faster with
 Read `docs/milestones/f71-i-suspect-we-might-need-to.md` (D3 lists the questions), `runner/checks.py` (`check_all`), `runner/gates.py` (`gate_all_tests`, `gate_tests_fail_on_main`), `pyproject.toml` (`[tool.pytest.ini_options]`), `tests/browser/conftest.py`, `tests/factory_dashboard/conftest.py` and `docs/adr/21-gate-every-test-file.md`.
 - The suite stays as thorough: the developers lean on it. Faster means running it better, not testing less.
 - Measure on main with `uv run pytest --durations=30` over the same directories as `gate_all_tests`, and time each directory and `mypy` on their own.
+- Also the card's "What we saw on 2026-10-13" and D7: two more steps to give a verdict on, the quick checks first with an answer at once when one fails, and the developer's prompt not setting a time limit on `check-all`. D1's limit is D5's now (75 minutes).
 - **Change no code or config: findings and proposals only.**
 
 ### Done when

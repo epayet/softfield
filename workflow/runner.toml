@@ -16,10 +16,10 @@ default_max_diff = 1000                 # a backstop against rewritten files, no
 
 [timeouts]  # seconds
 warmup = 300
-opencode = 3600                         # F71 (2026-10-12): attempts finished at 40–45 min, just under the 2700 cut
+opencode = 4500                         # 2026-10-13: f19-01 passed at 57 min and was cut at 59; three check-alls of 12 min each
 claude = 2700                           # F71: a lead job runs check-all once or twice, 12 min each (f31-03 hit 1800)
 review = 3600                           # a milestone review: F6's (30 tickets) hit 1800 twice, 2026-10-08
-gate = 900
+gate = 1200                             # 2026-10-13: the full suite takes 750 s
 
 [local_model]
 base_url = "http://127.0.0.1:1234"

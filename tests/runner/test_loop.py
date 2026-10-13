@@ -2118,6 +2118,76 @@ def test_the_next_run_marks_an_interrupted_attempt_interrupted(repo, fake_model)
     assert again["outcome"] == "passed"
 
 
+def _stopped_during_its_gates(repo: Path, fake_model, monkeypatch) -> None:
+    """One attempt that finished, then a stop while the runner's gates ran."""
+    _add_task(repo, "m1-01-thing")
+
+    def stop(context: gates.GateContext) -> list[GateResult]:
+        raise RuntimeError("stopped")
+
+    fake_model.append(_implement)
+    with monkeypatch.context() as patched:
+        patched.setattr(loop, "run_gates", stop)
+        with pytest.raises(RuntimeError, match="stopped"):
+            _run(repo)
+    with sqlite3.connect(_config(repo).metrics_db) as conn:  # an earlier second than the rerun's
+        conn.execute("UPDATE runs SET run_dir = '20000101-000000'")
+
+
+def test_a_stop_during_the_gates_runs_the_gates_again_not_the_developer(
+    repo, fake_model, monkeypatch, capsys
+):
+    """2026-10-13: f19-01's third attempt finished at minute 57 with its checks passing; the
+    owner stopped the runner 13 minutes into the gates, and a restart would have counted it as
+    timed out and run the developer again."""
+    _stopped_during_its_gates(repo, fake_model, monkeypatch)
+    [task] = _run(repo).tasks  # no scripted run is left: a developer attempt would fail here
+    assert (task.result, task.attempts, task.timeouts) == ("done", 1, 0)
+    assert fake_model.models == ["lmstudio/m"]
+    assert "return 42" in git(repo, "show", "main:coucou/thing.py")
+    state = load_state(_config(repo).runs_dir / "state.json")
+    assert state.in_flight is None and state.regate == {} and state.timed_out == {}
+    [job] = _rows(repo, "jobs")
+    assert (job["outcome"], job["note"]) == ("passed", "gates run again after a stop")
+    out = capsys.readouterr().out
+    assert "it had finished, so only its gates run again" in out
+    assert "attempt 1 of m1-01-thing, gates run again: passed" in out
+
+
+def test_gates_that_fail_when_run_again_cost_the_attempt_they_judge(repo, fake_model, monkeypatch):
+    _stopped_during_its_gates(repo, fake_model, monkeypatch)
+    real_gates, calls = gates.run_gates, []
+
+    def run_gates(context: gates.GateContext) -> list[GateResult]:
+        calls.append(1)
+        return [GateResult("ruff", False, "E501")] if len(calls) == 1 else real_gates(context)
+
+    monkeypatch.setattr(loop, "run_gates", run_gates)
+    fake_model.append(_implement_other)
+    [task] = _run(repo).tasks
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, ["ruff"])
+    first, again = _rows(repo, "jobs")
+    assert (first["outcome"], again["outcome"]) == ("failed", "passed")
+
+
+def test_a_stop_in_the_middle_of_an_attempt_still_counts_as_timed_out(repo, fake_model):
+    _add_task(repo, "m1-01-thing")
+
+    def crash(repo_: Path, prompt: str) -> None:
+        _implement(repo_, prompt)
+        raise RuntimeError("OpenCode died")
+
+    fake_model.append(crash)
+    with pytest.raises(RuntimeError, match="OpenCode died"):
+        _run(repo)
+    with sqlite3.connect(_config(repo).metrics_db) as conn:
+        conn.execute("UPDATE runs SET run_dir = '20000101-000000'")
+    fake_model.append(_implement_other)
+    [task] = _run(repo).tasks
+    assert (task.result, task.attempts, task.timeouts) == ("done", 2, 1)
+    assert fake_model.models == ["lmstudio/m", "lmstudio/m"]
+
+
 def test_a_live_update_changes_tokens_steps_and_heartbeat_only(repo, monkeypatch):
     s = loop.open_session(_config(repo))
     job = loop.record_start(s, "m1-01-thing", "m1", "developer", "local-m", log_path="x.jsonl")

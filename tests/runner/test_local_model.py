@@ -133,7 +133,7 @@ def test_opencode_reports_progress_as_it_runs(tmp_path, monkeypatch):
     assert run.exit_code == 0
 
 
-def test_opencode_gets_a_15_minute_shell_timeout_and_the_rest_of_the_environment(
+def test_opencode_gets_a_20_minute_shell_timeout_and_the_rest_of_the_environment(
     tmp_path, monkeypatch
 ):
     """f4-05: OpenCode killed shell calls at 120 s, check-all included; the runner raises
@@ -151,7 +151,7 @@ def test_opencode_gets_a_15_minute_shell_timeout_and_the_rest_of_the_environment
     log = tmp_path / "logs" / "opencode-1.jsonl"
     run = run_opencode(tmp_path, "m", "t", "p", 60, log)
     assert run.exit_code == 0
-    assert log.read_text().startswith("900000 kept\n")
+    assert log.read_text().startswith("1200000 kept\n")
 
 
 def _tool(tool: str, status: str = "completed") -> str:

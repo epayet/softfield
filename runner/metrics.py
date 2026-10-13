@@ -621,6 +621,19 @@ def finish_job(
     _update(conn, "jobs", job_id, values)
 
 
+def regate_job(
+    conn: sqlite3.Connection,
+    job_id: int,
+    *,
+    outcome: str,
+    gates: Sequence[Mapping[str, object]],
+    note: str,
+) -> None:
+    """A finished attempt whose gates a stop cut off, once they ran again: their verdict in
+    place of "interrupted". Its end stays where the stop left it, so the wait isn't its time."""
+    _update(conn, "jobs", job_id, _given(outcome=outcome, gates=gates, note=note))
+
+
 def set_job_model(conn: sqlite3.Connection, job_id: int, model: str) -> None:
     """A past job's model, read from its log by the backfill (f2-04)."""
     _update(conn, "jobs", job_id, {"model": model})

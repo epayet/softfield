@@ -28,6 +28,16 @@ I suspect we might need to increase the timeouts as the tests take quite some ti
   Its result is a findings section on this card, with each step's measured or estimated saving in minutes per ticket, then tickets in `tasks/later/` and, for a gate change (a workflow rule), a draft ADR. Nothing is changed by the investigation itself.
 - **D4: no later look** (owner, 2026-10-10: the periodic factory review, F59, covers that). f71-02's report says now, from the jobs already in the metrics database, how long developer attempts and Claude jobs take and how many were cut off, and whether D1's and D2's values fit; anything to change is an immediate follow-up for the owner to approve.
 
+## What we saw on 2026-10-13 (f19-01, a terminal session with the owner)
+- **A passing attempt ended at minute 57 of 60, and another was cut at 59.** f19-01's third attempt wrote its change and had its own tests green in 22 minutes; the other 35 went to three `check-all` runs: one killed at 600 s (a limit the model set itself; its output was "(no output)"), one of 12.5 min that failed on a single unused variable (`ruff` finds it in a second, but `check-all` reports only at the end), one of 12.5 min that passed. Its first attempt was cut at 59 min with 34 min in `check-all` the same way.
+- **The suite now takes 750 s** against a gate and shell limit of 900 s.
+- **The owner stopped the runner 13 minutes into the gates,** reading "70 minutes" as a broken 60-minute limit: the limit covers the developer's work, and the gates ran after it. A restart would have counted the finished attempt as timed out and run the developer again.
+
+## Decisions (2026-10-13)
+- **D5: developer attempts get 75 minutes** (`opencode = 4500`), and the gate and the developer's shell get 20 (`gate = 1200`, `SHELL_TIMEOUT_ENV`). The third raise for one cause, the suite's length: f71-02 goes at the cause.
+- **D6: a stop during the gates runs the gates again, not the developer** (`_recover` and `_regate` in `runner/loop.py`, done in the session): the attempt's own commit at the tip of a clean branch means it had finished.
+- **D7: the developer keeps `check-all` as its finish line** (owner: without the full suite it can't know its change works; f19-01 changed `base.html`, which every page's tests load). What a run costs is f71-02's subject, with two steps added to its list: the quick checks first, telling the developer at once when one fails, each result printed as it finishes; and the developer's prompt saying not to set a time limit on `check-all`.
+
 ## Tickets
 | # | Id | Who | Difficulty | What |
 |---|----|-----|------------|------|

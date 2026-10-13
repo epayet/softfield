@@ -26,8 +26,8 @@ from runner.procs import LIVE_EVERY as LIVE_EVERY
 from runner.procs import run_streaming as run_streaming
 
 LOCAL_PROVIDER = "lmstudio"
-# f4-05: OpenCode killed a shell call at 120 s, check-all included; 15 min is under [timeouts] gate
-SHELL_TIMEOUT_ENV = {"OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS": "900000"}
+# f4-05: OpenCode killed a shell call at 120 s, check-all included; 20 min is [timeouts] gate
+SHELL_TIMEOUT_ENV = {"OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS": "1200000"}
 
 
 @dataclass(frozen=True)
