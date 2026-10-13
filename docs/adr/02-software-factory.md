@@ -357,6 +357,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** about an hour of building took four days to land: two and a half waiting for the weekly reserve, then a red main. It is the third review running (F26, F12, F48) where the review, not the checkpoint, found the missing test: a checkpoint should be given the ticket's Done-when lines and asked for the test behind each.
 - **Decisions affected:** none.
 
+### F53 (2026-10-13): a review waiting for Claude doesn't stop the line ([review](../reviews/f53-why-is-milestone-diff-review-waiting.md))
+
+- **Q1:** one ticket, a headless lead job on protected runner code, merged first time. No escalation, direction or checkpoint. The review filed one developer ticket.
+- **Q3:** no developer work yet; the fix ticket is the first.
+- **Q5:** see the review's numbers.
+- **Anything else:** the last support job that slept instead of parking now parks: on 2026-10-08 that sleep cost 3 h 30 with about 40 tickets ready. Two findings of one kind, both from the ticket's wording. It said which tests to "replace", and one covered code that still runs under another command; the plan's Done when named two places (the console and the queue) and the ticket carried one. A ticket that replaces a test says whether the old behaviour is gone or moved, and a Done-when line that names two places is checked against both.
+- **Decisions affected:** none. ADR 16 item 4 now holds for every support job; ADR 22's "a due review keeps its place" holds whenever Claude can take it.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

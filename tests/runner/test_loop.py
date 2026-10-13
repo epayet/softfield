@@ -5171,6 +5171,27 @@ def test_the_5_hour_switch_lets_the_review_go_at_once(repo, fake_clock, at_the_k
     assert fake_clock[0] == THURSDAY
 
 
+def test_the_5_hour_switch_turned_on_during_a_named_milestones_wait_ends_it(
+    repo, fake_clock, at_the_keyboard, monkeypatch
+):
+    """`runner milestone` still waits in `wait_for_room` (F53 D1 parks `runner run`'s only)."""
+    _claude_at(repo, 0.80)
+    s = loop.open_session(_config(repo))
+    slept: list[float] = []
+    clock_sleep = time.sleep  # fake_clock's
+
+    def phone(seconds: float) -> None:
+        if not slept:  # the review waits: the owner turns the switch on
+            _ask_from_the_dashboard(repo, "reserve", "five_hour", "on")
+        slept.append(seconds)
+        clock_sleep(seconds)
+
+    monkeypatch.setattr("time.sleep", phone)
+    loop.wait_for_room(s, "the review")
+    assert slept == [loop.SWITCH_POLL_S] and fake_clock[0] < FIVE_RESETS
+    assert loop.switch_on(_state(repo), "five_hour", loop.now())
+
+
 def test_the_5_hour_switch_turned_on_while_the_review_is_parked_makes_it_the_next_pick(
     repo, fake_clock, at_the_keyboard, monkeypatch
 ):
