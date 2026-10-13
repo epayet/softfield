@@ -486,3 +486,93 @@ tbody tr:hover { background: var(--accent-wash); }
 #actions.on-its-way { border: 1px dashed var(--hazard); padding: 10px 12px; }
 #actions.on-its-way .way-title { display: block; }
 #actions.on-its-way .action-buttons, #actions.on-its-way #settled { display: none !important; }
+
+/* The board (f5-16, after docs/milestones/f5-board-mockup/): the totals, the search and the
+   kind, then the field, a column per stage that scrolls sideways when the six don't fit. A
+   card's left edge is its area's colour; a bug's is striped. Every control is at least 44 px */
+main:has(.board) { max-width: 1360px; }
+.board-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
+.board-head p { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
+.badge { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase;
+  color: var(--hazard-ink); background: var(--hazard); padding: 3px 8px; }
+.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px;
+  background: var(--rule); border: 1px solid var(--rule); }
+.totals div { background: var(--bay); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
+.totals b { font: 600 20px var(--mono); }
+.totals .ripe b { color: var(--warn-ink); }
+.totals span { font: 500 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.board-filter { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.board-filter label { display: flex; align-items: center; gap: 8px; font: 500 12px var(--display);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.board-filter input[type=search] { font: 14px var(--body); padding: 9px 12px; width: 260px; min-height: 44px;
+  background: var(--bay); }
+.board-filter button { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); padding: 0 14px; min-width: 44px; min-height: 44px; }
+.kinds { display: flex; }
+.kinds button { background: none; }
+.kinds button + button { border-left: 0; }
+.kinds button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+.field { background: var(--bay); border: 1px solid var(--rule); min-width: 0; }
+.field-head { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid var(--rule); }
+.field-head h2 { margin: 0; font: 600 15px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.field-head p { margin: 0; color: var(--muted); font-size: 13px; }
+.stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: var(--rule);
+  min-width: 1200px; }
+.stage { background: var(--bay); display: flex; flex-direction: column; min-width: 0; }
+.stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--plate);
+  border-bottom: 1px solid var(--rule); }
+.stage-head svg { flex: none; color: var(--stage, var(--ink-2)); }
+.stage-head h3 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.stage-head span { font: 12px var(--mono); color: var(--muted); }
+/* a stage's colour, for its icon: greener as it grows, orange in the factory, yellow for you */
+#stage-sprouting { --stage: var(--qwen); } #stage-planted { --stage: var(--product); }
+#stage-growing { --stage: var(--opus); } #stage-ripe { --stage: var(--warn-ink); }
+#stage-ripe h3 { color: var(--warn-ink); }
+.cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+.cards .none { margin: 0; color: var(--muted); font-size: 12.5px; }
+.card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
+  padding: 9px 10px; background: var(--plate); border: 1px solid var(--rule);
+  border-left: 4px solid var(--c, var(--muted)); color: var(--fg); overflow-wrap: anywhere; }
+.card:hover { text-decoration: none; outline: 1px solid var(--accent); }
+.card.factory { --c: var(--factory); } .card.product { --c: var(--product); }
+.card.bug { border-left: 0; padding-left: 14px;
+  background: linear-gradient(var(--plate), var(--plate)) right / calc(100% - 4px) 100% no-repeat,
+    repeating-linear-gradient(-45deg, var(--fail) 0 4px, var(--plate) 4px 8px); }
+.card-meta { font: 600 11px var(--mono); color: var(--muted); }
+.card-meta b { color: var(--fg); }
+.card-title { font: 600 14px/1.25 var(--body); }
+.card .meter { display: block; height: 8px; }
+.card-count { font: 12px var(--mono); color: var(--muted); }
+.card-note, .card-now { font-size: 12.5px; line-height: 1.35; }
+.card-note { color: var(--muted); }
+.card-now b { color: var(--serious-ink); font-weight: 600; }
+.card code { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px;
+  font-size: 12px; border-radius: 0; }
+#stage-growing .card { border-color: var(--opus); border-left-color: var(--c, var(--muted)); }
+#stage-ripe .card { border-color: var(--hazard); border-left-color: var(--c, var(--muted)); }
+#stage-harvested .card { border-style: dashed; border-left-style: solid; color: var(--ink-2); }
+.cards .more, .field-foot a { display: inline-flex; align-items: center; min-height: 44px; }
+.cards .more { font-size: 13px; }
+.field-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 16px;
+  padding: 2px 14px; border-top: 1px solid var(--rule); background: var(--plate); }
+.field-foot .legend { margin: 0; }
+.field-foot a { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+.swatch.factory { background: var(--factory); } .swatch.product { background: var(--product); }
+.swatch.bug { background: repeating-linear-gradient(-45deg, var(--fail) 0 3px, var(--plate) 3px 6px); }
+/* Phone: the stages stack, what needs the owner and what runs first (the owner, 2026-10-03);
+   the heads carry the counts, so the totals go, and so does a stage with no card */
+@media (max-width: 639px) {
+  .board-head p, .totals, .field-head { display: none; }
+  .board-filter label { flex: 1 1 100%; flex-direction: column; align-items: stretch; gap: 4px; }
+  .board-filter input[type=search] { width: 100%; font-size: 15px; }
+  .field { background: none; border: 0; display: grid; gap: 12px; }
+  .stages { display: flex; flex-direction: column; gap: 12px; min-width: 0; background: none; }
+  .stage { border: 1px solid var(--rule); }
+  .stage.bare { display: none; }
+  .stage-head { background: none; }
+  #stage-ripe { order: 1; border-color: var(--hazard); } #stage-growing { order: 2; border-color: var(--opus); }
+  #stage-planted { order: 3; } #stage-sprouting { order: 4; } #stage-seed { order: 5; }
+  #stage-harvested { order: 6; border-style: dashed; }
+  .field-foot { border: 1px solid var(--rule); padding: 8px 12px; }
+}

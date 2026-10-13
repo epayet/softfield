@@ -1,5 +1,7 @@
 """The board's cards (f5 D4–D6, ADR 19 items 1–4): every milestone and every bug ticket, in
-its growth stage. ``board`` returns plain data; the page (f5-16) draws it.
+its growth stage. ``board`` returns plain data; ``/board`` (f5-16) draws it, read-only: a
+column per stage, the totals, and a plain GET form for the search and the kind (``?q=``,
+``?kind=``).
 
 - **A milestone's stage** is derived from its thread and its tickets (D4), the first that
   holds: signed off → harvested; an idea no planning thread is about → seed, as the desk's
@@ -17,13 +19,28 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime
 
+from fastapi import APIRouter, Request
+from fastapi.responses import HTMLResponse
+
+from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.line import _LONG_AGO, _natural, _when
 from factory_dashboard.overview import running_jobs
 from factory_dashboard.queries import ticket_priority
 from runner import metrics
 from runner.tasks import BUGS, DEFAULT_PRIORITY, short_key
 
+router = APIRouter()
+
 STAGES = ("seed", "sprouting", "planted", "growing", "ripe", "harvested")
+# each stage's words on the page: its name, and what a card there is doing
+WORDS = {
+    "seed": ("Seed", "idea or set aside"),
+    "sprouting": ("Sprouting", "being planned"),
+    "planted": ("Planted", "tickets ready"),
+    "growing": ("Growing", "in the factory"),
+    "ripe": ("Ripe", "needs your sign-off"),
+    "harvested": ("Harvested", "signed off or fixed"),
+}
 KINDS = ("factory", "product", "bug")
 HARVESTED = 4  # the harvested cards shown; the rest are counted
 SET_ASIDE = "ticket written, set aside"
@@ -202,3 +219,66 @@ def board(
     )
     stages["harvested"] = [card for card, _ in harvested[:HARVESTED]]
     return Board(stages, max(len(harvested) - HARVESTED, 0))
+
+
+# --- the page (f5-16) ---------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Total:
+    count: int
+    label: str
+    ripe: bool = False  # the one that waits for the owner
+
+
+def _some(count: int, word: str) -> str:
+    return f"{count} {word}{'' if count == 1 else 's'}"
+
+
+def totals(found: Board) -> list[Total]:
+    """The strip above the field: each stage's cards, then the tickets set aside on them."""
+    seeds = found.stages["seed"]
+    bugs = sum(card.bug for card in seeds)
+    counts = {stage: len(cards) for stage, cards in found.stages.items()}
+    return [
+        Total(counts["seed"], f"Seeds: {_some(len(seeds) - bugs, 'idea')}, {_some(bugs, 'bug')}"),
+        *(
+            Total(
+                counts[stage], ": ".join(WORDS[stage]), ripe=stage == "ripe" and counts[stage] > 0
+            )
+            for stage in ("sprouting", "planted", "growing", "ripe")
+        ),
+        Total(counts["harvested"] + found.more_harvested, "Harvested"),
+        Total(
+            sum(card.set_aside for cards in found.stages.values() for card in cards),
+            "Tickets set aside",
+        ),
+    ]
+
+
+@router.get("/board", response_class=HTMLResponse)
+def board_page(
+    request: Request,
+    conn: Db,
+    project: Project,
+    now: Now,
+    q: str | None = None,
+    kind: str | None = None,
+) -> HTMLResponse:
+    kind = kind if kind in KINDS else ""  # anything else shows every kind
+    found = board(conn, project, now, q=q, kind=kind)
+    return render(
+        request,
+        conn,
+        project,
+        "board.html",
+        {
+            "active": "/board",
+            "found": found,
+            "words": WORDS,
+            "totals": totals(found),
+            "search": q or "",  # ``q`` is the links' ``?project=`` in every template
+            "kind": kind,
+            "kinds": [("", "All"), ("factory", "Factory"), ("product", "Product"), ("bug", "Bugs")],
+        },
+    )

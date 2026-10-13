@@ -86,6 +86,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     from factory_dashboard import (
         agents,
         bench,
+        board,
         jobs,
         line,
         milestones,
@@ -117,6 +118,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
     app.include_router(bench.router)
     app.include_router(requests.router)
     app.include_router(planning.router)
+    app.include_router(board.router)
 
     @app.get("/version", response_class=HTMLResponse)
     def version(seen: str = "") -> str:

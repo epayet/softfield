@@ -27,6 +27,7 @@ VENDOR = STATIC / "vendor"
 PAGES = [
     "/",
     "/planning",
+    "/board",
     "/milestones",
     "/tickets",
     "/jobs",

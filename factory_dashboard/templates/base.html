@@ -50,8 +50,8 @@
   </div>
   <div class="hazard" aria-hidden="true"></div>
   <nav class="tabs" aria-label="Pages">
-    {# Board joins the tabs after Planning once f5-16 adds its route: ("/board", "Board"); it then replaces Milestones (the owner, 2026-10-06) #}
-    {% for path, label in [("/", "Overview"), ("/planning", "Planning"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
+    {# Milestones stays until f5-17's card page carries a milestone's details; Board then replaces it (the owner, 2026-10-06) #}
+    {% for path, label in [("/", "Overview"), ("/planning", "Planning"), ("/board", "Board"), ("/milestones", "Milestones"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
     <a href="{{ path }}{{ q }}"{% if path == active %} aria-current="page"{% endif %}{% if path == "/planning" %} id="planning-tab"{% endif %}>{{ label }}{% if path == "/planning" and planning_count %} · {{ planning_count }}{% endif %}</a>
     {% endfor %}
   </nav>
