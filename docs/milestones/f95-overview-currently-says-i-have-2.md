@@ -6,6 +6,9 @@
 ## Notes
 overview currently says i have 2 things to sign off, but i see only 1 'finish to talk through' on my desk
 
+### From F107: overview page says I have this to sign off but planning… (merged by the lead on 2026-10-13)
+overview page says I have this to sign off but planning desk does not: uv run runner signoff f31-when-i-click-on-approve-plan
+
 ## Expected outcome
 - The Overview never shows more sign-offs waiting than the desk lists: a milestone waiting for sign-off shows once, through the desk's entry in Needs you.
 - When the owner asks the planning room about what they see ("it says 2, I see 1"), the lead can look at the same page and the same data, and answers with names, not only with the mechanism.
