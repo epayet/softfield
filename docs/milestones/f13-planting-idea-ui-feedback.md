@@ -1,6 +1,6 @@
 # Milestone F13: Planting idea UI feedback
 
-> **Status: planned** (2026-10-07, with the owner, in the planning room). **State:** ready · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-13. Base: git tag `f13-planting-idea-ui-feedback-start`. Report: [`docs/reviews/f13-planting-idea-ui-feedback.md`](../reviews/f13-planting-idea-ui-feedback.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes

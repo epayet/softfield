@@ -1,6 +1,6 @@
 # Review: F13 a planted idea shows in Coming at once
 
-- **Status:** reviewed on 2026-10-13 (round 1); waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-13.
 
 ## Sign-off sheet
 
