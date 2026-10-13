@@ -137,6 +137,9 @@
     }
     // F13: the idea shows in Coming at once and the form comes back empty; htmx draws the
     // new form, so its next send is a post too. The Desk stays, so the page doesn't jump.
+    // The box empties here, not only in the new form: the note is stored, and a second press
+    // while the new form is on its way (or never comes) must not plant it twice.
+    form.elements.text.value = "";
     htmx.ajax("GET", window.location.href, {target: "#plant-row", select: "#plant-row", swap: "outerHTML"});
   });
   // The box emptied: what comes next is a new note, and the refused one keeps its card

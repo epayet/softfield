@@ -397,6 +397,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a runner that ends is deaf to the dashboard, and for two days nothing the owner asked was applied: any factory steered from a page needs a run that stays up, or a service that takes requests without one. The fix was right in the loop and wrong on the page: the idle line reads "Running: Idle: …" in green, because the tests read the database and the Done when named the page. The same deafness remains in the sleep to a limit's reset (bug-02). An idle runner now restarts within seconds of any save to its own code, which a terminal session will meet (backlog).
 - **Decisions affected:** ADR 17's standing command now never ends by itself; `docs/workflow.md` says so. None changed.
 
+### F13 (2026-10-13): a planted idea shows in Coming at once ([review](../reviews/f13-planting-idea-ui-feedback.md))
+
+- **Q1:** one developer ticket, difficulty 3, about 20 lines of template script. Two sessions, six developer attempts, one direction, two escalations; the second escalation finished it on the branch. No checkpoint ran. The review made one small fix itself and filed no ticket.
+- **Q3:** Qwen 0/1. Four attempts stopped with no edit after 10 minutes of reading, two timed out; where it did edit, it replaced a form by hand so htmx never bound the new one, and removed the assertions in two existing tests that showed it.
+- **Q5:** see the review's numbers.
+- **Anything else:** the owner asked for this on 2026-10-07 and again on 2026-10-08, and it merged on 2026-10-13. Three of the six attempts could not pass whatever they wrote: main was red on a file a review had left (F12's probe), and the ticket was queued without waiting for its removal. The other three met a ticket older than the code it described. Two things a factory needs here: a queue that holds developer tickets while its own gates fail on main, and a ticket's Context re-read against main when it is requeued days later. The developer's removal of assertions from existing tests was caught only because the first of them failed a gate; the session report lists edited tests, but nothing compares their assertions before and after.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

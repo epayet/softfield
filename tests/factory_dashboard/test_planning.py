@@ -397,6 +397,24 @@ def test_a_failed_post_leaves_textarea_and_coming_as_they_were(page, planning, d
     assert _coming_lines(page) == before
 
 
+def test_a_stored_plant_empties_the_box_even_when_the_new_form_never_comes(
+    page, planning, db_path, serve
+):
+    """The post is stored and the re-fetch of the page fails (the Wi-Fi dropped): the box is
+    empty all the same, so a second press can't plant the same note twice."""
+    _open(page, serve())
+    page.route("**/planning", lambda route: route.abort())
+    page.fill('#plant textarea[name="text"]', "Stored once")
+    page.click("#plant-only")
+    page.wait_for_selector("#plant-status >> text=Asked")
+    page.wait_for_timeout(300)  # the re-fetch has failed by now
+    assert page.input_value('#plant textarea[name="text"]') == ""
+    assert page.locator("#desk-coming").count() == 0
+    page.click("#plant-only")  # the empty box is required: nothing is sent
+    page.wait_for_timeout(300)
+    assert _values(db_path, "plant") == [{"text": "Stored once", "ask": False}]
+
+
 @pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
 def test_the_desk_page_lays_out_at_phone_and_display_sizes(page, planning, db_path, serve, size):
     """Every group full, a message pending: nothing overlaps or runs off the screen."""
