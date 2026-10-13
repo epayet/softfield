@@ -26,3 +26,10 @@ Read `_machines` in `factory_dashboard/line.py` (today `waiting` means only an a
 - a document test per kind of wait gives the clog's machine and words; a working runner gives none
 - a browser test: the clog sign and its words show on desktop and phone
 - `uv run runner check-all --task f9-01-line-shows-waits` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
