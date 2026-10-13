@@ -52,3 +52,12 @@ attempts: 3
 tokens: 2837235
 logs: var/runs/20261010-085423/f13-01-planted-idea-shows-at-once
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 6817779
+logs: var/runs/20261013-135255/f13-01-planted-idea-shows-at-once
+```
