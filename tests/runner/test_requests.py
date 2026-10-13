@@ -1446,6 +1446,8 @@ def test_the_owners_words_a_request_carries(kind, subject, value, words):
         ("plant", True, "planted docs/milestones/f12-ducks.md, queued for the lead", None, False),
         ("plant", None, None, None, False),
         ("plant", True, "ducks is a card already: f3-ducks", NOW.isoformat(), False),
+        ("plant", True, "cancelled by you", None, False),  # F14: their own cancel, no refusal
+        ("plan_message", True, "cancelled by you", None, False),
         ("plan_message", True, "queued for the lead", None, False),
         ("plan_message", True, "a thread is a card's key or general, not 'x'", None, True),
         ("send_back", True, "F7 has no proposal adr-23", None, True),
@@ -2167,3 +2169,284 @@ def test_the_merges_a_card_holds_are_read_from_the_headings_merged_card_writes()
         )
         == []
     )
+
+
+# --- change: a waiting plant or message edited or cancelled before the pick (F14 D1 to D4) ----
+
+CANCEL = json.dumps({"cancel": True})
+
+
+def _cards(repo: Path) -> list[str]:
+    return sorted(p.name for p in (repo / "docs" / "milestones").glob("*.md"))
+
+
+def test_cancelling_a_waiting_plant_makes_no_card_no_commit_and_no_planner_row(repo):
+    """D2: the change was asked after the plant and still goes first."""
+    head = _ducks(repo)
+    plant = _ask(repo, "plant", None, _idea("Blue ducks", "For the bath.", ask=True))
+    change = _ask(repo, "change", str(plant), CANCEL)
+    assert _apply(repo) == [f"change {plant}: cancelled"]
+    assert _request(repo, plant) == (NOW.isoformat(), "cancelled by you")
+    assert _request(repo, change) == (NOW.isoformat(), "cancelled")
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    assert _cards(repo) == ["f3-rubber-ducks.md"]
+    assert _queued(repo) == []
+    assert not requests.refused(_row(repo, plant))  # their own cancel: not on the desk
+    assert _apply(repo) == []
+
+
+@pytest.mark.parametrize(
+    ("before", "after", "stem", "said"),
+    [
+        (
+            _idea("Blue ducks", "For the bath.", area="factory", ask=True),
+            {"title": "Red ducks", "thoughts": "For the key."},
+            "f4-red-ducks",
+            "Red ducks\n\nFor the key.",
+        ),
+        # a one-box note (F31 D7) edited as one box, and as a title with its thoughts
+        (
+            json.dumps({"text": "Blue ducks: for the bath.", "ask": True}),
+            {"text": "Red ducks: for the key."},
+            "f4-red-ducks-for-the-key",
+            "Red ducks: for the key.",
+        ),
+        (
+            json.dumps({"text": "Blue ducks: for the bath.", "ask": True}),
+            {"title": "Red ducks", "thoughts": "For the key."},
+            "f4-red-ducks",
+            "Red ducks\n\nFor the key.",
+        ),
+    ],
+)
+def test_an_edited_plant_is_planted_with_the_new_words_in_the_same_pick(
+    repo, before, after, stem, said
+):
+    """The words are replaced; what else the plant said (its area, "ask the lead") stays."""
+    _ducks(repo)
+    plant = _ask(repo, "plant", None, before)
+    change = _ask(repo, "change", str(plant), json.dumps(after))
+    planted = f"planted docs/milestones/{stem}.md, queued for the lead"
+    assert _apply(repo) == [f"change {plant}: changed", f"plant: {planted}"]
+    assert _request(repo, change) == (NOW.isoformat(), "changed")
+    assert _request(repo, plant) == (NOW.isoformat(), planted)
+    assert _cards(repo) == ["f3-rubber-ducks.md", f"{stem}.md"]
+    doc = (repo / "docs" / "milestones" / f"{stem}.md").read_text()
+    assert "Blue" not in doc and "bath" not in doc
+    assert [m["text"] for m in _thread(repo, "f4")] == [said]
+    assert json.loads(_row(repo, plant)["value"])["ask"] is True
+
+
+def test_an_edited_message_is_sent_with_the_new_words_in_the_same_pick(repo):
+    message = _ask(repo, "plan_message", "f7", _message("Why one queue?", p1="Old."))
+    _ask(repo, "change", str(message), _message("Why two queues?", p2="New."))
+    assert _apply(repo) == [
+        f"change {message}: changed",
+        "plan_message f7: queued for the lead",
+    ]
+    [said] = _thread(repo, "f7")
+    assert said["text"] == "Why two queues?"
+    assert json.loads(str(said["points"])) == [{"n": 2, "comment": "New."}]
+    assert _queued(repo) == [("planner", f"f7#{message}", "your message on F7", None)]
+
+
+def test_cancelling_a_waiting_message_adds_no_thread_message_and_no_planner_row(repo):
+    message = _ask(repo, "plan_message", "f7", _message("Why one queue?"))
+    change = _ask(repo, "change", str(message), CANCEL)
+    assert _apply(repo) == [f"change {message}: cancelled"]
+    assert _request(repo, message) == (NOW.isoformat(), "cancelled by you")
+    assert _request(repo, change) == (NOW.isoformat(), "cancelled")
+    assert _queued(repo) == []
+    conn = metrics.open_db(_db(repo))
+    try:
+        assert conn.execute("SELECT count(*) FROM planner_messages").fetchone()[0] == 0
+    finally:
+        conn.close()
+    assert not requests.refused(_row(repo, message))
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "change", "result"),
+    [
+        ("plant", None, _idea("Blue ducks"), CANCEL, "too late: already planted"),
+        ("plant", None, _idea("Blue ducks"), _idea("Red ducks"), "too late: already planted"),
+        ("plan_message", "f7", _message("Go."), CANCEL, "too late: already sent"),
+        ("plan_message", "f7", _message("Go."), _message("No."), "too late: already sent"),
+    ],
+)
+def test_a_change_that_comes_after_the_pick_is_too_late_and_changes_nothing(
+    repo, kind, subject, value, change, result
+):
+    _ducks(repo)
+    target = _ask(repo, kind, subject, value)
+    _apply(repo)
+    before = tuple(_row(repo, target))
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "change", str(target), change)
+    later = NOW + timedelta(minutes=5)
+    assert _apply(repo, at=later) == [f"change {target}: {result}"]
+    assert _request(repo, asked) == (later.isoformat(), result)
+    assert tuple(_row(repo, target)) == before
+    assert git(repo, "rev-parse", "HEAD") == head
+
+
+@pytest.mark.parametrize("subject", [None, "", "x", "12a", "99", "1" * 40])
+def test_a_change_names_a_request_by_its_id(repo, subject):
+    asked = _ask(repo, "change", subject, _idea("Red ducks"))
+    [line] = _apply(repo)
+    done, said = _request(repo, asked)
+    assert done == NOW.isoformat() and "request" in str(said)
+    assert "Red ducks" not in line  # the owner's words stay off the console
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "why"),
+    [
+        ("signoff", "f9-nothing", None, "is a signoff"),
+        ("pause", None, None, "is a pause"),
+        ("send_back", "f7/adr-23", _message("No."), "is a send_back"),
+    ],
+)
+def test_a_change_on_another_kind_of_request_changes_nothing(repo, kind, subject, value, why):
+    """D3: plants and messages only; the request is applied as it was asked."""
+    target = _ask(repo, kind, subject, value)
+    asked = _ask(repo, "change", str(target), CANCEL)
+    _apply(repo)
+    assert why in str(_request(repo, asked)[1])
+    done, result = _request(repo, target)
+    assert done == NOW.isoformat() and result != "cancelled by you"
+    assert _row(repo, target)["value"] == value
+
+
+def test_a_change_on_another_projects_request_changes_nothing(repo):
+    conn = metrics.open_db(_db(repo))
+    try:
+        other = metrics.upsert_project(conn, "elsewhere")
+        target = metrics.add_request(conn, other, "plant", None, BAD_AREA, NOW.isoformat())
+    finally:
+        conn.close()
+    asked = _ask(repo, "change", str(target), CANCEL)
+    _apply(repo)
+    assert _request(repo, asked)[1] == f"there is no request {target}"
+    assert _request(repo, target) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        "",
+        "not json",
+        "[]",
+        "{}",
+        '{"cancel": false}',
+        '{"cancel": "yes"}',
+        '{"cancel": true, "title": "Red ducks"}',  # which of the two?
+        '{"area": "product"}',  # no words
+        '{"title": ""}',
+        '{"title": "Red\\nducks"}',
+        '{"title": ["Red ducks"]}',
+        '{"text": " "}',
+        '{"title": "Red ducks", "area": "garden"}',
+    ],
+)
+def test_a_change_with_a_bad_value_says_why_and_the_plant_goes_as_it_was(repo, value):
+    _ducks(repo)
+    words = _idea("Blue ducks", "For the bath.")
+    plant = _ask(repo, "plant", None, words)
+    asked = _ask(repo, "change", str(plant), value)
+    lines = _apply(repo)
+    done, said = _request(repo, asked)
+    assert done == NOW.isoformat() and said not in (None, "", "changed", "cancelled")
+    assert lines == [f"change {plant}: {said}", "plant: planted docs/milestones/f4-blue-ducks.md"]
+    assert _row(repo, plant)["value"] == words
+
+
+@pytest.mark.parametrize(
+    "value", ["not json", "{}", '{"text": 3}', '{"text": " "}', '{"text": "x", "comments": []}']
+)
+def test_a_change_with_a_bad_value_leaves_the_message_as_it_was(repo, value):
+    words = _message("Why one queue?")
+    message = _ask(repo, "plan_message", "f7", words)
+    asked = _ask(repo, "change", str(message), value)
+    _apply(repo)
+    assert _request(repo, asked)[1] not in (None, "", "changed", "cancelled")
+    assert _row(repo, message)["value"] == words
+    assert [m["text"] for m in _thread(repo, "f7")] == ["Why one queue?"]
+
+
+def test_two_edits_apply_oldest_first_and_the_last_wins(repo):
+    _ducks(repo)
+    plant = _ask(repo, "plant", None, _idea("Blue ducks"))
+    _ask(repo, "change", str(plant), _idea("Red ducks"))
+    _ask(repo, "change", str(plant), _idea("Green ducks"))
+    assert _apply(repo) == [
+        f"change {plant}: changed",
+        f"change {plant}: changed",
+        "plant: planted docs/milestones/f4-green-ducks.md",
+    ]
+    assert _cards(repo) == ["f3-rubber-ducks.md", "f4-green-ducks.md"]
+
+
+def test_an_edit_after_a_cancel_is_too_late(repo):
+    _ducks(repo)
+    plant = _ask(repo, "plant", None, _idea("Blue ducks"))
+    _ask(repo, "change", str(plant), CANCEL)
+    _ask(repo, "change", str(plant), _idea("Red ducks"))
+    assert _apply(repo) == [
+        f"change {plant}: cancelled",
+        f"change {plant}: too late: already cancelled",
+    ]
+    assert _row(repo, plant)["value"] == _idea("Blue ducks")
+    assert _cards(repo) == ["f3-rubber-ducks.md"]
+
+
+def test_a_plant_waiting_for_main_is_cancelled_on_another_branch(repo):
+    """A change commits nothing, so it never waits for main."""
+    _ducks(repo)
+    git(repo, "checkout", "-q", "-b", "task/x")
+    plant = _ask(repo, "plant", None, _idea("Blue ducks"))
+    assert _apply(repo) == ["plant: waits for the repo to be on main"]
+    _ask(repo, "change", str(plant), CANCEL)
+    assert _apply(repo) == [f"change {plant}: cancelled"]
+    assert _request(repo, plant) == (NOW.isoformat(), "cancelled by you")
+    git(repo, "checkout", "-q", "main")
+    assert _apply(repo) == [] and _cards(repo) == ["f3-rubber-ducks.md"]
+
+
+def test_an_approved_seeds_plant_is_cancelled_but_not_edited(repo):
+    """Its words are the lead's proposal's: there are none of the owner's to replace."""
+    seed = _ask(repo, "plant", "general/seed-1", None)
+    edit = _ask(repo, "change", str(seed), _idea("Red ducks"))
+    cancel = _ask(repo, "change", str(seed), CANCEL)
+    _apply(repo)
+    assert "only be cancelled" in str(_request(repo, edit)[1])
+    assert _request(repo, cancel)[1] == "cancelled"
+    assert _row(repo, seed)["value"] is None
+    assert _request(repo, seed)[1] == "cancelled by you"
+
+
+def test_a_wait_leaves_a_change_for_the_pick(repo):
+    plant = _ask(repo, "plant", None, _idea("Blue ducks"))
+    change = _ask(repo, "change", str(plant), CANCEL)
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.find_project(conn, repo.name)
+        assert project is not None
+        assert requests.take_switches(conn, project, State(), NOW) == []
+    finally:
+        conn.close()
+    assert _request(repo, change) == (None, None) and _request(repo, plant) == (None, None)
+
+
+def test_a_requests_value_is_changed_only_while_it_is_open(repo):
+    plant = _ask(repo, "plant", None, _idea("Blue ducks"))
+    conn = metrics.open_db(_db(repo))
+    try:
+        assert metrics.change_request(conn, plant, _idea("Red ducks"))
+        assert metrics.finish_request(conn, plant, NOW.isoformat(), "planted x")
+        assert not metrics.change_request(conn, plant, _idea("Green ducks"))
+    finally:
+        conn.close()
+    assert _row(repo, plant)["value"] == _idea("Red ducks")

@@ -867,6 +867,14 @@ def finish_request(conn: sqlite3.Connection, request_id: int, done: str, result:
     return cursor.rowcount == 1
 
 
+def change_request(conn: sqlite3.Connection, request_id: int, value: str) -> bool:
+    """Replace an open request's value (F14 D2); False once it is finished: too late."""
+    cursor = conn.execute(
+        "UPDATE owner_requests SET value = ? WHERE id = ? AND done IS NULL", (value, request_id)
+    )
+    return cursor.rowcount == 1
+
+
 def dismiss_request(conn: sqlite3.Connection, request_id: int, at: str) -> bool:
     """The owner dismissed a refused request's words (F31 D9); False if they had already."""
     cursor = conn.execute(

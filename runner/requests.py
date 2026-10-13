@@ -51,6 +51,8 @@ PAUSE = "pause"  # no subject, no value (f5-18); the runner's usage event while 
 RESUME = "resume"
 DISMISS = "dismiss"  # subject: a refused request's id; no value (F31 D9)
 REJECT = "reject"  # subject: <thread>/<proposal id>; no value: won't do (F31 D2)
+# subject: an open plant's or plan_message's request id; value: its new words, or {cancel: true}
+CHANGE = "change"  # (F14 D1)
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
 _COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, REJECT, *_APPROVALS)
@@ -66,6 +68,12 @@ WORDS = (PLANT, PLAN_MESSAGE, SEND_BACK)
 _WORKED = {PLANT: "planted ", PLAN_MESSAGE: QUEUED_FOR_THE_LEAD, SEND_BACK: QUEUED_FOR_THE_LEAD}
 _MAX_REQUEST_ID = 12
 BY_YOU = "by you"  # the owner's own Archive; F31 D1's is planner.APPROVED
+CANCELLED_BY_YOU = "cancelled by you"  # a plant or a message a change cancelled (F14 D2)
+CANCELLED, CHANGED, TOO_LATE = "cancelled", "changed", "too late: already "  # a change's results
+# What a change may change (F14 D3): each one's word for taken, and the keys its words are under
+_CHANGEABLE = {PLANT: "planted", PLAN_MESSAGE: "sent"}
+_WORD_KEYS = {PLANT: ("title", "thoughts", "text"), PLAN_MESSAGE: ("text", "comments")}
+_CHANGE_VALUE = 'a change is JSON with the new words, or {"cancel": true}'
 
 type _Row = sqlite3.Row | Mapping[str, object]
 
@@ -75,6 +83,8 @@ def _what(row: sqlite3.Row) -> str:
     ``plant`` alone, its words being the owner's to read on the card."""
     if row["kind"] == PLANT and not row["subject"]:
         return PLANT
+    if row["kind"] == CHANGE:  # its value is the owner's words too
+        return " ".join(filter(None, [CHANGE, row["subject"]]))
     return " ".join(str(part) for part in (row["kind"], row["subject"] or row["value"]) if part)
 
 
@@ -886,8 +896,11 @@ def owners_words(row: _Row) -> Words | None:
 
 def refused(row: _Row) -> bool:
     """Whether the owner's words in a request didn't go through and wait on the desk: done
-    with a result that isn't its kind's worked one, and not dismissed."""
+    with a result that isn't its kind's worked one, and not dismissed. One they cancelled
+    themselves (F14) was not refused."""
     if row["done"] is None or row["dismissed"] is not None or owners_words(row) is None:
+        return False
+    if row["result"] == CANCELLED_BY_YOU:
         return False
     return not str(row["result"] or "").startswith(_WORKED[str(row["kind"])])
 
@@ -909,6 +922,57 @@ def _dismiss(conn: sqlite3.Connection, project_id: int, now: datetime, subject: 
         return f"request {wanted} wasn't refused: nothing to dismiss"
     metrics.dismiss_request(conn, row["id"], now.isoformat())
     return f"dismissed request {wanted}"
+
+
+# --- change: a waiting plant or message edited or cancelled (F14 D1 to D4) --------------------
+
+
+def _change(conn: sqlite3.Connection, project_id: int, now: datetime, row: sqlite3.Row) -> str:
+    """The owner edits or cancels a plant or a message the runner hasn't taken (F14 D2): a
+    cancel finishes it as cancelled by them; an edit replaces its words, what else it said
+    (an idea's area, "ask the lead") kept, for the same pick to apply. Too late once it is
+    done. Refused, nothing changed, for another kind of request or words its kind can't take."""
+    subject = row["subject"]
+    wanted = subject if isinstance(subject, str) else ""
+    if not (wanted.isascii() and wanted.isdigit() and len(wanted) <= _MAX_REQUEST_ID):
+        return f"a change names a waiting request by its id, not {subject!r}"
+    target = metrics.find_request(conn, int(wanted))
+    if target is None or target["project_id"] != project_id:
+        return f"there is no request {wanted}"
+    kind = str(target["kind"])
+    if kind not in _CHANGEABLE:
+        return f"request {wanted} is a {kind}: only a plant or a message is changed"
+    if target["done"] is not None:
+        was = CANCELLED if target["result"] == CANCELLED_BY_YOU else _CHANGEABLE[kind]
+        return f"{TOO_LATE}{was}"
+    try:
+        data = json.loads(row["value"]) if isinstance(row["value"], str) else None
+    except json.JSONDecodeError:
+        data = None
+    if not isinstance(data, dict):
+        return _CHANGE_VALUE
+    if "cancel" in data:
+        if data != {"cancel": True}:
+            return _CHANGE_VALUE
+        metrics.finish_request(conn, target["id"], now.isoformat(), CANCELLED_BY_YOU)
+        return CANCELLED
+    if kind == PLANT and target["subject"]:
+        return "a seed's words are the lead's: it can only be cancelled"
+    keys = _WORD_KEYS[kind]
+    if not any(key in data for key in keys):
+        return _CHANGE_VALUE
+    try:
+        before = json.loads(target["value"]) if isinstance(target["value"], str) else None
+    except json.JSONDecodeError:
+        before = None
+    kept = {k: v for k, v in before.items() if k not in keys} if isinstance(before, dict) else {}
+    value = json.dumps({**kept, **data})
+    if kind == PLANT:  # read as the pick will: words it would refuse change nothing
+        planner.planting(value)
+    else:
+        planner.message(value)
+    metrics.change_request(conn, target["id"], value)
+    return CHANGED
 
 
 # --- reprioritising: a ticket's or a card's priority, from the dashboard (f6-18) --------------
@@ -1112,6 +1176,8 @@ def _apply(
             return _dismiss(conn, project_id, now, subject)
         if kind == REJECT:
             return _reject(repo, conn, project_id, now, subject)
+        if kind == CHANGE:
+            return _change(conn, project_id, now, row)
     except (owner.OwnerError, loop.RunnerError, TaskError, planner.PlannerError) as exc:
         return str(exc)
     except Exception as exc:
@@ -1341,8 +1407,9 @@ def _clear_out(repo: Path, conn: sqlite3.Connection, project_id: int, now: datet
 
 
 def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[str]:
-    """Apply the project's open requests, oldest first, after turning off the switches whose
-    24 hours are over: one line per request done or left to wait, and per switch turned off.
+    """Apply the project's open requests, the changes then the others, each oldest first, after
+    turning off the switches whose 24 hours are over: one line per request done or left to
+    wait, and per switch turned off.
     The switches are set on ``state``, for the caller to save. Nothing to do without the
     database or the project in it, and neither is made."""
     if not db.is_file():
@@ -1356,6 +1423,14 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
         if metrics.once(conn, CLEAR_OUT, now.isoformat()):
             lines += _clear_out(repo, conn, project, now)
         _settle_waits(conn, project, state, now)
+        # Changes go first (F14 D2), and the others are read after them: a cancelled plant or
+        # message is never applied, and an edited one goes with its new words
+        for row in metrics.open_requests(conn, project):
+            if row["kind"] != CHANGE:
+                continue
+            result = _apply(repo, db, conn, project, state, now, row)
+            if metrics.finish_request(conn, row["id"], now.isoformat(), result):
+                lines.append(f"{_what(row)}: {result}")
         for row in metrics.open_requests(conn, project):
             if (why := _waits(repo, row["kind"])) is not None:
                 lines.append(f"{_what(row)}: {why}")

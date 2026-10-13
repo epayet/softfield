@@ -23,6 +23,7 @@ from runner.requests import (
     ACCEPT_ADR,
     APPROVE_PLAN,
     ARCHIVE,
+    CHANGE,
     DISMISS,
     DROP_SEED,
     PAUSE,
@@ -41,8 +42,9 @@ router = APIRouter()
 
 # The planning room's six (f6 D1) too, Now's pause and resume (f5-18), and the ↑ and ↓ of
 # Next in line and the Milestones page (f6-18), archiving a thread (2026-10-07), dismissing
-# words that didn't go through (F31 D9), and rejecting a proposal (F31 D2); the runner checks
-# each value, as for the first three
+# words that didn't go through (F31 D9), rejecting a proposal (F31 D2), and editing or
+# cancelling a waiting plant or message (F14 D1); the runner checks each value, as for the
+# first three
 KINDS = (
     SIGNOFF,
     RESERVE,
@@ -59,6 +61,7 @@ KINDS = (
     ARCHIVE,
     DISMISS,
     REJECT,
+    CHANGE,
 )
 
 

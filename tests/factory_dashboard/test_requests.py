@@ -76,6 +76,8 @@ PLANNING = [  # the planning room's six requests (f6 D1); the runner checks thei
     ("priority", "f1-05-first", "4"),  # f6-18: a ticket's, or a card's
     ("priority", "f7", "0"),
     ("reject", "f7/plan", None),  # F31 D2: won't do
+    ("change", "41", '{"title": "Two queues", "thoughts": ""}'),  # F14 D1: a waiting plant's
+    ("change", "41", '{"cancel": true}'),
 ]
 
 
