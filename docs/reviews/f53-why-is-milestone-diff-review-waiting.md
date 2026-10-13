@@ -1,6 +1,6 @@
 # Review: F53, a review waiting for Claude doesn't stop the line
 
-- **Status:** round 1 done; one fix ticket (`f53-02-parked-review-crate`) is ready for a developer.
+- **Status:** done, signed off by the owner on 2026-10-13.
 
 ## Sign-off sheet
 

@@ -1,6 +1,7 @@
 # Milestone F53: a review waiting for Claude doesn't stop the line
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-13. Base: git tag `f53-why-is-milestone-diff-review-waiting-start`. Report: [`docs/reviews/f53-why-is-milestone-diff-review-waiting.md`](../reviews/f53-why-is-milestone-diff-review-waiting.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes
