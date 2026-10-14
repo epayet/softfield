@@ -452,7 +452,7 @@ def test_runner_dashboard_serves_on_a_lan_address_when_asked(db_path, monkeypatc
 def test_runner_dashboard_refuses_a_missing_database(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(uvicorn, "run", lambda *a, **k: pytest.fail("served"))
     assert cli.main(["dashboard", "--db", str(tmp_path / "none.sqlite")]) == 1
-    assert "runner backfill" in capsys.readouterr().err
+    assert "softfield backfill" in capsys.readouterr().err
 
 
 def test_runner_dashboard_reloads_when_its_code_changes(db_path, monkeypatch):

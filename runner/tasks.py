@@ -209,10 +209,15 @@ def _str_tuple(meta: dict[str, Any], key: str, required: bool) -> tuple[str, ...
 
 
 # A lead ticket's `commands:` may never run git beyond the read-only tools it already has,
-# the owner's commands, or the loop itself; nor a prefix of any of them (`uv run`).
+# the owner's commands, or the loop itself; nor a prefix of any of them (`uv run`), as
+# `softfield` or as `uv run runner`, its name inside Softfield's own repo (ADR 30).
 _REFUSED_COMMANDS = tuple(
     ["git"]
-    + [f"softfield {c}" for c in ("signoff", "accept", "reject", "milestone", "run", "review")]
+    + [
+        f"{name} {c}"
+        for name in ("softfield", "uv run runner")
+        for c in ("signoff", "accept", "reject", "milestone", "run", "review")
+    ]
 )
 _DRY_RUN = "softfield run --dry-run"  # read-only: a replan checks its tickets with it
 _COMMAND_RE = re.compile(r"[\w@./:=+-]+( [\w@./:=+-]+)*")

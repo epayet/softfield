@@ -772,7 +772,7 @@ def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         prompts.append(job.prompt)
-        found = re.search(r"milestone (\S+) of Coucou.*Round (\d)", job.prompt, re.S)
+        found = re.search(r"milestone (\S+) of this project.*Round (\d)", job.prompt, re.S)
         assert found
         key, round_no = found.groups()
         events.append(f"{key} round {round_no}")

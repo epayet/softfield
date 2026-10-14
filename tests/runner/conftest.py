@@ -79,6 +79,13 @@ def machine(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _no_shared_docs(monkeypatch, tmp_path_factory):
+    """A test's lead jobs read only its own repo's docs, never the Softfield checkout's
+    (ADR 30 item 4); a test that wants shared docs sets ``config.HOME`` itself."""
+    monkeypatch.setattr("runner.config.HOME", tmp_path_factory.mktemp("softfield-home"))
+
+
+@pytest.fixture(autouse=True)
 def _no_outer_git(monkeypatch):
     """Run from a git hook, GIT_INDEX_FILE and friends point at the real repo; the temporary
     repos here must never inherit them."""

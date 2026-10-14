@@ -180,6 +180,19 @@ def test_the_adapter_runs_the_agents_model_with_the_specs_tools(tmp_path, monkey
     assert (result.ok, result.error, result.session_id) == (True, None, "s1")
 
 
+def test_every_job_may_read_softfields_shared_docs_and_only_read_them(tmp_path, monkeypatch):
+    """ADR 30 item 4: a project's lead job reads lead.md, task-format.md and the rest from the
+    Softfield checkout it runs from, outside the project; its edits stay the spec's."""
+    home = tmp_path / "live"
+    (home / "docs").mkdir(parents=True)
+    monkeypatch.setattr("runner.config.HOME", home)
+    seen = _fake_claude(monkeypatch, '{"result": "ok", "session_id": "s1"}', returncode=0)
+    _adapter_run(tmp_path, JobSpec("review", "Review.", 10, commands=GIT_READ_COMMANDS))
+    cmd = seen[0]
+    assert cmd[cmd.index("--add-dir") + 1] == str(home / "docs")
+    assert [t for t in cmd if t.startswith(("Edit", "Write"))] == []
+
+
 def test_a_usage_limit_message_comes_back_as_a_refusal_with_its_reset(tmp_path, monkeypatch):
     out = '{"is_error": true, "result": "You\'ve hit your limit · resets 5pm", "session_id": "s1"}'
     _fake_claude(monkeypatch, out)

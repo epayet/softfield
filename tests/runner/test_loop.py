@@ -5959,7 +5959,7 @@ def test_live_follows_softfields_main_and_nothing_else(repo, tmp_path, monkeypat
     merge moves it there, so the restart runs the new code. Another project's main never does."""
     live = tmp_path / "live"
     git(repo, "worktree", "add", "-q", "--detach", str(live), "main")
-    monkeypatch.setattr(loop.config, "HOME", live)
+    monkeypatch.setattr("runner.config.HOME", live)
     assert not loop.update_live(repo)
     (repo / "runner").mkdir()
     (repo / "runner" / "x.py").write_text("X = 1\n")

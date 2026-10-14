@@ -80,3 +80,10 @@ Done by the lead in terminal sessions, not as tickets, because it changes how th
 - The ticket and card formats, the gates, the agents and their ratings, the planning room and the board.
 - One metrics DB for every project, backed up daily.
 - Nothing merges or queues without the owner.
+
+## Amendments (the lead, 2026-10-14, while building B and C)
+- **`owner.md` stays in Softfield's `docs/agents/`, not `~/.config/softfield/`** (item 4): there it is versioned and backed up with the repo, and it is still one copy for every project. Coucou's CLAUDE.md imports it from `live`. Coucou's product taste and English-and-French rule moved to its `.factory/project.md`.
+- **A project may carry its own `docs/agents/lead.md`** (item 4): a lead job reads the project's when it has one (Softfield does), else the shared one in `live`, then the project's `.factory/project.md`. Headless Claude gets `--add-dir` on the shared docs, read-only.
+- **The machine file has a versioned copy** in `tests/fixtures/softfield-machine.toml` (the tests read it); `~/.config/softfield/factory.toml` is the one that counts. A new machine starts from that copy.
+- **Coucou's translations check** is a copy of `runner/i18n.py` in `coucou/i18n_checks.py` for its integration test; the `translations` gate stays in Softfield, on when a project's `[checks] translations` is true.
+- **The database moved by rule:** milestones and tickets not `m<N>`, runs started from 2026-09-30 12:00, every owner item, request, queue row and planning thread went to `softfield`; Coucou kept m0–m4, their 33 tickets and 41 runs. Backups: `~/backups/factory-metrics-before-split-2026-10-14.sqlite` and `…-before-rekey-2026-10-14.sqlite`.
