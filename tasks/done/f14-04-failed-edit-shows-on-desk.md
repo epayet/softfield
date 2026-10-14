@@ -35,3 +35,10 @@ Read `docs/milestones/f14-coming-planted-ideas-not-clickable.md` (Done when, las
 - `refused` and `owners_words` are unchanged for the three kinds they read today (the existing tests keep every assertion)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
