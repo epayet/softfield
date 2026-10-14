@@ -104,13 +104,13 @@ class OwnerItem:
 
 def owner_items(repo: Path, milestone: str, state: State, review_stop: str) -> list[OwnerItem]:
     """What the verdict asks of the owner, each with the command that answers it."""
-    rerun = f"uv run runner milestone {command_arg(milestone)}"
+    rerun = f"softfield milestone {command_arg(milestone)}"
     items = []
     for task_id in _ids(repo, "escalated", milestone):
         decision = state.owner.get(task_id)
         if decision:
             number = _ADR_NUMBER.search(decision["adr"])
-            command = f"uv run runner accept {int(number[1])}" if number else rerun
+            command = f"softfield accept {int(number[1])}" if number else rerun
             adr = decision["adr"] or task_id
             items.append(OwnerItem("adr", adr, decision["question"], command))
         else:
@@ -233,7 +233,7 @@ def verdict(
         needs.append(f"  • review stopped: {review_stop}")
     if needs:
         lines = ["⚠ NEEDS YOU", *needs, ""]
-        rerun = f"uv run runner milestone {command_arg(milestone)}"
+        rerun = f"softfield milestone {command_arg(milestone)}"
         lines.append(f"  Next: decide the above, then rerun  {rerun}")
         _write(
             repo,
@@ -248,7 +248,7 @@ def verdict(
     if steps:
         lines.append("  Test on your devices:")
         lines += [f"    {line}" for line in steps.splitlines()]
-    signoff_command = f"uv run runner signoff {command_arg(milestone)}"
+    signoff_command = f"softfield signoff {command_arg(milestone)}"
     lines += ["", f"  Then: {signoff_command}"]
     text = f"Test on your devices:\n{steps}" if steps else f"Review: {review.relative_to(repo)}"
     items.append(OwnerItem("signoff", milestone, text, signoff_command))

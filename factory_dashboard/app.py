@@ -1,5 +1,5 @@
 """The factory dashboard's service (ADR 13 item 2, f1 D1): a FastAPI app over the metrics
-database, served at 127.0.0.1 by ``uv run runner dashboard`` (or at ``--host``, a LAN address).
+database, served at 127.0.0.1 by ``softfield dashboard`` (or at ``--host``, a LAN address).
 
 - It restarts itself when its code changes, and each page polls ``/version`` to offer a refresh.
 - One read-only connection per request (``Db``). The one write is ``POST /requests``

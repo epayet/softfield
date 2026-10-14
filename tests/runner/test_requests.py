@@ -216,12 +216,12 @@ def test_a_switch_on_for_24_hours_reads_off_and_asks_to_be_turned_on_again(repo)
     lines = _apply(repo, state)
     assert "Claude's reserve: the week's switch went off after 24 hours" in lines[0]
     assert state.switches == {"five_hour": NOW.isoformat()}  # the other one stays on
-    assert _items(repo) == [("reserve", "week", "uv run runner reserve week on", True)]
+    assert _items(repo) == [("reserve", "week", "softfield reserve week on", True)]
     _apply(repo, state)
     assert len(_items(repo)) == 1  # raised once
     _ask(repo, "reserve", "week", "on")
     _apply(repo, state)
-    assert _items(repo) == [("reserve", "week", "uv run runner reserve week on", False)]
+    assert _items(repo) == [("reserve", "week", "softfield reserve week on", False)]
 
 
 @pytest.mark.parametrize(
@@ -1331,7 +1331,7 @@ def test_a_reorder_sets_the_cards_priorities_in_one_commit_and_the_pick_follows(
     # one commit by the runner, of the one card whose number had to change; a clean tree
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "the board's order, by the owner"
-    assert git(repo, "log", "-1", "--format=%an").strip() == "Coucou runner"
+    assert git(repo, "log", "-1", "--format=%an").strip() == "Softfield runner"
     assert _changed(repo) == [".factory/cards/f8-card.md"]
     assert _card_priorities(repo) == {"f7": 100, "f8": 0, "f9": 2}
     assert git(repo, "status", "--porcelain") == ""

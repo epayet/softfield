@@ -45,5 +45,5 @@ def test_a_cell_links_to_the_last_bench_job(bench_client):
 
 def test_without_bench_jobs_the_page_explains_the_command(client):
     html = client.get("/bench").text
-    assert "uv run runner bench &lt;ticket…&gt; --agents &lt;id…&gt;" in html
+    assert "softfield bench &lt;ticket…&gt; --agents &lt;id…&gt;" in html
     assert "<tbody>" not in html

@@ -1,66 +1,48 @@
 [project]
-name = "coucou"
+name = "softfield"
 version = "0.1.0"
-description = "Send a small moment to an always-on screen in someone's home."
+description = "A software factory: a frontier lead plans, local and cloud developers build, one runner gates and merges, for every project on this machine."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "django>=5.2,<5.3",
-    "uvicorn[standard]>=0.30",
-    "cryptography>=44",
-    "pillow>=11",
-    "pillow-heif>=0.21",
     "pyyaml>=6",
-    "django-stubs-ext>=5.1",
-    "whitenoise>=6.8",
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "jinja2>=3.1.6",
+    "uvicorn[standard]>=0.30",
 ]
 
 [project.scripts]
-coucou-public = "coucou.serve:public"
-coucou-admin = "coucou.serve:admin"
-coucou-staging = "coucou.serve:staging"
-runner = "runner.cli:main"
+softfield = "runner.cli:main"
+runner = "runner.cli:main"  # the same command, as `uv run runner` inside this repo
 
 [dependency-groups]
 dev = [
     "pytest>=8",
-    "pytest-django>=4.9",
-    "pytest-asyncio>=0.24",
-    "hypothesis>=6.100",
     "ruff>=0.8",
     "mypy>=1.13",
-    "django-stubs[compatible-mypy]>=5.1",
     "types-pyyaml>=6",
-    "pytest-playwright>=0.5",
+    "pytest-playwright>=0.5",  # the dashboard's pages on a phone and a wide screen
+    "playwright==1.63.0",  # the browsers installed in ~/.cache/ms-playwright
 ]
-factory = [
-    "fastapi>=0.142.2",
-    "httpx>=0.28.1",
-    "jinja2>=3.1.6",
-]
-
-[tool.uv]
-# The factory group (ADR 13: the dashboard) is part of every `uv sync` and `uv run`.
-default-groups = ["dev", "factory"]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["coucou", "runner", "factory_dashboard"]
+packages = ["runner", "factory_dashboard"]
 
 # --- ruff ---------------------------------------------------------------
 [tool.ruff]
 line-length = 100
 target-version = "py313"
-extend-exclude = ["**/migrations/**", "*.md"]  # Markdown never gates code (ADR 01, item 2)
+extend-exclude = ["*.md"]  # Markdown never gates code (ADR 01, item 2)
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "RUF", "S", "DTZ", "PT", "TID"]
 ignore = [
     "RUF001", "RUF002", "RUF003",  # emoji and typographic characters are intentional
-    "RUF012",  # Django's class attributes (list_display, Meta.constraints…) are lists by idiom
     "PT018",   # compound asserts are fine in tests
     "S603",    # subprocess with argument lists is used deliberately (runner, serve, tests)
 ]
@@ -73,12 +55,10 @@ ignore = [
 [tool.mypy]
 python_version = "3.13"
 strict = true
-plugins = ["mypy_django_plugin.main"]
 disallow_untyped_defs = true
 warn_unused_ignores = true
 warn_redundant_casts = true
 no_implicit_optional = true
-exclude = ["/migrations/"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
@@ -86,20 +66,7 @@ disallow_untyped_defs = false
 disallow_incomplete_defs = false
 disallow_untyped_calls = false
 
-[[tool.mypy.overrides]]
-module = ["pillow_heif.*"]
-ignore_missing_imports = true
-
-[tool.django-stubs]
-django_settings_module = "coucou.settings.test"
-
 # --- pytest -------------------------------------------------------------
 [tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "coucou.settings.test"
 testpaths = ["tests"]
-addopts = "-m 'not e2e' --strict-markers"
-markers = [
-    "e2e: end-to-end tests against the staging environment (run with -m e2e)",
-]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"
+addopts = "--strict-markers"

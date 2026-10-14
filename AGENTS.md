@@ -13,17 +13,16 @@ When a task file and this file disagree, stop and write `BLOCKED.md`.
 4. Build only against ADRs whose status is **Accepted**. If a task relies on a Proposed ADR, write `BLOCKED.md`.
 
 ## Code
-5. Write business rules as plain functions without side effects where practical: time and IDs are parameters, and Django, DB and IO stay in `models/`, `views/`, `repos.py` and friends.
+5. Keep rules as plain functions without side effects where practical: time and paths are parameters; git, SQLite, subprocesses and HTTP stay at the edges (`runner/loop.py`, `runner/gitops.py`, `runner/metrics.py`, the dashboard's routes).
 6. Type-hint everything. Code must pass ruff (lint + format) and mypy.
-7. No third-party network calls, CDNs, fonts, analytics or trackers. Every asset is self-hosted.
-8. Never log note text or photo contents.
-9. **English and French:** wrap every user-facing string (`gettext`, `{% translate %}`, JS `gettext()`), and add its French translation to `coucou/locale/fr/LC_MESSAGES/` in the same task, with all its accents (é, è, à, ç…), then compile it: `msgfmt -o coucou/locale/fr/LC_MESSAGES/django.mo coucou/locale/fr/LC_MESSAGES/django.po` (JS strings: the same with `djangojs.po` and `djangojs.mo`). API errors use stable codes, not sentences. Admin-only text stays plain English. Keep the tone light and warm in both languages.
+7. No third-party network calls, CDNs, fonts, analytics or trackers in the dashboard. Every asset is self-hosted (`factory_dashboard/static/vendor/`).
+8. The dashboard writes only through `POST /requests` (ADR 18); the runner is git's one writer.
 
 ## Tests
-10. **One test file per module:** `coucou/<name>.py` → `tests/unit/test_<name>.py`, `coucou/static/coucou/js/<name>.js` → `tests/browser/test_<name>.py`. Add to the existing file; never create a second one. Unit tests don't touch Django; integration tests use `tests/fakes/` or Django's test DB. See `docs/testing.md`.
-11. Write tests for what the task's "Done when" asks. They must fail without your change and pass with it.
-12. Change an existing test only when the task changes that behaviour. Never skip, xfail or delete a test to make it pass.
-13. A task is done when its `tests:` pass **and** the full unit + integration suite still passes.
+9. **One test file per module:** `runner/<name>.py` → `tests/runner/test_<name>.py`, `factory_dashboard/<name>.py` → `tests/factory_dashboard/test_<name>.py`. Add to the existing file; never create a second one. Tests use temporary git repos and databases, never the real ones.
+10. Write tests for what the task's "Done when" asks. They must fail without your change and pass with it.
+11. Change an existing test only when the task changes that behaviour. Never skip, xfail or delete a test to make it pass.
+12. A task is done when its `tests:` pass **and** the full suite still passes (`softfield check-all`).
 
 ## When you're stuck: `BLOCKED.md`
 Write `BLOCKED.md` at the repo root, then stop. Its first line is exactly one of:
@@ -39,5 +38,4 @@ Unplanned work you notice (a bug, missing test, refactor idea) goes as one bulle
 
 ## What to read
 - Any task: the task file, the files it points to, and the worked example it names.
-- Python/Django: `docs/architecture.md`. Tests: `docs/testing.md`.
-- Anything touching devices, auth, uploads or scoping: `docs/security.md` (these are usually protected).
+- How the factory works: `docs/how-it-works.md` and `docs/workflow.md`; tickets: `docs/task-format.md`.

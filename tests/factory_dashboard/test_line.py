@@ -2664,7 +2664,7 @@ def test_merged_crate_opens_card_with_ticket_link(page, line_client):
 
 def test_floor_links_layout_at_phone_and_display(page, line_client):
     """Every link on the floor passes the layout check at 390 px and 1440 px."""
-    from tests.browser.conftest import layout_problems
+    from tests.layout import layout_problems
 
     # Phone size
     open_line(page, line_client, {"width": 390, "height": 1200})

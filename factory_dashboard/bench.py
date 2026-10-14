@@ -1,6 +1,6 @@
 """The Bench page (ADR 14 item 8): each replayed ticket against each agent that tried it.
 
-``uv run runner bench`` records its attempts as jobs of role ``bench``. A cell is a pair's
+``softfield bench`` records its attempts as jobs of role ``bench``. A cell is a pair's
 latest bench (its newest run), whatever came before.
 """
 
@@ -15,7 +15,7 @@ from factory_dashboard.app import Db, Project, render
 
 router = APIRouter()
 
-COMMAND = "uv run runner bench <ticket…> --agents <id…>"
+COMMAND = "softfield bench <ticket…> --agents <id…>"
 WOULD_ESCALATE = "would escalate"
 
 

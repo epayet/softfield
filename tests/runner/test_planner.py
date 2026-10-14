@@ -910,7 +910,7 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     # one commit by the runner, of the card alone
     assert git(repo, "rev-parse", "HEAD~1").strip() == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
-    assert git(repo, "log", "-1", "--format=%an").strip() == "Coucou runner"
+    assert git(repo, "log", "-1", "--format=%an").strip() == "Softfield runner"
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
     assert changed == [".factory/cards/f7-parallel-planners.md"]
     assert git(repo, "status", "--porcelain").strip() == "M coucou/thing.py"

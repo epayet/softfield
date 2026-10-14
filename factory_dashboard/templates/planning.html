@@ -57,7 +57,7 @@
   </form>
 
   {% if coming.items %}
-  <div id="live-desk-coming" hx-get="/planning{{ q }}&project=coucou" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
+  <div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
   <section id="desk-coming" class="desk-coming" aria-label="Coming" style="flex: 999 1 420px; min-width: 0; background: var(--bay)">
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">Coming · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
@@ -121,7 +121,7 @@
   {% endif %}
   </div>
 
-  <div id="live-desk" hx-get="/planning{{ q }}&project=coucou" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
+  <div id="live-desk" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
   <section id="desk" aria-label="Your desk" style="flex: 999 1 420px; min-width: 0; background: var(--bay); border: 1px solid var(--rule)">
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk{% if planning_count %} · {{ planning_count }}{% endif %}</h2>
     {% for group in groups if group.items %}

@@ -238,7 +238,7 @@ def write_live(conn: sqlite3.Connection, heartbeat_age: timedelta) -> None:
         "adr",
         "ADR 15",
         text="Should reactions be editable once sent?",
-        command="uv run runner accept 15",
+        command="softfield accept 15",
         created=_at(timedelta(hours=1)),
     )
     done = metrics.upsert_owner_item(conn, project, "setup", "ollama", text="Sign in to Ollama.")
@@ -488,7 +488,7 @@ def write_milestone_detail(conn: sqlite3.Connection) -> None:
         signoff={
             "changed": "- A metrics database that every run writes.\n"
             "- The local dashboard at `127.0.0.1`.",
-            "how_to_test": "- Run `uv run runner milestone f1`.\n"
+            "how_to_test": "- Run `softfield milestone f1`.\n"
             "- Open `127.0.0.1` and check every page.",
             "what_next": "- Close the factory review.\n- Replan the agents section.",
             "later": "- Full diffs and before/after screenshots.\n- ADRs view on the dashboard.",
@@ -557,7 +557,7 @@ def write_milestone_detail_with_scores(conn: sqlite3.Connection) -> None:
         signoff={
             "changed": "- A metrics database that every run writes.\n"
             "- The local dashboard at `127.0.0.1`.",
-            "how_to_test": "- Run `uv run runner milestone f1`.\n"
+            "how_to_test": "- Run `softfield milestone f1`.\n"
             "- Open `127.0.0.1` and check every page.",
             "what_next": "- Close the factory review.\n- Replan the agents section.",
             "later": "- Full diffs and before/after screenshots.\n- ADRs view on the dashboard.",

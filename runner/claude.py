@@ -18,6 +18,7 @@ from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from runner.agents import ANY, Agent, JobResult, JobSpec, Reading, Refusal
+from runner.config import DOCS
 from runner.procs import run_streaming
 
 STRIPPED_ENV = ("ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "ANTHROPIC_AUTH_TOKEN")
@@ -309,6 +310,7 @@ def run_claude(
         *(("--model", job.model) if job.model else ()),
         *(("--resume", resume) if resume else ()),
         *(("--allowedTools", *job.allowed_tools) if job.allowed_tools else ()),
+        *(("--add-dir", str(DOCS)) if DOCS.is_dir() else ()),  # Softfield's shared docs, read
     ]
     started = time.monotonic()
     log_path.parent.mkdir(parents=True, exist_ok=True)

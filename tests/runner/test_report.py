@@ -1,3 +1,4 @@
+import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -63,7 +64,7 @@ def test_a_session_report_is_a_summary_with_the_runs_dashboard_link():
     assert "- **Headless Claude runs:** 1" in text
     # the run's folder is named after its start; its page has every task, job and gate
     assert f"{DASHBOARD_URL}/runs/20260927-140000" in text
-    assert "`uv run runner dashboard`" in text
+    assert "`softfield dashboard`" in text
     assert "| Task |" not in text and "## Headless Claude runs" not in text
     assert f"http://{HOST}:{PORT}" == DASHBOARD_URL
 
@@ -173,7 +174,8 @@ def test_the_report_goes_at_the_end_when_the_markers_are_missing():
 @pytest.fixture
 def in_repo(repo, monkeypatch, machine):
     toml = (cli._repo() / ".factory" / "project.toml").read_text()
-    (repo / ".factory" / "project.toml").write_text(toml.replace('name = "coucou"\n', ""))
+    toml = re.sub(r'^name = ".*"\n', "", toml, count=1, flags=re.M)  # its folder's name
+    (repo / ".factory" / "project.toml").write_text(toml)
     monkeypatch.chdir(repo)
     return repo
 

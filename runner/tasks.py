@@ -212,9 +212,9 @@ def _str_tuple(meta: dict[str, Any], key: str, required: bool) -> tuple[str, ...
 # the owner's commands, or the loop itself; nor a prefix of any of them (`uv run`).
 _REFUSED_COMMANDS = tuple(
     ["git"]
-    + [f"uv run runner {c}" for c in ("signoff", "accept", "reject", "milestone", "run", "review")]
+    + [f"softfield {c}" for c in ("signoff", "accept", "reject", "milestone", "run", "review")]
 )
-_DRY_RUN = "uv run runner run --dry-run"  # read-only: a replan checks its tickets with it
+_DRY_RUN = "softfield run --dry-run"  # read-only: a replan checks its tickets with it
 _COMMAND_RE = re.compile(r"[\w@./:=+-]+( [\w@./:=+-]+)*")
 
 

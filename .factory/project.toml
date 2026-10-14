@@ -2,21 +2,18 @@
 # Changing caps needs an Accepted ADR; timeouts are operational and can be tuned freely.
 
 [project]
-name = "coucou"
-description = "A small, private way to send a photo or a note to an always-on screen in someone's home."
+name = "softfield"
+description = "The software factory itself: the runner, the dashboard and the workflow that build every project."
 
 # What check-all and the gates run (ADR 30 item 3)
 [checks]
-test_dirs = ["tests/unit", "tests/integration", "tests/runner", "tests/browser", "tests/factory_dashboard"]
-mypy = ["coucou", "tests", "runner", "factory_dashboard"]
-translations = true                     # English and French (ADR 00 A2)
+test_dirs = ["tests/runner", "tests/factory_dashboard"]
+mypy = ["runner", "factory_dashboard", "tests"]
 dependency_files = ["pyproject.toml", "uv.lock"]
-dependency_dirs = ["coucou/static/coucou/vendor/", "factory_dashboard/static/vendor/"]
+dependency_dirs = ["factory_dashboard/static/vendor/"]
 
-[checks.layouts]                        # one test file per module (ADR 00 A1, ADR 06 item 2)
-"tests/unit" = ["coucou", ".py"]
+[checks.layouts]                        # one test file per module (ADR 00 A1)
 "tests/runner" = ["runner", ".py"]
-"tests/browser" = ["coucou/static/coucou/js", ".js"]
 "tests/factory_dashboard" = ["factory_dashboard", ".py"]
 
 [caps]

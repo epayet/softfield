@@ -54,7 +54,7 @@ AGENTS = (
     Agent("claude-opus", "claude", "opus", 9),
     Agent("claude-sonnet", "claude", "sonnet", 7),
 )
-LOOK = "Bash(uv run runner look:*)"  # ADR 28: the planner's and the review's, nobody else's
+LOOK = "Bash(softfield look:*)"  # ADR 28: the planner's and the review's, nobody else's
 ROLES = {
     "developer": ("local-m",),
     "last-attempt": ("local-m",),
@@ -155,11 +155,13 @@ def test_task_merges_on_first_attempt(repo, fake_model):
     assert git(repo, "status", "--porcelain") == ""
     # Who did what is visible in the log (ADR 00 A4).
     merge = report.tasks[0].commit
-    assert git(repo, "log", "-1", "--format=%an", merge).strip() == "Coucou local model"
+    assert git(repo, "log", "-1", "--format=%an", merge).strip() == "Softfield local model"
     assert "Agent: local-model\nTask: m1-01-thing\nModel: m\nAttempts: 1" in git(
         repo, "log", "-1", "--format=%B", merge
     )
-    assert git(repo, "log", "-1", "--format=%an%n%B").startswith("Coucou runner\nrunner: session")
+    assert git(repo, "log", "-1", "--format=%an%n%B").startswith(
+        "Softfield runner\nrunner: session"
+    )
     # The session report is a summary (f1-06); the commits are on the run's dashboard page.
     session = next((repo / ".factory" / "sessions").glob("*.md")).read_text()
     assert "`m1-01-thing`" in session and "/runs/" in session
@@ -616,7 +618,7 @@ def test_a_requeued_task_gets_its_own_log_folder(tmp_path):
 def test_retry_prompt_ends_with_the_gate_output(repo: Path):
     task = parse_task(write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing"), 150)
     first = loop._prompt(task, None)
-    assert "uv run runner check-all --fix --task m1-01-thing" in first
+    assert "softfield check-all --fix --task m1-01-thing" in first
     retry = loop._prompt(task, GateResult("ruff", False, ".factory/tasks/ready/m1-01-thing.md"))
     assert retry.index("### Goal") < retry.index("IMPORTANT")
     assert "uv run ruff check --fix" in retry  # the gate's hint
@@ -679,7 +681,7 @@ def test_an_attempt_with_an_undefined_name_still_fails_ruff(repo, fake_model, ru
     assert "F821" in next(repo.glob(".factory/var/runs/*/m1-01-thing/gates-3.txt")).read_text()
     # The formatting went into each attempt, as its developer's work.
     log = git(repo, "log", "--format=%an|%s%n%b", "task/m1-01-thing")
-    assert "Coucou local model|wip m1-01-thing attempt 1 (formatted)\nAgent: local-model" in log
+    assert "Softfield local model|wip m1-01-thing attempt 1 (formatted)\nAgent: local-model" in log
 
 
 def test_formatting_never_touches_a_file_the_branch_did_not_change(repo, fake_model):
@@ -936,7 +938,7 @@ def _lead_task(repo: Path, task_id: str) -> None:
 
 
 def _lead_implements(job, repo_):
-    assert job.kind == "lead-ticket" and "Bash(uv run runner check-all:*)" in job.allowed_tools
+    assert job.kind == "lead-ticket" and "Bash(softfield check-all:*)" in job.allowed_tools
     _implement(repo_, "")
 
 
@@ -2993,7 +2995,7 @@ def test_with_the_week_switch_off_a_lead_ticket_at_the_reserve_parks_for_the_own
     assert _state(repo).parked["m1-01-lead"]["kind"] == "reserve"
     [item] = _rows(repo, "owner_items")
     assert (item["kind"], item["subject"]) == ("reserve", "m1-01-lead")
-    assert item["command"] == "uv run runner run --use-reserve week" and item["resolved"] is None
+    assert item["command"] == "softfield run --use-reserve week" and item["resolved"] is None
     assert "21% of the week left" in str(item["text"])
     assert "Let the factory use the week's reserve" in str(item["text"])  # the switch to turn on
     assert "[y/N]" not in capsys.readouterr().out
@@ -3048,7 +3050,7 @@ def test_a_switch_turned_on_24_hours_ago_reads_off_and_asks_again(
     items = {(i["kind"], i["subject"]): i for i in _rows(repo, "owner_items")}
     assert set(items) == {("reserve", "week"), ("reserve", "m1-01-lead")}
     assert items["reserve", "week"]["resolved"] is None
-    assert items["reserve", "week"]["command"] == "uv run runner reserve week on"
+    assert items["reserve", "week"]["command"] == "softfield reserve week on"
 
 
 @pytest.mark.parametrize("week_used", [0.1, 0.5])
@@ -4117,7 +4119,7 @@ def test_at_80_percent_developer_work_goes_on_and_the_lead_ticket_parks_till_the
     assert (item["kind"], item["subject"]) == ("five-hour", "m1-01-lead")
     assert "80%" in str(item["text"]) and item["resolved"] is not None
     assert "Let the factory use your 25% of the 5-hour window" in str(item["text"])
-    assert item["command"] == "uv run runner reserve five-hour on"
+    assert item["command"] == "softfield reserve five-hour on"
     assert _state(repo).parked == {}
 
 
@@ -4679,7 +4681,7 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     )
     # the check Approve runs, for the drafts' tickets (2026-10-12: F75's approval was refused
     # twice and F71's would have been, for tickets the planner had no way to check)
-    check = "Bash(uv run runner check-tickets:*)"
+    check = "Bash(softfield check-tickets:*)"
     # ADR 28: every planner job may look at the database and the dashboard's pages, read-only
     drafts = (*edits, *reads, LOOK, check, "Bash(git checkout plan/f7:*)")
     assert [(on, tools[-len(drafts) :]) for on, tools in seen[:2]] == [("plan/f7", drafts)] * 2
@@ -5950,3 +5952,26 @@ def test_a_ctrl_c_while_the_run_isnt_idle_is_still_an_interrupt(repo, fake_clock
     assert not (repo / ".factory" / "sessions").exists()
     loop.end_open_runs()
     assert _rows(repo, "runs")[-1]["verdict"] == "interrupted"
+
+
+def test_live_follows_softfields_main_and_nothing_else(repo, tmp_path, monkeypatch):
+    """ADR 30 item 5: the runner runs from `live`, a detached checkout of Softfield's main; a
+    merge moves it there, so the restart runs the new code. Another project's main never does."""
+    live = tmp_path / "live"
+    git(repo, "worktree", "add", "-q", "--detach", str(live), "main")
+    monkeypatch.setattr(loop.config, "HOME", live)
+    assert not loop.update_live(repo)
+    (repo / "runner").mkdir()
+    (repo / "runner" / "x.py").write_text("X = 1\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a merge")
+    assert loop.update_live(repo)
+    assert git(live, "rev-parse", "HEAD") == git(repo, "rev-parse", "main")
+    assert (live / "runner" / "x.py").is_file()
+    assert not loop.update_live(repo)
+    other = tmp_path / "other"
+    other.mkdir()
+    git(other, "init", "-q", "-b", "main")
+    git(other, "commit", "-q", "--allow-empty", "-m", "init")
+    assert not loop.update_live(other)
+    assert not loop.update_live(live)  # run from its own work tree: nothing to follow

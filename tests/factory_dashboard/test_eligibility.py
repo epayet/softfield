@@ -45,4 +45,4 @@ def test_an_agent_that_never_replayed_a_checkpoint_is_not_listed(review_client):
 def test_without_review_replays_the_panel_says_so(client):
     panel = _panel(client.get("/agents").text)
     assert "No agent has replayed a checkpoint yet" in panel
-    assert "uv run runner bench --review" in panel
+    assert "softfield bench --review" in panel

@@ -17,9 +17,9 @@ from factory_dashboard import app as app_module
 from factory_dashboard.app import HOST, PORT, Db, create_app
 from factory_dashboard.queries import connect
 from runner import cli, metrics
-from tests.browser.conftest import DISPLAY, PHONE, layout_problems
 from tests.factory_dashboard.conftest import LOCAL, NOW, OTHER, PROJECT, write_allowance
 from tests.factory_dashboard.test_overview import REFRESH, lead_replies, open_overview
+from tests.layout import DISPLAY, PHONE, layout_problems
 
 STATIC = Path(app_module.__file__).parent / "static"
 VENDOR = STATIC / "vendor"

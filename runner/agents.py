@@ -15,7 +15,7 @@ from typing import Protocol, cast
 
 ANY = "**"  # an edit glob for the whole repo
 # Command prefixes a job may run; never the owner's commands (signoff, accept).
-CHECK_COMMANDS = ("uv run pytest", "uv run ruff", "uv run mypy", "uv run runner check-all")
+CHECK_COMMANDS = ("uv run pytest", "uv run ruff", "uv run mypy", "softfield check-all")
 GIT_READ_COMMANDS = ("git diff", "git log", "git show")  # the runner commits, never a job
 
 # ADR 15 item 12's error classes

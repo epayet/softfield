@@ -68,7 +68,7 @@ def test_local_model_commits_are_attributed_and_listed(repo):
         ("m1-01-old", "3", 1),
         ("m2-01-new", "1", 2),
     ]
-    assert found[1].sha == sha and found[1].author == "Coucou local model"
+    assert found[1].sha == sha and found[1].author == "Softfield local model"
 
 
 def test_the_runners_commits_skip_the_pre_commit_hook(repo):

@@ -1,4 +1,4 @@
-"""``uv run runner look``: what a planner or a review job may read (ADR 28). No AI in it.
+"""``softfield look``: what a planner or a review job may read (ADR 28). No AI in it.
 
 Two forms, both read-only:
 - ``look sql "<one SELECT>"`` prints rows of the metrics database. The file is opened
@@ -17,7 +17,7 @@ import warnings
 from html.parser import HTMLParser
 from pathlib import Path
 
-COMMAND = "uv run runner look"  # the prefix in a planner's and a review's tool list, no other's
+COMMAND = "softfield look"  # the prefix in a planner's and a review's tool list, no other's
 MAX_ROWS = 200
 MAX_CELL = 500  # characters of one cell
 MAX_PAGE = 40_000  # characters of one page

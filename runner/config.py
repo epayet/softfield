@@ -18,6 +18,11 @@ DEFAULT_BACKUP_DIR = "~/Dropbox/software-factory-backups"
 DEFAULT_MACHINE = "~/.config/softfield/factory.toml"
 MACHINE_ENV = "SOFTFIELD_CONFIG"  # another machine file; tests point it at none
 PROJECT_TOML = Path(".factory") / "project.toml"
+PROJECT_MD = Path(".factory") / "project.md"  # the rules that hold for this project only
+# The Softfield checkout this code runs from (``live``, ADR 30 item 5) and its shared docs:
+# lead.md, owner.md, task-format.md, task-writing.md, workflow.md (item 4)
+HOME = Path(__file__).resolve().parents[1]
+DOCS = HOME / "docs"
 PROTECTED = Path(".factory") / "protected-paths.txt"
 
 

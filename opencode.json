@@ -72,7 +72,7 @@
       "uv run ruff*": "allow",
       "uv run mypy*": "allow",
       "msgfmt *": "allow",
-      "uv run runner check-all*": "allow"
+      "softfield check-all*": "allow"
     },
     "external_directory": "deny",
     "question": "deny",

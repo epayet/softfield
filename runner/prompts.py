@@ -22,7 +22,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "review": _REVIEWS,
 }
 _BRIEF_SECTIONS = "From docs/agents/lead.md, the sections this job needs:\n\n"
-_BRIEF_END = "---\n\n"
+BRIEF_END = "---\n\n"
 
 
 def sections(text: str) -> dict[str, str]:
@@ -57,12 +57,12 @@ def brief(repo: Path, role: str) -> tuple[str, list[str]]:
     wanted = [found[name] + "\n\n" for name in SECTIONS[role] if name in found]
     if wanted:
         parts += [_BRIEF_SECTIONS, *wanted]
-    return "".join(parts) + _BRIEF_END if parts else "", missing
+    return "".join(parts) + BRIEF_END if parts else "", missing
 
 
 # The developer's prompt stays short: it drops instructions from long prompts (ADR 01).
 LOCAL = """\
-Implement the task below in the Coucou repository. Start from the files under `files:`;
+Implement the task below in this repository. Start from the files under `files:`;
 change other files only if the goal needs it. Write or update tests for what "Done when"
 asks, in the test files under `tests:`. Never edit protected paths
 (.factory/protected-paths.txt) and never run git. If you're stuck, write BLOCKED.md as
@@ -71,7 +71,7 @@ and unknown flags are refused, and a refused command returns nothing.
 
 {task}
 
-Finish by running `uv run runner check-all --fix --task {id}` and fixing what it reports.
+Finish by running `softfield check-all --fix --task {id}` and fixing what it reports.
 {extra}"""
 
 # On a retry the gate output goes last: the local model follows the end of a long prompt best
@@ -192,7 +192,7 @@ can't do), also write {logs}/ticket.md: the whole corrected ticket, frontmatter 
 
 ESCALATION = (
     """\
-You are the lead, handling an escalated task in the Coucou repo. Follow
+You are the lead, handling an escalated task in this repo. Follow
 "Escalations" above.
 
 - Task: .factory/tasks/escalated/{id}.md
@@ -203,7 +203,7 @@ You are the lead, handling an escalated task in the Coucou repo. Follow
 
 Do exactly one of:
 1. finish: when its gates fail on a small, clear gap, run `git checkout task/{id}`, finish the
-   work there and make `uv run runner check-all --task {id}` pass. The runner merges the
+   work there and make `softfield check-all --task {id}` pass. The runner merges the
    branch, crediting you both. Check out nothing else, and only for this outcome.
 2. requeue: repair or split the ticket and write the task file(s) to .factory/tasks/ready/
    (docs/task-format.md). Add facts, not a solution. Its next run builds on the branch; if
@@ -215,7 +215,7 @@ Do exactly one of:
 5. owner: only for what the owner is asked for (their preferences, above): draft an ADR in
    .factory/adr/ (status Proposed). The task and its dependants wait for the owner's decision.
 
-Code you change must pass `uv run runner check-all`; if it doesn't, none of it reaches main.
+Code you change must pass `softfield check-all`; if it doesn't, none of it reaches main.
 Then write {logs}/decision.json as
 {{"outcome": "finish" | "requeue" | "implemented" | "owner"}}, for a requeue maybe with
 "reset": true, and for "owner" also {{"adr": ".factory/adr/NN-slug.md", "question": "<one line
@@ -231,11 +231,11 @@ runner commits and moves files.
 )
 
 LEAD_TICKET = """\
-You are the lead, doing your own ticket in the Coucou repo: {task}. Follow
+You are the lead, doing your own ticket in this repo: {task}. Follow
 "Your own work" above: test-first, isolation tests for protected paths, and
 docs/security.md for anything security-related. You are on branch task/{id}.
 
-When it's done, `uv run runner check-all --fix --task {id}` must pass. Don't commit: the runner
+When it's done, `softfield check-all --fix --task {id}` must pass. Don't commit: the runner
 checks and merges your work. Read-only git (diff, log, show) is fine. If the ticket can't be
 done as written, change nothing and say why in your final message.
 """
@@ -306,7 +306,7 @@ empty list if none):
 """
 
 REVIEW = """\
-You are the lead, reviewing milestone {milestone} of Coucou. Follow "Review" above and
+You are the lead, reviewing milestone {milestone} of this project. Follow "Review" above and
 docs/workflow.md (Milestone review loop).
 
 Round {round} of at most {max_rounds}. {scope}
@@ -345,7 +345,7 @@ Give checkpoint_verdicts and score every round, as they stand: the last round's 
 Also create or update .factory/reviews/{milestone}.md. It starts with the owner's sign-off
 sheet ("Sign-off sheet" above), ending with "6. What next": your product and factory
 suggestions. Then what was built, findings and resolutions, backlog and workflow
-observations. The numbers come from `uv run runner report {milestone}`, between the
+observations. The numbers come from `softfield report {milestone}`, between the
 `<!-- runner report -->` markers: leave that block as it is and don't recount them.
 Read-only git (diff, log, show) is fine; don't commit: the runner does.
 """
@@ -434,7 +434,7 @@ link to a new tab; any of these stops it answering); the card's milestone doc in
 don't commit: the runner commits the branch after your reply.
 - A card that changes what a page shows or how it is laid out (a new view, an element \
 added, moved or removed, a new state or colour) gets a mock-up without being asked (F72), \
-on the dashboard (factory_dashboard/templates/) and in the app (coucou/templates/) alike. \
+in any page the project serves (its templates) alike. \
 Not for wording only, a bug that restores the look a page already meant, or work with \
 nothing on screen; when you skip one on a card with screen changes, say why in a point, so \
 the owner can ask for one. It is one file in .factory/cards/{card}-mockup/ with a \
@@ -453,7 +453,7 @@ aside (move it to .factory/tasks/later/). Never another milestone's ticket, neve
 progress (`in_flight` in .factory/var/runs/state.json names it), never \
 .factory/tasks/done/: the runner refuses the approval. Each changed ticket must pass \
 pre-flight: after writing or changing tickets, run \
-`uv run runner check-tickets` (every draft in .factory/tasks/later/; or name files) and fix \
+`softfield check-tickets` (every draft in .factory/tasks/later/; or name files) and fix \
 what it reports, since Approve refuses the plan for the same problems. Only a `replan` may touch \
 .factory/tasks/ready/.
 - When a change touches tickets the line may start while you talk (a `replan`, a ticket \

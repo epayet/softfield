@@ -299,7 +299,7 @@ def test_later_tickets_panel_shows_ticket_with_title_and_queue_command(later_cli
     assert f'href="/tickets/f1-99-later?project={PROJECT}"' in id_cell
     assert "f1-99-later" in id_cell
     assert row["goal"] == "A set-aside ticket."
-    assert "uv run runner queue f1-99-later" in row["queue"]
+    assert "softfield queue f1-99-later" in row["queue"]
     # Queue button's request (hx-vals parsed as JSON) is queue with that ticket's id as subject
     btn = re.search(
         r'<button[^>]*hx-post="/requests"[^>]*>Queue</button>',

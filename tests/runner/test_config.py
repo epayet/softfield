@@ -175,11 +175,10 @@ def test_security_tests_and_the_leads_docs_are_protected():
     """ADR 07 items 4 and 14: developers may change tests, but not the ones guarding protected
     code, and not the lead's instructions or their own notes."""
     guarded = [
-        "tests/integration/test_scoping_isolation.py",
-        "tests/integration/test_revocation.py",
-        "tests/unit/test_deviceauth.py",
-        "tests/browser/test_outbox.py",
-        "tests/e2e/test_display.py",
+        "tests/runner/test_report.py",
+        "tests/factory_dashboard/test_requests.py",
+        "factory_dashboard/requests.py",
+        ".factory/project.toml",
         "docs/agents/lead.md",
         "docs/agents/owner.md",
         "docs/agents/developer.md",
@@ -189,5 +188,5 @@ def test_security_tests_and_the_leads_docs_are_protected():
 
 
 def test_ordinary_tests_are_not_protected():
-    free = ["tests/browser/test_render.py", "tests/integration/test_display_css.py"]
+    free = ["tests/runner/test_tasks.py", "tests/factory_dashboard/test_board.py"]
     assert touching_protected(free, read_protected(REPO)) == []

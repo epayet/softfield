@@ -17,10 +17,10 @@ from factory_dashboard.board import STAGES, Board, Card, board, milestone_card
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
-from tests.browser.conftest import DISPLAY, PHONE, layout_problems
 from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT
 from tests.factory_dashboard.test_planning import ORIGIN
 from tests.factory_dashboard.test_planning import _open as open_page
+from tests.layout import DISPLAY, PHONE, layout_problems
 
 
 def read(db: Path, **filters: Any) -> Board:
@@ -405,7 +405,7 @@ def test_a_growing_card_shows_its_tickets_and_what_runs_now(board_client):
     assert re.search(r'<span class="meter"><span style="width: 33%">', growing)
     # a ripe card carries its sign-off command
     _, ripe = _card(html, "/milestones/f1")
-    assert "uv run runner signoff f1" in ripe
+    assert "softfield signoff f1" in ripe
 
 
 def test_the_totals_count_each_stage(board_client):

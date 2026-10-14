@@ -18,7 +18,7 @@ from factory_dashboard.queries import (
 from runner.config import project_name
 from runner.usage import ClaudeUsage, claude_line, short
 
-# Where `uv run runner dashboard` serves by default (factory_dashboard.app's HOST and PORT).
+# Where `softfield dashboard` serves by default (factory_dashboard.app's HOST and PORT).
 DASHBOARD_URL = "http://127.0.0.1:8765"
 
 
@@ -154,7 +154,7 @@ def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
         f"- **Duration:** {_minutes((ended - report.started).total_seconds())}",
         f"- **Tasks:** {_tasks_line(tasks)}",
         f"- **Headless Claude runs:** {len(report.claude_runs)}",
-        f"- **Details:** every task, job and gate at {run_url(report)} (`uv run runner dashboard`)",
+        f"- **Details:** every task, job and gate at {run_url(report)} (`softfield dashboard`)",
     ]
     lines += ["", "## Local model vs Claude", ""]
     lines.append(
@@ -237,7 +237,7 @@ def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
         REPORT_START,
         "## Numbers",
         "",
-        f"_Written by `uv run runner report {key}` from the metrics database, which isn't in"
+        f"_Written by `softfield report {key}` from the metrics database, which isn't in"
         " git: a snapshot. Run it again to refresh; edit outside these markers._",
         "",
         *_results_lines(r),
@@ -304,7 +304,7 @@ def with_report(text: str, block: str) -> str:
 def write_milestone_report(repo: Path, db: Path, key: str) -> Path:
     """Write ``runner report <key>`` into ``.factory/reviews/<key>.md``; returns the file."""
     if not db.is_file():
-        raise ReportError(f"no metrics database at {db}; `uv run runner backfill` makes one")
+        raise ReportError(f"no metrics database at {db}; `softfield backfill` makes one")
     conn = connect(db)
     try:
         block = milestone_report(conn, project_name(repo), key)

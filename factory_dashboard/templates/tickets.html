@@ -31,7 +31,7 @@
               hx-target="#answer-{{ t.ticket }}"
               hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ t.ticket | tojson }}}'
               hx-on::before-request="this.disabled = true">Queue</button>
-            <code>uv run runner queue {{ t.ticket }}</code>
+            <code>softfield queue {{ t.ticket }}</code>
           </td>
           <td><div id="answer-{{ t.ticket }}"></div></td>
         </tr>

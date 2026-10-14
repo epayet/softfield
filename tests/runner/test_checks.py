@@ -94,4 +94,4 @@ def test_the_hook_reads_the_commits_index_before_anything_clears_it():
     hook = Path(__file__).parents[2] / ".factory" / "hooks" / "pre-commit"
     code = [line for line in hook.read_text().splitlines() if not line.startswith("#")]
     assert not [line for line in code if "GIT_INDEX_FILE" in line]
-    assert code[-1] == "exec uv run runner check-all --hook"
+    assert code[-1] == "exec softfield check-all --hook"

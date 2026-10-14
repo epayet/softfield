@@ -30,7 +30,7 @@ def test_a_clean_milestone_is_ready_for_sign_off(repo: Path):
     assert code == 0
     assert text.startswith("✅ READY FOR SIGN-OFF")
     assert "1. Pair a phone.\n" in text and "Left for later" not in text
-    assert text.rstrip().endswith("Then: uv run runner signoff 1")
+    assert text.rstrip().endswith("Then: softfield signoff 1")
 
 
 def test_a_decision_for_the_owner_says_what_and_what_next(repo: Path):
@@ -45,7 +45,7 @@ def test_a_decision_for_the_owner_says_what_and_what_next(repo: Path):
     assert ".factory/adr/14-photos.md: Keep?" in text
     assert "paused behind it: m1-03-gallery" in text
     assert "m1-04-thing blocked: 2 escalations used" in text
-    assert "then rerun  uv run runner milestone 1" in text
+    assert "then rerun  softfield milestone 1" in text
 
 
 def test_a_review_that_stopped_for_the_owner_needs_you(repo: Path):
@@ -213,10 +213,10 @@ def test_the_verdicts_items_are_open_owner_items_with_a_command(repo: Path):
         ("review-stop", "m1"),
     }
     adr = items[("adr", ".factory/adr/14-photos.md")]
-    assert adr["text"] == "Keep?" and adr["command"] == "uv run runner accept 14"
+    assert adr["text"] == "Keep?" and adr["command"] == "softfield accept 14"
     blocked = items[("blocked", "m1-04-thing")]
     assert "2 escalations used" in str(blocked["text"])
-    assert blocked["command"] == "uv run runner milestone 1"
+    assert blocked["command"] == "softfield milestone 1"
     assert items[("review-stop", "m1")]["text"] == "adr-needed"
     assert all(item["created"] for item in items.values())
     assert [row["name"] for row in _projects(repo)] == [repo.name]
@@ -240,7 +240,7 @@ def test_a_ticket_waiting_for_the_reserve_needs_you_until_a_rerun_runs_it(repo: 
     assert code == 2 and f"  • {RESERVE_TEXT}" in text
     assert "later" not in text  # another milestone's
     item = _open(repo)[("reserve", "m1-03-lead")]
-    assert (item["text"], item["command"]) == (RESERVE_TEXT, "uv run runner milestone 1")
+    assert (item["text"], item["command"]) == (RESERVE_TEXT, "softfield milestone 1")
     owner.verdict(repo, "m1", State(), "clean", db=_db(repo))
     assert ("reserve", "m1-03-lead") not in _open(repo)
 
@@ -304,7 +304,7 @@ def test_sign_off_waiting_is_an_item_that_signoff_resolves(repo: Path):
     code, _ = owner.verdict(repo, "m1", State(), "clean", db=_db(repo))
     assert code == 0
     item = _open(repo)[("signoff", "m1")]
-    assert item["command"] == "uv run runner signoff 1"
+    assert item["command"] == "softfield signoff 1"
     assert "1. Pair a phone." in str(item["text"]) and "2. Send." in str(item["text"])
     owner.signoff(repo, "m1", TODAY, db=_db(repo))
     assert _open(repo) == {}
@@ -411,7 +411,7 @@ def test_a_factory_milestone_uses_its_key_everywhere(repo: Path):
     append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
     code, text = owner.verdict(repo, "f1", State(), "clean")
     assert code == 2 and "f1-02-report blocked" in text and "m1-02-photos" not in text
-    assert "uv run runner milestone f1" in text
+    assert "softfield milestone f1" in text
     blocked.unlink()
     (repo / ".factory" / "cards").mkdir(parents=True)
     (repo / ".factory" / "cards" / "f1.md").write_text(
@@ -423,7 +423,7 @@ def test_a_factory_milestone_uses_its_key_everywhere(repo: Path):
     git(repo, "commit", "-q", "-m", "docs")
     code, text = owner.verdict(repo, "f1", State(), "clean")
     assert code == 0 and "Review: .factory/reviews/f1.md" in text
-    assert text.rstrip().endswith("uv run runner signoff f1")
+    assert text.rstrip().endswith("softfield signoff f1")
     owner.signoff(repo, "f1", TODAY, force=True)
     assert "git tag `f1-start`" in (repo / ".factory" / "cards" / "f1.md").read_text()
     assert git(repo, "tag").split() == ["f1-done"]
@@ -441,7 +441,7 @@ def test_a_named_milestone_finds_its_short_tickets_and_its_docs(repo: Path):
     code, text = owner.verdict(repo, "f3-factory-line", state, "clean")
     assert code == 2 and "f3-02-report blocked" in text and "f30-02-other" not in text
     assert "f3-03 waits" in text
-    assert "uv run runner milestone f3-factory-line" in text
+    assert "softfield milestone f3-factory-line" in text
     with pytest.raises(owner.OwnerError, match="f3-02-report"):
         owner.signoff(repo, "f3-factory-line", TODAY)
     blocked.unlink()

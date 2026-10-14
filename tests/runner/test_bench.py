@@ -299,7 +299,7 @@ def test_an_opencode_agent_started_from_the_main_checkout_still_edits_its_copy(
     fake.write_text(FAKE_OPENCODE_PWD)
     fake.chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
-    monkeypatch.setenv("PWD", str(repo))  # `uv run runner bench` typed in the main checkout
+    monkeypatch.setenv("PWD", str(repo))  # `softfield bench` typed in the main checkout
     monkeypatch.setattr(loop, "call_claude", lambda *a, **k: pytest.fail("bench called Claude"))
     file_gates = tuple(g for g in gates.GATES if g.__name__ in {"gate_protected", "gate_diff_size"})
     monkeypatch.setattr(gates, "GATES", file_gates)

@@ -6,9 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from runner import metrics
-from tests.browser.conftest import DISPLAY, PHONE, layout_problems
 from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT
 from tests.factory_dashboard.test_planning import _open as open_page
+from tests.layout import DISPLAY, PHONE, layout_problems
 
 
 def section(html: str, name: str) -> str:
@@ -333,7 +333,7 @@ def test_milestone_detail_shows_signoff_parts_by_text(milestone_detail_client):
     html = milestone_detail_client.get("/milestones/f1").text
     for section_name, expected_text in (
         ("what-changed", "A metrics database"),
-        ("how-to-test", "Run `uv run runner milestone f1`"),
+        ("how-to-test", "Run `softfield milestone f1`"),
         ("what-next", "Close the factory review"),
         ("later", "Full diffs"),
         ("lessons", "Run the loop before the replan"),

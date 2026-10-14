@@ -8,8 +8,8 @@ from pathlib import Path
 # Who made a commit (ADR 00 A4). Every automated commit carries an ``Agent:`` trailer;
 # the local model's and the runner's also get their own author, so `git log` shows them.
 LOCAL_MODEL_AGENT = "local-model"
-LOCAL_MODEL_AUTHOR = "Coucou local model <local-model@coucou.invalid>"
-RUNNER_AUTHOR = "Coucou runner <runner@coucou.invalid>"
+LOCAL_MODEL_AUTHOR = "Softfield local model <local-model@softfield.invalid>"
+RUNNER_AUTHOR = "Softfield runner <runner@softfield.invalid>"
 
 _TRAILER_RE = re.compile(r"^([A-Za-z][A-Za-z-]*): (.+)$")
 _LEGACY_ATTEMPTS_RE = re.compile(r"in (\d+) attempt")

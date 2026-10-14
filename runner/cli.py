@@ -1,4 +1,4 @@
-"""``uv run runner``: the deterministic build runner. No AI in here; see docs/workflow.md."""
+"""``softfield``: the deterministic build runner. No AI in here; see docs/workflow.md."""
 
 import argparse
 import os
@@ -439,9 +439,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "dashboard":
             db = args.db or cfg.metrics_db
             if not db.is_file():
-                raise RunnerError(
-                    f"no metrics database at {db}; `uv run runner backfill` makes one"
-                )
+                raise RunnerError(f"no metrics database at {db}; `softfield backfill` makes one")
             host = _lan_address() if args.lan else args.host or "127.0.0.1"
             from factory_dashboard import app  # FastAPI loads only for this command
 

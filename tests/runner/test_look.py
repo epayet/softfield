@@ -1,4 +1,4 @@
-"""`uv run runner look` (ADR 28): a planner or review job reads the metrics database and the
+"""`softfield look` (ADR 28): a planner or review job reads the metrics database and the
 dashboard's pages, and can change neither."""
 
 import importlib
@@ -250,7 +250,8 @@ def in_repo(repo, monkeypatch, machine):
     toml = (cli._repo() / ".factory" / "project.toml").read_text()
     test_db = (repo / "var" / "factory-metrics.sqlite").as_posix()
     metrics_db = f'\n[metrics]\ndb = "{test_db}"\n'  # over the machine's real one
-    toml = toml.replace('name = "coucou"\n', "")  # the project is its folder's name
+    # the project is its folder's name
+    toml = re.sub(r'^name = ".*"\n', "", toml, count=1, flags=re.M)
     (repo / ".factory" / "project.toml").write_text(toml + metrics_db)
     monkeypatch.chdir(repo)
     conn = metrics.open_db(repo / "var" / "factory-metrics.sqlite")
@@ -320,7 +321,7 @@ def test_looking_applies_no_owner_request_and_changes_nothing(in_repo, capsys):
 
 # --- who may look (ADR 28 items 4 and 5) ------------------------------------------------------
 
-LOOK = "Bash(uv run runner look:*)"
+LOOK = "Bash(softfield look:*)"
 
 
 def test_the_review_job_may_look(repo, monkeypatch):
@@ -345,8 +346,8 @@ def test_the_review_job_may_look(repo, monkeypatch):
 @pytest.mark.parametrize("thread", ["f7", "general"])
 def test_the_planners_prompt_says_it_can_look_in_one_line(thread):
     prompt = planner.prompt(thread, "What is on my desk?", {})
-    [line] = [line for line in prompt.splitlines() if "uv run runner look" in line]
-    assert '`uv run runner look sql "<one SELECT>"`' in line
-    assert "`uv run runner look page <address>`" in line
+    [line] = [line for line in prompt.splitlines() if "softfield look" in line]
+    assert '`softfield look sql "<one SELECT>"`' in line
+    assert "`softfield look page <address>`" in line
     assert "look before answering what the owner sees" in line
     assert prompt.index(line) < prompt.index("What is on my desk?")

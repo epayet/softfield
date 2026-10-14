@@ -245,12 +245,12 @@ def test_a_lead_ticket_may_name_extra_commands(tmp_path):
     path = write_task(tmp_path, "m1-01-thing")
     assert parse_task(path, 150).commands == ()
     lead = path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
-    commands = "commands: [ollama list, uv run runner report, uv run runner run --dry-run]\n"
+    commands = "commands: [ollama list, softfield report, softfield run --dry-run]\n"
     path.write_text(lead.replace("agent: lead\n", "agent: lead\n" + commands))
     assert parse_task(path, 150).commands == (
         "ollama list",
-        "uv run runner report",
-        "uv run runner run --dry-run",  # read-only: a replan checks its tickets with it
+        "softfield report",
+        "softfield run --dry-run",  # read-only: a replan checks its tickets with it
     )
 
 
@@ -259,9 +259,9 @@ def test_a_lead_ticket_may_name_extra_commands(tmp_path):
     [
         "[git commit]",
         "[git]",
-        "[uv run runner signoff]",
-        "[uv run runner milestone f1]",
-        "[uv run runner]",
+        "[softfield signoff]",
+        "[softfield milestone f1]",
+        "[softfield]",
         "[uv run]",
         "['ls;rm']",
         "[1]",
@@ -303,15 +303,6 @@ def test_a_difficulty_is_an_integer_from_1_to_10(tmp_path, key, value):
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: 1\n{key}: {value}\n"))
     with pytest.raises(TaskError, match=key):
         parse_task(path, 150)
-
-
-def test_every_done_m1_to_m4_ticket_has_a_difficulty():
-    """f1-17 estimated M1–M4 from each ticket and its result, so ratings can be seeded."""
-    repo = Path(__file__).resolve().parents[2]
-    paths = sorted((repo / ".factory" / "tasks" / "done").glob("m*.md"))
-    assert paths
-    missing = [p.stem for p in paths if parse_task(p, 150).difficulty is None]
-    assert missing == []
 
 
 def test_a_milestone_is_a_number_or_a_named_key(tmp_path):

@@ -7,4 +7,4 @@
 # Git runs hooks with GIT_INDEX_FILE and friends set. Leave them: `commit -a` stages into
 # that index, and `check-all --hook` reads it to skip docs-only commits, then clears them
 # itself so the runner tests' git commands can't write into this commit's index.
-exec uv run runner check-all --hook
+exec softfield check-all --hook

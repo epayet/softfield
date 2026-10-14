@@ -8,8 +8,8 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 from factory_dashboard.overview import queue, queued_jobs
 from runner import metrics
-from tests.browser.conftest import layout_problems
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, SONNET
+from tests.layout import layout_problems
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
 
@@ -60,7 +60,7 @@ def test_the_overview_shows_every_panel_in_order(client):
 def test_needs_you_lists_open_owner_items_with_their_command(client):
     needs = section(client.get("/").text, "needs-you")
     assert "Should reactions be editable once sent?" in needs
-    assert "uv run runner accept 15" in needs
+    assert "softfield accept 15" in needs
     assert "Sign in to Ollama." not in needs  # resolved
 
 
@@ -83,7 +83,7 @@ def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
     assert "f1-04-live" not in section(html, "now")
     needs = section(html, "needs-you")
     assert "heartbeat stopped 3 min ago" in needs and "f1-04-live" in needs
-    assert "uv run runner run" in needs  # the standing command (ADR 17), not one milestone
+    assert "softfield run" in needs  # the standing command (ADR 17), not one milestone
     # with the runner gone, the queue waits on nobody
     assert "2 tickets waiting and the runner is idle" in needs
 
@@ -366,8 +366,8 @@ def test_now_holds_what_works_then_next_in_line_and_the_command_that_drains_it(c
     assert re.search(r"\b1 f1-05-first Queued first\. · a developer\b", next_in_line)
     assert next_in_line.index("1 f1-05-first") < next_in_line.index("2 f1-06-second")
     # The command to drain the queue is in the queue section, not in now.
-    assert "uv run runner run" in queue_section
-    assert "uv run runner run" not in now
+    assert "softfield run" in queue_section
+    assert "softfield run" not in now
     assert "f1-01-first" not in next_in_line  # merged
 
 
@@ -624,7 +624,7 @@ def test_another_project_shows_only_its_own(client):
     html = client.get(f"/?project={OTHER}").text
     queue_section = section(html, "queue")
     assert "m1-01-elsewhere" in queue_section
-    assert "uv run runner run" in queue_section
+    assert "softfield run" in queue_section
     assert "Next in line" in queue_section
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
         assert mine not in html

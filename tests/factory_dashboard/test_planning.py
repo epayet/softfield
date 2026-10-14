@@ -15,7 +15,6 @@ from fastapi.testclient import TestClient
 
 from factory_dashboard.planning import desk
 from runner import metrics
-from tests.browser.conftest import DISPLAY, PHONE, layout_problems
 from tests.factory_dashboard.conftest import (
     LOCAL,
     NOW,
@@ -24,6 +23,7 @@ from tests.factory_dashboard.conftest import (
     _at,
     write_planning,
 )
+from tests.layout import DISPLAY, PHONE, layout_problems
 from tests.runner.conftest import git
 
 ORIGIN = "http://127.0.0.1:8765"

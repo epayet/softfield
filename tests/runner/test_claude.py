@@ -96,7 +96,7 @@ _CHECK = (
     "Bash(uv run pytest:*)",
     "Bash(uv run ruff:*)",
     "Bash(uv run mypy:*)",
-    "Bash(uv run runner check-all:*)",
+    "Bash(softfield check-all:*)",
 )
 _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
 

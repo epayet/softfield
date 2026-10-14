@@ -19,7 +19,7 @@
   {% if c.running %}
   <span class="card-now"><b>Now:</b> {{ c.running.ticket }}{% if c.running.goal %} · {{ c.running.goal }}{% endif %} · {{ c.running.agent }}, attempt {{ c.running.attempt }}</span>
   {% endif %}
-  {% if c.stage == "ripe" and not c.bug %}<code>uv run runner signoff {{ c.key | lower }}</code>{% endif %}
+  {% if c.stage == "ripe" and not c.bug %}<code>softfield signoff {{ c.key | lower }}</code>{% endif %}
 </a>
 {% endmacro %}
 

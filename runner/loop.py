@@ -23,6 +23,7 @@ from runner import (
     allowance,
     backup,
     checks,
+    config,
     console,
     dispatch,
     look,
@@ -592,7 +593,7 @@ def sync_cards(s: Session) -> None:
 
 PICKING = "picking the next ticket"
 # A planner job checks its drafted tickets as Approve will (`runner check-tickets`, read-only)
-CHECK_TICKETS = "uv run runner check-tickets"
+CHECK_TICKETS = "softfield check-tickets"
 
 
 def set_activity(s: Session, activity: str | None, waiting_until: datetime | None = None) -> None:
@@ -1359,10 +1360,16 @@ def _process_note(path: Path | None) -> str | None:
 def _brief(s: Session, role: str) -> str:
     """What a new lead session starts with (f21 D2, `prompts.brief`). A section that isn't
     there is a note in the session report, once, and the job goes with the rest."""
-    text, missing = prompts.brief(s.repo, role)
+    # A project's own docs/agents/ (Softfield's) or the shared ones (ADR 30 item 4)
+    home = s.repo if (s.repo / prompts.LEAD_DOC).is_file() else config.HOME
+    text, missing = prompts.brief(home, role)
+    rules = s.repo / config.PROJECT_MD
+    if text and rules.is_file():
+        text += "This project's own rules (.factory/project.md):\n\n"
+        text += rules.read_text(encoding="utf-8").strip() + "\n\n" + prompts.BRIEF_END
     if missing:
         note = (
-            f"The {role} prompt went without {', '.join(missing)}: not found in docs/agents/"
+            f"The {role} prompt went without {', '.join(missing)}: not found in {home}/docs/agents/"
             " (`SECTIONS` in runner/prompts.py names the lead.md headings)."
         )
         if note not in s.report.notes:
@@ -3530,7 +3537,7 @@ def lapse_switches(state: State, at: datetime) -> list[str]:
 
 def switch_command(switch: str) -> str:
     """The console command that turns ``switch`` on (`runner reserve`)."""
-    return f"uv run runner reserve {switch.replace('_', '-')} on"
+    return f"softfield reserve {switch.replace('_', '-')} on"
 
 
 def _resets(entry: dict[str, Any]) -> datetime:
@@ -4161,7 +4168,7 @@ def at_reserve(s: Session, task: Task) -> bool:
             RESERVE_KIND,
             task.id,
             text=text,
-            command="uv run runner run --use-reserve week",
+            command="softfield run --use-reserve week",
             created=at.isoformat(),
         )
     s.report.notes.append(text)
@@ -4328,7 +4335,7 @@ def _hold_for_the_owner(s: Session) -> bool:
     since = datetime.fromisoformat(str(s.state.owner_pause)).astimezone(now().tzinfo)
     paused = f"Paused by you since {since:%H:%M}"
     if s.project_id is None:
-        s.report.notes.append(f"{paused}: `uv run runner resume`, then run again.")
+        s.report.notes.append(f"{paused}: `softfield resume`, then run again.")
         return False
     s.log(f"[{RUNNER_AGENT}] {paused}: nothing runs until you resume.")
     with doing(s, dispatch.PAUSED):
@@ -4428,11 +4435,34 @@ def _planning_goes(s: Session) -> bool:
 
 
 def _runner_code(repo: Path) -> str:
-    """A fingerprint of the runner's source, to notice an escalation changing it."""
+    """A fingerprint of the runner's source, to notice an escalation changing it: the repo's
+    own runner/ (Softfield's, when it works on itself) and the code this process runs from."""
     digest = hashlib.sha256()
-    for path in sorted((repo / "runner").rglob("*.py")):
+    for path in sorted({*(repo / "runner").rglob("*.py"), *(config.HOME / "runner").rglob("*.py")}):
         digest.update(path.as_posix().encode() + b"\0" + path.read_bytes())
     return digest.hexdigest()
+
+
+def update_live(repo: Path) -> bool:
+    """ADR 30 item 5: Softfield runs from ``live``, a checkout of its main of its own. When
+    ``repo`` is Softfield and its main has moved, ``live`` follows (detached, as main stays
+    checked out in ``repo``); the runner then restarts on the new code, and the dashboard
+    reloads. Whether it moved. Never from a branch: only main's merged, checked commits."""
+    home = config.HOME
+    if home == repo.resolve():
+        return False  # run from the work tree itself (`uv run runner`, tests)
+    try:
+        here, there = Git(home), Git(repo)
+        common = ("rev-parse", "--path-format=absolute", "--git-common-dir")
+        if here.run(*common).strip() != there.run(*common).strip():
+            return False  # another project
+        main = there.run("rev-parse", MAIN).strip()
+        if here.head() == main:
+            return False
+        here.run("checkout", "-q", "--detach", main)
+    except (GitError, OSError):
+        return False
+    return True
 
 
 RESTART_NOTE = (
@@ -4522,6 +4552,7 @@ def work_queue(
     ran = False  # a ticket ran, for ``once``
     idle: str | None = None  # the idle line the run shows while it holds (F101)
     while True:
+        update_live(s.repo)
         if _runner_code(s.repo) != code:
             # m4-07: Python keeps the old modules, so a runner fix made by an escalation
             # only takes effect in a new process. Stop rather than run requeued tasks stale.
