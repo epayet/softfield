@@ -581,3 +581,13 @@ def test_check_tickets_says_what_approve_would_refuse(in_repo, capsys):
     assert "m4-12-a" not in out
     assert cli.main(["check-tickets", ".factory/tasks/later/none.md"]) == 1
     assert git(in_repo, "status", "--porcelain") == before
+
+
+def test_softfield_alone_runs_every_project_as_softfield_run_does(tmp_path, monkeypatch, capsys):
+    """The owner, 2026-10-14: a bare `softfield` crashed on `run`'s missing options."""
+    machine = tmp_path / "factory.toml"
+    machine.write_text(f'[metrics]\ndb = "{tmp_path / "m.sqlite"}"\n')
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    monkeypatch.chdir(tmp_path)
+    assert cli.main([]) == 1
+    assert "no project to run" in capsys.readouterr().out

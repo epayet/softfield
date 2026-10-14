@@ -210,7 +210,7 @@ def _run_projects(args: argparse.Namespace, restarted: bool) -> int:
     if not configs:
         print("runner: no project to run: set one up in its folder with `softfield init`")
         return 1
-    if args.dry_run:
+    if getattr(args, "dry_run", False):
         for cfg in configs:
             print(f"== {cfg.project_name} ({cfg.repo})")
             loop.dry_run_plan(cfg)
@@ -219,7 +219,7 @@ def _run_projects(args: argparse.Namespace, restarted: bool) -> int:
     if running:
         print(f"runner: a run is live already ({', '.join(running)}): one runner at a time")
         return 1
-    if args.use_reserve is not None and not restarted:
+    if getattr(args, "use_reserve", None) is not None and not restarted:
         windows = ("week", "five_hour") if args.use_reserve == "both" else (args.use_reserve,)
         for cfg in configs:
             for switch in windows:
@@ -227,7 +227,9 @@ def _run_projects(args: argparse.Namespace, restarted: bool) -> int:
     for cfg in configs:
         _apply_requests(cfg, cfg.metrics_db)
     review = lambda cfg, key: _review(cfg, cfg.repo, key)  # noqa: E731
-    if loop.run_projects(_project_configs, review, escalate=not args.no_escalate):
+    if loop.run_projects(
+        _project_configs, review, escalate=not getattr(args, "no_escalate", False)
+    ):
         _restart()
     return 0
 
@@ -427,7 +429,9 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "lan", False) and args.host:
         dashboard.error("--lan finds this machine's address itself: give --lan or --host, not both")
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
-    if args.command in (None, "run") and not (getattr(args, "here", False) or args.once):
+    if args.command in (None, "run") and not (
+        getattr(args, "here", False) or getattr(args, "once", False)
+    ):
         return _run_projects(args, restarted)
     if args.command in ("init", "service") or (
         args.command == "dashboard" and (args.action == "update" or _here() is None)
