@@ -1,5 +1,5 @@
 {# Now (D3, f3 mock-up): what works, then the next three in the run order; drawn inside the /live partial, which refreshes it every 5 s. #}
-<section id="now" class="panel">
+<section id="now" class="panel" hx-swap-oob="innerHTML">
   <h2>Now <span class="src">refreshes every 5 s</span></h2>
   {% for job in running %}
   <div class="running-card">

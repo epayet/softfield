@@ -1,4 +1,4 @@
-{# Needs you, then Now (D3, D4, D8), then the allowance (f8-06), bare: the Overview's #live-needs-you, #live-now and #live-allowance fetch this every 5 s and each picks out its own section into itself (innerHTML), so their hx-get stays on the page. #}
+{# Needs you, then Now (D3, D4, D8), then the allowance (f8-06), bare: the Overview's #live-needs-you polls this every 5 s, selects #needs-you and #live-facts into itself, and pulls #now, #queue, #allowance out of band (innerHTML). #}
 {% include "_partials/needs_you.html" %}
 {% include "_partials/running.html" %}
 {% include "_partials/allowance.html" %}

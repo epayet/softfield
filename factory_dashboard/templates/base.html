@@ -70,8 +70,10 @@
     {% endfor %}
   </nav>
 </header>
+{% block live_poll %}
 {# Every page's poll (f6-16): the /live partial's out-of-band top bar (the status, its button, the Planning count), and notify.js's facts, compared only once the owner allowed notifications (f5-12) #}
 <div id="live-poll" hidden hx-get="/live{{ q }}" hx-trigger="every 5s" hx-select="#live-facts" hx-swap="innerHTML"></div>
+{% endblock %}
 {# Notification permission bar (f12-01, ADR 26 item 2): hidden until notify.js shows it #}
 <div id="notify-bar" hidden><div role="body"></div><div role="actions"><button data-action="yes">Yes</button><button data-action="no">No thanks</button><button data-action="got-it" hidden>Got it</button></div></div>
 <main>

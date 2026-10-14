@@ -108,12 +108,11 @@ def test_the_live_partial_answers_on_its_own_for_htmx(client):
     assert "hx-get" not in html
     # /running returns 404 (the endpoint was removed).
     assert client.get("/running").status_code == 404
-    # there are now four hx-get wrappers (needs-you, now, queue, allowance) on the main page.
+    # f19-02: one single poller on the Overview instead of four separate ones.
     page_html = client.get("/?project=coucou").text.split("<main>")[
         1
     ]  # not base.html's notify poll
-    assert page_html.count('hx-get="/live?project=coucou"') == 4
-    assert page_html.count('hx-swap="innerHTML"') == 4
+    assert page_html.count('hx-get="/live?project=coucou"') == 1
 
 
 def test_the_queue_item_goes_from_live_once_a_run_is_live(serve):

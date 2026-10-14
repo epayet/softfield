@@ -1,27 +1,22 @@
 {% extends "base.html" %}
 {% block title %}Overview · {{ project }}{% endblock %}
+{% block live_poll %}{% endblock %}
 {% block content %}
 <div class="page" data-replay="{{ replay }}" data-replay-day="{{ replay_day }}" data-since="{{ since.isoformat() }}">
 
-{# Needs you and Now: each wrapper fetches /live every 5 s and swaps its own section into
-   itself (innerHTML), so it keeps polling, and Needs you comes back after an empty spell (f3-16). #}
-<div id="live-needs-you" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#needs-you" hx-swap="innerHTML">
+{# The single poller for the Overview: polls /live every 5 s, selects #needs-you and #live-facts
+    into itself (innerHTML), and pulls #now, #queue, #allowance out of band (innerHTML). #}
+<div id="live-needs-you" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#needs-you, #live-facts" hx-swap="innerHTML" hx-swap-oob="#now,#queue,#allowance">
 {% include "_partials/needs_you.html" %}
 </div>
 
 <div class="row">
-    <div id="live-now" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#now" hx-swap="innerHTML">
-      {% include "_partials/running.html" %}
-    </div>
-    <div id="live-queue" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#queue" hx-swap="innerHTML">
-      {% include "_partials/queue.html" %}
-    </div>
+    <div id="live-now">{% include "_partials/running.html" %}</div>
+    <div id="live-queue">{% include "_partials/queue.html" %}</div>
 </div>
 
 <div class="row">
-  <div id="live-allowance" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#allowance" hx-swap="innerHTML">
-    {% include "_partials/allowance.html" %}
-  </div>
+  <div id="live-allowance">{% include "_partials/allowance.html" %}</div>
 </div>
 
 {% include "_partials/line.html" %}

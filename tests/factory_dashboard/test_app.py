@@ -552,11 +552,13 @@ def test_every_page_has_the_notify_bar_and_polls_live_whether_or_not_allowed(cli
         assert re.search(r'<div id="notify-bar"[^>]*hidden', html), path
         # the top bar's status and Planning count refresh on every page (f6-16), so the poll no
         # longer waits for notifications; notify.js compares the facts only once they're on
-        poll = re.search(r'<div id="live-poll"[^>]*>', html)
-        assert poll, path
-        assert 'hx-get="/live?project=coucou"' in poll[0] and "hidden" in poll[0]
-        assert 'hx-trigger="every 5s"' in poll[0]
-        assert 'hx-select="#live-facts"' in poll[0]
+        # the Overview has its own single poller (f19-02), not #live-poll
+        if path != "/":
+            poll = re.search(r'<div id="live-poll"[^>]*>', html)
+            assert poll, path
+            assert 'hx-get="/live?project=coucou"' in poll[0] and "hidden" in poll[0]
+            assert 'hx-trigger="every 5s"' in poll[0]
+            assert 'hx-select="#live-facts"' in poll[0]
     assert re.search(r"/static/notify\.js\?v=[0-9a-f]", html)
     assert client.get("/static/notify.js").status_code == 200
     assert client.get("/static/sw.js").status_code == 200
