@@ -2,8 +2,8 @@
 <div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">
   <span class="pill big {{ bar_status.tone }}" role="status">{{ bar_status.words }}</span>
   {% if bar_status.button == "pause" %}
-  <button type="button" class="bar-button" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ project | tojson }}}' hx-swap="none" data-asked="Pausing after {{ bar_status.words[9:] if bar_status.words.startswith('Running: ') else 'this job' }}">Pause</button>
+  <button type="button" class="bar-button" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Pausing after {{ bar_status.words[9:].split(' · ', 1) | reverse | join(' · ') if bar_status.words.startswith('Running: ') else 'this job' }}">Pause</button>
   {% elif bar_status.button == "resume" %}
-  <button type="button" class="bar-button" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ project | tojson }}}' hx-swap="none" data-asked="Resuming…">Resume</button>
+  <button type="button" class="bar-button" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Resuming…">Resume</button>
   {% endif %}
 </div>

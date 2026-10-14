@@ -16,6 +16,7 @@ from pathlib import Path
 from runner import checks, config, metrics
 from runner.config import PROJECT_TOML, ConfigError, load_config
 from runner.gitops import Git, GitError
+from runner.tasks import TaskError, milestone_key
 
 TEMPLATES = Path(__file__).parent / "templates"
 FACTORY_DIRS = (
@@ -116,6 +117,39 @@ def register(folder: Path, db: Path) -> None:
                 (min(last + 1, 99), folder.name),
             )
         metrics.set_project_paused(conn, folder.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+
+
+def publish_cards(folder: Path, name: str, db: Path) -> list[str]:
+    """The project's cards on its Planning desk and board at once, as the runner's `sync_cards`
+    puts them there at a session's start: the hand-over shouldn't wait for the runner's next
+    round, which comes only between jobs (2026-10-14: the first card stayed off the desk while a
+    developer job ran). Returns the keys it put there."""
+    from runner.milestone import card, milestone_doc  # runner.milestone imports the loop
+
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.upsert_project(conn, name, repo=str(folder))
+        published = []
+        for path in sorted((folder / ".factory" / "cards").glob("*.md")):
+            try:
+                key = milestone_key(path.stem)
+                text = path.read_text(encoding="utf-8")
+            except (TaskError, OSError, UnicodeDecodeError):
+                continue
+            found = card(key, text)
+            metrics.upsert_milestone(
+                conn,
+                project,
+                key,
+                title=milestone_doc(text).get("title"),
+                state=found.state,
+                priority=found.priority,
+                area=found.area,
+            )
+            published.append(key)
+        return published
     finally:
         conn.close()
 

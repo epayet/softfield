@@ -694,8 +694,9 @@ def main(argv: list[str] | None = None) -> int:
                 host = _lan_address()
             except RunnerError:
                 host = "127.0.0.1"
+            setup.publish_cards(repo, project_name(repo), cfg.metrics_db)  # on its desk at once
             if setup.ready(project_name(repo), cfg.metrics_db):
-                print("The runner takes it from its next round.")
+                print("The runner takes it from its next round, between two jobs.")
             print(setup.hand_over(project_name(repo), setup.first_card(repo), host))
         elif args.command == "check-tickets":
             given = args.tickets or sorted(

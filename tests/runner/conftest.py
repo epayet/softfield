@@ -86,6 +86,12 @@ def _no_shared_docs(monkeypatch, tmp_path_factory):
 
 
 @pytest.fixture(autouse=True)
+def _fresh_process(monkeypatch):
+    """Each test is a process of its own: the runner's code is fingerprinted anew."""
+    monkeypatch.setattr("runner.loop._CODE_AT_START", {})
+
+
+@pytest.fixture(autouse=True)
 def _no_outer_git(monkeypatch):
     """Run from a git hook, GIT_INDEX_FILE and friends point at the real repo; the temporary
     repos here must never inherit them."""

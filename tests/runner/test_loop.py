@@ -6207,3 +6207,19 @@ def test_an_interrupted_job_whose_branch_is_gone_starts_again(repo, capsys):
     assert (
         "m1-01-thing's branch task/m1-01-thing is gone: it starts again" in capsys.readouterr().out
     )
+
+
+def test_the_code_a_process_runs_on_is_fingerprinted_once(repo, tmp_path, monkeypatch):
+    """2026-10-14: `run_projects` calls `work_queue` again each round; fingerprinting at each
+    call compared live's new code with itself, and the runner ran an hour on the old one."""
+    live = tmp_path / "live"
+    git(repo, "worktree", "add", "-q", "--detach", str(live), "main")
+    monkeypatch.setattr("runner.config.HOME", live)
+    started = loop.code_at_start(repo)
+    (repo / "runner").mkdir()
+    (repo / "runner" / "x.py").write_text("X = 1\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "merged between two turns")
+    assert loop.update_live(repo)  # another turn moved live
+    assert loop.code_at_start(repo) == started  # the next turn still knows the old code
+    assert loop._runner_code(repo) != started  # so it restarts

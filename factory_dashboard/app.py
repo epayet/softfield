@@ -14,7 +14,7 @@ import hashlib
 import os
 import sqlite3
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any
@@ -218,6 +218,7 @@ class Status:
     words: str
     tone: str
     button: str | None
+    project: str | None = None  # whose run it is: the button's request goes there (ADR 30)
 
 
 PICKING = "picking the next ticket"  # runner/loop.py's PICKING: between jobs
@@ -236,6 +237,37 @@ def _asked(conn: sqlite3.Connection, project: str) -> str | None:
         (project,),
     ).fetchone()
     return None if row is None else str(row["kind"])
+
+
+def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -> Status:
+    """The top bar's status for the whole factory, whichever project the page shows (the
+    owner, 2026-10-14: picking a project is for planning and the board, not for what the
+    factory does). Of every project's status: a pause first (it holds every project), then a
+    running job, a wait for Claude, anything else live, and Stopped last; it names its project
+    when there is more than one, and its button posts there."""
+    from runner import metrics
+
+    names = [p.name for p in metrics.projects_in_order(conn)] or [project]
+    found = [(name, factory_status(conn, name, now)) for name in names]
+
+    def rank(status: Status) -> int:
+        if status.button == "resume" or "asked" in status.tone:
+            return 0
+        if status.words.startswith("Running: "):
+            return 1
+        if status.words.startswith("Waiting for Claude"):
+            return 2
+        return 4 if status.words == "Stopped" else 3
+
+    name, status = min(found, key=lambda pair: rank(pair[1]))
+    if len(names) == 1 or status.words == "Stopped":
+        return replace(status, project=name)
+    words = status.words
+    if words.startswith("Running: "):
+        words = f"Running: {name} · {words.removeprefix('Running: ')}"
+    else:
+        words = f"{words} · {name}"
+    return replace(status, words=words, project=name)
 
 
 def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Status:
@@ -280,7 +312,7 @@ def top_bar(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, 
     from factory_dashboard.planning import desk, waiting_for_you  # planning imports this module
 
     return {
-        "bar_status": factory_status(conn, project, now),
+        "bar_status": factory_wide_status(conn, project, now),
         "planning_count": len(waiting_for_you(desk(conn, project, now))),
     }
 

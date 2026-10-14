@@ -4450,6 +4450,16 @@ def _runner_code(repo: Path) -> str:
     return digest.hexdigest()
 
 
+_CODE_AT_START: dict[Path, str] = {}  # the runner's code as this process first saw it, by repo
+
+
+def code_at_start(repo: Path) -> str:
+    """The fingerprint this process runs on, taken the first time ``repo``'s turn comes: not at
+    each turn, or `run_projects` calling `work_queue` again after ``live`` moved would compare
+    the new code with itself and never restart (2026-10-14: it ran an hour on old code)."""
+    return _CODE_AT_START.setdefault(repo, _runner_code(repo))
+
+
 def _new_code(s: Session, code: str) -> bool:
     """Whether the runner must restart: ``live`` followed a merge into Softfield's main (only
     when ``s`` is Softfield's session: `update_live`), or Claude changed this repo's runner/.
@@ -4599,7 +4609,7 @@ def work_queue(
     the owner's requests and picks again (F101). It returns for a due review, the owner's
     Ctrl-C, or the day's report (`_idle_holds`). A Ctrl-C between two polls is `run_session`'s.
     """
-    code = _runner_code(s.repo)
+    code = code_at_start(s.repo)
     ran = False  # a ticket ran, for ``once``
     idle: str | None = None  # the idle line the run shows while it holds (F101)
     while True:

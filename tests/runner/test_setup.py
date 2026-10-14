@@ -238,3 +238,24 @@ def test_doctor_offers_to_accept_adr_00_first(tmp_path, monkeypatch, machine, ca
     assert "- **Status:** Accepted" in adr.read_text()
     assert setup.proposed_adr_00(folder) is None
     assert "ok  ADR 00 accepted" in out
+
+
+def test_doctor_puts_the_first_card_on_the_desk_at_once(tmp_path):
+    """2026-10-14: the hand-over said "its first card, on its Planning desk", but the card
+    reached the database only at the runner's next round, after a developer's job."""
+    db = tmp_path / "m.sqlite"
+    folder = tmp_path / "hello"
+    folder.mkdir()
+    setup.init(folder, db)
+    card = "# Milestone M1: Say hi\n\n> **State:** idea · **Priority:** 1 · **Area:** product\n"
+    (folder / ".factory/cards/m1-say-hi.md").write_text(card)
+    assert setup.publish_cards(folder, "hello", db) == ["m1-say-hi"]
+    conn = metrics.open_db(db)
+    try:
+        rows = conn.execute(
+            "SELECT m.key, m.title, m.state FROM milestones m JOIN projects p"
+            " ON p.id = m.project_id WHERE p.name = 'hello'"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert [tuple(r) for r in rows] == [("m1-say-hi", "Say hi", "idea")]
