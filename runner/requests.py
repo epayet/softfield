@@ -64,12 +64,18 @@ _MAX_DIFF = 1000  # parse_task needs one; pre-flight doesn't read it
 # The kinds that carry the owner's words (F31 D9). Their value may name, as `again`, the refused
 # request Try again sent anew (F48 D2): the desk reads it, the runner doesn't.
 WORDS = (PLANT, PLAN_MESSAGE, SEND_BACK)
-# Each one's result when it worked (F6 D1's table): any other is a refusal
-_WORKED = {PLANT: "planted ", PLAN_MESSAGE: QUEUED_FOR_THE_LEAD, SEND_BACK: QUEUED_FOR_THE_LEAD}
 _MAX_REQUEST_ID = 12
 BY_YOU = "by you"  # the owner's own Archive; F31 D1's is planner.APPROVED
 CANCELLED_BY_YOU = "cancelled by you"  # a plant or a message a change cancelled (F14 D2)
 CANCELLED, CHANGED, TOO_LATE = "cancelled", "changed", "too late: already "  # a change's results
+# Each one's result when it worked (F6 D1's table): any other is a refusal. A change that is an
+# edit carries the owner's words too (f14-04), its own kind beside WORDS: no retry names one.
+_WORKED = {
+    PLANT: "planted ",
+    PLAN_MESSAGE: QUEUED_FOR_THE_LEAD,
+    SEND_BACK: QUEUED_FOR_THE_LEAD,
+    CHANGE: CHANGED,
+}
 # What a change may change (F14 D3): each one's word for taken, and the keys its words are under
 _CHANGEABLE = {PLANT: "planted", PLAN_MESSAGE: "sent"}
 _WORD_KEYS = {PLANT: ("title", "thoughts", "text"), PLAN_MESSAGE: ("text", "comments")}
@@ -877,18 +883,34 @@ def _message_words(data: object) -> Words | None:
     return Words("", "\n\n".join(filter(None, [text.strip(), said])))
 
 
+def _edit_words(data: object) -> Words | None:
+    """A ``change``'s new words (f14-04), read without the request it names: a plant's title
+    and thoughts, or the text of a one-box note or a message, with its comments by point. A
+    cancel carries none."""
+    if data == {"cancel": True}:
+        return Words("", "")
+    if isinstance(data, dict) and "text" not in data and ("title" in data or "thoughts" in data):
+        return _plant_words(data)
+    return _message_words(data)
+
+
 def owners_words(row: _Row) -> Words | None:
     """The owner's words a ``plant`` (not a seed's), ``plan_message`` or ``send_back`` carries,
-    read leniently: a value the runner couldn't read is still theirs, so it is kept whole.
-    None for another kind, or with no words."""
+    or a ``change`` that is an edit, read leniently: a value the runner couldn't read is still
+    theirs, so it is kept whole. None for another kind, or with no words."""
     kind, value = row["kind"], row["value"]
-    if kind not in WORDS or (kind == PLANT and row["subject"]) or not isinstance(value, str):
+    if kind not in (*WORDS, CHANGE) or not isinstance(value, str):
+        return None
+    if kind == PLANT and row["subject"]:
         return None
     try:
         data = json.loads(value)
     except json.JSONDecodeError:
         data = None
-    words = _plant_words(data) if kind == PLANT else _message_words(data)
+    if kind == CHANGE:
+        words = _edit_words(data)
+    else:
+        words = _plant_words(data) if kind == PLANT else _message_words(data)
     if words is None:  # not as the dashboard writes it
         words = Words("", value.strip())
     return words if words.title or words.text else None
@@ -897,7 +919,8 @@ def owners_words(row: _Row) -> Words | None:
 def refused(row: _Row) -> bool:
     """Whether the owner's words in a request didn't go through and wait on the desk: done
     with a result that isn't its kind's worked one, and not dismissed. One they cancelled
-    themselves (F14) was not refused."""
+    themselves (F14) was not refused; an edit that came too late, or whose words the runner
+    couldn't take, was (f14-04)."""
     if row["done"] is None or row["dismissed"] is not None or owners_words(row) is None:
         return False
     if row["result"] == CANCELLED_BY_YOU:

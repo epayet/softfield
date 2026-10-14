@@ -55,7 +55,9 @@ from runner.planner import (
     thread_key,
 )
 from runner.requests import (
+    CHANGE,
     DISMISS,
+    PLAN_MESSAGE,
     PLANT,
     SEND_BACK,
     WORDS,
@@ -87,10 +89,11 @@ class DeskItem:
 @dataclass(frozen=True)
 class RefusedItem(DeskItem):
     """The owner's words a request refused (F31 D9): in full, with the runner's reason, and
-    where Try again puts them back."""
+    where Try again puts them back. An edit that didn't go through is one too (f14-04): a
+    plant's has no Try again (neither ``note`` nor ``again``), the idea being a card by then."""
 
     id: int
-    text: str  # an idea's thoughts, or the message with its comments by point
+    text: str  # an idea's thoughts, or the message with its comments by point; an edit's words
     note: str  # what Try again puts back in the Plant box (F31 D7); "" for a message
     again: str  # the thread whose reply box takes a message back; "" for an idea
 
@@ -302,13 +305,46 @@ def _retried(conn: sqlite3.Connection, project_id: int) -> set[int]:
     return found
 
 
+def _edited(conn: sqlite3.Connection, project_id: int, change: sqlite3.Row) -> sqlite3.Row | None:
+    """The plant or message a ``change`` names, in its own project; None for anything else."""
+    subject = str(change["subject"] or "")
+    if not (subject.isascii() and subject.isdigit() and len(subject) <= _MAX_REQUEST_ID):
+        return None
+    row = metrics.find_request(conn, int(subject))
+    if row is None or row["project_id"] != project_id:
+        return None
+    return row if row["kind"] in (PLANT, PLAN_MESSAGE) else None
+
+
+def _edit_words(words: Words) -> str:
+    """An edit's new words, whole: a plant's new title with its thoughts, or the text."""
+    return "\n\n".join(filter(None, [words.title, words.text]))
+
+
+def _failed_edit(
+    conn: sqlite3.Connection, project_id: int, titles: dict[str, str], change: sqlite3.Row
+) -> tuple[str, str]:
+    """A refused edit's title on the desk, saying what was edited, and the thread whose reply
+    box takes a message's back ("" for a plant's: planting its words again would make a
+    second card)."""
+    target = _edited(conn, project_id, change)
+    if target is None:
+        return "Your edit", ""
+    if target["kind"] == PLANT:
+        was = owners_words(target)
+        return f"Your edit of {(was.title if was else '') or 'your idea'}", ""
+    thread = _message_thread(target)
+    return f"Your edit on {_thread_title(thread, titles)}", f"/planning/{thread}"
+
+
 def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) -> list[DeskItem]:
     """The owner's words the runner refused (F31 D9), until they dismiss them: a dismiss on
-    its way takes one off at once, and so does a retry (``_retried``)."""
+    its way takes one off at once, and so does a retry (``_retried``). An edit of a waiting
+    plant or message that didn't go through is among them (f14-04), never a cancel."""
     rows = conn.execute(
         "SELECT * FROM owner_requests WHERE project_id = ? AND done IS NOT NULL"
-        " AND dismissed IS NULL AND kind IN (?, ?, ?) ORDER BY id",
-        (project_id, *WORDS),
+        " AND dismissed IS NULL AND kind IN (?, ?, ?, ?) ORDER BY id",
+        (project_id, *WORDS, CHANGE),
     ).fetchall()
     dismissing = {
         str(r["subject"])
@@ -323,16 +359,18 @@ def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) 
         words = owners_words(r)
         if words is None or not refused(r) or str(r["id"]) in dismissing or r["id"] in retried:
             continue
-        if r["kind"] == PLANT:
+        text = words.text
+        if r["kind"] == CHANGE:
+            title, again = _failed_edit(conn, project_id, titles, r)
+            text = _edit_words(words)
+        elif r["kind"] == PLANT:
             title, again = words.title or "Your idea", ""
         else:
             thread = _message_thread(r)
             title, again = f"Your message on {_thread_title(thread, titles)}", f"/planning/{thread}"
         reason = str(r["result"] or "")
         note = _plant_note(r["value"], words) if r["kind"] == PLANT else ""
-        items.append(
-            RefusedItem("refused", title, reason, "/planning", r["id"], words.text, note, again)
-        )
+        items.append(RefusedItem("refused", title, reason, "/planning", r["id"], text, note, again))
     return items
 
 
@@ -889,7 +927,8 @@ _MAX_REQUEST_ID = 12
 
 
 def _again(conn: sqlite3.Connection, project_id: int | None, thread: str, again: str) -> str:
-    """The words of the refused message ``again`` names, for the thread's reply box; "" for
+    """The words of the refused message ``again`` names, for the thread's reply box, or of a
+    message's edit that didn't go through (f14-04: its thread is the message's); "" for
     anything else, and for one retried already (F48 D2)."""
     if project_id is None or not (again.isascii() and again.isdigit()):
         return ""
@@ -901,9 +940,12 @@ def _again(conn: sqlite3.Connection, project_id: int | None, thread: str, again:
     if row["id"] in _retried(conn, project_id):
         return ""
     words = owners_words(row)
-    if words is None or not refused(row) or _message_thread(row) != thread:
+    if words is None or not refused(row):
         return ""
-    return words.text
+    sent = _edited(conn, project_id, row) if row["kind"] == CHANGE else row
+    if sent is None or sent["kind"] == PLANT or _message_thread(sent) != thread:
+        return ""
+    return _edit_words(words) if row["kind"] == CHANGE else words.text
 
 
 @router.get("/planning/{thread}", response_class=HTMLResponse)

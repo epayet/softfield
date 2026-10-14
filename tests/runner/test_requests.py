@@ -2450,3 +2450,127 @@ def test_a_requests_value_is_changed_only_while_it_is_open(repo):
     finally:
         conn.close()
     assert _row(repo, plant)["value"] == _idea("Red ducks")
+
+
+# --- an edit that didn't go through waits on the desk until dismissed (f14-04) ---------------
+
+
+@pytest.mark.parametrize(
+    ("value", "words"),
+    [
+        (_idea("Red ducks", "For the key."), ("Red ducks", "For the key.")),
+        ('{"title": "  Red ducks  "}', ("Red ducks", "")),
+        ('{"text": "Red ducks: for the key."}', ("", "Red ducks: for the key.")),
+        (_message("No.", p2="Shorter."), ("", "No.\n\nOn point 2: Shorter.")),
+        # read leniently: words the runner couldn't read are still the owner's
+        ("not json", ("", "not json")),
+        ('{"title": ["Red ducks"]}', ("", '{"title": ["Red ducks"]}')),
+        ('{"text": "x", "comments": 3}', ("", '{"text": "x", "comments": 3}')),
+        ('{"cancel": true, "title": "Red ducks"}', ("Red ducks", "")),
+        # a cancel, or a value with no words
+        (CANCEL, None),
+        ('{"cancel": false}', None),
+        ('{"area": "product"}', None),
+        ('{"text": " "}', None),
+        ("{}", None),
+        (None, None),
+    ],
+)
+def test_an_edits_words_are_its_values_and_a_cancel_carries_none(value, words):
+    row = {"kind": "change", "subject": "3", "value": value}
+    found = requests.owners_words(row)
+    assert (None if found is None else (found.title, found.text)) == words
+
+
+@pytest.mark.parametrize(
+    ("value", "done", "result", "dismissed", "refused"),
+    [
+        (_idea("Red ducks"), True, "too late: already planted", None, True),
+        (_message("No."), True, "too late: already sent", None, True),
+        (_idea("Red ducks"), True, "too late: already cancelled", None, True),
+        (_idea("Red\nducks"), True, "an idea has a title, on one line", None, True),
+        (_idea("Red ducks"), True, "there is no request 3", None, True),
+        (_idea("Red ducks"), True, "changed", None, False),
+        (_idea("Red ducks"), None, None, None, False),
+        (_idea("Red ducks"), True, "too late: already planted", NOW.isoformat(), False),
+        # a cancel is never shown there, whatever its result
+        (CANCEL, True, "cancelled", None, False),
+        (CANCEL, True, "too late: already planted", None, False),
+        (CANCEL, True, "too late: already sent", None, False),
+        (CANCEL, True, "there is no request 3", None, False),
+    ],
+)
+def test_an_edit_is_refused_when_done_without_changed_and_a_cancel_never(
+    value, done, result, dismissed, refused
+):
+    row = {
+        "kind": "change",
+        "subject": "3",
+        "value": value,
+        "done": done and NOW.isoformat(),
+        "result": result,
+        "dismissed": dismissed,
+    }
+    assert requests.refused(row) is refused
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "edit", "result"),
+    [
+        ("plant", None, _idea("Blue ducks"), _idea("Red ducks"), "too late: already planted"),
+        ("plan_message", "f7", _message("Go."), _message("No."), "too late: already sent"),
+    ],
+)
+def test_an_edit_that_came_too_late_is_dismissed_once_and_keeps_its_words(
+    repo, kind, subject, value, edit, result
+):
+    _ducks(repo)
+    target = _ask(repo, kind, subject, value)
+    _apply(repo)
+    change = _ask(repo, "change", str(target), edit)
+    _apply(repo)
+    row = _row(repo, change)
+    assert row["result"] == result and requests.refused(row)
+    later = NOW + timedelta(minutes=5)
+    dismissed = _ask(repo, "dismiss", str(change))
+    assert _apply(repo, at=later) == [f"dismiss {change}: dismissed request {change}"]
+    assert _request(repo, dismissed) == (later.isoformat(), f"dismissed request {change}")
+    row = _row(repo, change)
+    assert row["dismissed"] == later.isoformat()
+    assert row["value"] == edit and not requests.refused(row)  # its words stay
+    assert _row(repo, target)["dismissed"] is None  # the plant or message it named is as it was
+    _ask(repo, "dismiss", str(change))
+    assert _apply(repo) == [f"dismiss {change}: request {change} is dismissed already"]
+
+
+def test_an_edit_the_runner_refused_for_its_words_is_dismissed(repo):
+    _ducks(repo)
+    plant = _ask(repo, "plant", None, _idea("Blue ducks"))
+    change = _ask(repo, "change", str(plant), _idea("Red\nducks"))
+    _apply(repo)
+    row = _row(repo, change)
+    assert row["result"] not in ("changed", "cancelled") and requests.refused(row)
+    assert requests.owners_words(row) == requests.Words("Red\nducks", "")
+    _ask(repo, "dismiss", str(change))
+    assert _apply(repo) == [f"dismiss {change}: dismissed request {change}"]
+
+
+@pytest.mark.parametrize(
+    ("change", "taken", "error"),
+    [
+        (_idea("Red ducks"), False, "wasn't refused"),  # it worked: "changed"
+        (CANCEL, False, "carries no words"),  # "cancelled"
+        (CANCEL, True, "carries no words"),  # "too late: already planted"
+    ],
+)
+def test_dismiss_refuses_an_edit_that_worked_and_any_cancel(repo, change, taken, error):
+    _ducks(repo)
+    plant = _ask(repo, "plant", None, _idea("Blue ducks"))
+    if taken:
+        _apply(repo)
+    asked = _ask(repo, "change", str(plant), change)
+    _apply(repo)
+    dismiss = _ask(repo, "dismiss", str(asked))
+    _apply(repo)
+    assert error in str(_request(repo, dismiss)[1])
+    assert _row(repo, asked)["dismissed"] is None

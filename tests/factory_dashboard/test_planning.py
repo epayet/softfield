@@ -2768,3 +2768,156 @@ def test_a_message_change_that_isnt_stored_leaves_the_editor_open(page, planning
     assert page.input_value(f'#editor-{said} textarea[name="text"]') == "Geese"
     assert page.locator("#conversation .on-its-way").count() == 0
     assert _asked_changes(db_path) == []
+
+
+# --- an edit that didn't go through shows under "Didn't go through" (f14-04) ------------------
+
+GEESE = json.dumps({"title": "Rubber geese", "thoughts": "Grey ones."})
+BRIGHT = json.dumps({"text": "Make it <bright>.", "comments": {"2": "Shorter."}})
+LATE_PLANT = "too late: already planted"
+LATE_MESSAGE = "too late: already sent"
+
+
+def test_a_plants_edit_that_came_too_late_shows_with_its_new_words_and_dismiss_only(
+    planning, db_path, db, serve
+):
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, "planted f9-rubber-ducks")
+    change = _finished(db_path, planning, "change", str(ducks), GEESE, LATE_PLANT)
+    client = serve()
+    html = _page(client)
+    assert "Didn't go through" in _text(html.split('id="desk-refused"', 1)[1])
+    assert _refused_items(html) == {
+        str(change): "Your edit of Rubber ducks Rubber geese Grey ones."
+        f" The runner said: {LATE_PLANT} Dismiss"
+        " Dismissed Your edit of Rubber ducks:"
+    }
+    # planting the words again would make a second card: no Try again
+    assert f'id="again-{change}"' not in html
+    assert f'"subject": "{change}"' in unescape(html.split(f'id="dismiss-{change}"', 1)[1])
+    assert [i.title for i in desk(db, PROJECT, NOW)[0].items] == ["Your edit of Rubber ducks"]
+
+
+def test_a_one_box_notes_edit_shows_its_text_once(planning, db_path, serve):
+    note = _finished(db_path, planning, "plant", None, NOTE, "planted f9-calm-colours")
+    edit = json.dumps({"text": "Calmer colours\nNothing bright."})
+    change = _finished(db_path, planning, "change", str(note), edit, LATE_PLANT)
+    assert _refused_items(_page(serve()))[str(change)].startswith(
+        "Your edit of Calm colours Calmer colours Nothing bright. The runner said:"
+    )
+
+
+def test_a_messages_edit_that_came_too_late_shows_and_try_again_opens_its_thread_with_it(
+    planning, db_path, serve
+):
+    said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, "queued for the lead")
+    change = _finished(db_path, planning, "change", str(said), BRIGHT, LATE_MESSAGE)
+    client = serve()
+    html = _page(client)
+    item = _refused_items(html)[str(change)]
+    assert item.startswith(
+        "Your edit on The planning room Make it <bright>. On point 2: Shorter."
+        f" The runner said: {LATE_MESSAGE} Try again Dismiss"
+    )
+    again = re.search(rf'<a id="again-{change}" href="([^"]+)"', html)
+    assert again and unescape(again[1]) == f"/planning/f6?project={PROJECT}&again={change}#reply"
+    thread = _thread(client, f"f6?again={change}")
+    assert _reply_box(thread) == (str(change), "Make it <bright>.\n\nOn point 2: Shorter.")
+    # another thread's reply box doesn't take it
+    assert _reply_box(_thread(client, f"general?again={change}")) == ("", "")
+    # sent again from the reply box, that retry stands for it: one card per note (F48 D2)
+    retry = _retry(BRIGHT, str(change))
+    _finished(db_path, planning, "plan_message", "f6", retry, "queued for the lead")
+    assert _refused_items(_page(client)) == {}
+    assert _reply_box(_thread(client, f"f6?again={change}")) == ("", "")
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "value", "edit", "shown"),
+    [
+        ("plant", None, DUCKS, json.dumps({"title": "Rubber\ngeese"}), "Rubber geese"),
+        ("plant", None, DUCKS, "not json", "not json"),
+        (
+            "plan_message",
+            "f6",
+            MESSAGE,
+            '{"text": "x", "comments": 3}',
+            '{"text": "x", "comments": 3}',
+        ),
+    ],
+)
+def test_an_edit_refused_for_its_words_shows_them_with_the_runners_reason(
+    planning, db_path, serve, kind, subject, value, edit, shown
+):
+    """The plant or message still waits, as it was; the words that didn't replace its own are
+    on the desk."""
+    target = _finished(db_path, planning, kind, subject, value, None)
+    change = _finished(db_path, planning, "change", str(target), edit, "a change is JSON")
+    item = _refused_items(_page(serve()))[str(change)]
+    assert f"{shown} The runner said: a change is JSON" in item
+    assert ("Try again" in item) == (kind == "plan_message")
+
+
+@pytest.mark.parametrize(
+    ("value", "result"),
+    [
+        ('{"cancel": true}', "cancelled"),
+        ('{"cancel": true}', LATE_PLANT),
+        ('{"cancel": true}', "there is no request 99"),
+        (GEESE, "changed"),
+        (GEESE, None),  # on its way: Coming shows it
+    ],
+)
+def test_a_cancel_or_an_edit_that_worked_never_shows_there(
+    planning, db_path, db, serve, value, result
+):
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, "planted f9-rubber-ducks")
+    _finished(db_path, planning, "change", str(ducks), value, result)
+    assert desk(db, PROJECT, NOW)[0].items == []
+    html = _page(serve())
+    assert "desk-refused" not in html and "Didn't go through" not in html
+
+
+def test_an_edit_naming_no_plant_or_message_of_ours_still_shows_its_words(planning, db_path, serve):
+    """Whatever it named (nothing, another kind of request, another project's): the words are
+    the owner's, with Dismiss; nothing of the other project's is read."""
+    found: list[int] = []
+    _write(db_path, lambda conn: found.append(metrics.upsert_project(conn, "elsewhere")))
+    theirs = _finished(db_path, found[0], "plan_message", "f6", '{"text": "Secret."}', "sent")
+    back = _finished(db_path, planning, "send_back", "f6/plan", MESSAGE, "queued for the lead")
+    client = serve()
+    for subject in ("99", "x", str(back), str(theirs)):
+        change = _finished(db_path, planning, "change", subject, GEESE, "there is no request")
+        html = _page(client)
+        item = _refused_items(html)[str(change)]
+        assert item.startswith("Your edit Rubber geese Grey ones. The runner said:")
+        assert "Try again" not in item and "Secret" not in html
+        assert _reply_box(_thread(client, f"f6?again={change}")) == ("", "")
+        _write(db_path, lambda conn, c=change: metrics.dismiss_request(conn, c, NOW.isoformat()))
+
+
+def test_a_dismissed_or_dismissing_edit_leaves_the_desk(planning, db_path, serve):
+    ducks = _finished(db_path, planning, "plant", None, DUCKS, "planted f9-rubber-ducks")
+    gone = _finished(db_path, planning, "change", str(ducks), GEESE, LATE_PLANT)
+    going = _finished(db_path, planning, "change", str(ducks), GEESE, LATE_PLANT)
+    kept = _finished(db_path, planning, "change", str(ducks), GEESE, LATE_PLANT)
+    _write(db_path, lambda conn: metrics.dismiss_request(conn, gone, NOW.isoformat()))
+    _finished(db_path, planning, "dismiss", str(going), None, None)
+    assert list(_refused_items(_page(serve()))) == [str(kept)]
+
+
+def test_dismiss_on_an_edit_posts_a_dismiss_naming_the_change(page, planning, db_path, serve):
+    said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, "queued for the lead")
+    change = _finished(db_path, planning, "change", str(said), BRIGHT, LATE_MESSAGE)
+    _open(page, serve())
+    assert page.locator(f"#refused-{change} .refused-body").is_visible()
+    page.click(f"#dismiss-{change}")
+    page.wait_for_selector(f"#refused-{change}.dismissing >> text=Asked")
+    assert not page.locator(f"#refused-{change} .refused-body").is_visible()
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE kind = 'dismiss'").fetchall()
+        assert [(r["subject"], r["value"]) for r in rows] == [(str(change), None)]
+    finally:
+        conn.close()
+    page.reload()
+    assert page.locator(f"#refused-{change}").count() == 0

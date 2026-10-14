@@ -126,7 +126,8 @@
       <h3 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var({{ group.color }})">{{ group.name }}</h3>
       {% for item in group.items %}
       {% if group.key == "refused" %}
-      {# The owner's words the runner refused (F31 D9): in full, why, Try again and Dismiss #}
+      {# The owner's words the runner refused (F31 D9): in full, why, Try again and Dismiss.
+         A plant's edit that didn't go through (f14-04) has Dismiss only: neither again nor note #}
       <article class="refused" id="refused-{{ item.id }}">
         <div class="refused-body">
           <span style="font-size: 14px">{{ item.title }}</span>
@@ -135,7 +136,7 @@
           <div style="display: flex; gap: 8px; flex-wrap: wrap">
             {% if item.again %}
             <a id="again-{{ item.id }}" href="{{ item.again }}{{ q }}&amp;again={{ item.id }}#reply" style="display: inline-flex; align-items: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); padding: 0 14px; min-height: 44px">Try again</a>
-            {% else %}
+            {% elif item.note %}
             <button type="button" id="again-{{ item.id }}" data-note="{{ item.note }}"
               onclick="const f = document.getElementById('plant'); f.elements.text.value = this.dataset.note; f.elements.again.value = '{{ item.id }}'; f.scrollIntoView(); f.elements.text.focus()"
               style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Try again</button>
