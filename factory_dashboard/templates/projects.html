@@ -39,6 +39,8 @@
           aria-label="{{ card.name }}'s place"{% if asked %} class="asked" disabled{% endif %}><small>place</small></label>
         <div class="name">{{ card.name }}</div>
         {% if card.description %}<div class="what">{{ card.description }}</div>{% endif %}
+        {% if card.paused == "setting up" %}<div class="muted">Being set up on its computer; the runner takes it once that's done.</div>
+        {% elif card.paused %}<div class="muted">Paused: the runner leaves it alone.</div>{% endif %}
         <div class="facts">
           <span><b>{{ card.ready }}</b> ready</span>
           {% if card.building %}<span><b>{{ card.building }}</b> building</span>{% endif %}

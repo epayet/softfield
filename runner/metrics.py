@@ -387,6 +387,15 @@ def set_project_order(conn: sqlite3.Connection, names: Sequence[str]) -> list[st
     return unknown
 
 
+SETTING_UP = "setting up"  # a project's `paused` from `softfield init` until `doctor` passes
+
+
+def set_project_paused(conn: sqlite3.Connection, name: str, paused: str | None) -> None:
+    """Pause a project (why, or when) or, with None, let the runner take it again."""
+    with conn:
+        conn.execute("UPDATE projects SET paused = ? WHERE name = ?", (paused, name))
+
+
 def find_project(conn: sqlite3.Connection, name: str) -> int | None:
     """The project's id, without making one: a read leaves no row behind."""
     row = conn.execute("SELECT id FROM projects WHERE name = ?", (name,)).fetchone()

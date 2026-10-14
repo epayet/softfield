@@ -104,7 +104,8 @@ def init(folder: Path, db: Path) -> tuple[str, list[str]]:
 
 
 def register(folder: Path, db: Path) -> None:
-    """The project in the metrics database, last in the owner's order."""
+    """The project in the metrics database, last in the owner's order, and paused while it is
+    set up: the runner leaves it alone until `softfield doctor` passes (``ready``)."""
     conn = metrics.open_db(db)
     try:
         last = max((p.priority for p in metrics.projects_in_order(conn)), default=0)
@@ -114,6 +115,21 @@ def register(folder: Path, db: Path) -> None:
                 "UPDATE projects SET priority = ? WHERE name = ? AND priority = 100",
                 (min(last + 1, 99), folder.name),
             )
+        metrics.set_project_paused(conn, folder.name, metrics.SETTING_UP)
+    finally:
+        conn.close()
+
+
+def ready(name: str, db: Path) -> bool:
+    """`softfield doctor` passed: a project still being set up goes to the runner, which takes
+    it from its next round. Whether it was waiting for that."""
+    conn = metrics.open_db(db)
+    try:
+        row = next((p for p in metrics.projects_in_order(conn) if p.name == name), None)
+        if row is None or row.paused != metrics.SETTING_UP:
+            return False
+        metrics.set_project_paused(conn, name, None)
+        return True
     finally:
         conn.close()
 

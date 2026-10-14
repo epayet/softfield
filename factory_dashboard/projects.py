@@ -119,6 +119,7 @@ class ProjectCard:
     ideas: int
     done: int
     for_you: int  # its Planning desk's items waiting for the owner
+    paused: str | None = None  # `metrics.SETTING_UP` while `softfield init`'s setup runs
 
 
 @dataclass(frozen=True)
@@ -159,6 +160,7 @@ def project_cards(conn: sqlite3.Connection, now: datetime) -> list[ProjectCard]:
                 ideas=states.get("idea", 0),
                 done=states.get("done", 0),
                 for_you=len(waiting_for_you(desk(conn, row.name, now))),
+                paused=row.paused,
             )
         )
     return cards

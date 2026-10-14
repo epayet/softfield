@@ -108,6 +108,9 @@ def _restart() -> None:
     os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
 
 
+_UNLOADED: set[str] = set()  # projects whose project.toml didn't load, said once
+
+
 def _project_configs() -> list[Config]:
     """The registered projects the runner works on, in the owner's order: not paused, with a
     ``.factory/project.toml`` that loads (ADR 30 item 6). One that doesn't load is said."""
@@ -127,7 +130,11 @@ def _project_configs() -> list[Config]:
         try:
             configs.append(load_config(repo))
         except (OSError, ValueError, KeyError, ConfigError) as exc:
-            print(f"runner: {row.name}'s {PROJECT_TOML} doesn't load ({exc}): skipped")
+            if row.name not in _UNLOADED:  # once, not every round
+                _UNLOADED.add(row.name)
+                print(f"runner: {row.name}'s {PROJECT_TOML} doesn't load ({exc}): skipped")
+            continue
+        _UNLOADED.discard(row.name)
     return configs
 
 
@@ -600,6 +607,8 @@ def main(argv: list[str] | None = None) -> int:
                 host = _lan_address()
             except RunnerError:
                 host = "127.0.0.1"
+            if setup.ready(project_name(repo), cfg.metrics_db):
+                print("The runner takes it from its next round.")
             print(f"Ready: http://{host}:8765/planning?project={project_name(repo)}")
         elif args.command == "check-tickets":
             given = args.tickets or sorted(

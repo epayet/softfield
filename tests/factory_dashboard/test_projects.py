@@ -223,3 +223,15 @@ def test_send_lights_up_only_for_another_order_and_sends_the_names(page, project
         assert [json.loads(r[0]) for r in rows] == [[PROJECT, "softfield", "other"]]
     finally:
         conn.close()
+
+
+def test_a_project_being_set_up_says_so(projects_client, db_path):
+    """ADR 30: `softfield init` registers a project paused until `softfield doctor` passes."""
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "ducks", repo="/r/ducks")
+        metrics.set_project_paused(conn, "ducks", metrics.SETTING_UP)
+    finally:
+        conn.close()
+    order = section(projects_client.get("/projects").text, "projects-order")
+    assert "ducks Being set up on its computer; the runner takes it once that's done." in order

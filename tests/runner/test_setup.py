@@ -41,6 +41,12 @@ def test_init_sets_up_an_empty_folder_as_a_new_project_on_main(tmp_path, machine
     assert git(folder, "config", "core.hooksPath").strip() == ".factory/hooks"
     assert (folder / ".factory/hooks/pre-commit").stat().st_mode & 0o111
     assert _projects(db) == [("softfield", "/r/softfield", 1), ("ducks", str(folder), 2)]
+    conn = metrics.open_db(db)
+    try:  # the runner leaves it alone until `softfield doctor` passes
+        paused = {p.name: p.paused for p in metrics.projects_in_order(conn)}
+    finally:
+        conn.close()
+    assert paused == {"softfield": None, "ducks": metrics.SETTING_UP}
 
 
 def test_init_keeps_what_an_existing_repo_has_and_says_existing(tmp_path):
@@ -125,6 +131,8 @@ def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
         "x",
     )
     assert all(f.ok for f in setup.doctor(folder, db, run_checks=False))
+    assert setup.ready("ducks", db)  # doctor passed: the runner takes it
+    assert not setup.ready("ducks", db)  # once
 
 
 def test_the_setup_session_reads_the_shared_bootstrap():
