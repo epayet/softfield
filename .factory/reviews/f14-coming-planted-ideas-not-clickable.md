@@ -1,6 +1,6 @@
 # Review: F14, a waiting plant or message can be edited or cancelled
 
-- **Status:** reviewed on 2026-10-14, round 2 of 3: the review loop has stopped with nothing open. The fix ticket (`f14-04-failed-edit-shows-on-desk`) is merged; all of it is ready for you to try and sign off.
+- **Status:** done, signed off by the owner on 2026-10-14.
 
 ## Sign-off sheet
 

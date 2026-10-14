@@ -1,6 +1,7 @@
 # Milestone F14: Coming planted ideas not clickable
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-14. Base: git tag `f14-coming-planted-ideas-not-clickable-start`. Report: [`.factory/reviews/f14-coming-planted-ideas-not-clickable.md`](../reviews/f14-coming-planted-ideas-not-clickable.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes
