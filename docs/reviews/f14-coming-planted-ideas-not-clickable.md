@@ -1,6 +1,6 @@
 # Review: F14, a waiting plant or message can be edited or cancelled
 
-- **Status:** reviewed on 2026-10-14, round 1 of 3. One fix ticket is queued (`f14-04-failed-edit-shows-on-desk`, the lead's); everything else is ready for you to try.
+- **Status:** reviewed on 2026-10-14, round 2 of 3: the review loop has stopped with nothing open. The fix ticket (`f14-04-failed-edit-shows-on-desk`) is merged; all of it is ready for you to try and sign off.
 
 ## Sign-off sheet
 
@@ -15,7 +15,7 @@
 - The Now page's "Next in line" shows the same for a plant: the new title, or struck through.
 - At its next pick the runner applies changes before anything else: a cancelled plant makes no card and no commit, a cancelled message never reaches the lead, an edited one goes with the new words.
 - A seed the lead proposed and you approved can be cancelled while it waits, not edited: its words are the lead's.
-- **Not there yet:** an edit that comes too late shows "too late" on the desk only while you stay on the page, and on a thread not at all. See 3.
+- An edit that didn't go through (it came too late, or the runner couldn't take its words) now waits on the desk under **Didn't go through**: "Your edit of Rubber ducks" or "Your edit on The planning room", your new words in full, what the runner said, and Dismiss. A message's edit also has **Try again**, which opens its thread with the words in the reply box; a plant's has Dismiss only, since the idea is a card by then and planting the words again would make a second one. A cancel that came too late shows nothing there: it carried no words (added in round 2, `f14-04`).
 
 ### 2. How to test it yourself
 1. On your phone, open Planning and plant a note with **Plant** (not "Plant and ask the lead").
@@ -26,12 +26,14 @@
 6. Open a card's thread and send a message. Under it, press Edit, change it, Save: the new text shows at once, "changed".
 7. On another thread, send a message and press Cancel it: it is struck through and the Send box is back. On the desk, that thread is no longer in Coming.
 8. After the runner's next pick (up to an hour while a job runs): the edited note is a card with the new words, the cancelled one made none, the edited message is on its thread with the lead's reply on its way, the cancelled one is gone.
+9. The "too late" case, which needs a page older than the runner's last pick: open Planning in two tabs and plant a note. Once the runner has planted it (the first tab, reloaded, shows the card), go to the second tab without reloading, open the note's row there, change it and Save. After the next pick, the desk shows it under Didn't go through, "Your edit of …", with your new words and "too late: already planted". Press Dismiss: it leaves.
 
-I didn't look at it on a screen myself: a review job has no browser to look through. Seven tests open these pages in Chromium, two of them at a phone's width, press the buttons and read what shows without a reload.
+I didn't look at it on a screen myself: a review job has no browser to look through. Eight tests open these pages in Chromium, two of them at a phone's width, press the buttons and read what shows without a reload.
 
 ### 3. Left for later
-- **`f14-04-failed-edit-shows-on-desk`, queued, the lead's:** an edit that didn't go through (it came too late, or the runner refused its words) will show on the desk under "Didn't go through" with your new words and the reason, until you dismiss it. Today those words stay in the database and nothing shows them once the pick has passed; for a message, nothing shows at all. You can try everything else before it merges.
+- Nothing of F14's own is left: `f14-04-failed-edit-shows-on-desk` merged in round 2.
 - Backlog: after Send on a thread, the page probably holds the conversation twice nested (invisible, an older line of script); to check and fix when that script next changes.
+- Backlog: a message's edit that the runner refused for its words, while the message still waits, has a Try again that opens a thread with no reply box yet (the lead's answer is awaited). The words stay on the desk and the message's own Edit is back, so nothing is lost; rare, and a two-line fix when that code next changes.
 - Not in F14 by decision (D3, D4): a message the runner has taken can't be edited, and a queued reply from the lead can't be stopped. A planted card can still be removed with "Remove seed".
 
 ### 4. Decisions waiting for you
@@ -43,6 +45,8 @@ None.
 - 2026-10-13, evening: f14-02 (the desk's editor) went to the developer. Three attempts, each stopped after 10 minutes of reading with no edit, one direction in between; escalated, and the lead built it in 42 minutes. No session report for that run is in `docs/sessions/`.
 - 2026-10-14, 00:55 session: f14-03 (the thread's buttons) went to the developer. Two attempts stopped with no edit, a direction, then a 77-minute attempt that built it with five faults and stopped on an existing test the ticket hadn't named; escalated, and the lead finished it in 32 minutes. 11.3 million local tokens. [Session](../sessions/2026-10-14-0055.md).
 - 2026-10-14: this review, round 1. One small fix, one test, one lead ticket, one backlog line.
+- 2026-10-14, 03:20 session: f14-04 (the failed edit on the desk) built by the lead and merged at its first attempt; no local tokens. [Session](../sessions/2026-10-14-0320.md).
+- 2026-10-14: this review, round 2. The fix read against its ticket line by line: resolved, one nit to the backlog, nothing to fix.
 - Lessons:
   - **Both developer tickets came back to the lead,** as F13's and f9-25's did: four tickets in a row on the planning pages, none merged by a developer. Each needed the 1,000-line `planning.py`, a template with its script, and the 2,700-line `test_planning.py`; the developer reads for ten minutes and is stopped before its first edit. A direction didn't help either time. Written into "Known range": a ticket that redraws part of a planning page after a post is the lead's from the start, until that test file is split.
   - **The plan's last "Done when" line reached no ticket for messages.** "The dashboard shows that result" was written into f14-02 for plants and left out of f14-03. The review found it by reading the milestone's lines against the tickets', one by one; that check belongs at planning, before the tickets are queued.
@@ -67,14 +71,23 @@ None.
 - **The runner** (`runner/requests.py`, `runner/metrics.py`; f14-01, the lead): a request kind `change` whose subject is the id of the waiting request it changes. `apply_requests` applies every open change first, then reads the other requests again, so a cancelled plant or message is never applied and an edited one goes with its new words in the same pick. A cancel finishes its target as "cancelled by you", which `refused` doesn't count as a refusal. An edit replaces the target's words and keeps what else it said (its area, "ask the lead"); the new value is read as the pick will read it before it is stored, so a bad edit changes nothing. Too late once the target is done. A change commits nothing, so it never waits for main. `factory_dashboard/requests.py` accepts the kind.
 - **The desk** (`factory_dashboard/planning.py`, `templates/planning.html`, `overview.py`, `_partials/queue.html`; f14-02, built by the lead in escalation): `open_changes` reads the open changes by target; `coming` gives each waiting plant a row that opens (a `<details>` with the editor) or, with a change on its way, a dashed row with the change and its polling status. A change on a plant the runner has already taken keeps a row until the runner answers it. After a post, only Coming is drawn again. The Now page's plant rows show the same.
 - **The thread** (`factory_dashboard/planning.py`, `templates/thread.html`; f14-03, finished by the lead in escalation): a waiting message carries its request's id and its open change; the template adds Edit, Save and Cancel it, and one listener that draws the conversation again after a post. A cancelled message no longer counts as waiting for a reply.
-- **Tests:** 47 cases in `tests/runner/test_requests.py`, 2 in `tests/factory_dashboard/test_overview.py`, 18 in `tests/factory_dashboard/test_planning.py` (7 in Chromium, one added by this review), 2 rows in `tests/factory_dashboard/test_requests.py`.
+- **The failed edit on the desk** (`runner/requests.py`, `factory_dashboard/planning.py`, `templates/planning.html`; f14-04, the lead, round 2): `owners_words` reads a `change` that is an edit (a cancel carries none), `refused` counts one whose result isn't "changed", and `_dismiss` takes it as it takes the other three kinds. On the desk, `_refused` lists it with a title that names what was edited (`_failed_edit` looks the target up in its own project only), and `_again` gives a message's edit to its own thread's reply box. A retry sent from there names the change, so the row leaves the desk once (F48 D2).
+- **Tests:** 47 cases in `tests/runner/test_requests.py`, 2 in `tests/factory_dashboard/test_overview.py`, 18 in `tests/factory_dashboard/test_planning.py` (7 in Chromium, one added by this review), 2 rows in `tests/factory_dashboard/test_requests.py`. Round 2 added 5 tests (32 cases) at the runner and 8 on the page (14 cases, one in Chromium).
 
 ## Findings and resolutions
 | Id | Severity | Route | What | Resolution |
 |---|---|---|---|---|
-| F1 | should-fix | ticket (lead) | An edit that didn't go through shows nowhere once the pick has passed, and a message's never shows: after Save on a message the runner had taken, the thread is drawn again with the message stored and no status. The milestone's last "Done when" line ("the dashboard shows that result") holds for plants only while the page stays open, and the owner's new words stay in `owner_requests` alone: against "the owner's words are never refused unseen" (2026-10-08) | `tasks/ready/f14-04-failed-edit-shows-on-desk.md`: such an edit joins "Didn't go through" on the desk, with its words and the reason, until dismissed. The lead's: `owners_words`, `refused` and `_dismiss` are in the protected runner |
+| F1 | should-fix | ticket (lead) | An edit that didn't go through shows nowhere once the pick has passed, and a message's never shows: after Save on a message the runner had taken, the thread is drawn again with the message stored and no status. The milestone's last "Done when" line ("the dashboard shows that result") holds for plants only while the page stays open, and the owner's new words stay in `owner_requests` alone: against "the owner's words are never refused unseen" (2026-10-08) | **Resolved in round 2** by `f14-04-failed-edit-shows-on-desk` (the lead's, merged as `fcaa205` at its first attempt): such an edit joins "Didn't go through" on the desk, with its words and the reason, until dismissed. Every "Done when" line of the ticket has a test |
 | F2 | should-fix | claude | The desk's Coming kept listing a thread as "waiting for the lead" after its only waiting message was cancelled, while the thread itself showed the Send box again: the two pages disagreed until the pick | Fixed in the review: `coming` (`factory_dashboard/planning.py`) leaves out a `plan_message` with an open cancel; `test_a_cancelled_message_no_longer_puts_its_thread_in_coming` holds it (an edited message still shows, a second one brings the thread back) |
 | F3 | nit | backlog | The reply form's older listener in `thread.html` re-fetches with `select: "#conversation"` and `swap: "innerHTML"`, which puts a `#conversation` inside `#conversation` after each Send. Invisible; F14's own listener uses `outerHTML` and its test counts one | `docs/backlog.md` |
+| F4 | nit | backlog | Round 2, in f14-04: a message's edit refused for its words (not too late) gets a Try again to its thread's `#reply`, but the message it names still waits, and the thread draws "Next for the lead" instead of the reply box. Nothing is lost: the words stay on the desk and the message's Edit is back. Rare: the editor would have to send words the runner can't read | `docs/backlog.md`: give `again` only when the message is done |
+
+Round 2, read in f14-04 and found sound, no finding:
+- **A cancel never shows,** whatever its result: `{"cancel": true}` carries no words, so `refused` and `_dismiss` leave it alone, and a test holds each of the four results. A value that mixes a cancel with words (the runner refuses it) shows its words.
+- **Nothing crosses projects.** A change that names another project's request, another kind, or no request shows as "Your edit" with the owner's own words and Dismiss; a test plants a message in a second project and checks none of it reaches the page or a reply box.
+- **The three older kinds read as before.** `owners_words` and `refused` kept every earlier assertion; no existing test was edited, the diff only adds.
+- **The words are escaped.** The message test saves `<bright>` and reads it back as text from the desk and from the reply box.
+- **Too late is decided before the value is read** (`_change`), so a too-late edit always keeps its words for the desk, well formed or not.
 
 Read and found sound, no finding:
 - **Changes go first, and nothing races.** The dashboard still only adds rows; the runner alone finishes or rewrites one, and `change_request` updates only an open row. Two changes on one target apply in order; the desk's `open_changes` reads them the same way (a cancel wins, then the latest edit), and a test holds each side.
@@ -86,12 +99,14 @@ No checkpoint finding was handed to this review, so there is none to judge. Secu
 
 After the fix, `uv run pytest -q tests/unit tests/integration tests/runner` passes; the three dashboard test files touched by F14 gave 295 passed; ruff and mypy are clean on the edited files.
 
-Score: 7/10. What merged is careful and well tested, the runner's part especially. It loses points for the last "Done when" line reaching only half the feature, for the desk and the thread disagreeing about a cancelled message, and because the lead ended up writing all three tickets.
+Round 2: `uv run pytest -q tests/unit tests/integration tests/runner` gave 1954 passed, 1 skipped. The review changed no code this round.
 
-Stop reason: none. F1's ticket runs with the usual checkpoint.
+Score: 8/10 (7 in round 1). Every "Done when" line of the milestone now holds, and what merged is careful and well tested, the runner's part especially. It stays short of more because the last line reached the feature only through a review finding, and because the lead ended up writing all four tickets.
+
+Stop reason: none. Both should-fix findings are resolved and the two nits are in the backlog, so the loop stops here at round 2.
 
 ## Factory
-- **The flow:** three tickets; one lead ticket merged first time; two developer tickets escalated after three attempts each and were built or finished by the lead. Two directions, two escalations, no park, no limit, no stop for the owner. No checkpoint ran on F14's merges.
+- **The flow:** three tickets; one lead ticket merged first time; two developer tickets escalated after three attempts each and were built or finished by the lead. Two directions, two escalations, no park, no limit, no stop for the owner. No checkpoint ran on F14's merges. Round 2: the fix ticket, the lead's, merged at its first attempt; the run then stopped as it should, since the ticket changed `runner/`, and a fresh process took this round.
 - **Models and cost** (from the jobs table): Qwen (qwen3.6-35b-a3b) 0/2, about 127 minutes of attempts. Claude Opus before this review: $1.73 for f14-01, $0.87 and $0.73 for the two directions, $2.96 and $2.60 for the two escalations, $8.89 in all. Planning these two as lead tickets would have cost about the two escalations' price and saved the directions and four hours of line.
 - **What to change:**
   - A ticket that redraws part of a planning page after a post is the lead's from the start (in "Known range").
@@ -100,6 +115,8 @@ Stop reason: none. F1's ticket runs with the usual checkpoint.
 
 ## Workflow observations
 - No session report exists for the run that tried f14-02 (2026-10-13 17:46) or for the one that escalated it (20:22); F22's review missed the same run's report. The jobs table has the figures. If a run that ends on "runner changed, needs a fresh process" or on a stop skips its report, that is a bug to fix: worth a look when bug-01 is done.
+- Round 2: the fix ticket's "merged" commit says "1 attempt, 0 s in all", and the session report counts 0 local tokens "on 1 task(s)" for a ticket the lead built: a lead ticket's time isn't in the figure that line reads. Suggested fix: when the next runner ticket touches the merge message, take the time from the lead's job row; not worth a ticket alone.
+- Round 2's prompt asked for `git diff fce81ba^..main`, which holds round 1's own commit (the review report, the backlog, ADR 02) beside the fix: 14 files, 5 of them the fix. Reading `git show` of the fix's commit was enough. Same cause as bug-01: the range starts one commit too early.
 - The round-1 prompt gave 70 files; about a third are F14's. The rest are F22, F95's `look` command, F93 and F114's plans, a terminal session on the gates, and the roadmap's removal.
 
 <!-- runner report -->
