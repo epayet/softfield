@@ -1,6 +1,7 @@
 # Milestone F22: move archive button on planning desk at the bottom rather than the top
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-14. Base: git tag `f22-move-archive-button-on-planning-desk-start`. Report: [`.factory/reviews/f22-move-archive-button-on-planning-desk.md`](../reviews/f22-move-archive-button-on-planning-desk.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes

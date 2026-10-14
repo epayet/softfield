@@ -1,6 +1,6 @@
 # Review: F22, Archive sits at the bottom of a thread
 
-- **Status:** reviewed on 2026-10-14, round 1 of 3, nothing left for a round 2. Waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-14.
 
 ## Sign-off sheet
 
