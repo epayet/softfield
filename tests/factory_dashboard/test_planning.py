@@ -1899,13 +1899,15 @@ def test_try_again_fills_the_box_only_with_a_refused_message_of_ours(
     planning, db_path, serve, project_of, result
 ):
     """A message that worked, one on its way (the box waits for the lead's reply), or another
-    project's: the box stays empty."""
+    project's: the box stays empty. The reply's box: a waiting message has its own (F14)."""
     found: list[int] = [planning]
     if project_of == "elsewhere":
         _write(db_path, lambda conn: found.append(metrics.upsert_project(conn, "elsewhere")))
     asked = _finished(db_path, found[-1], "plan_message", "f6", '{"text": "Hi."}', result)
     thread = serve().get(f"/planning/f6?again={asked}").text
-    box = re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', thread, re.S)
+    reply = re.search(r'<form id="reply".*?</form>', thread, re.S)
+    box = reply and re.search(r'<textarea name="text"[^>]*>(.*?)</textarea>', reply[0], re.S)
+    assert (reply is None) == (result is None)
     assert box is None if result is None else box and box[1] == ""
 
 
@@ -2596,4 +2598,157 @@ def test_a_change_that_isnt_stored_leaves_the_row_open(page, planning, db_path, 
     page.wait_for_timeout(300)  # a re-fetch, if one wrongly followed, would have landed
     assert page.input_value(f'#edit-{ducks} input[name="title"]') == "Geese"
     assert page.locator(f"details#waiting-{ducks}[open]").count() == 1
+    assert _asked_changes(db_path) == []
+
+
+# --- a waiting message is edited or cancelled on its thread (f14-03) --------------------------
+
+SENT = "Sent · the runner picks it up at its next pick"
+CHANGED = "changed · the runner picks it up at its next pick"
+CANCELLING = "cancelling at the runner's next pick"
+COMMENTED = json.dumps({"text": "Make it calm.", "comments": {"2": 'Say "how".'}})
+
+
+def _said(html: str) -> list[str]:
+    """The owner's messages on a thread, each one's markup, in the page's order."""
+    return [
+        m[0]
+        for m in re.finditer(r'<article class="message"[^>]*>.*?</article>', html, re.S)
+        if "You · " in m[0]
+    ]
+
+
+def _lines(locator) -> list[str]:
+    return [line.strip() for line in locator.inner_text().splitlines() if line.strip()]
+
+
+def test_a_waiting_message_has_edit_and_cancel_it_and_a_stored_one_neither(
+    planning, db_path, serve
+):
+    """The editor waits closed, holding the message's own text; the message the runner took
+    ("Looks good.") is on the thread for good."""
+    said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
+    stored, waiting = _said(_thread(serve(), "f6"))
+    assert "Looks good." in stored and "<button" not in stored and "<form" not in stored
+    assert _text(waiting).endswith(
+        f"Make it calm. {SENT} Your message Make it calm. Edit Save Cancel it"
+    )
+    assert re.search(
+        rf'<form id="editor-{said}" hidden[^>]*>.*?<textarea name="text"[^>]*>Make it calm.</t',
+        waiting,
+        re.S,
+    )
+    assert re.search(
+        rf'<button type="submit" form="editor-{said}" id="save-{said}" hidden', waiting
+    )
+    assert f'id="edit-{said}"' in waiting and f'id="cancel-{said}"' in waiting
+    assert "on-its-way" not in waiting and "line-through" not in waiting
+
+
+def test_an_edit_on_its_way_shows_the_new_message_and_no_buttons(planning, db_path, serve):
+    """The edit's own words and comments show, its status polling; the other waiting message
+    still has its buttons, and the thread still waits for the lead."""
+    said = _finished(db_path, planning, "plan_message", "f6", COMMENTED, None)
+    other = _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
+    edit = json.dumps({"text": "Make it bright.", "comments": {"3": "Shorter."}})
+    change = _finished(db_path, planning, "change", str(said), edit, None)
+    html = _thread(serve(), "f6")
+    _, changed, untouched = _said(html)
+    assert "border-style: dashed" in changed and "line-through" not in changed
+    assert _text(changed).endswith(f"Make it bright. {CHANGED} {ASKED} On 3: Shorter.")
+    assert "Make it calm." not in changed and "On 2:" not in changed
+    assert f'hx-get="/requests/{change}"' in changed
+    assert "<button" not in changed and "<form" not in changed
+    assert f'id="edit-{other}"' in untouched and "on-its-way" not in untouched
+    assert '<p id="waiting"' in html and 'id="reply"' not in html
+
+
+def test_an_edit_the_runner_will_refuse_keeps_the_messages_words(planning, db_path, serve):
+    said = _finished(db_path, planning, "plan_message", "f6", COMMENTED, None)
+    _finished(db_path, planning, "change", str(said), '{"comments": {"x": "?"}}', None)
+    _, changed = _said(_thread(serve(), "f6"))
+    assert _text(changed).endswith(f'Make it calm. {CHANGED} {ASKED} On 2: Say "how".')
+    assert "<button" not in changed
+
+
+def test_a_cancel_on_its_way_strikes_the_message_and_the_send_form_comes_back(
+    planning, db_path, serve
+):
+    """A cancelled message waits for no reply: Send is back, until another message waits."""
+    said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
+    cancel = _finished(db_path, planning, "change", str(said), '{"cancel": true}', None)
+    client = serve()
+    html = _thread(client, "f6")
+    _, cancelled = _said(html)
+    assert re.search(r'<p style="[^"]*text-decoration: line-through">Make it calm.</p>', cancelled)
+    assert _text(cancelled).endswith(f"Make it calm. {CANCELLING} {ASKED}")
+    assert f'hx-get="/requests/{cancel}"' in cancelled
+    assert "<button" not in cancelled and "<form" not in cancelled
+    assert 'id="reply"' in html and '<p id="waiting"' not in html
+    _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
+    html = _thread(client, "f6")
+    assert '<p id="waiting"' in html and 'id="reply"' not in html
+
+
+def test_edit_then_save_posts_a_change_and_the_message_shows_it_at_once(
+    page, planning, db_path, serve
+):
+    """On a phone: Edit opens the text in place with Save; Save posts one change naming the
+    message, with the new text and its comments as they were; the message is drawn again
+    with no reload, on its way and without its buttons."""
+    said = _finished(db_path, planning, "plan_message", "f6", COMMENTED, None)
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6")
+    assert not page.locator(f"#editor-{said}").is_visible()
+    assert not page.locator(f"#save-{said}").is_visible()
+    page.click(f"#edit-{said}")
+    assert page.input_value(f'#editor-{said} textarea[name="text"]') == "Make it calm."
+    assert page.locator(f"#edit-{said}").count() == 0
+    for button in (f"#save-{said}", f"#cancel-{said}"):
+        assert page.locator(button).is_visible()
+        assert page.locator(button).evaluate("e => e.offsetHeight") >= 44
+    page.fill(f'#editor-{said} textarea[name="text"]', "Make it bright.")
+    page.click(f"#save-{said}")
+    page.wait_for_selector("#conversation .on-its-way")
+    assert page.url.endswith("/planning/f6")
+    message = page.locator("#conversation .message").last
+    assert _lines(message)[1:] == ["Make it bright.", CHANGED, ASKED, 'On 2: Say "how".']
+    assert page.locator(f"#editor-{said}, #save-{said}, #cancel-{said}").count() == 0
+    assert page.locator("#conversation").count() == 1
+    assert page.locator("#waiting").is_visible() and page.locator("#reply").count() == 0
+    words = {"text": "Make it bright.", "comments": {"2": 'Say "how".'}}
+    assert _asked_changes(db_path) == [(str(said), words)]
+    assert _values(db_path, "plan_message") == [json.loads(COMMENTED)]  # never edited
+
+
+def test_cancel_it_strikes_the_message_at_once_and_the_send_form_comes_back(
+    page, planning, db_path, serve
+):
+    said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
+    _open(page, serve(), "/planning/f6")
+    assert page.locator("#reply").count() == 0
+    page.click(f"#cancel-{said}")
+    page.wait_for_selector("#conversation .on-its-way")
+    message = page.locator("#conversation .message").last
+    assert _lines(message)[1:] == ["Make it calm.", CANCELLING, ASKED]
+    struck = message.locator("p").first
+    assert struck.inner_text() == "Make it calm."
+    assert "line-through" in struck.evaluate("e => getComputedStyle(e).textDecorationLine")
+    assert page.locator(f"#edit-{said}, #cancel-{said}").count() == 0
+    assert page.locator("#reply").is_visible() and page.locator("#waiting").count() == 0
+    assert _asked_changes(db_path) == [(str(said), {"cancel": True})]
+
+
+def test_a_message_change_that_isnt_stored_leaves_the_editor_open(page, planning, db_path, serve):
+    """The post is refused: nothing is drawn again, and the editor keeps what was typed."""
+    said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
+    _open(page, serve(), "/planning/f6")
+    page.route("**/requests", lambda route: route.fulfill(status=400, body="Bad request"))
+    page.click(f"#edit-{said}")
+    page.fill(f'#editor-{said} textarea[name="text"]', "Geese")
+    with page.expect_response("**/requests"):
+        page.click(f"#save-{said}")
+    page.wait_for_timeout(300)  # a re-fetch, if one wrongly followed, would have landed
+    assert page.input_value(f'#editor-{said} textarea[name="text"]') == "Geese"
+    assert page.locator("#conversation .on-its-way").count() == 0
     assert _asked_changes(db_path) == []

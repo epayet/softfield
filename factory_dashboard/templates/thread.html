@@ -46,11 +46,39 @@
     {% if msg.author == "owner" %}
     <article class="message" style="background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px{% if msg.waiting %}; border-style: dashed; border-color: var(--hazard){% endif %}">
       <span style="font: 600 12px var(--mono); color: var(--hazard)">You · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
-      <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
-      {% if msg.waiting %}<p style="margin: 0; font-size: 12.5px; color: var(--muted)">Sent · the runner picks it up at its next pick</p>{% endif %}
+      <p style="margin: 0; white-space: pre-line{% if msg.change and msg.change.cancel %}; text-decoration: line-through{% endif %}">{{ msg.text }}</p>
+      {% if msg.change %}
+      {# F14 D5: a change on a waiting message is on its way; the message is changed no more #}
+      <p class="on-its-way" style="margin: 0; font-size: 12.5px; color: var(--hazard)">{{ "cancelling at the runner's next pick" if msg.change.cancel else "changed · the runner picks it up at its next pick" }}</p>
+      {% with asked = {"id": msg.change.id, "done": none} %}{% include "_partials/request.html" %}{% endwith %}
+      {% elif msg.waiting %}
+      <p style="margin: 0; font-size: 12.5px; color: var(--muted)">Sent · the runner picks it up at its next pick</p>
+      {% endif %}
       {% for c in msg.points %}
       <p style="margin: 0; font-size: 14px; color: var(--ink-2)"><b>On {{ c.n }}:</b> {{ c.comment }}</p>
       {% endfor %}
+      {% if msg.waiting and not msg.change %}
+      {# F14: a waiting message is edited or cancelled until the runner takes it. Save sends the
+         whole message: the new text, and its comments as they were #}
+      <div class="waiting-message" style="display: flex; flex-direction: column; gap: 8px">
+        <form id="editor-{{ msg.id }}" hidden hx-post="/requests" hx-target="#waiting-status-{{ msg.id }}" hx-swap="innerHTML"
+          hx-vals='js:{kind: "change", project: {{ project | tojson }}, subject: "{{ msg.id }}", value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries({{ msg.points | tojson }}.map(function (c) { return [c.n, c.comment]; }))})}'>
+          <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Your message
+            <textarea name="text" rows="4"{% if not msg.points %} required{% endif %} style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ msg.text }}</textarea>
+          </label>
+        </form>
+        <p style="margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+          <button type="button" id="edit-{{ msg.id }}"
+            hx-on:click="document.getElementById('editor-{{ msg.id }}').hidden = false; document.getElementById('save-{{ msg.id }}').hidden = false; this.remove()"
+            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Edit</button>
+          <button type="submit" form="editor-{{ msg.id }}" id="save-{{ msg.id }}" hidden style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Save</button>
+          <button type="button" id="cancel-{{ msg.id }}" hx-post="/requests" hx-target="#waiting-status-{{ msg.id }}" hx-swap="innerHTML"
+            hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ msg.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'
+            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Cancel it</button>
+          <span id="waiting-status-{{ msg.id }}" style="font-size: 12.5px; color: var(--muted)"></span>
+        </p>
+      </div>
+      {% endif %}
     </article>
     {% else %}
     <article class="message" style="background: var(--bay); border: 1px solid var(--opus); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
@@ -132,6 +160,15 @@
     </script>
     {% endif %}
     </div>
+
+    <script>
+      // F14: Save or Cancel it on a waiting message shows the change at once, and the reply
+      // form when nothing waits any more. On the document, outside #conversation: bound once.
+      document.addEventListener("htmx:afterRequest", (event) => {
+        if (!event.detail.successful || !event.detail.elt.closest(".waiting-message")) return;
+        htmx.ajax("GET", window.location.href, {target: "#conversation", select: "#conversation", swap: "outerHTML"});
+      });
+    </script>
 
     {% if seed %}
     <details id="remove-seed">

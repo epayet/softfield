@@ -8,6 +8,7 @@
 - "Plant an idea": a ``plant`` request through ``POST /requests``, the dashboard's only write.
 """
 
+import contextlib
 import json
 import re
 import sqlite3
@@ -26,6 +27,7 @@ from factory_dashboard.line import live_line
 from factory_dashboard.milestones import _to_html
 from factory_dashboard.overview import (
     CANCELLING,
+    Change,
     Running,
     agent_allowances,
     open_changes,
@@ -705,6 +707,8 @@ class Message:
     points: list[dict[str, object]]  # a lead message's, or the owner's comments
     latest: bool  # the lead's latest points: the ones the owner comments on
     waiting: bool = False  # an open plan_message request not yet picked up
+    id: int = 0  # a waiting message's request: what a change names (F14 D1)
+    change: Change | None = None  # a waiting message's open change: on its way, no more edits
 
 
 @dataclass(frozen=True)
@@ -934,6 +938,7 @@ def thread_page(
             r["kind"] == PLANNER and str(r["subject"] or "").startswith(f"{thread}#")
             for r in metrics.open_jobs(conn, project_id)
         )
+        changes = open_changes(conn, project_id)
         # Append open plan_message requests as waiting messages
         for req in conn.execute(
             "SELECT * FROM owner_requests"
@@ -941,13 +946,22 @@ def thread_page(
             " AND subject = ? AND done IS NULL ORDER BY id",
             (project_id, thread),
         ).fetchall():
-            pending = True
             try:  # as the runner will read it; one it will refuse shows empty
                 text, comments = message(req["value"])
             except PlannerError:
                 text, comments = "", {}
+            # F14: a cancelled message waits for no reply; an edit shows its new words at once
+            change = changes.get(str(req["id"]))
+            if change is None or not change.cancel:
+                pending = True
+            if change is not None and not change.cancel:
+                edit = metrics.find_request(conn, change.id)
+                with contextlib.suppress(PlannerError):  # one the runner will refuse: as it was
+                    text, comments = message(edit["value"] if edit is not None else None)
             points = [{"n": n, "comment": c} for n, c in comments.items()]
-            messages.append(Message("owner", req["created"], text, points, False, waiting=True))
+            messages.append(
+                Message("owner", req["created"], text, points, False, True, req["id"], change)
+            )
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
     words = _again(conn, project_id, thread, again)
     return render(
