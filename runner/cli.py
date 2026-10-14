@@ -138,6 +138,53 @@ def _project_configs() -> list[Config]:
     return configs
 
 
+GUIDE = """
+Run
+  softfield run                  every project, in the Projects page's order (Ctrl-C stops it)
+  softfield run --here           only this folder's project
+  softfield run --dry-run        what would run next, per project
+Dashboard
+  softfield dashboard --lan      serve it on the home Wi-Fi; it opens on /projects
+  softfield dashboard update     bring it to Softfield's latest main now
+Projects
+  softfield init                 set up this folder as a project, then Claude finishes with you
+  softfield doctor               what a project still needs; passing hands it to the runner
+  softfield accept N | reject N  an ADR, in its project's folder
+  softfield signoff <key>        sign a milestone off, in its project's folder
+Always on
+  softfield service install      systemd units for the runner and the dashboard
+All commands: softfield --help"""
+
+
+def _guide() -> int:
+    """A bare `softfield`: whether a runner runs, the projects in order, and the commands."""
+    configs = _project_configs()
+    running = [cfg.project_name for cfg in configs if loop.live_run(cfg) is not None]
+    try:
+        head = Git(config.HOME).head()[:9]
+    except GitError:
+        head = "a folder outside git"
+    print(f"Softfield on {head} ({config.HOME})")
+    print("Runner: " + (f"running ({', '.join(running)})" if running else "not running"))
+    db = machine_metrics_db()
+    rows = []
+    if db.is_file():
+        conn = metrics.open_db(db)
+        try:
+            rows = metrics.projects_in_order(conn)
+        finally:
+            conn.close()
+    if rows:
+        print("Projects, in order:")
+        for place, row in enumerate(rows, start=1):
+            note = f"  ({row.paused})" if row.paused else ""
+            print(f"  {place}. {row.name}  {row.repo or ''}{note}")
+    else:
+        print("No project yet: set one up in its folder with `softfield init`.")
+    print(GUIDE)
+    return 0
+
+
 def _machine_command(args: argparse.Namespace) -> int:
     """The commands that need no project: `init` makes one, `service` serves them all, and
     `dashboard` outside a project opens on the first in the owner's order (ADR 30)."""
@@ -429,9 +476,9 @@ def main(argv: list[str] | None = None) -> int:
     if getattr(args, "lan", False) and args.host:
         dashboard.error("--lan finds this machine's address itself: give --lan or --host, not both")
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
-    if args.command in (None, "run") and not (
-        getattr(args, "here", False) or getattr(args, "once", False)
-    ):
+    if args.command is None:
+        return _guide()
+    if args.command == "run" and not (getattr(args, "here", False) or getattr(args, "once", False)):
         return _run_projects(args, restarted)
     if args.command in ("init", "service") or (
         args.command == "dashboard" and (args.action == "update" or _here() is None)

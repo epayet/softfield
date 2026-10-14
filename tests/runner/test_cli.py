@@ -583,11 +583,24 @@ def test_check_tickets_says_what_approve_would_refuse(in_repo, capsys):
     assert git(in_repo, "status", "--porcelain") == before
 
 
-def test_softfield_alone_runs_every_project_as_softfield_run_does(tmp_path, monkeypatch, capsys):
-    """The owner, 2026-10-14: a bare `softfield` crashed on `run`'s missing options."""
+def test_softfield_alone_is_a_guide_not_a_run(tmp_path, monkeypatch, capsys):
+    """The owner, 2026-10-14: a bare `softfield` says what runs and what to type; it starts
+    nothing."""
+    db = tmp_path / "m.sqlite"
     machine = tmp_path / "factory.toml"
-    machine.write_text(f'[metrics]\ndb = "{tmp_path / "m.sqlite"}"\n')
+    machine.write_text(f'[metrics]\ndb = "{db}"\n')
     monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
     monkeypatch.chdir(tmp_path)
-    assert cli.main([]) == 1
-    assert "no project to run" in capsys.readouterr().out
+    monkeypatch.setattr("runner.loop.run_projects", lambda *a, **k: pytest.fail("it ran"))
+    assert cli.main([]) == 0
+    out = capsys.readouterr().out
+    assert "No project yet" in out and "softfield run " in out and "softfield init" in out
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, "ducks", repo="/r/ducks")
+        metrics.set_project_paused(conn, "ducks", metrics.SETTING_UP)
+    finally:
+        conn.close()
+    assert cli.main([]) == 0
+    out = capsys.readouterr().out
+    assert "Runner: not running" in out and "1. ducks  /r/ducks  (setting up)" in out

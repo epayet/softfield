@@ -9,6 +9,7 @@ Why it looks like this: [ADR 30](.factory/adr/30-many-projects-one-factory.md).
 
 | To | Do |
 |---|---|
+| See where things are | `softfield` alone: whether a runner runs, the projects in order, the commands |
 | Run the factory | `softfield run`, from any folder: every project, in the order of the Projects page |
 | Run one project only | `softfield run --here`, in its folder |
 | See what would run next | `softfield run --dry-run` |
