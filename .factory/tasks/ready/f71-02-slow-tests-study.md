@@ -4,7 +4,7 @@ milestone: f71-i-suspect-we-might-need-to
 difficulty: 4
 depends_on: [f95-02-lead-jobs-can-look]
 agent: lead
-commands: [uv run runner look]
+commands: [softfield look]
 files:
   - .factory/cards/f71-i-suspect-we-might-need-to.md
 tests:
@@ -23,7 +23,7 @@ Read `.factory/cards/f71-i-suspect-we-might-need-to.md` (D3 lists the questions)
 
 ### Done when
 - the card has a "Findings" section: the suite's total, each directory's and `mypy`'s time, the 30 slowest tests grouped by cause, and how many full runs one ticket costs
-- Findings also say, from the jobs table (`uv run runner look sql "SELECT …"`, read-only; `runner/metrics.py` has the schema): how long developer attempts and Claude jobs took over the last two weeks, how many were cut off, and whether D1's and D2's limits fit (D4); a limit to change is a follow-up ticket, not a later look
+- Findings also say, from the jobs table (`softfield look sql "SELECT …"`, read-only; `runner/metrics.py` has the schema): how long developer attempts and Claude jobs took over the last two weeks, how many were cut off, and whether D1's and D2's limits fit (D4); a limit to change is a follow-up ticket, not a later look
 - each of D3's steps has a verdict (do, don't, later) with its measured or estimated saving in minutes per ticket and its risk
 - every "do" step is a ticket in `.factory/tasks/later/` (developer when unprotected and on an existing pattern); one that changes a gate or the workflow is a draft ADR in `.factory/adr/`, status Proposed
 - the tickets it writes pass `uv run pytest -q tests/runner/test_tasks.py`

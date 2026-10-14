@@ -15,7 +15,7 @@ tests:
 ---
 
 ### Goal
-While `uv run runner run` waits for a Claude limit to reset with nothing else to run, it applies the owner's requests as they come and starts whatever they make runnable, as the idle hold does since F101.
+While `softfield run` waits for a Claude limit to reset with nothing else to run, it applies the owner's requests as they come and starts whatever they make runnable, as the idle hold does since F101.
 
 ### Context
 Read `def _wait_for_reset`, `def wait_for_claude`, `def _idle_holds`, `def _idle_line`, `def _hold_for_the_owner` and `def work_queue` in `runner/loop.py`, and in `tests/runner/test_loop.py` `test_waiting_with_nothing_to_run_without_claude_shows_on_the_run` and `test_the_reserve_switch_turned_on_while_the_run_is_idle_runs_the_tickets` (the worked example, with `def _idles`). `runner/**` is protected: write the tests first, each failing for the right reason.

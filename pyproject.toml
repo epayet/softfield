@@ -14,7 +14,6 @@ dependencies = [
 
 [project.scripts]
 softfield = "runner.cli:main"
-runner = "runner.cli:main"  # the same command, as `uv run runner` inside this repo
 
 [dependency-groups]
 dev = [

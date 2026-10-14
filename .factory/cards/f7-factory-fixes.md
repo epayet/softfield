@@ -27,7 +27,7 @@
 | 06 | bench-isolation | L | 5 | – | a benched OpenCode agent works only in its copy, proven by a canary |
 
 ## Replay log
-`uv run runner ratings --replay`, 2026-10-04, on the real metrics database (f7-02).
+`softfield ratings --replay`, 2026-10-04, on the real metrics database (f7-02).
 - **What it plays:** every rated ticket's game, every judged verdict and every bench run, in time order, from each agent's estimate.
 - **Findings, per ADR 24 item 1:** findings on a merged ticket's code re-play that ticket's game a quarter lower, at the game's own time.
   - That's 16 of Qwen's 19 merged tickets, and 5 of gpt-oss-120b's 7.
@@ -65,7 +65,7 @@ f7-06, 2026-10-05: a real `opencode run` (`ollama/gpt-oss:20b-cloud`) in a bench
 - **For the owner:** every OpenCode bench before this fix probably ran in the main checkout. That includes 2026-10-04's (f4-25: gemma4, gpt-oss-120b, nemotron-3-super), and those runs feed the replay log above. Suggested fix: a ticket that sets those bench jobs to `void`, then reruns `runner ratings --replay`.
 
 ## Void benches
-`uv run runner ratings --void-benches-before 2026-10-05T00:59:54+01:00 --replay`, 2026-10-05, on the real metrics database (f7-07). It voided 19 OpenCode ticket-bench jobs, then recomputed.
+`softfield ratings --void-benches-before 2026-10-05T00:59:54+01:00 --replay`, 2026-10-05, on the real metrics database (f7-07). It voided 19 OpenCode ticket-bench jobs, then recomputed.
 
 | Agent | Jobs voided | Before | After | Coding games after |
 |---|---|---|---|---|

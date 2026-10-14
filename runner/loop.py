@@ -4450,7 +4450,7 @@ def update_live(repo: Path) -> bool:
     reloads. Whether it moved. Never from a branch: only main's merged, checked commits."""
     home = config.HOME
     if home == repo.resolve():
-        return False  # run from the work tree itself (`uv run runner`, tests)
+        return False  # run from the work tree itself (`uv run softfield`, tests)
     try:
         here, there = Git(home), Git(repo)
         common = ("rev-parse", "--path-format=absolute", "--git-common-dir")

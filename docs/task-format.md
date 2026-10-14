@@ -1,6 +1,6 @@
 # Task format
 
-Tasks ("tickets") are Markdown files with YAML frontmatter in `.factory/tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner; see the verdict). Tickets set aside wait in `.factory/tasks/later/`: the runner never takes them, and `uv run runner queue <id>` (an id or a unique prefix) moves one back to `ready/` in a commit ([ADR 17](../.factory/adr/17-always-on-factory.md) item 3). The file name is `<id>.md`. Why they look like this: [ADR 07](../.factory/adr/07-spend-less-frontier.md).
+Tasks ("tickets") are Markdown files with YAML frontmatter in `.factory/tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner; see the verdict). Tickets set aside wait in `.factory/tasks/later/`: the runner never takes them, and `softfield queue <id>` (an id or a unique prefix) moves one back to `ready/` in a commit ([ADR 17](../.factory/adr/17-always-on-factory.md) item 3). The file name is `<id>.md`. Why they look like this: [ADR 07](../.factory/adr/07-spend-less-frontier.md).
 
 ## Frontmatter
 
@@ -36,7 +36,7 @@ A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` (
 - **Full form:** `f3-factory-line`, `m5-history`. The slug is a few lowercase words joined by `-`, starting with a letter, short enough to type.
 - **Ticket ids always use the short form:** `f3-01-factory-line`, never `f3-factory-line-01-…`.
 - **Docs use the full key:** `.factory/cards/<full key>.md` and `.factory/reviews/<full key>.md`. An existing short-key doc (`.factory/cards/f2.md`) still works.
-- **Frontmatter and commands take either form:** `uv run runner milestone f3` and `uv run runner milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `.factory/cards/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
+- **Frontmatter and commands take either form:** `softfield milestone f3` and `softfield milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `.factory/cards/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
 - **Tags use the key as resolved:** `f3-factory-line-start` and `f3-factory-line-done`.
 - **A milestone can wait for another's sign-off** ([ADR 17](../.factory/adr/17-always-on-factory.md) item 4): a line `> **After:** f3-factory-line signed off` in its doc's header (above the first `##`) keeps its tickets from being picked until that milestone's doc says "Status: done" (what `runner signoff` writes; the `<key>-done` tag also counts). `--dry-run` and the verdict say "waits for f3-factory-line's sign-off", and `runner run` goes on with the other milestones. With no `After:` line, milestones are independent.
 - **A milestone doc is a card** ([ADR 19](../.factory/adr/19-feature-board.md) items 1 and 2b): a line `> **State:** building · **Priority:** 2 · **Area:** factory` in its header. Any part may be left out:
@@ -75,7 +75,7 @@ Acceptance criteria as bullets: what a user or a caller sees, including the edge
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
 
-The prompt already ends with `uv run runner check-all --fix --task <id>`, which runs every check; don't repeat finish commands in the ticket.
+The prompt already ends with `softfield check-all --fix --task <id>`, which runs every check; don't repeat finish commands in the ticket.
 
 ### Pattern to follow, Steps (optional)
 Only when a ticket really needs them: a pattern with no entry in `docs/agents/developer.md`, or a trap the developer would fall into.

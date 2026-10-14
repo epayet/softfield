@@ -7,7 +7,7 @@ A plain-language overview. The rules are in [`workflow.md`](workflow.md) and [`t
 ```mermaid
 flowchart TD
   plan["Plan with the owner<br/>milestone doc, ADRs, tickets"] -->|"commit to .factory/tasks/ready/"| ready[".factory/tasks/ready/"]
-  ready -->|"uv run runner run"| pick{"Pick the next job<br/>support jobs first, then tickets<br/>(lead, then developer)"}
+  ready -->|"softfield run"| pick{"Pick the next job<br/>support jobs first, then tickets<br/>(lead, then developer)"}
   pick -->|"developer ticket"| a1["Attempt 1<br/>local Qwen or a cloud developer"]
   a1 --> gates{"Gates<br/>runner check-all"}
   gates -->|fail| a2["Attempt 2<br/>+ the gate output"]
@@ -17,7 +17,7 @@ flowchart TD
   a3 --> gates
   gates -->|"fail 3 times, or BLOCKED.md"| esc["Escalation (Opus)<br/>finish, repair, or do it"]
   esc -->|"repaired"| ready
-  esc -->|"needs the owner"| adr(["ADR for the owner<br/>uv run runner accept N"])
+  esc -->|"needs the owner"| adr(["ADR for the owner<br/>softfield accept N"])
   pick -->|"lead ticket"| lead["Lead ticket (Opus)<br/>test-first, protected code, replans"]
   gates -->|pass| merge["Squash-merge to main"]
   lead -->|"check-all passes"| merge
@@ -26,7 +26,7 @@ flowchart TD
   cp --> ready
   merge -->|"a milestone's tickets all done"| review["Review (Opus)<br/>up to 3 rounds, fix tickets"]
   review --> ready
-  review -->|"verdict"| signoff(["Owner: device check<br/>uv run runner signoff KEY"])
+  review -->|"verdict"| signoff(["Owner: device check<br/>softfield signoff KEY"])
   pick -.->|"Claude past its line"| reserve(["Owner's switches:<br/>the week's reserve, your 25%"])
 ```
 
@@ -48,7 +48,7 @@ It's just folders of Markdown task files, with no database or server:
 .factory/tasks/blocked/    past its limits, or waiting for the owner; the verdict names it
 ```
 
-The owner starts a whole milestone with `uv run runner milestone N` ([ADR 12](../.factory/adr/12-junior-feedback-and-checkpoints.md)): it works through the queue, runs the review, and ends with a verdict, either ready for sign-off or exactly what needs the owner. Underneath, it loops over the queue:
+The owner starts a whole milestone with `softfield milestone N` ([ADR 12](../.factory/adr/12-junior-feedback-and-checkpoints.md)): it works through the queue, runs the review, and ends with a verdict, either ready for sign-off or exactly what needs the owner. Underneath, it loops over the queue:
 
 1. **Pick** the lowest id in `ready/` whose `depends_on` tasks are all in `done/`.
 2. **Branch** `task/<id>` from main.
@@ -76,7 +76,7 @@ The owner starts a whole milestone with `uv run runner milestone N` ([ADR 12](..
 7. **Escalation:** the headless frontier model, at most twice per task. It repairs or splits the spec, adds missing facts, does the task itself, or drafts an ADR for the owner. Its code must pass every check, or it stays on a branch. The runner commits its changes and moves the file.
 8. **Session report:** written to `.factory/sessions/` at the end.
 
-After a milestone's tasks are done, the review loop (`uv run runner review --milestone N` on its own) runs the staging end-to-end tests and a headless review. Blocking and should-fix findings become fix tasks or direct fixes, and nits go to the backlog. The loop stops on the rules in `workflow.md`.
+After a milestone's tasks are done, the review loop (`softfield review --milestone N` on its own) runs the staging end-to-end tests and a headless review. Blocking and should-fix findings become fix tasks or direct fixes, and nits go to the backlog. The loop stops on the rules in `workflow.md`.
 
 Everything is plain git and files, so a bad run is easy to inspect (logs go in `.factory/var/runs/`) or undo.
 

@@ -13,8 +13,8 @@ What the owner wants, and the lessons from working with them: [`owner.md`](owner
 - Don't install system packages or services, or enable systemd units, without asking.
 
 ## Phases: plan, then one command
-Plan (with the owner) → `uv run runner milestone N` (unattended) → sign-off ([ADR 12](../../.factory/adr/12-junior-feedback-and-checkpoints.md); [`docs/workflow.md`](../workflow.md) §Running a milestone). The repo holds the state (the milestone doc, ADRs, tasks, reports), so each interactive session starts fresh, with a short brief.
-- **The plan session ends with "go"** and the exact command for the owner: `uv run runner milestone N`. Never run or watch the runner from an interactive session: every turn re-reads the whole context (≈10M of M4's ≈18M).
+Plan (with the owner) → `softfield milestone N` (unattended) → sign-off ([ADR 12](../../.factory/adr/12-junior-feedback-and-checkpoints.md); [`docs/workflow.md`](../workflow.md) §Running a milestone). The repo holds the state (the milestone doc, ADRs, tasks, reports), so each interactive session starts fresh, with a short brief.
+- **The plan session ends with "go"** and the exact command for the owner: `softfield milestone N`. Never run or watch the runner from an interactive session: every turn re-reads the whole context (≈10M of M4's ≈18M).
 - **The owner prefers runs that need no oversight** over the cheapest session pattern: two touchpoints per milestone (plan, sign-off), plus a decision when the verdict says `⚠ NEEDS YOU`.
 - Between milestones, the owner may open a short session for an ADR or a deeper look; give them a ready-to-paste command when a phase ends.
 - **Ad-hoc requests go through the process too.** When the owner asks for a feature in chat, don't just build it: sort it into your list or the developers' list, write tickets for the developers' part, and do only your own part (protected, security, test-first, or a new kind of work). Only a trivial fix (a typo, or a single line with no behaviour change) is done directly.
@@ -44,7 +44,7 @@ Format: [`docs/task-format.md`](../task-format.md). Craft: [`docs/task-writing.m
 - A headless job can't delete a file: Bash is limited to its prefixes and Edit only writes. A lead ticket that deletes or renames one names it in `commands:` (`rm docs/old.md`); f1-16 was blocked on this.
 - **A ticket that repairs main goes first, and everything waits for it** (2026-10-12): give it `priority: 0` (lower goes first; 100 is last) and add it to the `depends_on` of every ready ticket, the lead's too. f12-03 had `priority: 100`: four lead tickets ran before it, finished their work and were blocked by the file it was there to remove.
 - **A blocked lead ticket whose work is good is landed from its branch, never requeued** (2026-10-12): a lead ticket starts again from main (`run_lead_task`), so a requeue pays for the work twice. Merge main into `task/<id>`, run `check-all --task <id>`, squash it in.
-- Run `uv run runner run --dry-run` before committing tickets: it shows what runs next and each ticket's pre-flight problems. Checkpoints too: in f1 a checkpoint queued f1-36 with bare names (`conftest.py`), `tests/runner/test_tasks.py` went red on main and f1-35 burnt two attempts on it; f1-37 did it again and cost f1-29 two attempts, so headless checkpoints now run `tests/runner/test_tasks.py` (their commits skip the hook). Write repo-relative paths in Context.
+- Run `softfield run --dry-run` before committing tickets: it shows what runs next and each ticket's pre-flight problems. Checkpoints too: in f1 a checkpoint queued f1-36 with bare names (`conftest.py`), `tests/runner/test_tasks.py` went red on main and f1-35 burnt two attempts on it; f1-37 did it again and cost f1-29 two attempts, so headless checkpoints now run `tests/runner/test_tasks.py` (their commits skip the hook). Write repo-relative paths in Context.
 
 ## Known range
 What developers pass at the first attempt, from results. Update it at each milestone review.
@@ -77,7 +77,7 @@ What developers pass at the first attempt, from results. Update it at each miles
 ## Your own work
 - Everything in `.factory/protected-paths.txt`, test-first. Keep that list current as security-relevant files appear; it's protected itself.
 - Changes to protected paths get isolation tests in the same commit.
-- Every commit goes through the pre-commit hook, `uv run runner check-all` (`git config core.hooksPath .factory/hooks`; docs- and tasks-only commits skip it). Developers' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did). Never pipe a check through `| tail`: it hides the exit code.
+- Every commit goes through the pre-commit hook, `softfield check-all` (`git config core.hooksPath .factory/hooks`; docs- and tasks-only commits skip it). Developers' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did). Never pipe a check through `| tail`: it hides the exit code.
 
 - **A terminal session beside a running runner works in its own worktree** (2026-10-08): the runner checks task and plan branches out in the main folder, so a lead's commits there land on whatever it has checked out. That day ten of them went onto a developer's `task/` branch, and its gates then failed on a protected path the lead had changed. Work in `git worktree add ../<repo>-lead -b lead/<topic> main`, and merge into main only while the runner is stopped (or paused on main), checking `git branch --show-current` first.
 
@@ -118,10 +118,10 @@ When the review loop stops, write this at the top of `.factory/reviews/mN.md`, i
 6. **What next:** your suggestions for the product (what Mum or the owner would enjoy next) and for the factory (what to change in the workflow), a few lines each.
 7. **What clogged the factory line** (owner, 2026-10-02): where the hours went that weren't merging work: waits for limits, failed attempts, stops for the owner, tickets that waited on one another while agents sat idle. Hours from the metrics database (runs, jobs, `usage_events`), each with what would unclog it.
 
-Then the rest of the report: what was built, findings, backlog, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `uv run runner report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../../.factory/adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
+Then the rest of the report: what was built, findings, backlog, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `softfield report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../../.factory/adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
 
 ## Reporting
-- The numbers come from the metrics database: `uv run runner report <key>` for a milestone review, the same queries as the dashboard (`factory_dashboard/queries.py`). The database isn't in git, so the review keeps a frozen snapshot.
+- The numbers come from the metrics database: `softfield report <key>` for a milestone review, the same queries as the dashboard (`factory_dashboard/queries.py`). The database isn't in git, so the review keeps a frozen snapshot.
 - The runner writes a session report to `.factory/sessions/` after every run.
 - After any session you lead, add a short narrative: what went well, what didn't, what it cost against the local model's share, and what to improve. After an interactive session that exercised the pipeline, summarise it briefly in the chat too.
 

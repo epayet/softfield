@@ -25,4 +25,4 @@ Read `.factory/adr/17-always-on-factory.md` item 1, `runner/router.py` (`route`,
 ### Done when
 - attempt 1 of a difficulty-3 ticket never routes to Sonnet, even when Sonnet is the best rated
 - attempt 2 after gpt-oss failed routes to Sonnet at 20% with no lead work, and not at 35% or with a lead ticket ready
-- `uv run runner check-all --task f4-13-sonnet-step-up` passes
+- `softfield check-all --task f4-13-sonnet-step-up` passes

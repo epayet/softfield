@@ -15,7 +15,7 @@ uv runner run command stopped when it had nothing to do because of claude on res
 - **What already works:** when the owner pauses the factory, the run holds and applies their requests every 5 seconds (`_hold_for_the_owner`). The same hold fits here.
 
 ## Expected outcome
-`uv run runner run` ends only when the owner ends it. With nothing it can run, it stays up, says what it waits for, applies every request from the dashboard as it comes, and starts again by itself when work appears or Claude comes back.
+`softfield run` ends only when the owner ends it. With nothing it can run, it stays up, says what it waits for, applies every request from the dashboard as it comes, and starts again by itself when work appears or Claude comes back.
 
 ## Done when
 - With every ready ticket waiting for Claude's reserve and no developer ticket runnable: the run doesn't end. The console and the Overview's Now say "Idle: 22 tickets wait for Claude's reserve · the week resets Mon 17:00".
@@ -23,7 +23,7 @@ uv runner run command stopped when it had nothing to do because of claude on res
 - When the week resets, the next ticket starts by itself.
 - With an empty queue: the run stays up ("Idle: nothing is ready"). Approving a plan from the desk queues its tickets and the first one starts.
 - What waits on the owner (a sign-off, an answer, a blocked ticket) is named in the idle line, once each, not repeated every poll.
-- `uv run runner run --once` and Ctrl-C end the run as today, and a session report is written.
+- `softfield run --once` and Ctrl-C end the run as today, and a session report is written.
 
 ## Decisions
 - **D1 Idle is a hold, not an end.** Where `work_queue` returns today with nothing to run, it holds as it does for the owner's pause: every 5 seconds it applies the owner's requests, checks the backup and reads Claude's windows, and it picks again as soon as anything is runnable. This goes for `runner run` only: `runner milestone` still ends with its verdict.

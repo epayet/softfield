@@ -5,7 +5,7 @@
 > Numbered F4 because F3 (the factory line) keeps its key: `f3-01` has a half-done branch and a saved session under that id.
 
 ## Outcome
-- The runner can be left on with `uv run runner run`. Claude's work waits for room while developer tickets keep going, and a yes to Claude's reserve releases parked work first.
+- The runner can be left on with `softfield run`. Claude's work waits for room while developer tickets keep going, and a yes to Claude's reserve releases parked work first.
 - Developers lose no attempt to formatting, and Sonnet only steps in after a failure.
 - Tickets can wait in `.factory/tasks/later/`, and a milestone can wait for another's sign-off.
 - The Overview answers "what is it doing, for which goal, and what waits for what" without a reload:
@@ -15,12 +15,12 @@
 - The Tickets page shows the latest work first.
 
 ## How to run it (the owner)
-1. Accept ADR 17 (`uv run runner accept 17`), or say no, and the lead moves 09, 11, 13, 15 and 18 to `.factory/tasks/later/`.
+1. Accept ADR 17 (`softfield accept 17`), or say no, and the lead moves 09, 11, 13, 15 and 18 to `.factory/tasks/later/`.
 2. Optional, first: the bench (`docs/roadmap.md`, "Cloud workers"):
    ```
-   uv run runner bench f1-38-project-page-fixes m4-11-send-once --agents ollama-gpt-oss-120b ollama-gemma4-31b ollama-nemotron-3-ultra
+   softfield bench f1-38-project-page-fixes m4-11-send-once --agents ollama-gpt-oss-120b ollama-gemma4-31b ollama-nemotron-3-ultra
    ```
-3. `uv run runner run`.
+3. `softfield run`.
 
 ## Decisions
 - **D1 Sonnet off `[roles] developer`** from 2026-10-02 (ADR 17 item 1). Ticket 13 brings it back as the step-up only.
