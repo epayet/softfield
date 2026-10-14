@@ -32,6 +32,7 @@ from runner.requests import (
     PRIORITY,
     QUEUE,
     REJECT,
+    REORDER,
     RESERVE,
     RESUME,
     SEND_BACK,
@@ -43,8 +44,8 @@ router = APIRouter()
 # The planning room's six (f6 D1) too, Now's pause and resume (f5-18), and the ↑ and ↓ of
 # Next in line and the Milestones page (f6-18), archiving a thread (2026-10-07), dismissing
 # words that didn't go through (F31 D9), rejecting a proposal (F31 D2), and editing or
-# cancelling a waiting plant or message (F14 D1); the runner checks each value, as for the
-# first three
+# cancelling a waiting plant or message (F14 D1), and the board's order sent whole (F15 D3);
+# the runner checks each value, as for the first three
 KINDS = (
     SIGNOFF,
     RESERVE,
@@ -62,6 +63,7 @@ KINDS = (
     DISMISS,
     REJECT,
     CHANGE,
+    REORDER,
 )
 
 

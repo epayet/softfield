@@ -22,6 +22,7 @@ from runner import loop, metrics, milestone, owner, planner
 from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
 from runner.tasks import (
+    BUGS,
     LATER,
     TaskError,
     full_key,
@@ -53,9 +54,11 @@ DISMISS = "dismiss"  # subject: a refused request's id; no value (F31 D9)
 REJECT = "reject"  # subject: <thread>/<proposal id>; no value: won't do (F31 D2)
 # subject: an open plant's or plan_message's request id; value: its new words, or {cancel: true}
 CHANGE = "change"  # (F14 D1)
+# no subject; value: a JSON list, the open cards' short keys and bug ticket ids in the board's
+REORDER = "reorder"  # order (F15 D3)
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
-_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, REJECT, *_APPROVALS)
+_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, REORDER, REJECT, *_APPROVALS)
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
@@ -89,6 +92,8 @@ def _what(row: sqlite3.Row) -> str:
     ``plant`` alone, its words being the owner's to read on the card."""
     if row["kind"] == PLANT and not row["subject"]:
         return PLANT
+    if row["kind"] == REORDER:  # its value is the whole board
+        return REORDER
     if row["kind"] == CHANGE:  # its value is the owner's words too
         return " ".join(filter(None, [CHANGE, row["subject"]]))
     return " ".join(str(part) for part in (row["kind"], row["subject"] or row["value"]) if part)
@@ -1015,20 +1020,30 @@ def _whole(value: object) -> int:
     return int(text)
 
 
+def _commit_files(git: Git, texts: Mapping[Path, str], message: str) -> None:
+    """Each path rewritten as its text, and they alone committed together, by the runner; as
+    they were if the commit fails."""
+    before = {path: path.read_text(encoding="utf-8") for path in texts}
+    rels = [path.relative_to(git.repo).as_posix() for path in texts]
+    for path, text in texts.items():
+        path.write_text(text, encoding="utf-8")
+    try:
+        git.run("add", "--", *rels)
+        message = with_trailers(message, agent="runner")
+        git.run(
+            "commit", "-q", "--no-verify", "-m", message, "--author", RUNNER_AUTHOR, "--", *rels
+        )
+    except GitError:
+        git.run("reset", "-q", "--", *rels, check=False)
+        for path, text in before.items():
+            path.write_text(text, encoding="utf-8")
+        raise
+
+
 def _commit_file(git: Git, path: Path, text: str, message: str) -> None:
     """``path`` rewritten as ``text`` and committed alone, by the runner; as it was if the
     commit fails."""
-    before = path.read_text(encoding="utf-8")
-    rel = path.relative_to(git.repo).as_posix()
-    path.write_text(text, encoding="utf-8")
-    try:
-        git.run("add", "--", rel)
-        message = with_trailers(message, agent="runner")
-        git.run("commit", "-q", "--no-verify", "-m", message, "--author", RUNNER_AUTHOR, "--", rel)
-    except GitError:
-        git.run("reset", "-q", "--", rel, check=False)
-        path.write_text(before, encoding="utf-8")
-        raise
+    _commit_files(git, {path: text}, message)
 
 
 def _ticket_with(text: str, priority: int) -> str:
@@ -1139,6 +1154,165 @@ def _priority(
     return _card_priority(repo, conn, project_id, subject, priority)
 
 
+# --- reorder: the board's whole order, sent once (F15 D3, D5, D10) ----------------------------
+
+REPLACED = "replaced by a later order"
+_REORDER_VALUE = "a reorder is a JSON list of card keys and bug ticket ids, first in line first"
+_SHORT_KEY_RE = re.compile(r"[a-z]+\d+")
+
+type _Tie = tuple[tuple[str, int], str]  # what `run_order` sorts by after the priority
+
+
+@dataclass(frozen=True)
+class _Placed:
+    """An open card or bug ticket on the board: the file its priority is in, the priority, and
+    what orders it among equals."""
+
+    path: Path
+    text: str
+    priority: int
+    tie: _Tie
+    card: milestone.Card | None = None  # a bug ticket has none
+
+
+def _board(repo: Path, state: State) -> dict[str, _Placed]:
+    """What a reorder may place, by the key the board sends: each card not done by its short
+    key, and each bug ticket in tasks/ready/ or tasks/later/ that isn't running by its id."""
+    found: dict[str, _Placed] = {}
+    for path in sorted((repo / "docs" / "milestones").glob("*.md")):
+        try:
+            key = milestone_key(path.stem)
+        except TaskError:  # a README
+            continue
+        if key == BUGS:
+            continue
+        text = path.read_text(encoding="utf-8")
+        card = milestone.card(path.stem, text)
+        if card.state != "done":
+            tie = (milestone_order(key), "")
+            found.setdefault(short_key(key), _Placed(path, text, card.priority, tie, card))
+    running = (state.in_flight or {}).get("ticket")
+    for folder in _MOVABLE:
+        for path in sorted((repo / "tasks" / folder).glob("bug-*.md")):
+            try:
+                task = parse_task(path, _MAX_DIFF)
+            except (ValueError, yaml.YAMLError, OSError):  # as ticket_problems: it won't read
+                continue
+            if task.milestone != BUGS or task.id == running:
+                continue
+            text = path.read_text(encoding="utf-8")
+            tie = (milestone_order(BUGS), task.id)
+            found.setdefault(task.id, _Placed(path, text, task_priority(task, {}), tie))
+    return found
+
+
+def _numbers(line: list[tuple[int, _Tie]]) -> list[int]:
+    """The priorities that put ``line`` (each one's priority and what orders it among equals)
+    in its order, with as many kept as can be: neighbours may share a number when the tie
+    between them falls the right way. One that changes takes the lowest that fits after the
+    one before it."""
+
+    def lowest(before: tuple[int, _Tie] | None, tie: _Tie) -> int:
+        if before is None:
+            return 0
+        return before[0] if before[1] < tie else before[0] + 1
+
+    # kept[j]: how many keep their number up to j when j keeps its own, and the one kept
+    # before it (-1: none)
+    kept: dict[int, tuple[int, int]] = {-1: (0, -1)}
+    for i in range(-1, len(line)):
+        if i not in kept:  # no numbering lets it stay
+            continue
+        before = None if i < 0 else line[i]
+        for j in range(i + 1, len(line)):
+            priority, tie = line[j]
+            least = lowest(before, tie)
+            if priority >= least and kept[i][0] + 1 > kept.get(j, (0, -1))[0]:
+                kept[j] = (kept[i][0] + 1, i)
+            before = (least, tie)
+    last = max(kept, key=lambda j: kept[j][0])
+    stay = set()
+    while last >= 0:
+        stay.add(last)
+        last = kept[last][1]
+    numbers: list[int] = []
+    before = None
+    for j, (priority, tie) in enumerate(line):
+        number = priority if j in stay else lowest(before, tie)
+        numbers.append(number)
+        before = (number, tie)
+    return numbers
+
+
+def _renumbered(key: str, placed: _Placed, priority: int) -> str:
+    """The card's doc or the bug ticket with its new priority, checked as the ``priority``
+    request checks it."""
+    if placed.card is None:
+        changed = _ticket_with(placed.text, priority)
+        if split_frontmatter(changed)[0].get("priority") != priority:
+            raise planner.PlannerError(f"{key}'s frontmatter can't take a priority: not reordered")
+        return changed
+    changed = _card_with(placed.text, priority)
+    if milestone.card(placed.path.stem, changed) != replace(placed.card, priority=priority):
+        raise planner.PlannerError(f"{key.upper()}'s header can't take a priority: not reordered")
+    return changed
+
+
+def _reorder(
+    repo: Path, conn: sqlite3.Connection, project_id: int, state: State, value: object
+) -> str:
+    """The board's order, sent whole (F15 D3, D5): each listed card's header Priority and each
+    listed bug ticket's ``priority:`` set so that the pick's order (``run_order``) is the
+    list's, in one commit of the files whose number changed, and none when the order holds
+    already. An open card or bug the list doesn't name comes after the listed ones, in the
+    order it had. A key that is no open card or bug ticket (unknown, done, removed, running,
+    general) is skipped and named. A ticket's own ``priority:`` inside a milestone is not
+    touched: it still wins over its card's (``task_priority``). Refused, main unchanged, for
+    a value that isn't a JSON list of strings or holds a key twice."""
+    try:
+        keys = json.loads(value) if isinstance(value, str) else None
+    except json.JSONDecodeError:
+        keys = None
+    if not isinstance(keys, list) or not all(isinstance(key, str) for key in keys):
+        return _REORDER_VALUE
+    seen: set[str] = set()
+    for key in keys:
+        if key in seen:
+            return f"a reorder names each card once: {key[:_MAX_ID]} is there twice"
+        seen.add(key)
+    board = _board(repo, state)
+    was = sorted(board, key=lambda key: (board[key].priority, board[key].tie))
+    line = [key for key in keys if key in board]
+    line += [key for key in was if key not in seen]
+    numbers = _numbers([(board[key].priority, board[key].tie) for key in line])
+    moved = {
+        key: number
+        for key, number in zip(line, numbers, strict=True)
+        if number != board[key].priority
+    }
+    texts = {key: _renumbered(key, board[key], number) for key, number in moved.items()}
+    if texts:
+        files = {board[key].path: text for key, text in texts.items()}
+        _commit_files(Git(repo), files, "the board's order, by the owner")
+    for key, number in moved.items():
+        if board[key].card is not None:
+            stem = board[key].path.stem
+            metrics.upsert_milestone(conn, project_id, milestone_key(stem), priority=number)
+            continue
+        row = conn.execute(
+            "SELECT 1 FROM tickets WHERE project_id = ? AND ticket = ?", (project_id, key)
+        ).fetchone()
+        if row is not None:  # else the next sync makes it
+            metrics.upsert_ticket(conn, project_id, key, body=texts[key])
+    result = f"reordered: {len(moved)} card{'' if len(moved) == 1 else 's'} changed"
+    skipped = [
+        key.upper() if _SHORT_KEY_RE.fullmatch(key) else key[:_MAX_ID]
+        for key in keys
+        if key not in board
+    ]
+    return f"{result}, skipped {', '.join(skipped)}" if skipped else result
+
+
 def _waits(repo: Path, kind: str) -> str | None:
     """Why a request that commits must wait, if it must: a queue commits on the branch it is
     on, and a sign-off or an approval commits the whole tree, so none goes anywhere but a main
@@ -1195,6 +1369,8 @@ def _apply(
             return _archive(conn, project_id, now, subject, value)
         if kind == PRIORITY:
             return _priority(repo, conn, project_id, state, subject, value)
+        if kind == REORDER:
+            return _reorder(repo, conn, project_id, state, value)
         if kind == DISMISS:
             return _dismiss(conn, project_id, now, subject)
         if kind == REJECT:
@@ -1454,11 +1630,17 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
             result = _apply(repo, db, conn, project, state, now, row)
             if metrics.finish_request(conn, row["id"], now.isoformat(), result):
                 lines.append(f"{_what(row)}: {result}")
-        for row in metrics.open_requests(conn, project):
+        waiting = metrics.open_requests(conn, project)
+        # Only the latest order is the board's (F15 D4): an earlier one still open is replaced
+        latest = max((row["id"] for row in waiting if row["kind"] == REORDER), default=None)
+        for row in waiting:
             if (why := _waits(repo, row["kind"])) is not None:
                 lines.append(f"{_what(row)}: {why}")
                 continue
-            result = _apply(repo, db, conn, project, state, now, row)
+            if row["kind"] == REORDER and row["id"] != latest:
+                result = REPLACED
+            else:
+                result = _apply(repo, db, conn, project, state, now, row)
             if metrics.finish_request(conn, row["id"], now.isoformat(), result):
                 lines.append(f"{_what(row)}: {result}")
                 if (thread := _settles(row, result)) is not None:

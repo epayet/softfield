@@ -78,6 +78,7 @@ PLANNING = [  # the planning room's six requests (f6 D1); the runner checks thei
     ("reject", "f7/plan", None),  # F31 D2: won't do
     ("change", "41", '{"title": "Two queues", "thoughts": ""}'),  # F14 D1: a waiting plant's
     ("change", "41", '{"cancel": true}'),
+    ("reorder", None, '["f8", "bug-07-queue-order", "f7"]'),  # F15 D3: the board's order
 ]
 
 

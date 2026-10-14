@@ -27,6 +27,7 @@
     | `queue` | the ticket id | – |
     | `pause` | – | – |
     | `resume` | – | – |
+    | `reorder` | – | a JSON list: the open cards' short keys and the open bug tickets' ids, first in line first (F15 D3) |
 
     `reserve` replaced the planned `five_hour` (yes or no) in F8 (ADR 22 item 4, f8-10).
   - `runner/metrics.py` owns `add_request(conn, project_id, kind, subject, value, created)` and `open_requests(conn, project_id)`. It also owns `finish_request(conn, request_id, done, result)`.
