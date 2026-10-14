@@ -38,3 +38,10 @@ Read `docs/milestones/f15-reprioritising-tickets.md` (D3, D5) and F5's D1, D2 an
 - `POST /requests` takes kind `reorder` from the dashboard and still refuses an unknown kind
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
