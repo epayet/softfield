@@ -28,3 +28,12 @@ Read `docs/milestones/f14-coming-planted-ideas-not-clickable.md` (Done when, D5)
 - with every waiting message on the thread cancelled, the Send form comes back (nothing is waiting for the lead)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 11350598
+logs: var/runs/20261014-005521/f14-03-edit-waiting-message
+```
