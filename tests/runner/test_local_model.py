@@ -325,7 +325,7 @@ def test_a_timeout_is_a_failure_even_on_a_cloud_tag(tmp_path, monkeypatch):
     assert result.timed_out and result.error == FAILURE
 
 
-def test_the_ollama_agents_are_opencode_json_tags_and_none_develops_for_now():
+def test_the_ollama_agents_are_opencode_json_tags_and_none_develops_for_now(machine):
     """D6: `ollama-<tag>` without `-cloud` or `:cloud`, `:` as `-`, model `ollama/<tag>`;
     each tag is in opencode.json's `ollama` provider. None is a developer until a clean bench
     (owner, 2026-10-04: the 2026-10-04 bench leaked into the main checkout, f7-06), and none

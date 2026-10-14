@@ -1,0 +1,111 @@
+# This machine's settings for every project (ADR 30 item 3): agents, roles, Claude's reserves,
+# the local model, the metrics database and its backup. A project's .factory/project.toml
+# can override a table's keys. Changing rules needs an Accepted ADR.
+
+[local_model]
+base_url = "http://127.0.0.1:1234"
+model = "qwen/qwen3.6-35b-a3b"          # LM Studio key; its settings are used as-is (JIT)
+
+# Agents are a harness plus a model, with one rating from 1 to 10: the lead's estimate until
+# results move it (ADR 14 items 2–3, ADR 15 item 9). Ids follow D6 in docs/milestones/f1.md.
+# `windows = [{ name = "month", capacity = 200 }]` seeds an agent's allowance (ADR 15 item 2).
+[agents."local-qwen3.6-35b-a3b"]       # quoted: a bare key would split at the dot
+harness = "opencode"
+model = "lmstudio/qwen/qwen3.6-35b-a3b"
+rating = 5
+
+# Ollama Cloud through the local daemon (opencode.json's `ollama` provider; f1-18's probe).
+# Ratings from ADR 14's size comparison with the local Qwen (5), or from F2's results where
+# they have some (ADR 14's probe section); none is 2 above it, so none is a step-up (ADR 15 item 7). Their allowance is unknown: used until refused (ADR 15 item 2).
+[agents.ollama-gpt-oss-20b]
+harness = "opencode"
+model = "ollama/gpt-oss:20b-cloud"
+rating = 4                              # same class or smaller
+
+[agents.ollama-nemotron-3-nano-30b]
+harness = "opencode"
+model = "ollama/nemotron-3-nano:30b-cloud"
+rating = 4                              # ~3B active: same class or smaller
+
+[agents.ollama-gemma4-31b]
+harness = "opencode"
+model = "ollama/gemma4:31b-cloud"
+rating = 5                              # roughly level
+
+[agents.ollama-gpt-oss-120b]
+harness = "opencode"
+model = "ollama/gpt-oss:120b-cloud"
+rating = 5                              # F2: f2-13 first time, f2-06 lost; 5.1 from results (f2-09)
+
+# F2 (f2-09): off `[roles] developer`. Both its runs on f2-07 (difficulty 3) blocked, after
+# 20 and 17 min (a shell timeout taken for a stuck check; then it wiped conftest.py with Write),
+# and the lead finished it. Not refused: it failed. Back only through the bench.
+[agents.ollama-nemotron-3-super]
+harness = "opencode"
+model = "ollama/nemotron-3-super:cloud"
+rating = 4                              # 4.3 from results, from a 6 estimate
+
+[agents.ollama-nemotron-3-ultra]
+harness = "opencode"
+model = "ollama/nemotron-3-ultra:cloud"
+rating = 6                              # 550B, but not expected to be Claude-level
+
+[agents.claude-sonnet]
+harness = "claude"
+model = "sonnet"
+rating = 7
+
+[agents.claude-opus]
+harness = "claude"
+model = "opus"
+rating = 9
+
+# Copilot Free through its CLI, read-only reviews only (runner/copilot.py). `auto` lets Copilot
+# pick the model and doesn't say which (f1-18's probe), so ADR 15 item 9's other-model rule
+# can't be checked for it; as a shadow it is never acted on (f1-26).
+[agents.copilot-auto]
+harness = "copilot"
+model = "auto"
+rating = 6                              # unknown models behind it; a mid estimate
+windows = [{ name = "month", capacity = 200 }]  # credits, fractional (f1-18)
+
+# Who does each kind of job. Developer jobs are routed (runner/router.py, ADR 15 items 6–7):
+# the best-rated listed agent that covers the ticket and its allowance permits, else local; a
+# step up after a failure. A checkpoint goes to the first listed that isn't an author's model
+# (item 9). The checkpoint's shadow runs on every agent it lists; every other role takes its first.
+[roles]
+# Sonnet off for now (owner, 2026-10-02; ADR 17 item 1): it took first attempts from the cloud
+# developers and drew on the lead's 5-hour window. f4-13 brings it back as the step-up only.
+# Cloud developers off (owner, 2026-10-04): the Ollama allowance is kept for a clean bench
+# (f7-06 first), whose results decide who comes back.
+developer = ["local-qwen3.6-35b-a3b"]
+last-attempt = ["local-qwen3.6-35b-a3b"]
+direction = ["claude-opus"]
+checkpoint = ["claude-sonnet", "claude-opus"]  # Opus when Sonnet wrote the code
+# Off: agents earn roles from the bench, not by shadowing (ADR 16 item 10)
+checkpoint-shadow = []
+# Does the checkpoint, read-only, when Claude is past its 75% or refused (ADR 16 item 9)
+checkpoint-stand-in = ["copilot-auto"]
+escalation = ["claude-opus"]
+lead-ticket = ["claude-opus"]
+review = ["claude-opus"]
+narrative = ["claude-opus"]
+# Answers the owner's messages in the planning room, before every other lead job (ADR 20)
+planner = ["claude-opus"]
+
+[claude]
+reserve = 0.3                           # of the week, kept for the lead's support roles (ADR 15)
+five_hour_reserve = 0.25                # of the 5-hour window, kept for the owner (ADR 16 item 1)
+developer_five_hour_cap = 0.5           # Claude takes developer tickets only under it (item 2)
+usage_limit_backoff_min = 900           # 15 min
+usage_limit_backoff_max = 18000         # 5 h, for a limit that only looks like one
+
+[metrics]
+db = "~/.local/share/software-factory/factory-metrics.sqlite"  # every project's runs (ADR 13)
+
+# The metrics database's copies (F20 D1): checked at the run's start, at each pick and while
+# it waits; past `keep`, the oldest copy in `dir` goes. A copy that fails never stops the run.
+[backup]
+dir = "~/Dropbox/software-factory-backups"
+keep = 14
+every_hours = 24

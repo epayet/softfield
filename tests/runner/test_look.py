@@ -200,7 +200,7 @@ def _get_addresses() -> list[str]:
         "name": PROJECT,
         "job_id": "1",
         "thread": "f6",
-        "path:path": "docs/milestones/f6-mockup/desk.html",
+        "path:path": ".factory/cards/f6-mockup/desk.html",
         "id": "adr-20",
         "request_id": "1",
         "key": "f1",
@@ -245,13 +245,13 @@ def test_no_get_route_of_the_dashboard_writes(db, tmp_path):
 
 
 @pytest.fixture
-def in_repo(repo, monkeypatch):
+def in_repo(repo, monkeypatch, machine):
     """The temporary repo as the command's, its metrics database under its ``var/``."""
-    toml = (cli._repo() / "workflow" / "runner.toml").read_text()
-    real_db = '"~/.local/share/software-factory/factory-metrics.sqlite"'
-    assert real_db in toml
+    toml = (cli._repo() / ".factory" / "project.toml").read_text()
     test_db = (repo / "var" / "factory-metrics.sqlite").as_posix()
-    (repo / "workflow" / "runner.toml").write_text(toml.replace(real_db, f'"{test_db}"'))
+    metrics_db = f'\n[metrics]\ndb = "{test_db}"\n'  # over the machine's real one
+    toml = toml.replace('name = "coucou"\n', "")  # the project is its folder's name
+    (repo / ".factory" / "project.toml").write_text(toml + metrics_db)
     monkeypatch.chdir(repo)
     conn = metrics.open_db(repo / "var" / "factory-metrics.sqlite")
     try:
@@ -301,7 +301,7 @@ def test_looking_applies_no_owner_request_and_changes_nothing(in_repo, capsys):
     """ADR 28 item 3: every other command applies the owner's requests first (here, a pause
     made from the dashboard). A look runs inside a job, and leaves them to the runner."""
     db = in_repo / "var" / "factory-metrics.sqlite"
-    state_path = in_repo / "var" / "runs" / "state.json"
+    state_path = in_repo / ".factory" / "var" / "runs" / "state.json"
     before, status = db.read_bytes(), git(in_repo, "status", "--porcelain")
     head = git(in_repo, "rev-parse", "HEAD")
     assert cli.main(["look", "sql", "SELECT kind, done FROM owner_requests"]) == 0
@@ -332,8 +332,8 @@ def test_the_review_job_may_look(repo, monkeypatch):
         out = re.search(r"Write (\S+) as:", job.prompt)
         assert out
         (repo_ / out[1]).write_text(json.dumps({"findings": [], "stop": None}))
-        (repo_ / "docs" / "reviews").mkdir(parents=True, exist_ok=True)
-        (repo_ / "docs" / "reviews" / "m1.md").write_text(REVIEW_DOC)
+        (repo_ / ".factory" / "reviews").mkdir(parents=True, exist_ok=True)
+        (repo_ / ".factory" / "reviews" / "m1.md").write_text(REVIEW_DOC)
         return JobResult(ok=True, text="", duration_s=1.0)
 
     monkeypatch.setattr(claude, "run_claude", run_claude)

@@ -3,7 +3,7 @@
 The dashboard only writes a request row. The runner applies it, with the code of its console
 command: at each pick, while a wait for the owner's 25% or their resume sleeps
 (`take_switches`), and at the start of every ``runner`` command while no run is live. Each
-request is finished once, with its result or its error, and never retried. Git and tasks/
+request is finished once, with its result or its error, and never retried. Git and .factory/tasks/
 keep one writer, and the run state.json, whose reserve switches (ADR 22 item 4) and pause
 (item 5) the requests set.
 """
@@ -19,6 +19,7 @@ from pathlib import Path
 import yaml
 
 from runner import loop, metrics, milestone, owner, planner
+from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
 from runner.tasks import (
@@ -148,10 +149,10 @@ def _kept_card(repo: Path, thread: str) -> str | None:
     two kept cards (a key planted twice before f109-02: the runner can't tell which is meant)."""
     if thread == planner.GENERAL:
         return None
-    if milestone_file(repo, "milestones", full_key(repo, thread)).is_file():
+    if milestone_file(repo, "cards", full_key(repo, thread)).is_file():
         return None
     kept = set()
-    for path in (repo / "docs" / "milestones").glob("*.md"):
+    for path in (repo / ".factory" / "cards").glob("*.md"):
         if thread in planner.merged_keys(path.read_text(encoding="utf-8")):
             try:
                 kept.add(planner.thread_key(path.stem))
@@ -285,7 +286,7 @@ def _drafts(git: Git, branch: str) -> list[tuple[str, str]]:
     return changes
 
 
-_OUTSIDE = "outside docs/ and tasks/later/"
+_OUTSIDE = "outside docs/, .factory/cards/, .factory/adr/ and .factory/tasks/later/"
 _BUILDING = "building"  # a card's state while its tickets run (f5 D4): a plan keeps it
 
 
@@ -294,7 +295,7 @@ def _why_not(
 ) -> str | None:
     """Why the plan branch may not change ``path``: a draft may change, and a ``replan`` its
     card's ready tickets too (f6-13), but not the running one, and one it removes only to set
-    it aside in tasks/later/."""
+    it aside in .factory/tasks/later/."""
     if planner.is_draft(path):
         return None
     if not path.startswith(planner.READY_DIR):
@@ -307,7 +308,7 @@ def _why_not(
     if name.removesuffix(".md") == running:
         return "the running ticket"
     if mode == "000000" and name not in later:
-        return "a ready ticket removed, not set aside in tasks/later/"
+        return "a ready ticket removed, not set aside in .factory/tasks/later/"
     return None
 
 
@@ -319,7 +320,7 @@ def _outside(
     later = {
         Path(path).name
         for mode, path in changes
-        if path.startswith(f"tasks/{LATER}/") and mode != "000000"
+        if path.startswith(f".factory/tasks/{LATER}/") and mode != "000000"
     }
     stray: dict[str, list[str]] = {}
     for mode, path in changes:
@@ -335,13 +336,13 @@ def _outside(
 
 
 _ADR_STATUS_RE = re.compile(r"^- \*\*Status:\*\*.*$", re.MULTILINE)  # as owner.decide_adr
-_CARD_DOC_RE = re.compile(r"docs/milestones/[^/]+\.md")
+_CARD_DOC_RE = re.compile(r"\.factory/cards/[^/]+\.md")
 
 
 def _owners_mark(path: str, before: str | None, after: str | None) -> bool:
     """Whether a draft sets what only the owner sets: an ADR's status (a new ADR may only be
     Proposed; ``accept_adr``), or a card's sign-off (``signoff``)."""
-    if path.startswith("docs/adr/"):
+    if path.startswith(".factory/adr/"):
         status = [_ADR_STATUS_RE.search(t or "") for t in (before, after)]
         was, now = (m[0] if m else None for m in status)
         return was != now and not (before is None and planner.is_proposed(after or ""))
@@ -370,13 +371,14 @@ def _owners_marks(git: Git, branch: str, changes: list[tuple[str, str]]) -> str 
 
 
 def _proposed(repo: Path, number: int) -> bool:
-    found = sorted((repo / "docs" / "adr").glob(f"{number:02d}-*.md"))
+    found = sorted((repo / ".factory" / "adr").glob(f"{number:02d}-*.md"))
     return bool(found) and planner.is_proposed(found[0].read_text(encoding="utf-8"))
 
 
 def ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
     """Each merged ticket's pre-flight problems, and an ADR it relies on that is still
-    Proposed, by ticket: one in tasks/later/ to be queued, or a ready one a replan changed."""
+    Proposed, by ticket: one in .factory/tasks/later/ to be queued, or a ready one a replan changed.
+    """
     problems = []
     for rel in tickets:
         path = repo / rel
@@ -388,10 +390,10 @@ def ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
         found = preflight(task, repo)
         elsewhere = [
             p.parent.name
-            for p in (repo / "tasks").glob(f"*/{task.id}.md")
+            for p in (repo / ".factory" / "tasks").glob(f"*/{task.id}.md")
             if p.parent.name not in (LATER, path.parent.name)
         ]
-        found += [f"already in tasks/{folder}/" for folder in sorted(elsewhere)]
+        found += [f"already in .factory/tasks/{folder}/" for folder in sorted(elsewhere)]
         adrs = planner.named_adrs(path.read_text(encoding="utf-8"))
         found += [
             f"relies on ADR {n}, still Proposed: accept it first"
@@ -417,11 +419,13 @@ def _merge(repo: Path, now: datetime, duplicate: str, kept: str, by: str = "owne
     and its doc removed (``git rm``), for the approval's one commit; the notes moved. A card
     with tickets isn't merged away: they would be left without their milestone."""
     names = (planner.thread_name(duplicate), planner.thread_name(kept))
-    docs = [milestone_file(repo, "milestones", full_key(repo, key)) for key in (duplicate, kept)]
+    docs = [milestone_file(repo, "cards", full_key(repo, key)) for key in (duplicate, kept)]
     for name, path in zip(names, docs, strict=True):
         if not path.is_file():
-            raise planner.PlannerError(f"{name} has no card in docs/milestones/: not merged")
-    tickets = sorted(p.relative_to(repo).as_posix() for p in repo.glob(f"tasks/*/{duplicate}-*.md"))
+            raise planner.PlannerError(f"{name} has no card in .factory/cards/: not merged")
+    tickets = sorted(
+        p.relative_to(repo).as_posix() for p in repo.glob(f".factory/tasks/*/{duplicate}-*.md")
+    )
     if tickets:
         raise planner.PlannerError(
             f"{names[0]} has tickets ({', '.join(tickets)}): it can't be merged away"
@@ -488,7 +492,7 @@ def auto_merge(
         duplicate, kept = planner.merge_cards(proposal)
     except planner.PlannerError as exc:
         return str(exc)
-    if not milestone_file(repo, "milestones", full_key(repo, duplicate)).is_file():
+    if not milestone_file(repo, "cards", full_key(repo, duplicate)).is_file():
         return None
     git = Git(repo)
     name = planner.thread_name(duplicate)
@@ -514,9 +518,9 @@ def auto_merge(
 def _ready_changes(
     repo: Path, changes: list[tuple[str, str]]
 ) -> tuple[list[str], list[str], list[str]]:
-    """A replan's ready tickets, by path, read before the merge while main is checked out:
-    those it adds, changes, and sets aside (removed from tasks/ready/: ``_outside`` has checked
-    each goes to tasks/later/)."""
+    """A replan's ready tickets, by path, read before the merge while main is checked out: those it
+    adds, changes, and sets aside (removed from .factory/tasks/ready/: ``_outside`` has checked each
+    goes to .factory/tasks/later/)."""
     added: list[str] = []
     changed: list[str] = []
     aside: list[str] = []
@@ -535,7 +539,7 @@ def _ready_changes(
 def _export(
     repo: Path, conn: sqlite3.Connection, project_id: int, thread: str, doc: Path
 ) -> Path | None:
-    """The card's thread written whole to ``docs/planning/<card's full key>.md`` (f20 D2), for
+    """The card's thread written whole to ``.factory/planning/<card's full key>.md`` (f20 D2), for
     the approval's commit; the file, when the approval made it, for an undo to remove (``_undo``
     restores one main had). None when the card has no thread."""
     found = metrics.find_thread(conn, project_id, thread)
@@ -544,7 +548,7 @@ def _export(
     title = milestone.milestone_doc(doc.read_text(encoding="utf-8")).get("title")
     messages = metrics.planner_messages(conn, found["id"])
     text = planner.export(planner.thread_name(thread), title, messages)
-    path = repo / "docs" / "planning" / f"{doc.stem}.md"
+    path = repo / ".factory" / "planning" / f"{doc.stem}.md"
     made = not path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -559,16 +563,16 @@ def _approve_plan(
     now: datetime,
     subject: object,
 ) -> str:
-    """Merge a card's plan branch into main, queue its tickets and set the card ready, apply
-    the thread's ``merge`` proposals, and write the card's thread to docs/planning/ (``_export``),
-    in one commit; the branch then goes. Refused, with
-    main as it was, when the branch changes more than drafts, clashes with main, a ticket fails
-    pre-flight (the planner fixes it next), or a merge can't be applied. A thread with merges
-    and no branch (the general one too) approves its merges alone.
+    """Merge a card's plan branch into main, queue its tickets and set the card ready, apply the
+    thread's ``merge`` proposals, and write the card's thread to .factory/planning/ (``_export``),
+    in one commit; the branch then goes. Refused, with main as it was, when the branch changes more
+    than drafts, clashes with main, a ticket fails pre-flight (the planner fixes it next), or a
+    merge can't be applied. A thread with merges and no branch (the general one too) approves its
+    merges alone.
 
-    A ``replan`` (f6-13) may change its card's ready tickets too, but not the running one: a
-    changed one is pre-flighted, one moved to tasks/later/ stays there, and the owner's pause
-    is lifted once it is applied. A building card keeps its state."""
+    A ``replan`` (f6-13) may change its card's ready tickets too, but not the running one: a changed
+    one is pre-flighted, one moved to .factory/tasks/later/ stays there, and the owner's pause is
+    lifted once it is applied. A building card keeps its state."""
     thread = planner.thread_key(subject)
     branch = planner.plan_branch(thread)
     git = Git(repo)
@@ -582,9 +586,7 @@ def _approve_plan(
     merges = _merges(proposals)
     # A duplicate whose card left the repo was merged (or dropped) already: approving its merge
     # again settles it rather than refusing it forever (F24, F45, F47 on 2026-10-08)
-    gone = [
-        d for d, _ in merges if not milestone_file(repo, "milestones", full_key(repo, d)).is_file()
-    ]
+    gone = [d for d, _ in merges if not milestone_file(repo, "cards", full_key(repo, d)).is_file()]
     merges = [(d, k) for d, k in merges if d not in gone]
     already = [f"{planner.thread_name(d)} merged already" for d in gone]
     if gone and not merges and not (branch is not None and _has_branch(git, branch)):
@@ -617,7 +619,7 @@ def _approve_plan(
         tickets = sorted(
             path
             for mode, path in changes
-            if path.startswith(f"tasks/{LATER}/")
+            if path.startswith(f".factory/tasks/{LATER}/")
             and path.endswith(".md")
             and mode != "000000"
             and Path(path).name not in set_aside
@@ -634,15 +636,15 @@ def _approve_plan(
             if problems := ticket_problems(repo, checked):
                 _undo(git)
                 return "not approved: " + "; ".join(problems)
-            doc = milestone_file(repo, "milestones", full_key(repo, thread))
+            doc = milestone_file(repo, "cards", full_key(repo, thread))
             if not doc.is_file():
                 _undo(git)
-                return f"{name} has no card in docs/milestones/: not approved"
+                return f"{name} has no card in .factory/cards/: not approved"
             text = doc.read_text(encoding="utf-8")
             if milestone.card(doc.stem, text).state != _BUILDING:  # a replan redirects it
                 doc.write_text(planner.ready_card(text), encoding="utf-8")
             for rel in tickets:
-                git.move(repo / rel, repo / "tasks" / "ready" / Path(rel).name)
+                git.move(repo / rel, repo / ".factory" / "tasks" / "ready" / Path(rel).name)
         moved = {(d, kept): _merge(repo, now, d, kept) for d, kept in merges}
         merged = [words.replace(" into ", " merged into ", 1) for words in joined]
         if planned:
@@ -697,8 +699,8 @@ def _accept_adr(repo: Path, db: Path, now: datetime, subject: object, value: obj
     branch = planner.plan_branch(thread)
     draft = None
     if branch is not None and _has_branch(git, branch):
-        names = git.run("ls-tree", "--name-only", branch, "docs/adr/").splitlines()
-        wanted = re.compile(rf"docs/adr/{number:02d}-[^/]+\.md")
+        names = git.run("ls-tree", "--name-only", branch, ".factory/adr/").splitlines()
+        wanted = re.compile(rf"\.factory/adr/{number:02d}-[^/]+\.md")
         draft = next((name for name in sorted(names) if wanted.fullmatch(name)), None)
     if branch is None or draft is None:
         path = owner.decide_adr(repo, number, "Accepted", now.date(), db=db)
@@ -764,7 +766,7 @@ def _plant(
     slug = name = planner.slug(title)
     n = 1
     while (taken := planner.card_named(repo, name)) is not None:
-        there = repo / "docs" / "milestones" / f"{taken}.md"
+        there = repo / ".factory" / "cards" / f"{taken}.md"
         if planner.holds(there.read_text(encoding="utf-8"), title, thoughts):
             return f"planted already: {there.relative_to(repo).as_posix()}"
         n += 1
@@ -778,7 +780,7 @@ def _plant(
         return f"an idea's title can't set its card: {title!r}"
     if milestone.milestone_doc(doc).get("title") != title:
         return f"an idea's title can't set its card: {title!r}"
-    path = repo / "docs" / "milestones" / f"{full}.md"
+    path = repo / ".factory" / "cards" / f"{full}.md"
     rel = path.relative_to(repo).as_posix()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(doc, encoding="utf-8")
@@ -814,18 +816,20 @@ def _drop_seed(
     """Remove an idea card the owner no longer wants (f6-17): its doc ``git rm``ed in a commit
     of its own, its thread told, its pending planner rows closed, its reply's item answered,
     and the card off the board. Refused, main unchanged, for a card that isn't an idea or that
-    a ticket in tasks/ belongs to."""
+    a ticket in .factory/tasks/ belongs to."""
     thread = planner.thread_key(subject)
     name = planner.thread_name(thread)
     if thread == planner.GENERAL:
         return f"{name} is not a seed: not removed"
-    doc = milestone_file(repo, "milestones", full_key(repo, thread))
+    doc = milestone_file(repo, "cards", full_key(repo, thread))
     if not doc.is_file():
-        return f"{name} has no card in docs/milestones/: not removed"
+        return f"{name} has no card in .factory/cards/: not removed"
     state = milestone.card(doc.stem, doc.read_text(encoding="utf-8")).state
     if state != planner.IDEA:
         return f"{name} is {state}, not an idea: not removed"
-    tickets = sorted(p.relative_to(repo).as_posix() for p in repo.glob(f"tasks/*/{thread}-*.md"))
+    tickets = sorted(
+        p.relative_to(repo).as_posix() for p in repo.glob(f".factory/tasks/*/{thread}-*.md")
+    )
     if tickets:
         return f"{name} has tickets ({', '.join(tickets)}): not removed"
     rel = doc.relative_to(repo).as_posix()
@@ -1079,18 +1083,19 @@ def _ticket_priority(
     ticket: str,
     priority: int,
 ) -> str:
-    """A ticket's ``priority:``, for one in tasks/ready/ or tasks/later/ that isn't running;
+    """A ticket's ``priority:``, for one in .factory/tasks/ready/ or .factory/tasks/later/ that
+    isn't running;
     the dashboard's row gets its new text at once."""
     if ticket == (state.in_flight or {}).get("ticket"):
         return f"{ticket} is running: its priority stays"
-    found = sorted((repo / "tasks").glob(f"*/{ticket}.md"))
+    found = sorted((repo / ".factory" / "tasks").glob(f"*/{ticket}.md"))
     path = next((p for p in found if p.parent.name in _MOVABLE), None)
     if path is None:
         if found:
-            return f"{ticket} is in tasks/{found[0].parent.name}/: its priority stays"
-        return f"{ticket} is no ticket in tasks/ready/ or tasks/later/"
+            return f"{ticket} is in .factory/tasks/{found[0].parent.name}/: its priority stays"
+        return f"{ticket} is no ticket in .factory/tasks/ready/ or .factory/tasks/later/"
     task = parse_task(path, _MAX_DIFF)
-    doc = milestone_file(repo, "milestones", task.milestone)
+    doc = milestone_file(repo, "cards", task.milestone)
     text = doc.read_text(encoding="utf-8") if doc.is_file() else None
     cards = {short_key(task.milestone): milestone.card(doc.stem, text).priority} if text else {}
     was = task_priority(task, cards)
@@ -1116,9 +1121,9 @@ def _card_priority(
     name = planner.thread_name(thread)
     if thread == planner.GENERAL:
         return f"{name} has no priority"
-    doc = milestone_file(repo, "milestones", full_key(repo, thread))
+    doc = milestone_file(repo, "cards", full_key(repo, thread))
     if not doc.is_file():
-        return f"{name} has no card in docs/milestones/: its priority stays"
+        return f"{name} has no card in .factory/cards/: its priority stays"
     text = doc.read_text(encoding="utf-8")
     found = milestone.card(doc.stem, text)
     if found.state == "done":
@@ -1177,9 +1182,10 @@ class _Placed:
 
 def _board(repo: Path, state: State) -> dict[str, _Placed]:
     """What a reorder may place, by the key the board sends: each card not done by its short
-    key, and each bug ticket in tasks/ready/ or tasks/later/ that isn't running by its id."""
+    key, and each bug ticket in .factory/tasks/ready/ or .factory/tasks/later/ that isn't running by
+    its id."""
     found: dict[str, _Placed] = {}
-    for path in sorted((repo / "docs" / "milestones").glob("*.md")):
+    for path in sorted((repo / ".factory" / "cards").glob("*.md")):
         try:
             key = milestone_key(path.stem)
         except TaskError:  # a README
@@ -1193,7 +1199,7 @@ def _board(repo: Path, state: State) -> dict[str, _Placed]:
             found.setdefault(short_key(key), _Placed(path, text, card.priority, tie, card))
     running = (state.in_flight or {}).get("ticket")
     for folder in _MOVABLE:
-        for path in sorted((repo / "tasks" / folder).glob("bug-*.md")):
+        for path in sorted((repo / ".factory" / "tasks" / folder).glob("bug-*.md")):
             try:
                 task = parse_task(path, _MAX_DIFF)
             except (ValueError, yaml.YAMLError, OSError):  # as ticket_problems: it won't read
@@ -1512,11 +1518,11 @@ def _rejected(conn: sqlite3.Connection, project_id: int, thread: str) -> set[obj
 def _reject(
     repo: Path, conn: sqlite3.Connection, project_id: int, now: datetime, subject: object
 ) -> str:
-    """Won't do (F31 D2). A draft (an ADR, a mock-up, a plan or a replan): the card's plan
-    branch goes, so every draft of the set is rejected with it, and a card with no ticket in
-    tasks/ that isn't building leaves main in a commit of its own (as ``_drop_seed``). A merge
-    or a seed: nothing changes but that proposal. Refused, nothing changed, for a proposal
-    not in the thread's latest reply, or one settled already."""
+    """Won't do (F31 D2). A draft (an ADR, a mock-up, a plan or a replan): the card's plan branch
+    goes, so every draft of the set is rejected with it, and a card with no ticket in
+    .factory/tasks/ that isn't building leaves main in a commit of its own (as ``_drop_seed``). A
+    merge or a seed: nothing changes but that proposal. Refused, nothing changed, for a proposal not
+    in the thread's latest reply, or one settled already."""
     wanted = subject if isinstance(subject, str) else ""
     card, _, pid = wanted.partition("/")
     if not card or not _PROPOSAL_ID_RE.fullmatch(pid):
@@ -1539,11 +1545,11 @@ def _reject(
     said = f"{planner.REJECTED_DRAFTS}{branch} ({', '.join(drafts)})"
     if branch is not None and _has_branch(git, branch):
         git.run("branch", "-q", "-D", branch)
-    doc = milestone_file(repo, "milestones", full_key(repo, thread))
+    doc = milestone_file(repo, "cards", full_key(repo, thread))
     if thread == planner.GENERAL or not doc.is_file():
         return said
     state = milestone.card(doc.stem, doc.read_text(encoding="utf-8")).state
-    tickets = list(repo.glob(f"tasks/*/{thread}-*.md"))
+    tickets = list(repo.glob(f".factory/tasks/*/{thread}-*.md"))
     if tickets or state == _BUILDING:
         return said
     rel = doc.relative_to(repo).as_posix()
@@ -1585,7 +1591,7 @@ def _clear_out(repo: Path, conn: sqlite3.Connection, project_id: int, now: datet
         if not said or said[-1]["author"] != "lead":
             continue
         if card in known:
-            doc = milestone_file(repo, "milestones", full_key(repo, card))
+            doc = milestone_file(repo, "cards", full_key(repo, card))
             if (
                 milestone.card(doc.stem, doc.read_text(encoding="utf-8")).state
                 not in _SETTLED_CARDS
@@ -1615,7 +1621,7 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
         return []
     conn = metrics.open_db(db)
     try:
-        project = metrics.find_project(conn, repo.name)
+        project = metrics.find_project(conn, project_name(repo))
         if project is None:
             return []
         lines = _lapse(conn, project, state, now)

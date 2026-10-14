@@ -7,7 +7,7 @@ ticket and savings per milestone, as small charts (D5). The list has no tab sinc
 (f5-17): the board links to it.
 
 ``/milestones/{key}`` is the milestone's card's page (f5-17, after
-``docs/milestones/f5-board-mockup/Card.dc.html``): its stage on the board, priority and area,
+``.factory/cards/f5-board-mockup/Card.dc.html``): its stage on the board, priority and area,
 how far it has grown, then what the page showed before, its tickets now in run order.
 """
 

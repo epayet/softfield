@@ -1,4 +1,4 @@
-"""Small persistent runner state in var/runs/state.json (gitignored)."""
+"""Small persistent runner state in .factory/var/runs/state.json (gitignored)."""
 
 import json
 from dataclasses import asdict, dataclass, field

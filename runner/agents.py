@@ -1,6 +1,6 @@
 """Agents, roles and the neutral job spec (ADR 14 items 2–4; ADR 15 items 2, 9 and 12).
 
-An agent is a harness plus a model, declared in workflow/runner.toml with its id
+An agent is a harness plus a model, declared in the machine's factory.toml with its id
 (`<harness>-<model>`, D6) and one rating. A role names the agents that may do it. A job is
 a `JobSpec`; the adapter for its agent's harness translates the spec into that harness's
 tools, runs it, and returns a `JobResult` whose error is a limit, transient or a failure.

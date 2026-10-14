@@ -121,7 +121,7 @@ def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
     ("kind", "subject", "value", "done", "result", "still_open"),
     [
         # worked: the ADR is accepted, the plan isn't about it
-        ("accept_adr", "f6", "20", True, "accepted docs/adr/20-planning-room.md", ["plan"]),
+        ("accept_adr", "f6", "20", True, "accepted .factory/adr/20-planning-room.md", ["plan"]),
         # an ADR request with another number is about another proposal
         ("accept_adr", "f6", "21", None, None, ["adr-20", "plan"]),
         # pending: the runner hasn't done it yet
@@ -774,7 +774,7 @@ _REVIEW_ADR: dict[str, Any] = {
     "id": "adr-20",
     "kind": "adr",
     "title": "ADR 20: the planning room",
-    "path": "docs/adr/20-planning-room.md",
+    "path": ".factory/adr/20-planning-room.md",
     "key_points": [
         {"n": 1, "title": "Planning goes first", "text": "At the next pick.", "flag": True},
         {"n": 2, "title": "Inside the runner", "text": "One process.", "flag": False},
@@ -792,7 +792,7 @@ _REVIEW_MOCKUP: dict[str, Any] = {
     "id": "mockup",
     "kind": "mockup",
     "title": "The desk, drawn",
-    "path": "docs/milestones/f6-mockup/index.html",
+    "path": ".factory/cards/f6-mockup/index.html",
     "key_points": [],
 }
 _REVIEW_SEED: dict[str, Any] = {
@@ -914,7 +914,7 @@ def test_approve_plan_waits_for_the_cards_adr_on_main(planning, db_path, serve, 
         return found[0]
 
     assert " disabled" in approve()
-    adr = checkout / "docs" / "adr" / "20-planning-room.md"
+    adr = checkout / ".factory" / "adr" / "20-planning-room.md"
     adr.parent.mkdir(parents=True)
     adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
     assert " disabled" in approve()
@@ -938,7 +938,7 @@ _REVIEW_MERGE: dict[str, Any] = {
     "id": "merge-f9",
     "kind": "merge",
     "title": "Parallel, said twice",
-    "path": "docs/milestones/f9-parallel.md",
+    "path": ".factory/cards/f9-parallel.md",
     "into": "f7",
     "key_points": [{"n": 1, "title": "Notes", "text": "F9's notes go to F7.", "flag": False}],
 }
@@ -987,7 +987,7 @@ def test_an_approved_merge_leaves_the_desk(planning, db_path, db):
 @pytest.mark.parametrize("gone", ["f9", "f7"])
 def test_a_merge_whose_card_left_main_asks_nothing(planning, db_path, db, checkout, gone):
     """F9 or F7 was merged elsewhere since the lead proposed it: nothing is left to ask."""
-    docs = checkout / "docs" / "milestones"
+    docs = checkout / ".factory" / "cards"
     docs.mkdir(parents=True)
     for key in {"f9", "f7"} - {gone}:
         (docs / f"{key}-x.md").write_text(f"# Milestone {key.upper()}: x\n")
@@ -1037,9 +1037,9 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     ``plan/f6`` and refuses any path outside a ``-mockup/`` folder, even a draft beside it."""
     git(checkout, "checkout", "-q", "-b", "plan/f6")
     for rel, text in (
-        ("docs/milestones/f6-mockup/index.html", "<p>the desk</p>"),
-        ("docs/milestones/f6-planning-room.md", "# F6"),
-        ("docs/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".factory/cards/f6-planning-room.md", "# F6"),
+        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
     ):
         (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
         (checkout / rel).write_text(text)
@@ -1050,17 +1050,17 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     client = serve()
     html = _review_page(client, "/planning/f6/proposals/mockup")
     frame = re.search(r'<iframe id="mockup" src="([^"?]+)[^"]*" sandbox="allow-scripts" ', html)
-    assert frame and frame[1] == "/planning/mockups/f6/docs/milestones/f6-mockup/index.html"
+    assert frame and frame[1] == "/planning/mockups/f6/.factory/cards/f6-mockup/index.html"
     served = client.get(frame[1])
     assert (served.status_code, served.text) == (200, "<p>the desk</p>")
     # Opened on its own, outside the sandboxed frame, it still runs in an origin of its own,
     # so its scripts can't post to /requests as the dashboard (ADR 18 item 3)
     assert served.headers["content-security-policy"] == "sandbox allow-scripts"
     for refused in (
-        "docs/milestones/f6-planning-room.md",
-        "docs/adr/20-planning-room.md",
-        "docs/milestones/f6-mockup/missing.html",
-        "docs/milestones/f6-mockup/",
+        ".factory/cards/f6-planning-room.md",
+        ".factory/adr/20-planning-room.md",
+        ".factory/cards/f6-mockup/missing.html",
+        ".factory/cards/f6-mockup/",
     ):
         assert client.get(f"/planning/mockups/f6/{refused}").status_code == 404, refused
 
@@ -1081,7 +1081,7 @@ def test_a_mockups_scripts_run_in_the_review_pages_frame_as_no_one(
     can't read the page around it or post as the dashboard. Only the browser says what a
     sandbox allows, so this runs in Chromium."""
     git(checkout, "checkout", "-q", "-b", "plan/f6")
-    mockup = checkout / "docs" / "milestones" / "f6-mockup" / "index.html"
+    mockup = checkout / ".factory" / "cards" / "f6-mockup" / "index.html"
     mockup.parent.mkdir(parents=True, exist_ok=True)
     mockup.write_text(_MOCKUP_WITH_A_SCRIPT)
     git(checkout, "add", "-A")
@@ -1123,7 +1123,7 @@ def _changes(html: str) -> list[tuple[str, str, str | None]]:
 
 def _replanned(checkout: Path) -> None:
     """main holds f7-01-a and f7-02-b; ``plan/f7`` changes a, adds c and sets b aside."""
-    a, b = "tasks/ready/f7-01-a.md", "tasks/ready/f7-02-b.md"
+    a, b = ".factory/tasks/ready/f7-01-a.md", ".factory/tasks/ready/f7-02-b.md"
     for rel, text in ((a, "main's a"), (b, "<b>'s text")):
         (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
         (checkout / rel).write_text(text)
@@ -1131,9 +1131,9 @@ def _replanned(checkout: Path) -> None:
     git(checkout, "commit", "-q", "-m", "tickets")
     git(checkout, "checkout", "-q", "-b", "plan/f7")
     (checkout / a).write_text("the replan's a")
-    (checkout / "tasks/ready/f7-03-c.md").write_text("the replan's c")
-    (checkout / "tasks/later").mkdir()
-    git(checkout, "mv", b, "tasks/later/f7-02-b.md")
+    (checkout / ".factory/tasks/ready/f7-03-c.md").write_text("the replan's c")
+    (checkout / ".factory/tasks/later").mkdir()
+    git(checkout, "mv", b, ".factory/tasks/later/f7-02-b.md")
     git(checkout, "add", "-A")
     git(checkout, "commit", "-q", "-m", "replan")
     git(checkout, "checkout", "-q", "main")
@@ -1146,9 +1146,9 @@ def test_a_replan_shows_what_approving_changes_with_each_text(planning, db_path,
     _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_REPLAN))
     html = _review_page(serve(), "/planning/f7/proposals/replan")
     assert _changes(html) == [
-        ("tasks/ready/f7-01-a.md", "changed", "the replan's a"),
-        ("tasks/ready/f7-02-b.md", "set aside", "<b>'s text"),
-        ("tasks/ready/f7-03-c.md", "added", "the replan's c"),
+        (".factory/tasks/ready/f7-01-a.md", "changed", "the replan's a"),
+        (".factory/tasks/ready/f7-02-b.md", "set aside", "<b>'s text"),
+        (".factory/tasks/ready/f7-03-c.md", "added", "the replan's c"),
     ]
     assert "main's a" not in html and "<b>'s text" not in html  # escaped
     colours = re.findall(r'class="word" style="[^"]*color: var\((--[\w-]+)\)', html)
@@ -1177,9 +1177,9 @@ def test_a_plan_with_its_branch_shows_its_changes_too(planning, db_path, serve, 
     _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN))
     html = _review_page(serve(), "/planning/f7/proposals/plan")
     assert [path for path, _, _ in _changes(html)] == [
-        "tasks/ready/f7-01-a.md",
-        "tasks/ready/f7-02-b.md",
-        "tasks/ready/f7-03-c.md",
+        ".factory/tasks/ready/f7-01-a.md",
+        ".factory/tasks/ready/f7-02-b.md",
+        ".factory/tasks/ready/f7-03-c.md",
     ]
     assert "resumes the line" not in html
 
@@ -1924,7 +1924,7 @@ def test_a_refused_send_back_tries_again_on_its_thread(planning, db_path, serve)
 @pytest.mark.parametrize(
     ("kind", "subject", "value", "result"),
     [
-        ("plant", None, DUCKS, "planted docs/milestones/f12-rubber-ducks.md, queued for the lead"),
+        ("plant", None, DUCKS, "planted .factory/cards/f12-rubber-ducks.md, queued for the lead"),
         ("plant", None, DUCKS, None),
         ("approve_plan", "f6", None, "there is no plan/f6 to approve"),
         ("pause", None, None, "already paused, since 12:00"),
@@ -2250,7 +2250,7 @@ def test_pressing_approve_shows_it_on_its_way_at_once_and_after_a_reload(
         ),
         ("rejected merge-f9", ["Rejected", "The runner said: rejected merge-f9"], False),
         (
-            "F9 has no card in docs/milestones/: not merged",
+            "F9 has no card in .factory/cards/: not merged",
             ["The runner said: F9 has no card"],
             True,
         ),
@@ -2315,9 +2315,12 @@ def test_a_plans_ticket_rows_say_who_builds_them_and_colour_the_word(
     difficulty beside its word, the word in its colour; another file shows neither."""
     git(checkout, "checkout", "-q", "-b", "plan/f7")
     for rel, text in (
-        ("tasks/later/f7-01-a.md", "---\nid: f7-01-a\nagent: lead\ndifficulty: 6\n---\nx\n"),
-        ("tasks/later/f7-02-b.md", "---\nid: f7-02-b\ndifficulty: 2\n---\nx\n"),
-        ("docs/milestones/f7-x.md", "# Milestone F7: x\n"),
+        (
+            ".factory/tasks/later/f7-01-a.md",
+            "---\nid: f7-01-a\nagent: lead\ndifficulty: 6\n---\nx\n",
+        ),
+        (".factory/tasks/later/f7-02-b.md", "---\nid: f7-02-b\ndifficulty: 2\n---\nx\n"),
+        (".factory/cards/f7-x.md", "# Milestone F7: x\n"),
     ):
         (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
         (checkout / rel).write_text(text)
@@ -2336,9 +2339,9 @@ def test_a_plans_ticket_rows_say_who_builds_them_and_colour_the_word(
         for r in rows
     }
     assert found == {
-        "docs/milestones/f7-x.md": ("--good", ""),
-        "tasks/later/f7-01-a.md": ("--good", "lead · difficulty 6"),
-        "tasks/later/f7-02-b.md": ("--good", "developer · difficulty 2"),
+        ".factory/cards/f7-x.md": ("--good", ""),
+        ".factory/tasks/later/f7-01-a.md": ("--good", "lead · difficulty 6"),
+        ".factory/tasks/later/f7-02-b.md": ("--good", "developer · difficulty 2"),
     }
 
 

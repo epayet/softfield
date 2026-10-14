@@ -102,9 +102,9 @@ def milestone_order(key: str) -> tuple[str, int]:
 
 
 def _doc_keys(repo: Path) -> dict[str, str]:
-    """Short key -> full key, from each ``docs/milestones/<full key>.md``."""
+    """Short key -> full key, from each ``.factory/cards/<full key>.md``."""
     found: dict[str, str] = {}
-    for path in sorted((repo / "docs" / "milestones").glob("*-*.md")):
+    for path in sorted((repo / ".factory" / "cards").glob("*-*.md")):
         if _KEY_RE.fullmatch(path.stem):
             found.setdefault(short_key(path.stem), path.stem)
     return found
@@ -112,14 +112,14 @@ def _doc_keys(repo: Path) -> dict[str, str]:
 
 def full_key(repo: Path, key: str) -> str:
     """A key in either form, as its doc names it: ``f3`` is ``f3-factory-line`` once
-    ``docs/milestones/f3-factory-line.md`` exists; otherwise the key as given."""
+    ``.factory/cards/f3-factory-line.md`` exists; otherwise the key as given."""
     return key if _named(key) else _doc_keys(repo).get(key, key)
 
 
 def named_keys(repo: Path) -> dict[str, str]:
     """Short key -> full key, from the tickets' frontmatter and then the docs (which win)."""
     found: dict[str, str] = {}
-    for path in sorted((repo / "tasks").glob("*/*.md")):
+    for path in sorted((repo / ".factory" / "tasks").glob("*/*.md")):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
             key = milestone_key(meta.get("milestone"))
@@ -140,9 +140,9 @@ def milestone_arg(repo: Path, value: object) -> str:
 
 
 def milestone_file(repo: Path, folder: str, key: str) -> Path:
-    """``docs/<folder>/<full key>.md``, or an existing one named by the short key (f2's)."""
-    path = repo / "docs" / folder / f"{key}.md"
-    short = repo / "docs" / folder / f"{short_key(key)}.md"
+    """``.factory/<folder>/<full key>.md``, or an existing one named by the short key (f2's)."""
+    path = repo / ".factory" / folder / f"{key}.md"
+    short = repo / ".factory" / folder / f"{short_key(key)}.md"
     return short if not path.is_file() and short.is_file() else path
 
 
@@ -272,8 +272,10 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
     bug_id = task_id.startswith("bug-")
     if bug_id != (milestone == BUGS) or (bug_id and not _BUG_ID_RE.fullmatch(task_id)):
         raise TaskError(f"a bug ticket is bug-<nn>-<slug> with 'milestone: {BUGS}', and only it")
-    if path.parent.parent.name == "tasks":  # tasks/<folder>/<id>.md: its repo has the docs
-        milestone = full_key(path.parent.parent.parent, milestone)
+    if (
+        path.parent.parent.name == "tasks"
+    ):  # .factory/tasks/<folder>/<id>.md: its repo has the cards
+        milestone = full_key(path.parents[3], milestone)
     sections = parse_sections(body)
     missing = [name for name in SECTIONS if not sections.get(name)]
     if missing:
@@ -329,15 +331,15 @@ def find_ticket(tasks_dir: Path, folder: str, wanted: str) -> Path:
         return matches[0]
     if not matches:
         elsewhere = sorted(
-            f"tasks/{p.parent.name}/{p.name}"
+            f".factory/tasks/{p.parent.name}/{p.name}"
             for p in tasks_dir.glob("*/*.md")
             if p.parent.name != folder and p.stem.startswith(wanted)
         )
         if elsewhere:
-            raise TaskError(f"{wanted} isn't in tasks/{folder}/: " + ", ".join(elsewhere))
+            raise TaskError(f"{wanted} isn't in .factory/tasks/{folder}/: " + ", ".join(elsewhere))
     choices = ", ".join(p.stem for p in matches or paths) or "none"
     found = "matches several tickets" if matches else "matches no ticket"
-    raise TaskError(f"{wanted} {found} in tasks/{folder}/. Choices: {choices}")
+    raise TaskError(f"{wanted} {found} in .factory/tasks/{folder}/. Choices: {choices}")
 
 
 def stopped_ids(tasks_dir: Path) -> set[str]:

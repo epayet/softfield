@@ -239,7 +239,7 @@ class Session:
         return self.cfg.runs_dir / "state.json"
 
     def tasks_dir(self, name: str) -> Path:
-        return self.repo / "tasks" / name
+        return self.repo / ".factory" / "tasks" / name
 
     def log(self, message: str) -> None:
         """One console line (`runner.console`); an empty one is a blank line."""
@@ -467,7 +467,7 @@ def _start_run(s: Session, command: str, cut_off_job: int | None = None) -> None
     s.project_id = _record(
         s,
         metrics.upsert_project,
-        s.repo.name,
+        s.cfg.project_name,
         repo=str(s.repo),
         description=s.cfg.project_description or None,
     )
@@ -532,7 +532,8 @@ TICKET_FOLDERS = ("ready", "done", *STOPPED, LATER)
 
 
 def sync_tickets(s: Session) -> None:
-    """Every ticket in tasks/ with its folder's state (f1 D4): the queue the dashboard reads.
+    """Every ticket in .factory/tasks/ with its folder's state (f1 D4): the queue the dashboard
+    reads.
     A row whose file is in no folder (deleted, like f1-30 by ADR 15, or f4-21 while blocked)
     leaves it, unless it is done."""
     present = set()
@@ -557,7 +558,7 @@ def sync_cards(s: Session) -> None:
     if s.project_id is None:
         return
     present = set()
-    for path in sorted((s.repo / "docs" / "milestones").glob("*.md")):
+    for path in sorted((s.repo / ".factory" / "cards").glob("*.md")):
         try:
             key = milestone_key(path.stem)
         except TaskError:
@@ -1021,7 +1022,7 @@ def lead_work_ready(s: Session) -> bool:
     protected = tuple(read_protected(s.repo))
     ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
     done = task_ids(s.tasks_dir("done"))
-    paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
+    paused = blocked_ids(ready, stopped_ids(s.repo / ".factory" / "tasks"))
     return any(
         router.lead_only(t.agent, t.files, protected)
         and t.id not in paused
@@ -1742,7 +1743,7 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
             timeouts=rec.timeouts,
         ),
         timeout=s.cfg.claude_timeout,
-        edit=("var/runs/**",),
+        edit=(".factory/var/runs/**",),
         commands=GIT_READ_COMMANDS,
     )
     direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
@@ -2893,7 +2894,7 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
         )
         + _recheck_note(s.state),
         timeout=s.cfg.claude_timeout,
-        edit=("tasks/ready/**", "docs/agents/developer.md", "var/runs/**"),
+        edit=(".factory/tasks/ready/**", "docs/agents/developer.md", ".factory/var/runs/**"),
         # pytest: the tickets' pre-flight test; its commit skips the hook
         commands=(*GIT_READ_COMMANDS, "uv run pytest"),
     )
@@ -2961,7 +2962,7 @@ def _merge_files(s: Session, merged: Iterable[str]) -> str:
     for entry in merged:
         ticket, sha = entry.split()[:2]
         files = [f for f in s.git.run("show", "--name-only", "--format=", sha).splitlines() if f]
-        lines.append(f"- {ticket} (tasks/done/{ticket}.md): {', '.join(files)}")
+        lines.append(f"- {ticket} (.factory/tasks/done/{ticket}.md): {', '.join(files)}")
     return "\n".join(lines)
 
 
@@ -3160,20 +3161,19 @@ def fix_tickets(
 
 
 def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: str) -> Path | None:
-    """A developer ticket in tasks/ready/ for a stand-in checkpoint's ``findings`` (by key), on
-    one ticket at fault and of one kind, from that ticket in tasks/done/: its milestone (unless
-    signed off: then ``milestone``, the running one), its tests, its difficulty, and the
-    findings' files that exist (else its files). A `test` kind is `tests_only`: tests in
-    `files:`, which pass on main. The findings are untrusted text: they go in the body,
-    quoted, and only checked paths reach the frontmatter. None when no done ticket is at
-    fault."""
+    """A developer ticket in .factory/tasks/ready/ for a stand-in checkpoint's ``findings`` (by
+    key), on one ticket at fault and of one kind, from that ticket in .factory/tasks/done/: its
+    milestone (unless signed off: then ``milestone``, the running one), its tests, its difficulty,
+    and the findings' files that exist (else its files). A `test` kind is `tests_only`: tests in
+    `files:`, which pass on main. The findings are untrusted text: they go in the body, quoted, and
+    only checked paths reach the frontmatter. None when no done ticket is at fault."""
     from runner.milestone import signed_off  # runner.milestone imports this module
 
     first = next(iter(findings.values()))
     tests_only = first.kind == "test"
     if not _TICKET_ID_RE.fullmatch(first.ticket):
         return None
-    source_path = repo / "tasks" / "done" / f"{first.ticket}.md"
+    source_path = repo / ".factory" / "tasks" / "done" / f"{first.ticket}.md"
     try:
         source = parse_task(source_path, 1)
     except (OSError, ValueError, yaml.YAMLError):
@@ -3190,7 +3190,7 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     prefix = ticket_prefix(milestone)  # a bug's fix is a bug (never signed off)
     numbers = [
         int(found[1])
-        for path in (repo / "tasks").glob("*/*.md")
+        for path in (repo / ".factory" / "tasks").glob("*/*.md")
         if (found := re.match(rf"{re.escape(prefix)}-(\d+)-", path.stem))
     ]
     words = re.findall(r"[a-z0-9]+", first.summary.lower())[:4]
@@ -3243,14 +3243,14 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     body = (
         f"### Goal\nFix {count} on {on}: {'; '.join(summaries.values())}\n\n"
         f"### Context\nBy {by}, standing in for the lead at a checkpoint, on the merge of"
-        f" `tasks/done/{first.ticket}.md`.{kind} What it found is under Finding:\n"
+        f" `.factory/tasks/done/{first.ticket}.md`.{kind} What it found is under Finding:\n"
         + "\n".join(places_text)
         + "\n\n### Finding\n"
         + "\n\n".join(quotes)
         + f"\n\n### Done when\n{done}"
     )
     frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)
-    path = repo / "tasks" / "ready" / f"{task_id}.md"
+    path = repo / ".factory" / "tasks" / "ready" / f"{task_id}.md"
     path.write_text(f"---\n{frontmatter}---\n\n{body}", encoding="utf-8")
     return path
 
@@ -3850,7 +3850,7 @@ def _all_cards(repo: Path) -> list[tuple[str, str, int]]:
     from runner.milestone import card  # runner.milestone imports this module
 
     found = []
-    for path in sorted((repo / "docs" / "milestones").glob("*.md")):
+    for path in sorted((repo / ".factory" / "cards").glob("*.md")):
         try:
             key = milestone_key(path.stem)
             text = path.read_text(encoding="utf-8")
@@ -3868,8 +3868,8 @@ def work_stands(
     """Where the work stands, for a planner job's prompt (F21 D1), from `dry_run_plan`'s
     inputs: the job in flight, the ready tickets in run order with what each waits for
     (``behind`` its queued direction or escalation), every card, and ``minutes``
-    (`ticket_minutes`). It reads tasks/ and docs/milestones/ and writes nothing."""
-    tasks = cfg.repo / "tasks"
+    (`ticket_minutes`). It reads .factory/tasks/ and .factory/cards/ and writes nothing."""
+    tasks = cfg.repo / ".factory" / "tasks"
     ready = load_dir(tasks / "ready", cfg.default_max_diff)
     done = task_ids(tasks / "done")
     paused = blocked_ids(ready, stopped_ids(tasks))
@@ -3898,7 +3898,7 @@ def _name_card(s: Session, thread: str, title: str) -> None:
 
     if thread == planner.GENERAL or s.git.current_branch() != MAIN:
         return
-    path = milestone_file(s.repo, "milestones", full_key(s.repo, thread))
+    path = milestone_file(s.repo, "cards", full_key(s.repo, thread))
     if not path.is_file():
         return
     before = path.read_text(encoding="utf-8")
@@ -4496,7 +4496,7 @@ def work_queue(
     once: bool = False,
     reviews: bool = False,
 ) -> bool:
-    """Work through tasks/ready (one milestone's, if given) and the queued jobs their runs
+    """Work through .factory/tasks/ready (one milestone's, if given) and the queued jobs their runs
     trigger: directions, checkpoints and escalations (ADR 22). Each turn runs what
     `dispatch.pick` returns; the next ticket is `_next_task`'s. Returns True if Claude (a lead
     ticket or an escalation) changed the runner, which needs a restart.
@@ -4539,7 +4539,7 @@ def work_queue(
         if milestone is not None:  # either form of the key (ADR 16 item 6)
             ready = [t for t in ready if short_key(t.milestone) == short_key(milestone)]
         done = task_ids(s.tasks_dir("done"))
-        paused = blocked_ids(ready, stopped_ids(s.repo / "tasks"))
+        paused = blocked_ids(ready, stopped_ids(s.repo / ".factory" / "tasks"))
         held = _held(s.repo, ready)
         rows = _runnable_rows(s, ready, escalate=escalate, reviews=reviews)
         behind = waiting_rows(s, ready)
@@ -4649,7 +4649,7 @@ def live_run(cfg: Config) -> str | None:
             "SELECT r.run_dir, r.heartbeat FROM runs r JOIN projects p ON p.id = r.project_id"
             " WHERE p.name = ? AND r.ended IS NULL AND r.heartbeat IS NOT NULL"
             " AND coalesce(r.command, '') != 'bench'",  # a bench works in copies, beside it
-            (cfg.repo.name,),
+            (cfg.project_name,),
         ).fetchall()
     finally:
         conn.close()
@@ -4660,7 +4660,8 @@ def live_run(cfg: Config) -> str | None:
 
 
 def queue_ticket(cfg: Config, wanted: str) -> str:
-    """Move a ticket from tasks/later/ to tasks/ready/ in a commit of its own (ADR 17 item
+    """Move a ticket from .factory/tasks/later/ to .factory/tasks/ready/ in a commit of its own (ADR
+    17 item
     3); ``wanted`` is its id or a unique prefix. Tasks only, so the commit skips the hook.
     Refused while a run is live: the runner commits on the same branch."""
     if (run := live_run(cfg)) is not None:
@@ -4671,7 +4672,7 @@ def queue_ticket(cfg: Config, wanted: str) -> str:
 def move_to_ready(repo: Path, wanted: str) -> str:
     """`queue_ticket`'s move and commit, for a caller that is git's one writer: the command
     once no run is live, or the run itself applying the owner's request (f5 D2)."""
-    tasks = repo / "tasks"
+    tasks = repo / ".factory" / "tasks"
     src = find_ticket(tasks, LATER, wanted)
     dst = tasks / "ready" / src.name
     git = Git(repo)
@@ -4721,7 +4722,7 @@ def _cards(repo: Path, ready: list[Task]) -> dict[str, int]:
 
     found = {}
     for key in {t.milestone for t in ready if t.milestone != BUGS}:
-        doc = milestone_file(repo, "milestones", key)
+        doc = milestone_file(repo, "cards", key)
         if doc.is_file():
             found[short_key(key)] = card(key, doc.read_text(encoding="utf-8")).priority
     return found
@@ -4737,15 +4738,15 @@ PARKED_REASON = "parked for a Claude limit"
 
 
 def dry_run_plan(cfg: Config) -> None:
-    """`runner run --dry-run` (f8-02): `dispatch.plan`'s list, each job with what it waits for
-    and why it is there, and each ticket's pre-flight problems (docs/task-writing.md). Reads
-    tasks/, state.json and the metrics database if there is one: any branch, any tree, and no
-    run folder or row (f1-33). A due review not queued yet is listed as the run would queue
-    it, and a support job an older state.json parked as the row the run makes of it."""
+    """`runner run --dry-run` (f8-02): `dispatch.plan`'s list, each job with what it waits for and
+    why it is there, and each ticket's pre-flight problems (docs/task-writing.md). Reads
+    .factory/tasks/, state.json and the metrics database if there is one: any branch, any tree, and
+    no run folder or row (f1-33). A due review not queued yet is listed as the run would queue it,
+    and a support job an older state.json parked as the row the run makes of it."""
     from runner.milestone import due_reviews  # runner.milestone imports this module
 
     at = now()
-    tasks = cfg.repo / "tasks"
+    tasks = cfg.repo / ".factory" / "tasks"
     ready = load_dir(tasks / "ready", cfg.default_max_diff)
     done = task_ids(tasks / "done")
     paused = blocked_ids(ready, stopped_ids(tasks))
@@ -4779,7 +4780,7 @@ def _stored_queue(cfg: Config) -> tuple[list[dispatch.Queued], dict[str, sqlite3
         return [], {}
     conn = metrics.open_db(cfg.metrics_db)
     try:
-        project = metrics.find_project(conn, cfg.repo.name)
+        project = metrics.find_project(conn, cfg.project_name)
         rows = [] if project is None else metrics.open_jobs(conn, project)
         readings = metrics.latest_readings(conn, f"{CLAUDE}-")
     finally:

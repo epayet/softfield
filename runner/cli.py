@@ -23,7 +23,7 @@ from runner import (
     report,
     requests,
 )
-from runner.config import Config, load_config
+from runner.config import Config, load_config, project_name
 from runner.gates import layout_problems
 from runner.gitops import Git
 from runner.loop import RunnerError, local_agent, run_session
@@ -44,9 +44,9 @@ from runner.tasks import TaskError, milestone_arg
 def _repo() -> Path:
     here = Path.cwd()
     for candidate in (here, *here.parents):
-        if (candidate / "workflow" / "runner.toml").is_file():
+        if (candidate / ".factory" / "project.toml").is_file():
             return candidate
-    raise SystemExit("run this inside the coucou repository")
+    raise SystemExit("run this inside a project: no .factory/project.toml here or above")
 
 
 def _lan_address() -> str:
@@ -79,7 +79,7 @@ def _request(cfg: Config, kind: str, subject: str | None, value: str | None) -> 
     """The owner's request as the dashboard writes it, for a console command."""
     conn = metrics.open_db(cfg.metrics_db)
     try:
-        project = metrics.upsert_project(conn, cfg.repo.name, repo=str(cfg.repo))
+        project = metrics.upsert_project(conn, cfg.project_name, repo=str(cfg.repo))
         metrics.add_request(conn, project, kind, subject, value, loop.now().isoformat())
     finally:
         conn.close()
@@ -143,7 +143,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="runner", description=__doc__)
     sub = parser.add_subparsers(dest="command")
     run = sub.add_parser(
-        "run", help="work through tasks/ready, reviewing each milestone it finishes (the default)"
+        "run",
+        help="work through .factory/tasks/ready, reviewing each milestone it finishes"
+        " (the default)",
     )
     run.add_argument("--once", action="store_true", help="stop after one task")
     run.add_argument("--dry-run", action="store_true", help="show what would run next")
@@ -173,7 +175,9 @@ def main(argv: list[str] | None = None) -> int:
     signoff.add_argument(
         "--score", type=int, help="optional, 1-10: how the result felt on the devices"
     )
-    queue = sub.add_parser("queue", help="the owner: move a ticket from tasks/later to ready")
+    queue = sub.add_parser(
+        "queue", help="the owner: move a ticket from .factory/tasks/later to ready"
+    )
     queue.add_argument("ticket", help="its id, or a unique prefix like m4-12")
     for name in ("accept", "reject"):
         decide = sub.add_parser(name, help=f"the owner: {name} an ADR")
@@ -196,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         "check-tickets", help="what Approve would refuse in drafted tickets (read-only)"
     )
     check_tickets.add_argument(
-        "tickets", nargs="*", help="ticket files (default: every one in tasks/later/)"
+        "tickets", nargs="*", help="ticket files (default: every one in .factory/tasks/later/)"
     )
     look_cmd = sub.add_parser(
         "look",
@@ -230,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
         "tickets", nargs="+", help="finished tickets, e.g. m4-09-…; with --review, milestones"
     )
     bench_cmd.add_argument(
-        "--agents", nargs="+", required=True, help="agent ids from workflow/runner.toml"
+        "--agents", nargs="+", required=True, help="agent ids from the machine's factory.toml"
     )
     bench_cmd.add_argument(
         "--review",
@@ -251,7 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ratings_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     report_cmd = sub.add_parser(
-        "report", help="write a milestone's numbers into docs/reviews/<key>.md"
+        "report", help="write a milestone's numbers into .factory/reviews/<key>.md"
     )
     report_cmd.add_argument("number", help="4 for M4, or a key like f1")
     report_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
@@ -318,7 +322,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"{key.upper()} signed off and tagged {key}-done.")
         elif args.command == "queue":
-            print(f"{loop.queue_ticket(cfg, args.ticket)}: back in tasks/ready/.")
+            print(f"{loop.queue_ticket(cfg, args.ticket)}: back in .factory/tasks/ready/.")
         elif args.command == "reserve":
             if loop.live_run(cfg) is not None:  # `_apply_requests` left it to the run
                 print(f"runner: a run is live: the run turns it {args.value} at its next pick.")
@@ -405,7 +409,7 @@ def main(argv: list[str] | None = None) -> int:
             conn = metrics.open_db(args.db or cfg.metrics_db)
             try:
                 start = loop.starting_ratings(cfg)
-                project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+                project = metrics.upsert_project(conn, project_name(repo), repo=str(repo))
                 if (cut_off := args.void_benches_before) is not None:
                     if cut_off.tzinfo is None:
                         raise RunnerError(f"--void-benches-before {cut_off}: give its time zone")
@@ -444,10 +448,11 @@ def main(argv: list[str] | None = None) -> int:
             print(f"The factory dashboard: http://{host}:{args.port}/ (Ctrl-C stops it)")
             if args.lan:
                 print("Open that address on your phone, on the same Wi-Fi.")
-            app.serve(db, repo.name, port=args.port, host=host)
+            app.serve(db, project_name(repo), port=args.port, host=host)
         elif args.command == "check-tickets":
             given = args.tickets or sorted(
-                p.relative_to(repo).as_posix() for p in (repo / "tasks" / "later").glob("*.md")
+                p.relative_to(repo).as_posix()
+                for p in (repo / ".factory" / "tasks" / "later").glob("*.md")
             )
             problems = ticket_problems(repo, given)
             print("\n".join(problems) or "tickets OK")
@@ -456,7 +461,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.what == "sql":
                 print(look.sql(cfg.metrics_db, args.query))
             else:
-                print(look.page(cfg.metrics_db, repo.name, args.address))
+                print(look.page(cfg.metrics_db, project_name(repo), args.address))
         elif args.command == "check-layout":
             problems = layout_problems(repo)
             print("\n".join(problems) or "layout OK")

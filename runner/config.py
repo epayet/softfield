@@ -1,5 +1,7 @@
-"""Runner settings from workflow/runner.toml."""
+"""Runner settings: the machine's ``~/.config/softfield/factory.toml``, then the project's
+``.factory/project.toml`` over it, table by table (ADR 30 item 3)."""
 
+import os
 import tomllib
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -12,6 +14,11 @@ DEFAULT_METRICS_DB = "~/.local/share/software-factory/factory-metrics.sqlite"
 # Outside any repo; a copy holds a .venv of a few hundred MB, and /tmp may be RAM (f2-12)
 DEFAULT_BENCH_DIR = "~/.cache/software-factory/bench"
 DEFAULT_BACKUP_DIR = "~/Dropbox/software-factory-backups"
+# The machine's settings: agents, roles, Claude, the local model, metrics, backup, bench
+DEFAULT_MACHINE = "~/.config/softfield/factory.toml"
+MACHINE_ENV = "SOFTFIELD_CONFIG"  # another machine file; tests point it at none
+PROJECT_TOML = Path(".factory") / "project.toml"
+PROTECTED = Path(".factory") / "protected-paths.txt"
 
 
 class ConfigError(ValueError):
@@ -48,6 +55,7 @@ class Config:
     narrative: bool
     metrics_db: Path  # outside the repo, shared by every project (ADR 13 item 1)
     project_description: str = ""  # the metrics database's project row (f1 D2)
+    name: str = ""  # `[project] name`; ``project_name`` falls back on the repo's folder
     claude_reserve: float = 0.3  # the share of Claude's week kept for support roles (ADR 15)
     review_timeout: int = 1800  # a milestone review's own limit; Claude's when unset (2026-10-08)
     five_hour_reserve: float = 0.25  # Claude's 5-hour window kept for the owner (ADR 16 item 1)
@@ -60,13 +68,18 @@ class Config:
     backup: Backup | None = None
 
     @property
+    def project_name(self) -> str:
+        """The project's name in the metrics database (ADR 30 item 3)."""
+        return self.name or self.repo.name
+
+    @property
     def runs_dir(self) -> Path:
-        return self.repo / "var" / "runs"
+        return self.repo / ".factory" / "var" / "runs"
 
     def agent_for(self, role: str) -> Agent:
         """The first agent `[roles]` names for ``role`` (f1-25 routes among them)."""
         if not (ids := self.roles.get(role)):
-            raise ConfigError(f"workflow/runner.toml: [roles] names no agent for {role}")
+            raise ConfigError(f"[roles] names no agent for {role}")
         return self.agents[ids[0]]
 
 
@@ -103,8 +116,33 @@ def _backup(table: dict[str, Any]) -> Backup:
     return Backup(Path(table.get("dir", DEFAULT_BACKUP_DIR)).expanduser(), keep, float(every))
 
 
+def machine_file() -> Path:
+    return Path(os.environ.get(MACHINE_ENV) or DEFAULT_MACHINE).expanduser()
+
+
+def _read(repo: Path) -> dict[str, Any]:
+    """The machine's tables, then the project's over them: a table in both is merged, the
+    project's keys winning."""
+    machine = machine_file()
+    data = tomllib.loads(machine.read_text(encoding="utf-8")) if machine.is_file() else {}
+    project = tomllib.loads((repo / PROJECT_TOML).read_text(encoding="utf-8"))
+    for name, table in project.items():
+        both = isinstance(table, dict) and isinstance(data.get(name), dict)
+        data[name] = {**data[name], **table} if both else table
+    return data
+
+
+def project_name(repo: Path) -> str:
+    """`[project] name` in the repo's ``.factory/project.toml``, else its folder's name."""
+    try:
+        data = tomllib.loads((repo / PROJECT_TOML).read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return repo.name
+    return str(data.get("project", {}).get("name") or repo.name)
+
+
 def load_config(repo: Path) -> Config:
-    data = tomllib.loads((repo / "workflow" / "runner.toml").read_text(encoding="utf-8"))
+    data = _read(repo)
     caps, timeouts, lm = data["caps"], data["timeouts"], data["local_model"]
     report = data.get("report", {})
     agents = {agent_id: _agent(agent_id, t) for agent_id, t in data.get("agents", {}).items()}
@@ -128,6 +166,7 @@ def load_config(repo: Path) -> Config:
         narrative=report.get("narrative", False),
         metrics_db=Path(data.get("metrics", {}).get("db", DEFAULT_METRICS_DB)).expanduser(),
         project_description=data.get("project", {}).get("description", ""),
+        name=str(data.get("project", {}).get("name") or ""),
         claude_reserve=data["claude"]["reserve"],
         five_hour_reserve=data["claude"].get("five_hour_reserve", 0.25),
         developer_five_hour_cap=data["claude"].get("developer_five_hour_cap", 0.5),
@@ -138,6 +177,40 @@ def load_config(repo: Path) -> Config:
     )
 
 
+@dataclass(frozen=True)
+class Checks:
+    """``[checks]`` in ``.factory/project.toml``: what check-all and the gates run on this
+    project (ADR 30 item 3). The defaults suit any uv project with its tests in ``tests/``."""
+
+    test_dirs: tuple[str, ...] = ("tests",)
+    mypy: tuple[str, ...] = ()  # mypy's targets; none skips it
+    translations: bool = False  # the gettext check of ``runner/i18n.py`` (ADR 00 A2)
+    dependency_files: tuple[str, ...] = ("pyproject.toml", "uv.lock")
+    dependency_dirs: tuple[str, ...] = ()  # vendored code
+    # test folder -> (module folder, module suffix): one test file per module (ADR 00 A1)
+    layouts: Mapping[str, tuple[str, str]] = field(default_factory=dict)
+
+
+def project_checks(repo: Path) -> Checks:
+    """The project's ``[checks]``; the defaults when its project.toml has none."""
+    try:
+        data = tomllib.loads((repo / PROJECT_TOML).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return Checks()
+    table, default = data.get("checks", {}), Checks()
+    try:
+        return Checks(
+            test_dirs=tuple(table.get("test_dirs", default.test_dirs)),
+            mypy=tuple(table.get("mypy", default.mypy)),
+            translations=bool(table.get("translations", default.translations)),
+            dependency_files=tuple(table.get("dependency_files", default.dependency_files)),
+            dependency_dirs=tuple(table.get("dependency_dirs", default.dependency_dirs)),
+            layouts={str(k): (str(v[0]), str(v[1])) for k, v in table.get("layouts", {}).items()},
+        )
+    except (TypeError, IndexError) as exc:
+        raise ConfigError(f"[checks] in {PROJECT_TOML}: {exc}") from exc
+
+
 def read_protected(repo: Path) -> list[str]:
-    lines = (repo / "workflow" / "protected-paths.txt").read_text(encoding="utf-8").splitlines()
+    lines = (repo / PROTECTED).read_text(encoding="utf-8").splitlines()
     return [line.strip() for line in lines if line.strip() and not line.startswith("#")]

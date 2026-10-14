@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ milestone.key | upper }} · Milestone · {{ project }}{% endblock %}
-{# A milestone's page is its card's (f5-17, after docs/milestones/f5-board-mockup/Card.dc.html):
+{# A milestone's page is its card's (f5-17, after .factory/cards/f5-board-mockup/Card.dc.html):
    the header and "How it grew" carry the board's stage, then what the page showed before. #}
 {% from "_partials/stage_icon.html" import icon %}
 {% block crumbs %}

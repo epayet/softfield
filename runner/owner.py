@@ -16,6 +16,7 @@ from pathlib import Path
 import yaml
 
 from runner import metrics
+from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.milestone import WAITS, footer_fields, signoff_sections
 from runner.state import State
@@ -47,7 +48,7 @@ class OwnerError(RuntimeError):
 def _milestone_of(repo: Path, task_id: str) -> str:
     """The short key of the milestone a ticket's ``milestone:`` names: a re-homed ticket keeps
     its old id. One with no file, or whose frontmatter won't parse, counts by its id."""
-    for path in sorted((repo / "tasks").glob(f"*/{task_id}.md")):
+    for path in sorted((repo / ".factory" / "tasks").glob(f"*/{task_id}.md")):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
             return short_key(milestone_key(meta["milestone"]))
@@ -58,7 +59,7 @@ def _milestone_of(repo: Path, task_id: str) -> str:
 
 def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
     """The tickets in ``folder`` that count for ``milestone`` (``_milestone_of``)."""
-    paths = sorted((repo / "tasks" / folder).glob("*.md"))
+    paths = sorted((repo / ".factory" / "tasks" / folder).glob("*.md"))
     return [p.stem for p in paths if _milestone_of(repo, p.stem) == short_key(milestone)]
 
 
@@ -116,7 +117,7 @@ def owner_items(repo: Path, milestone: str, state: State, review_stop: str) -> l
             text = f"{task_id} escalated with no decision: see its logs"
             items.append(OwnerItem("escalated", task_id, text, rerun))
     for task_id in _ids(repo, "blocked", milestone):
-        path = repo / "tasks" / "blocked" / f"{task_id}.md"
+        path = repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         items.append(OwnerItem("blocked", task_id, f"{task_id} blocked: {reason}", rerun))
     for task_id, text in _reserve_waits(repo, state, milestone):
@@ -137,7 +138,7 @@ def _write(repo: Path, db: Path | None, write: Callable[[sqlite3.Connection, int
     try:
         conn = metrics.open_db(db)
         try:
-            write(conn, metrics.upsert_project(conn, repo.name, repo=str(repo)))
+            write(conn, metrics.upsert_project(conn, project_name(repo), repo=str(repo)))
         finally:
             conn.close()
     except Exception as exc:
@@ -209,7 +210,7 @@ def verdict(
     items = owner_items(repo, milestone, state, review_stop)
     ready = [
         t
-        for t in load_dir(repo / "tasks" / "ready", 1000)
+        for t in load_dir(repo / ".factory" / "tasks" / "ready", 1000)
         if short_key(t.milestone) == short_key(milestone)
     ]
     needs = []
@@ -222,7 +223,7 @@ def verdict(
         else:
             needs.append(f"  • {task_id} escalated with no decision: see its logs{behind}")
     for task_id in _ids(repo, "blocked", milestone):
-        path = repo / "tasks" / "blocked" / f"{task_id}.md"
+        path = repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         needs.append(f"  • {task_id} blocked: {reason}")
     needs += [f"  • {text}" for _, text in _reserve_waits(repo, state, milestone)]
@@ -261,7 +262,7 @@ def verdict(
 
 def record_verdict(repo: Path, text: str) -> Path | None:
     """Append the verdict to the latest session report and commit it."""
-    reports = sorted((repo / "docs" / "sessions").glob("*.md"))
+    reports = sorted((repo / ".factory" / "sessions").glob("*.md"))
     if not reports:
         return None
     with reports[-1].open("a", encoding="utf-8") as fh:
@@ -350,12 +351,12 @@ def signoff(
         raise OwnerError(
             "work is left: " + ", ".join(left) + ". Finish it, or sign off with --force."
         )
-    doc = milestone_file(repo, "milestones", milestone)
+    doc = milestone_file(repo, "cards", milestone)
     review = milestone_file(repo, "reviews", milestone)
     status = (
         f"> **Status: done.** Signed off by the owner on {today.isoformat()}."
         f" Base: git tag `{milestone}-start`."
-        f" Report: [`docs/reviews/{review.name}`](../reviews/{review.name})."
+        f" Report: [`.factory/reviews/{review.name}`](../reviews/{review.name})."
     )
     # Both files are checked before either is written: a refusal leaves no half sign-off
     new_doc = _signed_doc(doc, status)
@@ -385,9 +386,9 @@ def _is_adr(number: int) -> Callable[[str, str], bool]:
 def decide_adr(repo: Path, number: int, status: str, today: date, db: Path | None = None) -> Path:
     """Set ADR N's status ("Accepted" or "Rejected") with the date, in one commit. With a
     metrics ``db``, the owner items asking about it are resolved."""
-    found = sorted((repo / "docs" / "adr").glob(f"{number:02d}-*.md"))
+    found = sorted((repo / ".factory" / "adr").glob(f"{number:02d}-*.md"))
     if not found:
-        raise OwnerError(f"ADR {number} not found in docs/adr/")
+        raise OwnerError(f"ADR {number} not found in .factory/adr/")
     _replace_line(
         found[0], _STATUS_LINE, f"- **Status:** {status} (by the owner, {today.isoformat()})"
     )

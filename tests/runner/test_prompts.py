@@ -42,16 +42,16 @@ def test_the_planner_prompt_names_the_block_the_branch_and_the_approval_rule():
     assert "nothing after it" in text and text.rstrip().endswith("```")
     # The branch (D4): drafts on plan/<card> only, in the drafts' folders, committed by the runner
     assert "plan/{card} only, never main" in text and "`git checkout plan/{card}`" in text
-    for folder in ("docs/adr/", "docs/milestones/{card}-mockup/", "tasks/later/"):
+    for folder in (".factory/adr/", ".factory/cards/{card}-mockup/", ".factory/tasks/later/"):
         assert folder in text
     assert "self-contained HTML" in text and "don't commit" in text
     # The frame the owner reads a mock-up in runs its scripts and nothing else (F104 D1)
     for refused in ("no localStorage", "no alert or confirm", "no request to the dashboard"):
         assert refused in text
     # The approval rule (item 7): nothing queued until the owner approves; only a replan's
-    # branch touches tasks/ready/ (f6-13)
+    # branch touches .factory/tasks/ready/ (f6-13)
     assert "Nothing is queued without their approval" in text
-    assert "Only a `replan` may touch tasks/ready/" in text
+    assert "Only a `replan` may touch .factory/tasks/ready/" in text
     # Questions first, every point agreed by default, and push back (owner.md)
     assert text.index("questions and comments first") < text.index("then revise")
     assert "counts as agreed" in text and "Challenge them" in text
@@ -65,11 +65,11 @@ def test_the_general_thread_has_no_branch_and_proposes_seeds():
 
 @pytest.mark.parametrize("text", [prompts.PLANNER, prompts.PLANNER_GENERAL])
 def test_both_planner_prompts_look_for_duplicates_and_propose_a_merge(text):
-    """f6-12: before answering, the cards in docs/milestones/ (idea, planning or ready) and the
+    """f6-12: before answering, the cards in .factory/cards/ (idea, planning or ready) and the
     other threads; a repeat is a point and a `merge` proposal, which the runner applies at
     once (F49 D1), keeping the more advanced card (D2)."""
     looks = text.index("Before answering")
-    assert "docs/milestones/" in text[looks:] and "idea, planning or ready" in text
+    assert ".factory/cards/" in text[looks:] and "idea, planning or ready" in text
     assert "{threads}" in text and "repeats another" in text
     assert "`merge`" in text and '"into"' in text.split("```json", 1)[1]
     assert "applies the merge on its own" in text and "once the owner approves" not in text
@@ -211,10 +211,10 @@ def test_a_card_that_changes_a_page_gets_a_today_proposed_mockup_unasked():
     assert "without being asked" in paragraph and "wording only" in paragraph
     assert "say why in a point" in paragraph
     # What it shows (D2): one file, a Today / Proposed switch, Today copied, real values
-    assert "Today / Proposed" in paragraph and "docs/milestones/{card}-mockup/" in paragraph
+    assert "Today / Proposed" in paragraph and ".factory/cards/{card}-mockup/" in paragraph
     assert "copied from the live template" in paragraph and "real values" in paragraph
     # The example it names for the switch has one (F72's review: f17's has none)
-    example = "docs/milestones/f94-mockup/away-rows.html"
+    example = ".factory/cards/f94-mockup/away-rows.html"
     assert example in paragraph
     assert 'data-show="today"' in (ROOT / example).read_text(encoding="utf-8")
     # Order (D3): with the plan, and the UI tickets point at it

@@ -115,7 +115,9 @@ def milestone_metrics(repo: Path, milestone: str) -> MilestoneMetrics:
     attempts: list[int] = []
     tasks: list[str] = []
     for folder in ("done", "escalated"):
-        for path in sorted((repo / "tasks" / folder).glob(f"{short_key(milestone)}-*.md")):
+        for path in sorted(
+            (repo / ".factory" / "tasks" / folder).glob(f"{short_key(milestone)}-*.md")
+        ):
             text = path.read_text(encoding="utf-8")
             footers = all_footers(text)
             tokens += footer_tokens(text)
@@ -155,7 +157,7 @@ def milestone_summary(repo: Path, milestone: str, base: str | None = None) -> st
 
 def _write_metrics(s: Session, milestone: str, base: str, rounds: list[int], stop: str) -> None:
     m = milestone_metrics(s.repo, milestone)
-    path = s.repo / "docs" / "reviews" / f"{milestone}-metrics.md"
+    path = s.repo / ".factory" / "reviews" / f"{milestone}-metrics.md"
     avg = sum(m.attempts) / len(m.attempts) if m.attempts else 0
     path.write_text(
         "\n".join(
@@ -272,7 +274,7 @@ def signed_off(repo: Path, key: str) -> bool:
     """Whether the owner signed ``key`` off: its doc says "Status: done", or failing that a
     ``<key>-done`` tag exists (either form of the key)."""
     key = full_key(repo, key)
-    doc = milestone_file(repo, "milestones", key)
+    doc = milestone_file(repo, "cards", key)
     status = _STATUS_RE.search(doc.read_text(encoding="utf-8")) if doc.is_file() else None
     if status and status.group(1).strip() == "done":
         return True
@@ -287,7 +289,7 @@ def waits_for(repo: Path, milestones: Iterable[str]) -> dict[str, str]:
     ``After: <key> signed off`` and whose ``<key>`` isn't signed off yet."""
     waits = {}
     for key in set(milestones):
-        doc = milestone_file(repo, "milestones", key)
+        doc = milestone_file(repo, "cards", key)
         after = milestone_after(doc.read_text(encoding="utf-8")) if doc.is_file() else None
         if after and not signed_off(repo, after):
             waits[short_key(key)] = after
@@ -323,7 +325,7 @@ def _first_line_in(body: str) -> str:
 def _record_milestone_doc(s: Session, milestone: str) -> None:
     if s.project_id is None:
         return
-    path = milestone_file(s.repo, "milestones", milestone)
+    path = milestone_file(s.repo, "cards", milestone)
     doc = milestone_doc(path.read_text(encoding="utf-8")) if path.is_file() else {}
     # A sheet written outside the runner (an interactive review) reaches the dashboard too
     review = milestone_file(s.repo, "reviews", milestone)
@@ -470,10 +472,11 @@ _BUILDING = ("ready", *STOPPED)
 
 
 def _ticket_milestones(repo: Path, folder: str) -> set[str]:
-    """The short keys of the milestones with a ticket in ``tasks/<folder>``; ``bugs``, and a
+    """The short keys of the milestones with a ticket in ``.factory/tasks/<folder>``; ``bugs``, and
+    a
     ticket that doesn't parse, are left out."""
     found = set()
-    for path in (repo / "tasks" / folder).glob("*.md"):
+    for path in (repo / ".factory" / "tasks" / folder).glob("*.md"):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
             if meta.get("milestone") != BUGS:
@@ -508,7 +511,7 @@ def due_reviews(repo: Path, state: State) -> list[str]:
 def _done_tickets(repo: Path, milestone: str) -> list[str]:
     """The ids of the milestone's tickets in done/."""
     found = []
-    for path in (repo / "tasks" / "done").glob("*.md"):
+    for path in (repo / ".factory" / "tasks" / "done").glob("*.md"):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
         except (TaskError, yaml.YAMLError, UnicodeDecodeError):
@@ -529,7 +532,7 @@ def _plan_commit(git: Git, repo: Path, milestone: str) -> str:
         merges = git.run("log", "-E", f"--grep={trailer}", "--format=%H").split()
         if merges and git.run("rev-list", "--parents", "-n", "1", merges[-1]).split()[1:]:
             return f"{merges[-1]}^"
-    doc = milestone_file(repo, "milestones", milestone)
+    doc = milestone_file(repo, "cards", milestone)
     if not doc.is_file():
         return "HEAD"
     path = doc.relative_to(repo).as_posix()

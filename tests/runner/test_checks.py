@@ -43,8 +43,8 @@ def test_fix_formats_before_checking(repo: Path, monkeypatch):
 
 def test_other_queued_tasks_tests_run_too(repo: Path, monkeypatch):
     """ADR 21: every test file on main is checked, whatever the queue holds."""
-    write_task(repo / "tasks" / "ready", "m1-01-mine")
-    other = write_task(repo / "tasks" / "ready", "m1-02-other")
+    write_task(repo / ".factory" / "tasks" / "ready", "m1-01-mine")
+    other = write_task(repo / ".factory" / "tasks" / "ready", "m1-02-other")
     other.write_text(other.read_text().replace("tests/unit/test_thing.py", "tests/unit/test_x.py"))
     calls: list[list[str]] = []
     monkeypatch.setattr(checks, "_exec", _fake_exec({}, calls))
@@ -56,9 +56,11 @@ def test_other_queued_tasks_tests_run_too(repo: Path, monkeypatch):
 def test_a_tasks_own_tests_run_even_when_another_queued_task_lists_them(repo: Path, monkeypatch):
     """f1-33: f1's lead tickets listed existing files that other queued tickets also listed,
     and no gate ran them."""
-    write_task(repo / "tasks" / "ready", "m1-01-mine")
-    write_task(repo / "tasks" / "ready", "m1-02-other")  # lists tests/unit/test_thing.py too
-    lead = write_task(repo / "tasks" / "ready", "m1-03-lead")
+    write_task(repo / ".factory" / "tasks" / "ready", "m1-01-mine")
+    write_task(
+        repo / ".factory" / "tasks" / "ready", "m1-02-other"
+    )  # lists tests/unit/test_thing.py too
+    lead = write_task(repo / ".factory" / "tasks" / "ready", "m1-03-lead")
     lead.write_text(
         lead.read_text()
         .replace("milestone: 1\n", "milestone: 1\nagent: lead\n")
@@ -80,7 +82,7 @@ def test_report_ends_with_a_verdict():
 
 
 def test_docs_and_tasks_only_commits_skip_the_hook():
-    assert checks.hook_can_skip(["docs/adr/12-x.md", "tasks/ready/m5-01-x.md"])
+    assert checks.hook_can_skip([".factory/adr/12-x.md", ".factory/tasks/ready/m5-01-x.md"])
     assert not checks.hook_can_skip(["docs/a.md", "runner/loop.py"])
     assert not checks.hook_can_skip([])
 
@@ -89,7 +91,7 @@ def test_the_hook_reads_the_commits_index_before_anything_clears_it():
     """`git commit -a` stages into a temporary index named by GIT_INDEX_FILE. The hook once
     unset it first, saw nothing staged and ran every check on a docs-only commit; the
     command clears it itself, once it has read what is staged."""
-    hook = Path(__file__).parents[2] / "workflow" / "hooks" / "pre-commit"
+    hook = Path(__file__).parents[2] / ".factory" / "hooks" / "pre-commit"
     code = [line for line in hook.read_text().splitlines() if not line.startswith("#")]
     assert not [line for line in code if "GIT_INDEX_FILE" in line]
     assert code[-1] == "exec uv run runner check-all --hook"

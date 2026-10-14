@@ -356,7 +356,7 @@ def _states(
 
 
 def _config(conn: sqlite3.Connection, project: str) -> Config | None:
-    """The project's ``workflow/runner.toml``, or None when its repo can't be read."""
+    """The project's ``.factory/project.toml``, or None when its repo can't be read."""
     row = conn.execute("SELECT repo FROM projects WHERE name = ?", (project,)).fetchone()
     if row is None or not row["repo"]:
         return None

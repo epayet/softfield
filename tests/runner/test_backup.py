@@ -14,6 +14,9 @@ from runner.report import TaskRecord
 from tests.runner.conftest import git, write_task
 from tests.runner.test_config import MINIMAL_TOML, REPO
 
+# `_config` reads this repo's project.toml over the machine file (ADR 30 item 3)
+pytestmark = pytest.mark.usefixtures("machine")
+
 THURSDAY = datetime(2026, 10, 1, 12, 0, tzinfo=UTC)
 
 
@@ -139,15 +142,14 @@ def test_while_none_is_due_a_check_does_not_list_the_folder(tmp_path, monkeypatc
 
 
 def _toml(tmp_path: Path, extra: str = "") -> Path:
-    (tmp_path / "workflow").mkdir()
-    (tmp_path / "workflow" / "runner.toml").write_text(MINIMAL_TOML + extra, encoding="utf-8")
+    (tmp_path / ".factory").mkdir()
+    (tmp_path / ".factory" / "project.toml").write_text(MINIMAL_TOML + extra, encoding="utf-8")
     return tmp_path
 
 
-def test_the_repos_toml_has_d1s_backup_section():
+def test_the_machines_toml_has_d1s_backup_section():
     expected = Backup(Path.home() / "Dropbox" / "software-factory-backups", 14, 24)
     assert load_config(REPO).backup == expected
-    assert "[backup]" in (REPO / "workflow" / "runner.toml").read_text(encoding="utf-8")
 
 
 def test_a_config_without_backup_uses_d1s_defaults(tmp_path):
@@ -230,7 +232,7 @@ def _ticket_runs(monkeypatch, then=None) -> list[str]:
 
 
 def test_once_the_copy_is_old_the_next_pick_writes_one(repo, tmp_path, fake_clock, monkeypatch):
-    write_task(repo / "tasks" / "ready", "m1-01-thing")
+    write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "ticket")
     folder = tmp_path / "Dropbox"
@@ -249,7 +251,7 @@ def test_once_the_copy_is_old_the_next_pick_writes_one(repo, tmp_path, fake_cloc
 def test_a_folder_not_writable_is_one_note_and_the_run_goes_on(
     repo, tmp_path, fake_clock, monkeypatch, capsys
 ):
-    write_task(repo / "tasks" / "ready", "m1-01-thing")
+    write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "ticket")
     folder = tmp_path / "Dropbox"

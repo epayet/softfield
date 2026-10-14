@@ -30,9 +30,10 @@ from runner.tasks import (
 )
 
 PLANNER = "planner"  # the role, and the queued job's kind (`dispatch.PLANNER`)
-DRAFTS = ("docs/**", "tasks/later/**")  # what a card's planner job may edit (f6 D4)
-DRAFT_DIRS = ("docs/", "tasks/later/")
-READY_DIR = "tasks/ready/"
+# what a card's planner job may edit (f6 D4): docs, cards, ADRs and set-aside tickets
+DRAFT_DIRS = ("docs/", ".factory/cards/", ".factory/adr/", ".factory/tasks/later/")
+DRAFTS = tuple(f"{d}**" for d in DRAFT_DIRS)
+READY_DIR = ".factory/tasks/ready/"
 PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `message`'s JSON
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
@@ -136,17 +137,19 @@ def drafts(card: str) -> tuple[str, ...]:
 
 
 def is_draft(path: str, card: str | None = None) -> bool:
-    """Whether a planner job may change ``path`` on its plan branch (f6 D4): docs and the
-    tickets in ``tasks/later/``, never code or ``tasks/done/``. Given its ``card``, the card's
-    own tickets in ``tasks/ready/`` too, which only a ``replan`` may change (f6-13)."""
+    """Whether a planner job may change ``path`` on its plan branch (f6 D4): docs and the tickets in
+    ``.factory/tasks/later/``, never code or ``.factory/tasks/done/``. Given its ``card``, the
+    card's own tickets in ``.factory/tasks/ready/`` too, which only a ``replan`` may change (f6-13).
+    """
     if ".." in path.split("/"):
         return False
     return path.startswith(DRAFT_DIRS) or (card is not None and is_ready_ticket(path, card))
 
 
 def is_ready_ticket(path: str, card: str) -> bool:
-    """Whether ``path`` is one of ``card``'s tickets in ``tasks/ready/``: ``f7-01-….md``."""
-    return re.fullmatch(rf"{READY_DIR}{re.escape(card)}-\d[\w.-]*\.md", path) is not None
+    """Whether ``path`` is one of ``card``'s ready tickets (``.factory/tasks/ready/f7-01-….md``)."""
+    pattern = rf"{re.escape(READY_DIR)}{re.escape(card)}-\d[\w.-]*\.md"
+    return re.fullmatch(pattern, path) is not None
 
 
 def draft(repo: Path, thread: str, path: str) -> bytes | None:
@@ -170,7 +173,7 @@ def draft(repo: Path, thread: str, path: str) -> bytes | None:
 
 
 _MAIN = "refs/heads/main"  # loop.MAIN; loop imports this module
-_LATER_DIR = "tasks/later/"
+_LATER_DIR = ".factory/tasks/later/"
 _WORDS = {"A": "added", "D": "removed"}  # any other status is "changed"
 
 
@@ -186,9 +189,9 @@ class Change:
 
 
 def plan_changes(repo: Path, thread: str) -> list[Change]:
-    """What approving the card's plan branch changes (f6-24): each path it changed since it
-    left main, by path; a ready ticket removed and moved to tasks/later/ is "set aside", once,
-    under its tasks/ready/ path. Empty with no branch, or for the general thread. Git only,
+    """What approving the card's plan branch changes (f6-24): each path it changed since it left
+    main, by path; a ready ticket removed and moved to .factory/tasks/later/ is "set aside", once,
+    under its .factory/tasks/ready/ path. Empty with no branch, or for the general thread. Git only,
     as ``draft``: ``runner.requests._drafts`` reads the same diff."""
     try:
         branch = plan_branch(thread_key(thread))
@@ -256,7 +259,7 @@ def sent_back(proposal: Mapping[str, Any], text: str, comments: Mapping[int, str
 
 
 # A ticket relies on an ADR it names: by its path, or as "ADR 20".
-_ADR_NAMED_RE = re.compile(r"\bdocs/adr/(\d+)-[\w.-]*\.md\b|\bADR (\d+)\b")
+_ADR_NAMED_RE = re.compile(r"(?<![\w/])\.factory/adr/(\d+)-[\w.-]*\.md\b|\bADR (\d+)\b")
 _PROPOSED_RE = re.compile(r"^- \*\*Status:\*\*[ \t]*Proposed\b", re.MULTILINE)
 READY = "ready"  # the card's state once its plan is approved (f5 D4)
 _STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*[^·*\n]*?(?=[ \t]*(?:·|\*|$))", re.MULTILINE)
@@ -312,9 +315,9 @@ def next_key(repo: Path, area: str, taken: Iterable[str] = ()) -> str:
     ticket or ``taken`` uses (``f7`` after ``f6-planning-room``). ``taken`` is the threads'
     cards (f109-02): a card merged away keeps its key, and its thread, to itself."""
     prefix = SERIES[area]
-    keys = [path.stem for path in (repo / "docs" / "milestones").glob("*.md")]
+    keys = [path.stem for path in (repo / ".factory" / "cards").glob("*.md")]
     keys += [key for key in taken if key != GENERAL]
-    for path in (repo / "tasks").glob("*/*.md"):
+    for path in (repo / ".factory" / "tasks").glob("*/*.md"):
         if found := _TICKET_KEY_RE.match(path.stem):
             keys.append(found[1])
     highest = 0
@@ -330,7 +333,7 @@ def next_key(repo: Path, area: str, taken: Iterable[str] = ()) -> str:
 
 def card_named(repo: Path, name: str) -> str | None:
     """The milestone doc whose slug is ``name``, in any series, if there is one."""
-    for path in sorted((repo / "docs" / "milestones").glob(f"*-{name}.md")):
+    for path in sorted((repo / ".factory" / "cards").glob(f"*-{name}.md")):
         if path.stem.partition("-")[2] == name:
             return path.stem
     return None
@@ -460,7 +463,7 @@ def seed_card(key: str, title: str, thoughts: str, area: str, note: str) -> str:
 def cards(repo: Path) -> set[str]:
     """Every card's short key, from its milestone doc: the cards a ``merge`` may name."""
     found = set()
-    for path in (repo / "docs" / "milestones").glob("*.md"):
+    for path in (repo / ".factory" / "cards").glob("*.md"):
         try:
             key = milestone_key(path.stem)
         except TaskError:  # a README
@@ -472,7 +475,7 @@ def cards(repo: Path) -> set[str]:
 
 # --- merging a duplicate card into the card it repeats (f6-12, D2 and D4) ---------------------
 
-_CARD_DOC_RE = re.compile(r"docs/milestones/([a-z][a-z0-9-]*)\.md")
+_CARD_DOC_RE = re.compile(r"\.factory/cards/([a-z][a-z0-9-]*)\.md")
 _HEADING_RE = re.compile(r"^(#{1,4}) ", re.MULTILINE)
 
 
@@ -487,7 +490,7 @@ def merge_cards(proposal: Mapping[str, Any]) -> tuple[str, str]:
     except TaskError:
         duplicate = None
     if duplicate is None or duplicate == BUGS:
-        raise PlannerError(f"merge {name}'s path is a card's doc in docs/milestones/, not {path!r}")
+        raise PlannerError(f"merge {name}'s path is a card's doc in .factory/cards/, not {path!r}")
     into = proposal.get("into")
     try:
         kept = thread_key(into)
@@ -868,7 +871,7 @@ REJECTED = "rejected"  # won't do (F31 D2)
 WORKED = ("queued for the lead", "approved", "accepted ", "planted ", REJECTED)  # its start
 DRAFTED = ("adr", "mockup", "plan", REPLAN)  # drafts on the plan branch: rejected together
 REJECTED_DRAFTS = "rejected the drafts on "  # a reject's result when the branch went
-_ADR_NUMBER = re.compile(r"docs/adr/(\d+)-")
+_ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
 
 
 def _about(proposal: Mapping[str, Any], card: str) -> list[tuple[str, str, str | None]]:

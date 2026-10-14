@@ -193,7 +193,7 @@ def _contrast(a: str, b: str) -> float:
     return (la + 0.05) / (lb + 0.05)
 
 
-MOCKUP = {  # docs/milestones/f1-factory-mockup.html's :root, and the board's area colours
+MOCKUP = {  # .factory/cards/f1-factory-mockup.html's :root, and the board's area colours
     "--floor": "#12161b",
     "--bay": "#181e25",
     "--plate": "#1f2730",

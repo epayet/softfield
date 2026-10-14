@@ -8,13 +8,12 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 from runner import i18n
+from runner.config import Checks, project_checks
 from runner.gitops import Git
 from runner.procs import run_bounded
 from runner.tasks import Task
 
 ALWAYS_ALLOWED = ("docs/discoveries.md",)
-DEPENDENCY_FILES = ("pyproject.toml", "uv.lock")
-DEPENDENCY_DIRS = ("coucou/static/coucou/vendor/", "factory_dashboard/static/vendor/")
 BLOCKED_FILE = "BLOCKED.md"
 BLOCKED_CATEGORIES = ("false-assumption", "needs-file", "needs-info", "unrelated-problem")
 _OUTPUT_LIMIT = 6000
@@ -89,8 +88,9 @@ def touching_protected(changed: Iterable[str], protected: Iterable[str]) -> list
     return sorted(f for f in changed if matches_any(f, patterns))
 
 
-def dependency_changes(changed: Iterable[str]) -> list[str]:
-    return sorted(f for f in changed if f in DEPENDENCY_FILES or f.startswith(DEPENDENCY_DIRS))
+def dependency_changes(changed: Iterable[str], checks: Checks) -> list[str]:
+    files, dirs = checks.dependency_files, checks.dependency_dirs
+    return sorted(f for f in changed if f in files or (dirs and f.startswith(dirs)))
 
 
 def is_test_file(path: str) -> bool:
@@ -202,20 +202,10 @@ def empty_modules(repo: Path, added: Iterable[str]) -> list[str]:
     return problems
 
 
-# test folder -> (module folder, module suffix): tests/unit/test_x.py <-> coucou/x.py, and
-# tests/browser/test_x.py <-> coucou/static/coucou/js/x.js (ADR 06 item 2).
-LAYOUTS = {
-    "tests/unit": ("coucou", ".py"),
-    "tests/runner": ("runner", ".py"),
-    "tests/browser": ("coucou/static/coucou/js", ".js"),
-    "tests/factory_dashboard": ("factory_dashboard", ".py"),
-}
-
-
 def layout_problems(repo: Path) -> list[str]:
     """One test file per module, named after it (ADR 00 A1, ADR 06)."""
     problems = []
-    for tests_dir, (package, suffix) in LAYOUTS.items():
+    for tests_dir, (package, suffix) in project_checks(repo).layouts.items():
         root = repo / tests_dir
         if not root.is_dir():
             continue
@@ -279,7 +269,7 @@ def gate_no_new_skips(ctx: GateContext) -> GateResult:
 
 
 def gate_dependencies(ctx: GateContext) -> GateResult:
-    bad = dependency_changes(ctx.git.changed_files(ctx.base))
+    bad = dependency_changes(ctx.git.changed_files(ctx.base), project_checks(ctx.repo))
     return _result("no-new-dependencies", [f"dependency file changed: {f}" for f in bad])
 
 
@@ -302,7 +292,10 @@ def gate_test_patterns(ctx: GateContext) -> GateResult:
 
 
 def gate_translations(ctx: GateContext) -> GateResult:
-    """Every user-facing string has a French translation, compiled (ADR 00, A2)."""
+    """Every user-facing string has a French translation, compiled (ADR 00, A2), in a
+    project whose ``[checks] translations`` is on."""
+    if not project_checks(ctx.repo).translations:
+        return _result("translations", [])
     problems = i18n.regenerated_problems(ctx.repo, ctx.timeout)
     return _result("translations", problems + i18n.compiled_out_of_date(ctx.repo))
 
@@ -329,9 +322,9 @@ def gate_ruff(ctx: GateContext) -> GateResult:
 
 
 def gate_mypy(ctx: GateContext) -> GateResult:
-    return _command(
-        "mypy", ctx, "uv", "run", "mypy", "coucou", "tests", "runner", "factory_dashboard"
-    )
+    if not (targets := project_checks(ctx.repo).mypy):
+        return _result("mypy", [])
+    return _command("mypy", ctx, "uv", "run", "mypy", *targets)
 
 
 def gate_task_tests(ctx: GateContext) -> GateResult:
@@ -340,19 +333,8 @@ def gate_task_tests(ctx: GateContext) -> GateResult:
 
 def gate_all_tests(ctx: GateContext) -> GateResult:
     """Every test file on main, whatever the queue holds (ADR 21)."""
-    return _command(
-        "all-tests",
-        ctx,
-        "uv",
-        "run",
-        "pytest",
-        "-q",
-        "tests/unit",
-        "tests/integration",
-        "tests/runner",
-        "tests/browser",
-        "tests/factory_dashboard",
-    )
+    test_dirs = project_checks(ctx.repo).test_dirs
+    return _command("all-tests", ctx, "uv", "run", "pytest", "-q", *test_dirs)
 
 
 def gate_tests_fail_on_main(ctx: GateContext) -> GateResult:

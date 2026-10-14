@@ -1,6 +1,6 @@
 """`runner backfill`: M1–M4 from their logs into the metrics database (f1-04, D2, D6).
 
-Every test builds its own fake `var/runs` and repo in tmp_path; none reads the real ones.
+Every test builds its own fake `.factory/var/runs` and repo in tmp_path; none reads the real ones.
 """
 
 import json
@@ -103,7 +103,7 @@ def _ticket(
     repo: Path, folder: str, task_id: str, *, agent: str = "developer", footer: str = ""
 ) -> Path:
     milestone = task_id.split("-", 1)[0].removeprefix("m")
-    path = repo / "tasks" / folder / f"{task_id}.md"
+    path = repo / ".factory" / "tasks" / folder / f"{task_id}.md"
     text = TICKET.format(id=task_id, milestone=milestone, agent=agent, goal=f"Goal of {task_id}.")
     path.write_text(text + (FOOTER.format(fields=footer) if footer else ""), encoding="utf-8")
     return path
@@ -117,15 +117,16 @@ def _write(path: Path, text: str) -> Path:
 
 @pytest.fixture
 def m4(repo: Path) -> Path:
-    """A repo and var/runs shaped like M4's: one ticket merged at its second attempt, after a
+    """A repo and .factory/var/runs shaped like M4's: one ticket merged at its second attempt, after
+    a
     direction; a review round with its findings; an old M1 ticket known only by its footer."""
     git(repo, "tag", "m4-start")
     _write(
-        repo / "docs" / "milestones" / "m4.md",
+        repo / ".factory" / "cards" / "m4.md",
         "# Milestone 4: Compose\n\n## Outcome\nMum gets notes.\n\n## Done when\n- it works\n",
     )
     _write(
-        repo / "docs" / "reviews" / "m4.md",
+        repo / ".factory" / "reviews" / "m4.md",
         "# M4 review\n\n### 1. What changed\nNotes.\n\n### 2. How to test it yourself\n1. Send.\n",
     )
     _ticket(repo, "done", "m4-01-thing", footer="result: done\nattempts: 2\ntokens: 23000")
@@ -141,7 +142,7 @@ def m4(repo: Path) -> Path:
     )
     git(repo, "tag", "m4-done")
 
-    run = repo / "var" / "runs" / RUN
+    run = repo / ".factory" / "var" / "runs" / RUN
     logs = run / "m4-01-thing"
     _write(logs / "opencode-1.jsonl", OPENCODE_1)
     _write(logs / "gates-1.txt", GATES_FAIL)
@@ -152,14 +153,16 @@ def m4(repo: Path) -> Path:
     _write(run / "claude-direction-m4-01-thing.log", _claude_log(CLAUDE_OK))
     _write(run / "claude-review-m4-review-r1.log", _claude_log(CLAUDE_OK))
     _write(run / "review-m4-r1.json", json.dumps(REVIEW))
-    _write(repo / "var" / "runs" / "state.json", json.dumps({"review_counts": {"4": [1]}}))
+    _write(
+        repo / ".factory" / "var" / "runs" / "state.json", json.dumps({"review_counts": {"4": [1]}})
+    )
     return repo
 
 
 def _run(repo: Path, db: Path) -> backfill.Summary:
     conn = metrics.open_db(db)
     try:
-        return backfill.backfill(conn, repo, repo / "var" / "runs", local_agent=LOCAL)
+        return backfill.backfill(conn, repo, repo / ".factory" / "var" / "runs", local_agent=LOCAL)
     finally:
         conn.close()
 
@@ -183,11 +186,16 @@ def _counts(db: Path) -> dict[str, int]:
 
 
 def test_a_gates_file_gives_each_gate_with_its_result():
-    gates = backfill.parse_gates(GATES_FAIL, "var/runs/r/t/gates-1.txt")
+    gates = backfill.parse_gates(GATES_FAIL, ".factory/var/runs/r/t/gates-1.txt")
     assert gates == [
-        {"name": "protected-paths", "ok": True, "seconds": None, "log": "var/runs/r/t/gates-1.txt"},
-        {"name": "ruff", "ok": True, "seconds": None, "log": "var/runs/r/t/gates-1.txt"},
-        {"name": "mypy", "ok": False, "seconds": None, "log": "var/runs/r/t/gates-1.txt"},
+        {
+            "name": "protected-paths",
+            "ok": True,
+            "seconds": None,
+            "log": ".factory/var/runs/r/t/gates-1.txt",
+        },
+        {"name": "ruff", "ok": True, "seconds": None, "log": ".factory/var/runs/r/t/gates-1.txt"},
+        {"name": "mypy", "ok": False, "seconds": None, "log": ".factory/var/runs/r/t/gates-1.txt"},
     ]
 
 
@@ -250,7 +258,7 @@ def test_the_run_and_its_tickets_are_written(m4, tmp_path):
 
 
 def test_a_tickets_difficulty_and_its_correction_are_stored(m4, tmp_path):
-    path = m4 / "tasks" / "done" / "m4-01-thing.md"
+    path = m4 / ".factory" / "tasks" / "done" / "m4-01-thing.md"
     text = path.read_text(encoding="utf-8")
     path.write_text(
         text.replace("depends_on:", "difficulty: 6\ndifficulty_corrected: 8\ndepends_on:")
@@ -269,7 +277,7 @@ def test_a_tickets_difficulty_and_its_correction_are_stored(m4, tmp_path):
 
 
 def test_a_ticket_with_a_bad_difficulty_is_a_gap(m4, tmp_path):
-    path = m4 / "tasks" / "done" / "m4-01-thing.md"
+    path = m4 / ".factory" / "tasks" / "done" / "m4-01-thing.md"
     path.write_text(
         path.read_text(encoding="utf-8").replace("depends_on:", "difficulty: 11\ndepends_on:")
     )
@@ -297,7 +305,7 @@ def test_local_attempts_become_jobs_with_tokens_steps_peak_and_gates(m4, tmp_pat
         ("ruff", True),
         ("mypy", False),
     ]
-    assert first["log_path"] == f"var/runs/{RUN}/m4-01-thing/opencode-1.jsonl"
+    assert first["log_path"] == f".factory/var/runs/{RUN}/m4-01-thing/opencode-1.jsonl"
     # A direction came before the last attempt (ADR 12 item 6).
     assert (second["role"], second["attempt"], second["outcome"]) == ("last-attempt", 2, "passed")
     assert (second["tokens_in"], second["steps"], second["peak_context"]) == (14000, 2, 10000)
@@ -318,7 +326,7 @@ def test_claude_jobs_are_written_with_their_role_and_agent(m4, tmp_path):
     assert direction["ticket_id"] is not None
     review = jobs["review"]
     assert review["ticket_id"] is None
-    assert review["log_path"] == f"var/runs/{RUN}/claude-review-m4-review-r1.log"
+    assert review["log_path"] == f".factory/var/runs/{RUN}/claude-review-m4-review-r1.log"
 
 
 def test_review_findings_hang_off_their_review_job(m4, tmp_path):
@@ -356,13 +364,13 @@ def test_the_milestone_gets_its_doc_review_and_dates(m4, tmp_path):
 
 
 def test_a_milestones_status_comes_from_its_doc(m4, tmp_path):
-    doc = m4 / "docs" / "milestones" / "m4.md"
+    doc = m4 / ".factory" / "cards" / "m4.md"
     text = doc.read_text(encoding="utf-8")
     doc.write_text(
         text.replace("\n\n", "\n\n> **Status: in review** (2026-09-30). Base: `m4-start`.\n\n", 1)
     )
     _write(
-        m4 / "docs" / "milestones" / "m0.md",
+        m4 / ".factory" / "cards" / "m0.md",
         "# Milestone 0: Setup\n\n> **Status: done.** Signed off by the owner on 2026-09-27.\n",
     )
     db = tmp_path / "metrics.sqlite"
@@ -384,20 +392,22 @@ def test_the_summary_counts_what_it_wrote_per_milestone(m4, tmp_path):
 def test_a_named_milestone_gathers_its_short_tickets_doc_review_and_findings(repo, tmp_path):
     """ADR 16 item 6: f3-factory-line's tickets are f3-01-…, in either form of frontmatter."""
     git(repo, "tag", "f3-factory-line-start")
-    _write(repo / "docs" / "milestones" / "f3-factory-line.md", "# Factory line\n")
-    _write(repo / "docs" / "reviews" / "f3-factory-line.md", "# F3\n\n### 1. What changed\nA.\n")
+    _write(repo / ".factory" / "cards" / "f3-factory-line.md", "# Factory line\n")
+    _write(
+        repo / ".factory" / "reviews" / "f3-factory-line.md", "# F3\n\n### 1. What changed\nA.\n"
+    )
     for task_id, key in (("f3-01-short", "f3"), ("f3-02-full", "f3-factory-line")):
         _write(
-            repo / "tasks" / "done" / f"{task_id}.md",
+            repo / ".factory" / "tasks" / "done" / f"{task_id}.md",
             TICKET.format(id=task_id, milestone=key, agent="lead", goal="G."),
         )
-    run = repo / "var" / "runs" / RUN
+    run = repo / ".factory" / "var" / "runs" / RUN
     _write(run / "f3-01-short" / "opencode-1.jsonl", OPENCODE_1)
     _write(run / "f3-01-short" / "gates-1.txt", GATES_OK)
     _write(run / "claude-review-f3-factory-line-review-r1.log", _claude_log(CLAUDE_OK))
     _write(run / "review-f3-factory-line-r1.json", json.dumps(REVIEW))
     state = {"review_counts": {"f3-factory-line": [2]}}
-    _write(repo / "var" / "runs" / "state.json", json.dumps(state))
+    _write(repo / ".factory" / "var" / "runs" / "state.json", json.dumps(state))
     db = tmp_path / "metrics.sqlite"
     summary = _run(repo, db)
     [milestone] = _rows(db, "SELECT * FROM milestones")
@@ -458,7 +468,10 @@ INIT = json.dumps({"type": "system", "subtype": "init", "model": "claude-opus-5-
 def test_a_backfilled_claude_job_gets_the_model_its_log_names(m4, tmp_path):
     usage = {"modelUsage": {"claude-sonnet-4-5": {"costUSD": 0.6}}}
     log = json.dumps(json.loads(CLAUDE_OK) | usage)
-    _write(m4 / "var" / "runs" / RUN / "claude-direction-m4-01-thing.log", _claude_log(log))
+    _write(
+        m4 / ".factory" / "var" / "runs" / RUN / "claude-direction-m4-01-thing.log",
+        _claude_log(log),
+    )
     db = tmp_path / "metrics.sqlite"
     _run(m4, db)
     models = {j["role"]: j["model"] for j in _rows(db, "SELECT role, model FROM jobs")}
@@ -489,12 +502,15 @@ def test_a_recorded_claude_job_gets_its_model_from_its_log_once(repo, tmp_path):
     """The runner's own jobs before f2-04: a stream log, read by its `log_path`."""
     run = "20261002-055804"
     stream = "\n".join([INIT, CLAUDE_OK])
-    _write(repo / "var" / "runs" / run / "claude-lead-ticket-f1-53.log", _claude_log(stream))
+    _write(
+        repo / ".factory" / "var" / "runs" / run / "claude-lead-ticket-f1-53.log",
+        _claude_log(stream),
+    )
     db = tmp_path / "metrics.sqlite"
     conn = metrics.open_db(db)
     project = metrics.upsert_project(conn, repo.name)
     run_id = metrics.upsert_run(conn, project, run, command="milestone f1")
-    logs = f"var/runs/{run}"
+    logs = f".factory/var/runs/{run}"
     lead_log = f"{logs}/claude-lead-ticket-f1-53.log"
     _recorded_job(conn, run_id, "lead-ticket", "claude-opus", lead_log)
     _recorded_job(conn, run_id, "review", "claude-opus", f"{logs}/claude-review-gone.log")
@@ -524,13 +540,13 @@ def test_a_ticket_known_only_by_its_footers_is_a_gap(m4, tmp_path):
 
 
 def test_missing_or_malformed_files_are_gaps_not_errors(m4, tmp_path):
-    logs = m4 / "var" / "runs" / RUN / "m4-01-thing"
+    logs = m4 / ".factory" / "var" / "runs" / RUN / "m4-01-thing"
     (logs / "gates-2.txt").unlink()
     _write(logs / "gates-1.txt", "Traceback: nothing useful\n")
-    _write(m4 / "var" / "runs" / RUN / "review-m4-r1.json", "{not json")
-    _write(m4 / "var" / "runs" / RUN / "claude-direction-m4-01-thing.log", "garbage")
-    _write(m4 / "var" / "runs" / "state.json", "{")
-    _write(m4 / "tasks" / "done" / "m4-02-broken.md", "no frontmatter here\n")
+    _write(m4 / ".factory" / "var" / "runs" / RUN / "review-m4-r1.json", "{not json")
+    _write(m4 / ".factory" / "var" / "runs" / RUN / "claude-direction-m4-01-thing.log", "garbage")
+    _write(m4 / ".factory" / "var" / "runs" / "state.json", "{")
+    _write(m4 / ".factory" / "tasks" / "done" / "m4-02-broken.md", "no frontmatter here\n")
     summary = _run(m4, tmp_path / "metrics.sqlite")
     text = "\n".join(summary.gaps)
     for expected in (
@@ -547,7 +563,10 @@ def test_missing_or_malformed_files_are_gaps_not_errors(m4, tmp_path):
 
 
 def test_an_unknown_job_kind_gets_backfill_unknown(m4, tmp_path):
-    _write(m4 / "var" / "runs" / RUN / "claude-mystery-m4-01-thing.log", _claude_log(CLAUDE_OK))
+    _write(
+        m4 / ".factory" / "var" / "runs" / RUN / "claude-mystery-m4-01-thing.log",
+        _claude_log(CLAUDE_OK),
+    )
     db = tmp_path / "metrics.sqlite"
     _run(m4, db)
     [job] = _rows(db, "SELECT * FROM jobs WHERE role = 'backfill-unknown'")
@@ -560,7 +579,7 @@ def test_an_empty_or_missing_runs_folder_is_fine(repo, tmp_path):
 
 
 def test_a_stray_file_in_var_runs_is_a_gap(m4, tmp_path):
-    _write(m4 / "var" / "runs" / "m2-batch2.log", "old batch output")
+    _write(m4 / ".factory" / "var" / "runs" / "m2-batch2.log", "old batch output")
     summary = _run(m4, tmp_path / "metrics.sqlite")
     assert any("m2-batch2.log" in g for g in summary.gaps)
 

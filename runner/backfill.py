@@ -1,12 +1,11 @@
 """``runner backfill``: past milestones into the metrics database from what's left of their
 logs (f1-04; ADR 13 item 1, f1 D2 and D6).
 
-It reads ``var/runs/<run>/`` (OpenCode logs, gates files, ``claude-*.log``, ``review-*.json``,
-``state.json``), the task files and their footers, ``docs/milestones/`` and ``docs/reviews/``,
-and git's ``Agent:``/``Task:`` trailers. Every write goes through ``runner.metrics``, so a
-second run updates the same rows. A run the runner recorded itself is left alone. Whatever
-is missing or unreadable is listed as a gap, never raised.
-"""
+It reads ``.factory/var/runs/<run>/`` (OpenCode logs, gates files, ``claude-*.log``,
+``review-*.json``, ``state.json``), the task files and their footers, ``.factory/cards/`` and
+``.factory/reviews/``, and git's ``Agent:``/``Task:`` trailers. Every write goes through
+``runner.metrics``, so a second run updates the same rows. A run the runner recorded itself is left
+alone. Whatever is missing or unreadable is listed as a gap, never raised."""
 
 import json
 import re
@@ -19,6 +18,7 @@ from pathlib import Path
 
 from runner import metrics
 from runner.claude import stream_model
+from runner.config import project_name
 from runner.gates import parse_blocked
 from runner.gitops import LOCAL_MODEL_AGENT, Git, GitError, parse_trailers
 from runner.local_model import parse_events, stream_facts
@@ -253,7 +253,11 @@ def backfill(conn: sqlite3.Connection, repo: Path, runs_dir: Path, *, local_agen
     """Load every past milestone into ``conn``; ``local_agent`` is D6's id for the OpenCode
     jobs (the logs don't name the model)."""
     b = _Backfill(
-        conn, repo, runs_dir, local_agent, metrics.upsert_project(conn, repo.name, repo=str(repo))
+        conn,
+        repo,
+        runs_dir,
+        local_agent,
+        metrics.upsert_project(conn, project_name(repo), repo=str(repo)),
     )
     b.full = named_keys(repo)
     footers = _tickets(b)
@@ -277,11 +281,12 @@ def backfill(conn: sqlite3.Connection, repo: Path, runs_dir: Path, *, local_agen
 
 
 def _tickets(b: _Backfill) -> dict[str, tuple[int, int]]:
-    """Every ticket in tasks/ with its text and folder; returns the local attempts and tokens
+    """Every ticket in .factory/tasks/ with its text and folder; returns the local attempts and
+    tokens
     its footers count, per ticket."""
     footers: dict[str, tuple[int, int]] = {}
     for folder in TICKET_FOLDERS:
-        for path in sorted((b.repo / "tasks" / folder).glob("*.md")):
+        for path in sorted((b.repo / ".factory" / "tasks" / folder).glob("*.md")):
             try:
                 text = path.read_text(encoding="utf-8")
                 meta, body = split_frontmatter(text)
@@ -580,10 +585,10 @@ def _milestones(b: _Backfill) -> None:
             rounds = load_state(state_path).review_counts
         except (ValueError, TypeError) as exc:
             b.gap(state_path, f"unreadable ({exc}); review rounds not recovered")
-    docs = b.repo / "docs"
-    keys = {b.key(p.stem) for p in (docs / "milestones").glob("*.md") if _is_key(p.stem)}
+    cards = b.repo / ".factory" / "cards"
+    keys = {b.key(p.stem) for p in cards.glob("*.md") if _is_key(p.stem)}
     for key in sorted(keys | set(b.milestones)):
-        doc_path = milestone_file(b.repo, "milestones", key)
+        doc_path = milestone_file(b.repo, "cards", key)
         review_path = milestone_file(b.repo, "reviews", key)
         text = doc_path.read_text(encoding="utf-8") if doc_path.is_file() else ""
         doc = milestone_doc(text)

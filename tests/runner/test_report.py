@@ -171,9 +171,9 @@ def test_the_report_goes_at_the_end_when_the_markers_are_missing():
 
 
 @pytest.fixture
-def in_repo(repo, monkeypatch):
-    toml = (cli._repo() / "workflow" / "runner.toml").read_text()
-    (repo / "workflow" / "runner.toml").write_text(toml)
+def in_repo(repo, monkeypatch, machine):
+    toml = (cli._repo() / ".factory" / "project.toml").read_text()
+    (repo / ".factory" / "project.toml").write_text(toml.replace('name = "coucou"\n', ""))
     monkeypatch.chdir(repo)
     return repo
 
@@ -184,7 +184,7 @@ def test_runner_report_writes_the_review(in_repo, tmp_path, capsys):
     write_fixture(conn)
     conn.execute("UPDATE projects SET name = ?", (in_repo.name,))
     conn.close()
-    review = in_repo / "docs" / "reviews" / "f1.md"
+    review = in_repo / ".factory" / "reviews" / "f1.md"
     review.parent.mkdir(parents=True)
     review.write_text(f"# F1 review\n\n{REPORT_START}\nstale\n{REPORT_END}\n\n## Findings\n")
     assert cli.main(["report", "f1", "--db", str(db)]) == 0
@@ -192,7 +192,7 @@ def test_runner_report_writes_the_review(in_repo, tmp_path, capsys):
     assert text.startswith("# F1 review\n\n" + REPORT_START)
     assert "stale" not in text and "| Tickets merged | 3 of 3 |" in text
     assert text.endswith(f"{REPORT_END}\n\n## Findings\n")
-    assert "docs/reviews/f1.md" in capsys.readouterr().out
+    assert ".factory/reviews/f1.md" in capsys.readouterr().out
 
 
 def test_the_reports_numbers_are_protected_and_the_queries_are_not():
@@ -209,4 +209,4 @@ def test_runner_report_refuses_an_unknown_milestone_or_database(in_repo, tmp_pat
     metrics.open_db(db).close()
     assert cli.main(["report", "f1", "--db", str(db)]) == 1
     assert "no milestone f1" in capsys.readouterr().err
-    assert not (in_repo / "docs" / "reviews" / "f1.md").exists()
+    assert not (in_repo / ".factory" / "reviews" / "f1.md").exists()

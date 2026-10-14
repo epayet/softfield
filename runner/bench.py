@@ -1,12 +1,13 @@
 """`runner bench`: replay finished tickets for chosen agents, in identical conditions (ADR 14
 item 8).
 
-Each ticket × agent gets a throwaway copy of the repo under `[bench] dir`, detached at the
-parent of the ticket's merge, with today's workflow files overlaid and the ticket back in
-`tasks/ready/`. The agent gets the usual attempts and gates there, as jobs of role `bench`;
+Each ticket × agent gets a throwaway copy of the repo under `[bench] dir`, detached at the parent of
+the ticket's merge, with today's workflow files overlaid and the ticket back in
+`.factory/tasks/ready/`. The agent gets the usual attempts and gates there, as jobs of role `bench`;
 no Claude, so a failed last attempt is recorded as "would escalate". Nothing reaches main,
-`tasks/` or a branch. The first refusal stops the bench. The logs stay in `var/bench/`. Each
-replay that ends without a refusal is a rating game for its agent (ADR 24 item 3).
+`.factory/tasks/` or a branch. The first refusal stops the bench. The logs stay in
+`.factory/var/bench/`. Each replay that ends without a refusal is a rating game for its agent (ADR
+24 item 3).
 
 The copy is a clone with its own `.git`, never a `git worktree`: OpenCode takes its project
 from the git common dir, so in a worktree it edited the main checkout (f2-12). Nor does the
@@ -116,7 +117,7 @@ class BenchReport:
 
 
 def bench_dir(cfg: Config) -> Path:
-    return cfg.repo / "var" / "bench"
+    return cfg.repo / ".factory" / "var" / "bench"
 
 
 def merge_commit(git: Git, ticket: str, recorded: str | None = None) -> str:
@@ -134,9 +135,9 @@ def merge_commit(git: Git, ticket: str, recorded: str | None = None) -> str:
 
 
 def _ticket_text(cfg: Config, ticket: str) -> str:
-    path = cfg.repo / "tasks" / "done" / f"{ticket}.md"
+    path = cfg.repo / ".factory" / "tasks" / "done" / f"{ticket}.md"
     if not path.is_file():
-        raise RunnerError(f"{ticket} isn't a finished ticket (no tasks/done/{ticket}.md)")
+        raise RunnerError(f"{ticket} isn't a finished ticket (no .factory/tasks/done/{ticket}.md)")
     return _FOOTER_BLOCK_RE.sub("\n", path.read_text(encoding="utf-8")).rstrip("\n") + "\n"
 
 
@@ -195,7 +196,7 @@ def _clone(cfg: Config, work: Path, at: str, tickets: dict[str, str], message: s
 def make_copy(cfg: Config, work: Path, parent: str, ticket: str, text: str) -> str:
     """A clone of ``parent``'s tree, with today's workflow and the ticket in ready/.
     Returns its base commit."""
-    ready = {f"tasks/ready/{ticket}.md": text}
+    ready = {f".factory/tasks/ready/{ticket}.md": text}
     return _clone(cfg, work, parent, ready, f"bench: {ticket} from {parent[:9]}")
 
 
@@ -225,7 +226,8 @@ def void_replay(
 
 
 def _open(cfg: Config) -> Session:
-    """A session recorded as a `bench` run; its logs in `var/bench/`. state.json is only read."""
+    """A session recorded as a `bench` run; its logs in `.factory/var/bench/`. state.json is only
+    read."""
     started = now()
     run_dir = bench_dir(cfg) / f"bench-{started:%Y%m%d-%H%M%S}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -243,7 +245,7 @@ def _open(cfg: Config) -> Session:
     except Exception as exc:
         _metrics_failed(s, exc)
         return s
-    s.project_id = _record(s, metrics.upsert_project, cfg.repo.name, repo=str(cfg.repo))
+    s.project_id = _record(s, metrics.upsert_project, cfg.project_name, repo=str(cfg.repo))
     if s.project_id is not None:
         at = started.isoformat()
         s.run_id = _record(
@@ -332,7 +334,9 @@ def _attempts(
     s: Session, agent: Agent, work: Path, base: str, logs: Path, ticket: str
 ) -> BenchResult:
     git = Git(work)
-    task = parse_task(work / "tasks" / "ready" / f"{ticket}.md", s.cfg.default_max_diff)
+    task = parse_task(
+        work / ".factory" / "tasks" / "ready" / f"{ticket}.md", s.cfg.default_max_diff
+    )
     protected = tuple(read_protected(work))
     last: GateResult | None = None
     timed_out = False
@@ -386,7 +390,7 @@ def _attempts(
 def run_bench(cfg: Config, tickets: list[str], agent_ids: list[str]) -> BenchReport:
     """Each ticket for each agent, in order, until done or the first refusal."""
     if unknown := [a for a in agent_ids if a not in cfg.agents]:
-        raise RunnerError(f"no such agent in workflow/runner.toml: {', '.join(unknown)}")
+        raise RunnerError(f"no such agent in the machine's factory.toml: {', '.join(unknown)}")
     _check_outside_repo(cfg)
     if any(sandboxed(cfg.agents[a]) for a in agent_ids) and not sandbox.available():
         raise RunnerError(f"the bench's sandbox needs Landlock ABI {sandbox.MIN_ABI}+ (Linux 6.2+)")
@@ -589,7 +593,9 @@ def _review_copy(cfg: Config, work: Path, cp: Checkpoint) -> None:
     """A clone at the last of the checkpoint's merges, each ticket in done/ as today."""
     shas = [m.split()[1] for m in cp.merges]
     at = Git(cfg.repo).run("merge-base", "--independent", *shas).split()[0]
-    done = {f"tasks/done/{m.split()[0]}.md": _ticket_text(cfg, m.split()[0]) for m in cp.merges}
+    done = {
+        f".factory/tasks/done/{m.split()[0]}.md": _ticket_text(cfg, m.split()[0]) for m in cp.merges
+    }
     _clone(cfg, work, at, done, f"bench: checkpoint {cp.job} at {at[:9]}")
 
 
@@ -665,7 +671,7 @@ def run_review_bench(cfg: Config, milestones: list[str], agent_ids: list[str]) -
     """Each checkpoint of each milestone for each agent (not its own), in order, until done or
     the first refusal."""
     if unknown := [a for a in agent_ids if a not in cfg.agents]:
-        raise RunnerError(f"no such agent in workflow/runner.toml: {', '.join(unknown)}")
+        raise RunnerError(f"no such agent in the machine's factory.toml: {', '.join(unknown)}")
     _check_outside_repo(cfg)
     if not cfg.metrics_db.is_file():
         raise RunnerError(f"no metrics database at {cfg.metrics_db}: nothing to replay")
@@ -674,7 +680,9 @@ def run_review_bench(cfg: Config, milestones: list[str], agent_ids: list[str]) -
     try:
         plan: list[tuple[Checkpoint, str]] = []
         for milestone in milestones:
-            per_agent = {a: checkpoints(conn, git, cfg.repo.name, milestone, a) for a in agent_ids}
+            per_agent = {
+                a: checkpoints(conn, git, cfg.project_name, milestone, a) for a in agent_ids
+            }
             for agent_id, found in per_agent.items():
                 if not found:
                     raise RunnerError(

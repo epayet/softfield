@@ -1,6 +1,6 @@
 // The factory line (f3 D11): draws svg#floor from the document in the JSON block
 // #factory-line that line.py's live_line wrote. Every rule lives in that document; this only
-// lays it out, as hand-written SVG after docs/milestones/f3-line-mockup/Line.dc.html, coloured
+// lays it out, as hand-written SVG after .factory/cards/f3-line-mockup/Line.dc.html, coloured
 // by the stylesheet's tokens. Every 5 s htmx fetches the document alone (f3-17); when it
 // differs, the floor is drawn again in place: a node whose part didn't change stays the same
 // node, so its animation runs on.

@@ -1,7 +1,7 @@
 """Which job runs next, and why (ADR 22 item 2, f8 D2). No AI in it.
 
 Pure: the queued jobs, the ready tickets, Claude's windows and the time are parameters; the
-callers read the metrics database, ``tasks/`` and ``state.json``.
+callers read the metrics database, ``.factory/tasks/`` and ``state.json``.
 
 - First by kind: planner, escalation, direction, checkpoint, review, then tickets: a parked
   ticket whose reset has passed, then lead tickets, then developer tickets, each in the run

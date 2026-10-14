@@ -25,9 +25,9 @@ router = APIRouter()
 
 LIVE = timedelta(minutes=2)  # D3: an older heartbeat means the runner stopped
 # Now is for the real runs (owner, 2026-10-04): a bench's runs (command 'bench') are left out.
-# [claude] in workflow/runner.toml: reserve for the lead starts at 70% of the week.
+# [claude] in the machine's factory.toml: reserve for the lead starts at 70% of the week.
 WEEK_MARK = 0.70
-# [claude] in workflow/runner.toml: reserve for you starts at 75% of the 5-hour window.
+# [claude] in the machine's factory.toml: reserve for you starts at 75% of the 5-hour window.
 FIVE_HOUR_MARK = 0.75
 
 

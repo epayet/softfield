@@ -1,0 +1,40 @@
+# The project's settings (ADR 30 item 3); the machine's are in ~/.config/softfield/factory.toml.
+# Changing caps needs an Accepted ADR; timeouts are operational and can be tuned freely.
+
+[project]
+name = "coucou"
+description = "A small, private way to send a photo or a note to an always-on screen in someone's home."
+
+# What check-all and the gates run (ADR 30 item 3)
+[checks]
+test_dirs = ["tests/unit", "tests/integration", "tests/runner", "tests/browser", "tests/factory_dashboard"]
+mypy = ["coucou", "tests", "runner", "factory_dashboard"]
+translations = true                     # English and French (ADR 00 A2)
+dependency_files = ["pyproject.toml", "uv.lock"]
+dependency_dirs = ["coucou/static/coucou/vendor/", "factory_dashboard/static/vendor/"]
+
+[checks.layouts]                        # one test file per module (ADR 00 A1, ADR 06 item 2)
+"tests/unit" = ["coucou", ".py"]
+"tests/runner" = ["runner", ".py"]
+"tests/browser" = ["coucou/static/coucou/js", ".js"]
+"tests/factory_dashboard" = ["factory_dashboard", ".py"]
+
+[caps]
+max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch + direction)
+# Headless Claude is bounded per trigger, not per milestone (ADR 12 item 10). A task past its
+# limits goes to tasks/blocked/ and is named in the report.
+directions_per_task = 1                 # the lead's direction before the last attempt
+escalations_per_task = 2
+checkpoint_every = 2                    # developer merges between checkpoint reviews
+review_rounds = 3
+default_max_diff = 1000                 # a backstop against rewritten files, not a sizing tool (ADR 07)
+
+[timeouts]  # seconds
+warmup = 300
+opencode = 4500                         # 2026-10-13: f19-01 passed at 57 min and was cut at 59; three check-alls of 12 min each
+claude = 2700                           # F71: a lead job runs check-all once or twice, 12 min each (f31-03 hit 1800)
+review = 3600                           # a milestone review: F6's (30 tickets) hit 1800 twice, 2026-10-08
+gate = 1200                             # 2026-10-13: the full suite takes 750 s
+
+[report]
+narrative = false  # a headless Claude narrative per session costs Pro usage; off by default

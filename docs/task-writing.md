@@ -1,6 +1,6 @@
 # Writing tasks for the local model: what works
 
-Practical guidance for whoever writes tickets: the lead, whichever frontier model that is ([`docs/agents/lead.md`](agents/lead.md)). The **rules** are in [`task-format.md`](task-format.md) and [ADR 01](adr/01-calibration-fixes.md); this page is the craft behind them, learned from calibration and M1 (see `docs/sessions/` and `docs/reviews/m1.md`).
+Practical guidance for whoever writes tickets: the lead, whichever frontier model that is ([`docs/agents/lead.md`](agents/lead.md)). The **rules** are in [`task-format.md`](task-format.md) and [ADR 01](../.factory/adr/01-calibration-fixes.md); this page is the craft behind them, learned from calibration and M1 (see `.factory/sessions/` and `.factory/reviews/m1.md`).
 
 **Evidence so far:** 5 tasks. 3/3 passed on the first attempt once these practices were in place. The 2 failures before that were both spec errors, not model errors.
 
@@ -102,7 +102,7 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 ## Lessons from F3
 
 - **Score the ticket with the rubric, not by feel.** f3-07 (replay controls) was written as difficulty 5; the rubric gives 10 (markup, CSS, a stepping state, a timer and the htmx pause interlocked; seven files to read; four dependencies; UI; timing). Qwen re-planned it for 10 minutes three times without one edit, and a direction saying "edit early" didn't change that. Split it into the bar (f3-07) and the stepping (f3-11).
-- **Point into a long file by line numbers, not by "near `id=…`".** The split f3-07 still sent Qwen to "the `.replay` bar in `docs/milestones/f1-factory-mockup.html` (near `id="replay"`)": OpenCode's grep fails on that file ("Ripgrep JSON record exceeded 65536 bytes": line 382 is its embedded data, over 64 KB on one line) and shell `grep` is denied, so Qwen paged through 1,100 lines hunting for it in each attempt and never edited. For a file over ~300 lines, give the lines (`f1-factory-mockup.html` lines 286–289 and 327–332) or quote the few lines that matter in Context.
+- **Point into a long file by line numbers, not by "near `id=…`".** The split f3-07 still sent Qwen to "the `.replay` bar in `.factory/cards/f1-factory-mockup.html` (near `id="replay"`)": OpenCode's grep fails on that file ("Ripgrep JSON record exceeded 65536 bytes": line 382 is its embedded data, over 64 KB on one line) and shell `grep` is denied, so Qwen paged through 1,100 lines hunting for it in each attempt and never edited. For a file over ~300 lines, give the lines (`f1-factory-mockup.html` lines 286–289 and 327–332) or quote the few lines that matter in Context.
 
 ## Lessons from F4
 

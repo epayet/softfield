@@ -134,7 +134,7 @@ def test_a_specs_commands_never_lift_the_denials(tmp_path, monkeypatch):
     assert not any("git diff" in a for a in ran[0][2:])
 
 
-@pytest.mark.parametrize("edit", [("**",), ("var/runs/**",)])
+@pytest.mark.parametrize("edit", [("**",), (".factory/var/runs/**",)])
 def test_a_spec_asking_for_edits_is_refused_before_running(tmp_path, monkeypatch, edit):
     ran = fake_copilot(monkeypatch)
     with pytest.raises(CopilotError, match="read-only"):

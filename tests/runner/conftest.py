@@ -31,6 +31,23 @@ Tests pass.
 """
 
 
+# Coucou's own checks (its .factory/project.toml), for the gates' tests
+CHECKS = """\
+[checks]
+mypy = ["coucou", "tests", "runner", "factory_dashboard"]
+translations = true
+dependency_dirs = ["coucou/static/coucou/vendor/", "factory_dashboard/static/vendor/"]
+test_dirs = ["tests/unit", "tests/integration", "tests/runner", "tests/browser",
+             "tests/factory_dashboard"]
+
+[checks.layouts]
+"tests/unit" = ["coucou", ".py"]
+"tests/runner" = ["runner", ".py"]
+"tests/browser" = ["coucou/static/coucou/js", ".js"]
+"tests/factory_dashboard" = ["factory_dashboard", ".py"]
+"""
+
+
 def write_task(directory: Path, task_id: str, deps: str = "[]") -> Path:
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{task_id}.md"
@@ -42,6 +59,23 @@ def git(repo: Path, *args: str) -> str:
     return subprocess.run(
         ["git", *args], cwd=repo, check=True, capture_output=True, text=True
     ).stdout
+
+
+@pytest.fixture(autouse=True)
+def _no_machine_config(monkeypatch, tmp_path_factory):
+    """A test's config is its repo's ``.factory/project.toml`` alone, never this machine's
+    ``~/.config/softfield/factory.toml`` (ADR 30 item 3)."""
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(tmp_path_factory.getbasetemp() / "no-machine.toml"))
+
+
+# A copy of a machine's ~/.config/softfield/factory.toml: its agents, roles, Claude's reserves
+MACHINE = Path(__file__).resolve().parents[1] / "fixtures" / "softfield-machine.toml"
+
+
+@pytest.fixture
+def machine(monkeypatch):
+    """This repo's project.toml over the machine file it was written for (ADR 30 item 3)."""
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(MACHINE))
 
 
 @pytest.fixture(autouse=True)
@@ -81,14 +115,15 @@ def repo(tmp_path: Path) -> Path:
     )
     (tmp_path / "tests" / "unit").mkdir(parents=True)
     (tmp_path / "tests" / "unit" / "test_thing.py").write_text("def test_thing():\n    pass\n")
-    (tmp_path / "workflow").mkdir()
-    (tmp_path / "workflow" / "protected-paths.txt").write_text(
+    (tmp_path / ".factory").mkdir()
+    (tmp_path / ".factory" / "project.toml").write_text(CHECKS)
+    (tmp_path / ".factory" / "protected-paths.txt").write_text(
         "# comment\ncoucou/secret.py\nrunner/**\n"
     )
     for folder in ("ready", "done", "escalated", "blocked"):
-        (tmp_path / "tasks" / folder).mkdir(parents=True)
-        (tmp_path / "tasks" / folder / ".gitkeep").write_text("")
-    (tmp_path / ".gitignore").write_text("var/\nBLOCKED.md\n")
+        (tmp_path / ".factory" / "tasks" / folder).mkdir(parents=True)
+        (tmp_path / ".factory" / "tasks" / folder / ".gitkeep").write_text("")
+    (tmp_path / ".gitignore").write_text(".factory/var/\nvar/\nBLOCKED.md\n")
     git(tmp_path, "add", "-A")
     git(tmp_path, "commit", "-q", "-m", "init")
     return tmp_path

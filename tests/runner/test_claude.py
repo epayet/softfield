@@ -82,8 +82,10 @@ def test_backoff_grows_and_caps():
 
 def test_path_scoped_write_rules_use_edit():
     """`Write(<glob>)` grants nothing to claude -p; `Edit(<glob>)` covers Write too."""
-    tools = allowed_tools(JobSpec("direction", "Direct.", timeout=1, edit=("var/runs/**",)))
-    assert "Edit(var/runs/**)" in tools
+    tools = allowed_tools(
+        JobSpec("direction", "Direct.", timeout=1, edit=(".factory/var/runs/**",))
+    )
+    assert "Edit(.factory/var/runs/**)" in tools
     assert not [t for t in tools if t.startswith("Write")]
 
 
@@ -103,8 +105,8 @@ _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
     ("spec", "today"),
     [
         (
-            JobSpec("direction", "", 1, edit=("var/runs/**",), commands=GIT_READ_COMMANDS),
-            (*_READ, *_GIT, "Edit(var/runs/**)"),
+            JobSpec("direction", "", 1, edit=(".factory/var/runs/**",), commands=GIT_READ_COMMANDS),
+            (*_READ, *_GIT, "Edit(.factory/var/runs/**)"),
         ),
         (
             JobSpec(
@@ -121,16 +123,20 @@ _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
                 "checkpoint",
                 "",
                 1,
-                edit=("tasks/ready/**", "docs/agents/developer.md", "var/runs/**"),
+                edit=(
+                    ".factory/tasks/ready/**",
+                    "docs/agents/developer.md",
+                    ".factory/var/runs/**",
+                ),
                 commands=(*GIT_READ_COMMANDS, "uv run pytest"),
             ),
             (
                 *_READ,
                 *_GIT,
                 "Bash(uv run pytest:*)",
-                "Edit(tasks/ready/**)",
+                "Edit(.factory/tasks/ready/**)",
                 "Edit(docs/agents/developer.md)",
-                "Edit(var/runs/**)",
+                "Edit(.factory/var/runs/**)",
             ),
         ),
         (
@@ -498,7 +504,7 @@ RESULT = json.dumps(
 
 
 def test_a_job_records_the_model_its_stream_names_not_the_alias(tmp_path, monkeypatch):
-    """f2-04: var/runs/20261002-055804's lead ticket ran `--model opus` on claude-opus-5-5."""
+    """f2-04: run 20261002-055804's lead ticket ran `--model opus` on claude-opus-5-5."""
     init = json.dumps({"type": "system", "subtype": "init", "model": "claude-opus-5-5"})
     stream = "\n".join([init, _message_from("claude-haiku-4-5", parent="toolu_1"), RESULT])
     _fake_stream(monkeypatch, stream)

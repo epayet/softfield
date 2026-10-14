@@ -71,7 +71,7 @@ router = APIRouter()
 
 GENERAL = "general"
 # A request's result when it worked (D1's table); any other result is a refusal.
-_ADR_NUMBER = re.compile(r"docs/adr/(\d+)-")
+_ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
 _TYPICAL = 20  # finished jobs of the running one's role and agent that make its typical length
 
 
@@ -1040,7 +1040,7 @@ def thread_page(
 
 # --- proposal review (f6-08) ----------------------------------------------------------------
 
-_MOCKUP_RE = re.compile(r"docs/milestones/[^/]+-mockup/[^/].*")
+_MOCKUP_RE = re.compile(r"\.factory/cards/[^/]+-mockup/[^/].*")
 
 
 def _repo(conn: sqlite3.Connection, project: str) -> Path | None:
@@ -1057,7 +1057,9 @@ def _adr_waits(repo: Path | None, proposals: list[dict[str, object]]) -> bool:
         if p.get("kind") != "adr":
             continue
         number = _ADR_NUMBER.match(str(p.get("path") or ""))
-        found = sorted((repo / "docs" / "adr").glob(f"{number[1]}-*.md")) if repo and number else []
+        found = (
+            sorted((repo / ".factory" / "adr").glob(f"{number[1]}-*.md")) if repo and number else []
+        )
         if not found or is_proposed(found[0].read_text(encoding="utf-8")):
             return True
     return False
@@ -1066,7 +1068,7 @@ def _adr_waits(repo: Path | None, proposals: list[dict[str, object]]) -> bool:
 @router.get("/planning/mockups/{thread}/{path:path}", response_class=HTMLResponse)
 def mockup_file(thread: str, path: str, conn: Db, project: Project) -> HTMLResponse:
     """A mock-up's file from the card's plan branch (``planner.draft``), for a sandboxed
-    ``<iframe>``; anything outside ``docs/milestones/*-mockup/`` is 404. Its CSP sandboxes it
+    ``<iframe>``; anything outside ``.factory/cards/*-mockup/`` is 404. Its CSP sandboxes it
     when opened on its own too: an origin of its own, so it can't post to ``/requests``."""
     repo = _repo(conn, project)
     content = draft(repo, thread, path) if repo and _MOCKUP_RE.fullmatch(path) else None
@@ -1106,7 +1108,7 @@ _WORD_COLOR = {"added": "--good", "changed": "--a7"}  # set aside and removed: -
 def _who(path: str, text: str | None) -> tuple[str, str]:
     """A ticket's builder and difficulty from its frontmatter (F31 D8); ("", "") for any other
     file, or a ticket that won't read."""
-    if text is None or not path.startswith("tasks/"):
+    if text is None or not path.startswith(".factory/tasks/"):
         return "", ""
     try:
         meta, _ = split_frontmatter(text)

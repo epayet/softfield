@@ -9,19 +9,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from runner import i18n
+from runner.config import project_checks
 from runner.gates import layout_problems
 from runner.procs import run_bounded
 
-TEST_DIRS = (
-    "tests/unit",
-    "tests/integration",
-    "tests/runner",
-    "tests/browser",
-    "tests/factory_dashboard",
-)
-MYPY_TARGETS = ("coucou", "tests", "runner", "factory_dashboard")
 # Commits that touch only these skip the hook: they can't break a check.
-HOOK_SKIPS = ("docs/", "tasks/")
+HOOK_SKIPS = (
+    "docs/",
+    *(f".factory/{d}" for d in ("tasks/", "cards/", "adr/", "planning/", "reviews/", "sessions/")),
+    ".factory/seed.md",
+    ".factory/project.md",
+)
 _OUTPUT_LIMIT = 4000
 # Set by git for hooks; a test's git subprocess would inherit them and write into the
 # commit being made (it did once: `commit -a` failed on a test fixture's file).
@@ -46,6 +44,8 @@ def _exec(repo: Path, args: list[str], timeout: int) -> tuple[int | None, str]:
 
 
 def _i18n_problems(repo: Path, timeout: int) -> list[str]:
+    if not project_checks(repo).translations:
+        return []
     return i18n.regenerated_problems(repo, timeout) + i18n.compiled_out_of_date(repo)
 
 
@@ -64,10 +64,16 @@ def check_all(
         _exec(repo, ["uv", "run", "ruff", "check", "--fix", "."], timeout)
     translations = _i18n_problems(repo, timeout)
     layout = layout_problems(repo)
+    project = project_checks(repo)
+    mypy = (
+        _command(repo, "mypy", ["uv", "run", "mypy", *project.mypy], timeout)
+        if project.mypy
+        else Check("mypy", True)
+    )
     return [
         _command(repo, "ruff check", ["uv", "run", "ruff", "check", "."], timeout),
         _command(repo, "ruff format", ["uv", "run", "ruff", "format", "--check", "."], timeout),
-        _command(repo, "mypy", ["uv", "run", "mypy", *MYPY_TARGETS], timeout),
+        mypy,
         Check("translations", not translations, "\n".join(translations)),
         Check("layout", not layout, "\n".join(layout)),
         _command(
@@ -80,7 +86,7 @@ def check_all(
                 "-q",
                 "-p",
                 "no:cacheprovider",
-                *TEST_DIRS,
+                *project.test_dirs,
             ],
             timeout,
         ),

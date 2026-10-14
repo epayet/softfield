@@ -1,14 +1,14 @@
 # AGENTS.md: rules for every coding agent
 
 **Who are you?**
-- **Developer** (running a task from `tasks/`): this file plus `docs/agents/developer.md` (both are in your prompt already).
+- **Developer** (running a task from `.factory/tasks/`): this file plus `docs/agents/developer.md` (both are in your prompt already).
 - **Lead** (planning, writing tickets, escalations, review): this file plus `docs/agents/owner.md` (the owner's preferences, first) and `docs/agents/lead.md`.
 
 When a task file and this file disagree, stop and write `BLOCKED.md`.
 
 ## Scope
 1. Start from your task's `files:` and `tests:`. Change other files only when the goal needs it, and no "while I'm here" fixes.
-2. Never edit a **protected path** (`workflow/protected-paths.txt`). The gates reject it.
+2. Never edit a **protected path** (`.factory/protected-paths.txt`). The gates reject it.
 3. Add **no dependencies** (`pyproject.toml`, `uv.lock`, vendored JS) unless the task explicitly says so.
 4. Build only against ADRs whose status is **Accepted**. If a task relies on a Proposed ADR, write `BLOCKED.md`.
 

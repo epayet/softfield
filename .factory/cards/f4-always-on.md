@@ -1,0 +1,72 @@
+# Milestone F4: always on
+
+> **Status: done.** Signed off by the owner on 2026-10-04. Base: git tag `f4-always-on-start`. Report: [`.factory/reviews/f4-always-on.md`](../reviews/f4-always-on.md).
+> From the owner's notes after F2 (`docs/roadmap.md`, "Owner's notes after F2"). The owner's priority 1: the runner works on its own and takes any ready ticket, for a weekend unattended. [ADR 17](../adr/17-always-on-factory.md) must be Accepted before tickets 09, 11, 13, 15 and 18 run; if it isn't, they wait in `.factory/tasks/later/`.
+> Numbered F4 because F3 (the factory line) keeps its key: `f3-01` has a half-done branch and a saved session under that id.
+
+## Outcome
+- The runner can be left on with `uv run runner run`. Claude's work waits for room while developer tickets keep going, and a yes to Claude's reserve releases parked work first.
+- Developers lose no attempt to formatting, and Sonnet only steps in after a failure.
+- Tickets can wait in `.factory/tasks/later/`, and a milestone can wait for another's sign-off.
+- The Overview answers "what is it doing, for which goal, and what waits for what" without a reload:
+  - allowances at the top;
+  - the queue beside Running now, in run order;
+  - no lost text selection.
+- The Tickets page shows the latest work first.
+
+## How to run it (the owner)
+1. Accept ADR 17 (`uv run runner accept 17`), or say no, and the lead moves 09, 11, 13, 15 and 18 to `.factory/tasks/later/`.
+2. Optional, first: the bench (`docs/roadmap.md`, "Cloud workers"):
+   ```
+   uv run runner bench f1-38-project-page-fixes m4-11-send-once --agents ollama-gpt-oss-120b ollama-gemma4-31b ollama-nemotron-3-ultra
+   ```
+3. `uv run runner run`.
+
+## Decisions
+- **D1 Sonnet off `[roles] developer`** from 2026-10-02 (ADR 17 item 1). Ticket 13 brings it back as the step-up only.
+- **D2 Interleaved numbering.**
+  - Lead and developer tickets alternate, and the lead tickets are independent of each other.
+  - When Claude parks, a developer ticket is always ready.
+  - The developer tickets on the Overview form one chain (08 → 10 → 12 → 14, 16), because they share `factory_dashboard/templates/overview.html`.
+- **D3 What a queued ticket waits for** (08). It is computed in `factory_dashboard/overview.py` from the `tickets` table:
+  - a `depends_on` ticket not `done` ("waits for f4-08-…");
+  - an escalated one ("waits for f4-08-…'s escalation");
+  - a lead ticket while a live run's `activity` starts with "waiting for Claude" ("waits for Claude").
+  - The order is `pick_next`'s rule (`runner/tasks.py`): milestone order, then id, with tickets whose dependencies are done first.
+- **D4 The `later` state** (09): `.factory/tasks/later/` is synced into `tickets.state = 'later'`, and the dashboard's later list (18) reads that.
+
+## Tickets
+| # | Ticket | Who | d | Depends on | What |
+|---|---|---|---|---|---|
+| 01 | yes-resumes-parked | L | 4 | – | After a yes to the 5-hour question, parked escalations and checkpoints go before the ticket that asked |
+| 02 | tickets-last-worked | D | 2 | – | Tickets page: latest work first, with a "last worked" column |
+| 03 | requeue-preflight | L | 4 | – | A requeued ticket is pre-flighted before it's committed (f2-F4) |
+| 04 | running-goal | D | 3 | – | Running now and the wait line show the ticket's goal |
+| 05 | opencode-shell-timeout | L | 3 | – | The runner sets OpenCode's shell timeout, so `check-all` isn't killed at 120 s |
+| 06 | running-tokens | D | 2 | 04 | "read N tokens · M turns", cached input included |
+| 07 | fresh-reading | L | 4 | – | A fresh Claude reading when a session starts |
+| 08 | queue-waits-for | D | 4 | – | The queue leaves out running tickets, follows run order and says what each waits for |
+| 09 | later-folder | L | 5 | – | `.factory/tasks/later/` and `runner queue <ticket>` (ADR 17 item 3) |
+| 10 | queue-live | D | 4 | 08 | The queue refreshes with Running now, beside it, with a height limit |
+| 11 | auto-format | L | 4 | – | `ruff format` and `ruff check --fix` before the gates (ADR 17 item 2) |
+| 12 | allowance-top | D | 3 | 10 | Allowances at the top of the Overview, refreshed every 5 s |
+| 13 | sonnet-step-up | L | 4 | – | In `.factory/tasks/later/`: Sonnet only as the step-up, under 30% (ADR 17 item 1), if F4's results say it should come back |
+| 14 | keep-selection | D | 2 | 12 | No refresh while text is selected |
+| 15 | milestone-after | L | 5 | – | `After: <key> signed off` in a milestone doc (ADR 17 item 4) |
+| 16 | allowance-mark | D | 2 | 12 | The reserve marks visible in both themes |
+| 17 | agents-model-label | D | 2 | – | "not recorded" says why |
+| 18 | later-list | D | 3 | 09 | The Tickets page lists the tickets set aside |
+| 20 | run-reviews-milestones | L | 5 | – | Under `runner run`, a milestone whose tickets are all done gets its review and verdict, then the run carries on |
+| 19 | bench-own-project | L | 4 | – | Each bench copy is a project of its own for OpenCode, so a bench never edits the main checkout (it did again, 2026-10-02) |
+| 33 | finding-tickets | L | 3 | – | A checkpoint's fix ticket goes to the at-fault ticket's milestone, with paths that exist (Copilot's stand-in wrote `coucou/…` paths, 2026-10-03) |
+
+**Changes, 2026-10-03 (lead, after the owner's notes):**
+- 20 runs with F3 (`milestone: f3`), so F3's review isn't left waiting behind F4.
+- 12 (allowance-top) and 16 (allowance-mark) are in `.factory/tasks/later/`. f3-18 puts Now first with a compact allowance row, and f5-14 colours the meters.
+- 21 (initial flash) is deleted: its finding is part of f3-17, which rewrites that code. Its branch, `task/f4-21-fix-initial-page-load-can`, is left unmerged.
+- 25–29: the paths were fixed by hand (`coucou/factory_dashboard/…` → `factory_dashboard/…`); 33 fixes the cause.
+- The runner now kills what is left of an agent's process group when the agent exits normally (`runner/procs.py`, by the lead): an attempt's `pytest … tests/browser` had outlived its OpenCode for 2½ h at 99% CPU.
+
+Not in F4 (roadmap, "Owner's notes after F2"):
+- a study of why `check-all` is slow (later, a proposal, not a fix);
+- ADR 18 (dashboard writes) and ADR 19 (feature board), drafted for the next planning session.

@@ -66,7 +66,7 @@ def _history(repo: Path, trailer: bool = True) -> str:
     (repo / "AGENTS.md").write_text("old rules\n")
     (repo / "docs" / "agents").mkdir(parents=True)
     (repo / "docs" / "agents" / "developer.md").write_text("old notes\n")
-    write_task(repo / "tasks" / "ready", TICKET)
+    write_task(repo / ".factory" / "tasks" / "ready", TICKET)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", f"add {TICKET}")
     parent = git(repo, "rev-parse", "HEAD").strip()
@@ -79,8 +79,10 @@ def _history(repo: Path, trailer: bool = True) -> str:
         "-am",
         with_trailers(f"{TICKET}: done", task=TICKET) if trailer else message,
     )
-    git(repo, "mv", f"tasks/ready/{TICKET}.md", f"tasks/done/{TICKET}.md")
-    append_footer(repo / "tasks" / "done" / f"{TICKET}.md", {"result": "done", "attempts": 1})
+    git(repo, "mv", f".factory/tasks/ready/{TICKET}.md", f".factory/tasks/done/{TICKET}.md")
+    append_footer(
+        repo / ".factory" / "tasks" / "done" / f"{TICKET}.md", {"result": "done", "attempts": 1}
+    )
     git(repo, "commit", "-q", "-am", f"runner: {TICKET} done")
     (repo / "AGENTS.md").write_text("today's rules\n")
     (repo / "docs" / "agents" / "developer.md").write_text("today's notes\n")
@@ -178,7 +180,7 @@ def test_two_agents_get_their_own_bench_jobs_and_main_is_untouched(repo, copies,
     ]
     assert len({j["attempt"] for j in jobs}) == 3  # one row each: two agents never share a key
     assert '"name": "protected-paths", "ok": false' in jobs[1]["gates"]
-    # main, the branches, the tree and tasks/ are as they were; the copies are gone
+    # main, the branches, the tree and .factory/tasks/ are as they were; the copies are gone
     assert _snapshot(repo) == before
     assert not (repo / "coucou" / "secret.py").exists()
     assert "raise NotImplementedError" not in (repo / "coucou" / "thing.py").read_text()
@@ -194,7 +196,7 @@ def test_the_copy_starts_at_the_merges_parent_with_todays_workflow(repo, copies,
         seen["thing"] = (work / "coucou" / "thing.py").read_text()
         seen["agents"] = (work / "AGENTS.md").read_text()
         seen["notes"] = (work / "docs" / "agents" / "developer.md").read_text()
-        seen["ticket"] = (work / "tasks" / "ready" / f"{TICKET}.md").read_text()
+        seen["ticket"] = (work / ".factory" / "tasks" / "ready" / f"{TICKET}.md").read_text()
         seen["branch"] = git(work, "rev-parse", "--abbrev-ref", "HEAD").strip()
         seen["remotes"] = git(work, "remote")
         # its own clone: its own .git, under [bench] dir, nothing shared with the repo's
@@ -269,7 +271,7 @@ def test_an_opencode_agent_edits_its_copy_never_the_main_checkout(
     assert not (repo / "coucou" / "opencode_was_here.py").exists()
     [result] = report.results
     assert (result.outcome, result.attempts) == ("passed", 1)  # the edit landed in the copy
-    [log] = (repo / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
+    [log] = (repo / ".factory" / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
     project = Path(log.read_text().split("project: ")[1].splitlines()[0])
     assert project.is_relative_to(copies)
     assert not list(copies.iterdir())  # removed afterwards
@@ -309,7 +311,7 @@ def test_an_opencode_agent_started_from_the_main_checkout_still_edits_its_copy(
     assert report.stopped is None
     [result] = report.results
     assert (result.outcome, result.attempts) == ("passed", 1)  # the edit landed in the copy
-    [log] = (repo / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
+    [log] = (repo / ".factory" / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
     directory = Path(log.read_text().split("directory: ")[1].splitlines()[0])
     assert directory.is_relative_to(copies)
 
@@ -510,7 +512,7 @@ def _answer(text: str) -> Act:
         assert TICKET in spec.prompt and "coucou/thing.py" in spec.prompt
         # the copy as the checkpoint saw it: the merge, with the ticket in done/
         assert "return 42" in (work / "coucou" / "thing.py").read_text()
-        assert (work / "tasks" / "done" / f"{TICKET}.md").is_file()
+        assert (work / ".factory" / "tasks" / "done" / f"{TICKET}.md").is_file()
         (work / "coucou" / "thing.py").write_text("edited\n")  # only ever the copy
         return JobResult(ok=True, text=text, duration_s=1.0, num_turns=2)
 
@@ -545,7 +547,9 @@ def test_a_review_replay_scores_a_hit_a_miss_and_lists_the_new_finding(repo, cop
         assert conn.execute("SELECT count(*) FROM findings").fetchone()[0] == 2
     finally:
         conn.close()
-    [listed] = (repo / "var" / "bench").glob(f"*/checkpoint-{checkpoint}-fake-a/new-findings.json")
+    [listed] = (repo / ".factory" / "var" / "bench").glob(
+        f"*/checkpoint-{checkpoint}-fake-a/new-findings.json"
+    )
     assert "nobody saw this" in listed.read_text()
     assert _snapshot(repo) == before
     assert not list(copies.iterdir())
@@ -686,7 +690,7 @@ def test_an_opencode_agent_cannot_write_the_main_checkout(
     report = bench.run_bench(cfg, [TICKET], ["ollama-x"])
     assert _snapshot(repo) == before
     assert not (repo / "coucou" / "leaked.py").exists()
-    [log] = (repo / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
+    [log] = (repo / ".factory" / "var" / "bench").glob(f"*/{TICKET}-ollama-x/opencode-1.jsonl")
     assert "leak: denied" in log.read_text()
     assert report.stopped is None
     [result] = report.results

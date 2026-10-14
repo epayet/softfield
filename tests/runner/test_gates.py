@@ -2,6 +2,7 @@ from dataclasses import replace
 from pathlib import Path
 
 from runner import gates
+from runner.config import Checks
 from runner.gates import (
     GateContext,
     GateResult,
@@ -43,7 +44,10 @@ def test_protected_globs():
 def test_dependency_changes():
     vendored = "factory_dashboard/static/vendor/htmx.min.js"
     changed = ["uv.lock", "coucou/static/coucou/vendor/alpine.js", vendored, "a.py"]
-    assert dependency_changes(changed) == [
+    checks = Checks(
+        dependency_dirs=("coucou/static/coucou/vendor/", "factory_dashboard/static/vendor/")
+    )
+    assert dependency_changes(changed, checks) == [
         "coucou/static/coucou/vendor/alpine.js",
         vendored,
         "uv.lock",
@@ -107,8 +111,8 @@ def test_parse_blocked():
 
 def test_all_tests_runs_every_test_file_whatever_the_queue_holds(repo: Path, monkeypatch):
     """ADR 21: another queued ticket's test files are on main, so they are gated too."""
-    current = write_task(repo / "tasks" / "ready", "m1-01-current")
-    other = write_task(repo / "tasks" / "ready", "m1-02-other")
+    current = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-current")
+    other = write_task(repo / ".factory" / "tasks" / "ready", "m1-02-other")
     other.write_text(other.read_text().replace("test_thing.py", "test_other.py"))
     calls: list[tuple[str, ...]] = []
 
@@ -160,7 +164,7 @@ def _branch_with(repo: Path, files: dict[str, str | None]) -> GateContext:
             (repo / rel).write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "wip")
-    task = parse_task(write_task(repo / "var", "m1-01-thing"), 1000)
+    task = parse_task(write_task(repo / ".factory" / "var", "m1-01-thing"), 1000)
     return GateContext(repo, Git(repo), task, "main", (), 60)
 
 

@@ -15,12 +15,12 @@ from tests.runner.conftest import git, write_task
 
 
 @pytest.fixture
-def in_repo(repo, monkeypatch):
-    toml = (cli._repo() / "workflow" / "runner.toml").read_text()
-    real_db = '"~/.local/share/software-factory/factory-metrics.sqlite"'
-    assert real_db in toml
+def in_repo(repo, monkeypatch, machine):
+    toml = (cli._repo() / ".factory" / "project.toml").read_text()
     test_db = (repo / "var" / "factory-metrics.sqlite").as_posix()
-    (repo / "workflow" / "runner.toml").write_text(toml.replace(real_db, f'"{test_db}"'))
+    metrics_db = f'\n[metrics]\ndb = "{test_db}"\n'  # over the machine's real one
+    toml = toml.replace('name = "coucou"\n', "")  # the project is its folder's name
+    (repo / ".factory" / "project.toml").write_text(toml + metrics_db)
     monkeypatch.chdir(repo)
     return repo
 
@@ -94,7 +94,7 @@ def test_a_restart_hands_no_reserve_answer_on_the_switches_outlive_it(in_repo, m
     them, and nothing it starts inherits one."""
     envs: list[dict[str, str]] = []
     seen: list[bool] = []
-    state_path = in_repo / "var" / "runs" / "state.json"
+    state_path = in_repo / ".factory" / "var" / "runs" / "state.json"
 
     def run(cfg, key, base):
         seen.append(loop.switch_on(load_state(state_path), "week", loop.now()))
@@ -204,7 +204,7 @@ def test_runner_run_reviews_a_finished_milestone_then_goes_on(in_repo, monkeypat
         "f9-02-last", "review f9", "verdict", "f10-01-next", "review f10", "verdict"
     ]  # fmt: skip
     assert "✅ READY FOR SIGN-OFF" in capsys.readouterr().out
-    reports = sorted((in_repo / "docs" / "sessions").glob("*.md"))
+    reports = sorted((in_repo / ".factory" / "sessions").glob("*.md"))
     assert any("## Verdict" in r.read_text() for r in reports)
     assert git(in_repo, "status", "--porcelain") == ""
 
@@ -250,7 +250,7 @@ def test_runner_pause_and_resume_write_the_dashboards_requests(in_repo, monkeypa
     live, the command applies it at once, so the next run starts paused."""
     at = datetime(2026, 10, 7, 21, 30, tzinfo=UTC)
     monkeypatch.setattr(loop, "now", lambda: at)
-    state_path = in_repo / "var" / "runs" / "state.json"
+    state_path = in_repo / ".factory" / "var" / "runs" / "state.json"
     assert cli.main(["pause"]) == 0
     assert load_state(state_path).owner_pause == at.isoformat()
     assert "pause: paused: the runner finishes its job, then holds" in capsys.readouterr().out
@@ -276,7 +276,7 @@ def test_runner_pause_during_a_live_run_leaves_it_to_the_run(in_repo, monkeypatc
     metrics.upsert_run(conn, project, "20261007-212900", started=beat, heartbeat=beat)
     conn.close()
     assert cli.main(["pause"]) == 0
-    assert load_state(in_repo / "var" / "runs" / "state.json").owner_pause is None
+    assert load_state(in_repo / ".factory" / "var" / "runs" / "state.json").owner_pause is None
     assert "a run is live: it pauses after the job it is on" in capsys.readouterr().out
 
 
@@ -297,8 +297,8 @@ def test_signoff_refuses_a_score_of_11(in_repo, capsys):
 
 def _later(repo, *ids):
     for task_id in ids:
-        write_task(repo / "tasks" / "later", task_id)
-    git(repo, "add", "tasks")
+        write_task(repo / ".factory" / "tasks" / "later", task_id)
+    git(repo, "add", ".factory/tasks")
     git(repo, "commit", "-q", "-m", "set aside")
     return git(repo, "rev-parse", "HEAD")
 
@@ -307,17 +307,17 @@ def test_queue_puts_a_later_ticket_back_in_ready_and_commits(in_repo, capsys):
     """ADR 17 item 3: a unique prefix will do; the commit holds the move alone."""
     _later(in_repo, "m4-12-send-recovers", "f3-01-other")
     assert cli.main(["queue", "m4-12"]) == 0
-    assert (in_repo / "tasks" / "ready" / "m4-12-send-recovers.md").is_file()
-    assert not (in_repo / "tasks" / "later" / "m4-12-send-recovers.md").exists()
+    assert (in_repo / ".factory" / "tasks" / "ready" / "m4-12-send-recovers.md").is_file()
+    assert not (in_repo / ".factory" / "tasks" / "later" / "m4-12-send-recovers.md").exists()
     assert git(in_repo, "log", "-1", "--format=%s").strip() == (
         "queue m4-12-send-recovers (by the owner)"
     )
     changed = git(in_repo, "show", "--name-only", "--no-renames", "--format=", "HEAD").split()
     assert sorted(changed) == [
-        "tasks/later/m4-12-send-recovers.md",
-        "tasks/ready/m4-12-send-recovers.md",
+        ".factory/tasks/later/m4-12-send-recovers.md",
+        ".factory/tasks/ready/m4-12-send-recovers.md",
     ]
-    assert "workflow/runner.toml" in git(in_repo, "status", "--porcelain")  # left alone
+    assert ".factory/project.toml" in git(in_repo, "status", "--porcelain")  # left alone
     assert "m4-12-send-recovers" in capsys.readouterr().out
 
 
@@ -330,19 +330,19 @@ def test_queue_with_an_unknown_or_ambiguous_id_shows_the_choices(in_repo, capsys
     err = capsys.readouterr().err
     assert all(choice in err for choice in shown)
     assert git(in_repo, "rev-parse", "HEAD") == head
-    assert sorted(p.name for p in (in_repo / "tasks" / "later").glob("*.md")) == [
+    assert sorted(p.name for p in (in_repo / ".factory" / "tasks" / "later").glob("*.md")) == [
         "m4-12-a.md",
         "m4-13-b.md",
     ]
 
 
 def test_queue_refuses_a_ticket_that_isnt_in_later(in_repo, capsys):
-    write_task(in_repo / "tasks" / "ready", "m4-14-ready")
-    git(in_repo, "add", "tasks")
+    write_task(in_repo / ".factory" / "tasks" / "ready", "m4-14-ready")
+    git(in_repo, "add", ".factory/tasks")
     git(in_repo, "commit", "-q", "-m", "ready")
     head = git(in_repo, "rev-parse", "HEAD")
     assert cli.main(["queue", "m4-14"]) == 1
-    assert "tasks/ready/" in capsys.readouterr().err
+    assert ".factory/tasks/ready/" in capsys.readouterr().err
     assert git(in_repo, "rev-parse", "HEAD") == head
 
 
@@ -364,7 +364,7 @@ def test_queue_refuses_while_a_run_is_live(in_repo, capsys, age, refused):
         assert "running" in capsys.readouterr().err
         assert git(in_repo, "rev-parse", "HEAD") == head
     else:
-        assert (in_repo / "tasks" / "ready" / "m4-12-a.md").is_file()
+        assert (in_repo / ".factory" / "tasks" / "ready" / "m4-12-a.md").is_file()
 
 
 def test_a_bad_milestone_name_is_an_error(in_repo, capsys):
@@ -565,17 +565,17 @@ def test_github_get_refuses_a_write(in_repo, monkeypatch, capsys):
 def test_check_tickets_says_what_approve_would_refuse(in_repo, capsys):
     """The planner's check of its drafts (2026-10-12): the same problems Approve finds, read
     from the files, changing nothing."""
-    good = write_task(in_repo / "tasks" / "later", "m4-12-a")
-    bad = write_task(in_repo / "tasks" / "later", "m4-13-b")
+    good = write_task(in_repo / ".factory" / "tasks" / "later", "m4-12-a")
+    bad = write_task(in_repo / ".factory" / "tasks" / "later", "m4-13-b")
     bad.write_text(
         bad.read_text().replace("### Context\n", "### Context\nRead `templates/gone.html`.\n")
     )
     before = git(in_repo, "status", "--porcelain")
     assert cli.main(["check-tickets", good.relative_to(in_repo).as_posix()]) == 0
     assert "tickets OK" in capsys.readouterr().out
-    assert cli.main(["check-tickets"]) == 1  # every ticket in tasks/later/
+    assert cli.main(["check-tickets"]) == 1  # every ticket in .factory/tasks/later/
     out = capsys.readouterr().out
     assert "m4-13-b: referenced path does not exist: templates/gone.html" in out
     assert "m4-12-a" not in out
-    assert cli.main(["check-tickets", "tasks/later/none.md"]) == 1
+    assert cli.main(["check-tickets", ".factory/tasks/later/none.md"]) == 1
     assert git(in_repo, "status", "--porcelain") == before

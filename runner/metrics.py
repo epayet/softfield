@@ -493,7 +493,7 @@ def remove_missing_tickets(
     conn: sqlite3.Connection, project_id: int, present: Collection[str]
 ) -> int:
     """Mark ``removed`` the project's rows whose ticket isn't in ``present`` (deleted from
-    tasks/): they leave the queue (f1 D8), and a deleted ``blocked`` one stops counting as
+    .factory/tasks/): they leave the queue (f1 D8), and a deleted ``blocked`` one stops counting as
     blocked (f6-17). A ``done`` row is history and stays. Returns how many."""
     rows = conn.execute(
         "SELECT id, ticket FROM tickets WHERE project_id = ? AND state NOT IN ('done', ?)",
@@ -519,7 +519,7 @@ def remove_cards(
     gone: str | None = None,
 ) -> int:
     """Mark ``removed`` the project's cards (rows with a ``state``) whose doc left
-    docs/milestones/, by short key: each not in ``present``, or the one card ``gone``. They
+    .factory/cards/, by short key: each not in ``present``, or the one card ``gone``. They
     leave the board (f6-17). Returns how many."""
     rows = conn.execute(
         "SELECT id, key FROM milestones WHERE project_id = ? AND state IS NOT NULL AND state != ?",

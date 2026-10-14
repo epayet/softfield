@@ -65,7 +65,7 @@ LOCAL = """\
 Implement the task below in the Coucou repository. Start from the files under `files:`;
 change other files only if the goal needs it. Write or update tests for what "Done when"
 asks, in the test files under `tests:`. Never edit protected paths
-(workflow/protected-paths.txt) and never run git. If you're stuck, write BLOCKED.md as
+(.factory/protected-paths.txt) and never run git. If you're stuck, write BLOCKED.md as
 AGENTS.md describes, then stop. Run commands exactly as written: pipes (`|`), redirections
 and unknown flags are refused, and a refused command returns nothing.
 
@@ -195,7 +195,7 @@ ESCALATION = (
 You are the lead, handling an escalated task in the Coucou repo. Follow
 "Escalations" above.
 
-- Task: tasks/escalated/{id}.md
+- Task: .factory/tasks/escalated/{id}.md
 - Why it was escalated: {reason}
 - Run logs: {logs}/ (OpenCode output, gate output, last.diff). The local model's work is on
   branch task/{id}, with main merged in; you are on main.
@@ -205,27 +205,27 @@ Do exactly one of:
 1. finish: when its gates fail on a small, clear gap, run `git checkout task/{id}`, finish the
    work there and make `uv run runner check-all --task {id}` pass. The runner merges the
    branch, crediting you both. Check out nothing else, and only for this outcome.
-2. requeue: repair or split the ticket and write the task file(s) to tasks/ready/
+2. requeue: repair or split the ticket and write the task file(s) to .factory/tasks/ready/
    (docs/task-format.md). Add facts, not a solution. Its next run builds on the branch; if
    the work there is unusable, add "reset": true to decision.json and it starts from main.
 3. requeue: answer the model's question by adding the facts to the task's Context, and write
-   the task to tasks/ready/{id}.md (as in 2, about the branch).
+   the task to .factory/tasks/ready/{id}.md (as in 2, about the branch).
 4. implemented: if the task is hard or protected, implement it yourself on main and make
    `uv run pytest -q tests/unit tests/integration tests/runner` pass.
 5. owner: only for what the owner is asked for (their preferences, above): draft an ADR in
-   docs/adr/ (status Proposed). The task and its dependants wait for the owner's decision.
+   .factory/adr/ (status Proposed). The task and its dependants wait for the owner's decision.
 
 Code you change must pass `uv run runner check-all`; if it doesn't, none of it reaches main.
 Then write {logs}/decision.json as
 {{"outcome": "finish" | "requeue" | "implemented" | "owner"}}, for a requeue maybe with
-"reset": true, and for "owner" also {{"adr": "docs/adr/NN-slug.md", "question": "<one line
+"reset": true, and for "owner" also {{"adr": ".factory/adr/NN-slug.md", "question": "<one line
 for the owner>"}}, and {logs}/escalation.md: 3-6 lines on what happened, what the local
 model got wrong, and the lesson. Turn the lesson into a check, an example or a line in
 docs/agents/developer.md (its budget is in docs/agents/lead.md ("Developers' notes")), and
 say which. """
     + PROCESS_NOTE
     + """\
-Read-only git (diff, log, show) is fine; don't commit and don't edit tasks/escalated/: the
+Read-only git (diff, log, show) is fine; don't commit and don't edit .factory/tasks/escalated/: the
 runner commits and moves files.
 """
 )
@@ -250,9 +250,9 @@ what the ticket asks, do the tests act as a person would and check content, not 
 is anything masked instead of fixed? Don't read the developer's thinking unless a finding needs
 explaining. Then do what helps the next tickets most, any of:
 - nothing, if it's sound
-- a fix ticket in tasks/ready/ (docs/task-format.md, `finding:` in the frontmatter), and add
-  its id to `depends_on` of the ready tickets that build on the problem
-- tighten upcoming tickets in tasks/ready/ with what you saw (facts, not solutions)
+- a fix ticket in .factory/tasks/ready/ (docs/task-format.md, `finding:` in the frontmatter), and
+  add its id to `depends_on` of the ready tickets that build on the problem
+- tighten upcoming tickets in .factory/tasks/ready/ with what you saw (facts, not solutions)
 - one line in docs/agents/developer.md (its budget is in docs/agents/lead.md ("Developers' notes"))
 
 If you wrote or changed a ticket, run `uv run pytest -q tests/runner/test_tasks.py` and fix
@@ -312,10 +312,10 @@ docs/workflow.md (Milestone review loop).
 Round {round} of at most {max_rounds}. {scope}
 
 Read the tests as closely as the code: missing edge cases, and every existing test a
-developer edited (the session reports in docs/sessions/ list them). Check the French.
+developer edited (the session reports in .factory/sessions/ list them). Check the French.
 
 Grade each finding blocking / should-fix / nit and route it:
-- local: write a ticket in tasks/ready/ (docs/task-format.md), `finding: <id>` in the
+- local: write a ticket in .factory/tasks/ready/ (docs/task-format.md), `finding: <id>` in the
   frontmatter. Findings listed as recurring must NOT go to the local model.
 - claude: fix it yourself now, keeping `uv run pytest -q tests/unit tests/integration
   tests/runner` green.
@@ -342,7 +342,7 @@ Write {out} as:
   "stop": null | "adr-needed" | "security-unresolved" | "unforeseen-cross-milestone"}}
 Keep ids stable across rounds; mark findings fixed since the last round "resolved": true.
 Give checkpoint_verdicts and score every round, as they stand: the last round's are kept.
-Also create or update docs/reviews/{milestone}.md. It starts with the owner's sign-off
+Also create or update .factory/reviews/{milestone}.md. It starts with the owner's sign-off
 sheet ("Sign-off sheet" above), ending with "6. What next": your product and factory
 suggestions. Then what was built, findings and resolutions, backlog and workflow
 observations. The numbers come from `uv run runner report {milestone}`, between the
@@ -354,7 +354,7 @@ Read-only git (diff, log, show) is fine; don't commit: the runner does.
 # 2026-10-02/03. A card's thread drafts on its plan branch; the general thread only talks.
 _PLANNER_HEAD = """\
 You are the lead, planning with the owner in the planning room \
-(docs/adr/20-planning-room.md). Plan as the owner's preferences and the lead's "Plan" and \
+(.factory/adr/20-planning-room.md). Plan as the owner's preferences and the lead's "Plan" and \
 "Tickets" sections say: both were pasted at the start of this session. \
 This is their message on {thread}.
 {comments}
@@ -362,9 +362,9 @@ The owner's message:
 
 {text}
 
-On a card's thread, read its doc in docs/milestones/ first: the owner's notes are there, \
+On a card's thread, read its doc in .factory/cards/ first: the owner's notes are there, \
 and their message may only point at them. \
-Before answering, look for a repeat (f6-12): read the cards in docs/milestones/ whose state \
+Before answering, look for a repeat (f6-12): read the cards in .factory/cards/ whose state \
 is idea, planning or ready, and think of the other threads. Other threads: {threads}. When \
 this idea or message repeats another card or thread, even in other words, say so as a point \
 and propose a `merge`: `path` the duplicate card's doc, `into` the short key of the card it \
@@ -425,36 +425,37 @@ PLANNER = (
     _PLANNER_HEAD
     + """\
 - Proposals are drafts on the branch plan/{card} only, never main: you are on it (if not, \
-run `git checkout plan/{card}`). ADRs in docs/adr/ (status Proposed); mock-ups as \
-self-contained HTML in docs/milestones/{card}-mockup/ (one file with its style, script and \
+run `git checkout plan/{card}`). ADRs in .factory/adr/ (status Proposed); mock-ups as \
+self-contained HTML in .factory/cards/{card}-mockup/ (one file with its style, script and \
 data inside: the owner reads it in a frame that runs its scripts and nothing else, so no \
 localStorage, no alert or confirm, no form to submit, no request to the dashboard and no \
 link to a new tab; any of these stops it answering); the card's milestone doc in \
-docs/milestones/; tickets in tasks/later/ (docs/task-format.md). Edit nothing else, and \
+.factory/cards/; tickets in .factory/tasks/later/ (docs/task-format.md). Edit nothing else, and \
 don't commit: the runner commits the branch after your reply.
 - A card that changes what a page shows or how it is laid out (a new view, an element \
 added, moved or removed, a new state or colour) gets a mock-up without being asked (F72), \
 on the dashboard (factory_dashboard/templates/) and in the app (coucou/templates/) alike. \
 Not for wording only, a bug that restores the look a page already meant, or work with \
 nothing on screen; when you skip one on a card with screen changes, say why in a point, so \
-the owner can ask for one. It is one file in docs/milestones/{card}-mockup/ with a \
+the owner can ask for one. It is one file in .factory/cards/{card}-mockup/ with a \
 Today / Proposed switch at the top: on a phone the owner flips between two pictures of the \
 same size, on a wide screen they sit side by side. Today is copied from the live template \
 and its CSS (factory_dashboard/static/dashboard.css, or the app's), not redrawn from \
 memory; Proposed marks each change with an outline and a short note; both show real values \
-you can read (var/runs/state.json, tasks/, docs/milestones/), as \
-docs/milestones/f17-mockup/top-bar.html does (for the switch, the copied Today and the \
-marks, follow docs/milestones/f94-mockup/away-rows.html). The mock-up and the plan come in \
+you can read (.factory/var/runs/state.json, .factory/tasks/, .factory/cards/), as \
+.factory/cards/f17-mockup/top-bar.html does (for the switch, the copied Today and the \
+marks, follow .factory/cards/f94-mockup/away-rows.html). The mock-up and the plan come in \
 the same reply: each UI ticket names the mock-up file in its Context as the picture to build, and \
 when the owner's comments change the mock-up, revise the tickets in the same turn.
 - To redirect {card} while it runs, propose a `replan` (f6-13): on the branch it may also \
-change {card}'s waiting tickets, tasks/ready/{card}-*.md: edit one, add one, or set one \
-aside (move it to tasks/later/). Never another milestone's ticket, never the one in \
-progress (`in_flight` in var/runs/state.json names it), never tasks/done/: the runner refuses the \
-approval. Each changed ticket must pass pre-flight: after writing or changing tickets, run \
-`uv run runner check-tickets` (every draft in tasks/later/; or name files) and fix what it \
-reports, since Approve refuses the plan for the same problems. Only a `replan` may touch \
-tasks/ready/.
+change {card}'s waiting tickets, .factory/tasks/ready/{card}-*.md: edit one, add one, or set one \
+aside (move it to .factory/tasks/later/). Never another milestone's ticket, never the one in \
+progress (`in_flight` in .factory/var/runs/state.json names it), never \
+.factory/tasks/done/: the runner refuses the approval. Each changed ticket must pass \
+pre-flight: after writing or changing tickets, run \
+`uv run runner check-tickets` (every draft in .factory/tasks/later/; or name files) and fix \
+what it reports, since Approve refuses the plan for the same problems. Only a `replan` may touch \
+.factory/tasks/ready/.
 - When a change touches tickets the line may start while you talk (a `replan`, a ticket \
 reworked), suggest the owner pause the factory from the dashboard first, and say so in a \
 point; approving the `replan` lifts their pause.
@@ -473,15 +474,15 @@ PLANNER_GENERAL = (
     + """\
 - This thread has no card, so no plan branch: read what you need and change nothing. An \
 idea worth a card is a `seed` proposal (path null); the runner plants it once approved. \
-Never write to tasks/: a card's own thread redirects its tickets.
+Never write to .factory/tasks/: a card's own thread redirects its tickets.
 """
     + _PLANNER_TAIL
 )
 
 NARRATIVE = """\
 Read {report}, the runner's report of the last build session, and the logs it mentions under
-var/runs/. Replace the text under "## Narrative" with 5-12 lines for the owner, who wants to
-learn how the frontier + local workflow performs: what went well, what didn't, what the
+.factory/var/runs/. Replace the text under "## Narrative" with 5-12 lines for the owner, who wants
+to learn how the frontier + local workflow performs: what went well, what didn't, what the
 local-vs-Claude token split means here, and concrete improvement opportunities (task size, context,
 prompts, gates). Edit only that section.
 """

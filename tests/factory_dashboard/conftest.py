@@ -13,7 +13,6 @@ wasn't kept: 500k input tokens.
 ``write_live`` adds what the Overview shows live, at ``NOW``; the ``client`` fixture serves both.
 """
 
-import re
 import sqlite3
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
@@ -25,6 +24,16 @@ from fastapi.testclient import TestClient
 
 from factory_dashboard import queries
 from runner import metrics
+
+# A copy of a machine's ~/.config/softfield/factory.toml: the agents and roles (ADR 30 item 3)
+MACHINE = Path(__file__).resolve().parents[1] / "fixtures" / "softfield-machine.toml"
+
+
+@pytest.fixture(autouse=True)
+def _machine_config(monkeypatch):
+    """The dashboard reads a project's config over this fixed machine file, never the real one."""
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(MACHINE))
+
 
 PROJECT, OTHER = "coucou", "other"
 NOW = datetime(2026, 10, 2, 12, 0, tzinfo=UTC)
@@ -473,7 +482,7 @@ def write_milestone_detail(conn: sqlite3.Connection) -> None:
         status="done",
         outcome="The factory now measures itself end-to-end.",
         done_when=(
-            "- All tickets in `tasks/done/`, `check-all` passes on `main`,\n"
+            "- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`,\n"
             "- `backfill` run twice gives identical row counts."
         ),
         signoff={
@@ -542,7 +551,7 @@ def write_milestone_detail_with_scores(conn: sqlite3.Connection) -> None:
         owner_score=8.5,
         outcome="The factory now measures itself end-to-end.",
         done_when=(
-            "- All tickets in `tasks/done/`, `check-all` passes on `main`,\n"
+            "- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`,\n"
             "- `backfill` run twice gives identical row counts."
         ),
         signoff={
@@ -1616,19 +1625,13 @@ def write_today(conn: sqlite3.Connection) -> None:
 @pytest.fixture
 def line_db(db_path: Path, tmp_path: Path) -> Path:
     """The fixture plus ``write_line``'s and ``write_today``'s rows, its repo a copy of this
-    repo's runner.toml with the developers the rows were written for (Qwen and gpt-oss-120b),
-    whoever the real roster has today."""
+    repo's project.toml over the machine fixture (``MACHINE``), with the developers the rows
+    were written for (Qwen and gpt-oss-120b)."""
     repo = tmp_path / "repo"
-    (repo / "workflow").mkdir(parents=True)
-    toml = Path(__file__).resolve().parents[2] / "workflow" / "runner.toml"
-    text = re.sub(
-        r"^developer = .*$",
-        'developer = ["local-qwen3.6-35b-a3b", "ollama-gpt-oss-120b"]',
-        toml.read_text(encoding="utf-8"),
-        count=1,
-        flags=re.M,
-    )
-    (repo / "workflow" / "runner.toml").write_text(text)
+    (repo / ".factory").mkdir(parents=True)
+    toml = Path(__file__).resolve().parents[2] / ".factory" / "project.toml"
+    roles = '\n[roles]\ndeveloper = ["local-qwen3.6-35b-a3b", "ollama-gpt-oss-120b"]\n'
+    (repo / ".factory" / "project.toml").write_text(toml.read_text(encoding="utf-8") + roles)
     conn = metrics.open_db(db_path)
     try:
         write_line(conn, str(repo))
@@ -1848,7 +1851,7 @@ PLANNING_ADR = {
     "id": "adr-20",
     "kind": "adr",
     "title": "ADR 20: the planning room",
-    "path": "docs/adr/20-planning-room.md",
+    "path": ".factory/adr/20-planning-room.md",
     "key_points": [{"n": 1, "title": "Planning goes first"}, {"n": 2, "title": "Opus plans"}],
 }
 PLANNING_PLAN = {"id": "plan", "kind": "plan", "title": "F6 plan: 7 tickets", "path": None}

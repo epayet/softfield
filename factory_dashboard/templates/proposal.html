@@ -51,7 +51,7 @@
     {% if changes %}
     <section id="plan-changes" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
       <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">What approving changes</h2>
-      <span style="font-size: 13px; color: var(--muted)">Each file the plan branch adds, changes, sets aside (moves to tasks/later/) or removes. Tap one for its text.</span>
+      <span style="font-size: 13px; color: var(--muted)">Each file the plan branch adds, changes, sets aside (moves to .factory/tasks/later/) or removes. Tap one for its text.</span>
       <ul style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px">
         {% for change in changes %}
         <li class="plan-change" style="background: var(--plate); border: 1px solid var(--rule); padding: 8px 12px; min-width: 0">

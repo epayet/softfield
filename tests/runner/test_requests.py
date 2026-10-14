@@ -73,8 +73,8 @@ def _item(repo: Path, kind: str, subject: str) -> None:
 
 def _later(repo: Path, *ids: str) -> None:
     for task_id in ids:
-        write_task(repo / "tasks" / "later", task_id)
-    git(repo, "add", "tasks")
+        write_task(repo / ".factory" / "tasks" / "later", task_id)
+    git(repo, "add", ".factory/tasks")
     git(repo, "commit", "-q", "-m", "set aside")
 
 
@@ -84,18 +84,18 @@ def test_a_signoff_request_signs_off_as_the_command_does(repo):
     assert _apply(repo) == ["signoff m1: signed off m1"]
     assert git(repo, "tag").split() == ["m1-done"]
     assert git(repo, "log", "-1", "--format=%s").strip() == "M1 signed off by the owner"
-    assert "Status: done." in (repo / "docs" / "milestones" / "m1.md").read_text()
+    assert "Status: done." in (repo / ".factory" / "cards" / "m1.md").read_text()
     assert _request(repo, asked) == (NOW.isoformat(), "signed off m1")
     assert _apply(repo) == []  # finished once
 
 
 def test_a_signoff_request_with_work_left_is_finished_with_the_commands_error(repo):
     _milestone(repo)
-    write_task(repo / "tasks" / "escalated", "m1-02-photos")
+    write_task(repo / ".factory" / "tasks" / "escalated", "m1-02-photos")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "escalated")
     head = git(repo, "rev-parse", "HEAD")
-    doc = (repo / "docs" / "milestones" / "m1.md").read_text()
+    doc = (repo / ".factory" / "cards" / "m1.md").read_text()
     asked = _ask(repo, "signoff", "m1")
     error = "work is left: m1-02-photos (escalated). Finish it, or sign off with --force."
     assert _apply(repo) == [f"signoff m1: {error}"]
@@ -103,7 +103,7 @@ def test_a_signoff_request_with_work_left_is_finished_with_the_commands_error(re
     # Nothing changed: no commit, no tag, the doc as it was, a clean tree.
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "tag") == "" and git(repo, "status", "--porcelain") == ""
-    assert (repo / "docs" / "milestones" / "m1.md").read_text() == doc
+    assert (repo / ".factory" / "cards" / "m1.md").read_text() == doc
     assert _apply(repo) == []  # never retried
 
 
@@ -120,16 +120,18 @@ def test_a_queue_request_moves_the_ticket_and_commits_as_the_command_does(repo):
     _later(repo, "m4-12-send-recovers", "f3-01-other")
     asked = _ask(repo, "queue", "m4-12-send-recovers")
     assert _apply(repo) == ["queue m4-12-send-recovers: queued m4-12-send-recovers"]
-    assert (repo / "tasks" / "ready" / "m4-12-send-recovers.md").is_file()
-    assert not (repo / "tasks" / "later" / "m4-12-send-recovers.md").exists()
-    assert (repo / "tasks" / "later" / "f3-01-other.md").is_file()  # only the one asked for
+    assert (repo / ".factory" / "tasks" / "ready" / "m4-12-send-recovers.md").is_file()
+    assert not (repo / ".factory" / "tasks" / "later" / "m4-12-send-recovers.md").exists()
+    assert (
+        repo / ".factory" / "tasks" / "later" / "f3-01-other.md"
+    ).is_file()  # only the one asked for
     assert git(repo, "log", "-1", "--format=%s").strip() == (
         "queue m4-12-send-recovers (by the owner)"
     )
     changed = git(repo, "show", "--name-only", "--no-renames", "--format=", "HEAD").split()
     assert sorted(changed) == [
-        "tasks/later/m4-12-send-recovers.md",
-        "tasks/ready/m4-12-send-recovers.md",
+        ".factory/tasks/later/m4-12-send-recovers.md",
+        ".factory/tasks/ready/m4-12-send-recovers.md",
     ]
     assert git(repo, "status", "--porcelain") == ""
     assert _request(repo, asked) == (NOW.isoformat(), "queued m4-12-send-recovers")
@@ -140,7 +142,7 @@ def test_a_queue_request_for_a_missing_ticket_is_finished_with_the_error(repo):
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "queue", "m9-01-nothing")
     [line] = _apply(repo)
-    error = "m9-01-nothing matches no ticket in tasks/later/. Choices: m4-12-a"
+    error = "m9-01-nothing matches no ticket in .factory/tasks/later/. Choices: m4-12-a"
     assert line == f"queue m9-01-nothing: {error}"
     assert _request(repo, asked)[1] == line.split(": ", 1)[1]
     assert git(repo, "rev-parse", "HEAD") == head
@@ -268,7 +270,7 @@ def test_another_projects_requests_are_left_alone(repo):
     conn.close()
     assert _apply(repo) == []
     assert _request(repo, theirs) == (None, None)
-    assert (repo / "tasks" / "later" / "m4-12-a.md").is_file()
+    assert (repo / ".factory" / "tasks" / "later" / "m4-12-a.md").is_file()
 
 
 def test_without_a_database_there_is_nothing_to_apply_and_none_is_made(repo):
@@ -421,9 +423,9 @@ ADR = "# ADR 23: Parallel planners\n\n- **Status:** Proposed\n- **Date:** 2026-1
 
 def _card(repo: Path) -> None:
     """F7's card on main, and a ticket set aside for another milestone."""
-    (repo / "docs" / "milestones").mkdir(parents=True)
-    (repo / "docs" / "milestones" / "f7-one-queue.md").write_text(CARD)
-    git(repo, "add", "docs")
+    (repo / ".factory" / "cards").mkdir(parents=True)
+    (repo / ".factory" / "cards" / "f7-one-queue.md").write_text(CARD)
+    git(repo, "add", ".factory")
     _later(repo, "f3-09-old")
 
 
@@ -449,7 +451,7 @@ def _main_unchanged(repo: Path, head: str) -> None:
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    assert sorted(p.name for p in (repo / "tasks" / "ready").glob("*.md")) == []
+    assert sorted(p.name for p in (repo / ".factory" / "tasks" / "ready").glob("*.md")) == []
 
 
 def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_card(repo):
@@ -457,10 +459,10 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     _plan(
         repo,
         {
-            "tasks/later/f7-01-a.md": _ticket("f7-01-a"),
-            "tasks/later/f7-02-b.md": _ticket("f7-02-b"),
-            "docs/milestones/f7-one-queue.md": CARD + "- The plan, drafted.\n",
-            "docs/milestones/f7-mockup/index.html": "<p>queue</p>\n",
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            ".factory/tasks/later/f7-02-b.md": _ticket("f7-02-b"),
+            ".factory/cards/f7-one-queue.md": CARD + "- The plan, drafted.\n",
+            ".factory/cards/f7-mockup/index.html": "<p>queue</p>\n",
         },
     )
     head = git(repo, "rev-parse", "HEAD")
@@ -468,14 +470,14 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     result = "approved plan/f7: queued f7-01-a, f7-02-b"
     assert _apply(repo) == [f"approve_plan f7-one-queue: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
-    ready = sorted(p.name for p in (repo / "tasks" / "ready").glob("*.md"))
+    ready = sorted(p.name for p in (repo / ".factory" / "tasks" / "ready").glob("*.md"))
     assert ready == ["f7-01-a.md", "f7-02-b.md"]
-    later = sorted(p.name for p in (repo / "tasks" / "later").glob("*.md"))
+    later = sorted(p.name for p in (repo / ".factory" / "tasks" / "later").glob("*.md"))
     assert later == ["f3-09-old.md"]  # set aside by the owner: not this plan's to queue
-    doc = (repo / "docs" / "milestones" / "f7-one-queue.md").read_text()
+    doc = (repo / ".factory" / "cards" / "f7-one-queue.md").read_text()
     assert milestone.card("f7-one-queue", doc).state == "ready"
     assert "- The plan, drafted." in doc and "**Priority:** 3" in doc
-    assert (repo / "docs" / "milestones" / "f7-mockup" / "index.html").is_file()
+    assert (repo / ".factory" / "cards" / "f7-mockup" / "index.html").is_file()
     # one commit on main, by the owner's request; the branch is gone, its drafts merged
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
@@ -484,18 +486,23 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     assert _apply(repo) == []  # finished once
 
 
-@pytest.mark.parametrize("stray", ["runner/loop.py", "tasks/done/f7-09-sneak.md", "AGENTS.md"])
+@pytest.mark.parametrize(
+    "stray", ["runner/loop.py", ".factory/tasks/done/f7-09-sneak.md", "AGENTS.md"]
+)
 def test_a_plan_touching_anything_but_drafts_is_refused_and_main_is_unchanged(repo, stray):
     _card(repo)
-    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a"), stray: "x = 1\n"})
+    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"), stray: "x = 1\n"})
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     [line] = _apply(repo)
     _, result = _request(repo, asked)
     assert line == f"approve_plan f7: {result}"
-    assert result == (f"plan/f7 changes {stray}, outside docs/ and tasks/later/: not approved")
+    assert result == (
+        f"plan/f7 changes {stray}, outside docs/, .factory/cards/, .factory/adr/"
+        " and .factory/tasks/later/: not approved"
+    )
     _main_unchanged(repo, head)
-    assert not (repo / "tasks" / "later" / "f7-01-a.md").exists()
+    assert not (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").exists()
     assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"  # kept, to fix
 
 
@@ -505,22 +512,26 @@ ACCEPTED = ADR.replace("Proposed", "Accepted (by the owner, 2026-10-06)")
 @pytest.mark.parametrize(
     ("on_main", "drafted", "gone"),
     [
-        ({}, {"docs/adr/23-parallel-planners.md": ACCEPTED}, ()),  # a new ADR, accepted
+        ({}, {".factory/adr/23-parallel-planners.md": ACCEPTED}, ()),  # a new ADR, accepted
         (
-            {"docs/adr/23-parallel-planners.md": ADR},
-            {"docs/adr/23-parallel-planners.md": ACCEPTED},
+            {".factory/adr/23-parallel-planners.md": ADR},
+            {".factory/adr/23-parallel-planners.md": ACCEPTED},
             (),
         ),  # a Proposed one accepted
         (
-            {"docs/adr/23-parallel-planners.md": ACCEPTED},
-            {"docs/adr/23-parallel-planners.md": ACCEPTED.replace("Accepted", "Superseded")},
+            {".factory/adr/23-parallel-planners.md": ACCEPTED},
+            {".factory/adr/23-parallel-planners.md": ACCEPTED.replace("Accepted", "Superseded")},
             (),
         ),
-        ({"docs/adr/23-parallel-planners.md": ACCEPTED}, {}, ("docs/adr/23-parallel-planners.md",)),
+        (
+            {".factory/adr/23-parallel-planners.md": ACCEPTED},
+            {},
+            (".factory/adr/23-parallel-planners.md",),
+        ),
         (
             {},
             {
-                "docs/milestones/f7-one-queue.md": CARD.replace(
+                ".factory/cards/f7-one-queue.md": CARD.replace(
                     "> **State:** planning", "> **State:** done"
                 )
             },
@@ -538,7 +549,7 @@ def test_a_plan_setting_what_only_the_owner_sets_is_refused(
         (repo / rel).write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "--allow-empty", "-m", "on main")
-    _plan(repo, {"tasks/later/f7-01-a.md": _ticket("f7-01-a"), **drafted}, gone=gone)
+    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"), **drafted}, gone=gone)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
@@ -552,11 +563,11 @@ def test_a_plan_setting_what_only_the_owner_sets_is_refused(
 
 def test_a_plan_editing_an_adr_but_not_its_status_is_approved(repo):
     _card(repo)
-    (repo / "docs" / "adr").mkdir()
-    (repo / "docs" / "adr" / "23-parallel-planners.md").write_text(ACCEPTED)
+    (repo / ".factory" / "adr").mkdir()
+    (repo / ".factory" / "adr" / "23-parallel-planners.md").write_text(ACCEPTED)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "adr")
-    _plan(repo, {"docs/adr/23-parallel-planners.md": ACCEPTED + "\nAs built: one planner.\n"})
+    _plan(repo, {".factory/adr/23-parallel-planners.md": ACCEPTED + "\nAs built: one planner.\n"})
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
@@ -566,6 +577,7 @@ def test_a_plan_with_a_symlink_is_refused(repo):
     """A link in docs/ would let a later edit reach outside the drafts."""
     _card(repo)
     git(repo, "checkout", "-q", "-b", "plan/f7", "main")
+    (repo / "docs").mkdir(exist_ok=True)
     (repo / "docs" / "link.md").symlink_to("../runner/loop.py")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "drafts")
@@ -584,18 +596,18 @@ def test_a_plan_that_clashes_with_main_is_refused_and_main_is_unchanged(repo):
     _plan(
         repo,
         {
-            "tasks/later/f7-01-a.md": _ticket("f7-01-a"),
-            "docs/milestones/f7-one-queue.md": CARD.replace("one queue", "two queues"),
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            ".factory/cards/f7-one-queue.md": CARD.replace("one queue", "two queues"),
         },
     )
-    (repo / "docs" / "milestones" / "f7-one-queue.md").write_text(CARD.replace("one", "a"))
+    (repo / ".factory" / "cards" / "f7-one-queue.md").write_text(CARD.replace("one", "a"))
     git(repo, "commit", "-q", "-am", "the owner's edit")
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "plan/f7 clashes with main: not approved"
     _main_unchanged(repo, head)
-    assert not (repo / "tasks" / "later" / "f7-01-a.md").exists()
+    assert not (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").exists()
     assert not Path(repo, git(repo, "rev-parse", "--git-path", "SQUASH_MSG").strip()).exists()
 
 
@@ -604,9 +616,9 @@ def test_a_ticket_with_a_bare_path_refuses_the_approval_with_the_problem_named(r
     _plan(
         repo,
         {
-            "tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
-            "tasks/later/f7-02-b.md": _ticket("f7-02-b"),
-            "tasks/later/f7-03-c.md": "no frontmatter\n",
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
+            ".factory/tasks/later/f7-02-b.md": _ticket("f7-02-b"),
+            ".factory/tasks/later/f7-03-c.md": "no frontmatter\n",
         },
     )
     head = git(repo, "rev-parse", "HEAD")
@@ -617,18 +629,18 @@ def test_a_ticket_with_a_bare_path_refuses_the_approval_with_the_problem_named(r
         " f7-03-c: task file must start with YAML frontmatter (---)"
     )
     _main_unchanged(repo, head)
-    assert not (repo / "tasks" / "later" / "f7-02-b.md").exists()  # nothing merged
+    assert not (repo / ".factory" / "tasks" / "later" / "f7-02-b.md").exists()  # nothing merged
     assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"
 
 
 def test_accept_adr_merges_the_draft_and_the_plan_waits_for_it(repo):
     _card(repo)
-    relies = "Build on `docs/adr/23-parallel-planners.md`."
+    relies = "Build on `.factory/adr/23-parallel-planners.md`."
     _plan(
         repo,
         {
-            "docs/adr/23-parallel-planners.md": ADR,
-            "tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
+            ".factory/adr/23-parallel-planners.md": ADR,
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
         },
     )
     head = git(repo, "rev-parse", "HEAD")
@@ -640,27 +652,27 @@ def test_accept_adr_merges_the_draft_and_the_plan_waits_for_it(repo):
     _main_unchanged(repo, head)
 
     accepted = _ask(repo, "accept_adr", "f7", "23")
-    assert _apply(repo) == ["accept_adr f7: accepted docs/adr/23-parallel-planners.md"]
-    assert _request(repo, accepted)[1] == "accepted docs/adr/23-parallel-planners.md"
-    adr = repo / "docs" / "adr" / "23-parallel-planners.md"
+    assert _apply(repo) == ["accept_adr f7: accepted .factory/adr/23-parallel-planners.md"]
+    assert _request(repo, accepted)[1] == "accepted .factory/adr/23-parallel-planners.md"
+    adr = repo / ".factory" / "adr" / "23-parallel-planners.md"
     assert "- **Status:** Accepted (by the owner, 2026-10-01)\n" in adr.read_text()
     assert git(repo, "log", "-1", "--format=%s").strip() == "ADR 23 accepted by the owner"
     assert git(repo, "rev-parse", "HEAD~1") == head
-    assert not (repo / "tasks" / "later" / "f7-01-a.md").exists()  # the ADR alone
+    assert not (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").exists()  # the ADR alone
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain") == ""
 
     second = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, second)[1] == "approved plan/f7: queued f7-01-a"
-    assert (repo / "tasks" / "ready" / "f7-01-a.md").is_file()
+    assert (repo / ".factory" / "tasks" / "ready" / "f7-01-a.md").is_file()
     assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
 
 
 def test_accept_adr_resolves_the_owner_items_that_ask_about_it(repo):
     _card(repo)
-    _plan(repo, {"docs/adr/23-parallel-planners.md": ADR})
-    _item(repo, "adr", "docs/adr/23-parallel-planners.md")
+    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
+    _item(repo, "adr", ".factory/adr/23-parallel-planners.md")
     _ask(repo, "accept_adr", "f7", "23")
     _apply(repo)
     assert _items(repo)[0][3] is False
@@ -668,13 +680,13 @@ def test_accept_adr_resolves_the_owner_items_that_ask_about_it(repo):
 
 def test_accept_adr_of_an_adr_already_on_main_accepts_it(repo):
     _card(repo)
-    (repo / "docs" / "adr").mkdir()
-    (repo / "docs" / "adr" / "23-parallel-planners.md").write_text(ADR)
+    (repo / ".factory" / "adr").mkdir()
+    (repo / ".factory" / "adr" / "23-parallel-planners.md").write_text(ADR)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "adr")
     asked = _ask(repo, "accept_adr", "f7", "23")
     _apply(repo)
-    assert _request(repo, asked)[1] == "accepted docs/adr/23-parallel-planners.md"
+    assert _request(repo, asked)[1] == "accepted .factory/adr/23-parallel-planners.md"
 
 
 @pytest.mark.parametrize(
@@ -684,7 +696,7 @@ def test_accept_adr_of_an_adr_already_on_main_accepts_it(repo):
         ("approve_plan", "f9", None, "there is no plan/f9 to approve"),
         ("approve_plan", "../x", None, "a thread is a card's key or general, not '../x'"),
         ("accept_adr", "f7", "x", "an ADR is named by its number, not 'x'"),
-        ("accept_adr", "f7", "99", "ADR 99 not found in docs/adr/"),
+        ("accept_adr", "f7", "99", "ADR 99 not found in .factory/adr/"),
         ("send_back", "f7/nothing", _message("Hi."), "F7 has no proposal nothing"),
         ("send_back", "f7", _message("Hi."), "a proposal is <thread>/<id>, not 'f7'"),
     ],
@@ -701,7 +713,7 @@ def test_an_approval_the_runner_cant_apply_is_finished_with_why(repo, kind, subj
 @pytest.mark.parametrize("kind", ["approve_plan", "accept_adr"])
 def test_an_approval_waits_for_a_clean_main(repo, kind):
     _card(repo)
-    _plan(repo, {"docs/adr/23-parallel-planners.md": ADR})
+    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
     asked = _ask(repo, kind, "f7", "23")
     (repo / "coucou" / "thing.py").write_text("# the owner's edit\n")
     assert _apply(repo) == [f"{kind} f7: waits for a clean main: an approval commits on it"]
@@ -721,7 +733,7 @@ def _proposed(repo: Path) -> None:
             "id": "adr-23",
             "kind": "adr",
             "title": "Parallel planners",
-            "path": "docs/adr/23-parallel-planners.md",
+            "path": ".factory/adr/23-parallel-planners.md",
             "key_points": [
                 {"n": 1, "title": "Two at once", "text": "Beside developers.", "flag": False},
                 {"n": 2, "title": "One branch", "text": "Each card's own.", "flag": False},
@@ -773,7 +785,7 @@ MERGE = {
     "id": "merge-f12",
     "kind": "merge",
     "title": "One queue, said twice",
-    "path": "docs/milestones/f12-queue-once.md",
+    "path": ".factory/cards/f12-queue-once.md",
     "into": "f10",
     "key_points": [{"n": 1, "title": "Notes", "text": "F12's notes go to F10.", "flag": False}],
 }
@@ -782,7 +794,7 @@ MERGE = {
 def _duplicates(repo: Path, kept: str = KEPT, thread: str = "f12") -> str:
     """F10 and F12 on main, the lead's reply on ``thread`` proposing the merge, and F12's
     Needs-you item for that reply; main's head."""
-    docs = repo / "docs" / "milestones"
+    docs = repo / ".factory" / "cards"
     docs.mkdir(parents=True)
     (docs / "f10-one-queue.md").write_text(kept)
     (docs / "f12-queue-once.md").write_text(DUPLICATE)
@@ -807,7 +819,7 @@ def test_a_merge_proposal_changes_nothing_before_the_owner_approves(repo):
     head = _duplicates(repo)
     assert _apply(repo) == []
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / "docs" / "milestones" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert (repo / ".factory" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
     assert [m["text"] for m in _thread(repo, "f12")] == ["Same idea."]
 
 
@@ -819,7 +831,7 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
     assert _apply(repo) == [f"approve_plan f12: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
     # the notes, under F10's Notes with where they came from; a quoted line can't sign it off
-    doc = (repo / "docs" / "milestones" / "f10-one-queue.md").read_text()
+    doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
     moved = (
         "### From F12: queue once (merged by the owner on 2026-10-01)\n"
         "A single line.\n\\> **Status: done.**\n"
@@ -827,14 +839,14 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
     assert doc.startswith(kept.rstrip("\n")) and doc.endswith(moved)
     assert "\n## Notes\n" in doc and doc.count("## Notes") == 1
     assert milestone.card("f10-one-queue", doc).state == milestone.card("f10", kept).state
-    assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+    assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
     # one commit by the runner: the duplicate removed, the kept card changed
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F12 merged into F10 by the owner"
     changed = git(repo, "show", "--name-status", "--no-renames", "--format=", "HEAD").split("\n")
     assert sorted(filter(None, changed)) == [
-        "D\tdocs/milestones/f12-queue-once.md",
-        "M\tdocs/milestones/f10-one-queue.md",
+        "D\t.factory/cards/f12-queue-once.md",
+        "M\t.factory/cards/f10-one-queue.md",
     ]
     assert git(repo, "status", "--porcelain") == ""
     # F12's thread points to F10's, and its Needs-you item is answered
@@ -848,15 +860,15 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
 
 def test_a_merge_proposed_on_the_kept_cards_thread_with_its_plan_goes_in_one_commit(repo):
     head = _duplicates(repo, KEPT_PLANNED, thread="f10")
-    _plan(repo, {"tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
+    _plan(repo, {".factory/tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
     asked = _ask(repo, "approve_plan", "f10")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f10: queued f10-01-a; merged F12 into F10"
     assert git(repo, "rev-parse", "HEAD~1") == head
-    assert (repo / "tasks" / "ready" / "f10-01-a.md").is_file()
-    doc = (repo / "docs" / "milestones" / "f10-one-queue.md").read_text()
+    assert (repo / ".factory" / "tasks" / "ready" / "f10-01-a.md").is_file()
+    doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
     assert milestone.card("f10-one-queue", doc).state == "ready" and "From F12" in doc
-    assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+    assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
     assert "/planning/f10" in str(_thread(repo, "f12")[-1]["text"])  # a thread made for it
     # F31 D1: its plan and its merge, all the reply proposed, are settled: the thread closes
     assert _items(repo) == [(planner.PLANNING, "f10", None, False)]
@@ -870,7 +882,7 @@ def test_a_merge_proposed_on_the_general_thread_is_approved_there(repo):
     asked = _ask(repo, "approve_plan", "general")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved: merged F12 into F10"
-    assert not (repo / "docs" / "milestones" / "f12-queue-once.md").exists()
+    assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
 
 
 def _with(repo: Path, rel: str, text: str) -> None:
@@ -881,7 +893,7 @@ def _with(repo: Path, rel: str, text: str) -> None:
 
 
 def _kept_gone(repo: Path) -> None:
-    git(repo, "rm", "-q", "docs/milestones/f10-one-queue.md")
+    git(repo, "rm", "-q", ".factory/cards/f10-one-queue.md")
     git(repo, "commit", "-q", "-m", "gone")
 
 
@@ -889,12 +901,12 @@ def _kept_gone(repo: Path) -> None:
     ("before", "error"),
     [
         (
-            lambda repo: _with(repo, "tasks/later/f12-01-a.md", _ticket("f12-01-a")),
-            "F12 has tickets (tasks/later/f12-01-a.md): it can't be merged away",
+            lambda repo: _with(repo, ".factory/tasks/later/f12-01-a.md", _ticket("f12-01-a")),
+            "F12 has tickets (.factory/tasks/later/f12-01-a.md): it can't be merged away",
         ),
-        (_kept_gone, "F10 has no card in docs/milestones/: not merged"),
+        (_kept_gone, "F10 has no card in .factory/cards/: not merged"),
         (
-            lambda repo: _plan(repo, {"docs/milestones/f12-queue-once.md": KEPT}, card="f12"),
+            lambda repo: _plan(repo, {".factory/cards/f12-queue-once.md": KEPT}, card="f12"),
             "plan/f12 has drafts for F12, which merges into F10: send it back",
         ),
     ],
@@ -916,7 +928,7 @@ def test_approving_a_merge_whose_duplicate_is_gone_already_settles_it(repo):
     """F24, F45 and F47 (2026-10-08): merged once, their threads' Approve was refused as "has
     no card" at every press, and they stayed on Needs you."""
     _duplicates(repo)
-    git(repo, "rm", "-q", "docs/milestones/f12-queue-once.md")
+    git(repo, "rm", "-q", ".factory/cards/f12-queue-once.md")
     git(repo, "commit", "-q", "-m", "F12 merged into F10 by the owner")
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f12")
@@ -959,7 +971,7 @@ SEED_CARD = (
 def _seeded(repo: Path, card: str = SEED_CARD) -> str:
     """F11's card on main and on the board, a thread with a pending message and a reply the
     owner hasn't answered; main's head."""
-    docs = repo / "docs" / "milestones"
+    docs = repo / ".factory" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "f11-test.md").write_text(card)
     git(repo, "add", "-A")
@@ -988,13 +1000,13 @@ def _seeded_with_a_ticket(repo: Path) -> None:
 def test_dropping_a_seed_removes_its_card_in_one_commit_and_closes_its_thread(repo):
     head = _seeded(repo)
     asked = _ask(repo, "drop_seed", "f11")
-    assert _apply(repo) == ["drop_seed f11: removed docs/milestones/f11-test.md"]
-    assert _request(repo, asked) == (NOW.isoformat(), "removed docs/milestones/f11-test.md")
-    assert not (repo / "docs" / "milestones" / "f11-test.md").exists()
+    assert _apply(repo) == ["drop_seed f11: removed .factory/cards/f11-test.md"]
+    assert _request(repo, asked) == (NOW.isoformat(), "removed .factory/cards/f11-test.md")
+    assert not (repo / ".factory" / "cards" / "f11-test.md").exists()
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F11 removed by the owner"
     changed = git(repo, "show", "--name-status", "--format=", "HEAD").split("\n")
-    assert list(filter(None, changed)) == ["D\tdocs/milestones/f11-test.md"]
+    assert list(filter(None, changed)) == ["D\t.factory/cards/f11-test.md"]
     assert git(repo, "status", "--porcelain") == ""
     assert [(m["author"], m["text"]) for m in _thread(repo, "f11")][-1] == (
         "lead",
@@ -1014,13 +1026,13 @@ def test_dropping_a_seed_removes_its_card_in_one_commit_and_closes_its_thread(re
 
 
 def test_dropping_a_seed_with_no_thread_makes_none(repo):
-    (repo / "docs" / "milestones").mkdir(parents=True)
-    (repo / "docs" / "milestones" / "f11-test.md").write_text(SEED_CARD)
+    (repo / ".factory" / "cards").mkdir(parents=True)
+    (repo / ".factory" / "cards" / "f11-test.md").write_text(SEED_CARD)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "a seed")
     asked = _ask(repo, "drop_seed", "f11-test")
     _apply(repo)
-    assert _request(repo, asked)[1] == "removed docs/milestones/f11-test.md"
+    assert _request(repo, asked)[1] == "removed .factory/cards/f11-test.md"
     conn = metrics.open_db(_db(repo))
     try:
         assert conn.execute("SELECT count(*) FROM planner_threads").fetchone()[0] == 0
@@ -1039,9 +1051,9 @@ def test_dropping_a_seed_with_no_thread_makes_none(repo):
         (
             _seeded_with_a_ticket,
             "f11",
-            "F11 has tickets (tasks/later/f11-01-a.md): not removed",
+            "F11 has tickets (.factory/tasks/later/f11-01-a.md): not removed",
         ),
-        (_seeded, "f13", "F13 has no card in docs/milestones/: not removed"),
+        (_seeded, "f13", "F13 has no card in .factory/cards/: not removed"),
         (_seeded, "general", "the general thread is not a seed: not removed"),
         (_seeded, "../x", "a thread is a card's key or general, not '../x'"),
     ],
@@ -1056,7 +1068,7 @@ def test_a_drop_the_runner_cant_apply_is_refused_and_main_is_unchanged(
     assert _request(repo, asked) == (NOW.isoformat(), error)
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    assert (repo / "docs" / "milestones" / "f11-test.md").is_file()
+    assert (repo / ".factory" / "cards" / "f11-test.md").is_file()
     assert [m["text"] for m in _thread(repo, "f11")] == ["Noted."]
     assert all(done is None for *_, done in _queued(repo))
     assert _card_state(repo, "f11-test") == "idea"
@@ -1081,7 +1093,7 @@ def test_sending_a_merge_back_works_as_for_any_proposal(repo):
         "- On its key point 1 (Notes): Not the same.\n\nKeep F12."
     ]
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / "docs" / "milestones" / "f12-queue-once.md").is_file()
+    assert (repo / ".factory" / "cards" / "f12-queue-once.md").is_file()
 
 
 # --- `priority`: the owner reorders the work from the dashboard (f6-18) ------------------------
@@ -1091,14 +1103,14 @@ def _two_ready(repo: Path) -> str:
     """m1-01-a and m1-02-b ready, both at the default priority, each with its row; main's
     head."""
     for task_id in ("m1-01-a", "m1-02-b"):
-        write_task(repo / "tasks" / "ready", task_id)
+        write_task(repo / ".factory" / "tasks" / "ready", task_id)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "two ready")
     conn = metrics.open_db(_db(repo))
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
         for task_id in ("m1-01-a", "m1-02-b"):
-            text = (repo / "tasks" / "ready" / f"{task_id}.md").read_text()
+            text = (repo / ".factory" / "tasks" / "ready" / f"{task_id}.md").read_text()
             metrics.upsert_ticket(conn, project, task_id, state="ready", body=text)
     finally:
         conn.close()
@@ -1107,7 +1119,7 @@ def _two_ready(repo: Path) -> str:
 
 def _pick_order(repo: Path) -> list[str]:
     """The ready tickets in the order `dispatch.plan` runs them, as the run builds them."""
-    ready = load_dir(repo / "tasks" / "ready", 400)
+    ready = load_dir(repo / ".factory" / "tasks" / "ready", 400)
     tickets = loop._dispatch_tickets(repo, ready, set(), set(), {}, NOW)
     return [line.pick.subject for line in dispatch.plan([], tickets, dispatch.Windows(), NOW)]
 
@@ -1129,7 +1141,7 @@ def test_a_priority_request_sets_a_ready_tickets_priority_in_one_commit_and_the_
     asked = _ask(repo, "priority", "m1-02-b", "4")
     assert _apply(repo) == ["priority m1-02-b: priority of m1-02-b set to 4"]
     assert _request(repo, asked) == (NOW.isoformat(), "priority of m1-02-b set to 4")
-    path = repo / "tasks" / "ready" / "m1-02-b.md"
+    path = repo / ".factory" / "tasks" / "ready" / "m1-02-b.md"
     assert parse_task(path, 400).priority == 4
     assert path.read_text().count("priority:") == 1
     assert _pick_order(repo) == ["m1-02-b", "m1-01-a"]
@@ -1139,7 +1151,7 @@ def test_a_priority_request_sets_a_ready_tickets_priority_in_one_commit_and_the_
         "m1-02-b: priority 100 → 4, by the owner"
     )
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == ["tasks/ready/m1-02-b.md"]
+    assert changed == [".factory/tasks/ready/m1-02-b.md"]
     assert git(repo, "status", "--porcelain") == ""
     # the dashboard's row has the new text at once; the other ticket's is as it was
     assert "priority: 4" in str(_body(repo, "m1-02-b"))
@@ -1148,14 +1160,14 @@ def test_a_priority_request_sets_a_ready_tickets_priority_in_one_commit_and_the_
 
 
 def test_a_priority_request_replaces_a_set_aside_tickets_own_priority(repo):
-    (repo / "tasks" / "later").mkdir(parents=True)
+    (repo / ".factory" / "tasks" / "later").mkdir(parents=True)
     text = TICKET.format(id="f7-01-a", context="x").replace("depends_on", "priority: 7\ndepends_on")
-    (repo / "tasks" / "later" / "f7-01-a.md").write_text(text)
+    (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "set aside")
     _ask(repo, "priority", "f7-01-a", "2")
     assert _apply(repo) == ["priority f7-01-a: priority of f7-01-a set to 2"]
-    after = (repo / "tasks" / "later" / "f7-01-a.md").read_text()
+    after = (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").read_text()
     assert after == text.replace("priority: 7", "priority: 2")
     assert git(repo, "log", "-1", "--format=%s").strip() == "f7-01-a: priority 7 → 2, by the owner"
 
@@ -1175,13 +1187,13 @@ def test_a_priority_request_on_a_card_sets_its_headers_priority(repo):
     asked = _ask(repo, "priority", "f7", "1")
     assert _apply(repo) == ["priority f7: priority of F7 set to 1"]
     assert _request(repo, asked)[1] == "priority of F7 set to 1"
-    doc = (repo / "docs" / "milestones" / "f7-one-queue.md").read_text()
+    doc = (repo / ".factory" / "cards" / "f7-one-queue.md").read_text()
     assert doc == CARD.replace("**Priority:** 3", "**Priority:** 1")
     assert milestone.card("f7-one-queue", doc) == milestone.Card("planning", 1, "factory")
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7: priority 3 → 1, by the owner"
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == ["docs/milestones/f7-one-queue.md"]
+    assert changed == [".factory/cards/f7-one-queue.md"]
     assert git(repo, "status", "--porcelain") == ""
     assert _priority_of(repo, "f7-one-queue") == 1  # the board's row, at once
 
@@ -1198,7 +1210,7 @@ def test_a_card_without_a_priority_gets_one_in_its_header(repo, card, header):
     _seeded(repo, card)
     _ask(repo, "priority", "f11-test", "0")
     assert _apply(repo) == ["priority f11-test: priority of F11 set to 0"]
-    doc = (repo / "docs" / "milestones" / "f11-test.md").read_text()
+    doc = (repo / ".factory" / "cards" / "f11-test.md").read_text()
     assert header in doc and doc.endswith("## Notes\nA test.\n")
     assert milestone.card("f11-test", doc).priority == 0
     assert git(repo, "log", "-1", "--format=%s").strip() == "F11: priority 100 → 0, by the owner"
@@ -1206,7 +1218,7 @@ def test_a_card_without_a_priority_gets_one_in_its_header(repo, card, header):
 
 def _done_ticket(repo: Path) -> None:
     _two_ready(repo)
-    write_task(repo / "tasks" / "done", "m1-00-old")
+    write_task(repo / ".factory" / "tasks" / "done", "m1-00-old")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "done")
 
@@ -1219,15 +1231,25 @@ def _done_card(repo: Path) -> None:
 @pytest.mark.parametrize(
     ("before", "subject", "value", "error"),
     [
-        (_done_ticket, "m1-00-old", "1", "m1-00-old is in tasks/done/: its priority stays"),
+        (
+            _done_ticket,
+            "m1-00-old",
+            "1",
+            "m1-00-old is in .factory/tasks/done/: its priority stays",
+        ),
         (_two_ready, "m1-01-a", "1", "m1-01-a is running: its priority stays"),
         (_done_card, "f11", "1", "F11 is done: its priority stays"),
         (_two_ready, "m1-02-b", "-1", "a priority is a whole number from 0, not '-1'"),
         (_two_ready, "m1-02-b", "1.5", "a priority is a whole number from 0, not '1.5'"),
         (_two_ready, "m1-02-b", "x", "a priority is a whole number from 0, not 'x'"),
         (_two_ready, "m1-02-b", None, "a priority is a whole number from 0, not None"),
-        (_two_ready, "m1-02", "1", "m1-02 is no ticket in tasks/ready/ or tasks/later/"),
-        (_two_ready, "f13", "1", "F13 has no card in docs/milestones/: its priority stays"),
+        (
+            _two_ready,
+            "m1-02",
+            "1",
+            "m1-02 is no ticket in .factory/tasks/ready/ or .factory/tasks/later/",
+        ),
+        (_two_ready, "f13", "1", "F13 has no card in .factory/cards/: its priority stays"),
         (_two_ready, "general", "1", "the general thread has no priority"),
         (_two_ready, "../x", "1", "a thread is a card's key or general, not '../x'"),
         (_two_ready, None, "1", "a priority request names a ticket or a card"),
@@ -1268,9 +1290,9 @@ BUG = "bug-07-queue-order"
 def _board(repo: Path, cards: dict[str, object], bug: bool = False) -> str:
     """Each card on main with its priority and one ready ticket (or its state alone, for one
     not open), with a ready bug ticket when asked; main's head."""
-    docs = repo / "docs" / "milestones"
+    docs = repo / ".factory" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
-    ready = repo / "tasks" / "ready"
+    ready = repo / ".factory" / "tasks" / "ready"
     ready.mkdir(parents=True, exist_ok=True)
     for key, priority in cards.items():
         header = f"**State:** ready · **Priority:** {priority}"
@@ -1291,7 +1313,7 @@ def _board(repo: Path, cards: dict[str, object], bug: bool = False) -> str:
 
 
 def _card_priorities(repo: Path) -> dict[str, int]:
-    docs = sorted((repo / "docs" / "milestones").glob("*-card.md"))
+    docs = sorted((repo / ".factory" / "cards").glob("*-card.md"))
     return {p.stem.split("-")[0]: milestone.card(p.stem, p.read_text()).priority for p in docs}
 
 
@@ -1310,7 +1332,7 @@ def test_a_reorder_sets_the_cards_priorities_in_one_commit_and_the_pick_follows(
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "the board's order, by the owner"
     assert git(repo, "log", "-1", "--format=%an").strip() == "Coucou runner"
-    assert _changed(repo) == ["docs/milestones/f8-card.md"]
+    assert _changed(repo) == [".factory/cards/f8-card.md"]
     assert _card_priorities(repo) == {"f7": 100, "f8": 0, "f9": 2}
     assert git(repo, "status", "--porcelain") == ""
     assert _priority_of(repo, "f8-card") == 0  # the board's row, at once
@@ -1328,21 +1350,21 @@ def test_a_reorder_to_the_order_the_cards_have_changes_nothing(repo):
 
 def test_a_reorder_sets_a_bug_tickets_priority_and_leaves_a_milestone_tickets_own(repo):
     _board(repo, {"f7": 3, "f8": 5}, bug=True)
-    own = repo / "tasks" / "ready" / "f8-01-a.md"
+    own = repo / ".factory" / "tasks" / "ready" / "f8-01-a.md"
     own.write_text(own.read_text().replace("depends_on", "priority: 1\ndepends_on"))
     git(repo, "commit", "-q", "-am", "its own priority")
     conn = metrics.open_db(_db(repo))
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
-        text = (repo / "tasks" / "ready" / f"{BUG}.md").read_text()
+        text = (repo / ".factory" / "tasks" / "ready" / f"{BUG}.md").read_text()
         metrics.upsert_ticket(conn, project, BUG, state="ready", body=text)
     finally:
         conn.close()
     assert _pick_order(repo) == ["f8-01-a", "f7-01-a", BUG]
     _ask(repo, "reorder", None, json.dumps([BUG, "f7", "f8"]))
     assert _apply(repo) == ["reorder: reordered: 1 card changed"]
-    assert _changed(repo) == [f"tasks/ready/{BUG}.md"]
-    assert parse_task(repo / "tasks" / "ready" / f"{BUG}.md", 400).priority == 0
+    assert _changed(repo) == [f".factory/tasks/ready/{BUG}.md"]
+    assert parse_task(repo / ".factory" / "tasks" / "ready" / f"{BUG}.md", 400).priority == 0
     assert "priority: 0" in str(_body(repo, BUG))  # the dashboard's row, at once
     # the ticket's own priority is as it was, and still wins over its card's
     assert parse_task(own, 400).priority == 1
@@ -1351,13 +1373,13 @@ def test_a_reorder_sets_a_bug_tickets_priority_and_leaves_a_milestone_tickets_ow
 
 def test_a_reorder_puts_an_unlisted_card_last_and_names_what_it_skipped(repo):
     _board(repo, {"f7": 100, "f8": 100, "f9": 2, "f11": "done"})
-    done = (repo / "docs" / "milestones" / "f11-card.md").read_text()
+    done = (repo / ".factory" / "cards" / "f11-card.md").read_text()
     value = json.dumps(["f8", "f11", "general", "f13", "../x", "f7"])
     _ask(repo, "reorder", None, value)
     result = "reordered: 2 cards changed, skipped F11, general, F13, ../x"
     assert _apply(repo) == [f"reorder: {result}"]
     assert _pick_order(repo) == ["f8-01-a", "f7-01-a", "f9-01-a"]
-    assert (repo / "docs" / "milestones" / "f11-card.md").read_text() == done
+    assert (repo / ".factory" / "cards" / "f11-card.md").read_text() == done
     assert len(_changed(repo)) == 2
     assert git(repo, "status", "--porcelain") == ""
 
@@ -1466,7 +1488,7 @@ def test_a_pause_request_holds_the_runner_until_a_resume_request(repo):
 
 def test_a_pause_outlives_the_state_files_reload(repo):
     """A restart reads state.json again: the pause is in it, so the runner stays paused."""
-    path = repo / "var" / "runs" / "state.json"
+    path = repo / ".factory" / "var" / "runs" / "state.json"
     state = load_state(path)
     _ask(repo, "pause")
     _apply(repo, state)
@@ -1527,7 +1549,7 @@ def test_a_refused_plant_is_dismissed_once_and_keeps_its_words(repo):
     [
         # worked: nothing to dismiss
         ("plan_message", "f7", _message("Go."), "queued for the lead", "wasn't refused"),
-        ("plant", None, BAD_AREA, "planted docs/milestones/f12-ducks.md", "wasn't refused"),
+        ("plant", None, BAD_AREA, "planted .factory/cards/f12-ducks.md", "wasn't refused"),
         # not done yet
         ("plant", None, BAD_AREA, None, "wasn't refused"),
         # refused, but no words of the owner's: they show elsewhere
@@ -1607,8 +1629,8 @@ def test_the_owners_words_a_request_carries(kind, subject, value, words):
     ("kind", "done", "result", "dismissed", "refused"),
     [
         ("plant", True, "an idea's area is factory or product, not 'garden'", None, True),
-        ("plant", True, "planted docs/milestones/f12-ducks.md", None, False),
-        ("plant", True, "planted docs/milestones/f12-ducks.md, queued for the lead", None, False),
+        ("plant", True, "planted .factory/cards/f12-ducks.md", None, False),
+        ("plant", True, "planted .factory/cards/f12-ducks.md, queued for the lead", None, False),
         ("plant", None, None, None, False),
         ("plant", True, "ducks is a card already: f3-ducks", NOW.isoformat(), False),
         ("plant", True, "cancelled by you", None, False),  # F14: their own cancel, no refusal
@@ -1643,9 +1665,9 @@ SAME_DUCKS = "Yellow  ones.\n\nFor Mum.\n> not a sign-off"  # as the owner typed
 
 def _ducks(repo: Path) -> str:
     """F3's card on main, planned since its note was planted; main's head."""
-    (repo / "docs" / "milestones").mkdir(parents=True)
-    (repo / "docs" / "milestones" / "f3-rubber-ducks.md").write_text(DUCKS_CARD)
-    git(repo, "add", "docs")
+    (repo / ".factory" / "cards").mkdir(parents=True)
+    (repo / ".factory" / "cards" / "f3-rubber-ducks.md").write_text(DUCKS_CARD)
+    git(repo, "add", ".factory")
     git(repo, "commit", "-q", "-m", "f3")
     return git(repo, "rev-parse", "HEAD")
 
@@ -1660,12 +1682,12 @@ def test_a_note_whose_slug_a_card_has_with_other_words_plants_a_second_card(repo
     second = _ask(repo, "plant", None, _idea("Rubber ducks", "Blue ones this time."))
     third = _ask(repo, "plant", None, _idea("Rubber ducks", "And a red one?", ask=True))
     _apply(repo)
-    assert _request(repo, second)[1] == "planted docs/milestones/f4-rubber-ducks-2.md"
+    assert _request(repo, second)[1] == "planted .factory/cards/f4-rubber-ducks-2.md"
     assert _request(repo, third)[1] == (
-        "planted docs/milestones/f5-rubber-ducks-3.md, queued for the lead"
+        "planted .factory/cards/f5-rubber-ducks-3.md, queued for the lead"
     )
     assert not requests.refused(_row(repo, second)) and not requests.refused(_row(repo, third))
-    milestones = repo / "docs" / "milestones"
+    milestones = repo / ".factory" / "cards"
     assert (milestones / "f3-rubber-ducks.md").read_text() == DUCKS_CARD  # the taken card stays
     assert (
         (milestones / "f4-rubber-ducks-2.md")
@@ -1693,12 +1715,12 @@ def test_the_same_words_again_are_planted_already_and_write_nothing(repo, value,
     _apply(repo)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "plant", None, value)
-    assert _apply(repo) == [f"plant: planted already: docs/milestones/{stem}.md"]
-    assert _request(repo, asked) == (NOW.isoformat(), f"planted already: docs/milestones/{stem}.md")
+    assert _apply(repo) == [f"plant: planted already: .factory/cards/{stem}.md"]
+    assert _request(repo, asked) == (NOW.isoformat(), f"planted already: .factory/cards/{stem}.md")
     assert not requests.refused(_row(repo, asked))
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    assert sorted(p.name for p in (repo / "docs" / "milestones").glob("*.md")) == [
+    assert sorted(p.name for p in (repo / ".factory" / "cards").glob("*.md")) == [
         "f3-rubber-ducks.md",
         "f4-rubber-ducks-2.md",
     ]
@@ -1730,7 +1752,7 @@ def test_the_runner_reads_nothing_from_again(repo):
     planted = _ask(repo, "plant", None, _idea("Parallel planners", again="7"))
     said = _ask(repo, "plan_message", "f3", json.dumps({"text": "Go.", "again": "8"}))
     _apply(repo)
-    assert _request(repo, planted)[1] == "planted docs/milestones/f4-parallel-planners.md"
+    assert _request(repo, planted)[1] == "planted .factory/cards/f4-parallel-planners.md"
     assert _request(repo, said)[1] == "queued for the lead"
     assert [m["text"] for m in _thread(repo, "f3")] == ["Go."]
 
@@ -1752,12 +1774,12 @@ LATER_ON = NOW + timedelta(minutes=30)
 def _running(repo: Path, kind: str = "replan") -> str:
     """F7 building on main with f7-01-a and f7-02-b ready, and f5-01-x of another milestone;
     the lead's reply on F7 proposing a ``kind``; main's head."""
-    docs = repo / "docs" / "milestones"
+    docs = repo / ".factory" / "cards"
     docs.mkdir(parents=True)
     (docs / "f7-one-queue.md").write_text(BUILDING)
-    (repo / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
+    (repo / ".factory" / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
     for task_id in ("f7-01-a", "f7-02-b", "f5-01-x"):
-        (repo / "tasks" / "ready" / f"{task_id}.md").write_text(_ticket(task_id))
+        (repo / ".factory" / "tasks" / "ready" / f"{task_id}.md").write_text(_ticket(task_id))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "F7 running")
     conn = metrics.open_db(_db(repo))
@@ -1781,7 +1803,9 @@ def _paused(repo: Path) -> State:
 
 
 def _ready(repo: Path) -> dict[str, str]:
-    return {p.stem: p.read_text() for p in sorted((repo / "tasks" / "ready").glob("*.md"))}
+    return {
+        p.stem: p.read_text() for p in sorted((repo / ".factory" / "tasks" / "ready").glob("*.md"))
+    }
 
 
 def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_pause(repo):
@@ -1789,9 +1813,9 @@ def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_paus
     _plan(
         repo,
         {
-            "tasks/ready/f7-01-a.md": LESS,
-            "tasks/ready/f7-04-d.md": _ticket("f7-04-d"),
-            "tasks/later/f7-03-c.md": _ticket("f7-03-c"),
+            ".factory/tasks/ready/f7-01-a.md": LESS,
+            ".factory/tasks/ready/f7-04-d.md": _ticket("f7-04-d"),
+            ".factory/tasks/later/f7-03-c.md": _ticket("f7-03-c"),
         },
     )
     state = _paused(repo)
@@ -1803,7 +1827,7 @@ def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_paus
     assert sorted(ready) == ["f5-01-x", "f7-01-a", "f7-02-b", "f7-03-c", "f7-04-d"]
     assert ready["f7-01-a"] == LESS
     # the card keeps building: a replan redirects it, it doesn't start it again
-    doc = (repo / "docs" / "milestones" / "f7-one-queue.md").read_text()
+    doc = (repo / ".factory" / "cards" / "f7-one-queue.md").read_text()
     assert milestone.card("f7-one-queue", doc).state == "building"
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
@@ -1816,7 +1840,7 @@ def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_paus
 
 def test_a_replan_approved_without_a_pause_still_applies(repo):
     _running(repo)
-    _plan(repo, {"tasks/ready/f7-01-a.md": LESS})
+    _plan(repo, {".factory/tasks/ready/f7-01-a.md": LESS})
     state = State()
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo, state)
@@ -1827,12 +1851,16 @@ def test_a_replan_approved_without_a_pause_still_applies(repo):
 
 def test_a_replan_sets_a_ready_ticket_aside_in_later(repo):
     _running(repo)
-    _plan(repo, {"tasks/later/f7-02-b.md": _ticket("f7-02-b")}, gone=("tasks/ready/f7-02-b.md",))
+    _plan(
+        repo,
+        {".factory/tasks/later/f7-02-b.md": _ticket("f7-02-b")},
+        gone=(".factory/tasks/ready/f7-02-b.md",),
+    )
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; set aside f7-02-b"
     assert sorted(_ready(repo)) == ["f5-01-x", "f7-01-a"]
-    assert (repo / "tasks" / "later" / "f7-02-b.md").is_file()
+    assert (repo / ".factory" / "tasks" / "later" / "f7-02-b.md").is_file()
 
 
 def _replan_refused(repo: Path, head: str, state: State, asked: int) -> str:
@@ -1850,42 +1878,44 @@ def _replan_refused(repo: Path, head: str, state: State, asked: int) -> str:
     ("files", "gone", "kind", "error"),
     [
         (
-            {"tasks/ready/f5-01-x.md": LESS},
+            {".factory/tasks/ready/f5-01-x.md": LESS},
             (),
             "replan",
-            "plan/f7 changes tasks/ready/f5-01-x.md, another milestone's ticket: not approved",
+            "plan/f7 changes .factory/tasks/ready/f5-01-x.md, another milestone's ticket:"
+            " not approved",
         ),
         (
-            {"tasks/ready/f7-01-a.md": LESS},
+            {".factory/tasks/ready/f7-01-a.md": LESS},
             (),
             "replan",
-            "plan/f7 changes tasks/ready/f7-01-a.md, the running ticket: not approved",
+            "plan/f7 changes .factory/tasks/ready/f7-01-a.md, the running ticket: not approved",
         ),
         (
-            {"tasks/later/f7-01-a.md": _ticket("f7-01-a")},
-            ("tasks/ready/f7-01-a.md",),
+            {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a")},
+            (".factory/tasks/ready/f7-01-a.md",),
             "replan",
-            "plan/f7 changes tasks/ready/f7-01-a.md, the running ticket: not approved",
+            "plan/f7 changes .factory/tasks/ready/f7-01-a.md, the running ticket: not approved",
         ),
         (
             {},
-            ("tasks/ready/f7-02-b.md",),
+            (".factory/tasks/ready/f7-02-b.md",),
             "replan",
-            "plan/f7 changes tasks/ready/f7-02-b.md,"
-            " a ready ticket removed, not set aside in tasks/later/: not approved",
+            "plan/f7 changes .factory/tasks/ready/f7-02-b.md,"
+            " a ready ticket removed, not set aside in .factory/tasks/later/: not approved",
         ),
         (
-            {"tasks/ready/f7-02-b.md": LESS},
+            {".factory/tasks/ready/f7-02-b.md": LESS},
             (),
             "plan",
-            "plan/f7 changes tasks/ready/f7-02-b.md,"
+            "plan/f7 changes .factory/tasks/ready/f7-02-b.md,"
             " a ready ticket only a replan changes: not approved",
         ),
         (
-            {"tasks/done/f7-00-z.md": LESS},
+            {".factory/tasks/done/f7-00-z.md": LESS},
             (),
             "replan",
-            "plan/f7 changes tasks/done/f7-00-z.md, outside docs/ and tasks/later/: not approved",
+            "plan/f7 changes .factory/tasks/done/f7-00-z.md, outside docs/, .factory/cards/,"
+            " .factory/adr/ and .factory/tasks/later/: not approved",
         ),
     ],
 )
@@ -1906,8 +1936,8 @@ def test_a_changed_ticket_failing_pre_flight_refuses_the_replan(repo):
     _plan(
         repo,
         {
-            "tasks/ready/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
-            "tasks/later/f7-03-c.md": _ticket("f7-03-c"),
+            ".factory/tasks/ready/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
+            ".factory/tasks/later/f7-03-c.md": _ticket("f7-03-c"),
         },
     )
     state = _paused(repo)
@@ -1916,7 +1946,7 @@ def test_a_changed_ticket_failing_pre_flight_refuses_the_replan(repo):
     assert _replan_refused(repo, head, state, asked) == (
         "not approved: f7-01-a: referenced path does not exist: conftest.py"
     )
-    assert not (repo / "tasks" / "later" / "f7-03-c.md").exists()
+    assert not (repo / ".factory" / "tasks" / "later" / "f7-03-c.md").exists()
 
 
 # --- `runner reserve` and `runner run --use-reserve` (ADR 22 item 4, f8 D4) ------------------
@@ -1928,14 +1958,14 @@ def at_now(monkeypatch):
 
 
 def _switches(repo: Path) -> dict[str, str]:
-    return load_state(repo / "var" / "runs" / "state.json").switches
+    return load_state(repo / ".factory" / "var" / "runs" / "state.json").switches
 
 
 def test_runner_reserve_records_the_same_as_the_request(in_repo, at_now, capsys):  # noqa: F811
     _ask(in_repo, "reserve", "week", "on")
     assert cli.main(["accept", "99"]) == 1  # any command applies the dashboard's request
     by_request = _switches(in_repo)
-    (in_repo / "var" / "runs" / "state.json").unlink()
+    (in_repo / ".factory" / "var" / "runs" / "state.json").unlink()
     assert cli.main(["reserve", "week", "on"]) == 0
     assert _switches(in_repo) == by_request == {"week": NOW.isoformat()}
     assert "on until Fri 12:00" in capsys.readouterr().out
@@ -1992,7 +2022,7 @@ def test_use_reserve_turns_the_switches_on_for_24_hours(
 
 def test_a_restart_doesnt_turn_the_switches_on_again(in_repo, at_now, monkeypatch):  # noqa: F811
     """A restart runs the same arguments: `--use-reserve` keeps its first 24 hours."""
-    state_path = in_repo / "var" / "runs" / "state.json"
+    state_path = in_repo / ".factory" / "var" / "runs" / "state.json"
     save_state(State(switches={"week": (NOW - timedelta(hours=10)).isoformat()}), state_path)
     monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: None)
     monkeypatch.setenv(cli.RESTARTED_ENV, "1")
@@ -2008,8 +2038,8 @@ def test_a_request_made_while_nothing_runs_is_applied_by_the_next_command(in_rep
     _later(in_repo, "m4-12-a", "m4-13-b")
     asked = _ask(in_repo, "queue", "m4-12-a")
     assert cli.main(["queue", "m4-13"]) == 0
-    assert (in_repo / "tasks" / "ready" / "m4-12-a.md").is_file()
-    assert (in_repo / "tasks" / "ready" / "m4-13-b.md").is_file()
+    assert (in_repo / ".factory" / "tasks" / "ready" / "m4-12-a.md").is_file()
+    assert (in_repo / ".factory" / "tasks" / "ready" / "m4-13-b.md").is_file()
     subjects = git(in_repo, "log", "-2", "--format=%s").splitlines()
     assert subjects == ["queue m4-13-b (by the owner)", "queue m4-12-a (by the owner)"]
     assert _request(in_repo, asked)[1] == "queued m4-12-a"
@@ -2026,7 +2056,7 @@ def test_a_live_run_applies_its_own_requests_not_another_command(in_repo):  # no
     conn.close()
     assert cli.main(["accept", "99"]) == 1  # any command; this one changes nothing
     assert _request(in_repo, asked) == (None, None)
-    assert (in_repo / "tasks" / "later" / "m4-12-a.md").is_file()
+    assert (in_repo / ".factory" / "tasks" / "later" / "m4-12-a.md").is_file()
 
 
 def test_a_live_bench_doesnt_hold_the_requests_back(in_repo):  # noqa: F811
@@ -2041,7 +2071,7 @@ def test_a_live_bench_doesnt_hold_the_requests_back(in_repo):  # noqa: F811
     )
     conn.close()
     cli.main(["accept", "99"])
-    assert (in_repo / "tasks" / "ready" / "m4-12-a.md").is_file()
+    assert (in_repo / ".factory" / "tasks" / "ready" / "m4-12-a.md").is_file()
     assert _request(in_repo, asked)[1] == "queued m4-12-a"
 
 
@@ -2060,7 +2090,7 @@ ADR_30: dict[str, Any] = {
     "id": "adr-30",
     "kind": "adr",
     "title": "One queue",
-    "path": "docs/adr/30-one-queue.md",
+    "path": ".factory/adr/30-one-queue.md",
 }
 PLAN_F7: dict[str, Any] = {"id": "plan-f7", "kind": "plan", "title": "F7 plan", "path": None}
 REPLAN_F7: dict[str, Any] = {
@@ -2104,7 +2134,10 @@ def test_rejecting_a_plan_drops_its_drafts_and_an_unbuilt_card(repo):
     _card(repo)
     _plan(
         repo,
-        {"docs/adr/30-one-queue.md": "# ADR 30\n", "tasks/later/f7-01-a.md": _ticket("f7-01-a")},
+        {
+            ".factory/adr/30-one-queue.md": "# ADR 30\n",
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+        },
     )
     _reply(repo, "f7", ADR_30, PLAN_F7)
     head = git(repo, "rev-parse", "HEAD")
@@ -2113,7 +2146,7 @@ def test_rejecting_a_plan_drops_its_drafts_and_an_unbuilt_card(repo):
     result = _request(repo, asked)[1]
     assert result == "rejected the drafts on plan/f7 (adr-30, plan-f7); F7 removed"
     assert git(repo, "branch", "--list", "plan/f7") == ""
-    assert not (repo / "docs" / "milestones" / "f7-one-queue.md").exists()
+    assert not (repo / ".factory" / "cards" / "f7-one-queue.md").exists()
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 rejected by the owner"
     assert git(repo, "status", "--porcelain") == ""
@@ -2124,12 +2157,12 @@ def test_rejecting_a_plan_drops_its_drafts_and_an_unbuilt_card(repo):
 
 def test_rejecting_a_replan_keeps_a_building_card_and_its_tickets(repo):
     _card(repo)
-    doc = repo / "docs" / "milestones" / "f7-one-queue.md"
+    doc = repo / ".factory" / "cards" / "f7-one-queue.md"
     doc.write_text(CARD.replace("planning", "building"))
-    write_task(repo / "tasks" / "ready", "f7-01-a")
+    write_task(repo / ".factory" / "tasks" / "ready", "f7-01-a")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "building")
-    _plan(repo, {"tasks/ready/f7-01-a.md": "changed\n"})
+    _plan(repo, {".factory/tasks/ready/f7-01-a.md": "changed\n"})
     _reply(repo, "f7", REPLAN_F7)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "reject", "f7/replan-f7")
@@ -2137,7 +2170,7 @@ def test_rejecting_a_replan_keeps_a_building_card_and_its_tickets(repo):
     assert _request(repo, asked)[1] == "rejected the drafts on plan/f7 (replan-f7)"
     assert git(repo, "branch", "--list", "plan/f7") == ""
     assert git(repo, "rev-parse", "HEAD") == head  # nothing committed
-    assert doc.is_file() and (repo / "tasks" / "ready" / "f7-01-a.md").is_file()
+    assert doc.is_file() and (repo / ".factory" / "tasks" / "ready" / "f7-01-a.md").is_file()
     assert _why(repo, "f7") == "rejected"
 
 
@@ -2147,7 +2180,7 @@ def test_rejecting_a_merge_commits_nothing_and_settles_it(repo):
     _apply(repo)
     assert _request(repo, asked)[1] == "rejected merge-f12"
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / "docs" / "milestones" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert (repo / ".factory" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
     assert _why(repo, "f12") == "rejected"
 
 
@@ -2210,17 +2243,17 @@ def test_approving_a_plan_leaves_a_rejected_merge_alone(repo):
     _apply(repo)
     assert _request(repo, asked)[1] == "there is no plan/f12 to approve"
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / "docs" / "milestones" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert (repo / ".factory" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
 
 
 def test_approving_a_plan_still_applies_the_merges_not_rejected(repo):
     """The general thread lists two merges: the rejected one stays, the other is applied."""
     _duplicates(repo, thread="general")
-    docs = repo / "docs" / "milestones"
+    docs = repo / ".factory" / "cards"
     (docs / "f13-queue-twice.md").write_text(DUPLICATE.replace("F12: queue once", "F13: twice"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "f13")
-    other = {**MERGE, "id": "merge-f13", "path": "docs/milestones/f13-queue-twice.md"}
+    other = {**MERGE, "id": "merge-f13", "path": ".factory/cards/f13-queue-twice.md"}
     _reply(repo, "general", MERGE, other)
     _ask(repo, "reject", "general/merge-f12")
     asked = _ask(repo, "approve_plan", "general")
@@ -2257,7 +2290,7 @@ def test_after_a_merge_the_lead_carries_on_on_the_kept_card(repo):
 def test_a_merge_proposed_on_the_kept_cards_thread_queues_nothing_more(repo):
     """f49-03: the lead is already on the kept card, with the plan the owner approved."""
     _duplicates(repo, KEPT_PLANNED, thread="f10")
-    _plan(repo, {"tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
+    _plan(repo, {".factory/tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
     _ask(repo, "approve_plan", "f10")
     _apply(repo)
     assert _queued(repo) == [] and _owner_said(repo, "f10") == []
@@ -2298,7 +2331,7 @@ def test_a_message_on_a_key_merged_into_two_cards_or_planted_again_stays_there(r
     """Before f109-02 a key was reused (F64, F73, F107): with two kept cards the runner can't
     tell which the owner means, and a key with a card again is that card's thread."""
     _merged_away(repo)
-    docs = repo / "docs" / "milestones"
+    docs = repo / ".factory" / "cards"
     other = planner.merged_card(
         KEPT.replace("F10", "F11"), "x", "From F12: y (merged by the lead on 2026-10-02)"
     )
@@ -2342,7 +2375,7 @@ CANCEL = json.dumps({"cancel": True})
 
 
 def _cards(repo: Path) -> list[str]:
-    return sorted(p.name for p in (repo / "docs" / "milestones").glob("*.md"))
+    return sorted(p.name for p in (repo / ".factory" / "cards").glob("*.md"))
 
 
 def test_cancelling_a_waiting_plant_makes_no_card_no_commit_and_no_planner_row(repo):
@@ -2392,12 +2425,12 @@ def test_an_edited_plant_is_planted_with_the_new_words_in_the_same_pick(
     _ducks(repo)
     plant = _ask(repo, "plant", None, before)
     change = _ask(repo, "change", str(plant), json.dumps(after))
-    planted = f"planted docs/milestones/{stem}.md, queued for the lead"
+    planted = f"planted .factory/cards/{stem}.md, queued for the lead"
     assert _apply(repo) == [f"change {plant}: changed", f"plant: {planted}"]
     assert _request(repo, change) == (NOW.isoformat(), "changed")
     assert _request(repo, plant) == (NOW.isoformat(), planted)
     assert _cards(repo) == ["f3-rubber-ducks.md", f"{stem}.md"]
-    doc = (repo / "docs" / "milestones" / f"{stem}.md").read_text()
+    doc = (repo / ".factory" / "cards" / f"{stem}.md").read_text()
     assert "Blue" not in doc and "bath" not in doc
     assert [m["text"] for m in _thread(repo, "f4")] == [said]
     assert json.loads(_row(repo, plant)["value"])["ask"] is True
@@ -2524,7 +2557,7 @@ def test_a_change_with_a_bad_value_says_why_and_the_plant_goes_as_it_was(repo, v
     lines = _apply(repo)
     done, said = _request(repo, asked)
     assert done == NOW.isoformat() and said not in (None, "", "changed", "cancelled")
-    assert lines == [f"change {plant}: {said}", "plant: planted docs/milestones/f4-blue-ducks.md"]
+    assert lines == [f"change {plant}: {said}", "plant: planted .factory/cards/f4-blue-ducks.md"]
     assert _row(repo, plant)["value"] == words
 
 
@@ -2549,7 +2582,7 @@ def test_two_edits_apply_oldest_first_and_the_last_wins(repo):
     assert _apply(repo) == [
         f"change {plant}: changed",
         f"change {plant}: changed",
-        "plant: planted docs/milestones/f4-green-ducks.md",
+        "plant: planted .factory/cards/f4-green-ducks.md",
     ]
     assert _cards(repo) == ["f3-rubber-ducks.md", "f4-green-ducks.md"]
 
