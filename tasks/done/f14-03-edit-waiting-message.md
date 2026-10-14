@@ -37,3 +37,9 @@ attempts: 3
 tokens: 11350598
 logs: var/runs/20261014-005521/f14-03-edit-waiting-message
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
