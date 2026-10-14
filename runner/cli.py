@@ -150,6 +150,7 @@ Projects
   softfield init                 set up this folder as a project, then Claude finishes with you
   softfield doctor               what a project still needs; passing hands it to the runner
   softfield accept N | reject N  an ADR, in its project's folder
+  softfield forget <name>        take a project off the list (its folder stays)
   softfield signoff <key>        sign a milestone off, in its project's folder
 Always on
   softfield service install      systemd units for the runner and the dashboard
@@ -185,6 +186,26 @@ def _guide() -> int:
     return 0
 
 
+def _forget(name: str, db: Path, *, ask: bool) -> int:
+    """`softfield forget <name>`: off the Projects page and the runner's list. Its folder stays
+    (delete it yourself); its history stays in the database, so past numbers still add up."""
+    conn = metrics.open_db(db)
+    try:
+        row = next((p for p in metrics.projects_in_order(conn) if p.name == name), None)
+        if row is None:
+            print(f"softfield: no project {name}")
+            return 1
+        if ask:
+            answer = input(f"Forget {name} ({row.repo})? Its folder stays. [y/N] ")
+            if answer.strip().lower() not in ("y", "yes"):
+                return 1
+        metrics.set_project_paused(conn, name, metrics.FORGOTTEN)
+    finally:
+        conn.close()
+    print(f"{name}: forgotten. Its folder stays: {row.repo}")
+    return 0
+
+
 def _machine_command(args: argparse.Namespace) -> int:
     """The commands that need no project: `init` makes one, `service` serves them all, and
     `dashboard` outside a project opens on the first in the owner's order (ADR 30)."""
@@ -202,8 +223,11 @@ def _machine_command(args: argparse.Namespace) -> int:
         if args.no_claude:
             print(f"Next: open Claude here and follow {setup.bootstrap()}.")
             return 0
+        print("\n" + setup.NEXT + "\n")
         command = setup.claude_command(folder, origin)
         os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
+    if args.command == "forget":
+        return _forget(args.name, db, ask=not args.yes)
     if args.command == "dashboard" and args.action == "update":
         source = loop.softfield_repo()
         if source is None:
@@ -470,6 +494,11 @@ def main(argv: list[str] | None = None) -> int:
     init.add_argument("--no-claude", action="store_true", help="write the files only")
     doctor = sub.add_parser("doctor", help="whether this project is ready for the web (ADR 30)")
     doctor.add_argument("--quick", action="store_true", help="skip running check-all")
+    forget = sub.add_parser(
+        "forget", help="take a project off the Projects page and the runner's list (not its folder)"
+    )
+    forget.add_argument("name")
+    forget.add_argument("--yes", action="store_true", help="don't ask to confirm")
     service = sub.add_parser("service", help="the runner and the dashboard as systemd services")
     service.add_argument("action", choices=("install",))
     args = parser.parse_args(argv)
@@ -480,7 +509,7 @@ def main(argv: list[str] | None = None) -> int:
         return _guide()
     if args.command == "run" and not (getattr(args, "here", False) or getattr(args, "once", False)):
         return _run_projects(args, restarted)
-    if args.command in ("init", "service") or (
+    if args.command in ("init", "service", "forget") or (
         args.command == "dashboard" and (args.action == "update" or _here() is None)
     ):
         return _machine_command(args)
@@ -649,6 +678,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "dashboard":
             return _serve_dashboard(args, args.db or cfg.metrics_db, project_name(repo))
         elif args.command == "doctor":
+            print(f"Checking {project_name(repo)} ({repo})")
             adr = setup.proposed_adr_00(repo)
             if adr is not None and sys.stdin.isatty():  # its review is the setup's last step
                 print(f"ADR 00 waits for you: {adr.relative_to(repo)}")
@@ -666,7 +696,7 @@ def main(argv: list[str] | None = None) -> int:
                 host = "127.0.0.1"
             if setup.ready(project_name(repo), cfg.metrics_db):
                 print("The runner takes it from its next round.")
-            print(f"Ready: http://{host}:8765/planning?project={project_name(repo)}")
+            print(setup.hand_over(project_name(repo), setup.first_card(repo), host))
         elif args.command == "check-tickets":
             given = args.tickets or sorted(
                 p.relative_to(repo).as_posix()

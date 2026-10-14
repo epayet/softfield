@@ -16,6 +16,7 @@ Why it looks like this: [ADR 30](.factory/adr/30-many-projects-one-factory.md).
 | Stop it | **Ctrl-C**. Idle, it writes each project's report; mid-job, it stops at once and the next start recovers the job |
 | Stop it gently | **Pause after this job** on the dashboard, then **Resume** |
 | Open the dashboard | `softfield dashboard --lan`, then the address it prints, on the phone too (it opens on `/projects`) |
+| Remove a project | `softfield forget <name>`: off the Projects page and the runner's list; its folder stays |
 | Put a project first | The Projects page: change the numbers, **Send new order**; the runner takes it at its next pick |
 | Plan, steer, sign off | Each project's Planning desk and Board, from the Projects page |
 

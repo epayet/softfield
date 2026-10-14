@@ -139,13 +139,30 @@ def bootstrap() -> Path:
     return config.HOME / "docs" / "bootstrap.md"
 
 
+NEXT = """What happens now: Claude asks for your idea and how to build it, keeps your words as
+the project's seed, drafts ADR 00 (the starting decisions) for your yes, and puts the first
+piece of work on a card. It doesn't build the idea: the factory does, from the card, and you
+plan and follow it on the dashboard. Claude ends by saying where."""
+
+
 def claude_command(folder: Path, origin: str) -> list[str]:
-    """The interactive Claude session that sets the project up with the owner."""
-    prompt = (
-        f"Set this {origin} project up for Softfield: read {bootstrap()} and follow it, "
-        f"starting with the {'idea' if origin == 'new' else 'repo'}."
+    """The interactive Claude session that sets the project up with the owner: the setup guide
+    is its instructions (not a file it may read), and it opens with the steps (the owner,
+    2026-10-14: the first try said nothing, then built the idea)."""
+    guide = bootstrap().read_text(encoding="utf-8") if bootstrap().is_file() else ""
+    opening = (
+        f"Start the setup of {folder.name}, a {origin} project: your first message, then the idea."
     )
-    return ["claude", "--add-dir", str(config.HOME / "docs"), prompt]
+    if origin == "existing":
+        opening = f"Start the setup of {folder.name}, an existing project: your first message."
+    return [
+        "claude",
+        "--add-dir",
+        str(config.HOME / "docs"),
+        "--append-system-prompt",
+        guide,
+        opening,
+    ]
 
 
 # --- doctor -----------------------------------------------------------------------------------
@@ -160,6 +177,47 @@ class Finding:
 def _adr_00(folder: Path) -> Path | None:
     found = sorted((folder / ".factory" / "adr").glob("00-*.md"))
     return found[0] if found else None
+
+
+ACCEPTED_00 = "ADR 0 accepted by the owner"  # `softfield accept 0`'s commit (owner.decide_adr)
+
+
+def _adr_00_finding(folder: Path) -> Finding:
+    """ADR 00 accepted by the owner: its status says so and `softfield accept 0` committed it.
+    A status written Accepted by hand (the setup session must not) doesn't count."""
+    adr = _adr_00(folder)
+    if adr is None:
+        return Finding(False, "ADR 00 accepted: none in .factory/adr/")
+    status = _STATUS_RE.search(adr.read_text(encoding="utf-8"))
+    if status is None or status[1] != "Accepted":
+        return Finding(False, "ADR 00 accepted: it waits for your yes")
+    try:
+        log = Git(folder).run("log", "--format=%s", "--", adr.relative_to(folder).as_posix())
+    except GitError:
+        log = ""
+    if ACCEPTED_00 not in log.splitlines():
+        return Finding(False, "ADR 00 accepted: only `softfield accept 0` accepts it, on your yes")
+    return Finding(True, "ADR 00 accepted")
+
+
+def first_card(folder: Path) -> str | None:
+    """The project's first card's file name, without .md (``m1-hello``)."""
+    cards = sorted(p.stem for p in (folder / ".factory" / "cards").glob("*.md"))
+    return cards[0] if cards else None
+
+
+def hand_over(name: str, card: str | None, host: str) -> str:
+    """What `doctor` says when the project is ready: where it is and what to do next."""
+    base = f"http://{host}:8765"
+    lines = [f"Done: {name} is in the factory.", f"  The Projects page: {base}/projects"]
+    if card:
+        key = card.split("-", 1)[0]
+        lines.append(f"  Its first card, {card}, on its Planning desk:")
+        lines.append(f"  {base}/planning/{key}?project={name}")
+    lines.append(
+        "Write to the card to plan it there; the runner builds it once you approve the plan."
+    )
+    return "\n".join(lines)
 
 
 def proposed_adr_00(folder: Path) -> Path | None:
@@ -187,14 +245,7 @@ def doctor(
         found.append(
             Finding((folder / ".factory/seed.md").is_file(), "the idea in .factory/seed.md")
         )
-    adr = _adr_00(folder)
-    status = _STATUS_RE.search(adr.read_text(encoding="utf-8")) if adr else None
-    found.append(
-        Finding(
-            status is not None and status[1] == "Accepted",
-            "ADR 00 accepted" + ("" if adr else ": none in .factory/adr/"),
-        )
-    )
+    found.append(_adr_00_finding(folder))
     cards = [p for p in (folder / ".factory" / "cards").glob("*.md")]
     found.append(Finding(bool(cards), "a first card in .factory/cards/"))
     conn = metrics.open_db(db)

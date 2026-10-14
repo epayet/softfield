@@ -1,9 +1,10 @@
 import subprocess
+from datetime import date
 from pathlib import Path
 
 import pytest
 
-from runner import cli, config, metrics, setup
+from runner import cli, config, metrics, owner, setup
 from runner.config import load_config
 from tests.runner.conftest import git
 
@@ -112,34 +113,75 @@ def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
     toml.write_text(toml.read_text().replace('description = ""', 'description = "Ducks."'))
     (folder / ".factory/seed.md").write_text("# Seed\n\nA duck counter.\n")
     adr = "# ADR 00: Initial decisions\n\n- **Status:** Accepted (by the owner, 2026-10-14)\n"
-    (folder / ".factory/adr/00-initial.md").write_text(adr)
+    (folder / ".factory/adr/00-initial.md").write_text(adr)  # written Accepted by hand
     (folder / ".factory/cards/m1-count.md").write_text("# Milestone M1: Count\n")
+    git(folder, "config", "user.email", "t@example.com")
+    git(folder, "config", "user.name", "Test")
+    git(folder, "add", "-A")
+    git(folder, "commit", "-q", "--no-verify", "-m", "set up")
+    assert [f.what for f in setup.doctor(folder, db, run_checks=False) if not f.ok] == [
+        "ADR 00 accepted: only `softfield accept 0` accepts it, on your yes"
+    ]
+    (folder / ".factory/adr/00-initial.md").write_text(
+        adr.replace("Accepted (by the owner, 2026-10-14)", "Proposed")
+    )
+    git(folder, "commit", "-qam", "proposed", "--no-verify")
+    owner.decide_adr(folder, 0, "Accepted", date(2026, 10, 14))  # the owner's yes
+    (folder / "stray.py").write_text("X = 1\n")  # untracked work fails it too
     assert [f.what for f in setup.doctor(folder, db, run_checks=False) if not f.ok] == [
         "everything committed, on main"
     ]
-    git(folder, "add", "-A")
-    git(
-        folder,
-        "-c",
-        "user.name=T",
-        "-c",
-        "user.email=t@e",
-        "commit",
-        "-q",
-        "--no-verify",
-        "-m",
-        "x",
-    )
+    (folder / "stray.py").unlink()
     assert all(f.ok for f in setup.doctor(folder, db, run_checks=False))
     assert setup.ready("ducks", db)  # doctor passed: the runner takes it
     assert not setup.ready("ducks", db)  # once
 
 
-def test_the_setup_session_reads_the_shared_bootstrap():
+def test_the_setup_session_gets_the_guide_as_its_instructions(monkeypatch):
+    """The owner, 2026-10-14: told to read the guide, the first try said nothing and then
+    built the idea. The guide is its instructions now, and it opens with the steps."""
+    monkeypatch.setattr("runner.config.HOME", Path(setup.__file__).parents[1])
     command = setup.claude_command(Path("/r/ducks"), "new")
     assert command[:3] == ["claude", "--add-dir", str(config.HOME / "docs")]
-    assert str(setup.bootstrap()) in command[-1] and "idea" in command[-1]
-    assert (Path(setup.__file__).parents[1] / "docs" / "bootstrap.md").is_file()
+    guide = command[command.index("--append-system-prompt") + 1]
+    assert "**Never build the idea.**" in guide and "Your first message" in guide
+    assert "Never mark ADR 00 Accepted yourself" in guide
+    assert command[-1].startswith("Start the setup of ducks, a new project")
+
+
+def test_doctor_hands_over_with_where_to_go_next():
+    text = setup.hand_over("hello", "m1-hello-world", "192.168.1.5")
+    assert text.splitlines() == [
+        "Done: hello is in the factory.",
+        "  The Projects page: http://192.168.1.5:8765/projects",
+        "  Its first card, m1-hello-world, on its Planning desk:",
+        "  http://192.168.1.5:8765/planning/m1?project=hello",
+        "Write to the card to plan it there; the runner builds it once you approve the plan.",
+    ]
+
+
+def test_forget_takes_a_project_off_every_list_but_keeps_its_rows(tmp_path, monkeypatch, capsys):
+    db = tmp_path / "m.sqlite"
+    machine = tmp_path / "factory.toml"
+    machine.write_text(f'[metrics]\ndb = "{db}"\n')
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, "hello", repo="/r/hello")
+        metrics.upsert_project(conn, "coucou", repo="/r/coucou")
+    finally:
+        conn.close()
+    monkeypatch.setattr("builtins.input", lambda prompt: "n")
+    assert cli.main(["forget", "hello"]) == 1  # not confirmed
+    assert cli.main(["forget", "hello", "--yes"]) == 0
+    assert "hello: forgotten. Its folder stays: /r/hello" in capsys.readouterr().out
+    assert [name for name, *_ in _projects(db)] == ["coucou"]
+    conn = metrics.open_db(db)
+    try:
+        assert metrics.find_project(conn, "hello") is not None  # its history stays
+    finally:
+        conn.close()
+    assert cli.main(["forget", "nope", "--yes"]) == 1
 
 
 def test_the_units_run_softfield_with_the_installers_path(tmp_path):

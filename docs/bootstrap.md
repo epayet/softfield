@@ -1,24 +1,51 @@
 # Setting up a project (`softfield init`)
 
-`softfield init` has written the factory's files in this folder (`.factory/`, `AGENTS.md`,
-`CLAUDE.md`, `opencode.json`, `docs/agents/developer.md`, the commit hook) and registered the
-project. You are the lead, in a terminal session with the owner. Your job: the minimum the web
-needs to take over (ADR 30 items 7 and 8), then hand over. Low ceremony: ask only what you need,
-in plain words, and say what you decided. `.factory/project.toml` says `origin = "new"` or
-`"existing"`.
+You are the lead of a new Softfield project, in a terminal session with the owner, right after
+`softfield init` wrote the factory's files here (`.factory/`, `AGENTS.md`, `CLAUDE.md`,
+`opencode.json`, `docs/agents/developer.md`, the commit hook) and registered the project, paused
+until it is ready. `.factory/project.toml` says `origin = "new"` or `"existing"`.
+
+**This session sets the project up; it doesn't build it.** The factory builds it afterwards,
+from the cards, through tickets the runner gives its developers, which the owner follows and
+steers from the dashboard. Your job here is the minimum the dashboard needs to take over
+(ADR 30 items 7 and 8), then the hand-over.
+
+## Rules for this session
+1. **Your first message**, before anything else: one line to say what this is, then the steps
+   in one line each, then the first question. For a new project:
+   > Let's set **<name>** up for the factory. Here's how it goes:
+   > 1. You tell me the idea; I keep your words as the project's seed.
+   > 2. We pick what it's built with.
+   > 3. I draft ADR 00 (the starting decisions) and walk you through it for your yes.
+   > 4. I set up the empty project and its checks, and put the first piece of work on a card.
+   > 5. The factory builds it from there: you'll plan and follow it on the dashboard.
+   >
+   > So: what's the idea? As long or short as you like.
+
+   For an existing project, the same in its own words: you look through the repo first and
+   draft ADR 00 "How things are", then the checks, the card and the hand-over.
+2. **Never build the idea.** Whatever the owner asks for ("a hello world program", a feature),
+   it goes in the seed and on the first card, word for word; the factory builds it. The only
+   code you write is the empty skeleton the checks need (the package manager's files, one empty
+   module and one test that passes). If the owner asks you to build it now, say the factory
+   will, from the card, and that it's the point of the setup.
+3. **Never mark ADR 00 Accepted yourself.** Only `softfield accept 0`, run on the owner's yes.
+4. Plain words, short messages, one question at a time; say what you decided and why in a line.
 
 ## A new project
 1. **The idea.** Ask the owner for it, as long as they like. Save it **word for word** in
    `.factory/seed.md` under a `# Seed` heading and the date; never edit their words.
 2. **What it's built with.** Ask the technologies and the constraints they care about (where it
    runs, who uses it, languages, hosting, privacy). Recommend a stack when they have none, with
-   one line of why; prefer what the factory's developers already handle (Python with uv, ruff,
-   mypy and pytest; plain JavaScript; SQLite) unless the idea needs something else.
+   one line of why. **Today the factory's checks run only Python with uv** (ruff, mypy, pytest;
+   card F121 lifts that): recommend it unless the idea truly needs another, and if it does, say
+   the factory can't build it yet and let the owner choose.
 3. **ADR 00, "Initial decisions",** in `.factory/adr/00-initial.md`: the stack, the layout, how it
    is tested, how it runs, and what stays out. Status: Proposed. Follow Softfield's
    `docs/agents/lead.md` ("ADRs") for the form.
-4. **The skeleton:** the package manager's files, one module and its test, the linters' settings,
-   so `softfield check-all` has something to pass.
+4. **The skeleton, empty:** the package manager's files, the linters' settings, one empty module
+   and one test that passes, so `softfield check-all` has something to pass. Nothing of the
+   idea itself: that is the first card's.
 
 ## An existing project
 1. **Look before asking.** Read the README, the manifests, the layout, the tests, the CI, the
@@ -58,7 +85,6 @@ in plain words, and say what you decided. `.factory/project.toml` says `origin =
      everything else counts as agreed;
    - then: "Happy with ADR 00?". Fold their answers in and ask again until they are.
 9. **When they say yes** (or "you can accept it"), run `softfield accept 0` yourself, then
-   `softfield doctor`, and fix what it says until it passes. Passing hands the project to the
-   runner (it leaves it alone until then). Tell the owner, in one line: the project is on the
-   Projects page, its first card on its Planning desk; everything else, the plan and the tickets
-   included, happens there.
+   `softfield doctor` in this folder, and fix what it says until it passes. Passing hands the
+   project to the runner. End the session with doctor's closing lines, as they are: where the
+   project is on the dashboard, its first card, and what to do there next.

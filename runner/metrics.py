@@ -367,9 +367,11 @@ class ProjectRow:
 
 
 def projects_in_order(conn: sqlite3.Connection) -> list[ProjectRow]:
-    """Every project, the owner's first first; a tie goes by name."""
+    """Every project but a forgotten one, the owner's first first; a tie goes by name."""
     rows = conn.execute(
-        "SELECT name, repo, description, priority, paused FROM projects ORDER BY priority, name"
+        "SELECT name, repo, description, priority, paused FROM projects"
+        " WHERE coalesce(paused, '') != ? ORDER BY priority, name",
+        (FORGOTTEN,),
     ).fetchall()
     return [ProjectRow(*row) for row in rows]
 
@@ -388,6 +390,7 @@ def set_project_order(conn: sqlite3.Connection, names: Sequence[str]) -> list[st
 
 
 SETTING_UP = "setting up"  # a project's `paused` from `softfield init` until `doctor` passes
+FORGOTTEN = "forgotten"  # `softfield forget`: gone from every list, its rows kept
 
 
 def set_project_paused(conn: sqlite3.Connection, name: str, paused: str | None) -> None:
