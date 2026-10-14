@@ -6102,3 +6102,31 @@ def test_live_knows_the_softfield_repo_it_follows(repo, tmp_path, monkeypatch):
     assert loop.softfield_repo() is None  # run from the work tree itself
     monkeypatch.setattr("runner.config.HOME", tmp_path / "not-a-repo")
     assert loop.softfield_repo() is None
+
+
+def test_a_ctrl_c_mid_job_leaves_that_project_as_one_projects_run_would(monkeypatch):
+    """The owner's Ctrl-C while a job runs (owner, 2026-10-14): that project's session isn't
+    closed (no report committed on the job's branch; the next start recovers the job), the
+    others are, and the Ctrl-C ends the command as before."""
+    from types import SimpleNamespace
+
+    cfgs = [SimpleNamespace(repo=Path(f"/r/{n}"), project_name=n) for n in ("softfield", "coucou")]
+    closed = []
+
+    def open_session(cfg):
+        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+        return SimpleNamespace(
+            cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
+        )
+
+    def work_queue(s, **kw):
+        if s.cfg.project_name == "coucou" and kw.get("take_tickets", True):
+            raise KeyboardInterrupt  # mid-ticket in Coucou
+        return False
+
+    monkeypatch.setattr(loop, "open_session", open_session)
+    monkeypatch.setattr(loop, "work_queue", work_queue)
+    monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s.cfg.project_name))
+    with pytest.raises(KeyboardInterrupt):
+        loop.run_projects(lambda: cfgs, lambda cfg, key: None)  # type: ignore[arg-type,return-value]
+    assert closed == ["softfield"]

@@ -4744,10 +4744,13 @@ def run_projects(
     a single project's `runner run`. Returns True when the runner's code changed: restart."""
     sessions: dict[Path, Session] = {}
     refused: set[Path] = set()
+    busy: list[Session] = []  # the session in a turn: a Ctrl-C there leaves it as it is
 
     def turn(s: Session, **kw: Any) -> tuple[bool, bool]:
         before = s.picks
+        busy.append(s)
         restart = work_queue(s, escalate=escalate, reviews=True, wait=False, **kw)
+        busy.remove(s)
         key = s.report.review
         if key is not None and not restart:
             close_session(sessions.pop(s.repo))
@@ -4788,9 +4791,15 @@ def run_projects(
                 _idle_wait()
     except KeyboardInterrupt:
         print(f"[{now():%H:%M:%S}] [{RUNNER_AGENT}] Ended by you.", flush=True)
+        if busy:  # mid-job, as one project's run: no report, the next start recovers it
+            for s in sessions.values():
+                if s not in busy:
+                    close_session(s)
+            raise
     finally:
-        for s in sessions.values():
-            close_session(s)
+        if not busy:
+            for s in sessions.values():
+                close_session(s)
     return False
 
 
