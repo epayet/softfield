@@ -30,3 +30,4 @@ A plant or a message still in "Coming" (the runner hasn't taken it at a pick) ca
 1. `f14-01-change-request` (lead: `runner/` is protected): the `change` kind in the runner and in the dashboard's accepted kinds.
 2. `f14-02-coming-editor` (developer): tap a waiting plant on the desk to edit or cancel it; Coming and the Now page show the change at once.
 3. `f14-03-edit-waiting-message` (developer): Edit and Cancel it on a waiting message on its thread.
+4. `f14-04-failed-edit-shows-on-desk` (lead, from the review's F1): an edit that came too late or was refused shows under "Didn't go through" with its words, until dismissed.

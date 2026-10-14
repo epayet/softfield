@@ -413,6 +413,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a one-sentence request waited six days (planted 2026-10-07, merged 2026-10-13), none of them in the work: it queued behind a red main (f12-03) and its turn. The cheapest work in a factory is also the easiest to leave waiting; a queue could let a difficulty-2 ticket with one file pass ahead when a developer is free. The review again read other work (31 files for one commit): bug-01.
 - **Decisions affected:** none.
 
+### F14 (2026-10-14): a waiting plant or message is edited or cancelled ([review](../reviews/f14-coming-planted-ideas-not-clickable.md))
+
+- **Q1:** three tickets: one the lead's (the protected runner), merged first time; two developer tickets at difficulty 4–5, both escalated after three attempts and built or finished by the lead. Two directions, two escalations, no checkpoint. The review made one small fix and filed one lead ticket.
+- **Q3:** Qwen 0/2. Five of six attempts stopped with no edit after 10 minutes of reading; the sixth, under a direction, built the thread's buttons in 77 minutes with five faults (among them a redraw listener that never fired, hidden by a `page.reload()` in its own tests) and stopped on an existing test the ticket hadn't named. Claude Opus: $8.89 before the review.
+- **Q5:** see the review's numbers.
+- **Anything else:** four tickets in a row on the same pages came back to the lead (f9-25, f13-01, f14-02, f14-03), each needing a 1,000-line module, a template with its script and a 2,700-line test file. A direction after two no-edit attempts has not once helped. What a factory needs here is a way to see that a kind of ticket is outside its developers' range and to route it by itself: by the size of the files it must read, not by the lead's difficulty score, which said 4. Second: one of the milestone's acceptance lines reached one ticket and not its twin; nothing checks that every "Done when" of a plan is carried by a ticket.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -456,12 +456,16 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
             (project_id,),
         ).fetchall()
         asked = conn.execute(
-            "SELECT subject FROM owner_requests"
+            "SELECT id, subject FROM owner_requests"
             " WHERE project_id = ? AND kind = 'plan_message' AND done IS NULL ORDER BY id",
             (project_id,),
         ).fetchall()
+        # F14: a message the owner cancelled waits for no reply, as on its thread
+        cancelled = {subject for subject, change in changes.items() if change.cancel}
         cards = [r["card"] for r in owners_last if r["card"] in planned]
-        cards += [str(r["subject"]) for r in asked if r["subject"]]
+        cards += [
+            str(r["subject"]) for r in asked if r["subject"] and str(r["id"]) not in cancelled
+        ]
         if cards:
             titles = _card_titles(conn, project_id)
             jobs = [j for j in running_jobs(conn, project, now) if j.live]

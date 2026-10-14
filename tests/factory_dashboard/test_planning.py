@@ -2690,6 +2690,22 @@ def test_a_cancel_on_its_way_strikes_the_message_and_the_send_form_comes_back(
     assert '<p id="waiting"' in html and 'id="reply"' not in html
 
 
+def test_a_cancelled_message_no_longer_puts_its_thread_in_coming(planning, db_path, serve):
+    """The desk says what the thread says: a message with a cancel on its way waits for no
+    reply; an edited one still does, and so does a second message nobody cancelled."""
+    said = _finished(db_path, planning, "plan_message", "general", MESSAGE, None)
+    waiting = ("/planning/general", "General")
+    client = serve()
+    assert waiting in _coming_items(_page(client))
+    edit = _finished(db_path, planning, "change", str(said), COMMENTED, None)
+    assert waiting in _coming_items(_page(client))
+    _write(db_path, lambda conn: metrics.finish_request(conn, edit, NOW.isoformat(), "changed"))
+    _finished(db_path, planning, "change", str(said), '{"cancel": true}', None)
+    assert 'id="desk-coming"' not in _page(client)  # nothing else was coming
+    _finished(db_path, planning, "plan_message", "general", MESSAGE, None)
+    assert waiting in _coming_items(_page(client))
+
+
 def test_edit_then_save_posts_a_change_and_the_message_shows_it_at_once(
     page, planning, db_path, serve
 ):
