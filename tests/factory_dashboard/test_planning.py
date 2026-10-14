@@ -2921,3 +2921,87 @@ def test_dismiss_on_an_edit_posts_a_dismiss_naming_the_change(page, planning, db
         conn.close()
     page.reload()
     assert page.locator(f"#refused-{change}").count() == 0
+
+
+# --- liveIdle with a waiting plant (f19-01) ----------------------------
+
+
+def test_liveIdle_is_true_when_page_loads_with_a_waiting_plant(page, planning, db_path, serve):
+    """With one waiting plant in Coming, liveIdle is true on page load: the editor's own
+    text doesn't count as user-typed."""
+    _finished(db_path, planning, "plant", None, NOTE, None)
+    _open(page, serve())
+    page.wait_for_selector("#desk-coming")
+    assert page.evaluate("() => window.liveIdle()") is True
+
+
+def test_liveIdle_is_false_once_text_is_typed_in_the_plant_box(page, planning, db_path, serve):
+    """With one waiting plant in Coming, liveIdle becomes false once text is typed in the
+    Plant box."""
+    _finished(db_path, planning, "plant", None, NOTE, None)
+    _open(page, serve())
+    page.wait_for_selector("#desk-coming")
+    assert page.evaluate("() => window.liveIdle()") is True
+    page.fill('#plant textarea[name="text"]', "A new note")
+    assert page.evaluate("() => window.liveIdle()") is False
+
+
+def test_liveIdle_is_true_again_once_plant_box_is_emptied_and_focus_left(
+    page, planning, db_path, serve
+):
+    """With one waiting plant in Coming, liveIdle is true again once the Plant box is
+    emptied and focus has left it."""
+    _finished(db_path, planning, "plant", None, NOTE, None)
+    _open(page, serve())
+    page.wait_for_selector("#desk-coming")
+    page.fill('#plant textarea[name="text"]', "A new note")
+    assert page.evaluate("() => window.liveIdle()") is False
+    page.fill('#plant textarea[name="text"]', "")
+    page.evaluate("() => document.querySelector('#plant textarea[name=text]').blur()")
+    assert page.evaluate("() => window.liveIdle()") is True
+
+
+def test_liveIdle_is_false_while_waiting_plant_is_open(page, planning, db_path, serve):
+    """With one waiting plant in Coming, liveIdle is false while the waiting plant is
+    open (details is open with input/textarea)."""
+    note = _finished(db_path, planning, "plant", None, NOTE, None)
+    _open(page, serve())
+    page.wait_for_selector("#desk-coming")
+    assert page.evaluate("() => window.liveIdle()") is True
+    page.click(f"#waiting-{note} summary")
+    assert page.evaluate("() => window.liveIdle()") is False
+
+
+def test_liveIdle_is_true_again_when_waiting_plant_is_closed(page, planning, db_path, serve):
+    """With one waiting plant in Coming, liveIdle is true again once the waiting plant
+    is closed (details is no longer open)."""
+    note = _finished(db_path, planning, "plant", None, NOTE, None)
+    _open(page, serve())
+    page.wait_for_selector("#desk-coming")
+    page.click(f"#waiting-{note} summary")
+    assert page.evaluate("() => window.liveIdle()") is False
+    page.click(f"#waiting-{note} summary")
+    assert page.evaluate("() => window.liveIdle()") is True
+
+
+def test_desk_has_a_poll_wrapper_with_correct_attributes(planning, serve):
+    """The desk has a poll wrapper with hx-get="/planning?project=coucou",
+    hx-trigger="every 5s [window.liveIdle()]" and hx-select="#desk"."""
+    html = _page(serve())
+    assert 'hx-get="/planning' in html
+    assert 'hx-trigger="every 5s [window.liveIdle()]"' in html
+    assert 'hx-select="#desk"' in html
+
+
+def test_desk_coming_poll_wrapper_when_items_exist(planning, db_path, serve):
+    """With a waiting plant, the HTML has a poll around #desk-coming."""
+    _finished(db_path, planning, "plant", None, NOTE, None)
+    html = _page(serve())
+    assert "desk-coming" in html
+    assert 'hx-select="#desk-coming"' in html
+
+
+def test_desk_coming_poll_wrapper_absent_when_no_items(planning, serve):
+    """With no waiting plant, the string desk-coming is nowhere in the page."""
+    html = _page(serve())
+    assert "desk-coming" not in html

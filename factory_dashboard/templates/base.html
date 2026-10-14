@@ -14,7 +14,21 @@
   // or has text selected, so neither the queue's scroll nor a selection is lost (2026-10-03).
   let lastScroll = 0;
   addEventListener("scroll", () => { lastScroll = Date.now(); }, { capture: true, passive: true });
-  window.liveIdle = () => Date.now() - lastScroll > 10000 && !String(getSelection());
+  window.liveIdle = () => {
+    if (Date.now() - lastScroll <= 10000) return false;
+    if (String(getSelection())) return false;
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return false;
+    for (const el of document.querySelectorAll('textarea, input')) {
+      if (el.type === 'hidden') continue;
+      if (!el.offsetParent) continue;
+      if (el.value !== el.defaultValue) return false;
+    }
+    for (const details of document.querySelectorAll('details[open]')) {
+      if (details.querySelector('input, textarea')) return false;
+    }
+    return true;
+  };
   // Scroll the active tab into view on phone (f3-30)
   document.addEventListener("DOMContentLoaded", () => {
     const tab = document.querySelector("nav.tabs a[aria-current='page']");
