@@ -4730,6 +4730,13 @@ def project_round(sessions: Sequence[Session], turn: Turn) -> tuple[bool, bool]:
     return False, False
 
 
+def _main_head(s: Session) -> str | None:
+    try:
+        return s.git.run("rev-parse", MAIN).strip()
+    except (GitError, OSError):
+        return None
+
+
 def run_projects(
     configs: Callable[[], list[Config]],
     review: Callable[[Config, str], None],
@@ -4745,8 +4752,16 @@ def run_projects(
     sessions: dict[Path, Session] = {}
     refused: set[Path] = set()
     busy: list[Session] = []  # the session in a turn: a Ctrl-C there leaves it as it is
+    synced: dict[Path, str] = {}  # each project's main, as its cards and tickets were read
 
     def turn(s: Session, **kw: Any) -> tuple[bool, bool]:
+        # A card or ticket committed outside the run (`softfield init`'s setup session, a
+        # terminal session) reaches the board at the next round, not the next session
+        head = _main_head(s)
+        if head is not None and synced.setdefault(s.repo, head) != head:
+            sync_tickets(s)
+            sync_cards(s)
+            synced[s.repo] = head
         before = s.picks
         busy.append(s)
         restart = work_queue(s, escalate=escalate, reviews=True, wait=False, **kw)

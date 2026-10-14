@@ -6082,6 +6082,7 @@ def test_run_projects_skips_a_project_off_main_once_reviews_and_closes_every_ses
 
     monkeypatch.setattr(loop, "open_session", open_session)
     monkeypatch.setattr(loop, "work_queue", work_queue)
+    monkeypatch.setattr(loop, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s))
     monkeypatch.setattr(loop, "_idle_wait", idle_wait)
     review = lambda cfg, key: reviewed.append((cfg.project_name, key))  # noqa: E731
@@ -6126,7 +6127,42 @@ def test_a_ctrl_c_mid_job_leaves_that_project_as_one_projects_run_would(monkeypa
 
     monkeypatch.setattr(loop, "open_session", open_session)
     monkeypatch.setattr(loop, "work_queue", work_queue)
+    monkeypatch.setattr(loop, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s.cfg.project_name))
     with pytest.raises(KeyboardInterrupt):
         loop.run_projects(lambda: cfgs, lambda cfg, key: None)  # type: ignore[arg-type,return-value]
     assert closed == ["softfield"]
+
+
+def test_a_card_committed_outside_the_run_reaches_the_board_at_the_next_round(monkeypatch):
+    """`softfield init`'s setup session commits the first card after the runner opened the new
+    project's session: the round sees main move and reads the cards again (owner, 2026-10-14)."""
+    from types import SimpleNamespace
+
+    cfg = SimpleNamespace(repo=Path("/r/ducks"), project_name="ducks")
+    calls: list[str] = []
+    synced = []
+    report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+    s = SimpleNamespace(
+        cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
+    )
+    polls = iter([None, None, KeyboardInterrupt])
+
+    def idle_wait():
+        if (step := next(polls)) is not None:
+            raise step()
+
+    monkeypatch.setattr(loop, "open_session", lambda cfg: s)
+    monkeypatch.setattr(loop, "work_queue", lambda s, **kw: False)
+    monkeypatch.setattr(loop, "close_session", lambda s: None)
+    monkeypatch.setattr(loop, "_idle_wait", idle_wait)
+
+    def main_head(s):  # main moves from a to b after the first round (its two turns)
+        calls.append("x")
+        return "a" if len(calls) <= 2 else "b"
+
+    monkeypatch.setattr(loop, "_main_head", main_head)
+    monkeypatch.setattr(loop, "sync_cards", lambda s: synced.append("cards"))
+    monkeypatch.setattr(loop, "sync_tickets", lambda s: synced.append("tickets"))
+    loop.run_projects(lambda: [cfg], lambda cfg, key: None)  # type: ignore[list-item]
+    assert synced == ["tickets", "cards"]  # once, when main moved from a to b
