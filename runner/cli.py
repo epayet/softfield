@@ -598,6 +598,12 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "dashboard":
             return _serve_dashboard(args, args.db or cfg.metrics_db, project_name(repo))
         elif args.command == "doctor":
+            adr = setup.proposed_adr_00(repo)
+            if adr is not None and sys.stdin.isatty():  # its review is the setup's last step
+                print(f"ADR 00 waits for you: {adr.relative_to(repo)}")
+                if input("Accept ADR 00 now? [y/N] ").strip().lower() in ("y", "yes"):
+                    path = owner.decide_adr(repo, 0, "Accepted", _today(), db=cfg.metrics_db)
+                    print(f"{path.relative_to(repo)}: Accepted.")
             findings = setup.doctor(repo, cfg.metrics_db, run_checks=not args.quick)
             for finding in findings:
                 print(f"{'ok' if finding.ok else '--'}  {finding.what}")

@@ -4444,6 +4444,20 @@ def _runner_code(repo: Path) -> str:
     return digest.hexdigest()
 
 
+def _new_code(s: Session, code: str) -> bool:
+    """Whether the runner must restart: ``live`` followed a merge into Softfield's main (only
+    when ``s`` is Softfield's session: `update_live`), or Claude changed this repo's runner/.
+    m4-07: Python keeps the old modules, so new code only runs in a new process; stop rather
+    than run the next job stale. Called when a job ends, so the factory updates at the end
+    of its own work, and before each pick, for a commit made outside the run."""
+    update_live(s.repo)
+    if _runner_code(s.repo) == code:
+        return False
+    s.report.notes.append(RESTART_NOTE)
+    set_activity(s, "restarting after a runner change")
+    return True
+
+
 def update_live(repo: Path) -> bool:
     """ADR 30 item 5: Softfield runs from ``live``, a checkout of its main of its own. When
     ``repo`` is Softfield and its main has moved, ``live`` follows (detached, as main stays
@@ -4583,12 +4597,7 @@ def work_queue(
     ran = False  # a ticket ran, for ``once``
     idle: str | None = None  # the idle line the run shows while it holds (F101)
     while True:
-        update_live(s.repo)
-        if _runner_code(s.repo) != code:
-            # m4-07: Python keeps the old modules, so a runner fix made by an escalation
-            # only takes effect in a new process. Stop rather than run requeued tasks stale.
-            s.report.notes.append(RESTART_NOTE)
-            set_activity(s, "restarting after a runner change")
+        if _new_code(s, code):  # a commit made outside the run (a terminal session's)
             return True
         if idle is None:
             set_activity(s, PICKING)
@@ -4652,11 +4661,15 @@ def work_queue(
             row = next(r for r in rows if (r.kind, r.subject) == (job.kind, job.subject))
             run_queued(s, row, escalate=escalate)
             s.picks += 1
+            if _new_code(s, code):  # the job just merged into Softfield: its code, now
+                return True
             continue
         with doing(s, task.id):
             rec = run_task(s, task)
         after_ticket(s, task, rec, escalate=escalate)
         s.picks += 1
+        if _new_code(s, code):
+            return True
         ran = True
 
 

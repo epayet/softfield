@@ -26,8 +26,9 @@ In the project's folder (an empty one for a new project):
 softfield init      # the factory's files in .factory/, committed on main, the project registered,
                     # then Claude opens to finish with you (docs/bootstrap.md):
                     # the idea or a look at the repo, ADR 00, the checks, the first card
-softfield doctor    # what the web still needs; when it passes, the runner takes the project
-                    # (it leaves it alone until then) and you carry on from the dashboard
+softfield doctor    # asks to accept ADR 00, then what the web still needs; when it passes,
+                    # the runner takes the project
+                    # (it leaves it alone until then). The setup session runs it for you.
 ```
 
 The factory works on a branch called `main`; `init` says how to rename another one.

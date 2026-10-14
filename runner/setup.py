@@ -162,6 +162,13 @@ def _adr_00(folder: Path) -> Path | None:
     return found[0] if found else None
 
 
+def proposed_adr_00(folder: Path) -> Path | None:
+    """ADR 00 while it waits for the owner (Proposed), else None."""
+    adr = _adr_00(folder)
+    status = _STATUS_RE.search(adr.read_text(encoding="utf-8")) if adr else None
+    return adr if adr is not None and status is not None and status[1] == "Proposed" else None
+
+
 def doctor(
     folder: Path, db: Path, *, run_checks: bool = True, timeout: int = 1200
 ) -> list[Finding]:

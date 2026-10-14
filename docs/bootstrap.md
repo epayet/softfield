@@ -49,9 +49,16 @@ in plain words, and say what you decided. `.factory/project.toml` says `origin =
 
    > **State:** idea · **Priority:** 1 · **Area:** product
    ```
-7. **ADR 00 accepted**: walk the owner through it as `docs/agents/owner.md` says ("Reviewing an
-   ADR with the owner"), then they accept it with `softfield accept 0`.
-8. **Commit** everything on `main`.
-9. Run **`softfield doctor`** and fix what it says until it passes. Then tell the owner: the
-   project is on the Projects page, its first card on its Planning desk; everything else, the plan
-   and the tickets included, happens there.
+7. **Commit** everything on `main`.
+8. **ADR 00, made easy to review.** Don't send the owner to the file. In the chat, give it as
+   `docs/agents/owner.md` says ("Reviewing an ADR with the owner"), short and plain:
+   - the key points, numbered, one line each: what the project is, what it's built with, how it
+     is tested and run, what's protected and why, what stays out;
+   - the open questions only, each with your recommendation and the alternatives as choices;
+     everything else counts as agreed;
+   - then: "Happy with ADR 00?". Fold their answers in and ask again until they are.
+9. **When they say yes** (or "you can accept it"), run `softfield accept 0` yourself, then
+   `softfield doctor`, and fix what it says until it passes. Passing hands the project to the
+   runner (it leaves it alone until then). Tell the owner, in one line: the project is on the
+   Projects page, its first card on its Planning desk; everything else, the plan and the tickets
+   included, happens there.

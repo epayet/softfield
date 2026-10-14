@@ -6166,3 +6166,24 @@ def test_a_card_committed_outside_the_run_reaches_the_board_at_the_next_round(mo
     monkeypatch.setattr(loop, "sync_tickets", lambda s: synced.append("tickets"))
     loop.run_projects(lambda: [cfg], lambda cfg, key: None)  # type: ignore[list-item]
     assert synced == ["tickets", "cards"]  # once, when main moved from a to b
+
+
+def test_a_softfield_merge_moves_live_and_restarts_when_its_job_ends(repo, tmp_path, monkeypatch):
+    """The owner, 2026-10-14: the factory updates at the end of its own work, not at the
+    start of the next one; `work_queue` asks `_new_code` as each job ends."""
+    from types import SimpleNamespace
+
+    live = tmp_path / "live"
+    git(repo, "worktree", "add", "-q", "--detach", str(live), "main")
+    monkeypatch.setattr("runner.config.HOME", live)
+    monkeypatch.setattr(loop, "set_activity", lambda s, what: None)
+    s = SimpleNamespace(repo=repo, report=SimpleNamespace(notes=[]))
+    code = loop._runner_code(repo)
+    assert not loop._new_code(s, code)  # type: ignore[arg-type]
+    (repo / "runner").mkdir()
+    (repo / "runner" / "x.py").write_text("X = 1\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the job's merge")
+    assert loop._new_code(s, code)  # type: ignore[arg-type]
+    assert git(live, "rev-parse", "HEAD") == git(repo, "rev-parse", "main")
+    assert s.report.notes == [loop.RESTART_NOTE]

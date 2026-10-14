@@ -169,3 +169,30 @@ def test_softfield_init_without_claude_from_the_folder(tmp_path, monkeypatch, ca
     assert _projects(tmp_path / "m.sqlite") == [("ducks", str(folder), 1)]
     assert subprocess.run(["git", "status", "--porcelain"], cwd=folder, capture_output=True,
                           text=True).stdout == ""  # fmt: skip
+
+
+def test_doctor_offers_to_accept_adr_00_first(tmp_path, monkeypatch, machine, capsys):
+    """The owner, 2026-10-14: accepting ADR 00 is part of getting ready, one yes away."""
+    db = tmp_path / "m.sqlite"
+    folder = tmp_path / "ducks"
+    folder.mkdir()
+    setup.init(folder, db)
+    git(folder, "config", "user.email", "t@example.com")
+    git(folder, "config", "user.name", "Test")
+    adr = folder / ".factory/adr/00-initial.md"
+    adr.write_text("# ADR 00: Initial decisions\n\n- **Status:** Proposed\n")
+    git(folder, "add", "-A")
+    git(folder, "commit", "-q", "--no-verify", "-m", "ADR 00")
+    assert setup.proposed_adr_00(folder) == adr
+    toml = folder / ".factory/project.toml"
+    toml.write_text(toml.read_text() + f'\n[metrics]\ndb = "{db}"\n')
+    git(folder, "commit", "-qam", "db", "--no-verify")
+    monkeypatch.chdir(folder)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda prompt: "y")
+    cli.main(["doctor", "--quick"])
+    out = capsys.readouterr().out
+    assert "ADR 00 waits for you: .factory/adr/00-initial.md" in out
+    assert "- **Status:** Accepted" in adr.read_text()
+    assert setup.proposed_adr_00(folder) is None
+    assert "ok  ADR 00 accepted" in out
