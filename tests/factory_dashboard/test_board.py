@@ -440,7 +440,7 @@ def test_the_page_is_read_only_and_links_to_the_factory_floor(board_client):
 def test_the_top_bar_has_a_board_tab_right_after_planning(board_client):
     tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', board_client.get("/").text, re.S)[0]
     paths = re.findall(r'href="([^"?]*)\?', tabs)
-    assert paths[:3] == ["/", "/planning", "/board"]
+    assert paths[:4] == ["/projects", "/", "/planning", "/board"]  # Projects first (ADR 30)
     assert re.search(r'<a href="/board\?project=coucou">Board</a>', tabs)
     assert re.search(
         r'<a href="/board\?project=coucou" aria-current="page">Board</a>', _page(board_client)

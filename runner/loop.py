@@ -230,6 +230,7 @@ class Session:
     # The metrics database's copies (F20 D1), None without `[backup]`; a failure is noted once
     backups: backup.Backups | None = None
     backup_failed: bool = False
+    picks: int = 0  # jobs run so far, tickets and queued jobs (`run_projects`'s round)
 
     @property
     def repo(self) -> Path:
@@ -4459,10 +4460,34 @@ def update_live(repo: Path) -> bool:
         main = there.run("rev-parse", MAIN).strip()
         if here.head() == main:
             return False
+        changed = here.run("diff", "--name-only", "HEAD", main).split()
         here.run("checkout", "-q", "--detach", main)
     except (GitError, OSError):
         return False
+    if {"pyproject.toml", "uv.lock"} & set(changed):
+        _reinstall(home)  # the new code's dependencies, before the restart imports it
     return True
+
+
+def softfield_repo() -> Path | None:
+    """The Softfield work tree ``live`` is a checkout of (its main work tree), or None when
+    this code runs from somewhere else."""
+    try:
+        common = Git(config.HOME).run("rev-parse", "--path-format=absolute", "--git-common-dir")
+    except (GitError, OSError):
+        return None
+    repo = Path(common.strip()).parent
+    return None if repo.resolve() == config.HOME.resolve() else repo
+
+
+def _reinstall(home: Path) -> None:
+    """`uv tool install` of ``live`` again, for a merge that changed its dependencies. Best
+    effort: a failure shows on the console, and the restart tries the new code anyway."""
+    code, out, err = run_bounded(
+        ["uv", "tool", "install", "-e", str(home), "--reinstall"], home, 600
+    )
+    if code != 0:
+        print(f"[{now():%H:%M:%S}] [{RUNNER_AGENT}] softfield's reinstall failed: {err or out}")
 
 
 RESTART_NOTE = (
@@ -4525,6 +4550,8 @@ def work_queue(
     escalate: bool = True,
     once: bool = False,
     reviews: bool = False,
+    take_tickets: bool = True,
+    wait: bool = True,
 ) -> bool:
     """Work through .factory/tasks/ready (one milestone's, if given) and the queued jobs their runs
     trigger: directions, checkpoints and escalations (ADR 22). Each turn runs what
@@ -4542,6 +4569,10 @@ def work_queue(
     the command to review. One Claude can't take now parks instead, and the queue goes on
     (F53 D1). Without ``escalate``, no escalation is queued or run. With
     ``once``, it stops after one ticket and the jobs that ticket queued.
+
+    For `run_projects` (ADR 30 item 6): without ``take_tickets`` it runs only the queued jobs;
+    without ``wait`` it never holds or sleeps here (for Claude's reset, the owner's pause or
+    nothing to run) but returns, so the next project can go.
 
     With ``reviews`` and without ``once`` (the standing `runner run`), it doesn't return with
     nothing to run: it holds, saying what it waits for (`_idle_line`), and each turn applies
@@ -4574,7 +4605,11 @@ def work_queue(
         held = _held(s.repo, ready)
         rows = _runnable_rows(s, ready, escalate=escalate, reviews=reviews)
         behind = waiting_rows(s, ready)
-        task = _next_task(s, ready, done, paused | held.keys() | behind.keys())
+        task = (
+            _next_task(s, ready, done, paused | held.keys() | behind.keys())
+            if take_tickets
+            else None
+        )
         tickets = [] if task is None else [_dispatch_ticket(s, task, ready)]
         paused_by_owner = s.state.owner_pause is not None
         job = dispatch.pick(rows, tickets, dispatch.Windows(), now(), paused=paused_by_owner)
@@ -4582,12 +4617,12 @@ def work_queue(
             return False
         if job is None:
             if paused_by_owner:
-                if _hold_for_the_owner(s):
+                if wait and _hold_for_the_owner(s):
                     continue
                 return False
-            if _wait_for_reset(s, ready, rows):
+            if wait and _wait_for_reset(s, ready, rows):
                 continue
-            if reviews and not once:  # the standing command holds (F101 D1)
+            if reviews and not once and wait:  # the standing command holds (F101 D1)
                 line = _idle_line(s, ready, paused, held)
                 if line != idle:
                     idle = line
@@ -4595,6 +4630,10 @@ def work_queue(
                     set_activity(s, line)
                 if _idle_holds(s):
                     continue
+            if not wait:  # `run_projects` goes to the next project; this one says why it waits
+                if reviews and not once and take_tickets:
+                    set_activity(s, _idle_line(s, ready, paused, held))
+                return False
             if paused:
                 s.report.notes.append("Paused (dependency escalated): " + ", ".join(sorted(paused)))
             if held:
@@ -4612,10 +4651,12 @@ def work_queue(
         if job.kind != dispatch.TICKET or task is None:  # a ticket: the one it was given
             row = next(r for r in rows if (r.kind, r.subject) == (job.kind, job.subject))
             run_queued(s, row, escalate=escalate)
+            s.picks += 1
             continue
         with doing(s, task.id):
             rec = run_task(s, task)
         after_ticket(s, task, rec, escalate=escalate)
+        s.picks += 1
         ran = True
 
 
@@ -4664,6 +4705,93 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
     report = close_session(s)
     report.restart = restart
     return report
+
+
+# --- every project (ADR 30 item 6) -----------------------------------------------------
+
+type Turn = Callable[..., tuple[bool, bool]]  # one project's turn: (restart, it ran a job)
+
+
+def project_round(sessions: Sequence[Session], turn: Turn) -> tuple[bool, bool]:
+    """One round of `run_projects`, the projects in the owner's order: first every project's
+    queued jobs (the owner's planning replies, directions, checkpoints, escalations: they never
+    wait behind another project's ticket), then one ticket from the first project that has one
+    it can run; while the owner pauses, no ticket. Returns (restart, a job ran)."""
+    for s in sessions:
+        restart, ran = turn(s, take_tickets=False)
+        if restart or ran:
+            return restart, ran
+    if any(s.state.owner_pause is not None for s in sessions):  # a pause holds every project
+        return False, False
+    for s in sessions:
+        restart, ran = turn(s, once=True)
+        if restart or ran:
+            return restart, ran
+    return False, False
+
+
+def run_projects(
+    configs: Callable[[], list[Config]],
+    review: Callable[[Config, str], None],
+    *,
+    escalate: bool = True,
+) -> bool:
+    """`softfield run` (ADR 30 item 6): every registered project, ``configs()`` read again each
+    round so a new order takes effect at the next pick. Each project keeps its own session
+    (its run, its report, its state.json); a round is `project_round`'s; with nothing to run
+    anywhere it waits one poll. A project that can't open a session (not on a clean main)
+    is skipped and said once. A due review closes its project's session and runs, as after
+    a single project's `runner run`. Returns True when the runner's code changed: restart."""
+    sessions: dict[Path, Session] = {}
+    refused: set[Path] = set()
+
+    def turn(s: Session, **kw: Any) -> tuple[bool, bool]:
+        before = s.picks
+        restart = work_queue(s, escalate=escalate, reviews=True, wait=False, **kw)
+        key = s.report.review
+        if key is not None and not restart:
+            close_session(sessions.pop(s.repo))
+            review(s.cfg, key)  # its project opens a new session next round
+            return False, True
+        return restart, s.picks > before
+
+    try:
+        while True:
+            cfgs = configs()
+            for repo in [r for r in sessions if r not in {c.repo for c in cfgs}]:
+                close_session(sessions.pop(repo))  # paused or gone: its session ends
+            live: list[Session] = []
+            for cfg in cfgs:
+                s = sessions.get(cfg.repo)
+                if (
+                    s is not None
+                    and now().date() != s.report.started.date()
+                    and (s.report.tasks or s.report.claude_runs)
+                ):
+                    close_session(sessions.pop(cfg.repo))  # the day's report (F101 D3)
+                    s = None
+                if s is None:
+                    try:
+                        s = open_session(cfg)
+                    except RunnerError as exc:
+                        if cfg.repo not in refused:
+                            refused.add(cfg.repo)
+                            print(f"[{now():%H:%M:%S}] [{RUNNER_AGENT}] {cfg.project_name}: {exc}")
+                        continue
+                    refused.discard(cfg.repo)
+                    sessions[cfg.repo] = s
+                live.append(s)
+            restart, ran = project_round(live, turn)
+            if restart:
+                return True
+            if not ran:
+                _idle_wait()
+    except KeyboardInterrupt:
+        print(f"[{now():%H:%M:%S}] [{RUNNER_AGENT}] Ended by you.", flush=True)
+    finally:
+        for s in sessions.values():
+            close_session(s)
+    return False
 
 
 LIVE = timedelta(minutes=2)  # f1 D3: an older heartbeat means the runner stopped

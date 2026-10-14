@@ -13,6 +13,7 @@ from runner import (
     backfill,
     bench,
     checks,
+    config,
     copilot,
     i18n,
     look,
@@ -22,10 +23,18 @@ from runner import (
     procs,
     report,
     requests,
+    setup,
 )
-from runner.config import Config, load_config, project_name
+from runner.config import (
+    PROJECT_TOML,
+    Config,
+    ConfigError,
+    load_config,
+    machine_metrics_db,
+    project_name,
+)
 from runner.gates import layout_problems
-from runner.gitops import Git
+from runner.gitops import Git, GitError
 from runner.loop import RunnerError, local_agent, run_session
 from runner.milestone import (
     PARKED,
@@ -41,12 +50,16 @@ from runner.state import load_state, save_state
 from runner.tasks import TaskError, milestone_arg
 
 
-def _repo() -> Path:
+def _here() -> Path | None:
+    """The project this folder is in: the nearest with a ``.factory/project.toml``."""
     here = Path.cwd()
-    for candidate in (here, *here.parents):
-        if (candidate / ".factory" / "project.toml").is_file():
-            return candidate
-    raise SystemExit("run this inside a project: no .factory/project.toml here or above")
+    return next((c for c in (here, *here.parents) if (c / PROJECT_TOML).is_file()), None)
+
+
+def _repo() -> Path:
+    if (repo := _here()) is None:
+        raise SystemExit("run this inside a project: no .factory/project.toml here or above")
+    return repo
 
 
 def _lan_address() -> str:
@@ -95,6 +108,122 @@ def _restart() -> None:
     os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args
 
 
+def _project_configs() -> list[Config]:
+    """The registered projects the runner works on, in the owner's order: not paused, with a
+    ``.factory/project.toml`` that loads (ADR 30 item 6). One that doesn't load is said."""
+    db = machine_metrics_db()
+    if not db.is_file():
+        return []
+    conn = metrics.open_db(db)
+    try:
+        rows = metrics.projects_in_order(conn)
+    finally:
+        conn.close()
+    configs = []
+    for row in rows:
+        repo = Path(row.repo) if row.repo else None
+        if row.paused or repo is None or not (repo / PROJECT_TOML).is_file():
+            continue
+        try:
+            configs.append(load_config(repo))
+        except (OSError, ValueError, KeyError, ConfigError) as exc:
+            print(f"runner: {row.name}'s {PROJECT_TOML} doesn't load ({exc}): skipped")
+    return configs
+
+
+def _machine_command(args: argparse.Namespace) -> int:
+    """The commands that need no project: `init` makes one, `service` serves them all, and
+    `dashboard` outside a project opens on the first in the owner's order (ADR 30)."""
+    db = machine_metrics_db()
+    if args.command == "init":
+        folder = Path.cwd()
+        try:
+            origin, written = setup.init(folder, db)
+        except (setup.SetupError, GitError) as exc:
+            print(f"softfield: {exc}")
+            return 1
+        print(f"{folder.name}: set up as a {origin} project, registered, committed.")
+        print("Wrote " + ", ".join(written) + ".")
+        if args.no_claude:
+            print(f"Next: open Claude here and follow {setup.bootstrap()}.")
+            return 0
+        command = setup.claude_command(folder, origin)
+        os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
+    if args.command == "dashboard" and args.action == "update":
+        source = loop.softfield_repo()
+        if source is None:
+            print("softfield: this install isn't a checkout of Softfield's repo: nothing to follow")
+            return 1
+        moved = loop.update_live(source)
+        head = Git(config.HOME).head()[:9]
+        if moved:
+            print(f"The dashboard moves to Softfield's main ({head}) and reloads in a few seconds;")
+            print("a running runner restarts on the same code at its next pick.")
+        else:
+            print(f"The dashboard is on Softfield's main already ({head}).")
+        return 0
+    if args.command == "service":
+        units = Path.home() / ".config" / "systemd" / "user"
+        for path in setup.install_units(units, Path.home()):
+            print(f"Wrote {path}")
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=False)
+        print("Start them, and at every boot:")
+        print("  systemctl --user enable --now softfield-runner softfield-dashboard")
+        print("Their logs: journalctl --user -u softfield-runner -f")
+        print("To keep them up while you're logged out: loginctl enable-linger $USER")
+        return 0
+    conn = metrics.open_db(db)  # the dashboard, outside any project
+    try:
+        first = next(iter(metrics.projects_in_order(conn)), None)
+    finally:
+        conn.close()
+    if first is None:
+        print("runner: no project yet: set one up in its folder with `softfield init`")
+        return 1
+    return _serve_dashboard(args, args.db or db, first.name)
+
+
+def _serve_dashboard(args: argparse.Namespace, db: Path, project: str) -> int:
+    if not db.is_file():
+        raise RunnerError(f"no metrics database at {db}; `softfield backfill` makes one")
+    host = _lan_address() if args.lan else args.host or "127.0.0.1"
+    from factory_dashboard import app  # FastAPI loads only for this command
+
+    print(f"The factory dashboard: http://{host}:{args.port}/projects (Ctrl-C stops it)")
+    if args.lan:
+        print("Open that address on your phone, on the same Wi-Fi.")
+    app.serve(db, project, port=args.port, host=host)
+    return 0
+
+
+def _run_projects(args: argparse.Namespace, restarted: bool) -> int:
+    """`softfield run`: every project, from any folder (ADR 30 item 6)."""
+    configs = _project_configs()
+    if not configs:
+        print("runner: no project to run: set one up in its folder with `softfield init`")
+        return 1
+    if args.dry_run:
+        for cfg in configs:
+            print(f"== {cfg.project_name} ({cfg.repo})")
+            loop.dry_run_plan(cfg)
+        return 0
+    running = [cfg.project_name for cfg in configs if loop.live_run(cfg) is not None]
+    if running:
+        print(f"runner: a run is live already ({', '.join(running)}): one runner at a time")
+        return 1
+    if args.use_reserve is not None and not restarted:
+        windows = ("week", "five_hour") if args.use_reserve == "both" else (args.use_reserve,)
+        for cfg in configs:
+            for switch in windows:
+                _switch_request(cfg, switch.replace("-", "_"), "on")
+    for cfg in configs:
+        _apply_requests(cfg, cfg.metrics_db)
+    review = lambda cfg, key: _review(cfg, cfg.repo, key)  # noqa: E731
+    if loop.run_projects(_project_configs, review, escalate=not args.no_escalate):
+        _restart()
+    return 0
+
+
 def _review(cfg: Config, repo: Path, key: str) -> None:
     """A review `runner run` found due (f4-20), and its verdict, as `runner milestone` gives
     them. A review that changes runner/ restarts the command; state.json keeps its rounds.
@@ -140,14 +269,15 @@ def _apply_requests(cfg: Config, db: Path) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     procs.stop_on_sigterm()
-    parser = argparse.ArgumentParser(prog="runner", description=__doc__)
+    parser = argparse.ArgumentParser(prog="softfield", description=__doc__)
     sub = parser.add_subparsers(dest="command")
     run = sub.add_parser(
         "run",
-        help="work through .factory/tasks/ready, reviewing each milestone it finishes"
-        " (the default)",
+        help="every registered project's queue, in the owner's order, reviewing each milestone"
+        " it finishes (the default)",
     )
-    run.add_argument("--once", action="store_true", help="stop after one task")
+    run.add_argument("--here", action="store_true", help="only this folder's project")
+    run.add_argument("--once", action="store_true", help="stop after one task (this project)")
     run.add_argument("--dry-run", action="store_true", help="show what would run next")
     run.add_argument("--no-escalate", action="store_true", help="don't call Claude on escalations")
     run.add_argument(
@@ -262,6 +392,13 @@ def main(argv: list[str] | None = None) -> int:
     dashboard = sub.add_parser(
         "dashboard", help="serve the factory dashboard at 127.0.0.1 until Ctrl-C (ADR 13)"
     )
+    dashboard.add_argument(
+        "action",
+        nargs="?",
+        choices=("update",),
+        help="update: bring the dashboard to Softfield's latest main now (the runner's code too,"
+        " which it otherwise does at its next pick)",
+    )
     dashboard.add_argument("--port", type=int, default=8765)
     dashboard.add_argument(
         "--host", help="the address to listen on (default 127.0.0.1), e.g. this machine's LAN IP"
@@ -270,10 +407,24 @@ def main(argv: list[str] | None = None) -> int:
         "--lan", action="store_true", help="listen on this machine's home-network address"
     )
     dashboard.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
+    init = sub.add_parser(
+        "init", help="set this folder up as a project, new or existing, then open Claude (ADR 30)"
+    )
+    init.add_argument("--no-claude", action="store_true", help="write the files only")
+    doctor = sub.add_parser("doctor", help="whether this project is ready for the web (ADR 30)")
+    doctor.add_argument("--quick", action="store_true", help="skip running check-all")
+    service = sub.add_parser("service", help="the runner and the dashboard as systemd services")
+    service.add_argument("action", choices=("install",))
     args = parser.parse_args(argv)
     if getattr(args, "lan", False) and args.host:
         dashboard.error("--lan finds this machine's address itself: give --lan or --host, not both")
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
+    if args.command in (None, "run") and not (getattr(args, "here", False) or args.once):
+        return _run_projects(args, restarted)
+    if args.command in ("init", "service") or (
+        args.command == "dashboard" and (args.action == "update" or _here() is None)
+    ):
+        return _machine_command(args)
 
     repo = _repo()
     cfg = load_config(repo)
@@ -437,16 +588,18 @@ def main(argv: list[str] | None = None) -> int:
             path = report.write_milestone_report(repo, args.db or cfg.metrics_db, key)
             print(f"{path.relative_to(repo)}: {key.upper()}'s numbers written.")
         elif args.command == "dashboard":
-            db = args.db or cfg.metrics_db
-            if not db.is_file():
-                raise RunnerError(f"no metrics database at {db}; `softfield backfill` makes one")
-            host = _lan_address() if args.lan else args.host or "127.0.0.1"
-            from factory_dashboard import app  # FastAPI loads only for this command
-
-            print(f"The factory dashboard: http://{host}:{args.port}/ (Ctrl-C stops it)")
-            if args.lan:
-                print("Open that address on your phone, on the same Wi-Fi.")
-            app.serve(db, project_name(repo), port=args.port, host=host)
+            return _serve_dashboard(args, args.db or cfg.metrics_db, project_name(repo))
+        elif args.command == "doctor":
+            findings = setup.doctor(repo, cfg.metrics_db, run_checks=not args.quick)
+            for finding in findings:
+                print(f"{'ok' if finding.ok else '--'}  {finding.what}")
+            if not all(f.ok for f in findings):
+                return 1
+            try:
+                host = _lan_address()
+            except RunnerError:
+                host = "127.0.0.1"
+            print(f"Ready: http://{host}:8765/planning?project={project_name(repo)}")
         elif args.command == "check-tickets":
             given = args.tickets or sorted(
                 p.relative_to(repo).as_posix()

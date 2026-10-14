@@ -1,0 +1,34 @@
+# The project's settings (ADR 30 item 3); the machine's are in ~/.config/softfield/factory.toml.
+# Changing caps needs an Accepted ADR; timeouts are operational and can be tuned freely.
+
+[project]
+name = "{name}"
+description = ""                        # one line: what it is, for the Projects page
+origin = "{origin}"                     # "new" or "existing": set up by `softfield init`
+
+# What check-all and the gates run (ADR 30 item 3). The setup fills these in for the stack.
+[checks]
+test_dirs = ["tests"]
+mypy = []                               # mypy's targets; none skips it
+dependency_files = []                   # manifests and lockfiles a developer may not change
+dependency_dirs = []                    # vendored code
+
+[checks.layouts]                        # test folder = [module folder, suffix]: one test file per module
+
+[caps]
+max_attempts = 3
+directions_per_task = 1
+escalations_per_task = 2
+checkpoint_every = 2
+review_rounds = 3
+default_max_diff = 1000
+
+[timeouts]  # seconds
+warmup = 300
+opencode = 4500
+claude = 2700
+review = 3600
+gate = 1200
+
+[report]
+narrative = false

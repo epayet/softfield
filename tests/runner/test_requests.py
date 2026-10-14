@@ -2014,7 +2014,7 @@ def test_use_reserve_turns_the_switches_on_for_24_hours(
         return None
 
     monkeypatch.setattr(cli, "run_session", run_session)
-    assert cli.main(["run", *flag]) == 0
+    assert cli.main(["run", "--here", *flag]) == 0
     assert seen == [expected]
     assert set(_switches(in_repo)) == expected
     assert all(on == NOW.isoformat() for on in _switches(in_repo).values())
@@ -2026,7 +2026,7 @@ def test_a_restart_doesnt_turn_the_switches_on_again(in_repo, at_now, monkeypatc
     save_state(State(switches={"week": (NOW - timedelta(hours=10)).isoformat()}), state_path)
     monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: None)
     monkeypatch.setenv(cli.RESTARTED_ENV, "1")
-    assert cli.main(["run", "--use-reserve"]) == 0
+    assert cli.main(["run", "--here", "--use-reserve"]) == 0
     assert load_state(state_path).switches == {"week": (NOW - timedelta(hours=10)).isoformat()}
     assert cli.RESTARTED_ENV not in os.environ
 
@@ -2772,3 +2772,24 @@ def test_dismiss_refuses_an_edit_that_worked_and_any_cancel(repo, change, taken,
     _apply(repo)
     assert error in str(_request(repo, dismiss)[1])
     assert _row(repo, asked)["dismissed"] is None
+
+
+def test_the_projects_page_order_is_applied_at_the_next_pick_without_a_commit(repo):
+    """ADR 30 item 6: the Projects page sends the whole order; the runner works in it from its
+    next pick. It touches no file, so a dirty tree or another branch doesn't hold it."""
+    conn = metrics.open_db(_db(repo))
+    try:
+        metrics.upsert_project(conn, "coucou", repo="/r/coucou")
+    finally:
+        conn.close()
+    git(repo, "checkout", "-q", "-b", "elsewhere")
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "project_order", value=json.dumps(["coucou", repo.name, "nope"]))
+    bad = _ask(repo, "project_order", value="coucou first")
+    assert _apply(repo) == [
+        f"project_order: the projects' order: coucou, {repo.name} (no project nope)",
+        "project_order: a projects' order is a JSON list of project names, first first",
+    ]
+    assert _request(repo, asked)[1] == f"the projects' order: coucou, {repo.name} (no project nope)"
+    assert _request(repo, bad)[0] is not None
+    assert git(repo, "rev-parse", "HEAD") == head

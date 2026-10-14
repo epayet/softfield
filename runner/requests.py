@@ -57,6 +57,7 @@ REJECT = "reject"  # subject: <thread>/<proposal id>; no value: won't do (F31 D2
 CHANGE = "change"  # (F14 D1)
 # no subject; value: a JSON list, the open cards' short keys and bug ticket ids in the board's
 REORDER = "reorder"  # order (F15 D3)
+PROJECT_ORDER = "project_order"  # value: a JSON list of project names, first first (ADR 30)
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
 _COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, REORDER, REJECT, *_APPROVALS)
@@ -93,8 +94,8 @@ def _what(row: sqlite3.Row) -> str:
     ``plant`` alone, its words being the owner's to read on the card."""
     if row["kind"] == PLANT and not row["subject"]:
         return PLANT
-    if row["kind"] == REORDER:  # its value is the whole board
-        return REORDER
+    if row["kind"] in (REORDER, PROJECT_ORDER):  # its value is the whole board, or every project
+        return str(row["kind"])
     if row["kind"] == CHANGE:  # its value is the owner's words too
         return " ".join(filter(None, [CHANGE, row["subject"]]))
     return " ".join(str(part) for part in (row["kind"], row["subject"] or row["value"]) if part)
@@ -1377,6 +1378,8 @@ def _apply(
             return _priority(repo, conn, project_id, state, subject, value)
         if kind == REORDER:
             return _reorder(repo, conn, project_id, state, value)
+        if kind == PROJECT_ORDER:
+            return _project_order(conn, value)
         if kind == DISMISS:
             return _dismiss(conn, project_id, now, subject)
         if kind == REJECT:
@@ -1388,6 +1391,25 @@ def _apply(
     except Exception as exc:
         return f"{type(exc).__name__}: {exc}"
     return f"unknown request: {kind}"
+
+
+_PROJECT_ORDER_VALUE = "a projects' order is a JSON list of project names, first first"
+
+
+def _project_order(conn: sqlite3.Connection, value: str | None) -> str:
+    """The Projects page's order, sent whole (ADR 30 item 6): the runner works in it from its
+    next pick. Nothing in git changes, so it never waits for a clean main."""
+    try:
+        names = json.loads(value or "")
+    except ValueError:
+        return _PROJECT_ORDER_VALUE
+    if not isinstance(names, list) or not names or not all(isinstance(n, str) for n in names):
+        return _PROJECT_ORDER_VALUE
+    unknown = metrics.set_project_order(conn, names)
+    order = ", ".join(p.name for p in metrics.projects_in_order(conn))
+    return f"the projects' order: {order}" + (
+        f" (no project {', '.join(unknown)})" if unknown else ""
+    )
 
 
 def _lapse(conn: sqlite3.Connection, project_id: int, state: State, now: datetime) -> list[str]:

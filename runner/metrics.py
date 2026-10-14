@@ -10,6 +10,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -267,10 +268,17 @@ CREATE TABLE once_steps (
 );
 """
 
+# ADR 30 item 6: the owner's order of the projects (lower first; a new one goes last) and a
+# project the runner leaves alone while paused (NULL while it runs; when, once paused).
+_V13 = """
+ALTER TABLE projects ADD COLUMN priority INTEGER NOT NULL DEFAULT 100;
+ALTER TABLE projects ADD COLUMN paused TEXT;
+"""
+
 ONCE_STEPS = ("f55 clear-out",)  # one-off steps an older database still owes (F55 D3)
 
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12]
+MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -345,6 +353,38 @@ def upsert_project(
 # A milestone's status while `runner run` is about to review it (f4-20): the line's queue
 # shows it until its first round starts and the status becomes "review".
 REVIEW_DUE = "review due"
+
+
+@dataclass(frozen=True)
+class ProjectRow:
+    """A registered project, as the runner and the Projects page read it (ADR 30 item 6)."""
+
+    name: str
+    repo: str | None
+    description: str | None
+    priority: int
+    paused: str | None
+
+
+def projects_in_order(conn: sqlite3.Connection) -> list[ProjectRow]:
+    """Every project, the owner's first first; a tie goes by name."""
+    rows = conn.execute(
+        "SELECT name, repo, description, priority, paused FROM projects ORDER BY priority, name"
+    ).fetchall()
+    return [ProjectRow(*row) for row in rows]
+
+
+def set_project_order(conn: sqlite3.Connection, names: Sequence[str]) -> list[str]:
+    """The projects ``names`` takes, 1, 2, 3…; a project it leaves out goes after them, in
+    its old order. Returns the names it didn't know."""
+    known = [p.name for p in projects_in_order(conn)]
+    unknown = [n for n in names if n not in known]
+    order = [n for n in dict.fromkeys(names) if n in known]
+    order += [n for n in known if n not in order]
+    with conn:
+        for place, name in enumerate(order, start=1):
+            conn.execute("UPDATE projects SET priority = ? WHERE name = ?", (place, name))
+    return unknown
 
 
 def find_project(conn: sqlite3.Connection, name: str) -> int | None:

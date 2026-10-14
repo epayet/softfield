@@ -616,3 +616,26 @@ main:has(.board) { max-width: 1360px; }
   #stage-harvested { order: 6; border-style: dashed; }
   .field-foot { border: 1px solid var(--rule); padding: 8px 12px; }
 }
+
+/* The Projects page (ADR 30 item 6, .factory/cards/f120-many-projects-mockup/projects.html) */
+.projects-page .rank { list-style: none; margin: 0; padding: 0; }
+.projects-page .muted { color: var(--muted); }
+.projects-page .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0;
+  border-bottom: 1px solid var(--grid); }
+.projects-page .proj:last-child { border-bottom: 0; }
+.projects-page .place { grid-row: span 4; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.projects-page .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate);
+  color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+.projects-page .place input.asked { border: 1px dashed var(--opus); }
+.projects-page .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase;
+  color: var(--muted); }
+.projects-page .name { font: 700 17px var(--display); letter-spacing: .03em; }
+.projects-page .what { color: var(--ink-2); font-size: 13.5px; }
+.projects-page .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+.projects-page .facts b { font-family: var(--display); }
+.projects-page .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display);
+  letter-spacing: .04em; text-transform: uppercase; }
+.projects-page .send-order { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase;
+  background: var(--hazard); color: var(--hazard-ink); border: 0; padding: 10px 16px; margin-top: 10px; }
+.projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
+.projects-page .on-its-way { color: var(--opus); font-size: 13px; margin-left: 10px; }

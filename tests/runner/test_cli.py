@@ -142,7 +142,7 @@ def test_runner_run_restarts_itself_after_a_runner_change(in_repo, monkeypatch):
     monkeypatch.setattr(os, "execve", execve)
     monkeypatch.setattr(sys, "argv", ["runner", "run"])
     with pytest.raises(Restarted):
-        cli.main(["run"])
+        cli.main(["run", "--here"])
     assert argvs[0][-1] == "run"
     assert envs[0][cli.RESTARTED_ENV] == "1"
 
@@ -152,7 +152,7 @@ def test_runner_run_without_a_runner_change_just_ends(in_repo, monkeypatch):
         cli, "run_session", lambda cfg, **kw: SessionReport(started=datetime.now(UTC))
     )
     monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
-    assert cli.main(["run"]) == 0
+    assert cli.main(["run", "--here"]) == 0
 
 
 def test_runner_run_goes_on_after_an_idle_session_ended_at_midnight(in_repo, monkeypatch):
@@ -163,7 +163,7 @@ def test_runner_run_goes_on_after_an_idle_session_ended_at_midnight(in_repo, mon
     ]
     monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: sessions.pop(0))
     monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
-    assert cli.main(["run"]) == 0
+    assert cli.main(["run", "--here"]) == 0
     assert sessions == []
 
 
@@ -201,7 +201,7 @@ def test_runner_run_reviews_a_finished_milestone_then_goes_on(in_repo, monkeypat
     monkeypatch.setattr(cli, "run_due_review", review)
     monkeypatch.setattr(owner, "record_verdict", record_verdict)
     monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
-    assert cli.main(["run"]) == 0
+    assert cli.main(["run", "--here"]) == 0
     assert events == [
         "f9-02-last", "review f9", "verdict", "f10-01-next", "review f10", "verdict"
     ]  # fmt: skip
@@ -226,7 +226,7 @@ def test_a_review_that_changes_the_runner_restarts_runner_run(in_repo, monkeypat
     monkeypatch.setattr(os, "execve", lambda *a: (_ for _ in ()).throw(Restarted()))
     monkeypatch.setattr(sys, "argv", ["runner", "run"])
     with pytest.raises(Restarted):
-        cli.main(["run"])
+        cli.main(["run", "--here"])
 
 
 def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):
@@ -243,7 +243,7 @@ def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):
     assert ended == ["ended"]
     monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: 1 / 0)
     with pytest.raises(ZeroDivisionError):
-        cli.main(["run"])
+        cli.main(["run", "--here"])
     assert ended == ["ended", "ended"]
 
 

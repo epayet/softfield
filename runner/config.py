@@ -137,6 +137,14 @@ def _read(repo: Path) -> dict[str, Any]:
     return data
 
 
+def machine_metrics_db() -> Path:
+    """The metrics database the machine's file names, without any project: `softfield run`
+    reads the projects there (ADR 30 item 6)."""
+    machine = machine_file()
+    data = tomllib.loads(machine.read_text(encoding="utf-8")) if machine.is_file() else {}
+    return Path(data.get("metrics", {}).get("db", DEFAULT_METRICS_DB)).expanduser()
+
+
 def project_name(repo: Path) -> str:
     """`[project] name` in the repo's ``.factory/project.toml``, else its folder's name."""
     try:

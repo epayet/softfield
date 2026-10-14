@@ -1,4 +1,12 @@
+import json
 import re
+
+import pytest
+
+from runner import metrics
+from tests.factory_dashboard.conftest import NOW, PROJECT
+from tests.factory_dashboard.test_planning import _open as open_page
+from tests.layout import DISPLAY, PHONE, layout_problems
 
 
 def section(html: str, name: str) -> str:
@@ -137,3 +145,81 @@ def test_project_crumb(project_client):
     assert len(crumbs) == 1
     elements = re.findall(r"<(a|span)[^>]*>", crumbs[0])
     assert len(elements) == 1
+
+
+# --- the Projects page (ADR 30 item 6) ------------------------------------------------------
+
+
+@pytest.fixture
+def projects_client(serve, db_path, tmp_path):
+    """The fixture's project, a second one first in the order with two ready tickets in its
+    repo, and the fixture's live job running in the first."""
+    repo = tmp_path / "softfield"
+    (repo / ".factory" / "tasks" / "ready").mkdir(parents=True)
+    for name in ("f1-01-a.md", "f1-02-b.md"):
+        (repo / ".factory" / "tasks" / "ready" / name).write_text("x")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "softfield", repo=str(repo), description="The factory.")
+        metrics.set_project_order(conn, ["softfield", PROJECT])
+    finally:
+        conn.close()
+    return serve()
+
+
+def test_the_projects_come_in_the_owners_order_with_what_waits_in_each(projects_client):
+    html = projects_client.get("/projects").text
+    order = section(html, "projects-order")
+    assert order.index("softfield") < order.index(PROJECT)
+    assert "The factory. 2 ready" in order
+    assert 'href="/board?project=softfield"' in html
+    assert 'aria-current="page">Projects' in html  # the first tab, lit
+    assert "Send new order" in order and "On its way" not in order
+
+
+def test_now_names_the_job_running_in_any_project(projects_client):
+    now = section(projects_client.get("/projects").text, "projects-now")
+    assert now.startswith(f"Now {PROJECT} ·")
+
+
+def test_an_order_not_taken_yet_shows_as_sent_and_cant_be_edited(projects_client, db_path):
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        value = json.dumps([PROJECT, "softfield"])
+        metrics.add_request(conn, project, "project_order", None, value, NOW.isoformat())
+    finally:
+        conn.close()
+    html = projects_client.get("/projects").text
+    order = section(html, "projects-order")
+    assert order.index(PROJECT) < order.index("softfield")  # as sent
+    assert "On its way: the runner takes it at its next pick" in order
+    assert html.count('class="asked" disabled') == html.count('class="proj"') > 1
+
+
+@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
+def test_the_projects_page_lays_out_at_phone_and_display_sizes(page, projects_client, size):
+    page.set_viewport_size(size)
+    open_page(page, projects_client, "/projects")
+    page.evaluate("() => document.fonts.ready")
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    assert layout_problems(page) == []
+
+
+def test_send_lights_up_only_for_another_order_and_sends_the_names(page, projects_client, db_path):
+    open_page(page, projects_client, "/projects")
+    send = page.locator(".send-order")
+    assert send.is_disabled()
+    page.get_by_label(f"{PROJECT}'s place").fill("1")
+    page.get_by_label("softfield's place").fill("2")
+    assert send.is_enabled()
+    send.click()
+    page.locator("#order-sent").get_by_text("On its way").wait_for()
+    assert page.get_by_label("softfield's place").is_disabled()
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT value FROM owner_requests WHERE kind = 'project_order'")
+        assert [json.loads(r[0]) for r in rows] == [[PROJECT, "softfield", "other"]]
+    finally:
+        conn.close()

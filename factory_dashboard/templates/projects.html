@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% block title %}Projects · software-factory{% endblock %}
+{% block crumbs %}{% endblock %}
+{% block content %}
+{# The page above every project (ADR 30 item 6, after .factory/cards/f120-many-projects-mockup/projects.html):
+   what runs now in any project, what waits for the owner, then the projects in the order the runner works in #}
+<div class="page projects-page">
+
+<section id="projects-now" class="panel">
+  <h2>Now</h2>
+  {% for job in now_jobs %}
+  <div><b>{{ job.project }}</b> · {% if job.ticket %}{{ job.ticket }}{% if job.title %} {{ job.title }}{% endif %}{% else %}{{ job.role }}{% endif %} · <span class="mono">{{ job.agent }}</span> · {{ job.minutes }} min</div>
+  {% else %}
+  <div class="muted">Nothing runs now.</div>
+  {% endfor %}
+</section>
+
+{% if for_you %}
+<section id="projects-needs-you" class="panel needs">
+  <h2>Needs you <span class="src">{{ for_you | sum(attribute="for_you") }} in all</span></h2>
+  <ul class="steps">
+    {% for card in for_you %}
+    <li><a href="/planning?project={{ card.name | urlencode }}">{{ card.name }}</a> · {{ card.for_you }} item{{ "s" if card.for_you != 1 }} on the Planning desk</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section id="projects-order" class="panel">
+  <h2>Projects <span class="src">the runner works in this order</span></h2>
+  <form id="order-form" hx-post="/requests" hx-target="#order-sent" hx-swap="innerHTML">
+    <input type="hidden" name="kind" value="project_order">
+    <input type="hidden" name="project" value="{{ project }}">
+    <input type="hidden" name="value" value="">
+    <ol class="rank">
+      {% for card in cards %}
+      <li class="proj" data-name="{{ card.name }}">
+        <label class="place"><input type="number" min="1" max="{{ cards | length }}" value="{{ loop.index }}" inputmode="numeric"
+          aria-label="{{ card.name }}'s place"{% if asked %} class="asked" disabled{% endif %}><small>place</small></label>
+        <div class="name">{{ card.name }}</div>
+        {% if card.description %}<div class="what">{{ card.description }}</div>{% endif %}
+        <div class="facts">
+          <span><b>{{ card.ready }}</b> ready</span>
+          {% if card.building %}<span><b>{{ card.building }}</b> building</span>{% endif %}
+          {% if card.ideas %}<span><b>{{ card.ideas }}</b> ideas</span>{% endif %}
+          {% if card.done %}<span><b>{{ card.done }}</b> done</span>{% endif %}
+          {% if card.for_you %}<span><b>{{ card.for_you }}</b> for you</span>{% else %}<span class="muted">nothing for you</span>{% endif %}
+        </div>
+        <div class="links">
+          <a href="/planning?project={{ card.name | urlencode }}">Planning</a>
+          <a href="/board?project={{ card.name | urlencode }}">Board</a>
+          <a href="/?project={{ card.name | urlencode }}">Overview</a>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+    <button type="submit" class="send-order" disabled>Send new order</button>
+    <span id="order-sent" class="on-its-way">{% if asked %}On its way: the runner takes it at its next pick{% endif %}</span>
+  </form>
+  <p class="muted" style="font-size: 13px">A new project is set up on its computer, in its folder; it shows here once it's ready.</p>
+</section>
+
+</div>
+<script>
+  // Send lights up only when the numbers say another order; it sends the names in that order,
+  // and the numbers show dashed orange, on their way, until the runner takes it (owner, 2026-10-07)
+  (() => {
+    const form = document.getElementById("order-form");
+    const rows = [...form.querySelectorAll(".proj")];
+    const send = form.querySelector(".send-order");
+    const order = () => rows
+      .map((row, i) => [Number(row.querySelector("input").value) || i + 1, i, row.dataset.name])
+      .sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((r) => r[2]);
+    const sameAsShown = () => order().every((name, i) => name === rows[i].dataset.name);
+    form.addEventListener("input", () => { send.disabled = sameAsShown(); });
+    form.addEventListener("htmx:configRequest", (event) => {
+      event.detail.parameters.value = JSON.stringify(order());
+    });
+    form.addEventListener("htmx:beforeRequest", () => {
+      for (const input of form.querySelectorAll("input[type=number]")) { input.classList.add("asked"); input.disabled = true; }
+      send.disabled = true;
+      document.getElementById("order-sent").textContent = "On its way: the runner takes it at its next pick";
+    });
+  })();
+</script>
+{% endblock %}

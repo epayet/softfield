@@ -25,6 +25,7 @@ STATIC = Path(app_module.__file__).parent / "static"
 VENDOR = STATIC / "vendor"
 
 TABS = [
+    "/projects",  # every project, first (ADR 30 item 6)
     "/",
     "/planning",
     "/board",

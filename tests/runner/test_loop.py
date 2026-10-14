@@ -5975,3 +5975,130 @@ def test_live_follows_softfields_main_and_nothing_else(repo, tmp_path, monkeypat
     git(other, "commit", "-q", "--allow-empty", "-m", "init")
     assert not loop.update_live(other)
     assert not loop.update_live(live)  # run from its own work tree: nothing to follow
+
+
+def test_live_reinstalls_only_when_a_merge_changes_its_dependencies(repo, tmp_path, monkeypatch):
+    live = tmp_path / "live"
+    git(repo, "worktree", "add", "-q", "--detach", str(live), "main")
+    monkeypatch.setattr("runner.config.HOME", live)
+    reinstalled: list[Path] = []
+    monkeypatch.setattr(loop, "_reinstall", reinstalled.append)
+    for name, text in (("runner.py", "X = 1\n"), ("pyproject.toml", "[project]\n")):
+        (repo / name).write_text(text)
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", name)
+        assert loop.update_live(repo)
+    assert reinstalled == [live]
+
+
+def _projects(*names, paused=()):
+    from types import SimpleNamespace
+
+    return [
+        SimpleNamespace(
+            name=n,
+            repo=Path(f"/r/{n}"),
+            state=SimpleNamespace(owner_pause="x" if n in paused else None),
+        )
+        for n in names
+    ]
+
+
+def _turns(jobs, restart_on=None):
+    """A fake turn: ``jobs`` maps (project, "queued" | "ticket") to whether it runs one."""
+    calls = []
+
+    def turn(s, take_tickets=True, once=False):
+        kind = "ticket" if take_tickets else "queued"
+        calls.append((s.name, kind))
+        return (s.name, kind) == restart_on, jobs.get((s.name, kind), False)
+
+    return turn, calls
+
+
+def test_every_projects_queued_jobs_go_before_any_ticket():
+    """ADR 30 item 6: the owner's planning reply in the second project doesn't wait behind the
+    first project's ticket."""
+    turn, calls = _turns({("coucou", "queued"): True, ("softfield", "ticket"): True})
+    assert loop.project_round(_projects("softfield", "coucou"), turn) == (False, True)
+    assert calls == [("softfield", "queued"), ("coucou", "queued")]
+
+
+def test_a_ticket_comes_from_the_first_project_that_can_run_one():
+    """Strict order, falling through: the top project first; the next only when it has none."""
+    turn, calls = _turns({("coucou", "ticket"): True})
+    assert loop.project_round(_projects("softfield", "coucou", "ducks"), turn) == (False, True)
+    assert calls[-2:] == [("softfield", "ticket"), ("coucou", "ticket")]
+    turn, calls = _turns({("softfield", "ticket"): True, ("coucou", "ticket"): True})
+    loop.project_round(_projects("softfield", "coucou"), turn)
+    assert ("coucou", "ticket") not in calls
+
+
+def test_a_pause_in_any_project_holds_every_ticket_but_not_the_planning():
+    turn, calls = _turns({("softfield", "ticket"): True})
+    assert loop.project_round(_projects("softfield", "coucou", paused=("coucou",)), turn) == (
+        False,
+        False,
+    )
+    assert all(kind == "queued" for _, kind in calls)
+
+
+def test_a_runner_change_in_one_project_restarts_the_round():
+    turn, calls = _turns({}, restart_on=("softfield", "queued"))
+    assert loop.project_round(_projects("softfield", "coucou"), turn) == (True, False)
+    assert calls == [("softfield", "queued")]
+
+
+def test_run_projects_skips_a_project_off_main_once_reviews_and_closes_every_session(
+    monkeypatch, capsys
+):
+    """`softfield run`'s rounds: a project that can't open a session is said once and tried
+    again each round; a due review closes its session first; Ctrl-C closes the others."""
+    from types import SimpleNamespace
+
+    cfgs = [SimpleNamespace(repo=Path(f"/r/{n}"), project_name=n) for n in ("softfield", "coucou")]
+    opened, closed, reviewed = [], [], []
+
+    def open_session(cfg):
+        if cfg.project_name == "coucou":
+            raise loop.RunnerError("start the runner on a clean main branch")
+        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+        s = SimpleNamespace(
+            cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
+        )
+        opened.append(s)
+        return s
+
+    def work_queue(s, **kw):
+        if len(opened) == 1 and not kw.get("take_tickets", True):
+            s.report.review = "f9"  # the first session finds F9's review due
+        return False
+
+    polls = iter([None, KeyboardInterrupt])
+
+    def idle_wait():
+        if (step := next(polls)) is not None:
+            raise step()
+
+    monkeypatch.setattr(loop, "open_session", open_session)
+    monkeypatch.setattr(loop, "work_queue", work_queue)
+    monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s))
+    monkeypatch.setattr(loop, "_idle_wait", idle_wait)
+    review = lambda cfg, key: reviewed.append((cfg.project_name, key))  # noqa: E731
+    configs = lambda: cfgs  # noqa: E731
+    assert loop.run_projects(configs, review) is False  # type: ignore[arg-type]
+    assert reviewed == [("softfield", "f9")]
+    assert closed == opened and len(opened) == 2  # reviewed, then reopened and closed at the end
+    assert capsys.readouterr().out.count("coucou: start the runner on a clean main branch") == 1
+
+
+def test_live_knows_the_softfield_repo_it_follows(repo, tmp_path, monkeypatch):
+    """`softfield dashboard update` (ADR 30 item 5): the repo live follows, where runs merge."""
+    live = tmp_path / "live"
+    git(repo, "worktree", "add", "-q", "--detach", str(live), "main")
+    monkeypatch.setattr("runner.config.HOME", live)
+    assert loop.softfield_repo() == repo
+    monkeypatch.setattr("runner.config.HOME", repo)
+    assert loop.softfield_repo() is None  # run from the work tree itself
+    monkeypatch.setattr("runner.config.HOME", tmp_path / "not-a-repo")
+    assert loop.softfield_repo() is None

@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F120 mock-up: the Projects page</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a;
+    --good: #5fd17a; --warn: #f2b10a; --factory: #f2b10a; --product: #4fd1a5;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px 16px; }
+  .page-h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.frame { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .note { display: block; color: var(--good); font: 12px var(--body); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+  .screens { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .phone { width: 390px; max-width: 100%; border: 1px solid var(--rule); }
+  .wide { width: 1000px; max-width: 100%; border: 1px solid var(--rule); }
+
+  /* ---- the dashboard as drawn (dashboard.css) ---- */
+  .bar { background: var(--bay); }
+  .bar-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; padding: 10px 14px; }
+  .brand { font: 700 18px/1.1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font: 600 13px var(--display); padding: 2px 10px;
+    border: 1px solid var(--rule); background: var(--plate); }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .pill.good::before { background: var(--good); }
+  .pill.asked { border: 1px dashed var(--opus); }
+  .filters { margin-left: auto; font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .filters select { background: var(--plate); color: var(--fg); border: 1px solid var(--rule); font: 14px var(--body); padding: 3px 6px; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); }
+  nav.tabs { display: flex; overflow-x: auto; border-top: 1px solid var(--rule); }
+  nav.tabs a { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    padding: 9px 12px; white-space: nowrap; }
+  nav.tabs a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
+  main { padding: 14px 14px 32px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; margin: 0 0 12px; }
+  .panel.needs { border-color: var(--warn); }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .muted { color: var(--muted); }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  ul.plain { list-style: none; margin: 0; padding: 0; }
+  ul.plain li { padding: 6px 0; border-bottom: 1px solid var(--grid); }
+  ul.plain li:last-child { border-bottom: 0; }
+
+  /* ---- proposed: the projects in order ---- */
+  .rank { list-style: none; margin: 0; padding: 0; counter-reset: rank; }
+  .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--grid); }
+  .proj:last-child { border-bottom: 0; }
+  .order { grid-row: span 3; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .order input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate);
+    color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .order input.asked { border: 1px dashed var(--opus); }
+  .order small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .proj .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .proj .name .area { display: inline-block; width: 10px; height: 10px; margin-right: 8px; }
+  .proj .what { color: var(--ink-2); font-size: 13.5px; }
+  .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .facts b { font-family: var(--display); }
+  .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .send { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase; background: var(--hazard);
+    color: var(--hazard-ink); border: 0; padding: 10px 16px; cursor: pointer; margin-top: 10px; }
+  .send[disabled] { background: var(--plate); color: var(--muted); cursor: default; }
+  .onway { color: var(--opus); font-size: 13px; margin-left: 10px; }
+</style>
+</head>
+<body>
+<h1 class="page-h1">F120: the Projects page</h1>
+<p class="lede">The page above every project (ADR 30 item 6): what runs now, then each project in the owner's order, with what waits and what waits for you; the order changes with a number and one send. Real values from the metrics database and the two repos on 2026-10-14; the running job is an example (the runner is off today).</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<!-- Today: the top bar of factory_dashboard/templates/base.html, the Overview first -->
+<div data-version="today" hidden>
+  <h3 class="frame">Phone</h3>
+  <div class="phone">
+    <header class="bar">
+      <div class="bar-top">
+        <span class="brand">software-factory</span>
+        <span class="pill">Stopped</span>
+        <label class="filters">Project <select><option>softfield</option><option>coucou</option></select></label>
+      </div>
+      <div class="hazard"></div>
+      <nav class="tabs"><a aria-current="page">Overview</a><a>Planning · 3</a><a>Board</a><a>Tickets</a><a>Jobs</a><a>Runs</a></nav>
+    </header>
+    <main>
+      <p class="muted">Every page shows one project, picked in the top bar. Nothing shows the projects side by side, their order, or what waits in the other one.</p>
+    </main>
+  </div>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <div class="screens">
+  <div>
+  <h3 class="frame">Phone</h3>
+  <div class="phone">
+    <header class="bar">
+      <div class="bar-top">
+        <span class="brand">software-factory</span>
+        <span class="pill good">Working</span>
+        <label class="filters">Project <select><option>softfield</option><option>coucou</option></select></label>
+      </div>
+      <div class="hazard"></div>
+      <nav class="tabs"><a aria-current="page" class="new">Projects</a><a>Overview</a><a>Planning · 3</a><a>Board</a><a>Tickets</a></nav>
+    </header>
+    <main>
+      <section class="panel new">
+        <h2>Now</h2>
+        <div><b>Softfield</b> · f49-02 merge context · <span class="mono">claude-opus</span> · 12 min</div>
+        <div class="muted" style="font-size:13px">Next: Softfield's f15-02 once F110 merges; Coucou has nothing ready.</div>
+        <span class="note">What runs, across every project, first (owner, 2026-10-03)</span>
+      </section>
+      <section class="panel needs new">
+        <h2>Needs you <span class="src">3, all in Softfield</span></h2>
+        <ul class="plain">
+          <li><a>Softfield</a> · 3 items on the Planning desk</li>
+        </ul>
+        <span class="note">Summed over projects; shown only when something waits (owner, 2026-10-02)</span>
+      </section>
+      <section class="panel new">
+        <h2>Projects <span class="src">the runner works in this order</span></h2>
+        <ol class="rank">
+          <li class="proj">
+            <div class="order"><input value="1" inputmode="numeric" aria-label="Softfield's place"><small>place</small></div>
+            <div class="name"><span class="area" style="background:var(--factory)"></span>Softfield</div>
+            <div class="what">The software factory itself: the runner, the dashboard and the workflow.</div>
+            <div>
+              <div class="facts"><span><b>70</b> ready</span><span><b>3</b> building</span><span><b>41</b> ideas</span><span><b>3</b> for you</span></div>
+              <div class="links"><a>Planning</a><a>Board</a><a>Overview</a></div>
+            </div>
+          </li>
+          <li class="proj">
+            <div class="order"><input value="2" inputmode="numeric" aria-label="Coucou's place"><small>place</small></div>
+            <div class="name"><span class="area" style="background:var(--product)"></span>Coucou</div>
+            <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+            <div>
+              <div class="facts"><span><b>0</b> ready</span><span><b>4</b> done</span><span class="muted">nothing for you</span></div>
+              <div class="links"><a>Planning</a><a>Board</a><a>Overview</a></div>
+            </div>
+          </li>
+        </ol>
+        <button class="send" disabled>Send new order</button>
+        <span class="note">Change a number, then Send: it lights up only when the order changed. The runner takes the new order at its next pick; until then the numbers show dashed orange, "on its way", and can't be edited (owner, 2026-10-07). Drag replaces the numbers when F15's drag exists.</span>
+      </section>
+      <p class="muted new" style="font-size:13px">A new project is set up on its computer, in its folder; it shows here once it's ready.<span class="note">No terminal command on the page (owner, 2026-10-13)</span></p>
+    </main>
+  </div>
+  </div>
+
+  <div>
+  <h3 class="frame">After Send (phone, the projects panel)</h3>
+  <div class="phone">
+    <main>
+      <section class="panel">
+        <h2>Projects <span class="src">the runner works in this order</span></h2>
+        <ol class="rank">
+          <li class="proj">
+            <div class="order"><input class="asked" value="1" disabled aria-label="Coucou's place"><small>place</small></div>
+            <div class="name"><span class="area" style="background:var(--product)"></span>Coucou</div>
+            <div class="what">A small, private way to send a photo or a note…</div>
+            <div class="facts"><span><b>0</b> ready</span></div>
+          </li>
+          <li class="proj">
+            <div class="order"><input class="asked" value="2" disabled aria-label="Softfield's place"><small>place</small></div>
+            <div class="name"><span class="area" style="background:var(--factory)"></span>Softfield</div>
+            <div class="what">The software factory itself…</div>
+            <div class="facts"><span><b>70</b> ready</span></div>
+          </li>
+        </ol>
+        <button class="send" disabled>Send new order</button><span class="onway">On its way: the runner takes it at its next pick</span>
+      </section>
+    </main>
+  </div>
+  </div>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what this card adds. Projects becomes the first tab and the page the dashboard opens on; every other tab stays one project's, picked in the top bar as today. Coucou's board shows one card "building" though its milestones are done: a stale state from before the split, fixed in the same work.</p>
+</div>
+
+<script>
+  for (const button of document.querySelectorAll(".switch button")) {
+    button.addEventListener("click", () => {
+      for (const b of document.querySelectorAll(".switch button")) b.setAttribute("aria-pressed", String(b === button));
+      for (const v of document.querySelectorAll("[data-version]")) v.hidden = v.dataset.version !== button.dataset.show;
+    });
+  }
+</script>
+</body>
+</html>

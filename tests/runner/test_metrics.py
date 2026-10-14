@@ -69,7 +69,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 12 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 13 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()
@@ -646,3 +646,19 @@ def test_a_new_run_leaves_a_live_run_alone(db, ids):
     assert db.execute("SELECT outcome FROM jobs WHERE id = ?", (bench,)).fetchone()[0] == "running"
     stale_after = datetime.fromisoformat(T1) + timedelta(minutes=1)
     assert metrics.close_abandoned(db, ids["project"], run, alive_after=stale_after) == 1
+
+
+def test_projects_come_in_the_owners_order_and_a_new_one_goes_last(tmp_path):
+    """ADR 30 item 6: the runner and the Projects page read the projects in the owner's order."""
+    conn = metrics.open_db(tmp_path / "m.sqlite")
+    for name in ("coucou", "softfield", "ducks"):
+        metrics.upsert_project(conn, name, repo=f"/r/{name}")
+    assert [p.name for p in metrics.projects_in_order(conn)] == ["coucou", "ducks", "softfield"]
+    assert metrics.set_project_order(conn, ["softfield", "coucou", "nope"]) == ["nope"]
+    assert [(p.name, p.priority) for p in metrics.projects_in_order(conn)] == [
+        ("softfield", 1),
+        ("coucou", 2),
+        ("ducks", 3),
+    ]
+    metrics.upsert_project(conn, "later", repo="/r/later")
+    assert metrics.projects_in_order(conn)[-1].name == "later"

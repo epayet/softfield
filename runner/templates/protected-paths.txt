@@ -1,0 +1,11 @@
+# Protected paths: only the lead may change these. The runner rejects any developer diff
+# that touches them. One gitignore-style glob per line, each with its reason (ADR 30 item 9).
+# The setup adds this project's sensitive code (security, privacy, data loss, deploy, settings).
+
+# The factory's own files: tickets, cards, ADRs, settings, and these rules
+.factory/**
+AGENTS.md
+CLAUDE.md
+opencode.json
+# The lead's notes for the developers (ADR 07 items 6 and 14)
+docs/agents/**

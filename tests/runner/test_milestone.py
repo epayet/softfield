@@ -797,7 +797,7 @@ def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
     monkeypatch.setattr(claude, "run_claude", run_claude)
     monkeypatch.setattr(owner, "record_verdict", record_verdict)
     monkeypatch.setattr(milestone, "wait_for_room", lambda *a: pytest.fail("the runner slept"))
-    assert cli.main(["run"]) == 0
+    assert cli.main(["run", "--here"]) == 0
     assert events == [
         "e2e",
         "f9 round 1",
