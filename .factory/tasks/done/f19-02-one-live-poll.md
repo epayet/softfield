@@ -23,3 +23,12 @@ Read `factory_dashboard/templates/overview.html`: `#live-needs-you`, `#live-now`
 - other pages keep the top bar's own poll
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 10926
+gate_failures: ['task-tests', 'stopped']
+tokens: 10461229
+```
