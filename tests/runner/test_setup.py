@@ -69,7 +69,7 @@ def test_init_after_a_fresh_git_init_on_master_works_on_main(tmp_path):
     assert git(folder, "branch", "--show-current").strip() == "main"
 
 
-@pytest.mark.parametrize("why", ["a project already", "check out main", "commit or stash"])
+@pytest.mark.parametrize("why", ["a project already", "is on feature", "commit or stash"])
 def test_init_refuses_what_it_would_get_wrong(tmp_path, why):
     folder = tmp_path / "busy"
     folder.mkdir()
@@ -81,7 +81,7 @@ def test_init_refuses_what_it_would_get_wrong(tmp_path, why):
     git(folder, "commit", "-q", "-m", "init")
     if why == "a project already":
         setup.init(folder, tmp_path / "m.sqlite")
-    elif why == "check out main":
+    elif why == "is on feature":
         git(folder, "checkout", "-q", "-b", "feature")
     else:
         (folder / "a.py").write_text("A = 2\n")

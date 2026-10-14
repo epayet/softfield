@@ -64,8 +64,11 @@ def init(folder: Path, db: Path) -> tuple[str, list[str]]:
         git.run("init", "-q", "-b", "main")
     elif not git.run("rev-parse", "--verify", "-q", "HEAD", check=False).strip():
         git.run("symbolic-ref", "HEAD", "refs/heads/main")  # a fresh `git init`: no commit yet
-    elif git.run("rev-parse", "--abbrev-ref", "HEAD").strip() != "main":
-        raise SetupError("check out main first: the factory works on main")
+    elif (branch := git.run("rev-parse", "--abbrev-ref", "HEAD").strip()) != "main":
+        raise SetupError(
+            f"the factory works on a branch called main, and this repo is on {branch}: check"
+            f" main out, or rename it (`git branch -m {branch} main`, and on your remote too)"
+        )
     elif not git.is_clean():
         raise SetupError("commit or stash your changes first: init commits what it writes")
     name = folder.name

@@ -142,7 +142,8 @@ def _machine_command(args: argparse.Namespace) -> int:
         except (setup.SetupError, GitError) as exc:
             print(f"softfield: {exc}")
             return 1
-        print(f"{folder.name}: set up as a {origin} project, registered, committed.")
+        kind = "a new" if origin == "new" else "an existing"
+        print(f"{folder.name}: set up as {kind} project, registered, committed.")
         print("Wrote " + ", ".join(written) + ".")
         if args.no_claude:
             print(f"Next: open Claude here and follow {setup.bootstrap()}.")
