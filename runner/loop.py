@@ -375,6 +375,12 @@ def _recover(git: Git, state: State, state_path: Path) -> str:
         if not git.is_clean():
             target = _free_branch(git, f"interrupted/{kind}-{ticket or job.get('milestone')}")
             git.run("checkout", "-q", "-b", target)
+    elif not git.run("rev-parse", "--verify", "-q", f"refs/heads/{branch}", check=False).strip():
+        # its branch is gone (Softfield's repo was split from Coucou's, ADR 30; or deleted by
+        # hand): nothing to put away, and the ticket starts again from main
+        state.in_flight = None
+        save_state(state, state_path)
+        return f"↺ [{agent}] the interrupted {name}'s branch {branch} is gone: it starts again"
     elif git.current_branch() != branch:
         git.checkout(branch)  # the tree's changes come along
     if kind == "local":

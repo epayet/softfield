@@ -10,4 +10,4 @@ The Projects page (`/projects`, ADR 30 item 6) orders projects with a number per
 "Send new order" (a `project_order` request, applied at the runner's next pick). The owner
 doesn't like arrows and reorders by drag, then one send (owner.md, 2026-10-13). Once F15's
 drag-and-send exists on the board (f15-04), use the same drag here and drop the numbers.
-Mock-up: .factory/cards/f120-many-projects-mockup/projects.html.
+Mock-up: .factory/cards/projects-page-mockup/projects.html.

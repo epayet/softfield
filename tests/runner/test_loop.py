@@ -6187,3 +6187,23 @@ def test_a_softfield_merge_moves_live_and_restarts_when_its_job_ends(repo, tmp_p
     assert loop._new_code(s, code)  # type: ignore[arg-type]
     assert git(live, "rev-parse", "HEAD") == git(repo, "rev-parse", "main")
     assert s.report.notes == [loop.RESTART_NOTE]
+
+
+def test_an_interrupted_job_whose_branch_is_gone_starts_again(repo, capsys):
+    """The owner's first `softfield run` after the split (2026-10-14): state.json said f19-02
+    was cut off on task/f19-02-one-live-poll, a branch left in Coucou's repo; the run crashed.
+    Now it says so, forgets the job, and the ticket starts again from main."""
+    cfg = _config(repo)
+    in_flight = {
+        "kind": "local", "ticket": "m1-01-thing", "branch": "task/m1-01-thing",
+        "agent": "local-qwen", "attempt": 2, "job_id": 1,
+        "started": "2026-10-14T07:25:51+01:00",
+    }  # fmt: skip
+    save_state(State(in_flight=in_flight), cfg.runs_dir / "state.json")
+    s = loop.open_session(cfg, None)
+    assert s.git.current_branch() == "main" and s.git.is_clean()
+    assert s.state.in_flight is None and _state(repo).in_flight is None
+    assert s.state.timed_out == {}  # it didn't run out of time: it never ran here
+    assert (
+        "m1-01-thing's branch task/m1-01-thing is gone: it starts again" in capsys.readouterr().out
+    )

@@ -104,7 +104,7 @@ def project_page(
     )
 
 
-# --- the Projects page (ADR 30 item 6, after .factory/cards/f120-many-projects-mockup/) ---
+# --- the Projects page (ADR 30 item 6, after .factory/cards/projects-page-mockup/) ---
 
 
 @dataclass(frozen=True)

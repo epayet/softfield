@@ -617,7 +617,7 @@ main:has(.board) { max-width: 1360px; }
   .field-foot { border: 1px solid var(--rule); padding: 8px 12px; }
 }
 
-/* The Projects page (ADR 30 item 6, .factory/cards/f120-many-projects-mockup/projects.html) */
+/* The Projects page (ADR 30 item 6, .factory/cards/projects-page-mockup/projects.html) */
 .projects-page .rank { list-style: none; margin: 0; padding: 0; }
 .projects-page .muted { color: var(--muted); }
 .projects-page .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0;
