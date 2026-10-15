@@ -31,3 +31,12 @@ Read `.factory/cards/f109-when-plans-get-merged-i-need.md` (D7). f109-01 built t
 - a card never merged, and the general thread, are unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 7002
+gate_failures: ['stopped', 'stopped']
+tokens: 10764846
+```
