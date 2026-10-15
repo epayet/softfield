@@ -430,7 +430,7 @@ def test_the_field_rows_ripe_and_stash_match_the_milestones(line_db):
     assert [(r["key"], r["ready"], r["running"], r["done"], r["total"]) for r in field["rows"]] == [
         ("f1", 1, 0, 3, 4),
         ("f5", 3, 0, 2, 6),
-        ("f9", 0, 1, 2, 4),
+        ("f9", 0, 1, 2, 3),
     ]
     assert [m["key"] for m in field["ripe"]] == ["f8"]
     assert [m["key"] for m in field["stash"]] == ["f7", "m4"]  # latest first
@@ -573,6 +573,51 @@ def test_a_card_ripens_only_once_its_review_is_written(line_db):
     [row] = [r for r in field["rows"] if r["key"] == "f8"]
     assert (row["ready"], row["running"], row["done"], row["total"]) == (0, 0, 1, 1)
     assert [m["key"] for m in field["stash"]] == ["f7", "m4"]  # done ones, sheet or not
+
+
+def test_a_set_aside_ticket_keeps_no_card_from_ripening(line_db):
+    """D1: a milestone whose review is written and every non-later ticket done is ripe,
+    even with a set-aside ticket."""
+    conn = metrics.open_db(line_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f8 = metrics.upsert_milestone(conn, project, "f8")
+        metrics.upsert_ticket(conn, project, "f8-later", milestone_id=f8, state="later")
+    finally:
+        conn.close()
+    field = document(line_db)["field"]
+    assert any(m["key"] == "f8" for m in field["ripe"])
+    assert not any(m["key"] == "f8" for m in field["rows"])
+    assert any(t["ticket"] == "f8-later" for t in field["later"])
+
+
+def test_a_removed_ticket_keeps_no_card_from_ripening(line_db):
+    """D1: a milestone whose review is written and every non-removed ticket done is ripe,
+    even with a removed ticket."""
+    conn = metrics.open_db(line_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f8 = metrics.upsert_milestone(conn, project, "f8")
+        metrics.upsert_ticket(conn, project, "f8-removed", milestone_id=f8, state=metrics.REMOVED)
+    finally:
+        conn.close()
+    field = document(line_db)["field"]
+    assert any(m["key"] == "f8" for m in field["ripe"])
+    assert not any(m["key"] == "f8" for m in field["rows"])
+
+
+def test_only_set_aside_tickets_keeps_milestone_out(line_db):
+    """A milestone whose only tickets are set aside is in neither ripe nor rows."""
+    conn = metrics.open_db(line_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(conn, project, "f110-later", signoff={"changed": "It."})
+        metrics.upsert_ticket(conn, project, "f110-later-1", milestone_id=m_id, state="later")
+    finally:
+        conn.close()
+    field = document(line_db)["field"]
+    assert not any(m["key"] == "f110-later" for m in field["ripe"])
+    assert not any(m["key"] == "f110-later" for m in field["rows"])
 
 
 def test_the_queue_is_in_run_order_and_now_names_the_next_three(line_db):

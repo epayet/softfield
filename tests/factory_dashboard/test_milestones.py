@@ -6,7 +6,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from runner import metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT
+from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT, write_signoff_button
 from tests.factory_dashboard.test_planning import _open as open_page
 from tests.layout import DISPLAY, PHONE, layout_problems
 
@@ -656,6 +656,33 @@ def test_a_ripe_milestone_shows_its_signoff_button(signoff_button_client):
         "project": PROJECT,
         "subject": "ripe1",
     }
+
+
+def test_a_set_aside_ticket_does_not_hide_the_signoff_button(db_path):
+    """A milestone whose non-later tickets are all done still shows the button
+    even with a later ticket."""
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_signoff_button(conn)
+        rows = conn.execute(
+            "SELECT m.id FROM milestones m JOIN projects p ON p.id = m.project_id"
+            " WHERE p.name = ? AND m.key = ?",
+            (PROJECT, "ripe1"),
+        ).fetchall()
+        [ripe1] = [r["id"] for r in rows]
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_ticket(conn, project, "ripe1-later", milestone_id=ripe1, state="later")
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+    page = client.get("/milestones/ripe1").text
+    assert 'id="signoff-button"' in page
 
 
 def test_a_milestone_with_a_ready_ticket_shows_no_button(serve):

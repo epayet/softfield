@@ -541,7 +541,9 @@ def _field(
             },
         )
         if r["ticket"] and ticket_states.get(r["ticket"]):
-            m["states"].append(ticket_states[r["ticket"]])
+            state = ticket_states[r["ticket"]]
+            if state not in ("later", metrics.REMOVED):
+                m["states"].append(state)
     planted, ripe, stash = [], [], []
     for m in sorted(milestones.values(), key=lambda m: milestone_order(m["key"])):
         states = m["states"]
