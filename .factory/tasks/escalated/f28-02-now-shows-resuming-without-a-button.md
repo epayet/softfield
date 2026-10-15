@@ -27,3 +27,12 @@ Read `factory_dashboard/templates/_partials/running.html` (its last block, f5-18
 - the listed `tests:` pass, and fail without the change
 - `tests/factory_dashboard/test_requests.py` is unchanged from main; if its four pause tests are the only failing gate, write BLOCKED.md naming them for the lead
 - all other gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 198477
+logs: .factory/var/runs/20261015-002303/f28-02-now-shows-resuming-without-a-button
+```
