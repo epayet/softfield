@@ -36,3 +36,9 @@ attempts: 3
 tokens: 146877
 logs: .factory/var/runs/20261015-095007/f109-04-merged-page-counts-and-tests
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
