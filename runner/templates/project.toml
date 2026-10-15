@@ -12,6 +12,7 @@ test_dirs = ["tests"]
 mypy = []                               # mypy's targets; none skips it
 dependency_files = []                   # manifests and lockfiles a developer may not change
 dependency_dirs = []                    # vendored code
+e2e = []                                # end-to-end test folders a review runs first; none skips them
 
 [checks.layouts]                        # test folder = [module folder, suffix]: one test file per module
 

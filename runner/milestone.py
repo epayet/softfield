@@ -19,6 +19,7 @@ from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
     CLAUDE_HEADLESS_AGENT,
     MAIN,
+    NO_E2E,
     REVIEW,
     RUNNER_AGENT,
     RunnerError,
@@ -158,6 +159,7 @@ def milestone_summary(repo: Path, milestone: str, base: str | None = None) -> st
 def _write_metrics(s: Session, milestone: str, base: str, rounds: list[int], stop: str) -> None:
     m = milestone_metrics(s.repo, milestone)
     path = s.repo / ".factory" / "reviews" / f"{milestone}-metrics.md"
+    path.parent.mkdir(parents=True, exist_ok=True)  # a new project's first review
     avg = sum(m.attempts) / len(m.attempts) if m.attempts else 0
     path.write_text(
         "\n".join(
@@ -426,6 +428,8 @@ def _e2e(s: Session) -> GateResult:
         lambda elapsed: s.log(console.running(RUNNER_AGENT, "e2e tests", elapsed)),
     )
     outcome = "passed" if result.ok else "failed"
+    if result.output == NO_E2E:
+        outcome = f"skipped ({NO_E2E})"
     s.log(f"■ [{RUNNER_AGENT}] e2e tests {outcome} · {console.duration(clock() - started)}")
     return result
 

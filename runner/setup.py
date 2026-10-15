@@ -23,6 +23,7 @@ TEMPLATES = Path(__file__).parent / "templates"
 FACTORY_DIRS = (
     "adr",
     "cards",
+    "reviews",
     "tasks/ready",
     "tasks/later",
     "tasks/done",

@@ -6223,3 +6223,36 @@ def test_the_code_a_process_runs_on_is_fingerprinted_once(repo, tmp_path, monkey
     assert loop.update_live(repo)  # another turn moved live
     assert loop.code_at_start(repo) == started  # the next turn still knows the old code
     assert loop._runner_code(repo) != started  # so it restarts
+
+
+def test_end_to_end_tests_run_only_where_the_project_names_them(tmp_path, monkeypatch):
+    """2026-10-15: every review outside Coucou stopped on "end-to-end tests fail" (no
+    tests/e2e, and no --browser in their pytest). `[checks] e2e` names them; none skips."""
+    ran: list[list[str]] = []
+
+    def bounded(cmd, cwd, timeout):
+        ran.append(cmd)
+        return 0, "1 passed", ""
+
+    monkeypatch.setattr(loop, "run_bounded", bounded)
+    assert loop.run_e2e(tmp_path, 60) == GateResult("e2e", True, loop.NO_E2E)
+    (tmp_path / ".factory").mkdir()
+    (tmp_path / ".factory/project.toml").write_text('[checks]\ne2e = ["tests/e2e"]\n')
+    assert loop.run_e2e(tmp_path, 60).ok
+    assert ran == [
+        [
+            *[
+                "uv",
+                "run",
+                "pytest",
+                "-q",
+                "-m",
+                "e2e",
+                "--browser",
+                "chromium",
+                "--browser",
+                "webkit",
+                "tests/e2e",
+            ]
+        ]
+    ]

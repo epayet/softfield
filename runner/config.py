@@ -200,6 +200,9 @@ class Checks:
     translations: bool = False  # the gettext check of ``runner/i18n.py`` (ADR 00 A2)
     dependency_files: tuple[str, ...] = ("pyproject.toml", "uv.lock")
     dependency_dirs: tuple[str, ...] = ()  # vendored code
+    # the end-to-end tests a milestone's review runs first; none skips them (2026-10-15: every
+    # review outside Coucou stopped on "end-to-end tests fail" for want of them)
+    e2e: tuple[str, ...] = ()
     # test folder -> (module folder, module suffix): one test file per module (ADR 00 A1)
     layouts: Mapping[str, tuple[str, str]] = field(default_factory=dict)
 
@@ -218,6 +221,7 @@ def project_checks(repo: Path) -> Checks:
             translations=bool(table.get("translations", default.translations)),
             dependency_files=tuple(table.get("dependency_files", default.dependency_files)),
             dependency_dirs=tuple(table.get("dependency_dirs", default.dependency_dirs)),
+            e2e=tuple(table.get("e2e", default.e2e)),
             layouts={str(k): (str(v[0]), str(v[1])) for k, v in table.get("layouts", {}).items()},
         )
     except (TypeError, IndexError) as exc:

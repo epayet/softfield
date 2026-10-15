@@ -46,7 +46,7 @@ from runner.agents import (
     adapter_for,
 )
 from runner.claude import Progress, backoff_seconds, probe
-from runner.config import Config, read_protected
+from runner.config import Config, project_checks, read_protected
 from runner.gates import (
     BLOCKED_FILE,
     HINTS,
@@ -5096,10 +5096,16 @@ def _print_plan(
 E2E_BROWSERS = ("chromium", "webkit")
 
 
+NO_E2E = "no end-to-end tests in [checks]"
+
+
 def run_e2e(repo: Path, timeout: int) -> GateResult:
+    """The project's end-to-end tests (``[checks] e2e``); passed when it has none."""
+    if not (dirs := project_checks(repo).e2e):
+        return GateResult("e2e", True, NO_E2E)
     browsers = [arg for name in E2E_BROWSERS for arg in ("--browser", name)]
     code, out, err = run_bounded(
-        ["uv", "run", "pytest", "-q", "-m", "e2e", *browsers, "tests/e2e"], repo, timeout
+        ["uv", "run", "pytest", "-q", "-m", "e2e", *browsers, *dirs], repo, timeout
     )
     if code is None:
         return GateResult("e2e", False, f"timed out after {timeout}s\n" + (out + err)[-4000:])
