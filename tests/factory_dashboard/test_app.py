@@ -1092,3 +1092,176 @@ def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serv
     finally:
         conn.close()
     assert kinds == ["pause"]
+
+
+def test_pause_survives_a_stale_live_poll(page, serve, db_path):
+    """A /live answer still showing Running and Pause leaves Pausing after this job and no button;
+    a later /live with Pausing after this job and Resume is swapped in (f28-01 D1)."""
+    client = serve()
+    live_count = [0]
+    posted = []
+    # A stale /live fragment showing Running and Pause (kind: pause).
+    stale_fragment = (
+        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
+        '<span class="pill big good" role="status">Running: f1-04-live</span>'
+        '<button type="button" class="bar-button" hx-post="/requests"'
+        ' hx-vals=\'{"kind": "pause", "project": "coucou"}\' hx-swap="none"'
+        ' data-asked="Pausing after f1-04-live">Pause</button></div>'
+    )
+    # Fresh /live fragment showing Pausing and Resume.
+    fresh_fragment = (
+        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
+        '<span class="pill big warn" role="status">Pausing after this job</span>'
+        '<button type="button" class="bar-button" hx-post="/requests"'
+        ' hx-vals=\'{"kind": "resume", "project": "coucou"}\' hx-swap="none"'
+        ' data-asked="Resuming…">Resume</button></div>'
+    )
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path == "/live":
+            if live_count[0] == 0:
+                r.fulfill(body=stale_fragment, content_type="text/html; charset=utf-8")
+            else:
+                r.fulfill(body=fresh_fragment, content_type="text/html; charset=utf-8")
+            live_count[0] += 1
+        elif path == "/requests":
+            posted.append(r.request.post_data or "")
+            answer = client.post("/requests", content=r.request.post_data, headers=ASK)
+            r.fulfill(status=answer.status_code, body=answer.text, content_type="text/html")
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/tickets")
+    words = page.locator("#factory-status [role=status]")
+    assert words.text_content() == "Running: f1-04-live"
+    page.locator("#factory-status button", has_text="Pause").click()
+    page.wait_for_function(
+        "document.querySelector('#factory-status [role=status]').textContent"
+        " === 'Pausing after f1-04-live'",
+        timeout=1_000,
+    )
+    page.wait_for_function("document.querySelector('#factory-status button') === null")
+    for _ in range(50):
+        if posted:
+            break
+        page.wait_for_timeout(100)
+    assert [parse_qs(body)["kind"] for body in posted] == [["pause"]]
+
+    # Wait for the fresh /live poll to arrive with Pausing and Resume.
+    page.wait_for_function(
+        "document.querySelector('#factory-status [role=status]').textContent"
+        " === 'Pausing after this job'",
+        timeout=REFRESH,
+    )
+    assert page.locator("#factory-status button").text_content() == "Resume"
+
+
+def test_resume_survives_a_stale_live_poll(page, serve, db_path):
+    """A stale Paused by you bar doesn't replace Resuming…; a fresh Running bar is swapped in
+    (f28-01 D1)."""
+    client = _pause_held_client(serve, serve_between=lambda **k: None, db_path=db_path)
+    live_count = [0]
+    posted = []
+    # A stale /live fragment showing Paused by you and Resume (kind: resume).
+    stale_fragment = (
+        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
+        '<span class="pill big warn" role="status">Paused by you since 11:40</span>'
+        '<button type="button" class="bar-button" hx-post="/requests"'
+        ' hx-vals=\'{"kind": "resume", "project": "coucou"}\' hx-swap="none"'
+        ' data-asked="Resuming…">Resume</button></div>'
+    )
+    # Fresh /live fragment showing Running and Pause.
+    fresh_fragment = (
+        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
+        '<span class="pill big good" role="status">Running: f1-04-live</span>'
+        '<button type="button" class="bar-button" hx-post="/requests"'
+        ' hx-vals=\'{"kind": "pause", "project": "coucou"}\' hx-swap="none"'
+        ' data-asked="Pausing after f1-04-live">Pause</button></div>'
+    )
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path == "/live":
+            if live_count[0] == 0:
+                r.fulfill(body=stale_fragment, content_type="text/html; charset=utf-8")
+            else:
+                r.fulfill(body=fresh_fragment, content_type="text/html; charset=utf-8")
+            live_count[0] += 1
+        elif path == "/requests":
+            posted.append(r.request.post_data or "")
+            answer = client.post("/requests", content=r.request.post_data, headers=ASK)
+            r.fulfill(status=answer.status_code, body=answer.text, content_type="text/html")
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/tickets")
+    words = page.locator("#factory-status [role=status]")
+    assert words.text_content() == "Paused by you since 11:40"
+    page.locator("#factory-status button", has_text="Resume").click()
+    page.wait_for_function(
+        "document.querySelector('#factory-status [role=status]').textContent === 'Resuming…'",
+        timeout=1_000,
+    )
+    page.wait_for_function("document.querySelector('#factory-status button') === null")
+    for _ in range(50):
+        if posted:
+            break
+        page.wait_for_timeout(100)
+    assert [parse_qs(body)["kind"] for body in posted] == [["resume"]]
+
+    # Wait for the fresh /live poll to arrive with Running and Pause.
+    page.wait_for_function(
+        "document.querySelector('#factory-status [role=status]').textContent"
+        " === 'Running: f1-04-live'",
+        timeout=REFRESH,
+    )
+    assert page.locator("#factory-status button").text_content() == "Pause"
+
+
+def test_refused_post_shows_error_and_restores_button(page, serve, db_path):
+    """A refused post (500) shows Didn't reach the factory: try again, and the next /live
+    puts the Pause button back (f28-01 D2)."""
+    client = serve()
+    live_count = [0]
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path == "/requests":
+            r.fulfill(status=500, body="Internal Server Error")
+        elif path == "/live":
+            r.fulfill(
+                body=client.get("/live").text,
+                content_type="text/html; charset=utf-8",
+            )
+            live_count[0] += 1
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/tickets")
+    words = page.locator("#factory-status [role=status]")
+    assert words.text_content() == "Running: f1-04-live"
+    page.locator("#factory-status button", has_text="Pause").click()
+    # Wait for the error words first, then for the Pause button to come back.
+    page.wait_for_function(
+        "document.querySelector('#factory-status [role=status]').textContent"
+        ' === "Didn\'t reach the factory: try again"',
+        timeout=REFRESH,
+    )
+    page.wait_for_function(
+        "document.querySelector('#factory-status button') !== null",
+        timeout=REFRESH,
+    )
+    assert page.locator("#factory-status button").text_content() == "Pause"

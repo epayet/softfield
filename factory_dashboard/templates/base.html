@@ -36,13 +36,61 @@
   });
   // The top bar's Pause or Resume (f6-16) shows what was asked at once, on its way, and goes
   // until the next poll brings the runner's own state: the request waits for its next pick.
+  let askedKind = null, askedWords = null, askedKindFromButton = null;
   document.addEventListener("htmx:beforeRequest", (event) => {
     const button = event.detail && event.detail.elt;
     if (!(button instanceof Element) || !button.matches("#factory-status button[data-asked]")) return;
+    askedKind = JSON.parse(button.getAttribute("hx-vals") || "{}").kind;
+    askedWords = button.dataset.asked;
+    askedKindFromButton = askedKind;
     const words = button.parentElement.querySelector("[role=status]");
     words.textContent = button.dataset.asked;
     words.className = "pill big warn asked";
     setTimeout(() => button.remove());
+    // Attach failure listeners to the button itself (f28-01 D2): the button is removed from
+    // the DOM before the response arrives, so events won't bubble up to document.
+    button.addEventListener("htmx:responseError", () => {
+      const status = document.querySelector("#factory-status [role=status]");
+      if (status) {
+        status.textContent = "Didn't reach the factory: try again";
+        status.className = "pill big fail";
+      }
+      askedKind = null;
+      askedWords = null;
+      askedKindFromButton = null;
+    });
+    button.addEventListener("htmx:sendError", () => {
+      const status = document.querySelector("#factory-status [role=status]");
+      if (status) {
+        status.textContent = "Didn't reach the factory: try again";
+        status.className = "pill big fail";
+      }
+      askedKind = null;
+      askedWords = null;
+      askedKindFromButton = null;
+    });
+  });
+  // On OOB swap: block stale bars while waiting for the runner's state (f28-01 D1).
+  document.addEventListener("htmx:oobBeforeSwap", (event) => {
+    if (event.detail.target.id !== "factory-status" || !askedKind) return;
+    const fragment = event.detail.fragment;
+    const btn = fragment.querySelector("button[data-asked]");
+    if (!btn) {
+      askedKind = null;
+      askedWords = null;
+      askedKindFromButton = null;
+      return;
+    }
+    const kind = btn.getAttribute("hx-vals");
+    let parsedKind;
+    try { parsedKind = JSON.parse(kind || "{}").kind; } catch(e) { return; }
+    if (parsedKind === askedKind) {
+      event.detail.shouldSwap = false;
+      return;
+    }
+    askedKind = null;
+    askedWords = null;
+    askedKindFromButton = null;
   });
 </script>
 </head>
