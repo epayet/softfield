@@ -219,42 +219,72 @@ def _paused_at(db_path, since, until=None):
         conn.close()
 
 
-def test_now_offers_pause_after_this_job_while_the_runner_runs(serve, db_path):
+def _now_pause(client) -> tuple[list[str], str]:
+    """Now's pause line(s) and the top bar's words, from one /live poll (f28-02). With two
+    projects the bar names the one it speaks of; Now, on that project's page, doesn't."""
+    html = str(client.get("/live").text)
+    now = html[html.index('<section id="now"') : html.index("</section>", html.index('id="now"'))]
+    bar = re.search(r'<span class="pill big [^"]*" role="status">([^<]*)</span>', html)
+    assert bar, "the top bar's status"
+    words = bar[1].removesuffix(f" · {PROJECT}")
+    return re.findall(r'<span class="pill warn">([^<]*)</span>', now), words
+
+
+# The top bar is the one Pause/Resume (f28-02 D3): Now shows the pause in its words, no button.
+
+
+def test_now_has_no_pause_line_or_button_while_the_runner_runs(serve, db_path):
     client = serve()
-    now = _now_section(client)
-    assert _buttons(now) == {"Pause after this job": "pause"}
-    assert "Paused by you" not in now
-    # the button's post, as htmx sends it, asks the runner to pause
+    lines, bar = _now_pause(client)
+    assert lines == [] and bar.startswith("Running: ")
+    assert _buttons(_now_section(client)) == {}
+
+
+def test_a_pause_asked_shows_on_now_in_the_top_bars_words(serve, db_path):
+    client = serve()
+    # the top bar's button posts this, as htmx sends it
     assert _post(client, "kind=pause", HTMX).status_code == 200
     assert [(r["kind"], r["subject"], r["value"]) for r in _rows(db_path)] == [
         ("pause", None, None)
     ]
-    # asked: until the runner takes it, Now says it pauses after this job
-    now = _now_section(client)
-    assert "Pausing after this job" in now
-    assert _buttons(now) == {"Resume": "resume"}
+    lines, bar = _now_pause(client)
+    assert bar.startswith("Pausing after ")
+    assert lines == [bar]
+    assert _buttons(_now_section(client)) == {}
 
 
-def test_now_shows_the_pause_and_a_resume_button_while_paused(serve, db_path):
+def test_now_shows_the_pause_held_without_a_resume_button(serve, db_path):
     client = serve()
     _paused_at(db_path, "2026-10-02T11:40:00+00:00")
-    now = _now_section(client)
-    assert "Paused by you since 11:40" in now
-    assert _buttons(now) == {"Resume": "resume"}
+    lines, bar = _now_pause(client)
+    assert lines == [bar]
+    assert bar.startswith("Paused by you since 11:40")
+    assert _buttons(_now_section(client)) == {}
+
+
+def test_a_resume_asked_shows_resuming_on_now_without_a_resume_button(serve, db_path):
+    """The owner (F29): the top said "Resuming…" while Now still offered Resume."""
+    client = serve()
+    _paused_at(db_path, "2026-10-02T11:40:00+00:00")
     assert _post(client, "kind=resume", HTMX).status_code == 200
     assert [r["kind"] for r in _rows(db_path)] == ["resume"]
+    lines, bar = _now_pause(client)
+    assert lines == [bar] == ["Resuming…"]
+    assert _buttons(_now_section(client)) == {}
 
 
 def test_a_pause_that_ended_shows_no_more(serve, db_path):
     client = serve()
     _paused_at(db_path, "2026-10-02T11:00:00+00:00", "2026-10-02T11:30:00+00:00")
-    now = _now_section(client)
-    assert "Paused by you" not in now
-    assert _buttons(now) == {"Pause after this job": "pause"}
+    lines, _ = _now_pause(client)
+    assert lines == []
+    assert "Paused by you" not in _now_section(client)
 
 
-def test_no_pause_button_while_nothing_runs(serve):
+def test_no_pause_line_or_button_while_nothing_runs(serve):
     client = serve(live=False)
+    lines, _ = _now_pause(client)
+    assert lines == []
     assert _buttons(_now_section(client)) == {}
 
 

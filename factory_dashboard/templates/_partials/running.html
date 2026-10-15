@@ -49,15 +49,10 @@
   {% endfor %}
   {% endfor %}
 
-  {# The owner's pause (f5-18): the runner finishes the job it is on, then holds until they resume. #}
-  {% if paused_clock or pausing %}
+  {# The owner's pause (f5-18) in the top bar's words; its button is the top bar's alone (f28-02). #}
+  {% if pause_words %}
   <div class="running-head">
-    <span class="pill warn">{% if paused_clock %}Paused by you since {{ paused_clock }}{% else %}Pausing after this job{% endif %}</span>
-    <button type="button" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ project | tojson }}}' hx-swap="outerHTML">Resume</button>
-  </div>
-  {% elif runs %}
-  <div class="running-head">
-    <button type="button" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ project | tojson }}}' hx-swap="outerHTML">Pause after this job</button>
+    <span class="pill warn">{{ pause_words }}</span>
   </div>
   {% endif %}
 

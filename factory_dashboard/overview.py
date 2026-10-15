@@ -162,16 +162,13 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
     ]
 
 
-def pausing(conn: sqlite3.Connection, project: str) -> bool:
-    """The owner asked for a pause the runner hasn't taken yet (f5-18): their latest open
-    pause or resume request is a pause."""
-    row = conn.execute(
-        "SELECT r.kind FROM owner_requests r JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ? AND r.done IS NULL AND r.kind IN ('pause', 'resume')"
-        " ORDER BY r.id DESC LIMIT 1",
-        (project,),
-    ).fetchone()
-    return row is not None and row["kind"] == "pause"
+def pause_words(conn: sqlite3.Connection, project: str, now: datetime) -> str | None:
+    """The owner's pause for Now, in the top bar's own words (f28-02): held, asked, or a
+    resume asked; None otherwise. The top bar holds the one Pause/Resume button."""
+    from factory_dashboard.app import factory_status
+
+    status = factory_status(conn, project, now)
+    return status.words if status.button == "resume" or status.words == "Resuming…" else None
 
 
 def runner_live(conn: sqlite3.Connection, project: str, now: datetime) -> bool:
@@ -657,9 +654,8 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         "all_done": not (all_queued or qjobs or jobs),
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),
-        # the owner's pause on Now (f5-18): since when it holds, else whether one is asked
-        "paused_clock": _clock(queries.paused_since(conn)),
-        "pausing": pausing(conn, project),
+        # the owner's pause on Now (f5-18), as the top bar words it (f28-02)
+        "pause_words": pause_words(conn, project, now),
         "queue": all_queued,
         "next": live_line(conn, project, now.astimezone())["now"]["next"],
         "drain": _drain(all_queued[0].milestone or "") if all_queued else None,
