@@ -25,3 +25,12 @@ Read `factory_dashboard/templates/overview.html` and `tests/factory_dashboard/te
 - the stray `hx-swap-oob` on the poller is gone unless the test shows it is needed
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 6344
+gate_failures: ['stopped', 'stopped']
+tokens: 8688770
+```
