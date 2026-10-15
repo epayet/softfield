@@ -153,6 +153,20 @@ def test_a_live_run_between_jobs_shows_its_activity(serve_between):
     assert "Nothing is running" not in running
 
 
+def test_a_live_run_with_idle_activity_shows_idle_as_is(serve_between):
+    """Idle activity is shown as-is in Now, without "Running: Idle" (F101 idle reads idle)."""
+    running = section(
+        serve_between(
+            activity="Idle: 2 tickets wait for Claude's reserve · the week resets Mon 16:00"
+        )
+        .get("/live")
+        .text,
+        "now",
+    )
+    assert "Idle: 2 tickets wait for Claude's reserve · the week resets Mon 16:00" in running
+    assert "Running: Idle" not in running
+
+
 def test_a_waiting_run_names_its_ticket_and_until_when(serve_between, db_path):
     """f2-03: "waiting for Claude" between jobs named no ticket."""
     from runner import metrics

@@ -916,6 +916,23 @@ def _stopped(serve, serve_between, db_path):
     return serve(live=False)
 
 
+def _idle_with_queue(serve, serve_between, db_path):
+    client = serve_between(
+        activity="Idle: 2 tickets wait for Claude's reserve · the week resets Mon 16:00",
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        for ticket, goal in (("f1-20-idle", "Idle first."), ("f1-21-idle", "Idle second.")):
+            metrics.upsert_ticket(
+                conn, project, ticket, milestone_id=f1, kind="developer", state="ready", title=goal
+            )
+    finally:
+        conn.close()
+    return client
+
+
 def _pause_held_planner(serve, serve_between, db_path):
     client = serve()
     _pause_held(db_path)
@@ -970,12 +987,18 @@ def _pause_held_planner(serve, serve_between, db_path):
             {"Resume": "resume"},
         ),
         (_resume_asked, "Resuming… · coucou", {}),  # on its way: nothing to press
+        (
+            _idle_with_queue,
+            "Idle: 2 tickets wait for Claude&#39;s reserve · the week resets Mon 16:00",
+            {"Pause": "pause"},
+        ),
         (_waiting, "Waiting for Claude until 12:40", {"Pause": "pause"}),  # one project
         (_stopped, "Stopped", {}),
     ],
     ids=[
         "running",
         "idle",
+        "idle-with-queue",
         "pause-asked",
         "paused",
         "paused-planner",

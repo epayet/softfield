@@ -33,7 +33,11 @@
       {% if run.activity == "paused by you" %}{# the runner's words while it holds (f5-18) #}
       <span>Holding between jobs: nothing runs until you resume</span>
       {% elif run.activity %}
+      {% if run.activity.startswith("Idle: ") %}
+      <span>{{ run.activity }}</span>
+      {% else %}
       <span>Running: {{ run.activity }}</span>
+      {% endif %}
       {% elif run.waiting_clock %}
       <span>Waiting for Claude's limit to reset, until {{ run.waiting_clock }}</span>
       {% else %}

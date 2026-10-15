@@ -222,6 +222,7 @@ class Status:
 
 
 PICKING = "picking the next ticket"  # runner/loop.py's PICKING: between jobs
+IDLE = "Idle: "  # runner writes its idle activity starting with this prefix (F101)
 
 
 def _clock(at: str) -> str:
@@ -257,6 +258,8 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
             return 1
         if status.words.startswith("Waiting for Claude"):
             return 2
+        if status.words.startswith("Idle: "):
+            return 3
         return 4 if status.words == "Stopped" else 3
 
     name, status = min(found, key=lambda pair: rank(pair[1]))
@@ -303,6 +306,8 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
         jobs or overview.queue(conn, project, now) or overview.queued_jobs(conn, project, now)
     ):
         return Status("Idle: nothing to do", "", "pause")
+    if activity.startswith(IDLE):
+        return Status(activity, "", "pause")
     return Status(f"Running: {activity}", "good", "pause")
 
 
