@@ -30,3 +30,12 @@ Read `desk`, `_refused` and `DeskItem` in `factory_dashboard/planning.py`, and `
 - the Overview's Needs you has no row of kind `blocked` of its own; its desk entry's number counts them; rows of other kinds (`adr`, `reserve`) show as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5739
+gate_failures: ['stopped', 'stopped']
+tokens: 2092760
+```
