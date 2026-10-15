@@ -26,3 +26,12 @@ Read `factory_dashboard/templates/base.html` (its script and `#live-poll`) and `
 - without a click, polls swap the bar as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 8477
+gate_failures: ['stopped', 'task-tests']
+tokens: 13210787
+```
