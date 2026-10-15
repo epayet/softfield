@@ -305,19 +305,23 @@ def _run_projects(args: argparse.Namespace, restarted: bool) -> int:
     return 0
 
 
-def _review(cfg: Config, repo: Path, key: str) -> None:
+def _review(cfg: Config, repo: Path, key: str) -> bool:
     """A review `runner run` found due (f4-20), and its verdict, as `runner milestone` gives
-    them. A review that changes runner/ restarts the command; state.json keeps its rounds.
-    One parked for Claude is no stop and has no verdict yet: back to the queue (F53 D1)."""
+    them; whether to restart: a review that changed runner/ (state.json keeps its rounds).
+    The caller restarts, so `softfield run` first closes the other projects' sessions: an
+    exec from inside the review left Coucou's run live, and the new process refused to
+    start beside it (2026-10-15). One parked for Claude is no stop and has no verdict yet:
+    back to the queue (F53 D1)."""
     stop = run_due_review(cfg, key)
     if stop == RESTART:
-        _restart()
+        return True
     if stop == PARKED:
-        return
+        return False
     state = load_state(cfg.runs_dir / "state.json")
     _, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
     owner.record_verdict(repo, text)
     print("\n" + text, end="", flush=True)
+    return False
 
 
 # The checks never apply the owner's requests: they run inside jobs, on task branches, and as
@@ -541,8 +545,8 @@ def main(argv: list[str] | None = None) -> int:
                     _restart()  # `runner run` is the standing command (ADR 17): it carries on
                 if session is None or (session.review is None and not session.idle):
                     break
-                if session.review is not None:
-                    _review(cfg, repo, session.review)  # then back to the queue (f4-20)
+                if session.review is not None and _review(cfg, repo, session.review):
+                    _restart()  # else back to the queue (f4-20)
         elif args.command == "milestone":
             key = milestone_arg(repo, args.number)
             owner.rerun_started(repo, key, db=cfg.metrics_db)

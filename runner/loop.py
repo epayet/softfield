@@ -4769,7 +4769,7 @@ def _main_head(s: Session) -> str | None:
 
 def run_projects(
     configs: Callable[[], list[Config]],
-    review: Callable[[Config, str], None],
+    review: Callable[[Config, str], bool],
     *,
     escalate: bool = True,
 ) -> bool:
@@ -4799,8 +4799,9 @@ def run_projects(
         key = s.report.review
         if key is not None and not restart:
             close_session(sessions.pop(s.repo))
-            review(s.cfg, key)  # its project opens a new session next round
-            return False, True
+            # its project opens a new session next round; a review that changed runner/
+            # restarts through the `finally` below, which closes the others' sessions
+            return review(s.cfg, key), True
         return restart, s.picks > before
 
     try:

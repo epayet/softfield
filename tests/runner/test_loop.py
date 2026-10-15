@@ -6085,12 +6085,44 @@ def test_run_projects_skips_a_project_off_main_once_reviews_and_closes_every_ses
     monkeypatch.setattr(loop, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s))
     monkeypatch.setattr(loop, "_idle_wait", idle_wait)
-    review = lambda cfg, key: reviewed.append((cfg.project_name, key))  # noqa: E731
+
+    def review(cfg, key):
+        reviewed.append((cfg.project_name, key))
+        return False
+
     configs = lambda: cfgs  # noqa: E731
     assert loop.run_projects(configs, review) is False  # type: ignore[arg-type]
     assert reviewed == [("softfield", "f9")]
     assert closed == opened and len(opened) == 2  # reviewed, then reopened and closed at the end
     assert capsys.readouterr().out.count("coucou: start the runner on a clean main branch") == 1
+
+
+def test_a_review_that_changes_the_runner_closes_every_session_before_the_restart(monkeypatch):
+    """2026-10-15: Softfield's review changed runner/ and the command exec'd from inside it;
+    Coucou's run stayed live, and the new process refused to start beside it. The review
+    now asks for the restart and `run_projects` returns, closing the other sessions first."""
+    from types import SimpleNamespace
+
+    cfgs = [SimpleNamespace(repo=Path(f"/r/{n}"), project_name=n) for n in ("softfield", "coucou")]
+    closed = []
+
+    def open_session(cfg):
+        report = SimpleNamespace(review=None, started=loop.now(), tasks=[], claude_runs=[])
+        return SimpleNamespace(
+            cfg=cfg, repo=cfg.repo, picks=0, report=report, state=SimpleNamespace(owner_pause=None)
+        )
+
+    def work_queue(s, **kw):
+        if s.cfg.project_name == "softfield":
+            s.report.review = "f95"
+        return False
+
+    monkeypatch.setattr(loop, "open_session", open_session)
+    monkeypatch.setattr(loop, "work_queue", work_queue)
+    monkeypatch.setattr(loop, "_main_head", lambda s: None)
+    monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s.cfg.project_name))
+    assert loop.run_projects(lambda: cfgs, lambda cfg, key: True) is True  # type: ignore[arg-type,return-value]
+    assert sorted(closed) == ["coucou", "softfield"]
 
 
 def test_live_knows_the_softfield_repo_it_follows(repo, tmp_path, monkeypatch):
@@ -6130,7 +6162,7 @@ def test_a_ctrl_c_mid_job_leaves_that_project_as_one_projects_run_would(monkeypa
     monkeypatch.setattr(loop, "_main_head", lambda s: None)
     monkeypatch.setattr(loop, "close_session", lambda s: closed.append(s.cfg.project_name))
     with pytest.raises(KeyboardInterrupt):
-        loop.run_projects(lambda: cfgs, lambda cfg, key: None)  # type: ignore[arg-type,return-value]
+        loop.run_projects(lambda: cfgs, lambda cfg, key: False)  # type: ignore[arg-type,return-value]
     assert closed == ["softfield"]
 
 
@@ -6164,7 +6196,7 @@ def test_a_card_committed_outside_the_run_reaches_the_board_at_the_next_round(mo
     monkeypatch.setattr(loop, "_main_head", main_head)
     monkeypatch.setattr(loop, "sync_cards", lambda s: synced.append("cards"))
     monkeypatch.setattr(loop, "sync_tickets", lambda s: synced.append("tickets"))
-    loop.run_projects(lambda: [cfg], lambda cfg, key: None)  # type: ignore[list-item]
+    loop.run_projects(lambda: [cfg], lambda cfg, key: False)  # type: ignore[list-item]
     assert synced == ["tickets", "cards"]  # once, when main moved from a to b
 
 
