@@ -263,7 +263,7 @@ def test_a_command_keeps_its_stdin(tmp_path: Path):
     prompt.write_text("hello\n")
     with prompt.open() as stdin:
         _, code = run_streaming(
-            ["sh", "-c", "read line; test \"$line\" = hello"],
+            ["sh", "-c", 'read line; test "$line" = hello'],
             tmp_path,
             10,
             tmp_path / "out.log",

@@ -22,8 +22,20 @@ HOOK_SKIPS = (
 )
 _OUTPUT_LIMIT = 4000
 # Set by git for hooks; a test's git subprocess would inherit them and write into the
-# commit being made (it did once: `commit -a` failed on a test fixture's file).
-GIT_HOOK_ENV = ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX", "GIT_OBJECT_DIRECTORY")
+# commit being made (it did once: `commit -a` failed on a test fixture's file). The author
+# ones override a test repo's own `user.name`: test_setup saw the owner's name, not the
+# runner's, and blocked a lead commit (2026-10-15).
+GIT_HOOK_ENV = (
+    "GIT_INDEX_FILE",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_PREFIX",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_AUTHOR_NAME",
+    "GIT_AUTHOR_EMAIL",
+    "GIT_AUTHOR_DATE",
+    "GIT_CONFIG_PARAMETERS",
+)
 
 
 @dataclass(frozen=True)

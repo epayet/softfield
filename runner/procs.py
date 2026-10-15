@@ -36,7 +36,10 @@ if os.getppid() != int(sys.argv[1]):
     die(0, None)
 code = subprocess.Popen(sys.argv[2:]).wait()
 if code < 0:
-    signal.signal(-code, signal.SIG_DFL)
+    try:
+        signal.signal(-code, signal.SIG_DFL)
+    except (OSError, ValueError):
+        pass
     os.kill(os.getpid(), -code)
 sys.exit(code)
 """
@@ -126,7 +129,7 @@ def run_bounded(
     timeout. A timeout kills the whole group: ``subprocess.run`` kills only the direct child,
     so `uv run pytest` left pytest running for a day (2026-10-01)."""
     proc = subprocess.Popen(
-        args,
+        _watched(args),
         cwd=cwd,
         env=env,
         stdout=subprocess.PIPE,
@@ -171,7 +174,7 @@ def run_streaming(
     env = {**(os.environ if env is None else env), "PWD": str(cwd.absolute())}
     with out_path.open("w", encoding="utf-8") as out, tempfile.TemporaryFile("w+") as err:
         proc = subprocess.Popen(
-            cmd,
+            _watched(cmd),
             cwd=cwd,
             env=env,
             stdin=stdin,
