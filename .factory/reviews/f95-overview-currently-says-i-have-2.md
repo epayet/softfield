@@ -1,6 +1,6 @@
 # Review: F95, sign-offs counted once, and the lead can look
 
-- **Status:** reviewed (round 1), waiting for the owner's sign-off.
+- **Status:** reviewed (rounds 1 and 2), waiting for the owner's sign-off. Round 2 found both fixes sound and nothing new.
 
 ## Sign-off sheet
 
@@ -34,6 +34,7 @@ None.
   - **A developer can turn a ticket's rule into its opposite and still write green tests.** The Done when said "not on the desk: no row"; the developer wrote "not on the desk: its own row", with a test for it. The checkpoint read "tests both sides" and called it sound without comparing the test with the Done when. Fix: the checkpoint prompt already asks it to check the Done when; this is a missed one, scored as such.
   - **ADR 30 left two stale paths in the lead's own prompts.** The review and escalation prompts named `tests/unit` and `tests/integration`, which this project no longer has. Fixed here: they now name the project's own test folders.
   - The `look` command worked in this review: the job hours below came from it.
+- 2026-10-15 21:44, runner: review round 2 (Opus) re-read round 1's own fixes; both hold, no new finding.
 
 ### 6. What next
 - **Product:** on hold, as you asked.
@@ -67,7 +68,9 @@ French: nothing to check, the dashboard is English only and nothing under a loca
 
 Checks after the fixes: `tests/factory_dashboard/test_overview.py` and `tests/runner/test_look.py`, 139 passed; the review and escalation tests of `test_milestone.py` and `test_loop.py`, 79 passed; ruff and mypy clean on every edited file. The full `tests/runner tests/factory_dashboard` run, started in the background after the overview fix, gave 2288 passed in 14 min 45 s (longer than one foreground command may run).
 
-Score: 6/10. f95-02 is careful work: a read-only guarantee SQLite itself enforces and a test that no GET writes. f95-01 got the card's one decision backwards and tested the wrong rule, and the checkpoint passed it.
+**Round 2** (only round 1's fix commit to read): F1 holds. Nothing else read `Need.subject`, and the off-desk test now asserts no row. F2 holds too: this round's own prompt named `tests/runner tests/factory_dashboard`. The review prompt has its own assertion in `test_milestone.py`. The escalation prompt has no assertion, but it would fail with a KeyError if `{tests}` weren't filled in, and the 18 escalation tests in `test_loop.py` pass. Checks: `test_overview.py`, `test_milestone.py` and `test_look.py` all pass (178 tests), plus the 18 escalation tests; ruff and mypy are clean on every edited file. No new finding, so the loop stops here.
+
+Score: 6/10 (unchanged). f95-02 is careful work: a read-only guarantee SQLite itself enforces and a test that no GET writes. f95-01 got the card's one decision backwards and tested the wrong rule, and the checkpoint passed it.
 
 ## Factory
 - **Flow:** two tickets, both merged first time; one waited on f110-01 (another card's ticket), which needed a direction. One checkpoint (Sonnet, $0.16), one review. No escalation, no stop for the owner.
