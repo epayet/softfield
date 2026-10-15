@@ -31,3 +31,12 @@ Read `.factory/cards/f109-when-plans-get-merged-i-need.md` (D1 to D4, D6). In `r
 - a card with no merge, the general thread, and a project with no checkout show no such links
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 6199
+gate_failures: ['stopped']
+tokens: 10134994
+```
