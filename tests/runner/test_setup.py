@@ -1,3 +1,4 @@
+import json
 import subprocess
 from datetime import date
 from pathlib import Path
@@ -158,6 +159,35 @@ def test_doctor_hands_over_with_where_to_go_next():
         "  http://192.168.1.5:8765/planning/m1?project=hello",
         "Write to the card to plan it there; the runner builds it once you approve the plan.",
     ]
+    planning = setup.hand_over("hello", "m1-hello-world", "192.168.1.5", planning=True)
+    assert planning.splitlines()[-1].startswith("The lead plans it once the runner is running")
+
+
+def test_the_hand_over_asks_the_lead_to_plan_the_first_card_once(tmp_path):
+    """The owner, 2026-10-15: the first card sat unplanned until they wrote to it."""
+    db = tmp_path / "m.sqlite"
+    at = "2026-10-15T09:00:00+01:00"
+    assert not setup.plan_first_card("hello", "m1-hello-world", db, at)  # no such project
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.upsert_project(conn, "hello", repo="/r/hello")
+    finally:
+        conn.close()
+    assert setup.plan_first_card("hello", "m1-hello-world", db, at)
+    assert not setup.plan_first_card("hello", "m1-hello-world", db, at)  # one waits already
+    conn = metrics.open_db(db)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests").fetchall()
+        assert [(r["project_id"], r["kind"], r["subject"]) for r in rows] == [
+            (project, "plan_message", "m1")
+        ]
+        assert json.loads(rows[0]["value"]) == {"text": "Plan this card.", "comments": {}}
+        conn.execute("UPDATE owner_requests SET done = ?", (at,))
+        metrics.planner_thread(conn, project, "m1", at)
+        conn.commit()
+    finally:
+        conn.close()
+    assert not setup.plan_first_card("hello", "m1-hello-world", db, at)  # its thread began
 
 
 def test_forget_takes_a_project_off_every_list_but_keeps_its_rows(tmp_path, monkeypatch, capsys):

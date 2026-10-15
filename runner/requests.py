@@ -175,7 +175,7 @@ def _plan_message(
     away (F107, 2026-10-13), it is the kept card's thread's: a job there could only answer
     that it has no card."""
     thread = planner.thread_key(row["subject"])
-    text, comments = planner.message(row["value"])
+    text, comments = planner.message(_first_words(conn, project_id, thread, row))
     at = now.isoformat()
     sent_on = ""
     if repo is not None and (kept := _kept_card(repo, thread)) is not None:
@@ -203,6 +203,26 @@ def _plan_message(
         if item["kind"] == planner.PLANNING and item["subject"] == thread:
             metrics.resolve_owner_item(conn, item["id"], at)
     return QUEUED_FOR_THE_LEAD + sent_on
+
+
+def _first_words(
+    conn: sqlite3.Connection, project_id: int, thread: str, row: sqlite3.Row
+) -> object:
+    """A message's value, or "Plan this card." for a card's first message sent with no words
+    (the box says the lead reads the card too; 2026-10-15). Written back on the request, so the
+    planner job, which reads it again, reads the same."""
+    try:
+        planner.message(row["value"])
+        return row["value"]
+    except planner.EmptyMessage:
+        found = metrics.find_thread(conn, project_id, thread)
+        if thread == planner.GENERAL or (
+            found is not None and metrics.planner_messages(conn, found["id"])
+        ):
+            raise
+    value = json.dumps({"text": planner.PLAN_THE_CARD, "comments": {}})
+    metrics.change_request(conn, row["id"], value)
+    return value
 
 
 def _carry_on(

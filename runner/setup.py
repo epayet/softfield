@@ -6,6 +6,7 @@ project and hands over to an interactive Claude session that sets the rest up wi
 writes the systemd user units that keep the runner and the dashboard up.
 """
 
+import json
 import os
 import re
 import shutil
@@ -168,6 +169,33 @@ def ready(name: str, db: Path) -> bool:
         conn.close()
 
 
+def plan_first_card(name: str, card: str, db: Path, at: str) -> bool:
+    """The hand-over asks the lead to plan the first card, as the owner's "Plan this card." on
+    its thread, so a proposal waits on the desk (2026-10-15: the card sat unplanned until the
+    owner wrote to it). Not when the card's thread has begun or a message waits for it. Whether
+    it asked."""
+    from runner import planner
+
+    thread = planner.thread_key(card)
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.find_project(conn, name)
+        if project is None or metrics.find_thread(conn, project, thread) is not None:
+            return False
+        waiting = conn.execute(
+            "SELECT 1 FROM owner_requests WHERE project_id = ? AND kind = ? AND subject = ?"
+            " AND done IS NULL",
+            (project, planner.PLAN_MESSAGE, thread),
+        ).fetchone()
+        if waiting is not None:
+            return False
+        value = json.dumps({"text": planner.PLAN_THE_CARD, "comments": {}})
+        metrics.add_request(conn, project, planner.PLAN_MESSAGE, thread, value, at)
+        return True
+    finally:
+        conn.close()
+
+
 def bootstrap() -> Path:
     """The setup session's guide, in the Softfield checkout this runs from."""
     return config.HOME / "docs" / "bootstrap.md"
@@ -240,7 +268,7 @@ def first_card(folder: Path) -> str | None:
     return cards[0] if cards else None
 
 
-def hand_over(name: str, card: str | None, host: str) -> str:
+def hand_over(name: str, card: str | None, host: str, *, planning: bool = False) -> str:
     """What `doctor` says when the project is ready: where it is and what to do next."""
     base = f"http://{host}:8765"
     lines = [f"Done: {name} is in the factory.", f"  The Projects page: {base}/projects"]
@@ -248,9 +276,15 @@ def hand_over(name: str, card: str | None, host: str) -> str:
         key = card.split("-", 1)[0]
         lines.append(f"  Its first card, {card}, on its Planning desk:")
         lines.append(f"  {base}/planning/{key}?project={name}")
-    lines.append(
-        "Write to the card to plan it there; the runner builds it once you approve the plan."
-    )
+    if planning:
+        lines.append(
+            "The lead plans it once the runner is running (`softfield run`): its proposal comes"
+            " on the card's thread. Answer there; the runner builds it once you approve the plan."
+        )
+    else:
+        lines.append(
+            "Write to the card to plan it there; the runner builds it once you approve the plan."
+        )
     return "\n".join(lines)
 
 

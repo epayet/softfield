@@ -37,6 +37,9 @@ READY_DIR = ".factory/tasks/ready/"
 PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `message`'s JSON
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
+# A card's first message with no words, and the one `softfield doctor` sends for a new project's
+# first card (2026-10-15: an empty Send was refused and the card sat unplanned)
+PLAN_THE_CARD = "Plan this card."
 MERGE = "merge"  # a card that repeats another, closed into it once approved (f6-12)
 APPLIED = "applied"  # a merge the runner applied after the job: no button (F49 D1)
 REPLAN = "replan"  # a running milestone redirected: it may change its ready tickets (f6-13)
@@ -50,6 +53,10 @@ _BLOCK_RE = re.compile(r"```json[ \t]*\n(.*?)\n?```", re.DOTALL)
 
 class PlannerError(ValueError):
     """A request or a reply the runner can't read, with why."""
+
+
+class EmptyMessage(PlannerError):
+    """A message with no words and no comments."""
 
 
 @dataclass(frozen=True)
@@ -121,7 +128,7 @@ def message(value: object) -> tuple[str, dict[int, str]]:
         if comment.strip():
             by_point[int(n)] = comment.strip()
     if not text.strip() and not by_point:
-        raise PlannerError("a message has words or comments")
+        raise EmptyMessage("a message has words or comments")
     return text.strip(), dict(sorted(by_point.items()))
 
 

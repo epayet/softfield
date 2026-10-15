@@ -694,10 +694,15 @@ def main(argv: list[str] | None = None) -> int:
                 host = _lan_address()
             except RunnerError:
                 host = "127.0.0.1"
-            setup.publish_cards(repo, project_name(repo), cfg.metrics_db)  # on its desk at once
-            if setup.ready(project_name(repo), cfg.metrics_db):
+            name, card = project_name(repo), setup.first_card(repo)
+            setup.publish_cards(repo, name, cfg.metrics_db)  # on its desk at once
+            planning = False
+            if setup.ready(name, cfg.metrics_db):
                 print("The runner takes it from its next round, between two jobs.")
-            print(setup.hand_over(project_name(repo), setup.first_card(repo), host))
+                if card is not None:  # the lead plans it without waiting for a message
+                    at = datetime.now().astimezone().isoformat()
+                    planning = setup.plan_first_card(name, card, cfg.metrics_db, at)
+            print(setup.hand_over(name, card, host, planning=planning))
         elif args.command == "check-tickets":
             given = args.tickets or sorted(
                 p.relative_to(repo).as_posix()

@@ -383,7 +383,7 @@ def test_sending_answers_on_a_thread_resolves_its_planning_item(repo):
         ("../x", _message("Hi."), "a thread is a card's key or general, not '../x'"),
         (None, _message("Hi."), "a thread is a card's key or general, not None"),
         ("f7", "Hi.", "a message is JSON with its text and comments"),
-        ("f7", _message(""), "a message has words or comments"),
+        ("general", _message(""), "a message has words or comments"),
     ],
 )
 def test_a_message_the_runner_cant_read_is_finished_with_why_and_queues_nothing(
@@ -393,6 +393,30 @@ def test_a_message_the_runner_cant_read_is_finished_with_why_and_queues_nothing(
     _apply(repo)
     assert _request(repo, asked) == (NOW.isoformat(), error)
     assert _queued(repo) == []
+
+
+def test_an_empty_first_message_on_a_card_asks_the_lead_to_plan_it(repo):
+    """The owner, 2026-10-15: the box says the lead reads the card too, so an empty Send on a
+    card's new thread was meant as "plan it", not refused. Later, empty is refused again."""
+    first = _ask(repo, "plan_message", "f7", _message("  "))
+    assert _apply(repo) == ["plan_message f7: queued for the lead"]
+    assert _queued(repo) == [("planner", f"f7#{first}", "your message on F7", None)]
+    assert [(m["author"], m["text"]) for m in _thread(repo, "f7")] == [("owner", "Plan this card.")]
+    conn = metrics.open_db(_db(repo))  # the planner job reads the same words
+    try:
+        assert (
+            json.loads(
+                conn.execute("SELECT value FROM owner_requests WHERE id = ?", (first,)).fetchone()[
+                    "value"
+                ]
+            )["text"]
+            == "Plan this card."
+        )
+    finally:
+        conn.close()
+    again = _ask(repo, "plan_message", "f7", _message(""))
+    _apply(repo)
+    assert _request(repo, again) == (NOW.isoformat(), "a message has words or comments")
 
 
 # --- `approve_plan`, `accept_adr`, `send_back`: the owner approves (ADR 20 items 6–7) -------
