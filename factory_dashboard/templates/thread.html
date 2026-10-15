@@ -128,7 +128,7 @@
     {% for card in merged_on %}
     <div class="merged-on-card" style="display: flex; flex-direction: column; gap: 6px">
       <p style="margin: 0; font-size: 14px; color: var(--ink-2)">Merged into {{ card.key | upper }}, {{ card.title }}: the conversation and its plans are there.</p>
-      <a href="{{ card.link }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">/planning/{{ card.key }}</a>
+      <a href="{{ card.link }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{{ card.key | upper }}, {{ card.title }} · {{ card.date }}</a>
       {% for prop in card.proposals %}
       <a href="{{ prop.link }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{{ prop.title }}</a>
       {% endfor %}

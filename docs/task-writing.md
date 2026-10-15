@@ -108,6 +108,10 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 
 - **A test-only fix can't go to a developer.** The `tests-fail-on-main` gate puts back main's code and needs the changed test to fail there; when `files:` holds only tests and main already behaves (a finding like "the test doesn't assert X"), no correct test can fail, so the ticket burns three attempts and an escalation (f4-23, f4-24, f4-28). Since f8-09, mark such a ticket `tests_only: true` ([`docs/task-format.md`](task-format.md)): the gate is skipped and a developer can do it; spell out in Done when what each assertion must reject.
 
+## Lessons from F109
+
+- **A finding that names `tests/factory_dashboard/test_planning.py` (3,500 lines) is a lead ticket,** like any planning-page ticket since F14. f109-04, a checkpoint's finding, went to the developer: its first attempt did most of it, then the next two re-read the test file for 10 minutes and stopped with no edit, the second under a direction that said "don't read the test file again". Writing a finding ticket, check its `files:` and `tests:` against the Known range in `docs/agents/lead.md` before routing it.
+
 ## Open questions
 
 - Outcome vs dictation: no visible difference in M2 (4 tasks). Keep sampling both.

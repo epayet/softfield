@@ -3046,7 +3046,7 @@ def test_a_merge_whose_card_left_main_shows_both_ways(planning, db_path, serve, 
     client = serve()
     html = client.get("/planning/f107").text
     assert response_contains(html, "Merged into F95, When plans get merged")
-    assert 'href="/planning/f95' in html
+    assert 'href="/planning/f95?' in html
     # h2 shows the heading's title
     h2 = re.search(r"<h2[^>]*>([^<]+)</h2>", html)
     assert h2 and "When plans get merged" in h2[1]
@@ -3123,10 +3123,12 @@ def test_merged_on_shows_link_to_kept_card(planning, db_path, serve, checkout):
     client = serve()
     html = client.get("/planning/f107").text
 
-    # Has #merged-on with link to F95
+    # Has #merged-on with link to F95, its text the card's key and title, not its path
     assert 'id="merged-on"' in html
-    assert 'href="/planning/f95' in html
-    assert "When plans get merged" in html
+    block = html.split('id="merged-on"', 1)[1]
+    link = re.search(r'<a href="/planning/f95\?[^"]*"[^>]*>([^<]*)</a>', block)
+    assert link and link[1].startswith("F95, When plans get merged")
+    assert ">/planning/" not in html
 
     # No message form (textarea for a message)
     assert 'id="reply"' not in html
@@ -3180,15 +3182,38 @@ def test_merged_on_lists_open_proposals(planning, db_path, serve, checkout):
     html = client.get("/planning/f107").text
     assert "Open plan for F95" not in html
 
-    # Applied proposal should not appear
+
+def test_merged_on_leaves_out_a_rejected_plan(planning, db_path, serve, checkout):
+    """A plan the owner rejected on F95's thread is not listed on /planning/f107."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+    f95_doc = planner.merged_card(
+        "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n",
+        "notes",
+        "From F107: When plans get merged (merged by the lead on 2026-10-13)",
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
     _write(
         db_path,
-        lambda conn: metrics.add_request(
-            conn, planning, "approve_plan", "f9", None, NOW.isoformat()
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
         ),
     )
-    html = client.get("/planning/f107").text
-    assert "Parallel, said twice" not in html
+    plan = {
+        "id": "plan-f95",
+        "kind": "plan",
+        "title": "Rejected plan for F95",
+        "path": None,
+        "key_points": [{"n": 1, "title": "Point", "text": "A point.", "flag": False}],
+    }
+    _write(db_path, lambda conn: _review(conn, planning, "f95", plan))
+    client = serve()
+    assert "Rejected plan for F95" in client.get("/planning/f107").text
+
+    _finished(db_path, planning, "reject", "f95/plan-f95", None, "rejected plan-f95")
+    assert "Rejected plan for F95" not in client.get("/planning/f107").text
 
 
 def test_merged_on_shows_ticket_count(planning, db_path, serve, checkout):
@@ -3243,6 +3268,68 @@ def test_merged_on_shows_ticket_count(planning, db_path, serve, checkout):
     assert 'href="/milestones/f95-plans-get-merged' in html
 
 
+def test_merged_on_counts_done_across_two_milestones(planning, db_path, serve, checkout):
+    """A kept card with two milestones, three tickets done in the second and one ready
+    in the first, shows 'Planned: 4 tickets, 3 done'."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F95's doc holds F107's merge
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    # Seed milestones: F95 (first milestone)
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
+        ),
+    )
+    # F95-continued (second milestone on same card, a replan)
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-continued", title="Plans continued"
+        ),
+    )
+    conn = metrics.open_db(db_path)
+    f95_m1 = conn.execute(
+        "SELECT id FROM milestones WHERE project_id = ? AND key = ?",
+        (planning, "f95-plans-get-merged"),
+    ).fetchone()["id"]
+    f95_m2 = conn.execute(
+        "SELECT id FROM milestones WHERE project_id = ? AND key = ?",
+        (planning, "f95-continued"),
+    ).fetchone()["id"]
+    conn.close()
+
+    # First milestone: 1 ready ticket
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_ticket(
+            conn, planning, "F95-1", milestone_id=f95_m1, state="ready"
+        ),
+    )
+    # Second milestone: 3 done tickets
+    for i in range(1, 4):
+        _write(
+            db_path,
+            lambda conn, n=i: metrics.upsert_ticket(
+                conn, planning, f"F95-02-{n}", milestone_id=f95_m2, state="done"
+            ),
+        )
+
+    client = serve()
+    html = client.get("/planning/f107").text
+
+    assert "Planned: 4 tickets, 3 done" in html
+
+
 def test_merged_on_two_kept_cards(planning, db_path, serve, checkout):
     """A key merged into two cards has two .merged-on-card parts, each with its
     own card's links, and keeps its message form."""
@@ -3279,9 +3366,9 @@ def test_merged_on_two_kept_cards(planning, db_path, serve, checkout):
     # Two .merged-on-card parts
     assert html.count("merged-on-card") == 2
 
-    # Both links present
-    assert 'href="/planning/f95' in html
-    assert 'href="/planning/f13' in html
+    # Both links present with href
+    assert 'href="/planning/f95?' in html
+    assert 'href="/planning/f13?' in html
 
     # Message form stays
     assert 'id="reply"' in html
@@ -3416,10 +3503,11 @@ def test_key_merged_into_two_cards(planning, db_path, serve, checkout):
 
     client = serve()
     html = client.get("/planning/f64").text
-    # When key is reused, shows "An earlier F64 was merged into F13" or F42
-    assert (
-        "An earlier F64 was merged into F13" in html or "An earlier F64 was merged into F42" in html
-    )
+    # Both links present, each with its own visible text
+    assert 'href="/planning/f13?' in html
+    assert 'href="/planning/f42?' in html
+    assert response_contains(html, "An earlier F64 was merged into F13, F64 title")
+    assert response_contains(html, "An earlier F64 was merged into F42, F64 title")
 
 
 def test_chain_f107_to_f10(planning, db_path, serve, checkout):
@@ -3451,12 +3539,15 @@ def test_chain_f107_to_f10(planning, db_path, serve, checkout):
 
     # F107's thread links to F10
     html = client.get("/planning/f107").text
-    assert 'href="/planning/f10' in html
+    assert 'href="/planning/f10?' in html
+    assert response_contains(html, "F10, F107 title")
 
     # F10's thread links to both F95 and F107
     html = client.get("/planning/f10").text
-    assert 'href="/planning/f95' in html
-    assert 'href="/planning/f107' in html
+    assert 'href="/planning/f95?' in html
+    assert 'href="/planning/f107?' in html
+    assert response_contains(html, "Merged here: F95, F95 title")
+    assert response_contains(html, "Merged here: F107, F107 title")
 
 
 def test_key_reused_says_an_earlier(planning, db_path, serve, checkout):

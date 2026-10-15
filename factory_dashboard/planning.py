@@ -65,7 +65,7 @@ from runner.requests import (
     owners_words,
     refused,
 )
-from runner.tasks import milestone_key, short_key, split_frontmatter
+from runner.tasks import TaskError, milestone_key, short_key, split_frontmatter
 
 router = APIRouter()
 
@@ -217,7 +217,7 @@ def _merge_links(
 
             if ref_key == source_key:
                 target_key: str | None = None
-                with contextlib.suppress(Exception):
+                with contextlib.suppress(TaskError):  # a card file not named by a key
                     target_key = short_key(milestone_key(path.stem))
                 if target_key is not None:
                     merged_into.append(
@@ -234,7 +234,7 @@ def _merge_links(
                     latest_title = title
 
             card_key: str | None = None
-            with contextlib.suppress(Exception):
+            with contextlib.suppress(TaskError):
                 card_key = short_key(milestone_key(path.stem))
             if card_key is not None and card_key == thread:
                 merged_here.append(
@@ -343,28 +343,17 @@ def _merged_on(
         ]
         # Tickets for this kept card
         milestone_rows = conn.execute(
-            "SELECT m.key, m.id FROM milestones m"
+            "SELECT m.key, m.id, t.state FROM milestones m"
             " JOIN tickets t ON t.milestone_id = m.id"
             " WHERE m.project_id = ? AND m.key LIKE ?"
             " AND t.state NOT IN ('later', 'removed')"
             " ORDER BY m.id",
             (project_id, f"{kept_key.upper()}-%"),
         ).fetchall()
-        milestone = None
-        ticket_count = 0
-        done_count = 0
-        for row in milestone_rows:
-            if milestone is None:
-                milestone = row
-            ticket_count += 1
-        # Count done tickets separately
-        if milestone:
-            done_rows = conn.execute(
-                "SELECT COUNT(*) AS cnt FROM tickets"
-                " WHERE milestone_id = ? AND project_id = ? AND state = 'done'",
-                (milestone["id"], project_id),
-            ).fetchone()
-            done_count = int(done_rows["cnt"]) if done_rows else 0
+        # N and M over the same rows: every milestone of the kept card (a replan has two)
+        milestone = milestone_rows[0] if milestone_rows else None
+        ticket_count = len(milestone_rows)
+        done_count = sum(1 for row in milestone_rows if row["state"] == "done")
         card_data: dict[str, object] = {
             "key": kept_key,
             "title": card["title"],
