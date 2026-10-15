@@ -96,6 +96,14 @@ def test_a_project_the_runner_never_ran_shows_an_empty_queue(client):
     assert "The queue is empty." in section(live.text, "queue")
 
 
+def test_live_poller_has_no_hx_swap_oob(client):
+    """f19-03: the stray hx-swap-oob on the poller is gone."""
+    html = client.get("/").text
+    poll = re.search(r'<div id="live-needs-you"[^>]*>', html)
+    assert poll, "no #live-needs-you"
+    assert "hx-swap-oob" not in poll[0], "poller must not carry hx-swap-oob"
+
+
 def test_the_live_partial_answers_on_its_own_for_htmx(client):
     response = client.get("/live?project=coucou")
     assert response.status_code == 200
@@ -933,6 +941,134 @@ def test_now_keeps_refreshing_after_the_first_refresh(page, serve_between, db_pa
         running(title)
         now.get_by_text(title).wait_for(timeout=REFRESH)
     assert "The first title." not in now.inner_text()
+
+
+# --- f19-03: every part refreshes on poll -------------------------------------------------------
+
+
+def test_overview_poll_refreshes_every_part(page, serve_between, db_path):
+    """f19-03: a single /live poll refreshes Needs you, Now, Queue, the allowance
+    and the top bar."""
+    client = serve_between(activity="check-all on main")
+    sign_off_all(db_path)
+
+    # Track /live requests.
+    live_count = [0]
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path == "/live":
+            live_count[0] += 1
+            body = client.get(url).text
+            r.fulfill(body=body, content_type="text/html; charset=utf-8")
+        elif path == "/" or path == "/away":
+            body = client.get(url).text
+            r.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            r.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+
+    # Wait for initial render.
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+
+    # Record top bar status before any change.
+    status_before = page.locator("#factory-status [role=status]").inner_text()
+
+    # 1. Now: start a job and wait for its title.
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-99-now",
+            milestone_id=f1,
+            kind="developer",
+            state="running",
+            title="Polling job.",
+        )
+        run_id = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-120000",
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.start_job(
+            conn,
+            run_id,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    page.locator("#now").get_by_text("Polling job.").wait_for(timeout=REFRESH)
+
+    # 2. Queue: add a ready ticket and wait for the count.
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-99-queue",
+            milestone_id=f1,
+            kind="developer",
+            state="ready",
+            title="Queue item.",
+        )
+    finally:
+        conn.close()
+    page.locator("#queue").get_by_text("1 ticket waiting").wait_for(timeout=REFRESH)
+
+    # 3. Allowance: add a reading and wait for 80%.
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.add_usage_event(
+            conn,
+            OPUS,
+            NOW.isoformat(),
+            "reading",
+            window="five_hour",
+            value=0.8,
+            resets_at=(NOW + timedelta(hours=5)).isoformat(),
+        )
+    finally:
+        conn.close()
+    page.locator("#allowance").get_by_text("80%").wait_for(timeout=REFRESH)
+
+    # 4. Needs you: add an owner item and wait for its text.
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "poll",
+            "Poll question.",
+            text="Something to do.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    page.locator("#needs-you").get_by_text("Something to do.").wait_for(timeout=REFRESH)
+
+    # 5. Top bar: status changed.
+    status_after = page.locator("#factory-status [role=status]").inner_text()
+    assert status_after != status_before, "top bar status did not change after poll"
+
+    # 6. The poller fires at most once per 5 s interval: at least one poll must have occurred.
+    assert live_count[0] >= 1, f"expected at least 1 /live poll, got {live_count[0]}"
 
 
 # --- away (f3-21) --------------------------------------------------------------------------------

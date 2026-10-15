@@ -6,7 +6,7 @@
 
 {# The single poller for the Overview: polls /live every 5 s, selects #needs-you and #live-facts
     into itself (innerHTML), and pulls #now, #queue, #allowance out of band (innerHTML). #}
-<div id="live-needs-you" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#needs-you, #live-facts" hx-swap="innerHTML" hx-swap-oob="#now,#queue,#allowance">
+<div id="live-needs-you" hx-get="/live{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#needs-you, #live-facts" hx-swap="innerHTML">
 {% include "_partials/needs_you.html" %}
 </div>
 
