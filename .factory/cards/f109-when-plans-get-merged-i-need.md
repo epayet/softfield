@@ -1,6 +1,7 @@
 # Milestone F109: Merged cards link to each other, both ways
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-15. Base: git tag `f109-when-plans-get-merged-i-need-start`. Report: [`.factory/reviews/f109-when-plans-get-merged-i-need.md`](../reviews/f109-when-plans-get-merged-i-need.md).
 > Planted by the owner on 2026-10-13.
 
 ## Notes

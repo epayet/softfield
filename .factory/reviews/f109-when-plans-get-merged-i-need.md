@@ -1,6 +1,6 @@
 # Review: F109, merged cards link to each other, both ways
 
-- **Status:** reviewed, round 1; waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-15.
 
 ## Sign-off sheet
 
