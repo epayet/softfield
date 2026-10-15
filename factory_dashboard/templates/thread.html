@@ -10,6 +10,12 @@
     <header id="card" style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column">
       {% if card_meta %}<span style="font: 600 12px var(--mono); color: var(--muted)">{{ card_meta }}</span>{% endif %}
       <h2 style="margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">{{ card_title }}</h2>
+      {% for link in merged_into %}
+      <a href="{{ link.link }}{{ q }}" class="merged-into" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{% if card_has_milestone %}An earlier {{ thread | upper }} was merged into {% else %}Merged into {% endif %}{{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
+      {% endfor %}
+      {% for link in merged_here %}
+      <a href="{{ link.link }}{{ q }}" class="merged-here" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">Merged here: {{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
+      {% endfor %}
     </header>
 
     {% if review %}
@@ -90,7 +96,7 @@
         <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
       </details>
       {% elif msg.text %}
-      <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+      <p style="margin: 0; white-space: pre-line">{{ msg.text_html | safe if msg.text_html else msg.text }}</p>
       {% endif %}
       {% if msg.points %}
       <ol class="deck" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">

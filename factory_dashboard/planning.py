@@ -65,13 +65,21 @@ from runner.requests import (
     owners_words,
     refused,
 )
-from runner.tasks import short_key, split_frontmatter
+from runner.tasks import milestone_key, short_key, split_frontmatter
 
 router = APIRouter()
 
 GENERAL = "general"
 # A request's result when it worked (D1's table); any other result is a refusal.
 _ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
+# Merge heading written by ``planner.merged_card``: captures source key, title and date.
+_MERGE_HEADING_RE = re.compile(
+    r"^#{3,} From ([A-Z]+\d+): (.+?) "
+    r"\(merged by the (?:lead|owner) on (\d{4}-\d{2}-\d{2})\)[ \t]*$",
+    re.MULTILINE,
+)
+# Path like /planning/f95 in plain text: escape first, then link.
+_PLANNING_PATH_RE = re.compile(r"/planning/([a-z][a-z0-9-]+)")
 _TYPICAL = 20  # finished jobs of the running one's role and agent that make its typical length
 
 
@@ -173,6 +181,74 @@ def _known_cards(repo: Path | None) -> set[str] | None:
     return None if repo is None else cards(repo)
 
 
+def _merge_links(
+    repo: Path | None, thread: str
+) -> tuple[list[dict[str, str]], list[dict[str, str]], str | None]:
+    """Read merge headings from card docs on main.
+
+    Returns ``(merged_into, merged_here, latest_title)``:
+    - ``merged_into``: links from this thread to cards it was merged into
+    - ``merged_here``: links from this thread to cards merged into it
+    - ``latest_title``: the title from the latest merge heading referencing this thread
+    """
+    if repo is None:
+        return [], [], None
+
+    merged_into: list[dict[str, str]] = []
+    merged_here: list[dict[str, str]] = []
+    source_key = thread.upper()
+    latest_title: str | None = None
+    latest_date: str = ""
+
+    cards_dir = repo / ".factory" / "cards"
+    if not cards_dir.is_dir():
+        return [], [], None
+
+    for path in cards_dir.glob("*.md"):
+        try:
+            doc = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+
+        for match in _MERGE_HEADING_RE.finditer(doc):
+            ref_key = match.group(1)
+            title = match.group(2).strip()
+            date = match.group(3)
+
+            if ref_key == source_key:
+                target_key: str | None = None
+                with contextlib.suppress(Exception):
+                    target_key = short_key(milestone_key(path.stem))
+                if target_key is not None:
+                    merged_into.append(
+                        {
+                            "key": target_key,
+                            "title": title,
+                            "date": date,
+                            "link": f"/planning/{target_key}",
+                        }
+                    )
+                # Track the latest heading title for this source
+                if date > latest_date:
+                    latest_date = date
+                    latest_title = title
+
+            card_key: str | None = None
+            with contextlib.suppress(Exception):
+                card_key = short_key(milestone_key(path.stem))
+            if card_key is not None and card_key == thread:
+                merged_here.append(
+                    {
+                        "key": ref_key.lower(),
+                        "title": title,
+                        "date": date,
+                        "link": f"/planning/{ref_key.lower()}",
+                    }
+                )
+
+    return merged_into, merged_here, latest_title
+
+
 def _gone_merge(proposal: dict[str, object], known: set[str] | None) -> bool:
     """A ``merge`` one of whose cards has left main: merged or dropped already, nothing to
     ask (2026-10-08: such merges filled the desk)."""
@@ -182,6 +258,15 @@ def _gone_merge(proposal: dict[str, object], known: set[str] | None) -> bool:
         return not set(merge_cards(proposal)) <= known
     except PlannerError:
         return False
+
+
+def _text_with_links(text: str) -> str:
+    """Escape ``text`` then turn ``/planning/<key>`` into links. The text is a lead's
+    plain line: the owner's messages stay as plain text."""
+    escaped = (
+        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    )
+    return _PLANNING_PATH_RE.sub(r'<a href="/planning/\1">/planning/\1</a>', escaped)
 
 
 def _open_proposals(
@@ -751,6 +836,7 @@ class Message:
     waiting: bool = False  # an open plan_message request not yet picked up
     id: int = 0  # a waiting message's request: what a change names (F14 D1)
     change: Change | None = None  # a waiting message's open change: on its way, no more edits
+    text_html: str | None = None  # pre-rendered HTML for lead messages without points
 
 
 @dataclass(frozen=True)
@@ -962,8 +1048,16 @@ def thread_page(
     archived_at: str | None = None
     archiving: str | None = None  # "on" or "off": an archive request the runner hasn't done
     review: Review | None = None
+    _has_row = False
     if project_id is not None:
         title, meta, seed = _header(conn, project_id, thread)
+        # Check if this thread's key still has a milestone row (key reused)
+        _has_row = any(
+            short_key(r["key"]) == thread
+            for r in conn.execute(
+                "SELECT key FROM milestones WHERE project_id = ? ORDER BY id", (project_id,)
+            ).fetchall()
+        )
         review = _review(conn, project, project_id, thread, now)
         found = metrics.find_thread(conn, project_id, thread)
         archived_at = found["archived"] if found is not None else None
@@ -1008,7 +1102,16 @@ def thread_page(
             messages.append(
                 Message("owner", req["created"], text, points, False, True, req["id"], change)
             )
+    # Lead messages without points: convert /planning/<key> paths to links
+    for i, msg in enumerate(messages):
+        if msg.author == "lead" and not msg.points and msg.text:
+            messages[i] = replace(msg, text_html=_text_with_links(msg.text))
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
+    repo = _repo(conn, project)
+    merged_into, merged_here, latest_title = _merge_links(repo, thread)
+    # When the card has no milestone row, use the heading's title for the h2
+    if not _has_row and latest_title:
+        title = latest_title
     words = _again(conn, project_id, thread, again)
     return render(
         request,
@@ -1034,6 +1137,9 @@ def thread_page(
             "next_reply": _next_reply(
                 conn, project, jobs, pending, _held(conn, project_id, now, thread)
             ),
+            "merged_into": merged_into,
+            "merged_here": merged_here,
+            "card_has_milestone": _has_row,
         },
     )
 

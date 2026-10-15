@@ -3008,3 +3008,316 @@ def test_desk_coming_poll_wrapper_absent_when_no_items(planning, serve):
     """With no waiting plant, the string desk-coming is nowhere in the page."""
     html = _page(serve())
     assert "desk-coming" not in html
+
+
+# --- merge links (f109-01) -------------------------------------------------------------------
+
+
+def test_a_merge_whose_card_left_main_shows_both_ways(planning, db_path, serve, checkout):
+    """F107 merged into F95: /planning/f107 shows 'Merged into F95' linking to F95,
+    and /planning/f95 shows 'Merged here: F107' linking to F107. The merged card's h2
+    shows the heading's title, not its bare key."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F95's doc holds F107's merge
+    f95_doc = "# Milestone f95-plans-get-merged: Plans get merged\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    # F107's doc (the merged card, no milestone row in DB)
+    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
+        "# Milestone f107-when-plans-get-merged-i-need: When plans get merged I need\n\n## Notes\n"
+    )
+
+    # Seed milestones: only F95 (F107 has no row)
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
+        ),
+    )
+
+    # Check /planning/f107
+    client = serve()
+    html = client.get("/planning/f107").text
+    assert response_contains(html, "Merged into F95, When plans get merged")
+    assert 'href="/planning/f95' in html
+    # h2 shows the heading's title
+    h2 = re.search(r"<h2[^>]*>([^<]+)</h2>", html)
+    assert h2 and "When plans get merged" in h2[1]
+
+    # Check /planning/f95
+    html = client.get("/planning/f95").text
+    assert response_contains(html, "Merged here: F107, When plans get merged")
+    assert 'href="/planning/f107' in html
+
+
+def response_contains(html: str, text: str) -> bool:
+    """Check if text appears in HTML (unescaped)."""
+    from html import unescape
+
+    return text in unescape(re.sub(r"<[^>]+>", "", html))
+
+
+def test_merge_links_function_returns_correct_links(checkout):
+    """The _merge_links function returns correct merged_into and merged_here lists."""
+    from factory_dashboard.planning import _merge_links
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "n", "From F107: Title (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
+        "# Milestone f107-when-plans-get-merged-i-need: When\n\n## Notes\n"
+    )
+
+    merged_into, _merged_here, _latest_title = _merge_links(checkout, "f107")
+    assert len(merged_into) == 1
+    assert merged_into[0]["key"] == "f95"
+    assert merged_into[0]["title"] == "Title"
+    assert merged_into[0]["date"] == "2026-10-13"
+    assert merged_into[0]["link"] == "/planning/f95"
+
+    _, merged_here2, _ = _merge_links(checkout, "f95")
+    assert len(merged_here2) == 1
+    assert merged_here2[0]["key"] == "f107"
+    assert merged_here2[0]["title"] == "Title"
+
+
+def test_no_merge_no_links(planning, serve):
+    """A card with no merge, the general thread, and no checkout show no such links."""
+    client = serve()
+
+    # General thread
+    html = client.get("/planning/general").text
+    assert "merged-into" not in html
+    assert "merged-here" not in html
+
+    # A card with no merge docs
+    html = client.get("/planning/f6").text
+    assert "merged-into" not in html
+    assert "merged-here" not in html
+
+
+def test_two_merges_on_one_kept_card(planning, db_path, serve, checkout):
+    """A kept card with two merges lists both."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "n1", "From F107: Title1 (merged by the lead on 2026-10-13)"
+    )
+    f95_doc = planner.merged_card(
+        f95_doc, "n2", "From F16: Title2 (merged by the owner on 2026-10-14)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
+        "# Milestone f107: When\n\n## Notes\n"
+    )
+    (docs / "f16-parallel: parallel (merged).md").write_text(
+        "# Milestone f16-parallel: Parallel\n\n## Notes\n"
+    )
+
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans"
+        ),
+    )
+
+    client = serve()
+    page_html = client.get("/planning/f95").text
+    assert page_html.count("merged-here") == 2
+
+
+def test_key_merged_into_two_cards(planning, db_path, serve, checkout):
+    """A key merged into two cards (F64 into F13 and F42) lists both on its thread."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    f13_doc = "# Milestone f13-factory-line: Line\n\n## Notes\n"
+    f13_doc = planner.merged_card(
+        f13_doc, "n", "From F64: F64 title (merged by the lead on 2026-10-01)"
+    )
+    (docs / "f13-factory-line.md").write_text(f13_doc)
+
+    f42_doc = "# Milestone f42-seeds: Seeds\n\n## Notes\n"
+    f42_doc = planner.merged_card(
+        f42_doc, "n", "From F64: F64 title (merged by the lead on 2026-10-02)"
+    )
+    (docs / "f42-seeds.md").write_text(f42_doc)
+
+    (docs / "f64-parallel: parallel (merged).md").write_text(
+        "# Milestone f64-parallel: Parallel\n\n## Notes\n"
+    )
+
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(conn, planning, "f64-parallel", title="Parallel"),
+    )
+
+    client = serve()
+    html = client.get("/planning/f64").text
+    # When key is reused, shows "An earlier F64 was merged into F13" or F42
+    assert (
+        "An earlier F64 was merged into F13" in html or "An earlier F64 was merged into F42" in html
+    )
+
+
+def test_chain_f107_to_f10(planning, db_path, serve, checkout):
+    """F107's notes moved from F95 into F10: links to F10 and back."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F10's doc has both the original heading (from F95) and the chain heading (from F107)
+    f10_doc = "# Milestone f10-notes: Notes\n\n## Notes\n"
+    # F95 was merged into F10
+    f10_doc = planner.merged_card(
+        f10_doc, "n", "From F95: F95 title (merged by the lead on 2026-10-05)"
+    )
+    # F107's heading moved down one level (### → ####)
+    f10_doc += "#### From F107: F107 title (merged by the lead on 2026-10-06)\n"
+    (docs / "f10-notes.md").write_text(f10_doc)
+
+    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
+        "# Milestone f107: When\n\n## Notes\n"
+    )
+
+    _write(
+        db_path, lambda conn: metrics.upsert_milestone(conn, planning, "f10-notes", title="Notes")
+    )
+
+    client = serve()
+
+    # F107's thread links to F10
+    html = client.get("/planning/f107").text
+    assert 'href="/planning/f10' in html
+
+    # F10's thread links to both F95 and F107
+    html = client.get("/planning/f10").text
+    assert 'href="/planning/f95' in html
+    assert 'href="/planning/f107' in html
+
+
+def test_key_reused_says_an_earlier(planning, db_path, serve, checkout):
+    """A key that has a card again on main says 'An earlier F73 was merged into F43'."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    f43_doc = "# Milestone f43-review: Review\n\n## Notes\n"
+    f43_doc = planner.merged_card(
+        f43_doc, "n", "From F73: F73 title (merged by the lead on 2026-10-01)"
+    )
+    (docs / "f43-review.md").write_text(f43_doc)
+
+    # F73 has a card again on main
+    (docs / "f73-new-card.md").write_text("# Milestone f73-new-card: New F73\n\n## Notes\n")
+
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(conn, planning, "f73-new-card", title="New F73"),
+    )
+
+    client = serve()
+    html = client.get("/planning/f73").text
+    assert "An earlier F73 was merged into F43" in html
+    # The card's own title (not the heading's title)
+    h2 = re.search(r"<h2[^>]*>([^<]+)</h2>", html)
+    assert h2 and "New F73" in h2[1]
+
+
+def test_lead_message_path_becomes_link(planning, db_path, serve):
+    """A lead message without points whose text holds /planning/f95 shows it as a link."""
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f6-planning-room", title="The planning room"
+        ),
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        f6 = metrics.planner_thread(
+            conn=conn, project_id=planning, card="f6", created=_at(timedelta(hours=5))
+        )["id"]
+        metrics.add_planner_message(
+            conn,
+            f6,
+            "lead",
+            _at(timedelta(hours=2)),
+            "The conversation goes on on F95's thread: /planning/f95",
+        )
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/planning/f6").text
+    assert '<a href="/planning/f95">/planning/f95</a>' in html
+
+
+def test_lead_message_b_stays_text(planning, db_path, serve):
+    """<b> in a lead message still shows as text."""
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f6-planning-room", title="The planning room"
+        ),
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        f6 = metrics.planner_thread(
+            conn=conn, project_id=planning, card="f6", created=_at(timedelta(hours=5))
+        )["id"]
+        metrics.add_planner_message(
+            conn, f6, "lead", _at(timedelta(hours=2)), "Check <b>bold</b> stays"
+        )
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/planning/f6").text
+    assert "&lt;b&gt;bold&lt;/b&gt;" in html
+
+
+def test_owner_message_path_no_link(planning, db_path, serve):
+    """An owner message holding the path has no link."""
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f6-planning-room", title="The planning room"
+        ),
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        f6 = metrics.planner_thread(
+            conn=conn, project_id=planning, card="f6", created=_at(timedelta(hours=5))
+        )["id"]
+        metrics.add_planner_message(conn, f6, "owner", _at(timedelta(hours=3)), "See /planning/f95")
+        metrics.add_planner_message(conn, f6, "lead", _at(timedelta(hours=2)), "Yes")
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/planning/f6").text
+    # The owner's message should not have links
+    assert '<a href="/planning/f95">' not in html
