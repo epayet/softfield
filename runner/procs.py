@@ -5,6 +5,7 @@ import contextlib
 import os
 import signal
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -14,6 +15,36 @@ from types import FrameType
 
 LIVE_EVERY = 30.0  # seconds between live updates while a job runs (f1 D3)
 GRACE = 5.0  # seconds a stopped group gets between SIGTERM and SIGKILL
+
+# Leads each command's session and kills it all when the process that started it dies, even
+# by SIGKILL, which nothing in that process can catch. OpenCode's shell timeout killed an
+# agent's `softfield check-all`; its `uv run pytest`, in a session of its own, ran on at 95%
+# for hours, three at once (2026-10-15). Linux tells the watcher (PR_SET_PDEATHSIG); the
+# check of its parent's pid covers a death before that. A SIGTERM to the group reaches the
+# command itself, so the watcher only waits: the command keeps its grace (`_stop`).
+_WATCH = """\
+import ctypes, os, signal, subprocess, sys
+def die(signum, frame):
+    os.killpg(0, signal.SIGKILL)
+signal.signal(signal.SIGUSR2, die)
+signal.signal(signal.SIGTERM, lambda signum, frame: None)
+try:
+    ctypes.CDLL(None, use_errno=True).prctl(1, signal.SIGUSR2)
+except AttributeError:
+    pass
+if os.getppid() != int(sys.argv[1]):
+    die(0, None)
+code = subprocess.Popen(sys.argv[2:]).wait()
+if code < 0:
+    signal.signal(-code, signal.SIG_DFL)
+    os.kill(os.getpid(), -code)
+sys.exit(code)
+"""
+
+
+def _watched(args: list[str]) -> list[str]:
+    return [sys.executable, "-I", "-c", _WATCH, str(os.getpid()), *args]
+
 
 _live: set[subprocess.Popen[str]] = set()
 _live_lock = threading.Lock()

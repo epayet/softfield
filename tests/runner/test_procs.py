@@ -1,5 +1,7 @@
 import os
 import signal
+import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -225,3 +227,51 @@ def test_a_command_that_exits_leaves_no_child_running(tmp_path: Path):
     code, _, _ = run_bounded(_leaver(pidfile), tmp_path, 10)
     assert code == 0
     assert _gone(pidfile)
+
+
+def _killed_mid_run(tmp_path: Path, call: str) -> Path:
+    """Start a process that calls ``call`` on a sleeper, SIGKILL it once the sleeper runs,
+    and return the sleeper's pidfile."""
+    pidfile = tmp_path / "child.pid"
+    script = (
+        "import sys; from pathlib import Path; from runner.procs import run_bounded, run_streaming;"
+        f"cmd = {_sleeper(pidfile)!r}; tmp = Path({str(tmp_path)!r}); {call}"
+    )
+    parent = subprocess.Popen([sys.executable, "-c", script], cwd=Path(__file__).parents[2])
+    deadline = time.monotonic() + 10
+    while not (pidfile.exists() and pidfile.read_text().strip()) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    parent.kill()
+    parent.wait()
+    return pidfile
+
+
+def test_a_killed_check_all_leaves_no_command_running(tmp_path: Path):
+    """2026-10-15: OpenCode's shell timeout killed an agent's `softfield check-all`; its
+    `uv run pytest`, in a session of its own, ran on at 95% for hours (three at once)."""
+    assert _gone(_killed_mid_run(tmp_path, "run_bounded(cmd, tmp, 60)"))
+
+
+def test_a_killed_runner_leaves_no_agent_running(tmp_path: Path):
+    call = "run_streaming(cmd, tmp, 60, tmp / 'out.log')"
+    assert _gone(_killed_mid_run(tmp_path, call))
+
+
+def test_a_command_keeps_its_stdin(tmp_path: Path):
+    """Claude jobs are fed their prompt on stdin through `run_streaming`."""
+    prompt = tmp_path / "prompt.txt"
+    prompt.write_text("hello\n")
+    with prompt.open() as stdin:
+        _, code = run_streaming(
+            ["sh", "-c", "read line; test \"$line\" = hello"],
+            tmp_path,
+            10,
+            tmp_path / "out.log",
+            stdin=stdin.fileno(),
+        )
+    assert code == 0
+
+
+def test_a_command_killed_by_a_signal_reports_it(tmp_path: Path):
+    code, _, _ = run_bounded(["sh", "-c", "kill -TERM $$"], tmp_path, 10)
+    assert code == -signal.SIGTERM
