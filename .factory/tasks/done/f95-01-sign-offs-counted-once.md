@@ -27,3 +27,12 @@ Read `factory_dashboard/overview.py` (`needs_you`, `_live_context`) and `factory
 - items of other kinds (`adr`, `blocked`, `reserve`) still show, each with its command
 - `data-needs` on `#live-facts` still carries the `signoff` item
 - the listed tests pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4625
+gate_failures: []
+tokens: 2667375
+```
