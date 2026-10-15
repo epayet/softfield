@@ -211,7 +211,7 @@ Do exactly one of:
 3. requeue: answer the model's question by adding the facts to the task's Context, and write
    the task to .factory/tasks/ready/{id}.md (as in 2, about the branch).
 4. implemented: if the task is hard or protected, implement it yourself on main and make
-   `uv run pytest -q tests/unit tests/integration tests/runner` pass.
+   `uv run pytest -q {tests}` pass.
 5. owner: only for what the owner is asked for (their preferences, above): draft an ADR in
    .factory/adr/ (status Proposed). The task and its dependants wait for the owner's decision.
 
@@ -317,8 +317,7 @@ developer edited (the session reports in .factory/sessions/ list them). Check th
 Grade each finding blocking / should-fix / nit and route it:
 - local: write a ticket in .factory/tasks/ready/ (docs/task-format.md), `finding: <id>` in the
   frontmatter. Findings listed as recurring must NOT go to the local model.
-- claude: fix it yourself now, keeping `uv run pytest -q tests/unit tests/integration
-  tests/runner` green.
+- claude: fix it yourself now, keeping `uv run pytest -q {tests}` green.
 - adr: only for what the owner is asked for (their preferences, above). Draft an ADR (status
   Proposed) and set "stop": "adr-needed". Decide everything else yourself; never park a
   finding for the owner.

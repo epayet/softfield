@@ -451,6 +451,8 @@ def test_the_last_rounds_verdicts_and_score_land_on_the_findings_and_milestone(r
     monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
     milestone.review_milestone(_config(repo), "m1", "m1-start")
     assert "m1-C1-1 (nit, a.py): Odd name" in prompts[0]
+    # the project's own test folders, from its project.toml (ADR 30), not a fixed list
+    assert "`uv run pytest -q tests/unit tests/integration tests/runner tests/browser" in prompts[0]
     findings = {f["key"]: f for f in _rows(repo, "findings")}
     assert set(findings) == {"m1-C1-1", "m1-C1-2", "m1-F1"}
     assert [findings[k]["verdict"] for k in ("m1-C1-1", "m1-C1-2", "m1-F1")] == [

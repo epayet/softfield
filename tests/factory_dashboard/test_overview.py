@@ -2333,9 +2333,9 @@ def test_a_signoff_on_a_ripe_milestone_shows_once_in_the_desk_entry(serve_betwee
     assert "signoff" in facts.lower()
 
 
-def test_a_signoff_on_a_non_ripe_milestone_shows_its_own_row(client, db_path):
-    """f95-01: a sign-off for a milestone not on the desk (it has a ready ticket) shows
-    its own row with command."""
+def test_a_signoff_on_a_milestone_off_the_desk_shows_no_row(client, db_path):
+    """f95-01: a stored sign-off for a milestone not on the desk (it got a ready ticket since
+    its verdict) shows no row: the desk is the one place a sign-off shows."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -2368,8 +2368,7 @@ def test_a_signoff_on_a_non_ripe_milestone_shows_its_own_row(client, db_path):
         conn.close()
     html = client.get("/live").text
     needs = section(html, "needs-you")
-    assert "softfield signoff f95-test" in needs
-    assert "signoff" in needs.lower()
+    assert "softfield signoff f95-test" not in needs
 
 
 def test_other_kinds_still_show_with_their_command(client, db_path):
@@ -2424,7 +2423,7 @@ def test_data_needs_carries_signoff_item_for_notify(client, db_path):
     match = re.search(r"data-needs='([^']*)'", facts)
     assert match, "no data-needs attribute"
     needs_data = json.loads(match[1])
-    assert any("signoff" in str(v).lower() for v in needs_data.values())
+    assert "softfield signoff f1" in needs_data.values()
 
 
 def test_an_empty_desk_has_no_entry_and_a_plain_tab(serve_between, db_path):

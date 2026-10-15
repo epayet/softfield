@@ -3343,6 +3343,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
             id=task.id,
             reason=reason,
             logs=logs.relative_to(s.repo).as_posix(),
+            tests=" ".join(project_checks(s.repo).test_dirs),  # the project's own (ADR 30)
             thinking=", ".join(p.relative_to(s.repo).as_posix() for p in rec_sessions)
             or "not available",
         ),

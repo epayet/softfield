@@ -417,7 +417,6 @@ class Need:
     text: str
     command: str | None = None
     ticket: str | None = None
-    subject: str | None = None  # the owner_item's subject (e.g. milestone key for signoff)
 
 
 def needs_you(
@@ -436,14 +435,7 @@ def needs_you(
         (project,),
     ).fetchall()
     found = [
-        Need(
-            f"owner-{i['id']}",
-            i["kind"],
-            i["text"] or i["subject"],
-            i["command"],
-            subject=i["subject"],
-        )
-        for i in items
+        Need(f"owner-{i['id']}", i["kind"], i["text"] or i["subject"], i["command"]) for i in items
     ]
     stopped: dict[str, Running] = {}
     for job in jobs:
@@ -645,15 +637,9 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
     qjobs = queued_jobs(conn, project, now)
     open_needs = needs_you(conn, project, now, jobs, all_queued)
-    # the desk's entry stands for its answers wanted, so no lead reply shows on its own
-    # (f6-09); also for a sign-off on a ripe milestone, so no sign-off row shows on its
-    # own (f95-01).
-    ripe_keys = {m["key"] for m in live_line(conn, project, now)["field"]["ripe"]}
-    needs = [
-        n
-        for n in open_needs
-        if n.kind != "planning" and not (n.kind == "signoff" and n.subject in ripe_keys)
-    ]
+    # the desk's entry stands for its answers wanted and its sign-offs, so no lead reply
+    # (f6-09) and no stored sign-off row (f95-01) shows on its own
+    needs = [n for n in open_needs if n.kind not in ("planning", "signoff")]
     items = waiting_for_you(desk(conn, project, now))  # what the owner acted on waits on no one
     if items:
         n = len(items)

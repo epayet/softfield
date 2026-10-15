@@ -13,7 +13,7 @@ import yaml
 
 from runner import console, look, metrics, prompts
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
-from runner.config import Config
+from runner.config import Config, project_checks
 from runner.gates import GateResult
 from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
@@ -641,6 +641,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
                 round=round_no,
                 max_rounds=cfg.review_rounds,
                 scope=scope,
+                tests=" ".join(project_checks(s.repo).test_dirs),  # the project's own (ADR 30)
                 recurring=", ".join(recurring_for_claude(seen)) or "none",
                 checkpoints=_checkpoint_list(s, milestone),
                 out=out.relative_to(cfg.repo).as_posix(),
