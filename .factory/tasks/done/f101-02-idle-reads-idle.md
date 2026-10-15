@@ -30,3 +30,12 @@ Read `def factory_status` in `factory_dashboard/app.py` and `factory_dashboard/t
 - "Idle: nothing to do" (picking, with an empty queue) is unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3718
+gate_failures: ['stopped']
+tokens: 3096396
+```
