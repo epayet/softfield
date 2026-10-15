@@ -313,6 +313,74 @@ def _open_proposals(
     return items
 
 
+def _merged_on(
+    conn: sqlite3.Connection,
+    project_id: int | None,
+    thread: str,
+    merged_into: list[dict[str, str]],
+    known: set[str] | None,
+) -> list[dict[str, object]]:
+    """Merged-on blocks for a merged-away card's thread page.
+
+    Returns one entry per kept card (most recent merge first), with open
+    proposals and ticket counts. Only when the thread key is not in known
+    (the card was merged away) and merged_into is non-empty.
+    """
+    if project_id is None or not merged_into or known is None or thread in known:
+        return []
+
+    # Sort by date descending (most recent first)
+    sorted_cards = sorted(merged_into, key=lambda m: m["date"], reverse=True)
+
+    all_open = _open_proposals(conn, project_id, known)
+    result: list[dict[str, object]] = []
+
+    for card in sorted_cards:
+        kept_key = card["key"]
+        # Open proposals for this kept card's thread
+        card_proposals = [
+            p for p in all_open if p.link.startswith(f"/planning/{kept_key}/proposals/")
+        ]
+        # Tickets for this kept card
+        milestone_rows = conn.execute(
+            "SELECT m.key, m.id FROM milestones m"
+            " JOIN tickets t ON t.milestone_id = m.id"
+            " WHERE m.project_id = ? AND m.key LIKE ?"
+            " AND t.state NOT IN ('later', 'removed')"
+            " ORDER BY m.id",
+            (project_id, f"{kept_key.upper()}-%"),
+        ).fetchall()
+        milestone = None
+        ticket_count = 0
+        done_count = 0
+        for row in milestone_rows:
+            if milestone is None:
+                milestone = row
+            ticket_count += 1
+        # Count done tickets separately
+        if milestone:
+            done_rows = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM tickets"
+                " WHERE milestone_id = ? AND project_id = ? AND state = 'done'",
+                (milestone["id"], project_id),
+            ).fetchone()
+            done_count = int(done_rows["cnt"]) if done_rows else 0
+        card_data: dict[str, object] = {
+            "key": kept_key,
+            "title": card["title"],
+            "date": card["date"],
+            "link": card["link"],
+            "proposals": card_proposals,
+        }
+        if milestone:
+            card_data["milestone_key"] = milestone["key"]
+            card_data["ticket_count"] = ticket_count
+            card_data["done_count"] = done_count
+        result.append(card_data)
+
+    return result
+
+
 def _ripe(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
     """Every ticket done, its review written, and not signed off, as the line's field has
     them (F50 D1)."""
@@ -1109,10 +1177,12 @@ def thread_page(
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
     repo = _repo(conn, project)
     merged_into, merged_here, latest_title = _merge_links(repo, thread)
+    known = _known_cards(repo)
     # When the card has no milestone row, use the heading's title for the h2
     if not _has_row and latest_title:
         title = latest_title
     words = _again(conn, project_id, thread, again)
+    merged_on = _merged_on(conn, project_id, thread, merged_into, known)
     return render(
         request,
         conn,
@@ -1139,6 +1209,7 @@ def thread_page(
             ),
             "merged_into": merged_into,
             "merged_here": merged_here,
+            "merged_on": merged_on,
             "card_has_milestone": _has_row,
         },
     )

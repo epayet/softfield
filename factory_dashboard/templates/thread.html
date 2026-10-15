@@ -123,9 +123,26 @@
     {% endif %}
     {% endfor %}
 
+    {% if merged_on %}
+    <div id="merged-on" style="background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px">
+    {% for card in merged_on %}
+    <div class="merged-on-card" style="display: flex; flex-direction: column; gap: 6px">
+      <p style="margin: 0; font-size: 14px; color: var(--ink-2)">Merged into {{ card.key | upper }}, {{ card.title }}: the conversation and its plans are there.</p>
+      <a href="{{ card.link }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">/planning/{{ card.key }}</a>
+      {% for prop in card.proposals %}
+      <a href="{{ prop.link }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{{ prop.title }}</a>
+      {% endfor %}
+      {% if card.ticket_count is defined %}
+      <a href="/milestones/{{ card.milestone_key }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">Planned: {{ card.ticket_count }} tickets, {{ card.done_count }} done</a>
+      {% endif %}
+    </div>
+    {% endfor %}
+    </div>
+    {% endif %}
+
     {% if next_reply %}
     <p id="waiting" style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted)">Next for the lead · {{ next_reply }}</p>
-    {% else %}
+    {% elif merged_on|length != 1 %}
     <form id="reply" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
       hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim())), again: this.elements.again.value || undefined})}'
       class="dock" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">

@@ -3095,6 +3095,247 @@ def test_merge_links_function_returns_correct_links(checkout):
     assert merged_here2[0]["title"] == "Title"
 
 
+def test_merged_on_shows_link_to_kept_card(planning, db_path, serve, checkout):
+    """F107 merged into F95, no F107 doc on main: /planning/f107 has #merged-on
+    with a link to /planning/f95 and F95's title, and no message form."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F95's doc holds F107's merge
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    # No F107 doc on main: "no doc on main" means F107's key is not in _known_cards
+
+    # Seed milestones: only F95 (F107 has no row)
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
+        ),
+    )
+
+    client = serve()
+    html = client.get("/planning/f107").text
+
+    # Has #merged-on with link to F95
+    assert 'id="merged-on"' in html
+    assert 'href="/planning/f95' in html
+    assert "When plans get merged" in html
+
+    # No message form (textarea for a message)
+    assert 'id="reply"' not in html
+    assert "<textarea" not in html
+
+
+def test_merged_on_lists_open_proposals(planning, db_path, serve, checkout):
+    """An open plan on F95's thread is listed in #merged-on by its title,
+    linking to its review page; an applied or rejected one is not."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F95's doc holds F107's merge
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    # No F107 doc on main
+    # Seed milestones: only F95
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
+        ),
+    )
+
+    # Create an open plan proposal on F95's thread (not a merge, to avoid _gone_merge filter)
+    _open_plan = {
+        "id": "plan-f95",
+        "kind": "plan",
+        "title": "Open plan for F95",
+        "path": None,
+        "key_points": [{"n": 1, "title": "Point", "text": "A point.", "flag": False}],
+    }
+    _write(db_path, lambda conn: _review(conn, planning, "f95", _open_plan))
+
+    client = serve()
+    html = client.get("/planning/f107").text
+
+    # The open proposal's title appears in #merged-on
+    assert "Open plan for F95" in html
+    # Link to the proposal's review page
+    assert 'href="/planning/f95/proposals/plan-f95' in html
+
+    # Applied proposal should not appear
+    _finished(db_path, planning, "approve_plan", "f95", None, "approved")
+    html = client.get("/planning/f107").text
+    assert "Open plan for F95" not in html
+
+    # Applied proposal should not appear
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "approve_plan", "f9", None, NOW.isoformat()
+        ),
+    )
+    html = client.get("/planning/f107").text
+    assert "Parallel, said twice" not in html
+
+
+def test_merged_on_shows_ticket_count(planning, db_path, serve, checkout):
+    """A kept card with one ready and one done ticket shows
+    'Planned: 2 tickets, 1 done' linking to its card page;
+    a kept card with no ticket shows no such link."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F95's doc holds F107's merge
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    # Seed milestones: only F95
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
+        ),
+    )
+    # Get the milestone id
+    conn = metrics.open_db(db_path)
+    f95_milestone = conn.execute(
+        "SELECT id FROM milestones WHERE project_id = ? AND key = ?",
+        (planning, "f95-plans-get-merged"),
+    ).fetchone()["id"]
+    conn.close()
+
+    # Add tickets: one ready, one done
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_ticket(
+            conn, planning, "F95-1", milestone_id=f95_milestone, state="ready"
+        ),
+    )
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_ticket(
+            conn, planning, "F95-2", milestone_id=f95_milestone, state="done"
+        ),
+    )
+
+    client = serve()
+    html = client.get("/planning/f107").text
+
+    assert "Planned: 2 tickets, 1 done" in html
+    assert 'href="/milestones/f95-plans-get-merged' in html
+
+
+def test_merged_on_two_kept_cards(planning, db_path, serve, checkout):
+    """A key merged into two cards has two .merged-on-card parts, each with its
+    own card's links, and keeps its message form."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F95's doc holds F107's merge
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    # F13's doc also holds F107's merge (earlier date)
+    f13_doc = "# Milestone f13-x: x\n\n## Notes\n"
+    f13_doc = planner.merged_card(
+        f13_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-10)"
+    )
+    (docs / "f13-x.md").write_text(f13_doc)
+
+    # Seed milestones: only F95
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
+        ),
+    )
+
+    client = serve()
+    html = client.get("/planning/f107").text
+
+    # Two .merged-on-card parts
+    assert html.count("merged-on-card") == 2
+
+    # Both links present
+    assert 'href="/planning/f95' in html
+    assert 'href="/planning/f13' in html
+
+    # Message form stays
+    assert 'id="reply"' in html
+
+
+def test_merged_on_card_on_main_no_block(planning, db_path, serve, checkout):
+    """A key that has a card on main again has no #merged-on and keeps its message form."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+
+    # F95's doc holds F107's merge
+    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = planner.merged_card(
+        f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    # F107's doc exists on main (key reused)
+    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
+        "# Milestone f107-when-plans-get-merged-i-need: When plans get merged I need\n\n## Notes\n"
+    )
+
+    # Seed milestones: only F95
+    _write(
+        db_path,
+        lambda conn: metrics.upsert_milestone(
+            conn, planning, "f95-plans-get-merged", title="Plans get merged"
+        ),
+    )
+
+    client = serve()
+    html = client.get("/planning/f107").text
+
+    # No #merged-on block
+    assert 'id="merged-on"' not in html
+
+    # Message form stays
+    assert 'id="reply"' in html
+
+
+def test_merged_on_never_merged_unchanged(planning, db_path, serve):
+    """A card never merged, and the general thread, are unchanged."""
+    client = serve()
+    html = client.get("/planning/f1").text
+
+    # No #merged-on block
+    assert 'id="merged-on"' not in html
+
+    # Message form stays
+    assert 'id="reply"' in html
+
+
 def test_no_merge_no_links(planning, serve):
     """A card with no merge, the general thread, and no checkout show no such links."""
     client = serve()
