@@ -2312,6 +2312,121 @@ def test_a_lead_reply_shows_once_in_the_desk_entry(serve_between, db_path):
     assert "The lead answered" in html.split('id="live-facts"')[1]  # notify.js still tells it
 
 
+def test_a_signoff_on_a_ripe_milestone_shows_once_in_the_desk_entry(serve_between, db_path):
+    """f95-01: a sign-off for a milestone on the desk's "Finished, to talk through" shows
+    through the desk's entry only, never as a separate row."""
+    client = serve_between()
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn, project, "signoff", "f1", text="softfield signoff f1", created=NOW.isoformat()
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    needs = section(html, "needs-you")
+    assert "signoff" not in needs.lower()  # no separate signoff row
+    assert "softfield signoff f1" not in needs
+    # the sign-off item still carries in data-needs for notify.js
+    facts = html.split('id="live-facts"')[1]
+    assert "signoff" in facts.lower()
+
+
+def test_a_signoff_on_a_non_ripe_milestone_shows_its_own_row(client, db_path):
+    """f95-01: a sign-off for a milestone not on the desk (it has a ready ticket) shows
+    its own row with command."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m = metrics.upsert_milestone(
+            conn,
+            project,
+            "f95-test",
+            title="Test milestone",
+            status="in progress",
+            started=(NOW - timedelta(days=1)).isoformat(),
+        )
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f95-test-01",
+            milestone_id=m,
+            kind="developer",
+            state="ready",
+            title="A ready ticket.",
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "signoff",
+            "f95-test",
+            text="softfield signoff f95-test",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    needs = section(html, "needs-you")
+    assert "softfield signoff f95-test" in needs
+    assert "signoff" in needs.lower()
+
+
+def test_other_kinds_still_show_with_their_command(client, db_path):
+    """Items of other kinds (adr, blocked, reserve) still show, each with its command."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 42",
+            text="An ADR question.",
+            command="softfield adr 42",
+            created=NOW.isoformat(),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f95-02",
+            text="Blocked on external.",
+            command="softfield unblock f95-02",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    needs = section(html, "needs-you")
+    assert "softfield adr 42" in needs
+    assert "softfield unblock f95-02" in needs
+
+
+def test_data_needs_carries_signoff_item_for_notify(client, db_path):
+    """data-needs on #live-facts still carries the signoff item so notify.js can compare."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "signoff",
+            "f1",
+            text="softfield signoff f1",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    # The signoff item is in data-needs even though filtered from needs-you
+    facts = html.split('id="live-facts"')[1]
+    match = re.search(r"data-needs='([^']*)'", facts)
+    assert match, "no data-needs attribute"
+    needs_data = json.loads(match[1])
+    assert any("signoff" in str(v).lower() for v in needs_data.values())
+
+
 def test_an_empty_desk_has_no_entry_and_a_plain_tab(serve_between, db_path):
     client = serve_between()
     sign_off_all(db_path)
