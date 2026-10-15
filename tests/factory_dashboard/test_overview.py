@@ -2372,7 +2372,7 @@ def test_a_signoff_on_a_milestone_off_the_desk_shows_no_row(client, db_path):
 
 
 def test_other_kinds_still_show_with_their_command(client, db_path):
-    """Items of other kinds (adr, blocked, reserve) still show, each with its command."""
+    """Items of other kinds (adr, reserve) still show; blocked does not (the desk counts it)."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -2394,12 +2394,22 @@ def test_other_kinds_still_show_with_their_command(client, db_path):
             command="softfield unblock f95-02",
             created=NOW.isoformat(),
         )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "reserve",
+            "f-reserve",
+            text="A reserve item.",
+            command="softfield reserve f-reserve",
+            created=NOW.isoformat(),
+        )
     finally:
         conn.close()
     html = client.get("/live").text
     needs = section(html, "needs-you")
     assert "softfield adr 42" in needs
-    assert "softfield unblock f95-02" in needs
+    assert "softfield unblock f95-02" not in needs
+    assert "softfield reserve f-reserve" in needs
 
 
 def test_data_needs_carries_signoff_item_for_notify(client, db_path):

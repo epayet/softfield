@@ -97,6 +97,7 @@ def test_desk_returns_the_five_groups_in_order_empty_ones_too(db_path, db):
     groups = desk(db, PROJECT, NOW)
     assert [g.name for g in groups] == [
         "Didn't go through",
+        "Blocked tickets",
         "Your answers wanted",
         "Proposals to review",
         "Finished, to talk through",
@@ -106,14 +107,15 @@ def test_desk_returns_the_five_groups_in_order_empty_ones_too(db_path, db):
         [],
         [],
         [],
+        [],
         ["The factory measures itself", "The web app"],
         [],
     ]
-    assert desk(db, "nowhere", NOW)[3].items == []
+    assert desk(db, "nowhere", NOW)[4].items == []
 
 
 def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
-    seeds = desk(db, PROJECT, NOW)[4].items
+    seeds = desk(db, PROJECT, NOW)[5].items
     assert [s.title for s in seeds] == ["Parallel developers"]
 
 
@@ -153,7 +155,7 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
             ),
         ),
     )
-    proposals = desk(db, PROJECT, NOW)[2].items
+    proposals = desk(db, PROJECT, NOW)[3].items
     assert [p.link.rsplit("/", 1)[1] for p in proposals if not p.on_its_way] == still_open
     # a pending one stays, dashed and on its way (the owner, 2026-10-08)
     assert [p.link.rsplit("/", 1)[1] for p in proposals if p.on_its_way] == (
@@ -169,7 +171,7 @@ def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
             conn, planning, "approve_plan", "f6", None, _at(timedelta(hours=3))
         ),
     )
-    assert len(desk(db, PROJECT, NOW)[2].items) == 2
+    assert len(desk(db, PROJECT, NOW)[3].items) == 2
 
 
 def test_the_factory_tile_names_the_running_ticket(planning, serve):
@@ -950,7 +952,7 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
     """f6-12: on the desk and its page, its words say "merge F9 into F7"; approving it is the
     thread's ``approve_plan``, which settles it (D6)."""
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
-    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    [item] = [i for i in desk(db, PROJECT, NOW)[3].items if i.link.endswith("/merge-f9")]
     assert item.words == "merge F9 into F7 · 1 key points"
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert ">Merge F9 into F7</span>" in html and "Approve: merge F9 into F7" in html
@@ -966,13 +968,13 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
             conn, planning, "approve_plan", "f9", None, NOW.isoformat()
         ),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    [item] = [i for i in desk(db, PROJECT, NOW)[3].items if i.link.endswith("/merge-f9")]
     assert item.on_its_way  # on its way until the runner's next pick, no longer waiting on you
 
 
 def _merges_on_the_desk(db: sqlite3.Connection) -> list[str]:
     return [
-        i.link for i in desk(db, PROJECT, NOW)[2].items if "/merge-" in i.link and not i.on_its_way
+        i.link for i in desk(db, PROJECT, NOW)[3].items if "/merge-" in i.link and not i.on_its_way
     ]
 
 
@@ -1024,7 +1026,7 @@ def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
     """F49 D1: the runner applied it after the job; no Approve, on the desk or its page."""
     applied = {**_REVIEW_MERGE, "applied": True}
     _write(db_path, lambda conn: _review(conn, planning, "f9", applied))
-    assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    assert not [i for i in desk(db, PROJECT, NOW)[3].items if i.link.endswith("/merge-f9")]
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert 'id="approve-merge"' not in html and 'id="merged-by-lead"' in html
     assert 'id="reject"' not in html  # nothing left to reject
@@ -2164,7 +2166,7 @@ def test_a_ripe_cards_page_shows_its_sheet_and_signs_off(planning, db_path, db, 
         "subject": "m4",
     }
     assert html.index('id="review"') < html.index('id="conversation"')
-    [item] = desk(db, PROJECT, NOW)[3].items
+    [item] = desk(db, PROJECT, NOW)[4].items
     assert item.words == "reviewed · waits for your sign-off"
 
 
@@ -2360,7 +2362,7 @@ def test_an_archive_on_its_way_shows_dashed_and_counts_no_more(planning, db_path
             conn, planning, "archive", "general", "on", NOW.isoformat()
         ),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[1].items if i.link == "/planning/general"]
+    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link == "/planning/general"]
     assert item.on_its_way and item.words == "archiving at the runner's next pick"
     assert top_bar(db, PROJECT, NOW)["planning_count"] == before - 1
     html = _page(serve())
@@ -2377,7 +2379,7 @@ def test_a_sign_off_on_its_way_shows_on_the_desk(planning, db_path, db):
         db_path,
         lambda conn: metrics.add_request(conn, planning, "signoff", "m4", None, NOW.isoformat()),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[3].items if i.link == "/planning/m4"]
+    [item] = [i for i in desk(db, PROJECT, NOW)[4].items if i.link == "/planning/m4"]
     assert item.on_its_way and item.words == "signing off at the runner's next pick"
 
 
@@ -3663,3 +3665,87 @@ def test_owner_message_path_no_link(planning, db_path, serve):
     html = client.get("/planning/f6").text
     # The owner's message should not have links
     assert '<a href="/planning/f95' not in html
+
+
+def test_two_blocked_tickets_appear_second_on_the_desk_with_their_ids_and_reasons(
+    planning, db_path, db, serve
+):
+    """Two open blocked rows: the desk's second group is "Blocked tickets" with two items,
+    oldest first, each titled with its own ticket's id and worded with its own reason, each
+    linking to its ticket's page."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f1-01",
+            text="f1-01 blocked: waiting on f12-03",
+            created=_at(timedelta(hours=4)),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f1-02",
+            text="f1-02 blocked: waiting on f95-01",
+            created=_at(timedelta(hours=2)),
+        )
+    finally:
+        conn.close()
+    html = _page(serve())
+    groups = _groups(html)
+    assert "blocked" in groups
+    blocked_markup = groups["blocked"]
+    assert "Blocked tickets" in blocked_markup
+    items = _items(blocked_markup)
+    assert len(items) == 2
+    assert items[0] == ("/tickets/f1-01", "f1-01")
+    assert items[1] == ("/tickets/f1-02", "f1-02")
+    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    assert (blocked_group.key, blocked_group.name, blocked_group.color) == (
+        "blocked",
+        "Blocked tickets",
+        "--hazard",
+    )
+    assert [i.title for i in blocked_group.items] == ["f1-01", "f1-02"]
+    assert [i.words for i in blocked_group.items] == [
+        "waiting on f12-03",
+        "waiting on f95-01",
+    ]
+    assert [i.link for i in blocked_group.items] == ["/tickets/f1-01", "/tickets/f1-02"]
+
+
+def test_a_resolved_blocked_ticket_does_not_show_on_the_desk(planning, db_path, db, serve):
+    """A resolved blocked row is not on the desk."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        item_id = metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f1-03",
+            text="f1-03 blocked: was waiting on something",
+            created=_at(timedelta(hours=-4)),
+        )
+        metrics.resolve_owner_item(conn, item_id, NOW.isoformat())
+    finally:
+        conn.close()
+    html = _page(serve())
+    groups = _groups(html)
+    blocked_markup = groups.get("blocked", "")
+    assert "f1-03" not in blocked_markup
+    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    assert blocked_group.items == []
+
+
+def test_no_open_blocked_tickets_means_empty_group_and_no_heading(planning, db_path, db, serve):
+    """With no open blocked rows, the group is empty and /planning doesn't show its heading."""
+    html = _page(serve())
+    groups = _groups(html)
+    blocked_markup = groups.get("blocked", "")
+    assert "Blocked tickets" not in blocked_markup
+    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    assert blocked_group.items == []

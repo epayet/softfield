@@ -484,6 +484,22 @@ def _failed_edit(
     return f"Your edit on {_thread_title(thread, titles)}", f"/planning/{thread}"
 
 
+def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
+    """Open blocked tickets with their reason: one plain DeskItem per row, oldest first."""
+    rows = conn.execute(
+        "SELECT subject, text FROM owner_items"
+        " WHERE project_id = ? AND kind = ? AND resolved IS NULL"
+        " ORDER BY created, id",
+        (project_id, "blocked"),
+    ).fetchall()
+    items: list[DeskItem] = []
+    for r in rows:
+        prefix = f"{r['subject']} blocked: "
+        words = r["text"][len(prefix) :] if r["text"].startswith(prefix) else r["text"]
+        items.append(DeskItem("blocked", r["subject"], words, f"/tickets/{r['subject']}"))
+    return items
+
+
 def _refused(conn: sqlite3.Connection, project_id: int, titles: dict[str, str]) -> list[DeskItem]:
     """The owner's words the runner refused (F31 D9), until they dismiss them: a dismiss on
     its way takes one off at once, and so does a retry (``_retried``). An edit of a waiting
@@ -734,7 +750,7 @@ def desk_trail(
 
 
 def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
-    """What waits for the owner (D6), in five groups in this order, empty ones included: what
+    """What waits for the owner (D6), in six groups in this order, empty ones included: what
     didn't go through first (F31 D9)."""
     project_id = metrics.find_project(conn, project)
     if project_id is None:
@@ -743,6 +759,7 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         proposals: list[DeskItem] = []
         ripe: list[DeskItem] = []
         seeds: list[DeskItem] = []
+        blocked: list[DeskItem] = []
     else:
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
@@ -750,8 +767,10 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         proposals = _open_proposals(conn, project_id, _known_cards(_repo(conn, project)))
         ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
+        blocked = _blocked(conn, project_id)
     return [
         DeskGroup("refused", "Didn't go through", "--hazard", refusals),
+        DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),
         DeskGroup("answers", "Your answers wanted", "--hazard", answers),
         DeskGroup("proposals", "Proposals to review", "--opus", proposals),
         DeskGroup("ripe", "Finished, to talk through", "--qwen", ripe),

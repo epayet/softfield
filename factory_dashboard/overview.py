@@ -637,9 +637,9 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
     qjobs = queued_jobs(conn, project, now)
     open_needs = needs_you(conn, project, now, jobs, all_queued)
-    # the desk's entry stands for its answers wanted and its sign-offs, so no lead reply
-    # (f6-09) and no stored sign-off row (f95-01) shows on its own
-    needs = [n for n in open_needs if n.kind not in ("planning", "signoff")]
+    # the desk's entry stands for its answers wanted, its sign-offs and its blocked tickets, so no
+    # lead reply (f6-09), no stored sign-off row (f95-01) and no blocked row shows on its own
+    needs = [n for n in open_needs if n.kind not in ("planning", "signoff", "blocked")]
     items = waiting_for_you(desk(conn, project, now))  # what the owner acted on waits on no one
     if items:
         n = len(items)
