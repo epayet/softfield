@@ -1,4 +1,4 @@
-# Milestone F135: Why is there a couple of 'end-to-end tests fail on staging…
+# Milestone F135: Reviews stop at once: they look for end-to-end tests the split removed
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
