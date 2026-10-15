@@ -27,3 +27,12 @@ Read `_merged_on` and `_merge_links` in `factory_dashboard/planning.py` and `#me
 - a plan applied or rejected on F95's thread is not listed on `/planning/f107`, and an open one is
 - with F107 merged into F10 through F95, `/planning/f107` links to `/planning/f10` exactly and `/planning/f10` shows both "Merged here" lines; a key merged into F13 and F42 shows both links
 - the listed tests pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 146877
+logs: .factory/var/runs/20261015-095007/f109-04-merged-page-counts-and-tests
+```
