@@ -4,7 +4,7 @@ milestone: f93-is-no-edit-after-10-minutes
 depends_on: []
 agent: lead
 difficulty: 1
-priority: 1
+priority: 0
 area: factory
 files:
   - runner/local_model.py
