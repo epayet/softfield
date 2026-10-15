@@ -1,6 +1,7 @@
 # Milestone F101: the runner waits instead of ending when it has nothing to run
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-15. Base: git tag `f101-uv-runner-run-command-stopped-when-start`. Report: [`.factory/reviews/f101-uv-runner-run-command-stopped-when.md`](../reviews/f101-uv-runner-run-command-stopped-when.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes

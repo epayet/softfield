@@ -1,6 +1,6 @@
 # Review: F101, the runner waits instead of ending when it has nothing to run
 
-- **Status:** round 1 done; one small developer ticket (f101-02) is left before your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-15.
 
 ## Sign-off sheet
 
