@@ -3014,27 +3014,22 @@ def test_desk_coming_poll_wrapper_absent_when_no_items(planning, serve):
 
 
 def test_a_merge_whose_card_left_main_shows_both_ways(planning, db_path, serve, checkout):
-    """F107 merged into F95: /planning/f107 shows 'Merged into F95' linking to F95,
-    and /planning/f95 shows 'Merged here: F107' linking to F107. The merged card's h2
-    shows the heading's title, not its bare key."""
+    """F107 merged into F95: /planning/f107 shows 'Merged into F95, <F95's title>' linking
+    to F95, and /planning/f95 shows 'Merged here: F107, <F107's title>' linking to F107. The
+    merged card's h2 shows the heading's title, not its bare key."""
     from runner import planner
 
     docs = checkout / ".factory" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
-    f95_doc = "# Milestone f95-plans-get-merged: Plans get merged\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
     )
     (docs / "f95-plans-get-merged.md").write_text(f95_doc)
 
-    # F107's doc (the merged card, no milestone row in DB)
-    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
-        "# Milestone f107-when-plans-get-merged-i-need: When plans get merged I need\n\n## Notes\n"
-    )
-
-    # Seed milestones: only F95 (F107 has no row)
+    # Seed milestones: only F95 (F107 has no row, and no doc: the merge removed it)
     _write(
         db_path,
         lambda conn: metrics.upsert_milestone(
@@ -3045,7 +3040,7 @@ def test_a_merge_whose_card_left_main_shows_both_ways(planning, db_path, serve, 
     # Check /planning/f107
     client = serve()
     html = client.get("/planning/f107").text
-    assert response_contains(html, "Merged into F95, When plans get merged")
+    assert response_contains(html, "Merged into F95, Plans get merged")
     assert 'href="/planning/f95?' in html
     # h2 shows the heading's title
     h2 = re.search(r"<h2[^>]*>([^<]+)</h2>", html)
@@ -3054,7 +3049,37 @@ def test_a_merge_whose_card_left_main_shows_both_ways(planning, db_path, serve, 
     # Check /planning/f95
     html = client.get("/planning/f95").text
     assert response_contains(html, "Merged here: F107, When plans get merged")
-    assert 'href="/planning/f107' in html
+    assert 'href="/planning/f107?' in html
+
+
+def test_a_merged_card_with_its_removed_row_says_merged_into(planning, db_path, serve, checkout):
+    """A merge leaves the merged card's milestone row, marked removed (`remove_cards`): its
+    page still says 'Merged into F95', not 'An earlier F107', and keeps the row's title."""
+    from runner import planner
+
+    docs = checkout / ".factory" / "cards"
+    docs.mkdir(parents=True)
+    f95_doc = planner.merged_card(
+        "# Milestone F95: Plans get merged\n\n## Notes\n",
+        "notes",
+        "From F107: When plans get merged (merged by the lead on 2026-10-13)",
+    )
+    (docs / "f95-plans-get-merged.md").write_text(f95_doc)
+
+    def seed(conn):
+        metrics.upsert_milestone(conn, planning, "f95-plans-get-merged", title="Plans get merged")
+        metrics.upsert_milestone(
+            conn, planning, "f107-when-plans", title="When plans get merged", state="idea"
+        )
+        metrics.remove_cards(conn, planning, gone="f107")
+
+    _write(db_path, seed)
+
+    html = serve().get("/planning/f107").text
+    assert response_contains(html, "Merged into F95, Plans get merged")
+    assert not response_contains(html, "An earlier F107")
+    h2 = re.search(r"<h2[^>]*>([^<]+)</h2>", html)
+    assert h2 and "When plans get merged" in h2[1]
 
 
 def response_contains(html: str, text: str) -> bool:
@@ -3072,20 +3097,17 @@ def test_merge_links_function_returns_correct_links(checkout):
     docs = checkout / ".factory" / "cards"
     docs.mkdir(parents=True)
 
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "n", "From F107: Title (merged by the lead on 2026-10-13)"
     )
     (docs / "f95-plans-get-merged.md").write_text(f95_doc)
 
-    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
-        "# Milestone f107-when-plans-get-merged-i-need: When\n\n## Notes\n"
-    )
-
-    merged_into, _merged_here, _latest_title = _merge_links(checkout, "f107")
+    merged_into, _merged_here, latest_title = _merge_links(checkout, "f107")
     assert len(merged_into) == 1
     assert merged_into[0]["key"] == "f95"
-    assert merged_into[0]["title"] == "Title"
+    assert merged_into[0]["title"] == "Plans"  # the kept card's, not the merged one's
+    assert latest_title == "Title"
     assert merged_into[0]["date"] == "2026-10-13"
     assert merged_into[0]["link"] == "/planning/f95"
 
@@ -3104,7 +3126,7 @@ def test_merged_on_shows_link_to_kept_card(planning, db_path, serve, checkout):
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
     )
@@ -3127,7 +3149,8 @@ def test_merged_on_shows_link_to_kept_card(planning, db_path, serve, checkout):
     assert 'id="merged-on"' in html
     block = html.split('id="merged-on"', 1)[1]
     link = re.search(r'<a href="/planning/f95\?[^"]*"[^>]*>([^<]*)</a>', block)
-    assert link and link[1].startswith("F95, When plans get merged")
+    assert link and link[1].startswith("F95, Plans get merged")
+    assert response_contains(html, "Merged into F95, Plans get merged: the conversation")
     assert ">/planning/" not in html
 
     # No message form (textarea for a message)
@@ -3144,7 +3167,7 @@ def test_merged_on_lists_open_proposals(planning, db_path, serve, checkout):
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
     )
@@ -3190,7 +3213,7 @@ def test_merged_on_leaves_out_a_rejected_plan(planning, db_path, serve, checkout
     docs = checkout / ".factory" / "cards"
     docs.mkdir(parents=True)
     f95_doc = planner.merged_card(
-        "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n",
+        "# Milestone F95: Plans get merged\n\n## Notes\n",
         "notes",
         "From F107: When plans get merged (merged by the lead on 2026-10-13)",
     )
@@ -3226,7 +3249,7 @@ def test_merged_on_shows_ticket_count(planning, db_path, serve, checkout):
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
     )
@@ -3277,7 +3300,7 @@ def test_merged_on_counts_done_across_two_milestones(planning, db_path, serve, c
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
     )
@@ -3339,7 +3362,7 @@ def test_merged_on_two_kept_cards(planning, db_path, serve, checkout):
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
     )
@@ -3382,7 +3405,7 @@ def test_merged_on_card_on_main_no_block(planning, db_path, serve, checkout):
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "notes", "From F107: When plans get merged (merged by the lead on 2026-10-13)"
     )
@@ -3445,7 +3468,7 @@ def test_two_merges_on_one_kept_card(planning, db_path, serve, checkout):
     docs = checkout / ".factory" / "cards"
     docs.mkdir(parents=True)
 
-    f95_doc = "# Milestone f95-plans-get-merged: Plans\n\n## Notes\n"
+    f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
     f95_doc = planner.merged_card(
         f95_doc, "n1", "From F107: Title1 (merged by the lead on 2026-10-13)"
     )
@@ -3453,13 +3476,6 @@ def test_two_merges_on_one_kept_card(planning, db_path, serve, checkout):
         f95_doc, "n2", "From F16: Title2 (merged by the owner on 2026-10-14)"
     )
     (docs / "f95-plans-get-merged.md").write_text(f95_doc)
-
-    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
-        "# Milestone f107: When\n\n## Notes\n"
-    )
-    (docs / "f16-parallel: parallel (merged).md").write_text(
-        "# Milestone f16-parallel: Parallel\n\n## Notes\n"
-    )
 
     _write(
         db_path,
@@ -3470,7 +3486,9 @@ def test_two_merges_on_one_kept_card(planning, db_path, serve, checkout):
 
     client = serve()
     page_html = client.get("/planning/f95").text
-    assert page_html.count("merged-here") == 2
+    assert page_html.count('class="merged-here"') == 2
+    assert response_contains(page_html, "Merged here: F107, Title1 · 2026-10-13")
+    assert response_contains(page_html, "Merged here: F16, Title2 · 2026-10-14")
 
 
 def test_key_merged_into_two_cards(planning, db_path, serve, checkout):
@@ -3480,21 +3498,17 @@ def test_key_merged_into_two_cards(planning, db_path, serve, checkout):
     docs = checkout / ".factory" / "cards"
     docs.mkdir(parents=True)
 
-    f13_doc = "# Milestone f13-factory-line: Line\n\n## Notes\n"
+    f13_doc = "# Milestone F13: Line\n\n## Notes\n"
     f13_doc = planner.merged_card(
         f13_doc, "n", "From F64: F64 title (merged by the lead on 2026-10-01)"
     )
     (docs / "f13-factory-line.md").write_text(f13_doc)
 
-    f42_doc = "# Milestone f42-seeds: Seeds\n\n## Notes\n"
+    f42_doc = "# Milestone F42: Seeds\n\n## Notes\n"
     f42_doc = planner.merged_card(
         f42_doc, "n", "From F64: F64 title (merged by the lead on 2026-10-02)"
     )
     (docs / "f42-seeds.md").write_text(f42_doc)
-
-    (docs / "f64-parallel: parallel (merged).md").write_text(
-        "# Milestone f64-parallel: Parallel\n\n## Notes\n"
-    )
 
     _write(
         db_path,
@@ -3503,11 +3517,11 @@ def test_key_merged_into_two_cards(planning, db_path, serve, checkout):
 
     client = serve()
     html = client.get("/planning/f64").text
-    # Both links present, each with its own visible text
+    # Both links present, each with its kept card's own title
     assert 'href="/planning/f13?' in html
     assert 'href="/planning/f42?' in html
-    assert response_contains(html, "An earlier F64 was merged into F13, F64 title")
-    assert response_contains(html, "An earlier F64 was merged into F42, F64 title")
+    assert response_contains(html, "Merged into F13, Line")
+    assert response_contains(html, "Merged into F42, Seeds")
 
 
 def test_chain_f107_to_f10(planning, db_path, serve, checkout):
@@ -3518,7 +3532,7 @@ def test_chain_f107_to_f10(planning, db_path, serve, checkout):
     docs.mkdir(parents=True)
 
     # F10's doc has both the original heading (from F95) and the chain heading (from F107)
-    f10_doc = "# Milestone f10-notes: Notes\n\n## Notes\n"
+    f10_doc = "# Milestone F10: Notes\n\n## Notes\n"
     # F95 was merged into F10
     f10_doc = planner.merged_card(
         f10_doc, "n", "From F95: F95 title (merged by the lead on 2026-10-05)"
@@ -3526,10 +3540,6 @@ def test_chain_f107_to_f10(planning, db_path, serve, checkout):
     # F107's heading moved down one level (### → ####)
     f10_doc += "#### From F107: F107 title (merged by the lead on 2026-10-06)\n"
     (docs / "f10-notes.md").write_text(f10_doc)
-
-    (docs / "f107-when-plans-get-merged-i-need.md").write_text(
-        "# Milestone f107: When\n\n## Notes\n"
-    )
 
     _write(
         db_path, lambda conn: metrics.upsert_milestone(conn, planning, "f10-notes", title="Notes")
@@ -3540,7 +3550,7 @@ def test_chain_f107_to_f10(planning, db_path, serve, checkout):
     # F107's thread links to F10
     html = client.get("/planning/f107").text
     assert 'href="/planning/f10?' in html
-    assert response_contains(html, "F10, F107 title")
+    assert response_contains(html, "Merged into F10, Notes")
 
     # F10's thread links to both F95 and F107
     html = client.get("/planning/f10").text
@@ -3604,7 +3614,7 @@ def test_lead_message_path_becomes_link(planning, db_path, serve):
 
     client = serve()
     html = client.get("/planning/f6").text
-    assert '<a href="/planning/f95">/planning/f95</a>' in html
+    assert '<a href="/planning/f95?project=coucou">/planning/f95</a>' in html
 
 
 def test_lead_message_b_stays_text(planning, db_path, serve):
@@ -3652,4 +3662,4 @@ def test_owner_message_path_no_link(planning, db_path, serve):
     client = serve()
     html = client.get("/planning/f6").text
     # The owner's message should not have links
-    assert '<a href="/planning/f95">' not in html
+    assert '<a href="/planning/f95' not in html

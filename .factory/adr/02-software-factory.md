@@ -421,6 +421,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** four tickets in a row on the same pages came back to the lead (f9-25, f13-01, f14-02, f14-03), each needing a 1,000-line module, a template with its script and a 2,700-line test file. A direction after two no-edit attempts has not once helped. What a factory needs here is a way to see that a kind of ticket is outside its developers' range and to route it by itself: by the size of the files it must read, not by the lead's difficulty score, which said 4. Second: one of the milestone's acceptance lines reached one ticket and not its twin; nothing checks that every "Done when" of a plan is carried by a ticket.
 - **Decisions affected:** none.
 
+### F109 (2026-10-15): merged cards link to each other ([review](../reviews/f109-when-plans-get-merged-i-need.md))
+
+- **Q1:** four tickets: one the lead's with the owner (f109-02, no key reused); two developer tickets at difficulty 4, each merged on its third attempt after a direction; one checkpoint fix ticket (f109-04), escalated and finished by the lead. The review fixed four findings itself, one blocking.
+- **Q3:** Qwen 0/3 first time, 20.9M tokens, five attempts ended "no edit after 10 min", all in `test_planning.py`. The checkpoint (Sonnet) found four real flaws and missed the two that mattered.
+- **Q5:** see the review's numbers.
+- **Anything else:** 25 tests passed while every real merged card's header would have been wrong twice: the fixtures left the merged card's doc on main and its milestones row out, the opposite of a real merge on both counts. Neither the developer, nor the checkpoint, nor the lead's ticket said what a real merge leaves behind; reading the 19 real headings on main showed both bugs in a minute. A factory's tests are only as true as their fixtures, and the cheapest check is one real record beside each hand-built one (now a ticket-writing rule). Second, a direction again didn't stop the no-edit re-reading (F14's lesson, again).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

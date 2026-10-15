@@ -11,7 +11,7 @@
       {% if card_meta %}<span style="font: 600 12px var(--mono); color: var(--muted)">{{ card_meta }}</span>{% endif %}
       <h2 style="margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">{{ card_title }}</h2>
       {% for link in merged_into %}
-      <a href="{{ link.link }}{{ q }}" class="merged-into" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{% if card_has_milestone %}An earlier {{ thread | upper }} was merged into {% else %}Merged into {% endif %}{{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
+      <a href="{{ link.link }}{{ q }}" class="merged-into" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{% if card_on_main %}An earlier {{ thread | upper }} was merged into {% else %}Merged into {% endif %}{{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
       {% endfor %}
       {% for link in merged_here %}
       <a href="{{ link.link }}{{ q }}" class="merged-here" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">Merged here: {{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
