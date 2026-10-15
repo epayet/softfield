@@ -27,3 +27,12 @@ Read `factory_dashboard/line.py` (`_field`, `_states`), `factory_dashboard/board
 - the set-aside ticket is still in `field["later"]`
 - the page of the first milestone has the Sign off button (`id="signoff-button"`)
 - the listed tests pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5281
+gate_failures: ['stopped', 'stopped']
+tokens: 2054863
+```
