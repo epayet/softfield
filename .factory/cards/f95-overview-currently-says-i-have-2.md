@@ -1,6 +1,7 @@
 # Milestone F95: overview currently says i have 2 things to sign off, but i…
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f95-overview-currently-says-i-have-2-start`. Report: [`.factory/reviews/f95-overview-currently-says-i-have-2.md`](../reviews/f95-overview-currently-says-i-have-2.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes

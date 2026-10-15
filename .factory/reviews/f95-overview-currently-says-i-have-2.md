@@ -1,6 +1,6 @@
 # Review: F95, sign-offs counted once, and the lead can look
 
-- **Status:** reviewed (rounds 1 and 2), waiting for the owner's sign-off. Round 2 found both fixes sound and nothing new.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 
