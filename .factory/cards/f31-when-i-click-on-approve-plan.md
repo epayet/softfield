@@ -1,6 +1,6 @@
 # Milestone F31: Proposals close the loop
 
-> **Status: planned** (2026-10-07, with the owner, in a terminal session). **State:** ready · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-15. Base: git tag `f31-when-i-click-on-approve-plan-start`. Report: [`.factory/reviews/f31-when-i-click-on-approve-plan.md`](../reviews/f31-when-i-click-on-approve-plan.md).
 > Planted by the owner on 2026-10-07 as "when i click on approve plan it looks like i can keep clicking on it"; grown the same night to every gap around proposals.
 
 ## Notes

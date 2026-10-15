@@ -1,6 +1,6 @@
 # Review: F31, proposals close the loop
 
-- **Status:** reviewed on 2026-10-12, round 1; waits for the owner's sign-off. One ticket, f31-04 ("What to do now"), is still in `tasks/later/`: it waits for a mock-up you haven't seen yet.
+- **Status:** done, signed off by the owner on 2026-10-15.
 
 ## Sign-off sheet
 
