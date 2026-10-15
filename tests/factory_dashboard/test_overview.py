@@ -633,8 +633,9 @@ def test_another_project_shows_only_its_own(client):
     assert "m1-01-elsewhere" in queue_section
     assert "softfield run" in queue_section
     assert "Next in line" in queue_section
+    page = html.split("<main>", 1)[1]  # the top bar says what the whole factory does (ADR 30)
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
-        assert mine not in html
+        assert mine not in page
     assert "m1-01-elsewhere" not in client.get("/").text
 
 

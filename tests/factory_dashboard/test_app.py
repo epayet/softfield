@@ -959,17 +959,18 @@ def _pause_held_planner(serve, serve_between, db_path):
 @pytest.mark.parametrize(
     ("setup", "words", "buttons"),
     [
-        (_running, "Running: f1-04-live", {"Pause": "pause"}),
-        (_idle, "Idle: nothing to do", {"Pause": "pause"}),
-        (_pause_asked, "Pausing after f1-04-live", {"Resume": "resume"}),  # which job, still
-        (_pause_held_client, "Paused by you since 11:40", {"Resume": "resume"}),
+        # the fixture has more than one project: the status names whose run it is (ADR 30)
+        (_running, "Running: coucou · f1-04-live", {"Pause": "pause"}),
+        (_idle, "Idle: nothing to do", {"Pause": "pause"}),  # this setup has one project
+        (_pause_asked, "Pausing after f1-04-live · coucou", {"Resume": "resume"}),
+        (_pause_held_client, "Paused by you since 11:40 · coucou", {"Resume": "resume"}),
         (
             _pause_held_planner,
-            "Paused by you since 11:40 · the lead is answering you",
+            "Paused by you since 11:40 · the lead is answering you · coucou",
             {"Resume": "resume"},
         ),
-        (_resume_asked, "Resuming…", {}),  # on its way: nothing to press until the runner takes it
-        (_waiting, "Waiting for Claude until 12:40", {"Pause": "pause"}),
+        (_resume_asked, "Resuming… · coucou", {}),  # on its way: nothing to press
+        (_waiting, "Waiting for Claude until 12:40", {"Pause": "pause"}),  # one project
         (_stopped, "Stopped", {}),
     ],
     ids=[
@@ -997,7 +998,9 @@ def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
 
 def test_the_status_wears_a_colour_from_the_tokens_and_its_words(serve):
     html = serve().get("/tickets").text
-    assert re.search(r'<span class="pill big good" role="status">Running: f1-04-live</span>', html)
+    assert re.search(
+        r'<span class="pill big good" role="status">Running: coucou · f1-04-live</span>', html
+    )
     css = (STATIC / "dashboard.css").read_text()
     assert re.search(r"\.pill\.big \{[^}]*var\(--display\)", css)
     # what the owner asked shows on its way: a dashed orange edge (lead.md, 2026-10-07)
@@ -1044,7 +1047,7 @@ def test_the_top_bar_refreshes_on_any_page_without_notifications(page, serve, db
     lead_replies(db_path, "f7")
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Paused by you since 11:40'",
+        " === 'Paused by you since 11:40 · coucou'",
         timeout=REFRESH,
     )
     page.wait_for_function("document.querySelector('#planning-tab').textContent === 'Planning · 2'")
@@ -1073,11 +1076,11 @@ def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serv
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Running: f1-04-live"
+    assert words.text_content() == "Running: coucou · f1-04-live"
     page.locator("#factory-status button", has_text="Pause").click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Pausing after f1-04-live'",
+        " === 'Pausing after f1-04-live · coucou'",
         timeout=1_000,
     )
     page.wait_for_function("document.querySelector('#factory-status button') === null")
@@ -1138,11 +1141,11 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Running: f1-04-live"
+    assert words.text_content() == "Running: coucou · f1-04-live"
     page.locator("#factory-status button", has_text="Pause").click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Pausing after f1-04-live'",
+        " === 'Pausing after f1-04-live · coucou'",
         timeout=1_000,
     )
     page.wait_for_function("document.querySelector('#factory-status button') === null")
@@ -1205,7 +1208,7 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Paused by you since 11:40"
+    assert words.text_content() == "Paused by you since 11:40 · coucou"
     page.locator("#factory-status button", has_text="Resume").click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent === 'Resuming…'",
@@ -1252,7 +1255,7 @@ def test_refused_post_shows_error_and_restores_button(page, serve, db_path):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
-    assert words.text_content() == "Running: f1-04-live"
+    assert words.text_content() == "Running: coucou · f1-04-live"
     page.locator("#factory-status button", has_text="Pause").click()
     # Wait for the error words first, then for the Pause button to come back.
     page.wait_for_function(
@@ -1265,3 +1268,11 @@ def test_refused_post_shows_error_and_restores_button(page, serve, db_path):
         timeout=REFRESH,
     )
     assert page.locator("#factory-status button").text_content() == "Pause"
+
+
+def test_the_top_bar_says_what_the_factory_does_whichever_project_is_shown(serve):
+    """The owner, 2026-10-14: picking a project is for planning and the board; the top bar
+    says what the factory does, and its Pause goes to the project whose run it is."""
+    html = serve().get("/planning?project=other").text
+    assert _status(html) == ("Running: coucou · f1-04-live", {"Pause": "pause"})
+    assert '"kind": "pause", "project": "coucou"' in html
