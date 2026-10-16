@@ -28,3 +28,12 @@ Read `show` and `registerSw` in `factory_dashboard/static/notify.js`, and `test_
 - second test: with a `showNotification` that rejects, the item appears exactly once in `window.shown`
 - only `tests/factory_dashboard/test_app.py` changes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 7729
+gate_failures: ['task-tests']
+tokens: 2592523
+```
