@@ -86,7 +86,13 @@ def test_no_page_or_stylesheet_names_a_third_party_host(client):
     """AGENTS.md rule 7: no CDN at run time, fonts included (f5-14)."""
     for path in [*PAGES, "/static/dashboard.css"]:
         text = client.get(path).text
-        assert re.findall(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}", text) == [], path
+        # SVG namespace declarations are not third-party hosts
+        found = [
+            m.group()
+            for m in re.finditer(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}", text)
+            if not re.search(r"xmlns=", text[: m.start()])
+        ]
+        assert found == [], path
         assert "@import" not in text, path
 
 
@@ -237,14 +243,116 @@ def test_the_top_bar_has_the_mockups_title_hazard_stripe_and_tab_segment(client)
     html = client.get("/").text
     header = re.search(r'<header class="bar">(.*?)</header>', html, re.S)
     assert header
-    assert '<span class="brand">' in header[1]
+    assert '<a class="brand"' in header[1]
     assert '<div class="hazard"' in header[1]
     assert '<nav class="tabs" aria-label="Pages">' in header[1]
     css = (STATIC / "dashboard.css").read_text()
-    assert re.search(r"\.brand \{[^}]*var\(--display\)[^}]*text-transform: uppercase", css)
+    assert re.search(r"\.brand \{[^}]*var\(--display\)[^}]*display: flex", css)
     # the segment: the current tab is a hazard-yellow plate, as in the mock-up
     assert re.search(r'nav\.tabs a\[aria-current="page"\] \{[^}]*background: var\(--hazard\)', css)
     assert re.search(r"\.hazard \{[^}]*repeating-linear-gradient\(-45deg, var\(--hazard\)", css)
+
+
+def test_the_brand_shows_logo_and_softfield_name(client):
+    """f68: the top bar shows the logo SVG and "SoftField" (Soft in warn-ink, Field in good)."""
+    html = client.get("/").text
+    assert re.search(r'<a class="brand"[^>]*href="\?project=', html)
+    assert re.search(r'<svg[^>]*aria-hidden="true"', html)
+    assert re.search(r'class="brand-soft">Soft</span>', html)
+    assert re.search(r'class="brand-field">Field</span>', html)
+    assert "software-factory" not in html
+
+
+def test_the_page_links_the_favicon(client):
+    """f68: every page links softfield.svg as its icon, and /static/softfield.svg serves an SVG."""
+    html = client.get("/").text
+    assert re.search(r'<link rel="icon"[^>]*href="[^"]*softfield\.svg[^"]*"', html)
+    resp = client.get("/static/softfield.svg")
+    assert resp.status_code == 200
+    assert b"<svg" in resp.content
+
+
+def test_the_brand_link_keeps_the_chosen_project(client):
+    """f68: clicking the brand goes to the Overview for the same project."""
+    html = client.get("/planning?project=other").text
+    brand = re.search(r'<a class="brand"[^>]*href="([^"]*)"', html)
+    assert brand
+    assert "?project=other" in brand[1]
+
+
+@pytest.mark.parametrize("scheme", ["dark", "light"])
+def test_the_logo_follows_the_theme_tokens(page, client, scheme):
+    """f68: the logo's sprout and crate use the theme's token colours."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme=scheme)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    svg = page.locator(".brand svg")
+    assert svg.is_visible()
+
+
+def test_phone_brand_logo_dot_sign_and_select_share_one_row(page, client):
+    """f68: at 390 px the logo, the name, F17's dot and sign, and the project select
+    still share one row, with no layout problems."""
+    page.set_viewport_size({"width": 390, "height": 844})
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector(".brand", state="visible", timeout=REFRESH)
+    page.evaluate("() => document.fonts.ready")
+    assert layout_problems(page) == []
+
+
+def test_desktop_brand_still_shows_host(client):
+    """f68: on desktop the host address still shows beside the brand name."""
+    html = client.get("/").text
+    header = re.search(r'<header class="bar">(.*?)</header>', html, re.S)
+    assert header
+    assert re.search(r'<a class="brand"[^>]*>.*?<small>', header[1], re.S)
+
+
+def test_phone_brand_name_does_not_wrap(page, client):
+    """f68: on a phone the brand name does not wrap to a second line."""
+    page.set_viewport_size(PHONE)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector(".brand", state="visible", timeout=REFRESH)
+    brand = page.locator(".brand")
+    height = brand.evaluate("el => el.getBoundingClientRect().height")
+    assert height < 30, f"brand wraps: {height}px"
+
+
+def test_no_page_shows_software_factory(client):
+    """f68: no page shows "software-factory" in the owner-facing HTML."""
+    for path in PAGES:
+        html = client.get(path).text
+        assert "software-factory" not in html, f"{path} still shows software-factory"
 
 
 def test_phone_title_and_filter_share_one_line_at_390px(page, client):
@@ -318,9 +426,7 @@ def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme
 def test_desktop_bar_unchanged_at_1440(client):
     """f3-30: at 1440 px the bar is as today (host visible, tabs fit without scrolling)."""
     html = client.get("/").text
-    assert re.search(r'<span class="brand">.*?<small>', html, re.S), (
-        "host address hidden on desktop"
-    )
+    assert re.search(r'<a class="brand".*?<small>', html, re.S), "host address hidden on desktop"
     assert re.search(r'<nav class="tabs"[^>]*>.*?href="/\?', html, re.S)
     assert re.search(r'href="/board\?', html)
     assert re.search(r'href="/tickets\?', html)

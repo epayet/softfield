@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}{{ project }}{% endblock %} · software-factory</title>
+<title>{% block title %}{{ project }}{% endblock %} · SoftField</title>
+<link rel="icon" type="image/svg+xml" href="{{ static('softfield.svg') }}">
 <link rel="stylesheet" href="{{ static('dashboard.css') }}">
 <script src="{{ static('vendor/htmx.min.js') }}" defer></script>
 <script src="{{ static('vendor/echarts.min.js') }}" defer></script>
@@ -99,7 +100,11 @@
 <body>
 <header class="bar">
   <div class="bar-top">
-    <span class="brand">software-factory <small>{{ request.url.netloc }}</small></span>
+    <a class="brand" href="{{ q }}">
+      {% include "_partials/logo.svg" %}
+      <span class="brand-soft">Soft</span><span class="brand-field">Field</span>
+      <small>{{ request.url.netloc }}</small>
+    </a>
     {% include "_partials/bar_status.html" %}
     <form class="filters" method="get">
       <label>Project

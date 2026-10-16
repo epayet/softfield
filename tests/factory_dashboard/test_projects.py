@@ -61,8 +61,8 @@ def test_project_shows_runs(project_client):
 def test_project_page_title_and_breadcrumb_and_topbar(project_client):
     """The title, breadcrumb text/href and top-bar option show the project name."""
     html = project_client.get("/projects/coucou").text
-    # Title: ``coucou · Project · software-factory``.
-    assert "coucou · Project · software-factory" in html
+    # Title: ``coucou · Project · SoftField``.
+    assert "coucou · Project · SoftField" in html
     # Breadcrumb text and href.
     assert 'href="/projects/coucou?project=coucou">coucou</a>' in html
     # Selected top-bar project option.

@@ -102,7 +102,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
         timeline,
     )
 
-    app = FastAPI(title="software-factory", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="softfield", docs_url=None, redoc_url=None, openapi_url=None)
     app.state.db, app.state.project = db, project
     # Only loopback names and the address it listens on: a page elsewhere that rebinds its own
     # name to one of them is refused.

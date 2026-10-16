@@ -81,9 +81,18 @@ header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); dis
   grid-template-columns: minmax(0, 1fr);
   padding: 12px 16px 10px; position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; }
 .bar-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; }
-.brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; text-transform: uppercase; }
+.brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px;
+  text-decoration: none; color: var(--ink); }
+.brand:hover { text-decoration: underline; }
+.brand svg { flex: none; width: 28px; height: 28px; }
+.brand-soft { color: var(--warn-ink); }
+.brand-field { color: var(--good); }
 .brand small { font: 400 12px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted);
   margin-left: 8px; }
+/* Logo parts use theme tokens so they follow the light/dark switch */
+.brand svg .sprout { stroke: var(--good); }
+.brand svg .stem { stroke: var(--good-ink); }
+.brand svg .crate { fill: var(--hazard); stroke: var(--hazard-ink); }
 .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px);
   opacity: .85; }
 /* The factory's status (f6-16, f17's mock-up): a dot for whose job runs (orange the lead, blue
