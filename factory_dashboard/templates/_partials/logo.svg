@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 28 28" aria-hidden="true">
-  <rect x="2" y="12" width="24" height="14" rx="2" fill="var(--hazard)" stroke="var(--hazard-ink)" stroke-width="1.5"/>
+  <rect class="crate" x="2" y="12" width="24" height="14" rx="2" fill="var(--hazard)" stroke="var(--hazard-ink)" stroke-width="1.5"/>
   <line x1="10" y1="12" x2="10" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/>
   <line x1="18" y1="12" x2="18" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/>
-  <path d="M14 12 L14 6" stroke="var(--good)" stroke-width="2" stroke-linecap="round"/>
-  <path d="M14 8 Q10 6 10 3" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-  <path d="M14 10 Q18 8 18 5" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <path class="sprout" d="M14 12 L14 6" stroke="var(--good)" stroke-width="2" stroke-linecap="round"/>
+  <path class="sprout" d="M14 8 Q10 6 10 3" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <path class="sprout" d="M14 10 Q18 8 18 5" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
 </svg>
