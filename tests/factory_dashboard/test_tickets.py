@@ -422,3 +422,57 @@ def test_non_later_state_filter_does_not_leak_to_later_section(db_path, tickets_
     html = resp.text
     later_section = section_raw(html, "later")
     assert "f1-12-escalated" not in later_section
+
+
+def later_priority_rows(html: str) -> list[tuple[str, str]]:
+    """Each later ticket's id and priority cell, in page order."""
+    later_section = section_raw(html, "later")
+    return re.findall(
+        r'<tr[^>]*\bdata-ticket="([^"]+)"[^>]*>.*?'
+        r'<td[^>]*\bdata-col="priority"[^>]*>(.*?)</td>',
+        later_section,
+        re.S,
+    )
+
+
+def test_later_tickets_sorted_by_priority_then_id(later_priority_client):
+    html = later_priority_client.get("/tickets").text
+    rows = later_priority_rows(html)
+    tickets = [r[0] for r in rows]
+    priorities = [int(r[1]) for r in rows]
+    # f1-95-low-priority has priority 5 (goes first)
+    assert tickets[0] == "f1-95-low-priority"
+    assert priorities[0] == 5
+    # f1-98-milestone has priority 10 (milestone's priority)
+    assert tickets[1] == "f1-98-milestone"
+    assert priorities[1] == 10
+    # f1-97-bug has priority 50 (bug default)
+    assert tickets[2] == "f1-97-bug"
+    assert priorities[2] == 50
+    # f1-99-later has priority 100 (default)
+    assert tickets[3] == "f1-99-later"
+    assert priorities[3] == 100
+
+
+def test_ticket_with_priority_5_lists_before_earlier_id_no_priority(later_priority_client):
+    html = later_priority_client.get("/tickets").text
+    rows = later_priority_rows(html)
+    tickets = [r[0] for r in rows]
+    # f1-95-low-priority (id 95) has priority 5 and comes before f1-99-later (id 99, no priority)
+    assert tickets.index("f1-95-low-priority") < tickets.index("f1-99-later")
+
+
+def test_bug_ticket_without_priority_shows_50(later_priority_client):
+    html = later_priority_client.get("/tickets").text
+    rows = later_priority_rows(html)
+    for ticket, priority in rows:
+        if ticket == "f1-97-bug":
+            assert priority == "50"
+
+
+def test_milestone_ticket_without_priority_shows_milestone_priority(later_priority_client):
+    html = later_priority_client.get("/tickets").text
+    rows = later_priority_rows(html)
+    for ticket, priority in rows:
+        if ticket == "f1-98-milestone":
+            assert priority == "10"

@@ -2074,3 +2074,80 @@ def signoff_button_client(db_path: Path) -> TestClient:
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def write_later_priority(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: set-aside tickets with various priorities for priority
+    ordering tests.
+
+    - ``f1-99-later`` (developer, f1 milestone, no explicit priority → uses milestone's default 100)
+    - ``f1-95-low-priority`` (developer, f1 milestone, explicit ``priority: 5`` in body)
+    - ``f1-97-bug`` (developer, bugs milestone, no explicit priority → bug priority 50)
+    - ``f1-98-milestone`` (developer, f2 milestone with priority 10 → uses milestone's priority 10)
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    # f2 milestone with priority 10
+    f2 = metrics.upsert_milestone(conn, project, "f2", title="F2 milestone", priority=10)
+    bugs = metrics.upsert_milestone(conn, project, "bugs", state="building")
+    # f1-95-low-priority: explicit priority 5 (goes first)
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-95-low-priority",
+        milestone_id=f1,
+        kind="developer",
+        state="later",
+        difficulty=2,
+        title="Low priority ticket.",
+        body="---\npriority: 5\n---\nGoal: Low priority ticket.",
+    )
+    # f1-98-milestone: no explicit priority, milestone priority is 10
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-98-milestone",
+        milestone_id=f2,
+        kind="developer",
+        state="later",
+        difficulty=2,
+        title="Milestone priority ticket.",
+    )
+    # f1-97-bug: bug ticket, no explicit priority → 50
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-97-bug",
+        milestone_id=bugs,
+        kind="developer",
+        state="later",
+        difficulty=1,
+        title="A bug ticket.",
+    )
+    # f1-99-later: no explicit priority, f1 milestone has no priority → 100
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-99-later",
+        milestone_id=f1,
+        kind="developer",
+        state="later",
+        difficulty=3,
+        title="A set-aside ticket.",
+    )
+
+
+@pytest.fixture
+def later_priority_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus ``write_later_priority``'s rows."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_later_priority(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")

@@ -14,6 +14,7 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
+from factory_dashboard.queries import ticket_priority
 
 router = APIRouter()
 
@@ -83,7 +84,7 @@ def list_later_tickets(
     project: str,
     *,
     milestone: str | None = None,
-) -> list[dict[str, str | None]]:
+) -> list[dict[str, str | int | None]]:
     """Tickets set aside (state ``later``) for ``project``, optionally filtered by
     ``milestone``. The page's state filter doesn't apply: the panel only ever lists these."""
     conditions = ["p.name = ?"]
@@ -98,7 +99,7 @@ def list_later_tickets(
     where = " AND ".join(conditions)
 
     rows = conn.execute(
-        f"SELECT t.ticket, t.title, t.kind "  # noqa: S608
+        f"SELECT t.ticket, t.title, t.kind, t.body, m.key AS milestone, m.priority AS card "  # noqa: S608
         "FROM tickets t "
         "JOIN projects p ON p.id = t.project_id "
         "LEFT JOIN milestones m ON m.id = t.milestone_id "
@@ -106,14 +107,18 @@ def list_later_tickets(
         f"ORDER BY t.ticket",
         tuple(params),
     ).fetchall()
-    return [
-        {
-            "ticket": row["ticket"],
-            "title": row["title"],
-            "kind": row["kind"],
-        }
-        for row in rows
-    ]
+    found: list[dict[str, str | int | None]] = []
+    for row in rows:
+        priority = ticket_priority(row["body"], row["milestone"], row["card"])
+        found.append(
+            {
+                "ticket": row["ticket"],
+                "title": row["title"],
+                "kind": row["kind"],
+                "priority": priority,
+            }
+        )
+    return sorted(found, key=lambda t: (t["priority"], t["ticket"]))
 
 
 def list_tickets(
