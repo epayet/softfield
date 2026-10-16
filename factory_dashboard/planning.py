@@ -913,7 +913,7 @@ class Message:
     at: str
     text: str
     points: list[dict[str, object]]  # a lead message's, or the owner's comments
-    latest: bool  # the lead's latest points: the ones the owner comments on
+    latest: bool  # the lead's latest message, with points: the ones the owner comments on
     waiting: bool = False  # an open plan_message request not yet picked up
     id: int = 0  # a waiting message's request: what a change names (F14 D1)
     change: Change | None = None  # a waiting message's open change: on its way, no more edits
@@ -1003,7 +1003,11 @@ def _review(
 
 
 def _messages(rows: list[sqlite3.Row]) -> list[Message]:
-    latest = max((r["id"] for r in rows if r["author"] == "lead" and r["points"]), default=None)
+    # F30 D1: the owner comments on the lead's latest message, the one drawn at the top; when
+    # it has no points (a plain answer, an approval note), the older points fold under Earlier
+    # with no Comment… boxes
+    lead = [r for r in rows if r["author"] == "lead"]
+    latest = lead[-1]["id"] if lead and lead[-1]["points"] else None
     return [
         Message(
             r["author"],

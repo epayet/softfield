@@ -1,5 +1,6 @@
 ---
 id: f33-02-now-estimate
+agent: lead
 milestone: f33-overview-now-check-all-how-long
 depends_on: [f33-01-activity-clock]
 difficulty: 3

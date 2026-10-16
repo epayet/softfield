@@ -782,6 +782,8 @@ def test_the_latest_exchange_comes_first_and_the_older_messages_fold_newest_firs
     assert [said.index(words) for words in order] == sorted(said.index(w) for w in order)
     assert "It passes." not in said
     assert html.count("It passes.") == 1 and html.count("And the phone?") == 1
+    # the points folded away are commented on no more: no Comment…, no "7 points" by Send
+    assert "Comment…" not in html and 'id="progress"' not in html
 
 
 def test_waiting_messages_show_above_the_leads_latest_newest_first(planning, db_path, serve):

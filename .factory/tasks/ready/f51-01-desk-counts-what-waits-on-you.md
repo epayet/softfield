@@ -1,5 +1,6 @@
 ---
 id: f51-01-desk-counts-what-waits-on-you
+agent: lead
 milestone: f51-when-a-plan-depends-on-an
 difficulty: 3
 depends_on: [f12-03-remove-review-probe]

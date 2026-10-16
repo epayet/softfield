@@ -1,5 +1,6 @@
 ---
 id: f106-03-try-again-set-aside
+agent: lead
 milestone: f106-where-do-blocked-tickets-go-for
 difficulty: 5
 depends_on: [f106-01-blocked-reaches-the-owner, f106-02-blocked-on-the-desk]

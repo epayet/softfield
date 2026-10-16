@@ -437,6 +437,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a ticket that explains a platform trap and names the fix is carried out as written; the gap was again between a Done-when line and the assertion behind it (F26's lesson). Nine days from note to merge, none of it in the work.
 - **Decisions affected:** none.
 
+### F30 (2026-10-16): a thread shows the latest answer first ([review](../reviews/f30-on-conversations-i-want-to-the.md))
+
+- **Q1:** one developer ticket, difficulty 3, escalated after three attempts and done by the lead on main (reset, not finished). No checkpoint. The review fixed two findings itself and filed no ticket.
+- **Q3:** Qwen 0/1, 7.8M tokens over 130 minutes: two no-edit stops, then, under a direction, a branch that duplicated the message markup and bent nine existing tests. The lead's version is about 30 lines.
+- **Q5:** see the review's numbers.
+- **Anything else:** the ticket was planned a week before the routing rule that would have made it the lead's, and a new rule reached new plans only: 16 more waiting tickets were in the same case until this review moved them. A factory's routing rules need to be applied to its queue when they are made, not only at planning. Second, the tests' threads all ended on a lead message with points; real approved threads end on an approval note, and one look at a real page (F95) showed the leftover counter (F109's lesson: one real record beside each hand-built one).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

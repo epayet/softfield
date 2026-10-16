@@ -1,5 +1,6 @@
 ---
 id: f73-02-set-aside-button
+agent: lead
 milestone: f73-i-want-to-be-able-to
 difficulty: 4
 depends_on: [f73-01-set-aside-list, f42-01-review-page-room]

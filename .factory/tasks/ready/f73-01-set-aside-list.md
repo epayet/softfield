@@ -1,5 +1,6 @@
 ---
 id: f73-01-set-aside-list
+agent: lead
 milestone: f73-i-want-to-be-able-to
 difficulty: 4
 depends_on: [f22-01-archive-at-the-bottom, f26-02-group-counts]

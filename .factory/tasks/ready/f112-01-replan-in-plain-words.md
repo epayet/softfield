@@ -1,5 +1,6 @@
 ---
 id: f112-01-replan-in-plain-words
+agent: lead
 milestone: f112-plain-words-for-replan
 difficulty: 3
 depends_on: []

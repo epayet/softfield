@@ -1,5 +1,6 @@
 ---
 id: f26-02-group-counts
+agent: lead
 milestone: f26-i-want-to-see-numbers-next
 difficulty: 2
 depends_on: [f63-01-desk-order]

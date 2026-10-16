@@ -1,5 +1,6 @@
 ---
 id: f90-01-seed-shows-its-note
+agent: lead
 milestone: f90-editing-seeds-that-i-ve-planted
 difficulty: 3
 depends_on: [f12-03-remove-review-probe]

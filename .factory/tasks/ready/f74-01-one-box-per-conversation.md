@@ -1,5 +1,6 @@
 ---
 id: f74-01-one-box-per-conversation
+agent: lead
 milestone: f74-when-i-reply-to-a-your
 difficulty: 3
 depends_on: [f63-01-desk-order]

@@ -1,5 +1,6 @@
 ---
 id: f67-02-key-points-by-kind
+agent: lead
 milestone: f67-in-proposals-sometimes-i-see-d1
 difficulty: 5
 depends_on: [f67-01-key-point-kinds]

@@ -1,5 +1,6 @@
 ---
 id: f75-01-archiving-on-approval
+agent: lead
 milestone: f75-i-believe-right-now-when-a
 difficulty: 3
 depends_on: [f74-01-one-box-per-conversation, f22-01-archive-at-the-bottom]
