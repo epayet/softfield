@@ -34,3 +34,12 @@ Read `factory_dashboard/templates/thread.html` (`#conversation`) and `thread_pag
 - the existing thread tests still pass, their order assertions updated
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 7761683
+logs: .factory/var/runs/20261016-044031/f30-01-thread-latest-first
+```
