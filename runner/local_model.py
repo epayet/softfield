@@ -158,11 +158,13 @@ def session_reasoning(db: Path, session_id: str) -> str:
 
 
 # f2-05: in f1, 6 of 24 failed local attempts made no edit in 25-30 minutes, some thinking
-# one phrase over and over; at each tick an attempt stuck like this is stopped.
-NO_EDIT_AFTER = 10 * 60.0
+# one phrase over and over; at each tick an attempt stuck like this is stopped. F93: 20 minutes,
+# not 10: from 10 to 13 October, 16 of 29 attempts were stopped at 10 minutes while the first
+# edits of the others came as late as 9.2.
+NO_EDIT_AFTER = 20 * 60.0
 REPEAT_WINDOW = 4000  # the characters of reasoning, last first, that must all repeat
 MAX_PHRASE = 200  # how long the repeated phrase may be
-STOP_NO_EDIT = "stopped: no edit after 10 min"
+STOP_NO_EDIT = f"stopped: no edit after {NO_EDIT_AFTER / 60:.0f} min"
 STOP_REPEATING = "stopped: repeating itself"
 STOP_REASONS = (STOP_NO_EDIT, STOP_REPEATING)
 

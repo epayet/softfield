@@ -424,19 +424,16 @@ def _attempt(tmp_path: Path, clock):
     return local_model.run_opencode(tmp_path, "m", "t", "p", 45 * 60, log, clock=clock)
 
 
-def test_a_stream_with_no_edit_for_10_minutes_is_stopped(tmp_path, monkeypatch):
-    """f1: 6 of 24 failed local attempts made no edit in 25-30 minutes."""
-    frames = [(m / 2, [_tool("read"), _step(100, 1)]) for m in range(1, 41)]
+def test_a_stream_with_no_edit_for_20_minutes_is_stopped(tmp_path, monkeypatch):
+    """f1: 6 of 24 failed local attempts made no edit in 25-30 minutes; F93: 10 was too soon."""
+    frames = [(m / 2, [_tool("read"), _step(100, 1)]) for m in range(1, 61)]
     clock, ticked = _ticking(monkeypatch, frames)
     _thinking(monkeypatch, VARIED)
     run = _attempt(tmp_path, clock)
-    assert run.stopped == STOP_NO_EDIT == "stopped: no edit after 10 min"
-    assert ticked[-1] == 10 and run.exit_code is None
+    assert run.stopped == STOP_NO_EDIT == "stopped: no edit after 20 min"
+    assert ticked[-1] == 20 and 19.5 in ticked and run.exit_code is None
     assert not run.timed_out  # stopped, not out of time
-    assert (
-        "--- stopped: no edit after 10 min ---"
-        in (tmp_path / "logs" / "opencode-1.jsonl").read_text()
-    )
+    assert f"--- {STOP_NO_EDIT} ---" in (tmp_path / "logs" / "opencode-1.jsonl").read_text()
 
 
 def test_a_stream_whose_reasoning_repeats_one_phrase_is_stopped_within_one_tick(
@@ -449,12 +446,12 @@ def test_a_stream_whose_reasoning_repeats_one_phrase_is_stopped_within_one_tick(
     assert ticked == [0.5]
 
 
-def test_a_stream_that_edits_at_minute_9_runs_on(tmp_path, monkeypatch):
-    frames = [(m / 2, [_tool("edit")] if m == 18 else [_step(100, 1)]) for m in range(1, 41)]
+def test_a_stream_that_edits_at_minute_19_runs_on(tmp_path, monkeypatch):
+    frames = [(m / 2, [_tool("edit")] if m == 38 else [_step(100, 1)]) for m in range(1, 61)]
     clock, ticked = _ticking(monkeypatch, frames)
     _thinking(monkeypatch, VARIED)
     run = _attempt(tmp_path, clock)
-    assert (run.stopped, run.exit_code, ticked[-1]) == ("", 0, 20)
+    assert (run.stopped, run.exit_code, ticked[-1]) == ("", 0, 30)
 
 
 def test_a_stopped_attempt_fails_with_its_reason(tmp_path, monkeypatch):

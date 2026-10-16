@@ -28,3 +28,10 @@ Read F93's "What we know" and Decisions D1–D2 in `.factory/cards/f93-is-no-edi
 - the comment above `NO_EDIT_AFTER` says why 20: F93, 16 of 29 attempts stopped at 10 minutes while first edits came as late as 9.2
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
