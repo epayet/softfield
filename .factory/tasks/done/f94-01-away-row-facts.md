@@ -30,3 +30,12 @@ Read F94's Decisions D1–D4 in `.factory/cards/f94-opus-f9-25-seeds-and-plantin
 - in the page, each row's `class="how"` element comes before its `class="title"` element, and the title's text is inside `class="title"` only
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 9772
+gate_failures: ['task-tests', 'stopped']
+tokens: 10197675
+```
