@@ -1,6 +1,7 @@
 # Milestone F12: Turn on notifications  little feedback button
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f12-turn-on-notifications-little-feedback-button-start`. Report: [`.factory/reviews/f12-turn-on-notifications-little-feedback-button.md`](../reviews/f12-turn-on-notifications-little-feedback-button.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes

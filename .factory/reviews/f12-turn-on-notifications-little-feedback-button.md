@@ -1,6 +1,6 @@
 # Review: F12 notifications, asked once
 
-- **Status:** reviewed on 2026-10-10 (round 1); three small tickets still to run (f12-03 to f12-05), then waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 
