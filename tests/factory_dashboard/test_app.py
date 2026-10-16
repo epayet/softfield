@@ -17,7 +17,7 @@ from factory_dashboard import app as app_module
 from factory_dashboard.app import HOST, PORT, Db, create_app
 from factory_dashboard.queries import connect
 from runner import cli, metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, OTHER, PROJECT, write_allowance
+from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, write_allowance
 from tests.factory_dashboard.test_overview import REFRESH, lead_replies, open_overview
 from tests.layout import DISPLAY, PHONE, layout_problems
 
@@ -279,8 +279,8 @@ def test_phone_title_and_filter_share_one_line_at_390px(page, client):
 @pytest.mark.parametrize("scheme", ["dark", "light"])
 def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme):
     """f3-30: under 640 px the bar is short lines, tabs scroll sideways, current tab visible. The
-    title and the project share a line; the factory's status and its button take one (f6-16),
-    and "Turn on notifications" one more while it shows."""
+    title, the factory's status (its dot and sign, f17) and the project share a line, and "Turn
+    on notifications" takes one more while it shows."""
     page.emulate_media(color_scheme=scheme)
     page.set_viewport_size(PHONE)
     open_overview(page, client)
@@ -852,19 +852,35 @@ ORIGIN = "http://127.0.0.1:8765"  # the test client's own origin
 ASK = {"Content-Type": "application/x-www-form-urlencoded", "HX-Request": "true", "Origin": ORIGIN}
 
 
-def _status(html: str) -> tuple[str, dict[str, str]]:
-    """The top bar's status: its words, and its buttons' words -> the request each posts."""
+SIGNS = {"Pause after this job": "⏸", "Resume": "▶"}  # a sign's name for a screen reader
+
+
+def _status(html: str) -> tuple[str, str, dict[str, str]]:
+    """The top bar's status: its words, its dot, and its sign's name (``aria-label``) -> the
+    request it posts. The dot's button names the same words; the sign shows only ⏸ or ▶."""
     block = re.search(r'<div id="factory-status"[^>]*>(.*?)</div>', html, re.S)
     assert block, "no #factory-status"
-    words = re.search(r'<span class="pill[^"]*" role="status">([^<]*)</span>', block[1])
+    words = re.search(r'<span class="words" role="status">([^<]*)</span>', block[1])
     assert words, block[1]
+    dot = re.fullmatch(
+        r'\s*<button type="button" class="dot-btn" aria-label="([^"]*)" title="\1">'
+        r'<i class="dot (\w+)"></i></button>.*',
+        block[1],
+        re.S,
+    )
+    assert dot and dot[1] == words[1], block[1]
     buttons = {}
-    for attrs, text in re.findall(r"<button([^>]*)>([^<]*)</button>", block[1]):
+    for attrs, text in re.findall(
+        r'<button type="button" class="sign"([^>]*)>([^<]*)</button>', block[1]
+    ):
         assert 'hx-post="/requests"' in attrs, attrs
         kind = re.search(r'"kind": "(\w+)"', attrs)
-        assert kind, attrs
-        buttons[text.strip()] = kind[1]
-    return words[1], buttons
+        name = re.search(r'aria-label="([^"]*)"', attrs)
+        assert kind and name, attrs
+        assert text == SIGNS[name[1]], text
+        buttons[name[1]] = kind[1]
+    assert len(re.findall(r"<button", block[1])) == 1 + len(buttons), block[1]
+    return words[1], dot[2], buttons
 
 
 def _ask(client: TestClient, kind: str) -> None:
@@ -973,30 +989,71 @@ def _pause_held_planner(serve, serve_between, db_path):
     return client
 
 
+def _lead_ticket(serve, serve_between, db_path):
+    """A lead ticket, the only live job: on a run of its own beside a run between jobs."""
+    client = serve_between(activity="picking the next ticket")
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        ticket = metrics.upsert_ticket(
+            conn, project, "f1-30-lead", milestone_id=f1, kind="lead", state="running"
+        )
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-120000",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=30)).isoformat(),
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="lead-ticket",
+            agent=OPUS,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+    finally:
+        conn.close()
+    return client
+
+
+PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
+
+
 @pytest.mark.parametrize(
-    ("setup", "words", "buttons"),
+    ("setup", "words", "dot", "buttons"),
     [
         # the fixture has more than one project: the status names whose run it is (ADR 30)
-        (_running, "Running: coucou · f1-04-live", {"Pause": "pause"}),
-        (_idle, "Idle: nothing to do", {"Pause": "pause"}),  # this setup has one project
-        (_pause_asked, "Pausing after f1-04-live · coucou", {"Resume": "resume"}),
-        (_pause_held_client, "Paused by you since 11:40 · coucou", {"Resume": "resume"}),
-        (
-            _pause_held_planner,
-            "Paused by you since 11:40 · the lead is answering you · coucou",
-            {"Resume": "resume"},
-        ),
-        (_resume_asked, "Resuming… · coucou", {}),  # on its way: nothing to press
+        (_running, "Running: coucou · f1-04-live", "developer", PAUSE),  # its only live job
+        (_lead_ticket, "Running: f1-30-lead", "lead", PAUSE),  # its only live job
+        (_idle, "Idle: nothing to do", "idle", PAUSE),  # this setup has one project
         (
             _idle_with_queue,
             "Idle: 2 tickets wait for Claude&#39;s reserve · the week resets Mon 16:00",
-            {"Pause": "pause"},
+            "idle",
+            PAUSE,
         ),
-        (_waiting, "Waiting for Claude until 12:40", {"Pause": "pause"}),  # one project
-        (_stopped, "Stopped", {}),
+        # the job goes on: its dot stays until it ends
+        (_pause_asked, "Pausing after f1-04-live · coucou", "developer", RESUME),
+        (_pause_held_client, "Paused by you since 11:40 · coucou", "idle", RESUME),
+        (
+            _pause_held_planner,
+            "Paused by you since 11:40 · the lead is answering you · coucou",
+            "lead",  # only the planner runs while paused
+            RESUME,
+        ),
+        (_resume_asked, "Resuming… · coucou", "idle", {}),  # on its way: nothing to press
+        (_waiting, "Waiting for Claude until 12:40", "waiting", PAUSE),  # one project
+        (_stopped, "Stopped", "stopped", {}),
     ],
     ids=[
         "running",
+        "lead-ticket",
         "idle",
         "idle-with-queue",
         "pause-asked",
@@ -1008,26 +1065,42 @@ def _pause_held_planner(serve, serve_between, db_path):
     ],
 )
 def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
-    serve, serve_between, db_path, setup, words, buttons
+    serve, serve_between, db_path, setup, words, dot, buttons
 ):
     client = setup(serve, serve_between, db_path)
     for path in ("/", "/planning", "/tickets", "/live"):
-        assert _status(client.get(path).text) == (words, buttons), path
+        assert _status(client.get(path).text) == (words, dot, buttons), path
     # /live carries it out of band, for every page's poll to swap into its top bar
     assert re.search(
         r'<div id="factory-status"[^>]*hx-swap-oob="outerHTML"', client.get("/live").text
     )
 
 
-def test_the_status_wears_a_colour_from_the_tokens_and_its_words(serve):
-    html = serve().get("/tickets").text
-    assert re.search(
-        r'<span class="pill big good" role="status">Running: coucou · f1-04-live</span>', html
-    )
+def test_the_status_dot_wears_the_floors_colours_from_the_tokens(serve):
     css = (STATIC / "dashboard.css").read_text()
-    assert re.search(r"\.pill\.big \{[^}]*var\(--display\)", css)
+
+    def rule(selector: str) -> str:
+        """The declarations of the top-level rule for exactly ``selector``."""
+        found = re.search(rf"^{re.escape(selector)} \{{([^}}]*)\}}", css, re.M)
+        assert found, selector
+        return found[1]
+
+    assert "background: var(--opus)" in rule(".factory-status .dot.lead")
+    assert "background: var(--dev)" in rule(".factory-status .dot.developer")  # the floor's
+    assert "background: var(--muted)" in rule(".factory-status .dot")
+    assert "var(--opus)" in rule(".factory-status .dot.waiting, .factory-status .dot.stopped")
+    assert "var(--muted)" in rule(".factory-status .dot.stopped")
+    # only a running job breathes, and never under reduced motion
+    breathing = re.findall(
+        r"@media \(prefers-reduced-motion: no-preference\) \{\s*([^{]*)\{ animation: breathe", css
+    )
+    assert breathing == [".factory-status .dot.lead, .factory-status .dot.developer "]
+    assert "rgba" not in rule(".factory-status .dot.lead") + rule(".factory-status .dot.developer")
     # what the owner asked shows on its way: a dashed orange edge (lead.md, 2026-10-07)
-    assert re.search(r"\.pill\.asked \{[^}]*dashed var\(--opus\)", css)
+    assert "dashed var(--opus)" in rule("#factory-status.asked")
+    assert '<div id="factory-status" class="factory-status asked"' in (
+        _pause_asked(serve, None, None).get("/").text
+    )
 
 
 def _tab(html: str) -> str:
@@ -1075,7 +1148,7 @@ def test_the_top_bar_refreshes_on_any_page_without_notifications(page, serve, db
     )
     page.wait_for_function("document.querySelector('#planning-tab').textContent === 'Planning · 2'")
     assert tab.get_attribute("aria-current") == "page"  # still the page shown
-    assert page.locator("#factory-status button").text_content() == "Resume"
+    assert page.get_by_role("button", name="Resume", exact=True).text_content() == "▶"
 
 
 def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serve, db_path):
@@ -1100,13 +1173,16 @@ def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serv
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Running: coucou · f1-04-live"
-    page.locator("#factory-status button", has_text="Pause").click()
+    page.get_by_role("button", name="Pause after this job", exact=True).click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
-        " === 'Pausing after f1-04-live · coucou'",
+        " === 'Pausing after f1-04-live · coucou'"
+        " && document.getElementById('factory-status').classList.contains('asked')",
         timeout=1_000,
     )
-    page.wait_for_function("document.querySelector('#factory-status button') === null")
+    edge = page.locator("#factory-status").evaluate("e => getComputedStyle(e).borderTopStyle")
+    assert edge == "dashed"
+    page.wait_for_function("document.querySelector('#factory-status .sign') === null")
     for _ in range(50):
         if posted:
             break
@@ -1120,6 +1196,13 @@ def test_pause_in_the_top_bar_shows_pausing_at_once_and_posts_a_pause(page, serv
     assert kinds == ["pause"]
 
 
+def _bar(words: str, tone: str, button: str | None, dot: str) -> str:
+    """A /live answer's top bar, drawn by the real partial."""
+    status = app_module.Status(words, tone, button, dot=dot)
+    partial = app_module.templates.get_template("_partials/bar_status.html")
+    return partial.render(bar_status=status, project=PROJECT)
+
+
 def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     """A /live answer still showing Running and Pause leaves Pausing after this job and no button;
     a later /live with Pausing after this job and Resume is swapped in (f28-01 D1)."""
@@ -1127,21 +1210,9 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     live_count = [0]
     posted = []
     # A stale /live fragment showing Running and Pause (kind: pause).
-    stale_fragment = (
-        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
-        '<span class="pill big good" role="status">Running: f1-04-live</span>'
-        '<button type="button" class="bar-button" hx-post="/requests"'
-        ' hx-vals=\'{"kind": "pause", "project": "coucou"}\' hx-swap="none"'
-        ' data-asked="Pausing after f1-04-live">Pause</button></div>'
-    )
+    stale_fragment = _bar("Running: f1-04-live", "good", "pause", "developer")
     # Fresh /live fragment showing Pausing and Resume.
-    fresh_fragment = (
-        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
-        '<span class="pill big warn" role="status">Pausing after this job</span>'
-        '<button type="button" class="bar-button" hx-post="/requests"'
-        ' hx-vals=\'{"kind": "resume", "project": "coucou"}\' hx-swap="none"'
-        ' data-asked="Resuming…">Resume</button></div>'
-    )
+    fresh_fragment = _bar("Pausing after this job", "warn asked", "resume", "developer")
 
     def route(r) -> None:
         url = r.request.url.removeprefix(ORIGIN)
@@ -1165,13 +1236,13 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Running: coucou · f1-04-live"
-    page.locator("#factory-status button", has_text="Pause").click()
+    page.get_by_role("button", name="Pause after this job", exact=True).click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
         " === 'Pausing after f1-04-live · coucou'",
         timeout=1_000,
     )
-    page.wait_for_function("document.querySelector('#factory-status button') === null")
+    page.wait_for_function("document.querySelector('#factory-status .sign') === null")
     for _ in range(50):
         if posted:
             break
@@ -1184,7 +1255,7 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
         " === 'Pausing after this job'",
         timeout=REFRESH,
     )
-    assert page.locator("#factory-status button").text_content() == "Resume"
+    assert page.get_by_role("button", name="Resume", exact=True).text_content() == "▶"
 
 
 def test_resume_survives_a_stale_live_poll(page, serve, db_path):
@@ -1194,21 +1265,9 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
     live_count = [0]
     posted = []
     # A stale /live fragment showing Paused by you and Resume (kind: resume).
-    stale_fragment = (
-        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
-        '<span class="pill big warn" role="status">Paused by you since 11:40</span>'
-        '<button type="button" class="bar-button" hx-post="/requests"'
-        ' hx-vals=\'{"kind": "resume", "project": "coucou"}\' hx-swap="none"'
-        ' data-asked="Resuming…">Resume</button></div>'
-    )
+    stale_fragment = _bar("Paused by you since 11:40", "warn", "resume", "idle")
     # Fresh /live fragment showing Running and Pause.
-    fresh_fragment = (
-        '<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">'
-        '<span class="pill big good" role="status">Running: f1-04-live</span>'
-        '<button type="button" class="bar-button" hx-post="/requests"'
-        ' hx-vals=\'{"kind": "pause", "project": "coucou"}\' hx-swap="none"'
-        ' data-asked="Pausing after f1-04-live">Pause</button></div>'
-    )
+    fresh_fragment = _bar("Running: f1-04-live", "good", "pause", "developer")
 
     def route(r) -> None:
         url = r.request.url.removeprefix(ORIGIN)
@@ -1232,12 +1291,13 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Paused by you since 11:40 · coucou"
-    page.locator("#factory-status button", has_text="Resume").click()
+    page.get_by_role("button", name="Resume", exact=True).click()
     page.wait_for_function(
-        "document.querySelector('#factory-status [role=status]').textContent === 'Resuming…'",
+        "document.querySelector('#factory-status [role=status]').textContent === 'Resuming…'"
+        " && document.getElementById('factory-status').classList.contains('asked')",
         timeout=1_000,
     )
-    page.wait_for_function("document.querySelector('#factory-status button') === null")
+    page.wait_for_function("document.querySelector('#factory-status .sign') === null")
     for _ in range(50):
         if posted:
             break
@@ -1250,7 +1310,8 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
         " === 'Running: f1-04-live'",
         timeout=REFRESH,
     )
-    assert page.locator("#factory-status button").text_content() == "Pause"
+    pause = page.get_by_role("button", name="Pause after this job", exact=True)
+    assert pause.text_content() == "⏸"
 
 
 def test_refused_post_shows_error_and_restores_button(page, serve, db_path):
@@ -1279,23 +1340,89 @@ def test_refused_post_shows_error_and_restores_button(page, serve, db_path):
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Running: coucou · f1-04-live"
-    page.locator("#factory-status button", has_text="Pause").click()
-    # Wait for the error words first, then for the Pause button to come back.
+    page.get_by_role("button", name="Pause after this job", exact=True).click()
+    # Wait for the error words first, with no dashed edge, then for the Pause sign to come back.
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
-        ' === "Didn\'t reach the factory: try again"',
+        ' === "Didn\'t reach the factory: try again"'
+        " && !document.getElementById('factory-status').classList.contains('asked')",
         timeout=REFRESH,
     )
     page.wait_for_function(
-        "document.querySelector('#factory-status button') !== null",
+        "document.querySelector('#factory-status .sign') !== null",
         timeout=REFRESH,
     )
-    assert page.locator("#factory-status button").text_content() == "Pause"
+    pause = page.get_by_role("button", name="Pause after this job", exact=True)
+    assert pause.text_content() == "⏸"
 
 
 def test_the_top_bar_says_what_the_factory_does_whichever_project_is_shown(serve):
     """The owner, 2026-10-14: picking a project is for planning and the board; the top bar
     says what the factory does, and its Pause goes to the project whose run it is."""
     html = serve().get("/planning?project=other").text
-    assert _status(html) == ("Running: coucou · f1-04-live", {"Pause": "pause"})
+    assert _status(html) == ("Running: coucou · f1-04-live", "developer", PAUSE)
     assert '"kind": "pause", "project": "coucou"' in html
+
+
+def _open_tickets(page, client: TestClient, size: dict[str, int]) -> None:
+    page.set_viewport_size(size)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/tickets")
+    page.evaluate("() => document.fonts.ready")
+
+
+def test_on_a_phone_the_dot_and_sign_join_the_brands_row_and_a_tap_shows_the_words(page, serve):
+    """f17: at 390 px the brand, the dot, the sign and the project share one row (their middles
+    agree: they differ in height), the dot and the sign are 44 px thumb targets, and the words
+    show only once the dot is tapped, and stay through the next poll."""
+    _open_tickets(page, serve(), PHONE)
+    parts = {
+        "brand": page.locator(".brand"),
+        "dot": page.locator("#factory-status .dot-btn"),
+        "sign": page.get_by_role("button", name="Pause after this job", exact=True),
+        "project": page.locator(".filters select"),
+    }
+    boxes = {name: part.bounding_box() for name, part in parts.items()}
+    middles = {name: box["y"] + box["height"] / 2 for name, box in boxes.items()}
+    assert max(middles.values()) - min(middles.values()) <= 3, middles
+    lefts = [boxes[name]["x"] for name in ("brand", "dot", "sign", "project")]
+    assert lefts == sorted(lefts), boxes
+    for name in ("dot", "sign"):
+        assert (boxes[name]["width"], boxes[name]["height"]) == (44, 44), (name, boxes[name])
+    words = page.locator("#factory-status [role=status]")
+    assert not words.is_visible()
+    parts["dot"].click()
+    assert words.is_visible()
+    assert words.text_content() == "Running: coucou · f1-04-live"
+    assert layout_problems(page) == []  # on screen, over nothing it shouldn't cover
+    # the next poll swaps the bar in again: the words stay
+    page.evaluate("() => { window.shown = document.querySelector('#factory-status .words'); }")
+    page.wait_for_function(
+        "document.querySelector('#factory-status .words') !== window.shown", timeout=REFRESH
+    )
+    assert words.is_visible()
+    parts["dot"].click()
+    assert not words.is_visible()
+
+
+def test_on_a_wide_screen_the_words_show_beside_the_dot(page, serve):
+    """f17: from 640 px the words show beside the dot, on its row, the sign after them."""
+    _open_tickets(page, serve(), {"width": 1024, "height": 768})
+    dot = page.locator("#factory-status .dot-btn").bounding_box()
+    words = page.locator("#factory-status [role=status]")
+    assert words.is_visible()
+    box = words.bounding_box()
+    sign = page.get_by_role("button", name="Pause after this job", exact=True).bounding_box()
+    assert dot["x"] + dot["width"] <= box["x"] <= dot["x"] + dot["width"] + 12, (dot, box)
+    assert sign["x"] >= box["x"] + box["width"], (box, sign)
+    middle = lambda b: b["y"] + b["height"] / 2  # noqa: E731
+    assert abs(middle(dot) - middle(box)) <= 3 and abs(middle(sign) - middle(box)) <= 3

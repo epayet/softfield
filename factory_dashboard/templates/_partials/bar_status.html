@@ -1,9 +1,10 @@
-{# The factory's status in the top bar (f6-16), with Pause or Resume: base.html draws it on every page, and the /live partial carries it again, out of band, for each page's poll. The button posts as Now's does (f5-18); base.html's script shows the asked state at once. #}
-<div id="factory-status" class="factory-status" hx-swap-oob="outerHTML">
-  <span class="pill big {{ bar_status.tone }}" role="status">{{ bar_status.words }}</span>
+{# The factory's status in the top bar (f6-16): base.html draws it on every page, and the /live partial carries it again, out of band, for each page's poll. A dot says whose job runs (f17; a button: on a phone it shows the words), the words beside it from 640 px, and Pause or Resume as a sign, ⏸ or ▶. The sign posts as Now's does (f5-18); base.html's script shows the asked state at once. #}
+<div id="factory-status" class="factory-status{% if 'asked' in bar_status.tone %} asked{% endif %}" hx-swap-oob="outerHTML">
+  <button type="button" class="dot-btn" aria-label="{{ bar_status.words }}" title="{{ bar_status.words }}"><i class="dot {{ bar_status.dot }}"></i></button>
+  <span class="words" role="status">{{ bar_status.words }}</span>
   {% if bar_status.button == "pause" %}
-  <button type="button" class="bar-button" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Pausing after {{ bar_status.words[9:].split(' · ', 1) | reverse | join(' · ') if bar_status.words.startswith('Running: ') else 'this job' }}">Pause</button>
+  <button type="button" class="sign" aria-label="Pause after this job" title="Pause after this job" hx-post="/requests" hx-vals='{"kind": "pause", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Pausing after {{ bar_status.words[9:].split(' · ', 1) | reverse | join(' · ') if bar_status.words.startswith('Running: ') else 'this job' }}">⏸</button>
   {% elif bar_status.button == "resume" %}
-  <button type="button" class="bar-button" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Resuming…">Resume</button>
+  <button type="button" class="sign" aria-label="Resume" title="Resume" hx-post="/requests" hx-vals='{"kind": "resume", "project": {{ (bar_status.project or project) | tojson }}}' hx-swap="none" data-asked="Resuming…">▶</button>
   {% endif %}
 </div>

@@ -212,13 +212,16 @@ Now = Annotated[datetime, Depends(get_now)]
 
 @dataclass(frozen=True)
 class Status:
-    """What the factory does, in the top bar (f6-16): its words, always shown; its pill's
-    classes in dashboard.css; and the request its button posts (``pause``, ``resume``, none)."""
+    """What the factory does, in the top bar (f6-16): its words; ``tone`` (``asked`` while the
+    owner's request is on its way); the request its sign posts (``pause``, ``resume``, none);
+    and its dot (f17): ``lead`` or ``developer`` while that one's job runs, ``waiting`` for
+    Claude, ``stopped`` with no live run, else ``idle``."""
 
     words: str
     tone: str
     button: str | None
     project: str | None = None  # whose run it is: the button's request goes there (ADR 30)
+    dot: str = "idle"
 
 
 PICKING = "picking the next ticket"  # runner/loop.py's PICKING: between jobs
@@ -277,30 +280,34 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     """Stopped with no live run; else the owner's pause (held, asked, or a resume asked), a
     wait for Claude, the job running, what the run does between jobs, or idle with no work."""
     from factory_dashboard import overview, queries  # overview imports this module
+    from factory_dashboard.line import DEVELOPER_ROLES  # line imports this module
 
     runs = overview.live_runs(conn, project, now)
     if not runs:
-        return Status("Stopped", "", None)
+        return Status("Stopped", "", None, dot="stopped")
     paused, asked = queries.paused_since(conn), _asked(conn, project)
     if paused and asked == "resume":
         return Status("Resuming…", "asked", None)
-    if paused:
+    if paused:  # only the planner runs while paused
         words = f"Paused by you since {_clock(paused)}"
         jobs = overview.running_jobs(conn, project, now)
         if any(j.live and j.role == "planner" for j in jobs):
-            words += " · the lead is answering you"
+            return Status(f"{words} · the lead is answering you", "warn", "resume", dot="lead")
         return Status(words, "warn", "resume")
-    if asked == "pause":  # which job, still (the owner, 2026-10-08: the bar lost it)
-        job = next((j for j in overview.running_jobs(conn, project, now) if j.live), None)
-        doing = f"{job.ticket or f'{job.role}, job {job.job}'}" if job else "this job"
-        return Status(f"Pausing after {doing}", "warn asked", "resume")
-    waiting = next((r.waiting_until for r in runs if r.waiting_until), None)
-    if waiting:
-        return Status(f"Waiting for Claude until {_clock(waiting)}", "serious", "pause")
+    # the dot is about the job the words name: the first live one
     jobs = overview.running_jobs(conn, project, now)
     job = next((j for j in jobs if j.live), None)
+    dot = "idle" if job is None else "developer" if job.role in DEVELOPER_ROLES else "lead"
+    if asked == "pause":  # which job, still (the owner, 2026-10-08: the bar lost it)
+        doing = f"{job.ticket or f'{job.role}, job {job.job}'}" if job else "this job"
+        return Status(f"Pausing after {doing}", "warn asked", "resume", dot=dot)
+    waiting = next((r.waiting_until for r in runs if r.waiting_until), None)
+    if waiting:
+        words = f"Waiting for Claude until {_clock(waiting)}"
+        return Status(words, "serious", "pause", dot="waiting")
     if job:
-        return Status(f"Running: {job.ticket or f'{job.role}, job {job.job}'}", "good", "pause")
+        words = f"Running: {job.ticket or f'{job.role}, job {job.job}'}"
+        return Status(words, "good", "pause", dot=dot)
     activity = next((r.activity for r in runs if r.activity), None) or PICKING
     if activity == PICKING and not (
         jobs or overview.queue(conn, project, now) or overview.queued_jobs(conn, project, now)

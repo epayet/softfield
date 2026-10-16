@@ -43,32 +43,34 @@
     askedKind = JSON.parse(button.getAttribute("hx-vals") || "{}").kind;
     askedWords = button.dataset.asked;
     askedKindFromButton = askedKind;
-    const words = button.parentElement.querySelector("[role=status]");
+    const bar = button.parentElement;
+    const words = bar.querySelector("[role=status]");
     words.textContent = button.dataset.asked;
-    words.className = "pill big warn asked";
+    bar.classList.add("asked");
     setTimeout(() => button.remove());
     // Attach failure listeners to the button itself (f28-01 D2): the button is removed from
     // the DOM before the response arrives, so events won't bubble up to document.
-    button.addEventListener("htmx:responseError", () => {
-      const status = document.querySelector("#factory-status [role=status]");
+    const failed = () => {
+      const bar = document.getElementById("factory-status");
+      const status = bar && bar.querySelector("[role=status]");
       if (status) {
         status.textContent = "Didn't reach the factory: try again";
-        status.className = "pill big fail";
+        status.className = "words fail";
+        bar.classList.remove("asked");
       }
       askedKind = null;
       askedWords = null;
       askedKindFromButton = null;
-    });
-    button.addEventListener("htmx:sendError", () => {
-      const status = document.querySelector("#factory-status [role=status]");
-      if (status) {
-        status.textContent = "Didn't reach the factory: try again";
-        status.className = "pill big fail";
-      }
-      askedKind = null;
-      askedWords = null;
-      askedKindFromButton = null;
-    });
+    };
+    button.addEventListener("htmx:responseError", failed);
+    button.addEventListener("htmx:sendError", failed);
+  });
+  // The dot is a button (f17): on a phone, where the words are hidden, a tap shows them until
+  // another tap. The mark is on the row, which the polls don't swap (htmx settles the bar's
+  // own classes back to the server's).
+  document.addEventListener("click", (event) => {
+    const dot = event.target instanceof Element && event.target.closest("#factory-status .dot-btn");
+    if (dot) dot.closest(".bar-top").classList.toggle("show-words");
   });
   // On OOB swap: block stale bars while waiting for the runner's state (f28-01 D1).
   document.addEventListener("htmx:oobBeforeSwap", (event) => {

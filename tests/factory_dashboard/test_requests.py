@@ -224,7 +224,7 @@ def _now_pause(client) -> tuple[list[str], str]:
     projects the bar names the one it speaks of; Now, on that project's page, doesn't."""
     html = str(client.get("/live").text)
     now = html[html.index('<section id="now"') : html.index("</section>", html.index('id="now"'))]
-    bar = re.search(r'<span class="pill big [^"]*" role="status">([^<]*)</span>', html)
+    bar = re.search(r'<span class="words" role="status">([^<]*)</span>', html)
     assert bar, "the top bar's status"
     words = bar[1].removesuffix(f" · {PROJECT}")
     return re.findall(r'<span class="pill warn">([^<]*)</span>', now), words
