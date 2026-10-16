@@ -759,8 +759,11 @@ def test_notification_bar_shows_steps_on_insecure_origin(page, client):
     assert f"2. paste this address in its box: {LAN}" in body
     assert "3. set it to Enabled and tap Relaunch" in body
     assert bar.locator(".copy-link").count() == 2
-    # the question's buttons answer nothing here, so only Got it shows
-    assert bar.locator("button:visible").all_text_contents() == ["Got it"]
+    # the question's buttons answer nothing here, so only Got it shows;
+    # the two Copy buttons are also visible
+    visible = bar.locator("button:visible").all_text_contents()
+    assert visible.count("Got it") == 1
+    assert visible.count("Copy") == 2
     page.locator('[data-action="got-it"]').click()
     bar.wait_for(state="hidden", timeout=REFRESH)
     assert page.evaluate("localStorage.getItem('notify:steps')") == "1"
@@ -768,6 +771,45 @@ def test_notification_bar_shows_steps_on_insecure_origin(page, client):
     page.reload()
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
     assert bar.is_hidden()
+
+
+FAKE_CLIPBOARD = """
+window.clipboard_received = [];
+window.navigator.clipboard = {
+  writeText: async (text) => { window.clipboard_received.push(text); }
+};
+"""
+
+
+def test_notification_bar_copy_buttons_are_buttons_and_say_copied(page, client):
+    """On the LAN address the Copy controls are real buttons that say "Copied"
+    after tapping (F6)."""
+    page.add_init_script(FAKE_CLIPBOARD)
+    _open_at(page, client, LAN)
+    bar = page.locator("#notify-bar")
+    bar.wait_for(state="visible", timeout=REFRESH)
+    buttons = bar.locator("button.copy-link")
+    assert buttons.count() == 2
+    assert buttons.nth(0).text_content() == "Copy"
+    assert buttons.nth(1).text_content() == "Copy"
+    buttons.nth(0).click()
+    page.wait_for_function(
+        "document.querySelectorAll('button.copy-link')[0].textContent === 'Copied'", timeout=REFRESH
+    )
+    assert buttons.nth(0).text_content() == "Copied"
+    assert buttons.nth(1).text_content() == "Copy"
+    assert page.evaluate("window.clipboard_received") == [
+        "chrome://flags/#unsafely-treat-insecure-origin-as-secure"
+    ]
+    buttons.nth(1).click()
+    page.wait_for_function(
+        "document.querySelectorAll('button.copy-link')[1].textContent === 'Copied'", timeout=REFRESH
+    )
+    assert buttons.nth(1).text_content() == "Copied"
+    assert page.evaluate("window.clipboard_received") == [
+        "chrome://flags/#unsafely-treat-insecure-origin-as-secure",
+        LAN,
+    ]
 
 
 def test_notification_bar_asks_after_got_it_once_the_address_is_trusted(page, client):

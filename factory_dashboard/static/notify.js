@@ -77,20 +77,20 @@
       bar.querySelector("[role=body]").innerHTML =
         "This address can&#39;t show notifications yet. In Chrome: " +
         "1. open <code>chrome://flags/#unsafely-treat-insecure-origin-as-secure</code> " +
-        "<a class=\"copy-link\" data-copy=\"" +
+        '<button type="button" class="copy-link" data-copy="' +
         encodeURIComponent("chrome://flags/#unsafely-treat-insecure-origin-as-secure") +
-        "\">Copy</a> " +
+        '">Copy</button> ' +
         "in a new tab; " +
         "2. paste this address in its box: <code class=\"origin-code\">" +
         origin +
         "</code> " +
-        "<a class=\"copy-link\" data-copy=\"" +
+        '<button type="button" class="copy-link" data-copy="' +
         encodeURIComponent(origin) +
-        "\">Copy</a>; " +
+        '">Copy</button>; ' +
         "3. set it to Enabled and tap Relaunch. Then come back here.";
-      for (const link of bar.querySelectorAll(".copy-link")) {
-        link.addEventListener("click", async () => {
-          const text = decodeURIComponent(link.dataset.copy);
+      for (const btn of bar.querySelectorAll(".copy-link")) {
+        btn.addEventListener("click", async () => {
+          const text = decodeURIComponent(btn.dataset.copy);
           try {
             await navigator.clipboard.writeText(text);
           } catch (_) {
@@ -101,6 +101,7 @@
             document.execCommand("copy");
             document.body.removeChild(ta);
           }
+          btn.textContent = "Copied";
         });
       }
       bar.querySelector('[data-action="got-it"]').addEventListener("click", () => {
