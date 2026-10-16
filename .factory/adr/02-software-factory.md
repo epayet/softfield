@@ -429,6 +429,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** 25 tests passed while every real merged card's header would have been wrong twice: the fixtures left the merged card's doc on main and its milestones row out, the opposite of a real merge on both counts. Neither the developer, nor the checkpoint, nor the lead's ticket said what a real merge leaves behind; reading the 19 real headings on main showed both bugs in a minute. A factory's tests are only as true as their fixtures, and the cheapest check is one real record beside each hand-built one (now a ticket-writing rule). Second, a direction again didn't stop the no-edit re-reading (F14's lesson, again).
 - **Decisions affected:** none.
 
+### F23 (2026-10-16): "Comment…" puts the cursor in the box ([review](../reviews/f23-when-i-click-comment-on-the.md))
+
+- **Q1:** one developer ticket, difficulty 2, 14 lines of template script and one browser test. Merged at the first attempt; one checkpoint nit (confirmed). The review tightened one assertion itself and filed no ticket.
+- **Q3:** Qwen 1/1 first time, 56 minutes and 1.0M tokens. It followed the ticket's iPhone note (focus inside the tap, not on `toggle`) exactly; its test checked "a comment box has focus" where Done when said "that point's".
+- **Q5:** see the review's numbers.
+- **Anything else:** a ticket that explains a platform trap and names the fix is carried out as written; the gap was again between a Done-when line and the assertion behind it (F26's lesson). Nine days from note to merge, none of it in the work.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

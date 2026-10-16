@@ -782,10 +782,10 @@ def test_clicking_comment_on_a_point_opens_its_box_and_focuses_the_textarea(
     # The details element is now open
     details = page.locator('li[data-point="1"] details[open]')
     assert details.is_visible()
-    # The focused element is the textarea.comment
-    focused = page.evaluate("() => document.activeElement")
-    assert focused is not None
-    assert page.evaluate("() => document.activeElement.classList.contains('comment')")
+    # The focused element is this point's textarea.comment, not another point's
+    assert page.evaluate(
+        "() => document.activeElement.matches('li[data-point=\"1\"] textarea.comment')"
+    )
     # Type some text
     page.fill('li[data-point="1"] textarea.comment', "First comment")
     # Click again to close
