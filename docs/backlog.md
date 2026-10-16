@@ -4,6 +4,7 @@ Nits from reviews and triaged discoveries that aren't scheduled yet. One bullet 
 
 <!-- e.g. - [m1-review nit] Rename `x` to `y` in coucou/ordering.py -->
 
+- [f110-review nit, f110-i-don-t-understand-why-there-F2, f95-…-C950-1] A milestone whose only tickets are set aside is "Planted: tickets ready" on the board (`_milestone_stage` in `factory_dashboard/board.py`), though none is ready, and on no part of the line's field (`_field` in `factory_dashboard/line.py`); `test_only_set_aside_tickets_keeps_milestone_out` (`tests/factory_dashboard/test_line.py`) only asserts where it isn't. Call it a seed ("idea or set aside") on the board, and pin both places in that test.
 - [f12-review nit, f12-F9] The notification bar's parts are found by `role="body"` and `role="actions"` (`factory_dashboard/templates/base.html`, `notify.js`, `dashboard.css`), which aren't ARIA roles. Use classes next time the bar changes, and give the bar `role="status"` if a screen reader should hear it.
 - [f12-review nit, f12-F10] Six `test_notification_bar_*` tests in `tests/factory_dashboard/test_app.py` each carry the same `route` function; the review added `_open_at` for its own three. Move the others onto it next time they change.
 - [f12-review nit, f12-F11] `test_sw_finds_open_dashboard_tab_on_notification_tap` reads `sw.js` as text. A real check needs a registered worker and a tapped notification, which the routed test pages can't give; do it when the dashboard gets a browser test on its real server with a service worker (web push would need one).

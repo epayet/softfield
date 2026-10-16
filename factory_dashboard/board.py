@@ -4,8 +4,9 @@ column per stage, the totals, and a plain GET form for the search and the kind (
 ``?kind=``). ``milestone_card`` is one milestone's card, for its page (f5-17).
 
 - **A milestone's stage** is derived from its thread and its tickets (D4), the first that
-  holds: signed off → harvested; an idea no planning thread is about → seed, as the desk's
-  seeds; state planning, or an idea with a thread → sprouting; every ticket done and the
+  holds: signed off → harvested; an idea no open thread is about (nor a message of the
+  owner's on its way) → seed, as the desk's seeds; state planning, or an idea with one →
+  sprouting, its note saying who the conversation waits for (F110 D4); every ticket done and the
   review's sheet stored → ripe, as the line's field has it; a ticket started → growing;
   otherwise → planted. Set-aside and removed tickets count for none of these.
 - **A bug ticket's stage** is its ticket's state (ADR 19 item 2): set aside → seed, ready →
@@ -113,9 +114,15 @@ def _bug_stage(state: str | None, running: bool) -> str:
     return "planted"
 
 
-def _card_note(key: str, stage: str, latest: Mapping[str, sqlite3.Row | None]) -> str:
+def _card_note(
+    key: str, stage: str, latest: Mapping[str, sqlite3.Row | None], sent: set[str]
+) -> str:
+    """Who a sprouting card's conversation waits for (D4). The owner's message still on its
+    way to the runner counts as theirs at once (the owner, 2026-10-07)."""
     if stage != "sprouting":
         return ""
+    if key in sent:
+        return "the lead is answering"
     msg = latest.get(key)
     if msg is None:
         return ""
@@ -155,6 +162,16 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             (project,),
         )
     }
+    # the owner's messages not yet picked up: one opens an archived thread again
+    sent = {
+        r["subject"]
+        for r in conn.execute(
+            "SELECT r.subject FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND r.kind = 'plan_message' AND r.done IS NULL",
+            (project,),
+        )
+    }
+    threads |= sent
     latest_messages: dict[str, sqlite3.Row] = {}
     for r in conn.execute(
         "SELECT t.card, m.author, m.at FROM planner_messages m"
@@ -224,7 +241,7 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             done=sum(t["state"] == "done" for t in counted),
             total=len(counted),
             set_aside=sum(t["state"] == "later" for t in own),
-            note=_card_note(key.lower(), stage, latest_messages),
+            note=_card_note(key.lower(), stage, latest_messages, sent),
             running=running(counted) if stage == "growing" else None,
         )
         found.append((card, _when(m["ended"]) if m["ended"] else _LONG_AGO))

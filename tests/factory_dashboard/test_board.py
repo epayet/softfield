@@ -122,6 +122,30 @@ def test_sprouting_card_with_owner_last_says_lead_is_answering(board_db):
     assert f21.note == "the lead is answering"
 
 
+def test_the_owners_message_on_its_way_shows_at_once(board_db):
+    """The owner answered from /planning; the runner hasn't picked it up: the card no longer
+    waits for them, and on an archived idea's thread it sprouts again (the owner, 2026-10-07)."""
+
+    def answer(conn: sqlite3.Connection, project: int) -> None:
+        thread = metrics.planner_thread(conn, project, "f21", NOW.isoformat())
+        metrics.add_planner_message(conn, thread["id"], "lead", NOW.isoformat(), "Which?")
+        archived = metrics.planner_thread(conn, project, "f20", NOW.isoformat())
+        metrics.set_thread_archived(conn, archived["id"], NOW.isoformat())
+        for key in ("f21", "f20"):
+            metrics.add_request(conn, project, "plan_message", key, "This one.", NOW.isoformat())
+
+    write(board_db, answer)
+    found = read(board_db)
+    assert (card(found, "F21").stage, card(found, "F21").note) == (
+        "sprouting",
+        "the lead is answering",
+    )
+    assert (card(found, "F20").stage, card(found, "F20").note) == (
+        "sprouting",
+        "the lead is answering",
+    )
+
+
 def test_page_shows_note_on_sprouting_but_not_other_stages(board_db, board_client):
     conn = metrics.open_db(board_db)
     try:
@@ -620,10 +644,12 @@ def test_ripe_card_words_fit_inside_the_card(page, board_client, size):
     open_page(page, board_client, "/board")
     page.evaluate("() => document.fonts.ready")
     cards = page.query_selector_all("#stage-ripe .card")
+    assert cards
     for card in cards:
-        assert card.is_visible()
-        text = card.inner_text()
-        assert "Read the review and sign off" in text
+        assert "Read the review and sign off" in card.inner_text()
+        box, words = card.bounding_box(), card.query_selector(".card-action").bounding_box()
+        assert box and words
+        assert box["x"] <= words["x"] and words["x"] + words["width"] <= box["x"] + box["width"] + 1
 
 
 def test_the_columns_scroll_sideways_on_a_narrow_desktop(page, board_client):
