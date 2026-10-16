@@ -1,6 +1,6 @@
 # Review: F17, a dot and a sign in the top bar
 
-- **Status:** round 2 done (the round 1 fixes hold), ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 

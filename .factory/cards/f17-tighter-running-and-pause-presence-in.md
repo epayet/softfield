@@ -1,6 +1,6 @@
 # Milestone F17: Tighter running and pause presence in menu
 
-> **Status: planned** (2026-10-07, with the owner in the planning room). **State:** ready · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f17-tighter-running-and-pause-presence-in-start`. Report: [`.factory/reviews/f17-tighter-running-and-pause-presence-in.md`](../reviews/f17-tighter-running-and-pause-presence-in.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes
