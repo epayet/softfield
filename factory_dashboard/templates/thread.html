@@ -108,7 +108,7 @@
             {% if p.answer %}<span style="font-size: 14px; color: var(--ink-2)">{{ p.answer }}</span>{% endif %}
             {% if p.action %}<span style="font-size: 14px"><span style="color: var(--opus); font-weight: 600">→ </span>{{ p.action }}</span>{% endif %}
             {% if msg.latest and next_reply is none %}
-            <details>
+            <details class="comment-box">
               <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); min-height: 44px; display: flex; align-items: center; cursor: pointer">Comment…</summary>
               <textarea class="comment" data-point="{{ p.n }}" rows="2" aria-label="Your comment on point {{ p.n }}" style="width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px"></textarea>
             </details>
@@ -190,6 +190,19 @@
       document.addEventListener("htmx:afterRequest", (event) => {
         if (!event.detail.successful || !event.detail.elt.closest(".waiting-message")) return;
         htmx.ajax("GET", window.location.href, {target: "#conversation", select: "#conversation", swap: "outerHTML"});
+      });
+      // f23-01: the summary on a point's details opens the box and focuses the textarea in the
+      // tap itself (iOS Safari only raises the keyboard on the tap that touches the element).
+      document.addEventListener("click", (event) => {
+        const summary = event.target.closest("#conversation details.comment-box > summary");
+        if (!summary) return;
+        event.preventDefault();
+        const details = summary.parentElement;
+        details.open = !details.open;
+        if (details.open) {
+          const textarea = details.querySelector("textarea.comment");
+          if (textarea) textarea.focus();
+        }
       });
     </script>
 

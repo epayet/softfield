@@ -770,6 +770,32 @@ def test_remove_seed_asks_first_then_posts_drop_seed(page, planning, db_path, se
     assert asked == [("drop_seed", "f9", None)]
 
 
+def test_clicking_comment_on_a_point_opens_its_box_and_focuses_the_textarea(
+    page, planning, db_path, serve
+):
+    """f23-01: tapping a point's "Comment…" opens its box and the focused element is that
+    point's textarea.comment; tapping it again closes the box and keeps the typed text."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    # Click on the first point's "Comment…" summary
+    page.click('li[data-point="1"] summary')
+    # The details element is now open
+    details = page.locator('li[data-point="1"] details[open]')
+    assert details.is_visible()
+    # The focused element is the textarea.comment
+    focused = page.evaluate("() => document.activeElement")
+    assert focused is not None
+    assert page.evaluate("() => document.activeElement.classList.contains('comment')")
+    # Type some text
+    page.fill('li[data-point="1"] textarea.comment', "First comment")
+    # Click again to close
+    page.click('li[data-point="1"] summary')
+    # The details element is now closed
+    assert page.locator('li[data-point="1"] details:not([open])').is_visible()
+    # The text is preserved
+    assert page.locator('li[data-point="1"] textarea.comment').input_value() == "First comment"
+
+
 # --- proposal review page (f6-08) -----------------------------------------------------------
 
 _REVIEW_ADR: dict[str, Any] = {
