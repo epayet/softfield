@@ -1,6 +1,6 @@
 # Review: F110, ripe on the board means a Sign off button
 
-- **Status:** reviewed, waits for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 

@@ -1,6 +1,7 @@
 # Milestone F110: Ripe on the board but no Sign off button: one rule for both
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f110-i-don-t-understand-why-there-start`. Report: [`.factory/reviews/f110-i-don-t-understand-why-there.md`](../reviews/f110-i-don-t-understand-why-there.md).
 > Planted by the owner on 2026-10-13.
 
 ## Notes
