@@ -22,3 +22,12 @@ Read the `later` section of `factory_dashboard/templates/tickets.html`, where `f
 - a lead ticket's row and a developer ticket's row each show their kind, asserted within the row; no row shows `softfield queue`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2139
+gate_failures: []
+tokens: 535338
+```
