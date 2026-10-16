@@ -24,3 +24,12 @@ How long something took or has run reads in days from 48 hours on: "took 5.9 day
 - `ago(timedelta(hours=142.2))` is "5.9 days"; `ago(timedelta(hours=48))` is "2 days"; `ago(timedelta(hours=47))` is "47 h"; `ago(timedelta(minutes=58))` is "58 min"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3687
+gate_failures: ['mypy']
+tokens: 895175
+```
