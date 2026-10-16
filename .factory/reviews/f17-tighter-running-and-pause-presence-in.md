@@ -1,6 +1,6 @@
 # Review: F17, a dot and a sign in the top bar
 
-- **Status:** round 1 done, ready for your sign-off.
+- **Status:** round 2 done (the round 1 fixes hold), ready for your sign-off.
 
 ## Sign-off sheet
 
@@ -38,6 +38,7 @@ None.
 - 2026-10-10 ([session report](../sessions/2026-10-10-0854.md)): the developer (Qwen) tried three times, 12.7M tokens. Two timed out and one stopped with no edit; the failures were mostly a test file another review had left on main. The escalation sent it back, "your branch holds nearly all of it", behind the ticket that removed that file.
 - 2026-10-16, 07:10: three more attempts, 588k tokens, each stopped after 10 minutes of reading. The branch the ticket described no longer held the work. The lead's escalation built it, decided "implemented", and was then cut off at its 45-minute limit while it waited for its second check-all. The runner was then stopped during its own check-all and wouldn't start again, so the work was finished and committed in a terminal session (09:13), with the runner fixes above.
 - 2026-10-16: this review, round 1. Two fixes by the review, three backlog lines, no ticket.
+- 2026-10-16: round 2 re-read the two fixes: both hold, nothing new.
 - Lessons:
   - **A requeue's "the branch so far" goes stale.** Six days later the branch was gone and the ticket still told the developer not to start again. Written into "Known range" (`docs/agents/lead.md`): check `git diff main...task/<id>` before trusting it.
   - **The runner's own steps after a Claude job are part of the job.** A stop there lost track of finished work. They now count as the job in flight (F71 D8); the review closed the parked case.
@@ -86,6 +87,13 @@ No checkpoint ran on this milestone (the ticket was finished by the lead), so th
 Score: 8/10. The bar matches the mock-up and your notes, with careful tests (sizes, rows by their middles, the tap surviving a poll, reduced motion, tokens only). The runner fixes close a real stall. It loses points for six wasted developer attempts on a ticket that was the lead's, and for F1, a gap in the same day's recovery work.
 
 Stop reason: none; nothing is left for a round 2.
+
+### Round 2
+Only the review's own fixes changed since round 1 (`git diff 16b7d2d^..main`: `runner/loop.py`, one test added, one assertion added, three backlog lines). Both hold:
+- **F1:** `handle_escalation` now removes `decision.json` only when `earlier is None`, the same rule `run_claude` applies to a job's process note. A parked escalation keeps the decision it wrote before the limit; a new escalation after a finished one still starts clean; one parked before it wrote anything had its file removed when it first started. The new test runs the park and the resume through `run_session` and checks the ticket reaches `done/`.
+- **F2:** `kept` follows `where`, so the line names the branch whenever the recovery keeps one; the assertion pins the words.
+
+No new finding, no ticket, F3–F5 stay in the backlog. `uv run pytest -q tests/runner tests/factory_dashboard`: 2314 passed. Score unchanged: 8/10.
 
 ## Factory
 - **The flow:** one developer ticket, six attempts over two sessions, two escalations (one requeue, one implemented and cut off at its limit), then a stopped runner that wouldn't restart until a terminal session finished the work. No park for a limit; one stop for the owner's terminal session.
