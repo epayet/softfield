@@ -56,3 +56,12 @@ attempts: 3
 tokens: 12701418
 logs: .factory/var/runs/20261010-085423/f17-01-status-dot-and-sign
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 588061
+logs: .factory/var/runs/20261016-071035/f17-01-status-dot-and-sign
+```
