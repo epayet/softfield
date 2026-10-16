@@ -117,7 +117,7 @@ def test_opencode_reports_progress_as_it_runs(tmp_path, monkeypatch):
     so far. The clock is a parameter, so the test doesn't wait 30 s."""
     from runner.local_model import run_opencode
 
-    # The edit first: this clock passes 10 minutes in a few ticks, and stops an attempt with none
+    # The edit first: this clock passes NO_EDIT_AFTER in a few ticks, and stops an attempt with none
     _fake_opencode(tmp_path, monkeypatch, "\n".join([_tool("edit"), _step(100, 1), _step(200, 2)]))
     monkeypatch.setattr(local_model, "session_reasoning", lambda db, session: "")
     ticks = itertools.count(0, 40)  # every read of the clock is 40 s later
