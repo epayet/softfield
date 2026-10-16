@@ -34,3 +34,12 @@ Read the top bar in `factory_dashboard/templates/base.html` (`.brand`), its rule
 - in the light theme (`page.emulate_media(color_scheme="light")`) the logo's sprout and crate are drawn in the light tokens' colours, and "Soft" is the amber `--warn-ink`, not the hazard yellow
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 6079
+gate_failures: ['task-tests']
+tokens: 11842618
+```
