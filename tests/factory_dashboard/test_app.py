@@ -630,6 +630,113 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
     assert len(shown) == 2 and "done" in shown[1]["title"].lower()
 
 
+# --- service worker path (f12-05) ----------------------------------------------------------
+
+FAKE_SERVICE_WORKER = """
+window.sw_registered = null; window.sw_notifications = [];
+Object.defineProperty(navigator, "serviceWorker", {
+  value: {
+    register: async (url) => {
+      window.sw_registered = url;
+      return {
+        showNotification: async (title, options) => {
+          window.sw_notifications.push({
+            title, body: options && options.body,
+            tag: options && options.tag
+          });
+        }
+      };
+    }
+  },
+  configurable: true,
+  writable: true
+});
+"""
+
+FAKE_SERVICE_WORKER_REJECTS = """
+window.sw_registered = null; window.sw_notifications = [];
+Object.defineProperty(navigator, "serviceWorker", {
+  value: {
+    register: async (url) => {
+      window.sw_registered = url;
+      return {
+        showNotification: async (title, options) => {
+          throw new Error("no");
+        }
+      };
+    }
+  },
+  configurable: true,
+  writable: true
+});
+"""
+
+
+def test_notifications_go_through_service_worker_on_android(page, serve_between, db_path):
+    """With a service worker registered the dashboard shows through it (the Android path).
+    register is called once with /static/sw.js, the notification lands in the stand-in's list,
+    and window.shown stays empty."""
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, serve_between(activity="check-all on main"))
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    # compare only runs when #live-facts is swapped (not on initial load),
+    # so wait for the baseline to be established by the first poll
+    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 31",
+            text="A follow-up question.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+
+    assert page.evaluate("window.sw_registered") == "/static/sw.js"
+    assert page.evaluate("window.sw_notifications.length") == 1
+    entry = page.evaluate("window.sw_notifications[0]")
+    assert entry["title"] == "Needs you"
+    assert entry["body"] == "A follow-up question."
+    assert entry["tag"] and entry["tag"] != ""
+    assert page.evaluate("window.shown") == []
+
+
+def test_fallback_to_direct_notification_when_showNotification_rejects(
+    page, serve_between, db_path
+):
+    """When showNotification rejects the item falls back to new Notification."""
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
+    open_overview(page, serve_between(activity="check-all on main"))
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 32",
+            text="A fallback question.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
+
+    shown = page.evaluate("window.shown")
+    assert len(shown) == 1 and "A fallback question." in shown[0]["body"]
+
+
 # --- notification bar (f12-01, ADR 26 item 2) ----------------------------------------------
 
 # A stand-in for the browser's Notification: it records what the page asks and shows.
