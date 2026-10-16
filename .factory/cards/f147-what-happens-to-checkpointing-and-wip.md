@@ -1,4 +1,4 @@
-# Milestone F147: What happens to checkpointing and WIP attempts that need…
+# Milestone F147: What happens to parked work when Claude runs out
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-16.
