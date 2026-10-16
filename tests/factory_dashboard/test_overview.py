@@ -29,7 +29,7 @@ def away_row(html: str, ticket: str) -> str:
         li for li in re.findall(r"<li>(.*?)</li>", match.group(1), re.S) if f">{ticket}</a>" in li
     ]
     assert len(rows) == 1, f"{len(rows)} rows for {ticket}"
-    return rows[0]
+    return rows[0]  # type: ignore[no-any-return]
 
 
 def row_text(row: str) -> str:

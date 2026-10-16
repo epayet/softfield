@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from factory_dashboard import app as app_module
-from factory_dashboard.app import HOST, PORT, Db, create_app
+from factory_dashboard.app import HOST, PORT, Db, ago, create_app
 from factory_dashboard.queries import connect
 from runner import cli, metrics
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, write_allowance
@@ -1426,3 +1426,17 @@ def test_on_a_wide_screen_the_words_show_beside_the_dot(page, serve):
     assert sign["x"] >= box["x"] + box["width"], (box, sign)
     middle = lambda b: b["y"] + b["height"] / 2  # noqa: E731
     assert abs(middle(dot) - middle(box)) <= 3 and abs(middle(sign) - middle(box)) <= 3
+
+
+# --- ago (f94-02) --------------------------------------------------------------------------------
+
+
+def test_ago_shows_days_from_48_hours_on():
+    """F94: >= 48 h writes days with one decimal; < 48 h is unchanged."""
+    assert ago(timedelta(hours=142.2)) == "5.9 days"
+    assert ago(timedelta(hours=48)) == "2 days"
+    assert ago(timedelta(hours=47)) == "47 h"
+    assert ago(timedelta(minutes=58)) == "58 min"
+    assert ago(timedelta(hours=120)) == "5 days"
+    assert ago(timedelta(hours=48.1)) == "2 days"
+    assert ago(timedelta(hours=0)) == "0 s"

@@ -43,12 +43,15 @@ def pct(value: float) -> str:
 
 
 def ago(delta: timedelta) -> str:
-    """``30 s``, ``3 min``, ``2 h``: how long, to a glance."""
+    """``30 s``, ``3 min``, ``2 h``, ``5.9 days``: how long, to a glance."""
     seconds = max(0, int(delta.total_seconds()))
     if seconds < 90:
         return f"{seconds} s"
     if seconds < 90 * 60:
         return f"{round(seconds / 60)} min"
+    if seconds >= 48 * 3600:
+        days = seconds / 3600 / 24
+        return f"{days:.1f} days".replace(".0 days", " days")
     return f"{seconds / 3600:.1f} h".replace(".0 h", " h")
 
 
