@@ -3,6 +3,7 @@ id: f94-01-away-row-facts
 milestone: f94-opus-f9-25-seeds-and-planting
 depends_on: [f12-03-remove-review-probe]
 difficulty: 3
+priority: 0
 files:
   - factory_dashboard/queries.py
   - factory_dashboard/templates/_partials/away.html
