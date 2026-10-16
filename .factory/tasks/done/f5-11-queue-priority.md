@@ -27,3 +27,12 @@ Read `list_later_tickets` in `factory_dashboard/tickets.py`, the "Set aside" pan
 - a bug ticket with no `priority:` shows 50, and a milestone's ticket with none shows its milestone's priority, each asserted within its row
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4464
+gate_failures: []
+tokens: 2398255
+```
