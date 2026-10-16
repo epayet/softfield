@@ -16,6 +16,7 @@ column per stage, the totals, and a plain GET form for the search and the kind (
 """
 
 import sqlite3
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -112,6 +113,19 @@ def _bug_stage(state: str | None, running: bool) -> str:
     return "planted"
 
 
+def _card_note(key: str, stage: str, latest: Mapping[str, sqlite3.Row | None]) -> str:
+    if stage != "sprouting":
+        return ""
+    msg = latest.get(key)
+    if msg is None:
+        return ""
+    if msg["author"] == "lead":
+        return f"waits for your answer since {_when(msg['at']).strftime('%-d %b')}"
+    if msg["author"] == "owner":
+        return "the lead is answering"
+    return ""
+
+
 def _matches(card: Card, q: str | None, kind: str | None) -> bool:
     if kind and card.kind != kind:
         return False
@@ -137,10 +151,20 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
         r["card"]
         for r in conn.execute(
             "SELECT t.card FROM planner_threads t JOIN projects p ON p.id = t.project_id"
-            " WHERE p.name = ?",
+            " WHERE p.name = ? AND t.archived IS NULL",
             (project,),
         )
     }
+    latest_messages: dict[str, sqlite3.Row] = {}
+    for r in conn.execute(
+        "SELECT t.card, m.author, m.at FROM planner_messages m"
+        " JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.archived IS NULL AND t.project_id IN"
+        "   (SELECT id FROM projects WHERE name = ?)"
+        " AND m.id = (SELECT max(id) FROM planner_messages WHERE thread_id = t.id)",
+        (project,),
+    ):
+        latest_messages[r["card"]] = r
     # each ticket's jobs: that it has one, whether one still runs, when the latest ended
     worked: set[int] = set()
     at_work: set[int] = set()
@@ -188,8 +212,9 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             continue
         counted = [t for t in own if t["state"] not in _OFF]
         stage = _milestone_stage(m, counted, threads, worked)
+        key = short_key(m["key"]).upper()
         card = Card(
-            key=short_key(m["key"]).upper(),
+            key=key,
             full_key=m["key"],
             title=m["title"],
             area=m["area"] or ("factory" if m["key"].startswith("f") else "product"),
@@ -199,6 +224,7 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             done=sum(t["state"] == "done" for t in counted),
             total=len(counted),
             set_aside=sum(t["state"] == "later" for t in own),
+            note=_card_note(key.lower(), stage, latest_messages),
             running=running(counted) if stage == "growing" else None,
         )
         found.append((card, _when(m["ended"]) if m["ended"] else _LONG_AGO))

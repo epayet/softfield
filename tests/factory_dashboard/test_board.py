@@ -62,6 +62,91 @@ def test_an_idea_is_a_seed_and_sprouting_once_a_thread_is_about_it(board_db):
     assert card(read(board_db), "F20").stage == "sprouting"
 
 
+def test_archived_threads_are_excluded_from_sprouting(board_db):
+    conn = metrics.open_db(board_db)
+    try:
+        (thread,) = conn.execute(
+            "SELECT id FROM planner_threads WHERE card = ?", ("f21",)
+        ).fetchone()
+        conn.execute(
+            "UPDATE planner_threads SET archived = ? WHERE id = ?",
+            (NOW.isoformat(), thread),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    found = read(board_db)
+    assert card(found, "F21").stage == "seed"
+
+
+def test_sprouting_card_shows_note_from_lead_message(board_db):
+    conn = metrics.open_db(board_db)
+    try:
+        (thread_id,) = conn.execute(
+            "SELECT id FROM planner_threads WHERE card = ?", ("f21",)
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO planner_messages (thread_id, author, at, text)"
+            " VALUES (?, 'lead', ?, 'What do you think?')",
+            (thread_id, (NOW - timedelta(hours=1)).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    found = read(board_db)
+    f21 = card(found, "F21")
+    assert f21.stage == "sprouting"
+    assert f21.note == "waits for your answer since 2 Oct"
+    f22 = card(found, "F22")
+    assert f22.stage == "sprouting"
+    assert f22.note == ""
+
+
+def test_sprouting_card_with_owner_last_says_lead_is_answering(board_db):
+    conn = metrics.open_db(board_db)
+    try:
+        (thread_id,) = conn.execute(
+            "SELECT id FROM planner_threads WHERE card = ?", ("f21",)
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO planner_messages (thread_id, author, at, text)"
+            " VALUES (?, 'owner', ?, 'I have an idea.')",
+            (thread_id, (NOW - timedelta(hours=1)).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    found = read(board_db)
+    f21 = card(found, "F21")
+    assert f21.stage == "sprouting"
+    assert f21.note == "the lead is answering"
+
+
+def test_page_shows_note_on_sprouting_but_not_other_stages(board_db, board_client):
+    conn = metrics.open_db(board_db)
+    try:
+        (thread_id,) = conn.execute(
+            "SELECT id FROM planner_threads WHERE card = ?", ("f21",)
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO planner_messages (thread_id, author, at, text)"
+            " VALUES (?, 'lead', ?, 'What do you think?')",
+            (thread_id, (NOW - timedelta(hours=1)).isoformat()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    html = _page(board_client)
+    _, words = _card(html, "/milestones/f21-parallel")
+    assert "waits for your answer since 2 Oct" in words
+    _, words = _card(html, "/milestones/f23-planted")
+    assert "waits for your answer" not in words
+    assert "the lead is answering" not in words
+    _, words = _card(html, "/milestones/f24-growing")
+    assert "waits for your answer" not in words
+    assert "the lead is answering" not in words
+
+
 def test_a_ready_card_with_a_ticket_merged_is_growing_and_shows_what_runs(board_db):
     growing = card(read(board_db), "F24")
     assert growing.stage == "growing"
