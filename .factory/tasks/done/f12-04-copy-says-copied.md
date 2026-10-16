@@ -28,3 +28,12 @@ Read `setupBar` in `factory_dashboard/static/notify.js` (the branch for an addre
 - after a tap on the second, the stand-in received the page's own address (`LAN`), and its label is "Copied"
 - the listed tests pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3363
+gate_failures: []
+tokens: 885779
+```
