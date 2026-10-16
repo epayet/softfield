@@ -819,7 +819,8 @@ def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:
 class AwayTicket:
     """A ticket that reached ``done`` in the span: its name (``/tickets/<ticket>``), title,
     who merged it, the display name of the merger, how many developer attempts it had,
-    the ticket kind, a context label, and the blocked ticket IDs."""
+    the ticket kind, a context label, the finish time, how long it took, and the blocked
+    ticket IDs."""
 
     ticket: str
     title: str | None
@@ -829,6 +830,8 @@ class AwayTicket:
     kind: str | None = None
     label: str = ""
     blocked_ids: tuple[str, ...] = ()
+    finished: datetime | None = None
+    took: timedelta | None = None
 
 
 @dataclass(frozen=True)
@@ -885,6 +888,14 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
         if j["ticket"] and j["role"] in LOCAL_ROLES:
             attempts[j["ticket"]] = attempts.get(j["ticket"], 0) + 1
 
+    # earliest started time per ticket (for took calculation)
+    first_started: dict[str, datetime] = {}
+    for j in jobs:
+        if j["ticket"] and j["started"]:
+            s = _time(j["started"])
+            if j["ticket"] not in first_started or s < first_started[j["ticket"]]:
+                first_started[j["ticket"]] = s
+
     def _display_name(agent: str | None) -> str | None:
         if not agent:
             return None
@@ -899,24 +910,21 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
     ) -> str:
         if not merged_by:
             return ""
-        display = _display_name(merged_by)
-        if not display:
-            return ""
         if merged_by == "claude-opus":
             if kind == "lead":
-                return f"{display} \u00b7 lead ticket"
+                return "lead ticket"
             if dev_attempts > 0:
                 if dev_attempts == 1:
                     if dev_outcomes and dev_outcomes[0] == "passed":
-                        return f"{display} \u00b7 1st try"
-                    return f"{display} \u00b7 finished after 1 developer attempt"
-                return f"{display} \u00b7 finished after {dev_attempts} developer attempts"
-            return display
+                        return "1st try"
+                    return "finished after 1 developer attempt"
+                return f"finished after {dev_attempts} developer attempts"
+            return ""
         if dev_attempts > 0:
             if dev_attempts == 1:
-                return f"{display} \u00b7 1st try"
-            return f"{display} \u00b7 {dev_attempts} attempts"
-        return display
+                return "1st try"
+            return f"{dev_attempts} attempts"
+        return ""
 
     merged = tuple(
         AwayTicket(
@@ -936,6 +944,8 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
                     if j2["ticket"] == j["ticket"] and j2["role"] in LOCAL_ROLES
                 ),
             ),
+            finished=at,
+            took=(at - first_started[j["ticket"]]) if j["ticket"] in first_started else None,
         )
         for at, j in sorted(last.values(), key=lambda found: found[0], reverse=True)
         if since <= at <= now

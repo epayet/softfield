@@ -1283,19 +1283,19 @@ def test_away_ticket_shows_agent_label_and_attempts(tmp_path):
     assert qwen.display_name == "qwen3.6-35b-a3b"
     assert qwen.attempts == 2
     assert qwen.kind == "developer"
-    assert qwen.label == "qwen3.6-35b-a3b · 2 attempts"
+    assert qwen.label == "2 attempts"
 
     opus = merged_map["away-opus"]
     assert opus.display_name == "Opus"
     assert opus.attempts == 1
     assert opus.kind == "developer"
-    assert opus.label == "Opus · finished after 1 developer attempt"
+    assert opus.label == "finished after 1 developer attempt"
 
     lead = merged_map["away-lead"]
     assert lead.display_name == "Opus"
     assert lead.attempts == 0
     assert lead.kind == "lead"
-    assert lead.label == "Opus · lead ticket"
+    assert lead.label == "lead ticket"
 
 
 def test_away_blocked_ids_links_in_summary(tmp_path):
@@ -1376,8 +1376,8 @@ def test_away_no_merged_by_shows_no_label(client, db_path):
 
 
 def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
-    """A developer ticket merged by claude-opus after 3 developer jobs reads
-    'finished after 3 developer attempts'."""
+    """A developer ticket merged by claude-opus after 3 developer jobs has the label
+    'finished after 3 developer attempts', and 'Opus' appears once in its row on the page."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1425,11 +1425,15 @@ def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
     away_text = section(html, "away")
-    assert "Opus · finished after 3 developer attempts" in away_text
+    assert "finished after 3 developer attempts" in away_text
+    assert "Opus" in away_text
+    # The label no longer contains the name; "Opus · " should not appear.
+    assert "Opus · " not in away_text
 
 
 def test_away_lead_ticket_shows_lead_ticket(client, db_path):
-    """A lead ticket merged by claude-opus reads 'Opus · lead ticket'."""
+    """A lead ticket merged by claude-opus reads 'lead ticket' in the label,
+    and 'Opus' appears once in the row."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1463,7 +1467,10 @@ def test_away_lead_ticket_shows_lead_ticket(client, db_path):
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
     away_text = section(html, "away")
-    assert "Opus · lead ticket" in away_text
+    assert "lead ticket" in away_text
+    assert "Opus" in away_text
+    # The label no longer contains the name; "Opus · " should not appear.
+    assert "Opus · " not in away_text
 
 
 def replay_since(html: str) -> datetime:
@@ -1522,7 +1529,8 @@ def test_the_away_panel_follows_since_and_links_each_merged_ticket(serve, db_pat
     assert chosen(html) == f"since {since.astimezone():%H:%M}"
     assert re.search(r'href="/tickets/away-b\?project=[^"]+">away-b</a>', html)
     away = section(html, "away")
-    assert "The away-b title. Opus · finished after 1 developer attempt" in away
+    assert "The away-b title." in away
+    assert "finished after 1 developer attempt" in away
     assert "away-a" not in away and "away-early" not in away  # merged before 10:00
     assert "Nothing happened" not in away
 
@@ -1553,6 +1561,263 @@ def test_the_away_panel_says_when_nothing_happened(client):
     since = NOW - timedelta(seconds=1)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
     assert section(html, "away").endswith(f"Nothing happened since {since.astimezone():%H:%M}.")
+
+
+def test_away_ticket_has_finished_and_took(tmp_path):
+    """A developer ticket merged by claude-opus after 3 developer jobs has
+    finished and took on the AwayTicket."""
+    from factory_dashboard import queries
+
+    path = tmp_path / "away-ft.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+        t = metrics.upsert_ticket(
+            conn,
+            project,
+            "away-ft",
+            milestone_id=m,
+            state="done",
+            merged_by=OPUS,
+            kind="developer",
+            title="Finished and took.",
+        )
+        for n in range(1, 4):
+            jid = metrics.start_job(
+                conn,
+                run,
+                ticket_id=t,
+                milestone_id=m,
+                role="developer",
+                agent=LOCAL,
+                attempt=n,
+                started=f"2026-10-02T08:{(n - 1) * 10:02d}:00+00:00",
+            )
+            metrics.finish_job(
+                conn,
+                jid,
+                ended=f"2026-10-02T08:{(n - 1) * 10 + 10:02d}:00+00:00",
+                outcome="failed",
+            )
+        esc = metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=m,
+            role="escalation",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T08:30:00+00:00",
+        )
+        metrics.finish_job(conn, esc, ended="2026-10-02T08:30:00+00:00", outcome="passed")
+    finally:
+        conn.close()
+    conn = queries.connect(path)
+    try:
+        away = queries.away(conn, PROJECT, SINCE, NOW)
+    finally:
+        conn.close()
+    tkt = away.merged[0]
+    assert tkt.ticket == "away-ft"
+    assert tkt.finished is not None
+    assert tkt.took is not None
+    assert tkt.took == timedelta(minutes=30)
+
+
+def test_finished_shows_time_when_same_day(client, db_path):
+    """A ticket whose first job started at 08:00 and whose last job ended at 08:20
+    the same day as now shows 'finished 08:20' and 'took 20 min'."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+        t = metrics.upsert_ticket(
+            conn,
+            project,
+            "away-today",
+            milestone_id=f1,
+            state="done",
+            merged_by=OPUS,
+            kind="developer",
+            title="Today finish.",
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started="2026-10-02T08:00:00+00:00",
+        )
+        esc = metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=f1,
+            role="escalation",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T08:20:00+00:00",
+        )
+        metrics.finish_job(conn, esc, ended="2026-10-02T08:20:00+00:00", outcome="passed")
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    away = section(html, "away")
+    finished_local = datetime(2026, 10, 2, 8, 20, tzinfo=UTC).astimezone()
+    assert f"finished {finished_local.strftime('%H:%M')}" in away
+    assert "took 20 min" in away
+
+
+def test_finished_shows_day_when_different_day(client, db_path):
+    """A ticket finished the day before now shows the day and month before the time."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261001-040000", started="2026-10-01T04:00:00+00:00"
+        )
+        t = metrics.upsert_ticket(
+            conn,
+            project,
+            "away-yesterday",
+            milestone_id=f1,
+            state="done",
+            merged_by=OPUS,
+            kind="developer",
+            title="Yesterday finish.",
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started="2026-10-01T23:00:00+00:00",
+        )
+        esc = metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=f1,
+            role="escalation",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-01T12:00:00+00:00",
+        )
+        metrics.finish_job(conn, esc, ended="2026-10-01T12:00:00+00:00", outcome="passed")
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    away = section(html, "away")
+    finished_local = datetime(2026, 10, 1, 12, 0, tzinfo=UTC).astimezone()
+    assert f"finished {finished_local.strftime('%-d %b %H:%M')}" in away
+
+
+def test_no_merged_by_shows_no_name_no_label_but_finished_and_took(client, db_path):
+    """A ticket with no merged_by shows no name and no label, but its finished and took."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn, project, "20261002-040000", started="2026-10-02T04:00:00+00:00"
+        )
+        t = metrics.upsert_ticket(
+            conn,
+            project,
+            "away-nomerge",
+            milestone_id=f1,
+            state="done",
+            merged_by=None,
+            kind="developer",
+            title="No merge title.",
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=t,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started="2026-10-02T08:00:00+00:00",
+        )
+        metrics.finish_job(
+            conn,
+            list(conn.execute("SELECT id FROM jobs WHERE ticket_id IS NOT NULL").fetchall())[-1][
+                "id"
+            ],
+            ended="2026-10-02T08:10:00+00:00",
+            outcome="passed",
+        )
+    finally:
+        conn.close()
+    # Re-fetch the job id properly
+    conn = metrics.open_db(db_path)
+    try:
+        job = conn.execute(
+            "SELECT id FROM jobs WHERE ticket_id IS NOT NULL ORDER BY id DESC LIMIT 1"
+        ).fetchone()
+        metrics.finish_job(conn, job["id"], ended="2026-10-02T08:10:00+00:00", outcome="passed")
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    away = section(html, "away")
+    assert "finished" in away
+    assert "took" in away
+
+
+def test_how_comes_before_title_in_away_rows(client, db_path):
+    """In the page, each row's class='how' element comes before its class='title' element."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    # Find each <li> in #away and verify .how comes before .title
+    items = re.findall(r"<li>(.*?)</li>", html.split('id="away"')[1].split("</section>")[0], re.S)
+    for item in items:
+        how_idx = item.find('class="how"')
+        title_idx = item.find('class="title"')
+        assert how_idx != -1, "no class='how' in row"
+        assert title_idx != -1, "no class='title' in row"
+        assert how_idx < title_idx, f"how ({how_idx}) should come before title ({title_idx})"
+
+
+def test_title_text_inside_title_only(client, db_path):
+    """The title's text is inside class='title' only."""
+    conn = metrics.open_db(db_path)
+    try:
+        write_away(conn)
+    finally:
+        conn.close()
+    since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
+    html = client.get("/?" + urlencode({"since": since.isoformat()})).text
+    # Find each <li> in #away and verify the title text is inside .title
+    items = re.findall(r"<li>(.*?)</li>", html.split('id="away"')[1].split("</section>")[0], re.S)
+    for item in items:
+        title_match = re.search(r'<span class="title">([^<]*)</span>', item)
+        assert title_match, "no .title span found"
+        title_text = title_match.group(1)
+        assert title_text, "title span should contain text"
 
 
 def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):

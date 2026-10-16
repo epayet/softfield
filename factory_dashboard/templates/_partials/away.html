@@ -8,19 +8,25 @@
     {% if away.blocked_ids %}blocked now:
       {% for bid in away.blocked_ids %}<a href="/tickets/{{ bid }}">{{ bid }}</a>{% if not loop.last %}, {% endif %}{% endfor %}{% else %}{{ away.blocked }} blocked now{% endif %}, {{ "$%.2f" | format(away.claude_usd) }} on Claude
   </p>
-  {% if away.merged %}
-  <ul class="steps">
-    {% for t in away.merged %}
-    <li>
-      <span class="what">
-        {% if t.display_name %}<span class="agent">{{ t.display_name }}</span>{% endif %}
-        <a class="mono" href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a>
-        {{ t.title or "" }}{% if t.label %} {{ t.label }}{% endif %}
-      </span>
-    </li>
-    {% endfor %}
-  </ul>
-  {% endif %}
+    {% if away.merged %}
+    <ul class="steps">
+      {% for t in away.merged %}
+      <li>
+        <span class="what">
+          {% if t.display_name %}<span class="agent">{{ t.display_name }}</span>{% endif %}
+          <a class="mono" href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a>
+          {% if t.label or t.finished %}
+          <span class="how">
+            {% if t.label %}{{ t.label }} · {% endif %}
+            {% if t.finished %}{% set ft = t.finished.astimezone() %}finished {% if ft.date() != now.astimezone().date() %}{{ ft.strftime('%-d %b ') }}{% endif %}{{ ft.strftime('%H:%M') }}{% if t.took %} · took {{ t.took | ago }}{% endif %}{% endif %}
+          </span>
+          {% endif %}
+          <span class="title">{{ t.title or "" }}</span>
+        </span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   {% else %}
   <p class="sub">Nothing happened since {{ since.strftime("%H:%M") }}.</p>
   {% endif %}

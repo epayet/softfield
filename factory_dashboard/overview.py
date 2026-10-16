@@ -716,6 +716,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "away": queries.away(conn, project, since, local),
             "since": since,
             "choices": choices,
+            "now": local,
             **_live_context(conn, project, now),
             "milestone": milestone,
             "savings": queries.savings(conn, project, milestone["key"]) if milestone else None,
@@ -757,5 +758,5 @@ def away_partial(request: Request, conn: Db, project: Project, now: Now) -> HTML
         conn,
         project,
         "_partials/away.html",
-        {"since": since, "away": queries.away(conn, project, since, local)},
+        {"since": since, "away": queries.away(conn, project, since, local), "now": local},
     )
