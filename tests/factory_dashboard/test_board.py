@@ -403,9 +403,10 @@ def test_a_growing_card_shows_its_tickets_and_what_runs_now(board_client):
     assert f"Now: f24-02-working · Goal of f24-02-working. · {LOCAL}, attempt 2" in words
     growing = _columns(html)["growing"]
     assert re.search(r'<span class="meter"><span style="width: 33%">', growing)
-    # a ripe card carries its sign-off command
+    # a ripe card carries the sign-off text
     _, ripe = _card(html, "/milestones/f1")
-    assert "softfield signoff f1" in ripe
+    assert "Read the review and sign off" in ripe
+    assert "softfield signoff" not in ripe
 
 
 def test_the_totals_count_each_stage(board_client):
@@ -528,6 +529,18 @@ def test_the_board_lays_out_at_phone_and_display_sizes(page, board_client, size)
         assert scroller.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
 
 
+@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
+def test_ripe_card_words_fit_inside_the_card(page, board_client, size):
+    page.set_viewport_size(size)
+    open_page(page, board_client, "/board")
+    page.evaluate("() => document.fonts.ready")
+    cards = page.query_selector_all("#stage-ripe .card")
+    for card in cards:
+        assert card.is_visible()
+        text = card.inner_text()
+        assert "Read the review and sign off" in text
+
+
 def test_the_columns_scroll_sideways_on_a_narrow_desktop(page, board_client):
     page.set_viewport_size({"width": 1000, "height": 800})
     open_page(page, board_client, "/board")
@@ -536,3 +549,38 @@ def test_the_columns_scroll_sideways_on_a_narrow_desktop(page, board_client):
     assert page.evaluate(
         "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"
     )
+
+
+def test_ripe_card_says_read_the_review_and_signs_off(board_db, board_client):
+    html = _page(board_client)
+    found = read(board_db)
+    for c in found.stages["ripe"]:
+        link = f"/milestones/{c.full_key}"
+        _, words = _card(html, link)
+        assert "Read the review and sign off" in words
+        assert "softfield signoff" not in words
+
+
+def test_ripe_card_link_ends_with_review_fragment(board_db, board_client):
+    html = _page(board_client)
+    found = read(board_db)
+    for c in found.stages["ripe"]:
+        link = f"/milestones/{c.full_key}"
+        _card(html, link)
+        match = re.search(rf'<a class="card[^"]*" href="{re.escape(link)}\?[^"]*#review">', html)
+        assert match, f"link for {link} should end with #review"
+
+
+def test_growing_and_harvested_cards_have_no_review_fragment(board_db, board_client):
+    html = _page(board_client)
+    found = read(board_db)
+    for stage in ("growing", "harvested"):
+        for c in found.stages[stage]:
+            link = f"{'/tickets' if c.bug else '/milestones'}/{c.full_key}"
+            _, words = _card(html, link)
+            match = re.search(
+                rf'<a class="card[^"]*" href="{re.escape(link)}\?[^"]*#review">', html
+            )
+            assert match is None, f"{stage} card {link} should not have #review"
+            if stage == "harvested":
+                assert "Read the review and sign off" not in words

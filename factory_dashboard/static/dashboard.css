@@ -560,6 +560,8 @@ main:has(.board) { max-width: 1360px; }
 .card-now b { color: var(--serious-ink); font-weight: 600; }
 .card code { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px;
   font-size: 12px; border-radius: 0; }
+.card-action { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px;
+  font-size: 12px; line-height: 1.35; }
 #stage-growing .card { border-color: var(--opus); border-left-color: var(--c, var(--muted)); }
 #stage-ripe .card { border-color: var(--hazard); border-left-color: var(--c, var(--muted)); }
 #stage-harvested .card { border-style: dashed; border-left-style: solid; color: var(--ink-2); }

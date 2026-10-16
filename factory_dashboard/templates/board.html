@@ -8,7 +8,7 @@
 
 {# A card: its edge is its area's colour, a bug's is striped and its label says "bug" #}
 {% macro card_link(c) %}
-<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}" href="{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}">
+<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}" href="{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}">
   <span class="card-meta">{% if c.stage not in ("ripe", "harvested") %}<b>P{{ c.priority }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span></span>
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
@@ -19,7 +19,7 @@
   {% if c.running %}
   <span class="card-now"><b>Now:</b> {{ c.running.ticket }}{% if c.running.goal %} · {{ c.running.goal }}{% endif %} · {{ c.running.agent }}, attempt {{ c.running.attempt }}</span>
   {% endif %}
-  {% if c.stage == "ripe" and not c.bug %}<code>softfield signoff {{ c.key | lower }}</code>{% endif %}
+  {% if c.stage == "ripe" and not c.bug %}<span class="card-action">Read the review and sign off ›</span>{% endif %}
 </a>
 {% endmacro %}
 
