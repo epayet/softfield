@@ -38,6 +38,9 @@ I suspect we might need to increase the timeouts as the tests take quite some ti
 - **D6: a stop during the gates runs the gates again, not the developer** (`_recover` and `_regate` in `runner/loop.py`, done in the session): the attempt's own commit at the tip of a clean branch means it had finished.
 - **D7: the developer keeps `check-all` as its finish line** (owner: without the full suite it can't know its change works; f19-01 changed `base.html`, which every page's tests load). What a run costs is f71-02's subject, with two steps added to its list: the quick checks first, telling the developer at once when one fails, each result printed as it finishes; and the developer's prompt saying not to set a time limit on `check-all`.
 
+## Decisions (2026-10-16)
+- **D8: Claude's jobs get 75 minutes** (`claude = 4500`, the developer's D5), the owner's call after f17-01. Escalations and lead tickets already share this one limit. f17-01's escalation built the whole ticket, ran check-all, fixed a mypy error and was cut at 45 minutes while waiting on its second check-all, after writing its decision. Reviews stay at 3600.
+
 ## Tickets
 | # | Id | Who | Difficulty | What |
 |---|----|-----|------------|------|

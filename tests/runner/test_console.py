@@ -31,6 +31,9 @@ def test_a_claude_end_line_has_outcome_minutes_and_dollars():
     assert console.claude_end("claude-sonnet", "checkpoint", False, 60, None) == (
         "■ [claude-sonnet] checkpoint failed · 1 min"
     )
+    assert console.claude_end("claude-opus", "escalation", False, 2700, None, timed_out=True) == (
+        "■ [claude-opus] escalation cut off at its time limit · 45 min"
+    )
 
 
 def test_a_summary_is_the_first_real_line_cut_to_about_100_characters():

@@ -1392,6 +1392,97 @@ def test_an_escalation_whose_work_fails_check_all_stays_off_main(
     assert git(repo, "status", "--porcelain") == ""
 
 
+def test_an_escalation_with_no_decision_keeps_its_work_off_main(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    """Cut off before it decided, its edits may be half a change: never check-alled onto main."""
+    _escalate_on_protected(repo, fake_model)
+    script, _ = fake_lead
+    script.extend([lambda job, repo_: None, lambda job, repo_: _implement(repo_, "")])
+    calls = _passes(monkeypatch)
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert calls == []
+    assert "raise NotImplementedError" in (repo / "coucou" / "thing.py").read_text()
+    assert "return 42" in git(repo, "show", "escalation/m1-01-thing:coucou/thing.py")
+    blocked = (repo / ".factory" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+    assert "no decision; its work is on escalation/m1-01-thing" in blocked
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def _decides(outcome: str) -> Callable[[ClaudeJob, Path], None]:
+    def decide(job: ClaudeJob, repo_: Path) -> None:
+        _implement(repo_, "")
+        logs = repo_ / job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
+        (logs / "decision.json").write_text(f'{{"outcome": "{outcome}"}}')
+
+    return decide
+
+
+def test_an_escalation_stopped_during_its_check_all_is_kept_and_resumed_uncounted(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    """f17-01 (2026-10-16): stopped during the runner's check-all of its escalation, the
+    finished work was left on a dirty main with nothing in flight, so the runner wouldn't start;
+    and the queued escalation, the ticket's last, would have blocked it."""
+    _escalate_on_protected(repo, fake_model)
+    state_path = _config(repo).runs_dir / "state.json"
+    state = load_state(state_path)
+    state.escalations["m1-01-thing"] = 1
+    save_state(state, state_path)
+    script, jobs = fake_lead
+    script.extend([lambda job, repo_: None, _decides("implemented")])
+
+    def stopped(repo_, timeout, *, task_id=None, fix=False):
+        raise RuntimeError("Ctrl-C")
+
+    monkeypatch.setattr(checks, "check_all", stopped)
+    with pytest.raises(RuntimeError, match="Ctrl-C"):
+        loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    flight = _state(repo).in_flight
+    assert flight is not None
+    assert (flight["kind"], flight["ticket"], flight["branch"]) == (
+        "escalation",
+        "m1-01-thing",
+        "main",
+    )
+    _earlier_run(repo)
+
+    script.append(_decides("implemented"))
+    script.extend([lambda job, repo_: None] * 3)  # a checkpoint, if one comes
+    fake_model.append(_after)
+    _passes(monkeypatch)
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    escalations = [j for j in jobs if j.kind == "escalation"]
+    assert len(escalations) == 2 and "interrupted/escalation-m1-01-thing" in escalations[1].prompt
+    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+    state = _state(repo)
+    assert state.escalations["m1-01-thing"] == 2 and state.in_flight is None
+    assert git(repo, "status", "--porcelain") == ""
+
+
+def test_a_lead_ticket_stopped_during_its_check_all_keeps_its_branch(repo, monkeypatch):
+    _lead_task(repo, "m1-01-lead")
+
+    def implement(job, repo_, timeout, log_path, now, resume=None):
+        _implement(repo_, "")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+
+    def stopped(repo_, timeout, *, task_id=None, fix=False):
+        raise RuntimeError("Ctrl-C")
+
+    monkeypatch.setattr(claude, "run_claude", implement)
+    monkeypatch.setattr(checks, "check_all", stopped)
+    with pytest.raises(RuntimeError, match="Ctrl-C"):
+        _run(repo)
+    s = loop.open_session(_config(repo), None)
+    assert s.git.current_branch() == "main" and s.git.is_clean()
+    assert s.state.interrupted == {
+        "lead-ticket:m1-01-lead": {"session_id": "s1", "branch": "task/m1-01-lead"}
+    }
+    assert "return 42" in git(repo, "show", "task/m1-01-lead:coucou/thing.py")
+
+
 def test_a_requeued_ticket_keeps_its_escalated_footer(repo, fake_model, fake_lead):
     """f0: the escalation rewrote the ticket, so its done/ file lost the 3 failed attempts
     and their tokens, and the metrics said "escalated: 0"."""

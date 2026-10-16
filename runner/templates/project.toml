@@ -27,7 +27,7 @@ default_max_diff = 1000
 [timeouts]  # seconds
 warmup = 300
 opencode = 4500
-claude = 2700
+claude = 4500
 review = 3600
 gate = 1200
 

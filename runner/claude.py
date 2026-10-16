@@ -226,6 +226,21 @@ def stream_model(lines: Iterable[str]) -> str | None:
     return _costliest(usage)
 
 
+def stream_session(lines: Iterable[str]) -> str | None:
+    """The session a stream ran in, from its `init` event: what a job cut off at its limit,
+    which never printed a result, resumes."""
+    for line in lines:
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(event, dict) or event.get("type") != "system":
+            continue
+        if isinstance(found := event.get("session_id"), str) and found:
+            return found
+    return None
+
+
 def progress(lines: Iterable[str]) -> Progress:
     """The tokens and turns of the stream so far. A message's content blocks come as separate
     `assistant` events with the same id; each message counts once, with its latest usage."""
@@ -330,7 +345,13 @@ def run_claude(
     if returncode is None:
         with log_path.open("a", encoding="utf-8") as log:
             log.write("\n--- timed out ---\n")
-        return JobResult(ok=False, text="timed out", duration_s=time.monotonic() - started)
+        return JobResult(
+            ok=False,
+            text="timed out",
+            duration_s=time.monotonic() - started,
+            session_id=stream_session(stdout.splitlines()),
+            timed_out=True,
+        )
     with log_path.open("a", encoding="utf-8") as log:
         log.write("\n--- stderr ---\n" + stderr)
     duration = time.monotonic() - started

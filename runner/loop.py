@@ -350,6 +350,27 @@ def _in_flight_session(s: Session, session_id: str | None) -> None:
         save_state(s.state, s.state_path)
 
 
+@contextmanager
+def _settling(s: Session, role: str, task: Task, session_id: str | None) -> Iterator[None]:
+    """The runner's own steps on a Claude job's work once its session ended (check-all, the
+    commits, the merge): still the job in flight, so a stop among them is recovered at the next
+    start like one inside the session, its work kept on a branch and its session resumed.
+    f17-01 (2026-10-16): stopped during the escalation's check-all, its finished work was left
+    on main with nothing in flight, and the runner wouldn't start again. A stop keeps it."""
+    _set_in_flight(
+        s,
+        kind=role,
+        ticket=task.id,
+        subject=task.id,
+        milestone=task.milestone,
+        branch=s.git.current_branch(),
+        agent=s.cfg.agent_for(role).id,
+        session_id=session_id,
+    )
+    yield
+    _clear_in_flight(s)
+
+
 def _free_branch(git: Git, name: str) -> str:
     """``name``, or ``name-2``, ``name-3``…: an earlier interruption's branch is kept."""
     taken = set(git.run("branch", "--list", "--format=%(refname:short)").split())
@@ -412,14 +433,16 @@ def _recover(git: Git, state: State, state_path: Path) -> str:
         message = WIP_INTERRUPTED.format(name=ticket or kind)
         kept = git.commit_all(with_trailers(message, agent=CLAUDE_HEADLESS_AGENT))
         session = str(job.get("session_id") or "")
-        where = target if kept and target else ""
+        # off main, its branch holds the work even with nothing left to commit (a lead ticket
+        # stopped during its check-all: the runner had committed it)
+        where = target if target and (kept or branch != MAIN) else ""
         state.interrupted[job_key(kind, str(name))] = {"session_id": session, "branch": where}
         after = (
             f"its session {session} resumes on its next run"
             if session
             else "it starts again on its next run"
         )
-    if target is not None:
+    if target is not None or git.current_branch() != MAIN:
         git.checkout(MAIN)
     state.in_flight = None
     save_state(state, state_path)
@@ -1601,7 +1624,8 @@ def call_claude(
             ok=result.ok,
         )
     )
-    s.log(console.claude_end(agent, what, result.ok, clock() - started, result.cost_usd))
+    elapsed = clock() - started
+    s.log(console.claude_end(agent, what, result.ok, elapsed, result.cost_usd, result.timed_out))
     if line := console.summary(agent, _note_summary(notes) or result.text):
         s.log(line)
     return result
@@ -2380,11 +2404,18 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
         commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, *task.commands),
     )
     try:
-        call_claude(s, job, task.milestone, task.id, ticket=task.id, park=True)
+        result = call_claude(s, job, task.milestone, task.id, ticket=task.id, park=True)
     except Parked:
         s.git.checkout(MAIN)
         rec.result = "parked"
         return
+    with _settling(s, job.role, task, result.session_id):
+        _settle_lead_task(s, task, rec, logs, job)
+
+
+def _settle_lead_task(s: Session, task: Task, rec: TaskRecord, logs: Path, job: JobSpec) -> None:
+    """The lead ticket's work, merged once check-all passes, else blocked on its branch."""
+    branch = f"task/{task.id}"
     s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT))
     if not s.git.changed_files(MAIN):  # an interrupted run's commit counts too
         s.git.checkout(MAIN)
@@ -3323,14 +3354,18 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     isn't counted (ADR 16 item 4)."""
     escalated = s.tasks_dir("escalated") / task.path.name
     used = s.state.escalations.get(task.id, 0)
-    if used >= s.cfg.escalations_per_task:
+    # One stopped part-way is the same escalation when it resumes: not counted again (one
+    # parked for a limit was taken off the count when it parked)
+    earlier = s.state.interrupted.get(job_key("escalation", task.id))
+    resuming = earlier is not None and earlier.get("cause") != "limit"
+    if used >= s.cfg.escalations_per_task and not resuming:
         block(s, escalated, f"{used} escalations used; last: {reason}")
         return
     resume = {"milestone": task.milestone, "logs": _rel(s, logs), "reason": reason}
     if (hold := claude_hold(s, now())) is not None:
         _park_support(s, "escalation", task.id, hold, **resume)
         return
-    s.state.escalations[task.id] = used + 1
+    s.state.escalations[task.id] = used + (0 if resuming else 1)
     save_state(s.state, s.state_path)
     branch = f"task/{task.id}"
     # The branch gets main (the escalated ticket, newer code), for a lead that finishes it.
@@ -3353,6 +3388,8 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, f"git checkout {branch}"),
     )
     decision_path = logs / "decision.json"
+    if not resuming:  # only this escalation's decision counts
+        decision_path.unlink(missing_ok=True)
     try:
         result = call_claude(
             s,
@@ -3371,12 +3408,39 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
             del s.state.escalations[task.id]
         save_state(s.state, s.state_path)
         return
+    with _settling(s, job.role, task, result.session_id):
+        _settle_escalation(s, task, logs, job, result, decision_path)
+
+
+def _settle_escalation(
+    s: Session, task: Task, logs: Path, job: JobSpec, result: JobResult, decision_path: Path
+) -> None:
+    """What the escalation's decision does. A session cut off at its time limit is judged by
+    the decision it wrote, its work by check-all as any other's (f17-01 wrote "implemented",
+    then was cut off waiting on its own second check-all); one with no decision keeps its
+    work off main."""
+    escalated = s.tasks_dir("escalated") / task.path.name
+    branch = f"task/{task.id}"
     try:
         decision = json.loads(decision_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         decision = {}
     outcome = decision.get("outcome")
+    if result.timed_out:
+        agent = s.cfg.agent_for(job.role).id
+        said = f"it had decided {outcome}: check-all decides" if outcome else "with no decision"
+        s.log(f"  ↳ [{agent}] cut off at its time limit, {said}")
+        s.report.notes.append(f"Escalation {task.id} was cut off at its time limit, {said}.")
     on = s.git.current_branch()
+    if not outcome and on == MAIN and not _only_docs_and_tasks(s):
+        kept = f"escalation/{task.id}"
+        s.git.run("checkout", "-q", "-B", kept)
+        s.git.commit_all(
+            with_trailers(f"escalation {task.id}: no decision", agent=CLAUDE_HEADLESS_AGENT)
+        )
+        s.git.checkout(MAIN)
+        block(s, escalated, f"the escalation ended with no decision; its work is on {kept}")
+        return
     if outcome == "finish" or on != MAIN:
         _finish_branch(s, task, logs, job, outcome, on)
         return

@@ -307,6 +307,22 @@ def test_a_job_that_times_out_keeps_its_stream_in_the_log(tmp_path, monkeypatch)
     assert (result.ok, result.text) == (False, "timed out")
     log = (tmp_path / "log").read_text(encoding="utf-8")
     assert log.startswith('{"type": "assistant"') and log.endswith("--- timed out ---\n")
+    assert result.timed_out and result.session_id is None  # no init event in this stream
+
+
+def test_a_job_cut_off_at_its_limit_keeps_its_session_for_the_resume(tmp_path, monkeypatch):
+    """f17-01's escalation was cut off at 45 min: its session, from the stream's `init`."""
+    init = json.dumps({"type": "system", "subtype": "init", "session_id": "s9"})
+
+    def fake(cmd, cwd, timeout, out_path, on_tick=None, **kwargs):
+        out_path.write_text(init + "\n" + _assistant("m1", 1, 0, 1) + "\n", encoding="utf-8")
+        return "", None
+
+    monkeypatch.setattr(claude, "run_streaming", fake)
+    job = ClaudeJob("escalation", "E.", ("Read",))
+    result = run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert (result.ok, result.timed_out, result.session_id) == (False, True, "s9")
+    assert claude.stream_session(["not json", "[1]", init]) == "s9"
 
 
 def _as_result_event(stdout: str) -> str:

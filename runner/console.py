@@ -39,9 +39,12 @@ def local_end(
     )
 
 
-def claude_end(agent: str, what: str, ok: bool, seconds: float, cost: float | None) -> str:
+def claude_end(
+    agent: str, what: str, ok: bool, seconds: float, cost: float | None, timed_out: bool = False
+) -> str:
     parts = [duration(seconds), *([f"${cost:.2f}"] if cost is not None else [])]
-    return f"■ [{agent}] {what} {'done' if ok else 'failed'} · " + " · ".join(parts)
+    outcome = "done" if ok else "cut off at its time limit" if timed_out else "failed"
+    return f"■ [{agent}] {what} {outcome} · " + " · ".join(parts)
 
 
 def first_line(text: str) -> str:
