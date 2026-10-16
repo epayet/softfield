@@ -1,6 +1,6 @@
 # Review: F94, While you were away says who, when and how long, once
 
-- **Status:** round 1 done; one small developer ticket left (f94-02), then ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 

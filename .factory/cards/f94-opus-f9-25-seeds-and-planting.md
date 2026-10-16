@@ -1,6 +1,7 @@
 # Milestone F94: While you were away: who, when and how long, said once
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f94-opus-f9-25-seeds-and-planting-start`. Report: [`.factory/reviews/f94-opus-f9-25-seeds-and-planting.md`](../reviews/f94-opus-f9-25-seeds-and-planting.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes
