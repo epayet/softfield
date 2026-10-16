@@ -1,6 +1,6 @@
 # Review: F23, "Comment…" puts the cursor in the box
 
-- **Status:** reviewed, round 1; waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 

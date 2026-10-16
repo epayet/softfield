@@ -1,6 +1,7 @@
 # Milestone F23: when i click comment on the planning desk ticket, i want it to focus on the text box
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** done · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f23-when-i-click-comment-on-the-start`. Report: [`.factory/reviews/f23-when-i-click-comment-on-the.md`](../reviews/f23-when-i-click-comment-on-the.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes
