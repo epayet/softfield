@@ -525,7 +525,12 @@ def test_a_fixture_reply_with_7_points_shows_each_point(planning, db_path, serve
     html = _thread(serve(), "f6")
     assert "The planning room" in _text(html.split('<header id="card"', 1)[1].split("</header>")[0])
     text = _text(html)
-    assert text.index("A first go.") < text.index("Looks good.") < text.index("Here's each point")
+    assert (
+        text.index("Here's each point")
+        < text.index("Earlier in this thread (3)")
+        < text.index("Looks good.")
+        < text.index("A first go.")
+    )
     points = _points(html)
     assert list(points) == [str(p["n"]) for p in _SEVEN_POINTS]
     for p in _SEVEN_POINTS:
@@ -555,7 +560,8 @@ def test_a_reply_with_points_folds_its_text_and_one_without_shows_it(planning, d
     [fold] = re.findall(r'<details class="full-reply"[^>]*>(.*?)</details>', html, re.S)
     assert "open" not in html.split('<details class="full-reply"', 1)[1].split(">", 1)[0]
     assert _text(fold) == "Full reply Here's each point with my answer."
-    assert html.index('class="full-reply"') < html.index('class="deck"')
+    folded = html.split('class="full-reply"', 1)[1].split("</article>", 1)[0]
+    assert 'class="deck"' in folded  # its points follow the fold, in the same message
     assert "Sorry." not in fold and "(no json block.)" in _text(html)
     assert "Why so?" not in fold and "Why so?" in _text(html)
     assert html.count('class="full-reply"') == 1  # the owner's, the broken and the textless
@@ -592,11 +598,11 @@ def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
     page.click('#reply button[type="submit"]')
     page.wait_for_selector("#conversation >> text=And the phone?")
     page.wait_for_selector("#reply", state="hidden")
-    # waiting message: #waiting present, message shows "Sent"
+    # waiting message: #waiting present, the sent message at the top (F30), showing "Sent"
     assert page.locator("#waiting").is_visible()
-    msg = page.locator("#conversation .message").last
+    msg = page.locator("#conversation .message").first
     assert msg.is_visible()
-    assert "Sent" in msg.inner_text()
+    assert "And the phone?" in msg.inner_text() and "Sent" in msg.inner_text()
     conn = metrics.open_db(db_path)
     try:
         rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
@@ -740,6 +746,94 @@ def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve)
     assert '<form id="reply"' not in html
     assert "Send" not in _text(html)
     assert "Comment…" not in html
+
+
+def test_the_latest_exchange_comes_first_and_the_older_messages_fold_newest_first(
+    planning, db_path, serve
+):
+    """F30 D1: the lead's latest message, then Send, then a closed Earlier holding every older
+    message, newest first."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+
+    def replied(conn: sqlite3.Connection) -> None:
+        f6 = metrics.planner_thread(conn, planning, "f6", NOW.isoformat())["id"]
+        metrics.add_planner_message(conn, f6, "owner", _at(timedelta(minutes=4)), "And the phone?")
+        metrics.add_planner_message(conn, f6, "lead", _at(timedelta(minutes=1)), "It passes.")
+
+    _write(db_path, replied)
+    html = _thread(serve(), "f6")
+    conversation = html.split('<div id="conversation">', 1)[1]
+    assert (
+        conversation.index("It passes.")
+        < conversation.index('<form id="reply"')
+        < conversation.index('<details id="earlier">')
+    )
+    # Earlier closes #conversation; the page's script comes next
+    earlier = html.split('<details id="earlier">', 1)[1].split("<script>", 1)[0]
+    said = _text(earlier)
+    assert said.startswith("Earlier in this thread (5) ")
+    order = [
+        "And the phone?",
+        "Here's each point",
+        "Looks good.",
+        "Here's the plan.",
+        "A first go.",
+    ]
+    assert [said.index(words) for words in order] == sorted(said.index(w) for w in order)
+    assert "It passes." not in said
+    assert html.count("It passes.") == 1 and html.count("And the phone?") == 1
+
+
+def test_waiting_messages_show_above_the_leads_latest_newest_first(planning, db_path, serve):
+    """F30 D1: what waits for the lead comes first: the wait, then the owner's messages, newest
+    first and dashed, then the lead's latest message; no Send."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    for minutes, words in ((6, "And the phone?"), (5, "And the tablet?")):
+        value = json.dumps({"text": words, "comments": {}})
+        _write(
+            db_path,
+            lambda conn, value=value, minutes=minutes: metrics.add_request(
+                conn, planning, "plan_message", "f6", value, _at(timedelta(minutes=minutes))
+            ),
+        )
+    html = _thread(serve(), "f6")
+    conversation = html.split('<div id="conversation">', 1)[1]
+    assert (
+        conversation.index('<p id="waiting"')
+        < conversation.index("And the tablet?")
+        < conversation.index("And the phone?")
+        < conversation.index("each point with my answer")
+        < conversation.index('<details id="earlier">')
+    )
+    tablet, phone, _ = _said(html)
+    assert "border-style: dashed" in tablet and "border-style: dashed" in phone
+    assert 'id="reply"' not in html
+
+
+def test_a_thread_with_one_message_has_no_earlier(planning, db_path, serve):
+    """F30 D1: a lone lead message, or the owner's first message still waiting, shows open,
+    with nothing folded."""
+
+    def lead_only(conn: sqlite3.Connection) -> None:
+        f7 = metrics.planner_thread(conn, planning, "f7", NOW.isoformat())["id"]
+        metrics.add_planner_message(conn, f7, "lead", _at(timedelta(minutes=5)), "Hello there.")
+
+    _write(db_path, lead_only)
+    client = serve()
+    html = _thread(client, "f7")
+    assert "Hello there." in _text(html.split('<div id="conversation">', 1)[1])
+    assert 'id="earlier"' not in html and "Earlier in this thread" not in html
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "plan_message", "general", MESSAGE, _at(timedelta(minutes=5))
+        ),
+    )
+    _write(db_path, lambda conn: conn.execute("DELETE FROM planner_messages"))
+    html = _thread(client, "general")
+    [waiting] = _said(html)
+    assert "Make it calm." in waiting and "border-style: dashed" in waiting
+    assert 'id="earlier"' not in html and '<p id="waiting"' in html
 
 
 def test_only_a_seeds_thread_has_remove_seed(planning, serve):
@@ -2659,7 +2753,7 @@ def test_a_waiting_message_has_edit_and_cancel_it_and_a_stored_one_neither(
     """The editor waits closed, holding the message's own text; the message the runner took
     ("Looks good.") is on the thread for good."""
     said = _finished(db_path, planning, "plan_message", "f6", MESSAGE, None)
-    stored, waiting = _said(_thread(serve(), "f6"))
+    waiting, stored = _said(_thread(serve(), "f6"))
     assert "Looks good." in stored and "<button" not in stored and "<form" not in stored
     assert _text(waiting).endswith(
         f"Make it calm. {SENT} Your message Make it calm. Edit Save Cancel it"
@@ -2684,7 +2778,7 @@ def test_an_edit_on_its_way_shows_the_new_message_and_no_buttons(planning, db_pa
     edit = json.dumps({"text": "Make it bright.", "comments": {"3": "Shorter."}})
     change = _finished(db_path, planning, "change", str(said), edit, None)
     html = _thread(serve(), "f6")
-    _, changed, untouched = _said(html)
+    untouched, changed, _ = _said(html)  # newest first (F30)
     assert "border-style: dashed" in changed and "line-through" not in changed
     assert _text(changed).endswith(f"Make it bright. {CHANGED} {ASKED} On 3: Shorter.")
     assert "Make it calm." not in changed and "On 2:" not in changed
@@ -2697,7 +2791,7 @@ def test_an_edit_on_its_way_shows_the_new_message_and_no_buttons(planning, db_pa
 def test_an_edit_the_runner_will_refuse_keeps_the_messages_words(planning, db_path, serve):
     said = _finished(db_path, planning, "plan_message", "f6", COMMENTED, None)
     _finished(db_path, planning, "change", str(said), '{"comments": {"x": "?"}}', None)
-    _, changed = _said(_thread(serve(), "f6"))
+    changed, _ = _said(_thread(serve(), "f6"))
     assert _text(changed).endswith(f'Make it calm. {CHANGED} {ASKED} On 2: Say "how".')
     assert "<button" not in changed
 
@@ -2710,7 +2804,7 @@ def test_a_cancel_on_its_way_strikes_the_message_and_the_send_form_comes_back(
     cancel = _finished(db_path, planning, "change", str(said), '{"cancel": true}', None)
     client = serve()
     html = _thread(client, "f6")
-    _, cancelled = _said(html)
+    cancelled, _ = _said(html)
     assert re.search(r'<p style="[^"]*text-decoration: line-through">Make it calm.</p>', cancelled)
     assert _text(cancelled).endswith(f"Make it calm. {CANCELLING} {ASKED}")
     assert f'hx-get="/requests/{cancel}"' in cancelled
@@ -2758,7 +2852,7 @@ def test_edit_then_save_posts_a_change_and_the_message_shows_it_at_once(
     page.click(f"#save-{said}")
     page.wait_for_selector("#conversation .on-its-way")
     assert page.url.endswith("/planning/f6")
-    message = page.locator("#conversation .message").last
+    message = page.locator("#conversation .message").first
     assert _lines(message)[1:] == ["Make it bright.", CHANGED, ASKED, 'On 2: Say "how".']
     assert page.locator(f"#editor-{said}, #save-{said}, #cancel-{said}").count() == 0
     assert page.locator("#conversation").count() == 1
@@ -2776,7 +2870,7 @@ def test_cancel_it_strikes_the_message_at_once_and_the_send_form_comes_back(
     assert page.locator("#reply").count() == 0
     page.click(f"#cancel-{said}")
     page.wait_for_selector("#conversation .on-its-way")
-    message = page.locator("#conversation .message").last
+    message = page.locator("#conversation .message").first
     assert _lines(message)[1:] == ["Make it calm.", CANCELLING, ASKED]
     struck = message.locator("p").first
     assert struck.inner_text() == "Make it calm."

@@ -47,8 +47,7 @@
 
     {% include "_partials/desk_trail.html" %}
 
-    <div id="conversation">
-    {% for msg in messages %}
+    {% macro draw(msg) %}
     {% if msg.author == "owner" %}
     <article class="message" style="background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px{% if msg.waiting %}; border-style: dashed; border-color: var(--hazard){% endif %}">
       <span style="font: 600 12px var(--mono); color: var(--hazard)">You · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
@@ -121,7 +120,14 @@
       {% endif %}
     </article>
     {% endif %}
-    {% endfor %}
+    {% endmacro %}
+
+    {# F30 D1: the latest exchange first, Send under it, the older messages folded under it #}
+    <div id="conversation">
+    {% if next_reply %}
+    <p id="waiting" style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted)">Next for the lead · {{ next_reply }}</p>
+    {% endif %}
+    {% for msg in messages %}{{ draw(msg) }}{% endfor %}
 
     {% if merged_on %}
     <div id="merged-on" style="background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px">
@@ -140,9 +146,7 @@
     </div>
     {% endif %}
 
-    {% if next_reply %}
-    <p id="waiting" style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted)">Next for the lead · {{ next_reply }}</p>
-    {% elif merged_on|length != 1 %}
+    {% if not next_reply and merged_on|length != 1 %}
     <form id="reply" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
       hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim())), again: this.elements.again.value || undefined})}'
       class="dock" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
@@ -181,6 +185,13 @@
         }
       });
     </script>
+    {% endif %}
+
+    {% if earlier %}
+    <details id="earlier">
+      <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Earlier in this thread ({{ earlier | length }})</summary>
+      {% for msg in earlier %}{{ draw(msg) }}{% endfor %}
+    </details>
     {% endif %}
     </div>
 

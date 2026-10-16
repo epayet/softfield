@@ -1192,6 +1192,12 @@ def thread_page(
     card_on_main = known is not None and thread in known
     words = _again(conn, project_id, thread, again)
     merged_on = _merged_on(conn, project_id, thread, merged_into, known)
+    # F30 D1: the latest exchange first (the lead's latest message, under what came after it),
+    # the older messages folded under Earlier; each newest first
+    lead = [i for i, msg in enumerate(messages) if msg.author == "lead"]
+    split = lead[-1] if lead else -1
+    latest = [*reversed(messages[split + 1 :]), *messages[split : split + 1]]
+    earlier = list(reversed(messages[:split])) if lead else []
     return render(
         request,
         conn,
@@ -1210,7 +1216,8 @@ def thread_page(
             "archiving": archiving,
             "review": review,
             "trail": desk_trail(conn, project, now, request.url.path),
-            "messages": messages,
+            "messages": latest,
+            "earlier": earlier,
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,
             "next_reply": _next_reply(
