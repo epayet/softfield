@@ -436,6 +436,7 @@ def _recover(git: Git, state: State, state_path: Path) -> str:
         # off main, its branch holds the work even with nothing left to commit (a lead ticket
         # stopped during its check-all: the runner had committed it)
         where = target if target and (kept or branch != MAIN) else ""
+        kept = kept or bool(where)  # what the line below says
         state.interrupted[job_key(kind, str(name))] = {"session_id": session, "branch": where}
         after = (
             f"its session {session} resumes on its next run"
@@ -3388,7 +3389,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, f"git checkout {branch}"),
     )
     decision_path = logs / "decision.json"
-    if not resuming:  # only this escalation's decision counts
+    if earlier is None:  # only this escalation's decision counts (a parked one resumes too)
         decision_path.unlink(missing_ok=True)
     try:
         result = call_claude(

@@ -1481,6 +1481,7 @@ def test_a_lead_ticket_stopped_during_its_check_all_keeps_its_branch(repo, monke
         "lead-ticket:m1-01-lead": {"session_id": "s1", "branch": "task/m1-01-lead"}
     }
     assert "return 42" in git(repo, "show", "task/m1-01-lead:coucou/thing.py")
+    assert "its changes are on task/m1-01-lead;" in s.report.notes[-1]
 
 
 def test_a_requeued_ticket_keeps_its_escalated_footer(repo, fake_model, fake_lead):
@@ -4438,6 +4439,29 @@ def test_an_escalation_refused_by_a_limit_parks_and_free_tickets_go_on(
     state = _state(repo)
     assert state.parked == {} and state.escalations == {"m1-01-thing": 1}
     assert git(repo, "status", "--porcelain") == ""
+
+
+def test_an_escalation_parked_after_its_decision_keeps_it_for_the_resume(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """The same escalation resumes: the decision it wrote before the limit still counts."""
+    _escalate_on_protected(repo, fake_model)
+    resumes: list[str | None] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        if job.kind == "escalation":
+            resumes.append(resume)
+            if resume is None:
+                _decides("implemented")(job, repo_)
+                raise UsageLimited(THURSDAY + timedelta(hours=1), session_id="s1")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=2, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    fake_model.append(_after)
+    _passes(monkeypatch)
+    loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
+    assert resumes == [None, "s1"]
+    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
 
 
 # --- the planning room: the owner's messages go first (ADR 20 items 1–3, f6-01) -------------
