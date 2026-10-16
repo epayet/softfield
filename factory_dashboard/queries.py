@@ -917,8 +917,8 @@ def away(conn: sqlite3.Connection, project: str, since: datetime, now: datetime)
                 if dev_attempts == 1:
                     if dev_outcomes and dev_outcomes[0] == "passed":
                         return "1st try"
-                    return "finished after 1 developer attempt"
-                return f"finished after {dev_attempts} developer attempts"
+                    return "after 1 developer attempt"  # the row's "finished 10:32" follows
+                return f"after {dev_attempts} developer attempts"
             return ""
         if dev_attempts > 0:
             if dev_attempts == 1:

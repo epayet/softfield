@@ -21,6 +21,22 @@ def section(html: str, name: str) -> str:
     return " ".join(unescape(re.sub(r"<[^>]+>", " ", match.group(1))).split())
 
 
+def away_row(html: str, ticket: str) -> str:
+    """The raw HTML of ``ticket``'s row in While you were away."""
+    match = re.search(r'<section[^>]*\bid="away"[^>]*>(.*?)</section>', html, re.S)
+    assert match, "no section away"
+    rows = [
+        li for li in re.findall(r"<li>(.*?)</li>", match.group(1), re.S) if f">{ticket}</a>" in li
+    ]
+    assert len(rows) == 1, f"{len(rows)} rows for {ticket}"
+    return rows[0]
+
+
+def row_text(row: str) -> str:
+    """A row's text, tags stripped."""
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", row)).split())
+
+
 def charts(html: str) -> dict[str, object]:
     """Each chart's kind and its JSON data block (f1 D5)."""
     found = re.findall(
@@ -1198,7 +1214,7 @@ def test_away_counts_failures_and_claude_as_the_rest_of_the_dashboard(tmp_path):
 def test_away_ticket_shows_agent_label_and_attempts(tmp_path):
     """A merged ticket by local-qwen3.6-35b-a3b after two developer jobs shows a
     "qwen3.6-35b-a3b" label and "2 attempts"; one by claude-opus after a failed
-    developer job, "Opus" and "finished after 1 developer attempt"."""
+    developer job, "Opus" and "after 1 developer attempt"."""
     from factory_dashboard import queries
 
     path = tmp_path / "away-label.sqlite"
@@ -1289,7 +1305,7 @@ def test_away_ticket_shows_agent_label_and_attempts(tmp_path):
     assert opus.display_name == "Opus"
     assert opus.attempts == 1
     assert opus.kind == "developer"
-    assert opus.label == "finished after 1 developer attempt"
+    assert opus.label == "after 1 developer attempt"
 
     lead = merged_map["away-lead"]
     assert lead.display_name == "Opus"
@@ -1377,7 +1393,7 @@ def test_away_no_merged_by_shows_no_label(client, db_path):
 
 def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
     """A developer ticket merged by claude-opus after 3 developer jobs has the label
-    'finished after 3 developer attempts', and 'Opus' appears once in its row on the page."""
+    'after 3 developer attempts', and 'Opus' and 'finished' each appear once in its row."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1393,7 +1409,7 @@ def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
             state="done",
             merged_by=OPUS,
             kind="developer",
-            title="Opus merged after 3.",
+            title="Merged after 3.",
         )
         for n in range(1, 4):
             jid = metrics.start_job(
@@ -1424,11 +1440,10 @@ def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    away_text = section(html, "away")
-    assert "finished after 3 developer attempts" in away_text
-    assert "Opus" in away_text
-    # The label no longer contains the name; "Opus · " should not appear.
-    assert "Opus · " not in away_text
+    row = row_text(away_row(html, "away-opus-3"))
+    assert "Opus away-opus-3 after 3 developer attempts · finished " in row
+    assert row.count("Opus") == 1
+    assert row.count("finished") == 1
 
 
 def test_away_lead_ticket_shows_lead_ticket(client, db_path):
@@ -1466,11 +1481,9 @@ def test_away_lead_ticket_shows_lead_ticket(client, db_path):
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    away_text = section(html, "away")
-    assert "lead ticket" in away_text
-    assert "Opus" in away_text
-    # The label no longer contains the name; "Opus · " should not appear.
-    assert "Opus · " not in away_text
+    row = row_text(away_row(html, "away-lead-opus"))
+    assert "lead ticket" in row
+    assert row.count("Opus") == 1
 
 
 def replay_since(html: str) -> datetime:
@@ -1530,7 +1543,7 @@ def test_the_away_panel_follows_since_and_links_each_merged_ticket(serve, db_pat
     assert re.search(r'href="/tickets/away-b\?project=[^"]+">away-b</a>', html)
     away = section(html, "away")
     assert "The away-b title." in away
-    assert "finished after 1 developer attempt" in away
+    assert "after 1 developer attempt · finished" in away
     assert "away-a" not in away and "away-early" not in away  # merged before 10:00
     assert "Nothing happened" not in away
 
@@ -1648,7 +1661,7 @@ def test_finished_shows_time_when_same_day(client, db_path):
             kind="developer",
             title="Today finish.",
         )
-        metrics.start_job(
+        dev = metrics.start_job(
             conn,
             run,
             ticket_id=t,
@@ -1658,6 +1671,7 @@ def test_finished_shows_time_when_same_day(client, db_path):
             attempt=1,
             started="2026-10-02T08:00:00+00:00",
         )
+        metrics.finish_job(conn, dev, ended="2026-10-02T08:12:00+00:00", outcome="failed")
         esc = metrics.start_job(
             conn,
             run,
@@ -1666,17 +1680,18 @@ def test_finished_shows_time_when_same_day(client, db_path):
             role="escalation",
             agent=OPUS,
             attempt=1,
-            started="2026-10-02T08:20:00+00:00",
+            started="2026-10-02T08:14:00+00:00",
         )
         metrics.finish_job(conn, esc, ended="2026-10-02T08:20:00+00:00", outcome="passed")
     finally:
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    away = section(html, "away")
+    row = row_text(away_row(html, "away-today"))
     finished_local = datetime(2026, 10, 2, 8, 20, tzinfo=UTC).astimezone()
-    assert f"finished {finished_local.strftime('%H:%M')}" in away
-    assert "took 20 min" in away
+    # far west of UTC, 08:20 UTC is the evening before NOW's local day
+    day = "" if finished_local.date() == NOW.astimezone().date() else f"{finished_local:%-d %b} "
+    assert f"finished {day}{finished_local:%H:%M} · took 20 min" in row
 
 
 def test_finished_shows_day_when_different_day(client, db_path):
@@ -1698,7 +1713,7 @@ def test_finished_shows_day_when_different_day(client, db_path):
             kind="developer",
             title="Yesterday finish.",
         )
-        metrics.start_job(
+        dev = metrics.start_job(
             conn,
             run,
             ticket_id=t,
@@ -1706,8 +1721,9 @@ def test_finished_shows_day_when_different_day(client, db_path):
             role="developer",
             agent=LOCAL,
             attempt=1,
-            started="2026-10-01T23:00:00+00:00",
+            started="2026-10-01T09:00:00+00:00",
         )
+        metrics.finish_job(conn, dev, ended="2026-10-01T10:00:00+00:00", outcome="failed")
         esc = metrics.start_job(
             conn,
             run,
@@ -1716,16 +1732,16 @@ def test_finished_shows_day_when_different_day(client, db_path):
             role="escalation",
             agent=OPUS,
             attempt=1,
-            started="2026-10-01T12:00:00+00:00",
+            started="2026-10-01T11:00:00+00:00",
         )
         metrics.finish_job(conn, esc, ended="2026-10-01T12:00:00+00:00", outcome="passed")
     finally:
         conn.close()
     since = datetime(2026, 10, 1, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    away = section(html, "away")
+    row = row_text(away_row(html, "away-yesterday"))
     finished_local = datetime(2026, 10, 1, 12, 0, tzinfo=UTC).astimezone()
-    assert f"finished {finished_local.strftime('%-d %b %H:%M')}" in away
+    assert f"finished {finished_local:%-d %b %H:%M} · took 3 h" in row
 
 
 def test_no_merged_by_shows_no_name_no_label_but_finished_and_took(client, db_path):
@@ -1747,7 +1763,7 @@ def test_no_merged_by_shows_no_name_no_label_but_finished_and_took(client, db_pa
             kind="developer",
             title="No merge title.",
         )
-        metrics.start_job(
+        dev = metrics.start_job(
             conn,
             run,
             ticket_id=t,
@@ -1757,30 +1773,17 @@ def test_no_merged_by_shows_no_name_no_label_but_finished_and_took(client, db_pa
             attempt=1,
             started="2026-10-02T08:00:00+00:00",
         )
-        metrics.finish_job(
-            conn,
-            list(conn.execute("SELECT id FROM jobs WHERE ticket_id IS NOT NULL").fetchall())[-1][
-                "id"
-            ],
-            ended="2026-10-02T08:10:00+00:00",
-            outcome="passed",
-        )
-    finally:
-        conn.close()
-    # Re-fetch the job id properly
-    conn = metrics.open_db(db_path)
-    try:
-        job = conn.execute(
-            "SELECT id FROM jobs WHERE ticket_id IS NOT NULL ORDER BY id DESC LIMIT 1"
-        ).fetchone()
-        metrics.finish_job(conn, job["id"], ended="2026-10-02T08:10:00+00:00", outcome="passed")
+        metrics.finish_job(conn, dev, ended="2026-10-02T08:10:00+00:00", outcome="passed")
     finally:
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    away = section(html, "away")
-    assert "finished" in away
-    assert "took" in away
+    row = away_row(html, "away-nomerge")
+    assert 'class="agent"' not in row
+    how = re.search(r'<span class="how">(.*?)</span>', row, re.S)
+    assert how, "no class='how' in row"
+    assert row_text(how.group(1)).startswith("finished ")  # no label before it
+    assert row_text(how.group(1)).endswith(" · took 10 min")
 
 
 def test_how_comes_before_title_in_away_rows(client, db_path):
@@ -1811,13 +1814,11 @@ def test_title_text_inside_title_only(client, db_path):
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    # Find each <li> in #away and verify the title text is inside .title
-    items = re.findall(r"<li>(.*?)</li>", html.split('id="away"')[1].split("</section>")[0], re.S)
-    for item in items:
-        title_match = re.search(r'<span class="title">([^<]*)</span>', item)
-        assert title_match, "no .title span found"
-        title_text = title_match.group(1)
-        assert title_text, "title span should contain text"
+    row = away_row(html, "away-b")
+    title = re.search(r'<span class="title">([^<]*)</span>', row)
+    assert title, "no .title span found"
+    assert title.group(1) == "The away-b title."
+    assert row.count("The away-b title.") == 1
 
 
 def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):

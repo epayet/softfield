@@ -113,6 +113,11 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 - **A finding that names `tests/factory_dashboard/test_planning.py` (3,500 lines) is a lead ticket,** like any planning-page ticket since F14. f109-04, a checkpoint's finding, went to the developer: its first attempt did most of it, then the next two re-read the test file for 10 minutes and stopped with no edit, the second under a direction that said "don't read the test file again". Writing a finding ticket, check its `files:` and `tests:` against the Known range in `docs/agents/lead.md` before routing it.
 - **A ticket whose tests build records by hand names the real record to copy.** F109's tests kept a merged card's doc on main and gave it no milestones row; a real merge `git rm`s the doc and keeps the row, marked removed. Every test passed while each merged card's header was wrong twice over (the review's F1, F2). Say in Context what the record looks like on main ("a merge removes the doc, keeps the row as `removed`; a card's doc opens `# Milestone F95: <title>`").
 
+## Lessons from F94
+
+- **A Jinja template ticket with a mock-up points at the mock-up's exact markup** ("write each row as the Proposed `<li>` of `f94-mockup/away-rows.html`"), so the first step is an edit. f94-01 (30 lines) lost its first two attempts, a timeout and a no-edit stop, before a direction (2026-10-16). Preact components still get props, not markup (JavaScript tasks above).
+- **A "Done when" about one row names that row:** "in away-x's own row, 'Opus' appears once", not "'Opus' appears once". f94-01's tests checked the whole panel, where the fixture's other tickets made them pass without the change (f94-F1, F4).
+
 ## Open questions
 
 - Outcome vs dictation: no visible difference in M2 (4 tasks). Keep sampling both.

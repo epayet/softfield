@@ -445,6 +445,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the ticket was planned a week before the routing rule that would have made it the lead's, and a new rule reached new plans only: 16 more waiting tickets were in the same case until this review moved them. A factory's routing rules need to be applied to its queue when they are made, not only at planning. Second, the tests' threads all ended on a lead message with points; real approved threads end on an approval note, and one look at a real page (F95) showed the leftover counter (F109's lesson: one real record beside each hand-built one).
 - **Decisions affected:** none.
 
+### F94 (2026-10-16): While you were away says who, when and how long, once ([review](../reviews/f94-opus-f9-25-seeds-and-planting.md))
+
+- **Q1:** one developer ticket, difficulty 3, merged on the third attempt after a direction. No checkpoint. The review rewrote four weak tests and one wording itself, and filed one developer ticket (f94-02, durations in days).
+- **Q3:** Qwen 0/1 first time, 10.2M tokens over 163 minutes for about 30 lines: a timeout, a no-edit stop, then a pass. The code was right; four of its six new tests passed without testing their own ticket's row.
+- **Q5:** see the review's numbers.
+- **Anything else:** both visible findings ("finished … · finished", "took 142.2 h") came from reading the page on the live database, and neither the mock-up nor the tests could show them. Third milestone running (F109, F30, F94) where a real record found what the hand-built ones hid. Reading the page on real data belongs in the checkpoint or review of every UI ticket (card text in the review, for the owner to plant).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
