@@ -28,3 +28,12 @@ Read `.factory/cards/f110-i-don-t-understand-why-there.md` (D4). In `factory_das
 - a planted, a growing and a ripe card show neither phrase
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 5500
+gate_failures: []
+tokens: 2606681
+```
