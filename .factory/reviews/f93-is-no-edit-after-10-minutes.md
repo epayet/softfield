@@ -1,6 +1,6 @@
 # Review: F93, developer attempts get 20 minutes before the no-edit stop
 
-- **Status:** round 1 done, ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 

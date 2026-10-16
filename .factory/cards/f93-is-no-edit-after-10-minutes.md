@@ -1,6 +1,7 @@
 # Milestone F93: Developer attempts get 20 minutes before the no-edit stop
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f93-is-no-edit-after-10-minutes-start`. Report: [`.factory/reviews/f93-is-no-edit-after-10-minutes.md`](../reviews/f93-is-no-edit-after-10-minutes.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes
