@@ -1780,10 +1780,14 @@ def test_no_merged_by_shows_no_name_no_label_but_finished_and_took(client, db_pa
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
     row = away_row(html, "away-nomerge")
     assert 'class="agent"' not in row
+    finished_local = datetime(2026, 10, 2, 8, 10, tzinfo=UTC).astimezone()
     how = re.search(r'<span class="how">(.*?)</span>', row, re.S)
     assert how, "no class='how' in row"
-    assert row_text(how.group(1)).startswith("finished ")  # no label before it
-    assert row_text(how.group(1)).endswith(" · took 10 min")
+    expected_how = f"finished {finished_local:%H:%M} · took 10 min"
+    assert row_text(how.group(1)) == expected_how
+    row_text_full = row_text(row)
+    assert "Opus" not in row_text_full
+    assert "developer attempt" not in row_text_full
 
 
 def test_how_comes_before_title_in_away_rows(client, db_path):
@@ -1814,11 +1818,15 @@ def test_title_text_inside_title_only(client, db_path):
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    row = away_row(html, "away-b")
-    title = re.search(r'<span class="title">([^<]*)</span>', row)
-    assert title, "no .title span found"
-    assert title.group(1) == "The away-b title."
-    assert row.count("The away-b title.") == 1
+    for ticket in ("away-a", "away-b"):
+        row = away_row(html, ticket)
+        title = re.search(r'<span class="title">([^<]*)</span>', row)
+        assert title, f"no .title span found for {ticket}"
+        assert title.group(1) == f"The {ticket} title."
+        assert row.count(f"The {ticket} title.") == 1
+        how_match = re.search(r'<span class="how">(.*?)</span>', row, re.S)
+        assert how_match, f"no .how span found for {ticket}"
+        assert f"The {ticket} title." not in how_match.group(1)
 
 
 def test_choosing_a_span_updates_away_in_place(page, serve, client, db_path):
