@@ -1,6 +1,6 @@
 # Milestone F30: on conversations, i want to the latest answer first so that i don't have to scroll
 
-> **Status: planned** (2026-10-07, with the owner, in the planning room). **State:** ready · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-16. Base: git tag `f30-on-conversations-i-want-to-the-start`. Report: [`.factory/reviews/f30-on-conversations-i-want-to-the.md`](../reviews/f30-on-conversations-i-want-to-the.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes

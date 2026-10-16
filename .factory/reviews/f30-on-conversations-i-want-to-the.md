@@ -1,6 +1,6 @@
 # Review: F30, a thread shows the latest answer first
 
-- **Status:** reviewed, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-16.
 
 ## Sign-off sheet
 
