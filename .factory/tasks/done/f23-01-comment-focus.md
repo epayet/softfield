@@ -27,3 +27,12 @@ On a planning thread, tapping a point's "Comment…" puts the cursor in that poi
 - all gates pass (see `docs/workflow.md`)
 
 Keep the `<details>`: only add the focus on open.
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3353
+gate_failures: []
+tokens: 1000791
+```
