@@ -30,3 +30,12 @@ The template is `factory_dashboard/templates/_partials/away.html`; read it for t
 - only `tests/factory_dashboard/test_overview.py` changes
 - the listed `tests:` pass
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 4435
+gate_failures: ['stopped', 'stopped']
+tokens: 307449
+```
