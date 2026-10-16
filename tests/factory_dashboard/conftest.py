@@ -1829,6 +1829,16 @@ def write_later(conn: sqlite3.Connection) -> None:
         difficulty=3,
         title="A set-aside ticket.",
     )
+    metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-97-later",
+        milestone_id=f1,
+        kind="lead",
+        state="later",
+        difficulty=2,
+        title="A lead set-aside ticket.",
+    )
 
 
 @pytest.fixture

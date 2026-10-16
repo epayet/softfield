@@ -290,20 +290,24 @@ def later_row(raw: str, ticket: str) -> dict[str, str]:
     return {col: text.strip() for col, text in cells}
 
 
-def test_later_tickets_panel_shows_ticket_with_title_and_queue_command(later_client):
+def test_later_tickets_panel_shows_kind(later_client):
     html = later_client.get("/tickets").text
     later_section = section_raw(html, "later")
-    row = later_row(later_section, "f1-99-later")
-    id_cell = row["id"]
-    # f4-always-on-F2: the link keeps the project, as the main table's do
+    dev_row = later_row(later_section, "f1-99-later")
+    id_cell = dev_row["id"]
     assert f'href="/tickets/f1-99-later?project={PROJECT}"' in id_cell
     assert "f1-99-later" in id_cell
-    assert row["goal"] == "A set-aside ticket."
-    assert "softfield queue f1-99-later" in row["queue"]
+    assert dev_row["goal"] == "A set-aside ticket."
+    assert dev_row["kind"] == "developer"
+    lead_row = later_row(later_section, "f1-97-later")
+    assert lead_row["goal"] == "A lead set-aside ticket."
+    assert lead_row["kind"] == "lead"
+    # No row shows the old queue command text
+    assert "softfield queue" not in later_section
     # Queue button's request (hx-vals parsed as JSON) is queue with that ticket's id as subject
     btn = re.search(
         r'<button[^>]*hx-post="/requests"[^>]*>Queue</button>',
-        row["queue"],
+        dev_row["queue"],
         re.S,
     )
     assert btn is not None, "Queue button not found"

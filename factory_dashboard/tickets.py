@@ -98,7 +98,7 @@ def list_later_tickets(
     where = " AND ".join(conditions)
 
     rows = conn.execute(
-        f"SELECT t.ticket, t.title "  # noqa: S608
+        f"SELECT t.ticket, t.title, t.kind "  # noqa: S608
         "FROM tickets t "
         "JOIN projects p ON p.id = t.project_id "
         "LEFT JOIN milestones m ON m.id = t.milestone_id "
@@ -110,6 +110,7 @@ def list_later_tickets(
         {
             "ticket": row["ticket"],
             "title": row["title"],
+            "kind": row["kind"],
         }
         for row in rows
     ]
