@@ -25,3 +25,12 @@ Read `test_no_page_or_stylesheet_names_a_third_party_host` and `test_the_logo_fo
 - the brand link is at least 44 px tall at 390 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 5756
+gate_failures: []
+tokens: 3415587
+```
