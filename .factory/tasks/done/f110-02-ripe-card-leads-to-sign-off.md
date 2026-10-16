@@ -25,3 +25,12 @@ Read `factory_dashboard/templates/board.html` (the `card_link` macro), `factory_
 - a growing card's and a harvested card's links have no fragment, and neither shows the words
 - on a phone, the ripe card's words fit inside the card
 - the listed tests pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4405
+gate_failures: []
+tokens: 1567853
+```
