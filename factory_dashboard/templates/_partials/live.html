@@ -4,7 +4,7 @@
 {% include "_partials/allowance.html" %}
 {% include "_partials/queue.html" %}
 {# What notify.js compares after each poll (f5-12): the open Needs-you items, id -> text, and whether all the work is done #}
-<div id="live-facts" hidden data-project="{{ project }}" data-needs='{{ notify | tojson }}' data-all-done="{{ 'true' if all_done else 'false' }}"></div>
+<div id="live-facts" hidden data-project="{{ project }}" data-needs='{{ notify | tojson }}' data-notices='{{ notices | tojson }}' data-all-done="{{ 'true' if all_done else 'false' }}"></div>
 {# The top bar's live facts (f6-09, f6-16), swapped out of band into it on every page: the Planning tab's words (innerHTML, so the tab stays current on /planning), the factory's status and its button #}
 <a id="planning-tab" href="/planning{{ q }}" hx-swap-oob="innerHTML">Planning{% if planning_count %} · {{ planning_count }}{% endif %}</a>
 {% include "_partials/bar_status.html" %}

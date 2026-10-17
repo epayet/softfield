@@ -2904,3 +2904,301 @@ def test_a_cancelled_plant_is_struck_through_in_next_in_line(client, db_path):
         "Plant: Rubber ducks · cancelling at the runner's next pick",
     ]
     assert re.findall(r"<s>(.*?)</s>", markup) == ["Rubber ducks"]
+
+
+def _live_facts(html: str) -> tuple[str, dict[str, str], dict[str, dict[str, str]], str]:
+    """The four data attributes on ``#live-facts``."""
+    facts = html.split('id="live-facts"')[1]
+    m = re.search(r'data-project="([^"]*)"', facts)
+    assert m is not None
+    project = m.group(1)
+    m = re.search(r"data-needs='([^']*)'", facts)
+    assert m is not None
+    needs = json.loads(m.group(1))
+    m = re.search(r"data-notices='([^']*)'", facts)
+    assert m is not None
+    notices_raw = m.group(1)
+    m = re.search(r'data-all-done="([^"]*)"', facts)
+    assert m is not None
+    all_done = m.group(1)
+    return project, needs, json.loads(notices_raw), all_done
+
+
+def test_a_lead_reply_on_a_card_with_two_open_proposals_says_how_many(serve_between, db_path):
+    """A lead's reply on a card with two open proposals: its notice is titled
+    "The lead replied: <the card's title>", says "2 proposals to review" and links
+    to ``/planning/<card>``."""
+    client = serve_between()
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(
+            conn,
+            project,
+            "f7",
+            title="The f7 card",
+            status="in progress",
+            started=(NOW - timedelta(days=1)).isoformat(),
+        )
+        thread = metrics.planner_thread(conn, project, "f7", NOW.isoformat())
+        proposals = json.dumps(
+            [
+                {"id": 1, "title": "Proposal one"},
+                {"id": 2, "title": "Proposal two"},
+            ]
+        )
+        metrics.add_planner_message(
+            conn,
+            thread["id"],
+            "lead",
+            NOW.isoformat(),
+            "A reply.",
+            proposals=proposals,
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "planning",
+            "f7",
+            text="The lead answered your message on f7.",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, _, notices, _ = _live_facts(html)
+    # Find the planning notice (the one with "The lead replied" title)
+    planning_notices = [n for n in notices.values() if n["title"].startswith("The lead replied:")]
+    assert len(planning_notices) == 1
+    notice = planning_notices[0]
+    assert "The f7 card" in notice["title"]
+    assert notice["body"] == "2 proposals to review"
+    assert notice["link"] == "/planning/f7?project=coucou"
+
+
+def test_a_lead_reply_with_no_proposal_says_answer_is_wanted(serve_between, db_path):
+    """A lead's reply with no proposal: "Your answer is wanted"; one proposal:
+    "1 proposal to review"."""
+    client = serve_between()
+    sign_off_all(db_path)
+    # Create a lead reply on a card that has no open proposals.
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        thread = metrics.planner_thread(conn, project, "f8", NOW.isoformat())
+        metrics.add_planner_message(conn, thread["id"], "lead", NOW.isoformat(), "A reply.")
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "planning",
+            "f8",
+            text="The lead answered your message on F8.",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, _, notices, _ = _live_facts(html)
+    planning_notices = [n for n in notices.values() if n["title"].startswith("The lead replied:")]
+    assert len(planning_notices) == 1
+    assert planning_notices[0]["body"] == "Your answer is wanted"
+
+
+def test_a_failed_leads_job_says_send_again(serve_between, db_path):
+    """A failed lead's job: titled "The lead couldn't answer: <the card's title>",
+    body "Send your message again"."""
+    client = serve_between()
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(
+            conn,
+            project,
+            "f7",
+            title="The f7 card",
+            status="in progress",
+            started=(NOW - timedelta(days=1)).isoformat(),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "planning",
+            "f7",
+            text="The lead couldn't answer on f7.",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, _, notices, _ = _live_facts(html)
+    fail_notices = [
+        n for n in notices.values() if n["title"].startswith("The lead couldn't answer:")
+    ]
+    assert len(fail_notices) == 1
+    assert "The f7 card" in fail_notices[0]["title"]
+    assert fail_notices[0]["body"] == "Send your message again"
+    assert fail_notices[0]["link"] == "/planning/f7?project=coucou"
+
+
+def test_a_reply_on_the_general_thread_is_titled_general(serve_between, db_path):
+    """A reply on the general thread is titled "The lead replied: General" and links
+    to ``/planning/general``."""
+    client = serve_between()
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        thread = metrics.planner_thread(conn, project, "general", NOW.isoformat())
+        metrics.add_planner_message(conn, thread["id"], "lead", NOW.isoformat(), "A reply.")
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "planning",
+            "general",
+            text="The lead answered your message on general.",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, _, notices, _ = _live_facts(html)
+    planning_notices = [n for n in notices.values() if n["title"] == "The lead replied: General"]
+    assert len(planning_notices) == 1
+    assert planning_notices[0]["body"] == "Your answer is wanted"
+    assert planning_notices[0]["link"] == "/planning/general?project=coucou"
+
+
+def test_an_open_signoff_item_says_ready_for_your_signoff(serve_between, db_path):
+    """An open ``signoff`` item: "Ready for your sign-off: <the card's title>",
+    body "Reviewed, waits for you", link ``/planning/<short key>``."""
+    client = serve_between()
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(
+            conn,
+            project,
+            "f8",
+            title="The f8 card",
+            status="in progress",
+            started=(NOW - timedelta(days=1)).isoformat(),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "signoff",
+            "f8",
+            text="softfield signoff f8",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, _, notices, _ = _live_facts(html)
+    signoff_notices = [
+        n for n in notices.values() if n["title"].startswith("Ready for your sign-off:")
+    ]
+    assert len(signoff_notices) == 1
+    assert "The f8 card" in signoff_notices[0]["title"]
+    assert signoff_notices[0]["body"] == "Reviewed, waits for you"
+    assert signoff_notices[0]["link"] == "/planning/f8?project=coucou"
+
+
+def test_an_open_review_stop_item_says_the_review_stopped(serve_between, db_path):
+    """An open ``review-stop`` item: "The review stopped: <the card's title>",
+    its stored text as the body, link ``/planning/<short key>``."""
+    client = serve_between()
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(
+            conn,
+            project,
+            "f8",
+            title="The f8 card",
+            status="in progress",
+            started=(NOW - timedelta(days=1)).isoformat(),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "review-stop",
+            "f8",
+            text="The review reason.",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, _, notices, _ = _live_facts(html)
+    review_notices = [n for n in notices.values() if n["title"].startswith("The review stopped:")]
+    assert len(review_notices) == 1
+    assert "The f8 card" in review_notices[0]["title"]
+    assert review_notices[0]["body"] == "The review reason."
+    assert review_notices[0]["link"] == "/planning/f8?project=coucou"
+
+
+def test_other_kinds_say_what_and_where(db_path):
+    """Items of kind ``adr``, ``blocked``, ``escalated``, ``reserve`` and ``five-hour``,
+    the stopped runner and the idle queue: the title D1's table gives, the item's text as
+    the body, link ``/``."""
+    from factory_dashboard.overview import Need, notices
+    from factory_dashboard.planning import _card_titles
+
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        card_titles = _card_titles(conn, project_id)
+    finally:
+        conn.close()
+
+    open_needs = [
+        Need("adr-1", "adr", "An ADR question."),
+        Need("blocked-1", "blocked", "A ticket is blocked."),
+        Need("escalated-1", "escalated", "An escalation."),
+        Need("reserve-1", "reserve", "Claude's reserve."),
+        Need("five-hour-1", "five-hour", "The 5-hour share."),
+        Need("runner-1", "runner", "The runner stopped mid-job."),
+        Need("queue-1", "queue", "The runner is idle."),
+    ]
+    result = notices(open_needs, card_titles, PROJECT, [])
+    expected_titles = {
+        "adr-1": "A decision for you",
+        "blocked-1": "A ticket is blocked",
+        "escalated-1": "A ticket is blocked",
+        "reserve-1": "Claude's allowance: your choice",
+        "five-hour-1": "Claude's allowance: your choice",
+        "runner-1": "The runner stopped",
+        "queue-1": "The runner is idle",
+    }
+    for nid, exp_title in expected_titles.items():
+        assert nid in result
+        assert result[nid]["title"] == exp_title
+        assert result[nid]["body"] == next(n.text for n in open_needs if n.id == nid)
+        assert result[nid]["link"] == f"/?project={PROJECT}"
+
+
+def test_data_notices_has_exactly_the_ids_data_needs_has(serve_between, db_path):
+    """Every link keeps the page's project, as the other links of the partial do.
+    ``data-notices`` has exactly the ids ``data-needs`` has."""
+    client = serve_between()
+    sign_off_all(db_path)
+    lead_replies(db_path, "f7")
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "signoff",
+            "f8",
+            text="softfield signoff f8",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, needs, notices, _ = _live_facts(html)
+    assert set(notices.keys()) == set(needs.keys())
+    # Every link keeps the project.
+    for notice in notices.values():
+        assert "?project=coucou" in notice["link"]

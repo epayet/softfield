@@ -8,8 +8,10 @@ allowance, savings for the current milestone and the Claude spend chart.
 
 import json
 import sqlite3
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import TypedDict
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -417,6 +419,7 @@ class Need:
     text: str
     command: str | None = None
     ticket: str | None = None
+    subject: str | None = None
 
 
 def needs_you(
@@ -435,7 +438,15 @@ def needs_you(
         (project,),
     ).fetchall()
     found = [
-        Need(f"owner-{i['id']}", i["kind"], i["text"] or i["subject"], i["command"]) for i in items
+        Need(
+            f"owner-{i['id']}",
+            i["kind"],
+            i["text"] or i["subject"],
+            i["command"],
+            None,
+            i["subject"],
+        )
+        for i in items
     ]
     stopped: dict[str, Running] = {}
     for job in jobs:
@@ -457,6 +468,116 @@ def needs_you(
         n = len(waiting)
         text = f"{n} ticket{'s' if n != 1 else ''} waiting and the runner is idle."
         found.append(Need("queue", "queue", text, _drain(waiting[0].milestone or "")))
+    return found
+
+
+# --- notices (D1: f114-01) ---------------------------------------------------
+
+
+class Notices(TypedDict):
+    title: str
+    body: str
+    link: str
+
+
+def notices(
+    open_needs: list[Need],
+    card_titles: dict[str, str],
+    project: str,
+    proposals: Sequence[object],
+) -> dict[str, Notices]:
+    """For every open need, its title, body and link, worded from the item's kind and its card.
+
+    The card's title comes from ``card_titles``; a card with no title in the database shows its
+    key.  The general thread is titled "General".
+    """
+    from runner.tasks import short_key
+
+    found: dict[str, Notices] = {}
+    for need in open_needs:
+        if need.kind == "planning":
+            card = need.subject or need.id
+            title = card_titles.get(card, card)
+            if card == "general":
+                title = "General"
+            if need.text and need.text.startswith("The lead couldn't answer"):
+                found[need.id] = {
+                    "title": f"The lead couldn't answer: {title}",
+                    "body": "Send your message again",
+                    "link": f"/planning/{card}?project={project}",
+                }
+                continue
+            # Count open proposals for this card (not on their way).
+            count = sum(
+                1
+                for p in proposals
+                if isinstance(p, object)
+                and getattr(p, "link", "").startswith(f"/planning/{card}/proposals/")
+                and not getattr(p, "on_its_way", False)
+            )
+            if count == 0:
+                body = "Your answer is wanted"
+            elif count == 1:
+                body = "1 proposal to review"
+            else:
+                body = f"{count} proposals to review"
+            found[need.id] = {
+                "title": f"The lead replied: {title}",
+                "body": body,
+                "link": f"/planning/{card}?project={project}",
+            }
+        elif need.kind == "signoff":
+            key = short_key(need.subject or need.id)
+            title = card_titles.get(key, key)
+            found[need.id] = {
+                "title": f"Ready for your sign-off: {title}",
+                "body": "Reviewed, waits for you",
+                "link": f"/planning/{key}?project={project}",
+            }
+        elif need.kind == "review-stop":
+            key = short_key(need.subject or need.id)
+            title = card_titles.get(key, key)
+            found[need.id] = {
+                "title": f"The review stopped: {title}",
+                "body": need.text,
+                "link": f"/planning/{key}?project={project}",
+            }
+        elif need.kind == "adr":
+            found[need.id] = {
+                "title": "A decision for you",
+                "body": need.text,
+                "link": f"/?project={project}",
+            }
+        elif need.kind == "blocked" or need.kind == "escalated":
+            found[need.id] = {
+                "title": "A ticket is blocked",
+                "body": need.text,
+                "link": f"/?project={project}",
+            }
+        elif need.kind == "reserve" or need.kind == "five-hour":
+            found[need.id] = {
+                "title": "Claude's allowance: your choice",
+                "body": need.text,
+                "link": f"/?project={project}",
+            }
+        elif need.kind == "runner":
+            found[need.id] = {
+                "title": "The runner stopped",
+                "body": need.text,
+                "link": f"/?project={project}",
+            }
+        elif need.kind == "queue":
+            found[need.id] = {
+                "title": "The runner is idle",
+                "body": need.text,
+                "link": f"/?project={project}",
+            }
+        elif need.kind == "all_done":
+            found[need.id] = {
+                "title": "All work done",
+                "body": need.text,
+                "link": f"/?project={project}",
+            }
     return found
 
 
@@ -627,9 +748,12 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     the run order)."""
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
     from factory_dashboard.planning import (  # planning.py imports from overview at module level
+        _card_titles,
+        _open_proposals,
         desk,
         waiting_for_you,
     )
+    from runner import metrics
 
     jobs = running_jobs(conn, project, now)
     all_queued = queue(conn, project, now)
@@ -640,11 +764,19 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     # the desk's entry stands for its answers wanted, its sign-offs and its blocked tickets, so no
     # lead reply (f6-09), no stored sign-off row (f95-01) and no blocked row shows on its own
     needs = [n for n in open_needs if n.kind not in ("planning", "signoff", "blocked")]
+    project_id = metrics.find_project(conn, project)
+    card_titles: dict[str, str] = {}
+    proposals: Sequence[object] = []
+    if project_id is not None:
+        card_titles = _card_titles(conn, project_id)
+        proposals = _open_proposals(conn, project_id)
     items = waiting_for_you(desk(conn, project, now))  # what the owner acted on waits on no one
     if items:
         n = len(items)
         text = f"{n} thing{'s wait' if n != 1 else ' waits'} for you on your desk"
         needs.insert(0, Need("desk", "desk", text))
+    # D1: word each notice from the item's kind and its card
+    notice_data = notices(open_needs, card_titles, project, proposals)
     return {
         "needs": needs,
         "desk_items": items[:3],
@@ -652,6 +784,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         # what notify.js compares after each poll (f5-12), each lead reply still on its own:
         # a job stopped mid-way isn't done
         "notify": {need.id: need.text for need in open_needs},
+        "notices": notice_data,
         "all_done": not (all_queued or qjobs or jobs),
         "running": [job for job in jobs if job.live],
         "runs": live_runs(conn, project, now),
