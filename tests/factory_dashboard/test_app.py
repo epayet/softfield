@@ -1958,6 +1958,9 @@ def test_pressing_the_button_switches_to_light_at_once(page, client):
     fg = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()")
     assert floor == "#eceee9", f"floor {floor} != light floor"
     assert fg == "#16191d", f"fg {fg} != light fg"
+    # The series colour the spend chart reads from --a2 (== --opus) has changed
+    a2 = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--a2').trim()")
+    assert a2 == "#ff9640", f"a2 {a2} != light a2"
 
 
 def test_the_choice_stays_on_reload(page, client):
@@ -2055,6 +2058,8 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
     header = page.locator("header.bar")
     # Dark theme height as the baseline
     dark_height = header.evaluate("el => el.getBoundingClientRect().height")
+    # At 390px the header has wrapped tabs; verify it stays within the expected bound
+    assert dark_height <= 96, f"dark header {dark_height}px exceeds the expected maximum at 390px"
     # Switch to light and compare against the prior height
     page.evaluate("document.getElementById('theme-btn').click()")
     light_height = header.evaluate("el => el.getBoundingClientRect().height")
