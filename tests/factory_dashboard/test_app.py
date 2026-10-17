@@ -1965,3 +1965,58 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
     height = header.evaluate("el => el.getBoundingClientRect().height")
     # The bar should not be taller than the phone compact limit (150px as in other tests)
     assert height <= 150, f"header height {height}px > 150px at 390px viewport"
+
+
+def test_live_system_theme_changes_sync_button_and_dispatch_themechange(page, client):
+    """f69-02: when the system preference changes with nothing stored the button and charts stay
+    in sync (C1026-2)."""
+    page.set_viewport_size(DISPLAY)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    # Intercept matchMedia to capture the system-preference listener callback
+    page.add_init_script("""
+        var _originalMatchMedia = window.matchMedia;
+        window.matchMedia = function(query) {
+            var mql = _originalMatchMedia.call(window, query);
+            if (query === "(prefers-color-scheme: light)") {
+                var origAddEventListener = mql.addEventListener.bind(mql);
+                mql.addEventListener = function(event, callback) {
+                    if (event === "change") window._themeListener = callback;
+                    return origAddEventListener(event, callback);
+                };
+            }
+            return mql;
+        };
+    """)
+    page.emulate_media(color_scheme="dark")
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    assert page.locator("#theme-btn").text_content() == "Light"
+    # Simulate a live system preference change to light (the browser won't fire this naturally)
+    page.evaluate("window._themeFired = false")
+    page.evaluate("""
+        document.addEventListener('themechange', function() { window._themeFired = true; });
+    """)
+    page.evaluate("""
+        var mql = matchMedia("(prefers-color-scheme: light)");
+        Object.defineProperty(mql, 'matches', { value: true, writable: true, configurable: true });
+        window._themeListener({ matches: true });
+    """)
+    # data-theme should have changed
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    # button should say Night (offering to switch back to dark)
+    assert page.locator("#theme-btn").text_content() == "Night"
+    assert (
+        page.evaluate("document.getElementById('theme-btn').title") == "Switch to the night theme"
+    )
+    # themechange should have been dispatched (charts redraw on this event)
+    assert page.evaluate("window._themeFired") is True

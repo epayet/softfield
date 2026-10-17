@@ -16,6 +16,13 @@
     if (!stored) {
       matchMedia("(prefers-color-scheme: light)").addEventListener("change", function(e) {
         document.documentElement.setAttribute("data-theme", e.matches ? "light" : "dark");
+        var btn = document.getElementById("theme-btn");
+        if (btn) {
+          var t = document.documentElement.getAttribute("data-theme");
+          btn.textContent = t === "light" ? "Night" : "Light";
+          btn.title = t === "light" ? "Switch to the night theme" : "Switch to the light theme";
+        }
+        document.dispatchEvent(new Event("themechange"));
       });
     }
   })();
