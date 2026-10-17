@@ -1040,6 +1040,62 @@ def test_fallback_to_direct_notification_when_showNotification_rejects(
     assert len(shown) == 1 and "A fallback question." in shown[0]["body"]
 
 
+def test_bundled_notifications_include_the_project_context(page, serve_between, db_path):
+    """f114-05: bundled (multi-item) notifications keep the page's project in their link."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 33",
+            text="First bundled item.",
+            created=NOW.isoformat(),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 34",
+            text="Second bundled item.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+
+    entry = page.evaluate("window.sw_notifications[0]")
+    assert entry["title"] == "2 things need you"
+    assert "?project=coucou" in entry["data"]["link"]
+    assert page.evaluate("window.shown") == []
+
+
 # --- notification bar (f12-01, ADR 26 item 2) ----------------------------------------------
 
 # A stand-in for the browser's Notification: it records what the page asks and shows.

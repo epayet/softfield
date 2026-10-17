@@ -54,7 +54,7 @@
     } else {
       const count = newIds.length;
       const titles = newIds.map(id => notices[id].title).join("\n");
-      show(count + " things need you", titles, "bundle", "/planning");
+      show(count + " things need you", titles, "bundle", "/planning?project=" + facts.dataset.project);
     }
   }
 
