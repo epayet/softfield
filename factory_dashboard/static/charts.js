@@ -258,12 +258,28 @@
           }
         });
       }
+      // Store the chart instance for theme redraws.
+      el._chart = chart;
     }
+  }
+
+  // Redraw every chart with the new theme colours (f69-01).
+  function redrawAll() {
+    for (const el of document.querySelectorAll("[data-chart]")) {
+      const chart = el._chart;
+      if (!chart) continue;
+      chart.dispose();
+      delete el._chart;
+      delete el.dataset.drawn;
+    }
+    draw(document);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
     draw(document);
     // Partials htmx swaps in may hold charts too.
     document.body.addEventListener("htmx:afterSwap", (event) => draw(event.target));
+    // Theme change: dispose and redraw every chart (f69-01).
+    document.addEventListener("themechange", redrawAll);
   });
 })();

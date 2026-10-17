@@ -6,6 +6,20 @@
 <title>{% block title %}{{ project }}{% endblock %} · SoftField</title>
 <link rel="icon" type="image/svg+xml" href="{{ static('softfield.svg') }}">
 <link rel="stylesheet" href="{{ static('dashboard.css') }}">
+<script>
+  // No flash: set data-theme before the stylesheet paints (f69-01).
+  (function() {
+    var stored = null;
+    try { stored = localStorage.getItem("theme"); } catch(e) {}
+    var theme = stored || (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+    document.documentElement.setAttribute("data-theme", theme);
+    if (!stored) {
+      matchMedia("(prefers-color-scheme: light)").addEventListener("change", function(e) {
+        document.documentElement.setAttribute("data-theme", e.matches ? "light" : "dark");
+      });
+    }
+  })();
+</script>
 <script src="{{ static('vendor/htmx.min.js') }}" defer></script>
 <script src="{{ static('vendor/echarts.min.js') }}" defer></script>
 <script src="{{ static('charts.js') }}" defer></script>
@@ -34,6 +48,30 @@
   document.addEventListener("DOMContentLoaded", () => {
     const tab = document.querySelector("nav.tabs a[aria-current='page']");
     if (tab) tab.scrollIntoView({ inline: "center", block: "nearest" });
+  });
+  // Theme switch button (f69-01): sets data-theme, stores the choice, dispatches themechange.
+  document.addEventListener("DOMContentLoaded", () => {
+    var btn = document.getElementById("theme-btn");
+    if (!btn) return;
+    function update() {
+      var t = document.documentElement.getAttribute("data-theme");
+      if (t === "light") {
+        btn.textContent = "Night";
+        btn.title = "Switch to the night theme";
+      } else {
+        btn.textContent = "Light";
+        btn.title = "Switch to the light theme";
+      }
+    }
+    btn.addEventListener("click", () => {
+      var cur = document.documentElement.getAttribute("data-theme");
+      var next = cur === "light" ? "dark" : "light";
+      document.documentElement.setAttribute("data-theme", next);
+      try { localStorage.setItem("theme", next); } catch(e) {}
+      document.dispatchEvent(new Event("themechange"));
+      update();
+    });
+    update();
   });
   // The top bar's Pause or Resume (f6-16) shows what was asked at once, on its way, and goes
   // until the next poll brings the runner's own state: the request waits for its next pick.
@@ -116,6 +154,7 @@
       </label>
       <noscript><button>Show</button></noscript>
     </form>
+    <button id="theme-btn" class="theme-btn" title="Switch to the light theme">Light</button>
   </div>
   <div class="hazard" aria-hidden="true"></div>
   <nav class="tabs" aria-label="Pages">

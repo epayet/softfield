@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import json
 import os
@@ -194,11 +195,10 @@ def _resolve_tokens(css: str, scheme: str) -> dict[str, str]:
         for k, _v in dark.items():
             resolved[k] = _resolve(dark, k)
         return resolved
-    light_start = css.index("@media (prefers-color-scheme: light)")
-    light_block_start = css.index(":root {", light_start)
-    light_body_start = light_block_start + len(":root {")
+    light_start = css.index(':root[data-theme="light"]')
+    light_body_start = css.index("{", light_start) + 1
     light_body_end = css.index("}", light_body_start)
-    light = dict(re.findall(r"(--[\w-]+):\s*([^;]+);", css[light_block_start:light_body_end]))
+    light = dict(re.findall(r"(--[\w-]+):\s*([^;]+);", css[light_start:light_body_end]))
     merged = {**dark, **light}
     resolved = {}
     for k, _v in merged.items():
@@ -249,8 +249,9 @@ MOCKUP = {  # .factory/cards/f1-factory-mockup.html's :root, and the board's are
 def test_dark_is_the_default_and_light_follows_the_system():
     css = (STATIC / "dashboard.css").read_text()
     dark = _block(css, ":root {")
-    light = {**dark, **_block(css, "@media (prefers-color-scheme: light) { :root {")}
+    light = {**dark, **_block(css, ':root[data-theme="light"] {')}
     assert "prefers-color-scheme: dark" not in css
+    assert "prefers-color-scheme: light" not in css
     assert {name: _resolve(dark, name) for name in MOCKUP} == MOCKUP
     # light: a pale floor, the same hazard yellow and orange
     assert _luminance(_resolve(light, "--floor")) > 0.8
@@ -325,6 +326,8 @@ def test_the_logo_follows_the_theme_tokens(page, client, scheme):
 
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
+    # The CSS now uses data-theme instead of prefers-color-scheme
+    page.evaluate(f'document.documentElement.setAttribute("data-theme", "{scheme}")')
     svg = page.locator(".brand svg")
     assert svg.is_visible()
     crate = page.locator(".brand svg .crate")
@@ -361,6 +364,8 @@ def test_the_logo_themes_differ(page, client):
 
     page.emulate_media(color_scheme="dark")
     page.goto(ORIGIN + "/")
+    page.evaluate("localStorage.removeItem('theme')")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     crate_dark = page.locator(".brand svg .crate").evaluate("el => getComputedStyle(el).fill")
     sprout_dark = page.locator(".brand svg .sprout").first.evaluate(
         "el => getComputedStyle(el).getPropertyValue('stroke').trim()"
@@ -369,6 +374,8 @@ def test_the_logo_themes_differ(page, client):
 
     page.emulate_media(color_scheme="light")
     page.goto(ORIGIN + "/")
+    page.evaluate("localStorage.removeItem('theme')")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
     crate_light = page.locator(".brand svg .crate").evaluate("el => getComputedStyle(el).fill")
     sprout_light = page.locator(".brand svg .sprout").first.evaluate(
         "el => getComputedStyle(el).getPropertyValue('stroke').trim()"
@@ -549,6 +556,9 @@ def test_the_overview_wears_the_factory_look_in_both_themes(
     The screenshot lands in ``tmp_path`` (``--basetemp`` keeps it, for the job's notes)."""
     page.emulate_media(color_scheme=scheme)
     page.set_viewport_size(size)
+    # Clear any stored theme so the page follows the system preference
+    with contextlib.suppress(Exception):
+        page.evaluate("localStorage.removeItem('theme')")
     open_overview(page, client)
     page.evaluate("() => document.fonts.ready")
     assert page.evaluate("() => getComputedStyle(document.body).backgroundColor") == floor
@@ -1796,3 +1806,125 @@ def test_ago_shows_days_from_48_hours_on():
     assert ago(timedelta(hours=120)) == "5 days"
     assert ago(timedelta(hours=48.1)) == "2 days"
     assert ago(timedelta(hours=0)) == "0 s"
+
+
+# --- theme switch button (f69-01) ----------------------------------------------------------------
+
+
+def test_every_page_has_the_theme_button(client):
+    """Every page's top bar has the Light/Night button."""
+    for path in PAGES:
+        html = client.get(path).text
+        assert re.search(r'<button[^>]*id="theme-btn"[^>]*>', html), path
+
+
+def test_the_theme_button_says_night_when_dark(page, client):
+    """By default (dark), the button says "Light" with the right title."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="dark")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    btn = page.locator("#theme-btn")
+    assert btn.text_content() == "Light"
+    assert btn.evaluate("el => el.title") == "Switch to the light theme"
+
+
+def test_pressing_the_button_switches_to_light_at_once(page, client):
+    """Pressing the button switches to light immediately, charts included."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="dark")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    # Verify initial state
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    # Click the button via JavaScript to ensure the event fires
+    page.evaluate("document.getElementById('theme-btn').click()")
+    # The button now says "Night" (offering to switch back)
+    btn = page.locator("#theme-btn")
+    assert btn.text_content() == "Night"
+    assert btn.evaluate("el => el.title") == "Switch to the night theme"
+    # The html element has data-theme="light"
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+
+
+def test_the_choice_stays_on_reload(page, client):
+    """The theme choice persists on reload and across pages."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="dark")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    # Click the button via JavaScript to ensure the event fires
+    page.evaluate("document.getElementById('theme-btn').click()")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+
+
+def test_without_stored_value_follows_the_system(page, client):
+    """With nothing stored, the page follows the system preference."""
+    page.set_viewport_size(DISPLAY)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    # With no stored value and dark system: data-theme starts as dark
+    page.emulate_media(color_scheme="dark")
+    page.goto(ORIGIN + "/")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
+    # With light system: data-theme starts as light
+    page.emulate_media(color_scheme="light")
+    page.goto(ORIGIN + "/")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+
+
+def test_at_390px_the_top_bar_is_no_taller(page, client):
+    """At 390 px the top bar is no taller than before the button was added."""
+    page.set_viewport_size({"width": 390, "height": 844})
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    header = page.locator("header.bar")
+    height = header.evaluate("el => el.getBoundingClientRect().height")
+    # The bar should not be taller than the phone compact limit (150px as in other tests)
+    assert height <= 150, f"header height {height}px > 150px at 390px viewport"
