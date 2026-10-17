@@ -1901,6 +1901,13 @@ def test_pressing_the_button_switches_to_light_at_once(page, client):
     assert btn.evaluate("el => el.title") == "Switch to the night theme"
     # The html element has data-theme="light"
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    # The CSS custom properties the charts and floor read have actually changed
+    floor = page.evaluate(
+        "getComputedStyle(document.documentElement).getPropertyValue('--floor').trim()"
+    )
+    fg = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()")
+    assert floor == "#eceee9", f"floor {floor} != light floor"
+    assert fg == "#16191d", f"fg {fg} != light fg"
 
 
 def test_the_choice_stays_on_reload(page, client):
@@ -1922,6 +1929,12 @@ def test_the_choice_stays_on_reload(page, client):
     # Click the button via JavaScript to ensure the event fires
     page.evaluate("document.getElementById('theme-btn').click()")
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    # Persist on reload
+    page.reload()
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    # Persist across pages
+    page.goto(ORIGIN + "/tickets")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
 
 
 def test_without_stored_value_follows_the_system(page, client):
@@ -1937,14 +1950,42 @@ def test_without_stored_value_follows_the_system(page, client):
             r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
 
     page.route(f"{ORIGIN}/**", route)
+    # Intercept matchMedia to capture the system-preference listener callback
+    page.add_init_script("""
+        var _originalMatchMedia = window.matchMedia;
+        window.matchMedia = function(query) {
+            var mql = _originalMatchMedia.call(window, query);
+            if (query === "(prefers-color-scheme: light)") {
+                var origAddEventListener = mql.addEventListener.bind(mql);
+                mql.addEventListener = function(event, callback) {
+                    if (event === "change") window._themeListener = callback;
+                    return origAddEventListener(event, callback);
+                };
+            }
+            return mql;
+        };
+    """)
     # With no stored value and dark system: data-theme starts as dark
     page.emulate_media(color_scheme="dark")
     page.goto(ORIGIN + "/")
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
-    # With light system: data-theme starts as light
-    page.emulate_media(color_scheme="light")
-    page.goto(ORIGIN + "/")
+    # Live system change to light: the button updates and visual properties change
+    page.evaluate("window._themeFired = false")
+    page.evaluate("""
+        document.addEventListener('themechange', function() { window._themeFired = true; });
+    """)
+    page.evaluate("""
+        var mql = matchMedia("(prefers-color-scheme: light)");
+        Object.defineProperty(mql, 'matches', { value: true, writable: true, configurable: true });
+        window._themeListener({ matches: true });
+    """)
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    assert page.locator("#theme-btn").text_content() == "Night"
+    floor = page.evaluate(
+        "getComputedStyle(document.documentElement).getPropertyValue('--floor').trim()"
+    )
+    assert floor == "#eceee9", f"floor {floor} != light floor"
+    assert page.evaluate("window._themeFired") is True
 
 
 def test_at_390px_the_top_bar_is_no_taller(page, client):
@@ -1962,9 +2003,14 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     header = page.locator("header.bar")
-    height = header.evaluate("el => el.getBoundingClientRect().height")
-    # The bar should not be taller than the phone compact limit (150px as in other tests)
-    assert height <= 150, f"header height {height}px > 150px at 390px viewport"
+    # Dark theme height as the baseline
+    dark_height = header.evaluate("el => el.getBoundingClientRect().height")
+    # Switch to light and compare against the prior height
+    page.evaluate("document.getElementById('theme-btn').click()")
+    light_height = header.evaluate("el => el.getBoundingClientRect().height")
+    assert light_height <= dark_height + 2, (
+        f"light header {light_height}px > dark {dark_height}px + 2px at 390px viewport"
+    )
 
 
 def test_live_system_theme_changes_sync_button_and_dispatch_themechange(page, client):
