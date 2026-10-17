@@ -30,3 +30,12 @@ Read `factory_dashboard/templates/base.html` (the top bar, "Turn on notification
 - at 390 px the top bar is no taller than before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 9345
+gate_failures: ['task-tests']
+tokens: 5907669
+```
