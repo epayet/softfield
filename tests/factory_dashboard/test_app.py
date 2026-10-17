@@ -131,7 +131,9 @@ def test_a_page_that_names_cdn_example_com_after_the_top_bar_fails():
         for m in re.finditer(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}(/[^\s\"'<>]*)?", text)
         if m.group() not in ("http://www.w3.org/2000/svg",)
     ]
-    assert found, "expected https://cdn.example.com to be detected as third-party host"
+    assert "https://cdn.example.com/x.js" in found, (
+        "expected https://cdn.example.com/x.js to be detected as third-party host"
+    )
 
 
 def test_no_template_has_a_bare_static_link():
