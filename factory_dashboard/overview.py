@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import TypedDict
+from urllib.parse import quote
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -504,7 +505,7 @@ def notices(
                 found[need.id] = {
                     "title": f"The lead couldn't answer: {title}",
                     "body": "Send your message again",
-                    "link": f"/planning/{card}?project={project}",
+                    "link": f"/planning/{card}?project={quote(project)}",
                 }
                 continue
             # Count open proposals for this card (not on their way).
@@ -524,7 +525,7 @@ def notices(
             found[need.id] = {
                 "title": f"The lead replied: {title}",
                 "body": body,
-                "link": f"/planning/{card}?project={project}",
+                "link": f"/planning/{card}?project={quote(project)}",
             }
         elif need.kind == "signoff":
             key = short_key(need.subject or need.id)
@@ -532,7 +533,7 @@ def notices(
             found[need.id] = {
                 "title": f"Ready for your sign-off: {title}",
                 "body": "Reviewed, waits for you",
-                "link": f"/planning/{key}?project={project}",
+                "link": f"/planning/{key}?project={quote(project)}",
             }
         elif need.kind == "review-stop":
             key = short_key(need.subject or need.id)
@@ -540,43 +541,43 @@ def notices(
             found[need.id] = {
                 "title": f"The review stopped: {title}",
                 "body": need.text,
-                "link": f"/planning/{key}?project={project}",
+                "link": f"/planning/{key}?project={quote(project)}",
             }
         elif need.kind == "adr":
             found[need.id] = {
                 "title": "A decision for you",
                 "body": need.text,
-                "link": f"/?project={project}",
+                "link": f"/?project={quote(project)}",
             }
         elif need.kind == "blocked" or need.kind == "escalated":
             found[need.id] = {
                 "title": "A ticket is blocked",
                 "body": need.text,
-                "link": f"/?project={project}",
+                "link": f"/?project={quote(project)}",
             }
         elif need.kind == "reserve" or need.kind == "five-hour":
             found[need.id] = {
                 "title": "Claude's allowance: your choice",
                 "body": need.text,
-                "link": f"/?project={project}",
+                "link": f"/?project={quote(project)}",
             }
         elif need.kind == "runner":
             found[need.id] = {
                 "title": "The runner stopped",
                 "body": need.text,
-                "link": f"/?project={project}",
+                "link": f"/?project={quote(project)}",
             }
         elif need.kind == "queue":
             found[need.id] = {
                 "title": "The runner is idle",
                 "body": need.text,
-                "link": f"/?project={project}",
+                "link": f"/?project={quote(project)}",
             }
         elif need.kind == "all_done":
             found[need.id] = {
                 "title": "All work done",
                 "body": need.text,
-                "link": f"/?project={project}",
+                "link": f"/?project={quote(project)}",
             }
     return found
 

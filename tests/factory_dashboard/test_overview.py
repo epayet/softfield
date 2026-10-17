@@ -3210,3 +3210,39 @@ def test_data_notices_has_the_ids(serve_between, db_path):
     # Every link keeps the project.
     for notice in notices.values():
         assert "?project=coucou" in notice["link"]
+
+
+def test_notices_encode_project_with_special_characters(db_path):
+    """f114-03: notice links URL-encode the project so names with & or # are not truncated."""
+    from factory_dashboard.overview import Need, notices
+    from factory_dashboard.planning import _card_titles
+
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        card_titles = _card_titles(conn, project_id)
+    finally:
+        conn.close()
+
+    open_needs = [
+        Need("adr-1", "adr", "A question."),
+        Need("planning-1", "planning", "A planning need."),
+        Need("blocked-1", "blocked", "Blocked."),
+        Need("signoff-1", "signoff", "Signoff.", subject="f8"),
+        Need("review-1", "review-stop", "Stopped.", subject="f8"),
+    ]
+    tricky = "my&proj#2"
+    result = notices(open_needs, card_titles, tricky, [])
+
+    # The & and # must be percent-encoded in every link.
+    for _nid, notice in result.items():
+        assert "?project=" in notice["link"]
+        assert "&" not in notice["link"].split("?project=")[1]
+        assert "#" not in notice["link"].split("?project=")[1]
+
+    # The planning link must have the card path and encoded project.
+    assert result["planning-1"]["link"] == "/planning/planning-1?project=my%26proj%232"
+    # The ADR link must have the encoded project.
+    assert result["adr-1"]["link"] == "/?project=my%26proj%232"
