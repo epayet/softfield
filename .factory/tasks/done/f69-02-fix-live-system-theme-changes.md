@@ -26,3 +26,12 @@ f69-i-want-a-button-to-switch-C1026-2: Live system-theme changes leave the butto
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 5855
+gate_failures: []
+tokens: 855815
+```
