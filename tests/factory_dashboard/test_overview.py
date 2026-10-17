@@ -3012,6 +3012,50 @@ def test_a_lead_reply_with_no_proposal_says_answer_is_wanted(serve_between, db_p
     assert planning_notices[0]["body"] == "Your answer is wanted"
 
 
+def test_a_lead_reply_with_one_proposal_says_one_to_review(serve_between, db_path):
+    """A lead's reply with one open proposal: "1 proposal to review"."""
+    client = serve_between()
+    sign_off_all(db_path)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_milestone(
+            conn,
+            project,
+            "f7",
+            title="The f7 card",
+            status="in progress",
+            started=(NOW - timedelta(days=1)).isoformat(),
+        )
+        thread = metrics.planner_thread(conn, project, "f7", NOW.isoformat())
+        proposals = json.dumps([{"id": 1, "title": "Proposal one"}])
+        metrics.add_planner_message(
+            conn,
+            thread["id"],
+            "lead",
+            NOW.isoformat(),
+            "A reply.",
+            proposals=proposals,
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "planning",
+            "f7",
+            text="The lead answered your message on f7.",
+        )
+    finally:
+        conn.close()
+    html = client.get("/live").text
+    _, notices, _ = _live_facts(html)
+    planning_notices = [n for n in notices.values() if n["title"].startswith("The lead replied:")]
+    assert len(planning_notices) == 1
+    notice = planning_notices[0]
+    assert "The f7 card" in notice["title"]
+    assert notice["body"] == "1 proposal to review"
+    assert notice["link"] == "/planning/f7?project=coucou"
+
+
 def test_a_failed_leads_job_says_send_again(serve_between, db_path):
     """A failed lead's job: titled "The lead couldn't answer: <the card's title>",
     body "Send your message again"."""
@@ -3189,14 +3233,21 @@ def test_other_kinds_say_what_and_where(db_path):
 
 def test_data_notices_has_the_ids(serve_between, db_path):
     """Every link keeps the page's project, as the other links of the partial do.
-    ``data-notices`` has the ids of open owner items."""
+    ``data-notices`` has the ids of open owner items, with keys matching the open items."""
     client = serve_between()
     sign_off_all(db_path)
     lead_replies(db_path, "f7")
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
-        metrics.upsert_owner_item(
+        planning_id = metrics.upsert_owner_item(
+            conn,
+            project,
+            "planning",
+            "f7",
+            text="The lead answered your message on F7.",
+        )
+        signoff_id = metrics.upsert_owner_item(
             conn,
             project,
             "signoff",
@@ -3210,6 +3261,8 @@ def test_data_notices_has_the_ids(serve_between, db_path):
     # Every link keeps the project.
     for notice in notices.values():
         assert "?project=coucou" in notice["link"]
+    # The notice keys exactly match the open items.
+    assert set(notices) == {f"owner-{planning_id}", f"owner-{signoff_id}"}
 
 
 def test_notices_encode_project_with_special_characters(db_path):
@@ -3246,3 +3299,52 @@ def test_notices_encode_project_with_special_characters(db_path):
     assert result["planning-1"]["link"] == "/planning/planning-1?project=my%26proj%232"
     # The ADR link must have the encoded project.
     assert result["adr-1"]["link"] == "/?project=my%26proj%232"
+
+
+def test_planning_notice_falls_back_to_card_key_when_no_title(serve_between, db_path):
+    """A card without a title in the database uses its key as the notice title."""
+    from factory_dashboard.overview import Need, notices
+    from factory_dashboard.planning import _card_titles
+
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        card_titles = _card_titles(conn, project_id)
+    finally:
+        conn.close()
+
+    open_needs = [
+        Need("planning-1", "planning", "A planning need.", subject="f99"),
+    ]
+    result = notices(open_needs, card_titles, PROJECT, [])
+
+    assert "planning-1" in result
+    assert result["planning-1"]["title"] == "The lead replied: f99"
+    assert result["planning-1"]["body"] == "Your answer is wanted"
+    assert result["planning-1"]["link"] == "/planning/f99?project=coucou"
+
+
+def test_signoff_notice_uses_short_key_for_full_milestone_key(serve_between, db_path):
+    """f114-04: a signoff notice for a full milestone key uses short_key to produce the link."""
+    from factory_dashboard.overview import Need, notices
+    from factory_dashboard.planning import _card_titles
+
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[
+            "id"
+        ]
+        card_titles = _card_titles(conn, project_id)
+    finally:
+        conn.close()
+
+    open_needs = [
+        Need("signoff-1", "signoff", "Reviewed, waits for you", subject="f8-factory-line"),
+    ]
+    result = notices(open_needs, card_titles, PROJECT, [])
+
+    assert "signoff-1" in result
+    assert result["signoff-1"]["title"] == "Ready for your sign-off: f8"
+    assert result["signoff-1"]["link"] == "/planning/f8?project=coucou"
