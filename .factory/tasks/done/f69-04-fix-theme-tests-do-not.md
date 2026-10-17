@@ -27,3 +27,12 @@ f69-i-want-a-button-to-switch-C1035-2: Theme tests do not verify rendered chart 
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3710
+gate_failures: []
+tokens: 749885
+```
