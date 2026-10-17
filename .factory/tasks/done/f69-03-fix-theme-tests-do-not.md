@@ -27,3 +27,12 @@ f69-i-want-a-button-to-switch-C1026-3: Theme tests do not verify the promised vi
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3880
+gate_failures: []
+tokens: 2388850
+```
