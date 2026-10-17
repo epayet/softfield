@@ -26,3 +26,12 @@ f69-i-want-a-button-to-switch-C1035-1: The CDN regression test does not exercise
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2475
+gate_failures: []
+tokens: 309074
+```
