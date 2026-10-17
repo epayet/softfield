@@ -25,3 +25,12 @@ f69-i-want-a-button-to-switch-C1035-3: Notice links do not encode the project qu
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4603
+gate_failures: []
+tokens: 1384357
+```
