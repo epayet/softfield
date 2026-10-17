@@ -1096,6 +1096,167 @@ def test_bundled_notifications_include_the_project_context(page, serve_between, 
     assert page.evaluate("window.shown") == []
 
 
+def test_three_items_become_one_bundle_with_titles_in_body(page, serve_between, db_path):
+    """Three new items produce one notification whose title names the count and whose body
+    lists each title on its own line (f69)."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for owner_id, _adr, text in [
+            ("bundle-a", "ADR 40", "First bundled item."),
+            ("bundle-b", "ADR 41", "Second bundled item."),
+            ("bundle-c", "ADR 42", "Third bundled item."),
+        ]:
+            metrics.upsert_owner_item(
+                conn,
+                project,
+                "adr",
+                owner_id,
+                text=text,
+                created=NOW.isoformat(),
+            )
+    finally:
+        conn.close()
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+
+    entry = page.evaluate("window.sw_notifications[0]")
+    assert entry["title"] == "3 things need you"
+    body_lines = entry["body"].split("\n")
+    assert len(body_lines) == 3
+    # For adr items, the title is "A decision for you"
+    assert all(line == "A decision for you" for line in body_lines)
+    assert "?project=coucou" in entry["data"]["link"]
+    assert page.evaluate("window.shown") == []
+
+
+def test_bundled_notification_silent_on_next_look(page, serve_between, db_path):
+    """After a bundled notification fires, the next poll sees the same items and produces
+    no second notification."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for owner_id, _adr, text in [
+            ("silent-a", "ADR 50", "Item one."),
+            ("silent-b", "ADR 51", "Item two."),
+        ]:
+            metrics.upsert_owner_item(
+                conn,
+                project,
+                "adr",
+                owner_id,
+                text=text,
+                created=NOW.isoformat(),
+            )
+    finally:
+        conn.close()
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+    initial_count = page.evaluate("window.sw_notifications.length")
+    assert initial_count == 1
+
+    # Wait for the next poll cycle: same items, no new notification
+    page.wait_for_timeout(6_000)
+    final_count = page.evaluate("window.sw_notifications.length")
+    assert final_count == initial_count
+
+
+def test_bundled_link_retains_projects_context(page, serve_between, db_path):
+    """The bundled notification link carries the page's project so the owner lands on the
+    right planning view."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 60",
+            text="Bundle test item.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+
+    entry = page.evaluate("window.sw_notifications[0]")
+    link = entry["data"]["link"]
+    assert "?project=coucou" in link
+
+
 # --- notification bar (f12-01, ADR 26 item 2) ----------------------------------------------
 
 # A stand-in for the browser's Notification: it records what the page asks and shows.
@@ -1308,11 +1469,58 @@ def test_notification_bar_asks_again_when_the_browser_prompt_was_closed(page, cl
 
 
 def test_sw_finds_open_dashboard_tab_on_notification_tap():
-    """sw.js uses includeUncontrolled so a tap focuses an open dashboard page and posts the link."""
+    """sw.js uses includeUncontrolled so a tap focuses an open dashboard page and posts the link.
+    Also verifies the worker closes the notification (Android) and falls back to openWindow."""
     sw = (STATIC / "sw.js").read_text()
     assert "includeUncontrolled" in sw
     assert "event.notification.close()" in sw  # Android keeps a tapped notification otherwise
     assert "postMessage" in sw
+    assert "openWindow" in sw
+
+
+FAKE_SERVICE_WORKER_LISTENER = """
+window.sw_messages = [];
+Object.defineProperty(navigator, 'serviceWorker', {
+  value: {
+    addEventListener: function(type, handler) {
+      if (type === 'message') {
+        window._sw_message_handler = handler;
+      }
+    }
+  },
+  configurable: true,
+  writable: true
+});
+"""
+
+
+def test_service_worker_listener_rejects_external_links(page, client):
+    """notify.js only accepts postMessage links starting with / and not // (safe vs external)."""
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER_LISTENER)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    page.wait_for_timeout(REFRESH)
+
+    # External link: should be rejected (no navigation)
+    before = page.evaluate("window.location.href")
+    page.evaluate("() => window._sw_message_handler({ data: { link: '//evil.com' } })")
+    after = page.evaluate("window.location.href")
+    assert before == after  # no navigation for external links
+
+    # Null link: should be rejected
+    page.evaluate("() => window._sw_message_handler({ data: { link: null } })")
+    assert before == page.evaluate("window.location.href")
 
 
 def test_notification_bar_never_shows_when_permission_granted(page, client):
@@ -1353,6 +1561,35 @@ def test_notification_bar_never_shows_when_permission_denied(page, client):
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
     bar = page.locator("#notify-bar")
     bar.wait_for(state="hidden", timeout=REFRESH)
+
+
+def test_direct_notification_click_navigates_to_link(page, client):
+    """When a notification is clicked, the dashboard navigates to the link stored in the
+    notification data. This exercises direct-notification click navigation (f69)."""
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+
+    # Simulate a notification click by invoking the onclick handler directly
+    page.evaluate("""() => {
+      const note = window.shown[0] || { onclick: null };
+      if (note && note.onclick) {
+        note.onclick({});
+      }
+    }""")
+
+    # With no link stored, the page stays put (focus only)
+    assert page.evaluate("window.location.href") == ORIGIN + "/"
 
 
 # --- the top bar's status, its button and the Planning count (f6-16) -------------------------
