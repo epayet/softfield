@@ -2583,7 +2583,9 @@ def test_a_lead_reply_shows_once_in_the_desk_entry(serve_between, db_path):
     needs = section(html, "needs-you")
     assert "1 thing waits for you on your desk" in needs
     assert "The lead answered" not in needs and "planning" not in needs  # the entry stands for it
-    assert "The lead answered" in html.split('id="live-facts"')[1]  # notify.js still tells it
+    # the lead reply is in data-notices for notify.js
+    facts = html.split('id="live-facts"')[1]
+    assert "The lead replied" in facts
 
 
 def test_a_signoff_on_a_ripe_milestone_shows_once_in_the_desk_entry(serve_between, db_path):
@@ -2602,9 +2604,15 @@ def test_a_signoff_on_a_ripe_milestone_shows_once_in_the_desk_entry(serve_betwee
     needs = section(html, "needs-you")
     assert "signoff" not in needs.lower()  # no separate signoff row
     assert "softfield signoff f1" not in needs
-    # the sign-off item still carries in data-needs for notify.js
+    # the sign-off item is in data-notices for notify.js
     facts = html.split('id="live-facts"')[1]
-    assert "signoff" in facts.lower()
+    match = re.search(r"data-notices='([^']*)'", facts)
+    assert match is not None
+    notices = json.loads(match[1])
+    signoff_notices = [
+        n for n in notices.values() if n["title"].startswith("Ready for your sign-off:")
+    ]
+    assert len(signoff_notices) == 1
 
 
 def test_a_signoff_on_a_milestone_off_the_desk_shows_no_row(client, db_path):
@@ -2686,8 +2694,8 @@ def test_other_kinds_still_show_with_their_command(client, db_path):
     assert "softfield reserve f-reserve" in needs
 
 
-def test_data_needs_carries_signoff_item_for_notify(client, db_path):
-    """data-needs on #live-facts still carries the signoff item so notify.js can compare."""
+def test_data_notices_carries_signoff_item(client, db_path):
+    """data-notices on #live-facts carries the signoff item so notify.js can compare."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -2702,12 +2710,16 @@ def test_data_needs_carries_signoff_item_for_notify(client, db_path):
     finally:
         conn.close()
     html = client.get("/live").text
-    # The signoff item is in data-needs even though filtered from needs-you
+    # The signoff item is in data-notices with its title and link
     facts = html.split('id="live-facts"')[1]
-    match = re.search(r"data-needs='([^']*)'", facts)
-    assert match, "no data-needs attribute"
-    needs_data = json.loads(match[1])
-    assert "softfield signoff f1" in needs_data.values()
+    match = re.search(r"data-notices='([^']*)'", facts)
+    assert match, "no data-notices attribute"
+    notices_data = json.loads(match[1])
+    signoff_notices = [
+        n for n in notices_data.values() if n["title"].startswith("Ready for your sign-off:")
+    ]
+    assert len(signoff_notices) == 1
+    assert signoff_notices[0]["body"] == "Reviewed, waits for you"
 
 
 def test_an_empty_desk_has_no_entry_and_a_plain_tab(serve_between, db_path):
@@ -2906,22 +2918,19 @@ def test_a_cancelled_plant_is_struck_through_in_next_in_line(client, db_path):
     assert re.findall(r"<s>(.*?)</s>", markup) == ["Rubber ducks"]
 
 
-def _live_facts(html: str) -> tuple[str, dict[str, str], dict[str, dict[str, str]], str]:
-    """The four data attributes on ``#live-facts``."""
+def _live_facts(html: str) -> tuple[str, dict[str, dict[str, str]], str]:
+    """The three data attributes on ``#live-facts``."""
     facts = html.split('id="live-facts"')[1]
     m = re.search(r'data-project="([^"]*)"', facts)
     assert m is not None
     project = m.group(1)
-    m = re.search(r"data-needs='([^']*)'", facts)
-    assert m is not None
-    needs = json.loads(m.group(1))
     m = re.search(r"data-notices='([^']*)'", facts)
     assert m is not None
     notices_raw = m.group(1)
     m = re.search(r'data-all-done="([^"]*)"', facts)
     assert m is not None
     all_done = m.group(1)
-    return project, needs, json.loads(notices_raw), all_done
+    return project, json.loads(notices_raw), all_done
 
 
 def test_a_lead_reply_on_a_card_with_two_open_proposals_says_how_many(serve_between, db_path):
@@ -2966,7 +2975,7 @@ def test_a_lead_reply_on_a_card_with_two_open_proposals_says_how_many(serve_betw
     finally:
         conn.close()
     html = client.get("/live").text
-    _, _, notices, _ = _live_facts(html)
+    _, notices, _ = _live_facts(html)
     # Find the planning notice (the one with "The lead replied" title)
     planning_notices = [n for n in notices.values() if n["title"].startswith("The lead replied:")]
     assert len(planning_notices) == 1
@@ -2997,7 +3006,7 @@ def test_a_lead_reply_with_no_proposal_says_answer_is_wanted(serve_between, db_p
     finally:
         conn.close()
     html = client.get("/live").text
-    _, _, notices, _ = _live_facts(html)
+    _, notices, _ = _live_facts(html)
     planning_notices = [n for n in notices.values() if n["title"].startswith("The lead replied:")]
     assert len(planning_notices) == 1
     assert planning_notices[0]["body"] == "Your answer is wanted"
@@ -3029,7 +3038,7 @@ def test_a_failed_leads_job_says_send_again(serve_between, db_path):
     finally:
         conn.close()
     html = client.get("/live").text
-    _, _, notices, _ = _live_facts(html)
+    _, notices, _ = _live_facts(html)
     fail_notices = [
         n for n in notices.values() if n["title"].startswith("The lead couldn't answer:")
     ]
@@ -3059,7 +3068,7 @@ def test_a_reply_on_the_general_thread_is_titled_general(serve_between, db_path)
     finally:
         conn.close()
     html = client.get("/live").text
-    _, _, notices, _ = _live_facts(html)
+    _, notices, _ = _live_facts(html)
     planning_notices = [n for n in notices.values() if n["title"] == "The lead replied: General"]
     assert len(planning_notices) == 1
     assert planning_notices[0]["body"] == "Your answer is wanted"
@@ -3092,7 +3101,7 @@ def test_an_open_signoff_item_says_ready_for_your_signoff(serve_between, db_path
     finally:
         conn.close()
     html = client.get("/live").text
-    _, _, notices, _ = _live_facts(html)
+    _, notices, _ = _live_facts(html)
     signoff_notices = [
         n for n in notices.values() if n["title"].startswith("Ready for your sign-off:")
     ]
@@ -3128,7 +3137,7 @@ def test_an_open_review_stop_item_says_the_review_stopped(serve_between, db_path
     finally:
         conn.close()
     html = client.get("/live").text
-    _, _, notices, _ = _live_facts(html)
+    _, notices, _ = _live_facts(html)
     review_notices = [n for n in notices.values() if n["title"].startswith("The review stopped:")]
     assert len(review_notices) == 1
     assert "The f8 card" in review_notices[0]["title"]
@@ -3178,9 +3187,9 @@ def test_other_kinds_say_what_and_where(db_path):
         assert result[nid]["link"] == f"/?project={PROJECT}"
 
 
-def test_data_notices_has_exactly_the_ids_data_needs_has(serve_between, db_path):
+def test_data_notices_has_the_ids(serve_between, db_path):
     """Every link keeps the page's project, as the other links of the partial do.
-    ``data-notices`` has exactly the ids ``data-needs`` has."""
+    ``data-notices`` has the ids of open owner items."""
     client = serve_between()
     sign_off_all(db_path)
     lead_replies(db_path, "f7")
@@ -3197,8 +3206,7 @@ def test_data_notices_has_exactly_the_ids_data_needs_has(serve_between, db_path)
     finally:
         conn.close()
     html = client.get("/live").text
-    _, needs, notices, _ = _live_facts(html)
-    assert set(notices.keys()) == set(needs.keys())
+    _, notices, _ = _live_facts(html)
     # Every link keeps the project.
     for notice in notices.values():
         assert "?project=coucou" in notice["link"]

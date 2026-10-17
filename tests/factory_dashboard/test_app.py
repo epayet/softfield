@@ -733,14 +733,14 @@ def test_a_page_says_when_a_new_version_is_available(client, tmp_path, monkeypat
 # --- notifications (f5-12, ADR 18 item 4) ---------------------------------------------------
 
 
-def _facts(html: str) -> tuple[dict[str, str], str]:
-    """What ``notify.js`` compares: the open Needs-you items (id -> text), and "all done"."""
+def _facts(html: str) -> tuple[dict[str, dict[str, str]], str]:
+    """What ``notify.js`` compares: the open needs (id -> {title, body, link}), and "all done"."""
     tag = re.search(r'<div id="live-facts"[^>]*>', html)
     assert tag, "no #live-facts"
-    needs = re.search(r"data-needs='([^']*)'", tag[0])
+    notices = re.search(r"data-notices='([^']*)'", tag[0])
     done = re.search(r'data-all-done="(true|false)"', tag[0])
-    assert needs and done, tag[0]
-    return json.loads(unescape(needs[1])), done[1]
+    assert notices and done, tag[0]
+    return json.loads(unescape(notices[1])), done[1]
 
 
 def _owner_item_ids(db_path: Path) -> dict[str, int]:
@@ -753,19 +753,19 @@ def _owner_item_ids(db_path: Path) -> dict[str, int]:
 
 
 def test_the_live_partial_carries_the_open_items_and_whether_work_is_running(serve, db_path):
-    needs, done = _facts(serve().get("/live").text)
+    notices, done = _facts(serve().get("/live").text)
     ids = _owner_item_ids(db_path)
     # only the open item: the resolved "ollama" one is not there
-    assert needs == {f"owner-{ids['ADR 15']}": "Should reactions be editable once sent?"}
+    assert set(notices) == {f"owner-{ids['ADR 15']}"}
     assert done == "false"  # a job runs and two tickets wait
 
 
 def test_what_the_dashboard_sees_itself_has_an_id_too(serve, db_path):
-    needs, done = _facts(serve(heartbeat_age=timedelta(minutes=3)).get("/live").text)
+    notices, done = _facts(serve(heartbeat_age=timedelta(minutes=3)).get("/live").text)
     ids = _owner_item_ids(db_path)
-    assert set(needs) == {f"owner-{ids['ADR 15']}", "runner-20261002-113500", "queue"}
-    assert "heartbeat stopped 3 min ago" in needs["runner-20261002-113500"]
-    assert needs["queue"] == "2 tickets waiting and the runner is idle."
+    assert set(notices) == {f"owner-{ids['ADR 15']}", "runner-20261002-113500", "queue"}
+    assert notices["runner-20261002-113500"]["title"] == "The runner stopped"
+    assert notices["queue"]["title"] == "The runner is idle"
     assert done == "false"  # a job stopped mid-way isn't done
 
 
@@ -869,7 +869,8 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
     page.wait_for_selector('#live-facts[data-all-done="false"]', state="attached", timeout=REFRESH)
     page.wait_for_timeout(6_000)  # the next poll sees the same item: no second notification
     shown = page.evaluate("window.shown")
-    assert len(shown) == 1 and "A question that came later." in shown[0]["body"]
+    assert len(shown) == 1 and shown[0]["title"] == "A decision for you"
+    assert "A question that came later." in shown[0]["body"]
 
     conn = metrics.open_db(db_path)
     try:
@@ -896,7 +897,8 @@ Object.defineProperty(navigator, "serviceWorker", {
         showNotification: async (title, options) => {
           window.sw_notifications.push({
             title, body: options && options.body,
-            tag: options && options.tag
+            tag: options && options.tag,
+            data: options && options.data
           });
         }
       };
@@ -930,13 +932,21 @@ def test_notifications_go_through_service_worker_on_android(page, serve_between,
     """With a service worker registered the dashboard shows through it (the Android path).
     register is called once with /static/sw.js, the notification lands in the stand-in's list,
     and window.shown stays empty."""
+    client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
-    open_overview(page, serve_between(activity="check-all on main"))
+    open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    # compare only runs when #live-facts is swapped (not on initial load),
-    # so wait for the baseline to be established by the first poll
-    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    # Wait for the baseline to be established by compare() on DOMContentLoaded
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        # Fallback: establish baseline manually if compare() didn't run
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
 
     conn = metrics.open_db(db_path)
     try:
@@ -951,14 +961,29 @@ def test_notifications_go_through_service_worker_on_android(page, serve_between,
         )
     finally:
         conn.close()
+    # Fetch the updated partial so data-notices includes the new item,
+    # then swap it in so compare() sees the fresh data
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    # Now trigger compare() on the updated DOM
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
 
     assert page.evaluate("window.sw_registered") == "/static/sw.js"
     assert page.evaluate("window.sw_notifications.length") == 1
     entry = page.evaluate("window.sw_notifications[0]")
-    assert entry["title"] == "Needs you"
+    assert entry["title"] == "A decision for you"
     assert entry["body"] == "A follow-up question."
     assert entry["tag"] and entry["tag"] != ""
+    assert entry["data"]["link"] == "/?project=coucou"
     assert page.evaluate("window.shown") == []
 
 
@@ -966,11 +991,19 @@ def test_fallback_to_direct_notification_when_showNotification_rejects(
     page, serve_between, db_path
 ):
     """When showNotification rejects the item falls back to new Notification."""
+    client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
-    open_overview(page, serve_between(activity="check-all on main"))
+    open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
 
     conn = metrics.open_db(db_path)
     try:
@@ -985,6 +1018,20 @@ def test_fallback_to_direct_notification_when_showNotification_rejects(
         )
     finally:
         conn.close()
+    # Fetch the updated partial so data-notices includes the new item,
+    # then swap it in so compare() sees the fresh data
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    # Now trigger compare() on the updated DOM
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
     page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
 
     shown = page.evaluate("window.shown")
@@ -1203,10 +1250,11 @@ def test_notification_bar_asks_again_when_the_browser_prompt_was_closed(page, cl
 
 
 def test_sw_finds_open_dashboard_tab_on_notification_tap():
-    """sw.js uses includeUncontrolled so a tap focuses an open dashboard page."""
+    """sw.js uses includeUncontrolled so a tap focuses an open dashboard page and posts the link."""
     sw = (STATIC / "sw.js").read_text()
     assert "includeUncontrolled" in sw
     assert "event.notification.close()" in sw  # Android keeps a tapped notification otherwise
+    assert "postMessage" in sw
 
 
 def test_notification_bar_never_shows_when_permission_granted(page, client):

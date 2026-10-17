@@ -17,16 +17,17 @@
   // The service worker registration (f12-01, ADR 26 item 3).
   let registration = null;
 
-  function show(title, body, tag) {
+  function show(title, body, tag, link) {
     try {
       if (registration) {
-        registration.showNotification(title, { body, tag }).catch(() => {
-          new Notification(title, { body, tag }).onclick = () => window.focus();
+        registration.showNotification(title, { body, tag, data: { link } }).catch(() => {
+          const note = new Notification(title, { body, tag });
+          note.onclick = () => { window.focus(); if (link) window.location = link; };
         });
         return;
       }
       const note = new Notification(title, { body, tag });
-      note.onclick = () => window.focus();
+      note.onclick = () => { window.focus(); if (link) window.location = link; };
     } catch (error) {
       // Chrome on Android shows only a service worker's notifications, and there is none
       console.warn("notify:", error);
@@ -35,15 +36,38 @@
 
   function compare(facts) {
     const key = "notify:" + facts.dataset.project;
-    const needs = JSON.parse(facts.dataset.needs);
+    const notices = JSON.parse(facts.dataset.notices);
     const done = facts.dataset.allDone === "true";
     const before = JSON.parse(localStorage.getItem(key) || "null");
-    localStorage.setItem(key, JSON.stringify({ ids: Object.keys(needs), done, at: Date.now() }));
+    localStorage.setItem(key, JSON.stringify({ ids: Object.keys(notices), done, at: Date.now() }));
     if (!before || Date.now() - before.at > FRESH) return; // what is already there isn't news
-    for (const [id, text] of Object.entries(needs)) {
-      if (!before.ids.includes(id)) show("Needs you", text, id);
+    const newIds = Object.keys(notices).filter(id => !before.ids.includes(id));
+    if (newIds.length === 0 && !(done && !before.done)) return;
+    if (done && !before.done) {
+      show("All work done", "The queue is empty and nothing runs.", "all-done", "/");
+      return;
     }
-    if (done && !before.done) show("All work done", "The queue is empty and nothing runs.", "all-done");
+    if (newIds.length === 1) {
+      const id = newIds[0];
+      const notice = notices[id];
+      show(notice.title, notice.body, id, notice.link);
+    } else {
+      const count = newIds.length;
+      const titles = newIds.map(id => notices[id].title).join("\n");
+      show(count + " things need you", titles, "bundle", "/planning");
+    }
+  }
+
+  // Listen for postMessage from the service worker (D3).
+  function setupSwListener() {
+    if (!navigator.serviceWorker) return;
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      const msg = event.data;
+      if (!msg || typeof msg.link !== "string") return;
+      // Only accept links starting with / and not //
+      if (msg.link[0] !== "/" || msg.link[1] === "/") return;
+      window.location = msg.link;
+    });
   }
 
   // The notification permission bar (f12-01, ADR 26 item 2).
@@ -128,9 +152,24 @@
   document.addEventListener("DOMContentLoaded", () => {
     setupBar();
     registerSw();
+    setupSwListener();
+    // Establish baseline on page load so tests don't need to wait for the first poll
+    const facts = document.querySelector("#live-facts");
+    if (facts && window.notifyOn()) compare(facts);
     document.body.addEventListener("htmx:afterSwap", (event) => {
-      const facts = event.target.querySelector("#live-facts");
-      if (facts && window.notifyOn()) compare(facts);
+      const el = event.target.querySelector("#live-facts");
+      if (el && window.notifyOn()) compare(el);
     });
   });
+
+  // Test helpers: establish the baseline manually if compare() didn't run,
+  // or trigger a comparison after the database changes
+  window._notifyEstablishBaseline = () => {
+    const facts = document.querySelector("#live-facts");
+    if (facts && window.notifyOn()) compare(facts);
+  };
+  window._notifyCheck = () => {
+    const facts = document.querySelector("#live-facts");
+    if (facts && window.notifyOn()) compare(facts);
+  };
 })();

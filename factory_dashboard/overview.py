@@ -781,9 +781,6 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         "needs": needs,
         "desk_items": items[:3],
         "planning_count": len(items),  # the Planning tab's count, refreshed by the live partial
-        # what notify.js compares after each poll (f5-12), each lead reply still on its own:
-        # a job stopped mid-way isn't done
-        "notify": {need.id: need.text for need in open_needs},
         "notices": notice_data,
         "all_done": not (all_queued or qjobs or jobs),
         "running": [job for job in jobs if job.live],
