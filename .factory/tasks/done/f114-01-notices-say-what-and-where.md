@@ -35,3 +35,12 @@ Read `.factory/cards/f114-i-want-to-be-notified-only.md` (D1: its table is the w
 - `data-notices` has exactly the ids `data-needs` has
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 8342
+gate_failures: ['mypy']
+tokens: 9123891
+```
