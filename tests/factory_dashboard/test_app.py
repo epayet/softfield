@@ -90,11 +90,48 @@ def test_no_page_or_stylesheet_names_a_third_party_host(client):
         # SVG namespace declarations are not third-party hosts
         found = [
             m.group()
-            for m in re.finditer(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}", text)
-            if m.group() not in ("http://www.w3.org/2000/svg", "http://www.w3.org")
+            for m in re.finditer(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}(/[^\s\"'<>]*)?", text)
+            if m.group() not in ("http://www.w3.org/2000/svg",)
         ]
         assert found == [], path
         assert "@import" not in text, path
+
+
+def test_a_page_that_names_cdn_example_com_after_the_top_bar_fails():
+    """f69: a page that names https://cdn.example.com/x.js after the top bar makes the
+    third-party host test fail (regression for the exact-namespace exemption)."""
+    import tempfile
+
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app
+
+    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
+        db_path = Path(f.name)
+    try:
+        from runner import cli as runner_cli
+
+        runner_cli.main(["backfill", "--db", str(db_path)])
+    finally:
+        pass
+
+    app = create_app(db_path, "coucou")
+    client = TestClient(app, base_url="http://127.0.0.1")
+    html = client.get("/").text
+    header_close = html.lower().rfind("</header>")
+    assert header_close != -1, "no </header> found"
+    injected = (
+        html[: header_close + len("</header>")]
+        + "\n<script src='https://cdn.example.com/x.js'></script>"
+        + html[header_close + len("</header>") :]
+    )
+    text = injected
+    found = [
+        m.group()
+        for m in re.finditer(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}(/[^\s\"'<>]*)?", text)
+        if m.group() not in ("http://www.w3.org/2000/svg",)
+    ]
+    assert found, "expected https://cdn.example.com to be detected as third-party host"
 
 
 def test_no_template_has_a_bare_static_link():
