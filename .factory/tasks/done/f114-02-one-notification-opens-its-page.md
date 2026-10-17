@@ -37,3 +37,12 @@ Read `.factory/cards/f114-i-want-to-be-notified-only.md` (D2, D3), then `factory
 - `#live-facts` has no `data-needs`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 10233
+gate_failures: ['task-tests']
+tokens: 11821754
+```
