@@ -26,3 +26,12 @@ f69-i-want-a-button-to-switch-C1035-5: Bundled notifications lose project contex
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4053
+gate_failures: []
+tokens: 991147
+```
