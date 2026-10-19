@@ -600,6 +600,11 @@ main:has(.board) { max-width: 1360px; }
 #stage-growing .card { border-color: var(--opus); border-left-color: var(--c, var(--muted)); }
 #stage-ripe .card { border-color: var(--hazard); border-left-color: var(--c, var(--muted)); }
 #stage-harvested .card { border-style: dashed; border-left-style: solid; color: var(--ink-2); }
+/* a card an order sent from the board moves, until the runner takes it (F15 D4): the
+   planning desk's dashed orange edge, its area's colour kept on the left */
+#field .card.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid;
+  border-left-color: var(--c, var(--muted)); }
+.card-way { font: 600 11.5px/1.35 var(--mono); color: var(--hazard); }
 .cards .more, .field-foot a { display: inline-flex; align-items: center; min-height: 44px; }
 .cards .more { font-size: 13px; }
 .field-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 16px;

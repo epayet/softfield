@@ -314,6 +314,121 @@ def test_cards_within_a_stage_come_in_priority_order_then_by_key(board_db):
     assert keys(found, "ripe") == ["F1", "M4"]  # both 100
 
 
+def _planted(*cards: tuple[str, int]) -> Callable[[sqlite3.Connection, int], None]:
+    """More planted cards, each with its priority."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        for key, priority in cards:
+            metrics.upsert_milestone(conn, p, key, title=key, state="ready", priority=priority)
+
+    return change
+
+
+def _reorder(
+    value: str, done: str | None = None, result: str | None = None
+) -> Callable[[sqlite3.Connection, int], None]:
+    """A ``reorder`` request, open or finished with ``result``."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        asked = metrics.add_request(conn, p, "reorder", None, value, NOW.isoformat())
+        if done:
+            metrics.finish_request(conn, asked, done, result or "")
+
+    return change
+
+
+def _places(found: Board, stage: str) -> list[tuple[str, int, bool, int]]:
+    return [(c.key, c.place, c.on_its_way, c.was) for c in found.stages[stage]]
+
+
+def test_a_card_shows_its_place_in_its_stage_but_not_once_ripe_or_harvested(board_db):
+    """F15 D1: #1, #2… in place of a P number, in the stages the owner orders."""
+    write(board_db, _planted(("f27-third", 9)))
+    found = read(board_db)
+    assert _places(found, "planted") == [
+        ("F23", 1, False, 0),
+        ("bug-02-stale", 2, False, 0),
+        ("F27", 3, False, 0),
+    ]
+    assert [c.place for c in found.stages["seed"]] == [1, 2]
+    assert [c.place for c in found.stages["sprouting"]] == [1, 2]
+    assert [c.place for c in found.stages["growing"]] == [1, 2, 3, 4]
+    assert [c.place for c in found.stages["ripe"] + found.stages["harvested"]] == [0, 0, 0, 0]
+
+
+def test_an_open_reorder_shows_at_once_with_where_the_moved_card_was(board_db):
+    """F15 D4: F9 sent before F7, which the priorities put first: F9 is on its way, F7 is not
+    marked (the card moved is the one out of place, not the one it passed)."""
+    write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
+    assert keys(read(board_db), "planted") == ["F7", "F9", "F23", "bug-02-stale"]
+
+    write(board_db, _reorder('["f9", "f7"]'))
+    found = read(board_db)
+    assert _places(found, "planted") == [
+        ("F9", 1, True, 2),
+        ("F7", 2, False, 0),
+        ("F23", 3, False, 0),
+        ("bug-02-stale", 4, False, 0),
+    ]
+    assert not any(c.on_its_way for cards in found.stages.values() for c in cards if c.key != "F9")
+
+
+def test_a_card_whose_neighbours_moved_past_it_is_not_marked(board_db):
+    write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
+    # F7 sent to the end of the planted cards: only F7 is out of place
+    write(board_db, _reorder('["f9", "f23", "bug-02-stale", "f7"]'))
+    assert _places(read(board_db), "planted") == [
+        ("F9", 1, False, 0),
+        ("F23", 2, False, 0),
+        ("bug-02-stale", 3, False, 0),
+        ("F7", 4, True, 1),
+    ]
+
+
+def test_the_latest_open_reorder_is_the_one_shown(board_db):
+    write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
+    write(board_db, _reorder('["f9", "f7"]'))
+    write(board_db, _reorder('["f23", "f7", "f9"]'))
+    assert _places(read(board_db), "planted") == [
+        ("F23", 1, True, 3),
+        ("F7", 2, False, 0),
+        ("F9", 3, False, 0),
+        ("bug-02-stale", 4, False, 0),
+    ]
+
+
+def test_a_done_or_refused_reorder_shows_no_mark(board_db):
+    write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
+    before = read(board_db)
+    write(board_db, _reorder('["f9", "f7"]', NOW.isoformat(), "reordered: 1 card changed"))
+    write(board_db, _reorder('["f23", "f9"]', NOW.isoformat(), "a reorder names each card once"))
+    write(board_db, _reorder("not a list"))  # the runner will refuse it: nothing to show
+    after = read(board_db)
+    assert after.stages == before.stages
+    assert _places(after, "planted")[0] == ("F7", 1, False, 0)
+
+
+def test_a_card_the_reorder_doesnt_name_keeps_its_place_after_the_listed_ones(board_db):
+    write(board_db, _reorder('["bug-02-stale", "f25", "nowhere"]'))
+    found = read(board_db)
+    assert _places(found, "planted") == [("bug-02-stale", 1, True, 2), ("F23", 2, False, 0)]
+    # F25 is listed first of the growing cards; the others keep their own order after it
+    assert keys(found, "growing") == ["F25", "F24", "bug-03-working", "bug-04-stuck"]
+    assert card(found, "F25").was == 4
+    assert keys(found, "seed") == ["F20", "bug-01-duck-count"]
+
+
+def test_places_are_counted_before_q_and_kind_narrow_the_cards(board_db):
+    assert _places(read(board_db, q="stale"), "planted") == [("bug-02-stale", 2, False, 0)]
+    write(board_db, _reorder('["bug-03-working", "bug-04-stuck", "f24"]'))
+    bugs = read(board_db, kind="bug")
+    assert _places(bugs, "growing") == [
+        ("bug-03-working", 1, False, 0),
+        ("bug-04-stuck", 2, False, 0),
+    ]
+    assert _places(read(board_db, q="f24"), "growing") == [("F24", 3, True, 1)]
+
+
 def test_q_keeps_the_cards_whose_key_or_title_contains_it(board_db):
     found = read(board_db, q="DUCK")
     every = sorted(c.key for cards in found.stages.values() for c in cards)
@@ -502,7 +617,33 @@ def test_a_bug_card_says_bug_and_links_to_its_ticket_page(board_client):
     assert "bug" not in classes
     assert "product" in classes
     assert "bug" not in words
-    assert words.startswith("P30 F20 product The duck pond")
+    assert words.startswith("#1 F20 product The duck pond")
+
+
+def test_a_card_shows_its_place_and_no_p_number_on_the_page(board_db):
+    write(board_db, _planted(("f27-third", 9)))
+    html = _page(_client(board_db))
+    _, words = _card(html, "/milestones/f27-third")
+    assert words.startswith("#3 F27 factory")
+    assert not re.search(r"\bP\d", words)
+    for link in ("/milestones/f1", "/milestones/m3"):  # ripe, harvested
+        _, words = _card(html, link)
+        assert "#" not in words
+        assert not re.search(r"\bP\d", words)
+
+
+def test_a_card_on_its_way_has_a_dashed_edge_and_says_where_it_was(board_db):
+    write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
+    write(board_db, _reorder('["f9", "f7"]'))
+    html = _page(_client(board_db))
+    classes, words = _card(html, "/milestones/f9-second")
+    assert "on-its-way" in classes
+    assert words.startswith("#1 F9")
+    assert "on its way · was #2 · at the runner's next pick" in words
+    classes, words = _card(html, "/milestones/f7-first")
+    assert "on-its-way" not in classes
+    assert "on its way" not in words
+    assert words.startswith("#2 F7")
 
 
 def test_a_growing_card_shows_its_tickets_and_what_runs_now(board_client):
@@ -650,6 +791,20 @@ def test_ripe_card_words_fit_inside_the_card(page, board_client, size):
         box, words = card.bounding_box(), card.query_selector(".card-action").bounding_box()
         assert box and words
         assert box["x"] <= words["x"] and words["x"] + words["width"] <= box["x"] + box["width"] + 1
+
+
+@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
+def test_the_on_its_way_line_fits_inside_the_card(page, board_db, size):
+    write(board_db, _reorder('["bug-02-stale"]'))
+    page.set_viewport_size(size)
+    open_page(page, _client(board_db), "/board")
+    page.evaluate("() => document.fonts.ready")
+    (moved,) = page.query_selector_all(".card.on-its-way")
+    box, words = moved.bounding_box(), moved.query_selector(".card-way").bounding_box()
+    assert box and words
+    assert box["x"] <= words["x"] and words["x"] + words["width"] <= box["x"] + box["width"] + 1
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    assert layout_problems(page) == []
 
 
 def test_the_columns_scroll_sideways_on_a_narrow_desktop(page, board_client):

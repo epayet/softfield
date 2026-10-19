@@ -13,12 +13,16 @@ column per stage, the totals, and a plain GET form for the search and the kind (
   planted, running or stopped → growing, done → harvested.
 - **Left out:** a removed card, a removed ticket, and the ``bugs`` row (a standing key).
 - **Order:** by priority, then key; harvested, the latest first, and only the latest
-  ``HARVESTED``.
+  ``HARVESTED``. A card in a stage of ``PLACED`` shows its place there, ``#1``… (F15 D1).
+- **An order on its way** (F15 D4): while the latest ``reorder`` request is open, the cards
+  come in its order (the cards it doesn't name after, in theirs), and each card it puts out of
+  place says where it was. Places are counted before ``q`` and ``kind`` narrow the cards.
 """
 
+import json
 import sqlite3
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 
 from fastapi import APIRouter, Request
@@ -29,6 +33,7 @@ from factory_dashboard.line import _LONG_AGO, _natural, _when
 from factory_dashboard.overview import running_jobs
 from factory_dashboard.queries import ticket_priority
 from runner import metrics
+from runner.requests import REORDER
 from runner.tasks import BUGS, DEFAULT_PRIORITY, short_key
 
 router = APIRouter()
@@ -43,6 +48,7 @@ WORDS = {
     "ripe": ("Ripe", "needs your sign-off"),
     "harvested": ("Harvested", "signed off or fixed"),
 }
+PLACED = ("seed", "sprouting", "planted", "growing")  # the stages whose order the owner sets
 KINDS = ("factory", "product", "bug")
 HARVESTED = 4  # the harvested cards shown; the rest are counted
 SET_ASIDE = "ticket written, set aside"
@@ -74,6 +80,9 @@ class Card:
     set_aside: int = 0
     note: str = ""
     running: Work | None = None  # on a growing card, from a live job
+    place: int = 0  # its place in its stage, from 1; 0 in a stage not ``PLACED``
+    on_its_way: bool = False  # an open reorder puts it out of place
+    was: int = 0  # then, its place without the reorder
 
     @property
     def kind(self) -> str:
@@ -254,6 +263,75 @@ def milestone_card(conn: sqlite3.Connection, project: str, now: datetime, key: s
     return next((c for c, _ in _cards(conn, project, now) if not c.bug and c.full_key == key), None)
 
 
+def _order_on_its_way(conn: sqlite3.Connection, project: str) -> list[str] | None:
+    """The keys of the latest open ``reorder``, as sent; None when none waits or the runner
+    will refuse it (not a list of keys)."""
+    row = conn.execute(
+        "SELECT r.value FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+        " WHERE p.name = ? AND r.kind = ? AND r.done IS NULL ORDER BY r.id DESC LIMIT 1",
+        (project, REORDER),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        keys = json.loads(row["value"] or "")
+    except ValueError:
+        return None
+    if not isinstance(keys, list) or not all(isinstance(key, str) for key in keys):
+        return None
+    return keys
+
+
+def _out_of_place(before: list[str], after: list[str]) -> set[str]:
+    """The keys outside the longest run ``before`` and ``after`` share (F15 D3): a card whose
+    neighbours moved past it is not out of place. Of two equally long runs, the one kept
+    leaves out the card that came up: swapping two, the one moved up is out of place."""
+    n, m = len(before), len(after)
+    run = [[0] * (m + 1) for _ in range(n + 1)]  # run[i][j]: the longest of before[i:], after[j:]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            if before[i] == after[j]:
+                run[i][j] = run[i + 1][j + 1] + 1
+            else:
+                run[i][j] = max(run[i + 1][j], run[i][j + 1])
+    kept: set[str] = set()
+    i = j = 0
+    while i < n and j < m:
+        if before[i] == after[j]:
+            kept.add(before[i])
+            i, j = i + 1, j + 1
+        elif run[i][j + 1] >= run[i + 1][j]:
+            j += 1
+        else:
+            i += 1
+    return set(after) - kept
+
+
+def _placed(
+    conn: sqlite3.Connection, project: str, found: list[tuple[Card, datetime]]
+) -> list[tuple[Card, datetime]]:
+    """The cards in the board's order, each with its place in its stage, and an open reorder's
+    order with its marks (F15 D1, D4)."""
+    line = sorted(found, key=lambda c: (c[0].priority, _natural(c[0].key.lower())))
+    sent = _order_on_its_way(conn, project)
+    shown = line
+    if sent is not None:
+        rank = {key: n for n, key in enumerate(sent)}
+        shown = sorted(line, key=lambda c: rank.get(c[0].key.lower(), len(rank)))  # stable
+    placed: dict[str, Card] = {}
+    for stage in PLACED:
+        before = [card.key for card, _ in line if card.stage == stage]
+        cards = [card for card, _ in shown if card.stage == stage]
+        moved = _out_of_place(before, [card.key for card in cards])
+        for n, card in enumerate(cards, start=1):
+            if card.key in moved:
+                was = before.index(card.key) + 1
+                placed[card.key] = replace(card, place=n, on_its_way=True, was=was)
+            else:
+                placed[card.key] = replace(card, place=n)
+    return [(placed.get(card.key, card), at) for card, at in shown]
+
+
 def board(
     conn: sqlite3.Connection,
     project: str,
@@ -263,10 +341,10 @@ def board(
 ) -> Board:
     """The project's cards by stage. ``q`` keeps the cards whose key or title contains it,
     whatever the case; ``kind`` is one of ``KINDS``. ``now`` tells which jobs are live."""
-    found = _cards(conn, project, now)
+    found = _placed(conn, project, _cards(conn, project, now))
     kept = [(card, at) for card, at in found if _matches(card, q, kind)]
     stages: dict[str, list[Card]] = {stage: [] for stage in STAGES}
-    for card, _ in sorted(kept, key=lambda c: (c[0].priority, _natural(c[0].key.lower()))):
+    for card, _ in kept:
         if card.stage != "harvested":
             stages[card.stage].append(card)
     harvested = sorted(  # the latest first

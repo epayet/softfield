@@ -8,8 +8,8 @@
 
 {# A card: its edge is its area's colour, a bug's is striped and its label says "bug" #}
 {% macro card_link(c) %}
-<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}" href="{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}">
-  <span class="card-meta">{% if c.stage not in ("ripe", "harvested") %}<b>P{{ c.priority }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span></span>
+<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.on_its_way %} on-its-way{% endif %}" href="{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}">
+  <span class="card-meta">{% if c.place %}<b>#{{ c.place }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span></span>
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
   <span class="meter"><span style="width: {{ (100 * c.done / c.total) | round | int }}%"></span></span>
@@ -20,6 +20,7 @@
   <span class="card-now"><b>Now:</b> {{ c.running.ticket }}{% if c.running.goal %} · {{ c.running.goal }}{% endif %} · {{ c.running.agent }}, attempt {{ c.running.attempt }}</span>
   {% endif %}
   {% if c.stage == "ripe" and not c.bug %}<span class="card-action">Read the review and sign off ›</span>{% endif %}
+  {% if c.on_its_way %}<span class="card-way">on its way · was #{{ c.was }} · at the runner's next pick</span>{% endif %}
 </a>
 {% endmacro %}
 
@@ -29,7 +30,7 @@
 <header class="board-head">
   <h1>The board</h1>
   <span class="badge">Read-only</span>
-  <p>Every feature starts as a seed in the field. Planning sprouts it, the factory grows it ticket by ticket, you harvest it at sign-off. Cards are in priority order: P1 is first in line.</p>
+  <p>Every feature starts as a seed in the field. Planning sprouts it, the factory grows it ticket by ticket, you harvest it at sign-off. Each card shows its place in its stage: #1 is first in line.</p>
 </header>
 
 <section id="totals" class="totals" aria-label="Totals">
