@@ -33,3 +33,10 @@ Read `.factory/cards/f15-reprioritising-tickets.md` (D1, D4) and the picture, `.
 - on a phone the on-its-way line fits inside the card
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
