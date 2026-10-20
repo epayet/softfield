@@ -25,3 +25,10 @@ Read `.factory/cards/f15-reprioritising-tickets.md`, the four merged tickets' co
 - the card's doc has a "## Replan" section dated today
 - `uv run pytest -q tests/runner/test_tasks.py` passes
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
