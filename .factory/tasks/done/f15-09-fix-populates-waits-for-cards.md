@@ -25,3 +25,12 @@ f68-i-want-the-factory-to-be-C1080-1: Populates waits for cards outside planted 
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 9569
+gate_failures: ['all-tests', 'stopped']
+tokens: 2484242
+```
