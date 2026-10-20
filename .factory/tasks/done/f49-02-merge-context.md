@@ -36,3 +36,10 @@ Read `.factory/cards/f49-don-t-ask-me-to-merge.md` D3 and D4. In `runner/planner
 - a `summary` that isn't text makes the reply's block unread, with the note saying why
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
