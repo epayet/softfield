@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F132 mock-up: one Overview and one top bar for the whole factory</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --opus: #ff9640; --copilot: #7aa7ff; --a1: #7aa7ff;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  [hidden] { display: none !important; }
+
+  .switch { display: inline-flex; margin: 10px 0 14px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 18px; grid-template-columns: minmax(0, 1fr); }
+  .version > .label { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted);
+    margin: 0 0 6px; }
+  /* wide screen: side by side, no switch; phone: the switch flips two pictures of the same size */
+  @media (min-width: 1100px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .version[hidden] { display: block !important; }
+  }
+  .page { background: var(--floor); border: 1px solid var(--rule); }
+  .page main { padding: 12px; display: grid; gap: 12px; }
+
+  /* ---- the top bar, as drawn ---- */
+  header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 8px; padding: 10px 12px 8px; }
+  .bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+  .brand { font: 700 20px/1.1 var(--display); letter-spacing: .04em; }
+  .brand .s { color: var(--hazard); } .brand .f { color: var(--good); }
+  .brand small { font: 400 11px var(--mono); color: var(--muted); margin-left: 4px; }
+  .status { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--muted); flex: none; }
+  .dot.lead { background: var(--opus); box-shadow: 0 0 0 4px rgba(255,150,64,.18); }
+  .dot.dev { background: var(--copilot); box-shadow: 0 0 0 4px rgba(122,167,255,.18); }
+  .words { font: 600 14px/1.3 var(--display); letter-spacing: .03em; }
+  .sign { width: 32px; height: 32px; display: grid; place-items: center; background: var(--hazard); color: var(--hazard-ink);
+    border-radius: 5px; font-size: 15px; }
+  .picker { font: 13px var(--body); color: var(--muted); display: inline-flex; gap: 6px; align-items: center; }
+  .select { background: var(--plate); color: var(--fg); border: 1px solid var(--rule); padding: 2px 8px; font: 13px var(--body); }
+  .theme { margin-left: auto; font: 12px var(--body); color: var(--muted); border: 1px solid var(--rule); padding: 2px 8px; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  nav.tabs { display: flex; flex-wrap: wrap; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); align-items: stretch; }
+  nav.tabs span { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    padding: 7px 10px; border: solid var(--rule); border-width: 0 1px 1px 0; white-space: nowrap; }
+  nav.tabs span.on { background: var(--hazard); color: var(--hazard-ink); }
+  .crumbs { font-size: 13px; color: var(--ink-2); }
+
+  /* ---- the panels, as drawn ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 10px 12px; min-width: 0; }
+  .panel.needs { border-color: var(--hazard); }
+  .panel h2 { font: 600 13px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px;
+    display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: auto; }
+  .panel h3 { font: 600 12px var(--display); text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 4px; }
+  .panel p { margin: 0 0 6px; }
+  .sub { color: var(--ink-2); }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 7px 1px 5px; border-radius: 10px;
+    border: 1px solid var(--rule); white-space: nowrap; }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--muted)); }
+  .pill.warn { --dot: var(--hazard); } .pill.running { --dot: var(--a1); }
+  .agent { font-family: var(--mono); font-size: 12.5px; }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { display: grid; grid-template-columns: 92px 1fr; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--grid); }
+  .steps li:last-child { border-bottom: 0; }
+  .steps li.wide1 { grid-template-columns: 1fr; }
+  .steps .what { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; min-width: 0; }
+  .steps .how { color: var(--ink-2); font-size: 13px; }
+  .steps .title { flex-basis: 100%; color: var(--ink-2); font-size: 13.5px; }
+  .running-head { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 6px 0 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .next-row { font-size: 13.5px; padding: 3px 0; }
+  .next-in-line { border-top: 1px solid var(--grid); padding-top: 8px; margin-top: 8px; }
+  .bars { display: grid; gap: 6px; }
+  .meter { height: 8px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .meter i { position: absolute; inset: 0 auto 0 0; background: var(--good); }
+  .meter i.past { background: var(--hazard); }
+  .floor { height: 120px; border: 1px dashed var(--rule); display: grid; place-items: center; color: var(--muted);
+    text-align: center; padding: 8px; font-size: 13px; background: var(--plate); }
+
+  /* ---- proposed: the project plate, a new shape on the existing tokens (ink and rules only, no status colour) ---- */
+  .proj { display: inline-flex; align-items: center; font: 600 11px var(--mono); letter-spacing: .04em; color: var(--ink-2);
+    background: var(--plate); border: 1px solid var(--rule); padding: 0 6px; position: relative; white-space: nowrap; }
+  .proj::before, .proj::after { content: ""; position: absolute; width: 4px; height: 4px; border: solid var(--ink-2); }
+  .proj::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+  .proj::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+  /* the project's own pages, gathered behind the picker, as one bay of the tab strip */
+  .bay-group { display: flex; align-items: stretch; border: solid var(--rule); border-width: 0 1px 1px 0;
+    background: repeating-linear-gradient(-45deg, transparent 0 6px, rgba(242,177,10,.06) 6px 8px); }
+  .bay-group .picker { padding: 0 8px; border-right: 1px solid var(--rule); font: 600 11px var(--mono); letter-spacing: .05em;
+    text-transform: uppercase; }
+  .bay-group span { border-width: 0 1px 0 0 !important; }
+  .bay-group span:last-child { border-width: 0 !important; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .gone { outline: 1px dashed var(--muted); outline-offset: 2px; opacity: .75; }
+  .note { display: block; font: 500 12px var(--body); color: var(--good); margin-top: 4px; }
+  .gone .note { color: var(--muted); }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 900px; }
+</style>
+</head>
+<body>
+<h1>F132 · one Overview, one top bar, for the whole factory</h1>
+<p class="lede">The Overview at 14:08 on 20 Oct, on real data: three projects, one runner. Softfield's lead is answering you on F132 (job 1097); travel-companion's runs say "picking the next ticket" because they wait their turn, and its next ticket (m1-06-replan) waits for Claude's 5-hour window. Today is the page as it draws for the project picked, softfield; pick travel-companion and Now goes blank. Proposed draws the same page whichever project is picked.</p>
+
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/base.html, overview.html and its partials, with the live values -->
+<div class="version" data-version="today" hidden>
+  <p class="label">Today · project picked: softfield</p>
+  <div class="page">
+    <header class="bar">
+      <div class="bar-top">
+        <span class="brand"><span class="s">Soft</span><span class="f">Field</span><small>127.0.0.1</small></span>
+        <span class="status"><i class="dot"></i><span class="words">Running: travel-companion · picking the next ticket</span><span class="sign">⏸</span></span>
+        <span class="picker">Project <span class="select">softfield ▾</span></span>
+        <span class="theme">Light</span>
+      </div>
+      <div class="hazard"></div>
+      <nav class="tabs"><span>Projects</span><span class="on">Overview</span><span>Planning · 76</span><span>Board</span><span>Tickets</span><span>Jobs</span><span>Runs</span><span>Timeline</span><span>Agents</span><span>Bench</span></nav>
+    </header>
+    <main>
+      <div class="crumbs">softfield</div>
+      <section class="panel needs">
+        <h2>Needs you <span class="src">each item goes when it's done</span></h2>
+        <ul class="steps">
+          <li><span class="when"><span class="pill warn">desk</span></span><span class="what"><span>76 things wait for you on your desk</span> <a class="mono" href="#">when i pause the factory, i don't want planner tasks to be paused</a> <a class="mono" href="#">Open your desk ›</a></span></li>
+          <li><span class="when"><span class="pill warn">review-stop</span></span><span class="what">end-to-end tests fail on staging softfield milestone f28-the-first-time-i-clicked-on</span></li>
+          <li><span class="when"><span class="pill warn">review-stop</span></span><span class="what">end-to-end tests fail on staging softfield milestone f19-will-i-need-to-refresh-planning</span></li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Now <span class="src">refreshes every 5 s</span></h2>
+        <div class="running-head"><span class="pill running">attempt 11</span><span class="agent">claude-opus</span><span>planner</span><a href="#">job 1097 ›</a></div>
+        <dl class="kv"><dt>Elapsed</dt><dd class="mono">74 s</dd><dt>Live</dt><dd class="mono">read 315k tokens · 8 turns</dd><dt>Heartbeat</dt><dd class="mono">6 s ago</dd></dl>
+      </section>
+      <section class="panel">
+        <h3>Queue</h3>
+        <p>54 tickets waiting.</p>
+        <div class="next-in-line">
+          <h3>Next in line</h3>
+          <div class="next-row"><b class="mono">1 review F68</b> · a batch</div>
+          <div class="next-row"><b class="mono">2 <a href="#">f106-01-blocked-reaches-the-owner</a></b> The runner tells the owner the moment it blocks a ticket… · the lead · priority 1</div>
+          <div class="next-row"><b class="mono">3 <a href="#">f106-03-try-again-set-aside</a></b> Each blocked ticket on the desk has two buttons… · the lead · waits for f106-01-blocked-reaches-the-owner · priority 1</div>
+          <p><a href="#">Reorder on the board ›</a></p>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+        <div class="bars">
+          <div>Claude 5-hour window: 79% <span class="sub">· resets at 16:10</span><div class="meter"><i class="past" style="width:79%"></i></div></div>
+          <div>Claude week: 21% <span class="sub">· resets on Oct 26 17:00</span><div class="meter"><i style="width:21%"></i></div></div>
+          <div>Copilot month: 21% <span class="sub">· resets on Nov 1 00:00</span><div class="meter"><i style="width:21%"></i></div></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2>From the field to the stash <span class="src">live</span></h2>
+        <div class="floor">the floor (drawn small here): softfield's field, its crates on the machines, its stash</div>
+      </section>
+      <section class="panel">
+        <h2>While you were away <span class="src">since 20:00</span></h2>
+        <p class="sub">11 merged, 1 failed attempt, 0 escalations, 14 new for you, 0 blocked now, $53.39 on Claude</p>
+        <ul class="steps">
+          <li class="wide1"><span class="what"><span class="agent">qwen3.6-35b-a3b</span> <a class="mono" href="#">f15-10-fix-wait-note-assertions-check</a> <span class="how">1st try · finished 14:07 · took 1.6 h</span><span class="title">Fix a checkpoint finding on f15-08-card-says-what-it-waits-for's tests</span></span></li>
+          <li class="wide1"><span class="what"><span class="agent">qwen3.6-35b-a3b</span> <a class="mono" href="#">f15-09-fix-populates-waits-for-cards</a> <span class="how">3 attempts · finished 12:12 · took 2.9 h</span><span class="title">Fix a checkpoint finding on f15-08-card-says-what-it-waits-for</span></span></li>
+          <li class="wide1"><span class="what"><span class="agent">qwen3.6-35b-a3b</span> <a class="mono" href="#">f68-05-fix-cdn-regression-test-duplicates</a> <span class="how">2 attempts · finished 09:10 · took 2.5 days</span><span class="title">CDN regression test duplicates the detector instead of exercising it</span></span></li>
+        </ul>
+      </section>
+      <section class="panel">
+        <h2>Savings from delegating so far on F160-THE-TOP-BAR-ON-WHAT-S <span class="src">API-equivalent dollars</span></h2>
+        <p class="sub">No delegated tickets yet.</p>
+      </section>
+      <section class="panel">
+        <h2>Claude per milestone <span class="src">API-equivalent dollars</span></h2>
+        <div class="floor" style="height:70px">a bar per softfield milestone</div>
+      </section>
+    </main>
+  </div>
+  <p class="legend">The bar names travel-companion, which only waits its turn, while softfield's job runs. Nothing on the page says the factory has two other projects: travel-companion's 4 desk items, its 9 tickets and its 5 merges since 20:00 show only when you pick it, and then Now is empty. Savings names F160, a card merged away this morning: "the newest milestone not done" is now just the newest plant.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <p class="label">Proposed · the same, whichever project is picked</p>
+  <div class="page">
+    <header class="bar">
+      <div class="bar-top">
+        <span class="brand"><span class="s">Soft</span><span class="f">Field</span><small>127.0.0.1</small></span>
+        <span class="status new"><i class="dot lead"></i><span class="words">Running: softfield · planner, job 1097</span><span class="sign">⏸</span></span>
+        <span class="theme">Light</span>
+      </div>
+      <div class="hazard"></div>
+      <nav class="tabs">
+        <span>Projects</span><span class="on">Overview</span>
+        <span class="bay-group new"><span class="picker">project <span class="select">softfield ▾</span></span><span>Planning · 76</span><span>Board</span><span>Tickets</span></span>
+        <span>Jobs</span><span>Runs</span><span>Timeline</span><span>Agents</span><span>Bench</span>
+      </nav>
+    </header>
+    <main>
+      <p class="sub" style="margin:0"><span class="new" style="padding:0 4px">The bar follows the job, never the project picked. Your case this morning would have read: <i class="dot dev" style="display:inline-block;vertical-align:middle;width:10px;height:10px"></i> <b>Running: softfield · f15-10-fix-wait-note-assertions-check</b>.</span></p>
+      <div class="crumbs new" style="padding:0 4px">The whole factory · 3 projects</div>
+      <section class="panel needs new">
+        <h2>Needs you <span class="src">every project · each item goes when it's done</span></h2>
+        <ul class="steps">
+          <li><span class="when"><span class="pill warn">desk</span></span><span class="what"><span class="proj">softfield</span><span>76 things wait on its desk</span> <a class="mono" href="#">when i pause the factory, i don't want planner tasks to be paused</a> <a class="mono" href="#">Open ›</a></span></li>
+          <li><span class="when"><span class="pill warn">desk</span></span><span class="what"><span class="proj">travel-companion</span><span>4 things wait on its desk</span> <a class="mono" href="#">Rename Tabi: a name from the Japanese travel notebook</a> <a class="mono" href="#">Open ›</a></span></li>
+          <li><span class="when"><span class="pill warn">desk</span></span><span class="what"><span class="proj">coucou</span><span>1 thing waits on its desk</span> <a class="mono" href="#">Open ›</a></span></li>
+          <li><span class="when"><span class="pill warn">five-hour</span></span><span class="what"><span class="proj">travel-companion</span><span>m1-06-replan waits for Claude's 5-hour window (79% used, kept for you): it goes on after 16:10</span></span></li>
+          <li><span class="when"><span class="pill warn">review-stop</span></span><span class="what"><span class="proj">softfield</span><span>end-to-end tests fail on staging: f28-the-first-time-i-clicked-on</span></span></li>
+          <li><span class="when"><span class="pill warn">review-stop</span></span><span class="what"><span class="proj">softfield</span><span>end-to-end tests fail on staging: f19-will-i-need-to-refresh-planning</span></span></li>
+        </ul>
+        <span class="note">Every project's desk and notices, each with its plate; a link opens that project's page.</span>
+      </section>
+      <section class="panel new">
+        <h2>Now <span class="src">refreshes every 5 s</span></h2>
+        <div class="running-head"><span class="proj">softfield</span><span class="pill running">attempt 11</span><span class="agent">claude-opus</span><span>planner</span><a href="#">job 1097 ›</a></div>
+        <dl class="kv"><dt>Elapsed</dt><dd class="mono">74 s</dd><dt>Live</dt><dd class="mono">read 315k tokens · 8 turns</dd><dt>Heartbeat</dt><dd class="mono">6 s ago</dd></dl>
+        <span class="note">The job, wherever it runs. With no job, one line for the runner: "Between jobs: picking the next ticket".</span>
+      </section>
+      <section class="panel new">
+        <h3>Queue</h3>
+        <p>63 tickets waiting: <span class="proj">softfield</span> 54 · <span class="proj">travel-companion</span> 9</p>
+        <div class="next-in-line">
+          <h3>Next in line <span class="sub" style="text-transform:none;letter-spacing:0;font-weight:400">· the runner's own order, across projects</span></h3>
+          <div class="next-row"><b class="mono">1 review F68</b> · a batch · <span class="proj">softfield</span></div>
+          <div class="next-row"><b class="mono">2 <a href="#">f106-01-blocked-reaches-the-owner</a></b> The runner tells the owner the moment it blocks a ticket… · the lead · <span class="proj">softfield</span></div>
+          <div class="next-row"><b class="mono">3 <a href="#">f106-03-try-again-set-aside</a></b> Each blocked ticket on the desk has two buttons… · the lead · waits for f106-01-blocked-reaches-the-owner · <span class="proj">softfield</span></div>
+          <div class="next-row sub">Passed over: <span class="proj">travel-companion</span> goes first in your order, but its m1-06-replan is parked until Claude's 5-hour window resets (16:10), and its 9 waiting tickets all wait for m1-06.</div>
+          <p><a href="#">Order the projects ›</a> · <a href="#">Reorder softfield's board ›</a></p>
+        </div>
+        <span class="note">One list in the order the runner takes work: every project's planning replies and reviews, then tickets project by project in your order.</span>
+      </section>
+      <section class="panel">
+        <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+        <div class="bars">
+          <div>Claude 5-hour window: 79% <span class="sub">· resets at 16:10</span><div class="meter"><i class="past" style="width:79%"></i></div></div>
+          <div>Claude week: 21% <span class="sub">· resets on Oct 26 17:00</span><div class="meter"><i style="width:21%"></i></div></div>
+          <div>Copilot month: 21% <span class="sub">· resets on Nov 1 00:00</span><div class="meter"><i style="width:21%"></i></div></div>
+        </div>
+      </section>
+      <section class="panel new">
+        <h2>From the field to the stash <span class="src">live · every project</span></h2>
+        <div class="floor">one floor: the field counts every project's cards, the machines (shared by every project) carry any project's crate, and each crate's label starts with its project's plate</div>
+        <span class="note">The floor's own ticket comes last (f132-05); until then it stays the picked project's, its title saying which.</span>
+      </section>
+      <section class="panel new">
+        <h2>While you were away <span class="src">since 20:00 · every project</span></h2>
+        <p class="sub">16 merged, 1 failed attempt, 0 escalations, 18 new for you, 0 blocked now, $88.00 on Claude</p>
+        <ul class="steps">
+          <li class="wide1"><span class="what"><span class="agent">qwen3.6-35b-a3b</span> <a class="mono" href="#">f15-10-fix-wait-note-assertions-check</a> <span class="proj">softfield</span> <span class="how">1st try · finished 14:07 · took 1.6 h</span><span class="title">Fix a checkpoint finding on f15-08-card-says-what-it-waits-for's tests</span></span></li>
+          <li class="wide1"><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">m1-05-first-page</a> <span class="proj">travel-companion</span> <span class="how">lead ticket · finished 12:31 · took 4 min</span><span class="title">Tabi's first pages, the worked example developers copy</span></span></li>
+          <li class="wide1"><span class="what"><span class="agent">Opus</span> <a class="mono" href="#">m1-03-agent</a> <span class="proj">travel-companion</span> <span class="how">lead ticket · finished 12:26 · took 9 min</span><span class="title">The agent, agent-neutral from the start</span></span></li>
+          <li class="wide1"><span class="what"><span class="agent">qwen3.6-35b-a3b</span> <a class="mono" href="#">f15-09-fix-populates-waits-for-cards</a> <span class="proj">softfield</span> <span class="how">3 attempts · finished 12:12 · took 2.9 h</span><span class="title">Fix a checkpoint finding on f15-08-card-says-what-it-waits-for</span></span></li>
+        </ul>
+      </section>
+      <section class="panel gone">
+        <h2>Savings from delegating · Claude per milestone</h2>
+        <p class="sub" style="margin:0">Leave the Overview for each project's page (Projects › softfield), where "so far" means that project's merged developer tickets, not one card's.</p>
+        <span class="note">Moved (question 4 in the plan).</span>
+      </section>
+    </main>
+  </div>
+  <p class="legend"><span class="new" style="padding:0 4px">Dashed green</span> marks what changes; <span class="gone" style="padding:0 4px">dashed grey</span> what moves away. The new project plate is ink and rules with corner ticks, never a status colour; it shows only when the factory has more than one project. The picker moves into the tab strip, in front of the three pages it changes (Planning, Board, Tickets); every other tab is the whole factory's.</p>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
