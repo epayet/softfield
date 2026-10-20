@@ -1,4 +1,4 @@
-# Milestone F158: milestones don't show me their descriptions, so when i…
+# Milestone F158: A card's page says what it's about: its Outcome, else your note
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-20.
