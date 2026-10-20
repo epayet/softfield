@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F152 mock-up: a growing card says what its review is doing</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --factory: #f2b10a; --serious-ink: var(--opus); --warn-ink: var(--hazard); --accent: var(--sonnet);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.part { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions [data-version] { display: block !important; }
+    .switch { display: none; }
+  }
+  .version-name { font: 700 14px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 6px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card adds */
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 520px; }
+  .legend .new { padding: 0 4px; }
+  .example { font: 11px var(--mono); color: var(--muted); }
+  [hidden] { display: none !important; }
+
+  /* ---- the stage and its cards, as drawn (dashboard.css) ---- */
+  .stage { background: var(--bay); display: flex; flex-direction: column; max-width: 340px; border: 1px solid var(--rule); }
+  .stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .stage-head svg { flex: none; color: var(--opus); }
+  .stage-head h3 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
+    padding: 9px 10px; background: var(--plate); border: 1px solid var(--opus);
+    border-left: 4px solid var(--factory); color: var(--fg); overflow-wrap: anywhere; }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .meter { display: block; height: 8px; background: var(--grid); position: relative; }
+  .meter > span { position: absolute; inset: 0 auto 0 0; background: var(--opus); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-note, .card-now { font-size: 12.5px; line-height: 1.35; }
+  .card-note { color: var(--muted); }
+  .card-now b { color: var(--serious-ink); font-weight: 600; }
+
+  /* ---- proposed: the review's step, a plate with the hazard tick ---- */
+  .card-review { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35;
+    padding: 5px 8px; background: var(--floor); border-left: 2px solid var(--hazard); color: var(--ink-2); }
+  .card-review b { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--fg); }
+
+  /* ---- the card page's header, as drawn ---- */
+  .card-head { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; max-width: 340px; margin-top: 18px; }
+  .card-head h2 { font: 600 16px var(--body); margin: 2px 0 8px; }
+  .card-head dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13.5px; }
+  .card-head dt { color: var(--muted); font: 12px var(--mono); }
+  .card-head dd { margin: 0; }
+</style>
+</head>
+<body>
+<h1>F152: a growing card says what its review is doing</h1>
+<p class="lede">The Growing stage of the board, with today's cards and their counts (F5, F19, F28, F88). F88's "review running" is how it read from 07:21 to 07:40 this morning; F19's "next in line" is how it will read once F135 has cleared its stop.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/board.html's card_link and milestone.html's header -->
+<div data-version="today" hidden>
+  <p class="version-name">Today</p>
+  <section class="stage">
+    <div class="stage-head">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9M12 13c-4 0-6-3-6-6 4 0 6 3 6 6Zm0-2c0-4 2-7 6-7 0 4-2 7-6 7Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      <div><h3>Growing</h3><span>in the factory · 13</span></div>
+    </div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> <span>F5</span> <span>factory</span></span>
+        <span class="card-title">steer from the phone, and the board</span>
+        <span class="meter"><span style="width: 94%"></span></span>
+        <span class="card-count">17 of 18 tickets · 1 set aside</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#3</b> <span>F19</span> <span>factory</span></span>
+        <span class="card-title">Will I need to refresh planning page when my questions get answered on planning</span>
+        <span class="meter"><span style="width: 100%"></span></span>
+        <span class="card-count">3 of 3 tickets</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#4</b> <span>F28</span> <span>factory</span></span>
+        <span class="card-title">the first time i clicked on the pause button nothing happened, but then eventually it worked</span>
+        <span class="meter"><span style="width: 100%"></span></span>
+        <span class="card-count">2 of 2 tickets</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#5</b> <span>F88</span> <span>factory</span></span>
+        <span class="card-title">add to lead memory that new software factory features…</span>
+        <span class="meter"><span style="width: 100%"></span></span>
+        <span class="card-count">1 of 1 ticket</span></a>
+    </div>
+  </section>
+  <header class="card-head">
+    <span class="card-meta">F19 · f19-will-i-need-to-refresh-planning</span>
+    <h2>Will I need to refresh planning page when my questions get answered on planning</h2>
+    <dl>
+      <dt>Stage</dt><dd>Growing: in the factory</dd>
+      <dt>Tickets</dt><dd>3 of 3 done</dd>
+    </dl>
+  </header>
+  <p class="legend">A full bar and nothing else: no word on what comes next, or whether you are needed. "1 set aside" doesn't say it won't run.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <p class="version-name">Proposed</p>
+  <section class="stage">
+    <div class="stage-head">
+      <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V9M12 13c-4 0-6-3-6-6 4 0 6 3 6 6Zm0-2c0-4 2-7 6-7 0 4-2 7-6 7Z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>
+      <div><h3>Growing</h3><span>in the factory · 13</span></div>
+    </div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> <span>F5</span> <span>factory</span></span>
+        <span class="card-title">steer from the phone, and the board</span>
+        <span class="meter"><span style="width: 94%"></span></span>
+        <span class="card-count">17 of 18 tickets · <span class="new">1 set aside, won't run</span></span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#3</b> <span>F19</span> <span>factory</span></span>
+        <span class="card-title">Will I need to refresh planning page when my questions get answered on planning</span>
+        <span class="meter"><span style="width: 100%"></span></span>
+        <span class="card-count">3 of 3 tickets</span>
+        <span class="card-review new"><b>Review stopped</b>end-to-end tests fail on staging · shown under Needs you</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#4</b> <span>F28</span> <span>factory</span></span>
+        <span class="card-title">the first time i clicked on the pause button nothing happened, but then eventually it worked</span>
+        <span class="meter"><span style="width: 100%"></span></span>
+        <span class="card-count">2 of 2 tickets</span>
+        <span class="card-review new"><b>Review stopped</b>end-to-end tests fail on staging · shown under Needs you</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#5</b> <span>F88</span> <span>factory</span></span>
+        <span class="card-title">add to lead memory that new software factory features…</span>
+        <span class="meter"><span style="width: 100%"></span></span>
+        <span class="card-count">1 of 1 ticket</span>
+        <span class="card-review new"><b>Review running</b>claude-opus reads the work · then it's yours to sign off</span>
+        <span class="example">as it read 07:21–07:40</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#3</b> <span>F19</span> <span>factory</span></span>
+        <span class="card-title">Will I need to refresh planning page when my questions get answered on planning</span>
+        <span class="meter"><span style="width: 100%"></span></span>
+        <span class="card-count">3 of 3 tickets</span>
+        <span class="card-review new"><b>Review next</b>Claude reviews it before the next ticket · then it's yours to sign off</span>
+        <span class="example">F19 once F135 has cleared its stop</span></a>
+    </div>
+  </section>
+  <header class="card-head">
+    <span class="card-meta">F19 · f19-will-i-need-to-refresh-planning</span>
+    <h2>Will I need to refresh planning page when my questions get answered on planning</h2>
+    <dl>
+      <dt>Stage</dt><dd>Growing: in the factory <span class="new">· review stopped: end-to-end tests fail on staging · shown under Needs you</span></dd>
+      <dt>Tickets</dt><dd>3 of 3 done</dd>
+    </dl>
+  </header>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. Once every ticket is done, the card says which step its review is at: next, running, or stopped (with the runner's reason). It moves to Ripe when the review's sheet is in, as today. The plate's yellow tick is ornament, the same on all three, so the words carry the state.</p>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
