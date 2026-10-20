@@ -41,7 +41,8 @@ from runner.tasks import (
 
 SIGNOFF = "signoff"  # subject: the milestone key
 RESERVE = "reserve"  # subject: week or five_hour; value: on or off (f8 D4)
-QUEUE = "queue"  # subject: the ticket id
+QUEUE = "queue"  # subject: the ticket id, in later/ or blocked/ (F106 D3)
+SET_ASIDE = "set_aside"  # subject: a blocked ticket's id, moved to later/ (F106 D3)
 PLAN_MESSAGE = planner.PLAN_MESSAGE  # subject: the thread; value: {text, comments} (f6 D1)
 SEND_BACK = "send_back"  # subject: <thread>/<proposal id>; value: {text, comments}
 ACCEPT_ADR = "accept_adr"  # subject: the card; value: the ADR's number
@@ -61,7 +62,7 @@ REORDER = "reorder"  # order (F15 D3)
 PROJECT_ORDER = "project_order"  # value: a JSON list of project names, first first (ADR 30)
 _STATE_ONLY = (RESERVE, PAUSE, RESUME)  # they change state.json alone: a wait takes them
 _APPROVALS = (ACCEPT_ADR, APPROVE_PLAN)  # they commit on main: the only way drafts reach it
-_COMMITS = (SIGNOFF, QUEUE, PLANT, DROP_SEED, PRIORITY, REORDER, REJECT, *_APPROVALS)
+_COMMITS = (SIGNOFF, QUEUE, SET_ASIDE, PLANT, DROP_SEED, PRIORITY, REORDER, REJECT, *_APPROVALS)
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
@@ -1425,10 +1426,15 @@ def _apply(
             key = milestone_arg(repo, subject)
             owner.signoff(repo, key, now.date(), db=db)
             return f"signed off {key}"
-        if kind == QUEUE:
-            if not subject:  # "" would match every ticket in later/
-                return "a queue request names its ticket"
-            return f"queued {loop.move_to_ready(repo, str(subject))}"
+        if kind in (QUEUE, SET_ASIDE):
+            if not subject:  # "" would match every ticket in the folder
+                return f"a {kind} request names its ticket"
+            if kind == QUEUE:
+                said, ticket = "queued", loop.move_to_ready(repo, str(subject))
+            else:
+                said, ticket = "set aside", loop.set_aside(repo, str(subject))
+            _answered_block(conn, project_id, now, ticket)
+            return f"{said} {ticket}"
         if kind == RESERVE:
             return _switch(conn, project_id, state, now, subject, value)
         if kind in (PAUSE, RESUME):
@@ -1506,6 +1512,13 @@ def _lapse(conn: sqlite3.Connection, project_id: int, state: State, now: datetim
         )
         lines.append(text)
     return lines
+
+
+def _answered_block(conn: sqlite3.Connection, project_id: int, now: datetime, ticket: str) -> None:
+    """A ticket out of blocked/, tried again or set aside: its item leaves the desk (F106 D3)."""
+    for row in metrics.open_owner_items(conn, project_id):
+        if row["kind"] == loop.BLOCKED_KIND and row["subject"] == ticket:
+            metrics.resolve_owner_item(conn, row["id"], now.isoformat())
 
 
 def _settle_waits(conn: sqlite3.Connection, project_id: int, state: State, now: datetime) -> None:

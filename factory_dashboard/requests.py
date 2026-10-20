@@ -37,6 +37,7 @@ from runner.requests import (
     RESERVE,
     RESUME,
     SEND_BACK,
+    SET_ASIDE,
     SIGNOFF,
 )
 
@@ -46,11 +47,13 @@ router = APIRouter()
 # Next in line and the Milestones page (f6-18), archiving a thread (2026-10-07), dismissing
 # words that didn't go through (F31 D9), rejecting a proposal (F31 D2), and editing or
 # cancelling a waiting plant or message (F14 D1), the board's order sent whole (F15 D3), and
-# the Projects page's order (ADR 30 item 6); the runner checks each value, as for the first three
+# the Projects page's order (ADR 30 item 6), and a blocked ticket set aside (F106 D3); the runner
+# checks each value, as for the first three
 KINDS = (
     SIGNOFF,
     RESERVE,
     QUEUE,
+    SET_ASIDE,
     PLAN_MESSAGE,
     PLANT,
     SEND_BACK,

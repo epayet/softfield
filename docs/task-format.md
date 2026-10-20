@@ -1,6 +1,6 @@
 # Task format
 
-Tasks ("tickets") are Markdown files with YAML frontmatter in `.factory/tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner; see the verdict). Tickets set aside wait in `.factory/tasks/later/`: the runner never takes them, and `softfield queue <id>` (an id or a unique prefix) moves one back to `ready/` in a commit ([ADR 17](../.factory/adr/17-always-on-factory.md) item 3). The file name is `<id>.md`. Why they look like this: [ADR 07](../.factory/adr/07-spend-less-frontier.md).
+Tasks ("tickets") are Markdown files with YAML frontmatter in `.factory/tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner, whose desk has it at once). Tickets set aside wait in `.factory/tasks/later/`: the runner never takes them, and `softfield queue <id>` (an id or a unique prefix) moves one back to `ready/` in a commit ([ADR 17](../.factory/adr/17-always-on-factory.md) item 3). A blocked ticket comes back the same way, from the desk's Try again (a `queue` request; later/ is searched first, then blocked/), or goes to `later/` with Set aside (a `set_aside` request); either keeps its footers ([F106](../.factory/cards/f106-where-do-blocked-tickets-go-for.md) D3). The file name is `<id>.md`. Why they look like this: [ADR 07](../.factory/adr/07-spend-less-frontier.md).
 
 ## Frontmatter
 

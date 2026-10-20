@@ -18,6 +18,7 @@ import yaml
 from runner import metrics
 from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
+from runner.loop import BLOCKED_KIND, blocked_text
 from runner.milestone import WAITS, footer_fields, signoff_sections
 from runner.state import State
 from runner.tasks import (
@@ -116,10 +117,13 @@ def owner_items(repo: Path, milestone: str, state: State, review_stop: str) -> l
         else:
             text = f"{task_id} escalated with no decision: see its logs"
             items.append(OwnerItem("escalated", task_id, text, rerun))
+    ready = load_dir(repo / ".factory" / "tasks" / "ready", 1000)
     for task_id in _ids(repo, "blocked", milestone):
+        # as ``block`` wrote it, with no command: the desk's buttons answer it (F106 D1, D3)
         path = repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
-        items.append(OwnerItem("blocked", task_id, f"{task_id} blocked: {reason}", rerun))
+        text = blocked_text(task_id, reason, len(blocked_ids(ready, {task_id})))
+        items.append(OwnerItem(BLOCKED_KIND, task_id, text, ""))
     for task_id, text in _reserve_waits(repo, state, milestone):
         items.append(OwnerItem("reserve", task_id, text, rerun))
     if _needs_owner(review_stop):

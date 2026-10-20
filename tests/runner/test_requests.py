@@ -13,7 +13,7 @@ import pytest
 from runner import cli, dispatch, loop, metrics, milestone, planner, requests
 from runner.gitops import Git, GitError
 from runner.state import State, load_state, save_state
-from runner.tasks import load_dir, parse_task
+from runner.tasks import append_footer, load_dir, parse_task
 from tests.runner.conftest import git, write_task
 from tests.runner.test_cli import in_repo  # noqa: F401 - a fixture
 from tests.runner.test_owner import _milestone
@@ -148,6 +148,119 @@ def test_a_queue_request_for_a_missing_ticket_is_finished_with_the_error(repo):
     assert _request(repo, asked)[1] == line.split(": ", 1)[1]
     assert git(repo, "rev-parse", "HEAD") == head
     assert _apply(repo) == []
+
+
+# --- a blocked ticket brought back: tried again, or set aside (F106 D3) -----------------------
+
+
+def _blocked(repo: Path, task_id: str, work: str | None = None) -> None:
+    """A ticket the runner blocked: in blocked/ with its footer, its item open, and its work on
+    ``task/<id>`` when ``work`` is given."""
+    if work is not None:
+        git(repo, "checkout", "-q", "-b", f"task/{task_id}")
+        (repo / "work.txt").write_text(work)
+        git(repo, "add", "work.txt")
+        git(repo, "commit", "-q", "-m", f"wip {task_id}")
+        git(repo, "checkout", "-q", "main")
+    path = write_task(repo / ".factory" / "tasks" / "blocked", task_id)
+    append_footer(path, {"result": "blocked", "reason": "check-all failed"})
+    git(repo, "add", ".factory/tasks")
+    git(repo, "commit", "-q", "-m", f"runner: {task_id} blocked")
+    _item(repo, "blocked", task_id)
+
+
+def _moved_alone(repo: Path, task_id: str, src: str, dst: str) -> None:
+    changed = git(repo, "show", "--name-only", "--no-renames", "--format=", "HEAD").split()
+    assert sorted(changed) == sorted(
+        [f".factory/tasks/{src}/{task_id}.md", f".factory/tasks/{dst}/{task_id}.md"]
+    )
+    assert git(repo, "status", "--porcelain") == ""
+    moved = (repo / ".factory" / "tasks" / dst / f"{task_id}.md").read_text()
+    assert "result: blocked" in moved and "reason: check-all failed" in moved  # footers kept
+
+
+def test_a_queue_request_tries_a_blocked_ticket_again_keeping_its_failed_work(repo):
+    _blocked(repo, "f9-01-lead", work="first try")
+    held = git(repo, "rev-parse", "task/f9-01-lead").strip()
+    asked = _ask(repo, "queue", "f9-01-lead")
+    assert _apply(repo) == ["queue f9-01-lead: queued f9-01-lead"]
+    assert (repo / ".factory" / "tasks" / "ready" / "f9-01-lead.md").is_file()
+    assert not (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead.md").exists()
+    assert git(repo, "log", "-1", "--format=%s").strip() == "queue f9-01-lead (by the owner)"
+    _moved_alone(repo, "f9-01-lead", "blocked", "ready")
+    assert git(repo, "rev-parse", "blocked/f9-01-lead").strip() == held
+    assert _items(repo) == [("blocked", "f9-01-lead", "x", False)]
+    assert _request(repo, asked) == (NOW.isoformat(), "queued f9-01-lead")
+
+
+def test_a_second_try_replaces_the_older_copy_of_the_failed_work(repo):
+    _blocked(repo, "f9-01-lead", work="first try")
+    git(repo, "branch", "blocked/f9-01-lead", "main")  # an older copy, from an earlier try
+    held = git(repo, "rev-parse", "task/f9-01-lead").strip()
+    _ask(repo, "queue", "f9-01-lead")
+    assert _apply(repo) == ["queue f9-01-lead: queued f9-01-lead"]
+    assert git(repo, "rev-parse", "blocked/f9-01-lead").strip() == held
+
+
+def test_a_blocked_ticket_with_no_branch_is_tried_again_and_makes_none(repo):
+    _blocked(repo, "f9-01-lead")
+    _ask(repo, "queue", "f9-01-lead")
+    assert _apply(repo) == ["queue f9-01-lead: queued f9-01-lead"]
+    assert git(repo, "branch", "--list", "blocked/*") == ""
+
+
+def test_a_queue_request_takes_later_first(repo):
+    _later(repo, "f9-01-lead")
+    _blocked(repo, "f9-01-lead-again")
+    _ask(repo, "queue", "f9-01-lead")
+    assert _apply(repo) == ["queue f9-01-lead: queued f9-01-lead"]
+    assert (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead-again.md").is_file()
+    assert _items(repo) == [("blocked", "f9-01-lead-again", "x", True)]
+
+
+def test_a_set_aside_request_moves_a_blocked_ticket_to_later_alone(repo):
+    _blocked(repo, "f9-01-lead", work="first try")
+    _blocked(repo, "f9-02-other")
+    asked = _ask(repo, "set_aside", "f9-01-lead")
+    assert _apply(repo) == ["set_aside f9-01-lead: set aside f9-01-lead"]
+    assert (repo / ".factory" / "tasks" / "later" / "f9-01-lead.md").is_file()
+    assert not (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead.md").exists()
+    assert git(repo, "log", "-1", "--format=%s").strip() == "set aside f9-01-lead (by the owner)"
+    _moved_alone(repo, "f9-01-lead", "blocked", "later")
+    assert _items(repo) == [
+        ("blocked", "f9-01-lead", "x", False),
+        ("blocked", "f9-02-other", "x", True),
+    ]
+    assert "task/f9-01-lead" in git(repo, "branch")  # the work stays where it was
+    assert _request(repo, asked) == (NOW.isoformat(), "set aside f9-01-lead")
+
+
+@pytest.mark.parametrize(
+    ("folder", "subject", "said"),
+    [
+        ("ready", "f9-03-ticket", "isn't in .factory/tasks/blocked/"),
+        ("done", "f9-03-ticket", "isn't in .factory/tasks/blocked/"),
+        (None, "f9-09-nothing", "matches no ticket in .factory/tasks/blocked/"),
+        (None, "", "a set_aside request names its ticket"),
+        (None, None, "a set_aside request names its ticket"),
+    ],
+)
+def test_a_set_aside_request_for_a_ticket_not_blocked_is_refused_and_moves_nothing(
+    repo, folder, subject, said
+):
+    _blocked(repo, "f9-01-lead")
+    if folder is not None:
+        write_task(repo / ".factory" / "tasks" / folder, "f9-03-ticket")
+        git(repo, "add", ".factory/tasks")
+        git(repo, "commit", "-q", "-m", folder)
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "set_aside", subject)
+    [line] = _apply(repo)
+    assert said in line
+    assert _request(repo, asked)[1] == line.split(": ", 1)[1]
+    assert git(repo, "rev-parse", "HEAD") == head and git(repo, "status", "--porcelain") == ""
+    assert (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead.md").is_file()
+    assert _items(repo) == [("blocked", "f9-01-lead", "x", True)]
 
 
 @pytest.mark.parametrize("switch", ["week", "five_hour"])

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import milestone, owner
+from runner import loop, milestone, owner
 from runner.state import State
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
@@ -216,10 +216,20 @@ def test_the_verdicts_items_are_open_owner_items_with_a_command(repo: Path):
     assert adr["text"] == "Keep?" and adr["command"] == "softfield accept 14"
     blocked = items[("blocked", "m1-04-thing")]
     assert "2 escalations used" in str(blocked["text"])
-    assert blocked["command"] == "softfield milestone 1"
+    assert blocked["command"] == ""  # the desk's buttons answer it (F106 D3)
     assert items[("review-stop", "m1")]["text"] == "adr-needed"
     assert all(item["created"] for item in items.values())
     assert [row["name"] for row in _projects(repo)] == [repo.name]
+
+
+def test_the_verdicts_blocked_item_says_what_block_said(repo: Path):
+    """F106 D1: a rerun's verdict doesn't change the item ``block`` stored, nor its count."""
+    state = _needs_you(repo)
+    write_task(repo / ".factory" / "tasks" / "ready", "m1-06-after", "[m1-04-thing]")
+    owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
+    said = loop.blocked_text("m1-04-thing", "2 escalations used", 1)
+    assert _open(repo)[("blocked", "m1-04-thing")]["text"] == said
+    assert said == "m1-04-thing blocked: 2 escalations used · 1 ticket waits behind it"
 
 
 RESERVE_TEXT = (

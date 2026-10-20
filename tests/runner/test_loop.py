@@ -990,6 +990,34 @@ def test_a_lead_ticket_that_fails_check_all_is_blocked_with_its_branch_kept(
     assert (repo / ".factory" / "tasks" / "ready" / "m1-02-after.md").exists()  # paused, not run
 
 
+@pytest.mark.parametrize(
+    ("after", "said"),
+    [
+        (2, " · 2 tickets wait behind it"),
+        (1, " · 1 ticket waits behind it"),
+        (0, ""),
+    ],
+)
+def test_a_blocked_lead_ticket_is_on_the_owners_desk_at_once(
+    repo, fake_model, fake_lead, monkeypatch, after, said
+):
+    """F106 D1: ``block`` stores the item itself, not only a milestone's verdict."""
+    _lead_task(repo, "m1-01-lead")
+    if after:
+        _add_task(repo, "m1-02-after", "[m1-01-lead]")
+    if after > 1:
+        _add_task(repo, "m1-03-later", "[m1-02-after]")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch, ok=False)
+    _run(repo)
+    [item] = _rows(repo, "owner_items")
+    assert (item["kind"], item["subject"]) == ("blocked", "m1-01-lead")
+    reason = "check-all failed; the work is on task/m1-01-lead"
+    assert item["text"] == f"m1-01-lead blocked: {reason}{said}"
+    assert not item["command"] and item["resolved"] is None
+
+
 def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fake_lead):
     for n in (1, 2, 3):
         _add_task(repo, f"m1-0{n}-thing")

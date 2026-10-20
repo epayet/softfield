@@ -66,6 +66,14 @@ def test_each_kind_keeps_its_subject_or_value(client, db_path):
     ]
 
 
+def test_setting_a_blocked_ticket_aside_writes_one_row(client, db_path):
+    """F106 D3: the blocked item's "Set aside"."""
+    assert _post(client, "kind=set_aside&subject=f21-01-planner", HTMX).status_code == 200
+    assert [(r["kind"], r["subject"], r["value"]) for r in _rows(db_path)] == [
+        ("set_aside", "f21-01-planner", None),
+    ]
+
+
 PLANNING = [  # the planning room's six requests (f6 D1); the runner checks their values
     ("plan_message", "f7", '{"text": "Draft it.", "comments": {}}'),
     ("plant", None, '{"title": "One queue", "thoughts": "", "area": "factory"}'),

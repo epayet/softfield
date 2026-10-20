@@ -2371,8 +2371,20 @@ def _check_all(s: Session, task_id: str | None, logs: Path, name: str) -> bool:
     return all(r.ok for r in results)
 
 
+BLOCKED_KIND = "blocked"  # a blocked ticket's owner item; its subject is the ticket's id
+
+
+def blocked_text(task_id: str, reason: str, waiting: int) -> str:
+    """A blocked ticket's owner item (F106 D1), as ``block`` and the verdict write it."""
+    if not waiting:
+        return f"{task_id} blocked: {reason}"
+    behind = f"{waiting} ticket waits" if waiting == 1 else f"{waiting} tickets wait"
+    return f"{task_id} blocked: {reason} · {behind} behind it"
+
+
 def block(s: Session, task_path: Path, reason: str) -> None:
-    """Move a task to blocked/ with its reason; its dependants pause (ADR 12 item 10)."""
+    """Move a task to blocked/ with its reason; its dependants pause (ADR 12 item 10). The owner
+    has it on their desk at once (F106 D1), with no command: the desk's buttons answer it."""
     target = s.tasks_dir("blocked") / task_path.name
     s.git.move(task_path, target)
     append_footer(target, {"result": "blocked", "reason": reason})
@@ -2380,8 +2392,20 @@ def block(s: Session, task_path: Path, reason: str) -> None:
     record_ticket(s, target)
     rate_finished(s, task_path.stem)
     s.report.notes.append(f"Blocked {task_path.stem}: {reason}")
+    waiting = waiting_behind(s, target.stem)
+    if s.project_id is not None:
+        _record(
+            s,
+            metrics.upsert_owner_item,
+            s.project_id,
+            BLOCKED_KIND,
+            target.stem,
+            text=blocked_text(target.stem, reason, waiting),
+            command="",  # an older item's rerun command goes too
+            created=now().isoformat(),
+        )
     where = f"ticket in {target.relative_to(s.repo).as_posix()}"
-    s.log(console.stopped(task_path.stem, "blocked", reason, where, waiting_behind(s, target.stem)))
+    s.log(console.stopped(task_path.stem, "blocked", reason, where, waiting))
 
 
 def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
@@ -4950,9 +4974,9 @@ def live_run(cfg: Config) -> str | None:
 
 
 def queue_ticket(cfg: Config, wanted: str) -> str:
-    """Move a ticket from .factory/tasks/later/ to .factory/tasks/ready/ in a commit of its own (ADR
-    17 item
-    3); ``wanted`` is its id or a unique prefix. Tasks only, so the commit skips the hook.
+    """Move a ticket from .factory/tasks/later/ (or blocked/, F106 D3) to .factory/tasks/ready/ in a
+    commit of its own (ADR 17 item 3); ``wanted`` is its id or a unique prefix. Tasks only, so the
+    commit skips the hook.
     Refused while a run is live: the runner commits on the same branch."""
     if (run := live_run(cfg)) is not None:
         raise RunnerError(f"run {run} is running; queue {wanted} once it has stopped")
@@ -4961,15 +4985,41 @@ def queue_ticket(cfg: Config, wanted: str) -> str:
 
 def move_to_ready(repo: Path, wanted: str) -> str:
     """`queue_ticket`'s move and commit, for a caller that is git's one writer: the command
-    once no run is live, or the run itself applying the owner's request (f5 D2)."""
+    once no run is live, or the run itself applying the owner's request (f5 D2). A ticket in
+    later/ first, else one in blocked/, tried again (F106 D3): its ``task/<id>`` is copied to
+    ``blocked/<id>`` first, since a lead ticket starts again from main and resets its branch."""
     tasks = repo / ".factory" / "tasks"
-    src = find_ticket(tasks, LATER, wanted)
-    dst = tasks / "ready" / src.name
+    try:
+        src = find_ticket(tasks, LATER, wanted)
+    except TaskError as later:
+        try:
+            src = find_ticket(tasks, "blocked", wanted)
+        except TaskError:
+            raise later from None
     git = Git(repo)
-    git.move(src, dst)
-    paths = (src.relative_to(repo).as_posix(), dst.relative_to(repo).as_posix())
-    git.run("commit", "-q", "--no-verify", "-m", f"queue {src.stem} (by the owner)", "--", *paths)
+    if src.parent.name == "blocked" and git.run("branch", "--list", f"task/{src.stem}").strip():
+        git.run("branch", "-f", f"blocked/{src.stem}", f"task/{src.stem}")
+    _move_alone(git, src, tasks / "ready", f"queue {src.stem} (by the owner)")
     return src.stem
+
+
+def set_aside(repo: Path, wanted: str) -> str:
+    """A blocked ticket moved to later/ in a commit of its own, the owner's ``set_aside``
+    request (F106 D3); its branch stays as it is."""
+    src = find_ticket(repo / ".factory" / "tasks", "blocked", wanted)
+    _move_alone(
+        Git(repo), src, repo / ".factory" / "tasks" / LATER, f"set aside {src.stem} (by the owner)"
+    )
+    return src.stem
+
+
+def _move_alone(git: Git, src: Path, folder: Path, message: str) -> None:
+    """A ticket moved to ``folder``, the move alone committed. Tasks only: the commit skips the
+    hook."""
+    dst = folder / src.name
+    git.move(src, dst)
+    paths = (src.relative_to(git.repo).as_posix(), dst.relative_to(git.repo).as_posix())
+    git.run("commit", "-q", "--no-verify", "-m", message, "--", *paths)
 
 
 def close_session(s: Session) -> SessionReport:
