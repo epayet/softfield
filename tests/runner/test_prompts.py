@@ -223,6 +223,20 @@ def test_a_card_that_changes_a_page_gets_a_today_proposed_mockup_unasked():
     assert "mock-up" not in prompts.PLANNER_GENERAL and "Today" not in prompts.PLANNER_GENERAL
 
 
+def test_a_factory_mockups_proposed_is_drawn_in_the_factory_theme_leaning_bolder():
+    """f88-01: Proposed uses the factory theme from dashboard.css's tokens, a little bolder
+    than needed (F88 D1, D4), the factory only (D5); the game is never named (D2)."""
+    text = prompts.PLANNER
+    start = text.index("- A card that changes what a page shows or how it is laid out")
+    paragraph = text[start : text.index("\n- ", start)]
+    assert "factory theme" in paragraph and "dashboard.css's tokens" in paragraph
+    assert "leaning bolder" in paragraph and "the owner tones it down" in paragraph
+    assert "nothing copied from a game" in paragraph
+    assert "a factory page" in paragraph
+    for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):
+        assert "endfield" not in template.lower() and "arknights" not in template.lower()
+
+
 def test_the_planner_prompts_still_fill_in():
     """The new rules add no stray brace: both prompts format with the same fields."""
     for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):

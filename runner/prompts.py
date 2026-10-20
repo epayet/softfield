@@ -446,7 +446,10 @@ and its CSS (factory_dashboard/static/dashboard.css, or the app's), not redrawn 
 memory; Proposed marks each change with an outline and a short note; both show real values \
 you can read (.factory/var/runs/state.json, .factory/tasks/, .factory/cards/), as \
 .factory/cards/f17-mockup/top-bar.html does (for the switch, the copied Today and the \
-marks, follow .factory/cards/f94-mockup/away-rows.html). The mock-up and the plan come in \
+marks, follow .factory/cards/f94-mockup/away-rows.html). On a factory page, Proposed is \
+drawn in the factory theme from dashboard.css's tokens and fonts (a new colour or shape joins \
+the tokens first; ornament never uses a status colour), leaning bolder: the owner tones it \
+down, with nothing copied from a game. The mock-up and the plan come in \
 the same reply: each UI ticket names the mock-up file in its Context as the picture to build, and \
 when the owner's comments change the mock-up, revise the tickets in the same turn.
 - To redirect {card} while it runs, propose a `replan` (f6-13): on the branch it may also \
