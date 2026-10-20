@@ -1260,6 +1260,115 @@ def test_bundled_link_retains_projects_context(page, serve_between, db_path):
     assert "?project=coucou" in link
 
 
+def test_bundled_link_encodes_special_characters_in_project(page, serve_between, db_path):
+    """f69: the bundled link URL-encodes the project so names with & or # are not truncated."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for owner_id, _adr, text in [
+            ("enc-a", "ADR 70", "Encoded item one."),
+            ("enc-b", "ADR 71", "Encoded item two."),
+        ]:
+            metrics.upsert_owner_item(
+                conn,
+                project,
+                "adr",
+                owner_id,
+                text=text,
+                created=NOW.isoformat(),
+            )
+    finally:
+        conn.close()
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+
+    # Set the project to a value with special characters and seed its baseline
+    # from the page-load baseline so enc-a / enc-b are seen as new items.
+    page.evaluate(
+        "() => { "
+        "document.querySelector('#live-facts').dataset.project = 'my&proj#2'; "
+        "localStorage.setItem('notify:my&proj#2', localStorage.getItem('notify:coucou')); "
+        "}"
+    )
+    page.evaluate("window._notifyCheck()")
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+
+    entry = page.evaluate("window.sw_notifications[0]")
+    link = entry["data"]["link"]
+    assert "?project=my%26proj%232" in link, f"expected encoded project in link, got {link}"
+
+
+def test_fallback_notification_has_onclick_handler(page, serve_between, db_path):
+    """f69: when the service worker rejects, the fallback notification has an onclick
+    handler so the owner can navigate on tap."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 80",
+            text="Fallback navigation test.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
+    page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
+
+    shown = page.evaluate("window.shown")
+    assert len(shown) == 1 and "Fallback navigation test." in shown[0]["body"]
+    # The notification must have an onclick handler so the owner can navigate on tap.
+    assert page.evaluate("window.shown[0] && window.shown[0].onclick !== null")
+
+
 # --- notification bar (f12-01, ADR 26 item 2) ----------------------------------------------
 
 # A stand-in for the browser's Notification: it records what the page asks and shows.
