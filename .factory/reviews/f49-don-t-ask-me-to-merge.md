@@ -32,7 +32,7 @@ None.
 - 2026-10-08: planned with you. f49-01 (the runner applies merges) done by the lead (`6f1db63`).
 - 2026-10-13: f49-03 (the lead carries on on the kept card) done by the lead with you, after F107 (`1fefa51`).
 - 2026-10-20 00:08 ([session](../sessions/2026-10-20-0008.md)): f49-02 merged on its first attempt, a lead ticket (protected runner code, test first). The other five merges in that session were F15's.
-- 2026-10-20: this review, round 1. Three nits: one fixed in the review, two in the backlog.
+- 2026-10-20: this review, round 1. Three nits: one fixed in the review, two in the backlog. Round 2 (06:41) checked that fix and found nothing new.
 - Lessons:
   - **Write the test's data in the order production writes it.** The merge test stored the lead's reply before merging, but the real job stores it after, so the test can't see the missing reply in the export (F1). Same lesson as F109 ("fixtures that don't look like real data"), smaller stakes.
   - **A protected, test-first lead ticket of difficulty 6 went through on its first attempt,** with no checkpoint findings. Splitting F49 into three tickets of one decision each paid off.
@@ -80,6 +80,8 @@ Checks after the fix: `uv run pytest -q tests/runner tests/factory_dashboard` ga
 Score: 8/10. Every Done-when line is met and tested, including the resumed session and the undo. The design keeps the owner's words beside the summary, as asked. Two small edge cases are left, one of them hidden by a fixture written in the wrong order.
 
 Stop reason: none. One finding fixed, two nits in the backlog; nothing for round 2.
+
+**Round 2** (2026-10-20 06:41): the fix diff is the docstring alone (F3), plus the backlog lines for F1 and F2 and the review itself. The docstring matches what `run_planner` does. `uv run ruff check runner/planner.py` is clean, and `tests/runner/test_planner.py` gave 213 passed. F1 and F2 stay in the backlog as routed, and no new finding came up. The loop ends here with the score unchanged at 8/10.
 
 ## Factory
 - **The flow:** three lead tickets over three sessions. f49-02 merged on its first attempt, with no direction, escalation or park. There was no stop for the owner in this run (f49-03 was done with them earlier, after F107).
