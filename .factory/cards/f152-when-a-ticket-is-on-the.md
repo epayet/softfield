@@ -1,4 +1,4 @@
-# Milestone F152: When a ticket is on the board growing and all tickets are…
+# Milestone F152: A done card says where its review is, and set aside says it won't run
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-20.
