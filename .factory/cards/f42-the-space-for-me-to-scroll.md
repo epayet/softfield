@@ -1,6 +1,6 @@
 # Milestone F42: The space for me to scroll on a planning proposal card is very small
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** ready · **Priority:** 5 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

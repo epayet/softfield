@@ -1,6 +1,6 @@
 # Milestone F10: crates on the belts
 
-> **Status: planned** (2026-10-06, with the owner). **State:** ready · **Priority:** 5 · **Area:** factory
+> **Status: planned** (2026-10-06, with the owner). **State:** ready · **Priority:** 20 · **Area:** factory
 > **After:** f6-planning-room signed off (the owner, 2026-10-06: crates after the planning room; without it, its lead ticket would go before F6's developer tickets)
 > From the roadmap's "Crates move along the belts" (after F8, which made every job a queue row) and the owner's notes of 2026-10-06: "I want to see one crate moving on the conveyor belt at a time when it's doing work", "there was a time when the developer was working but the belt wasn't moving", and "Running: check-all · f6-06, but the line wasn't moving".
 

@@ -1,6 +1,6 @@
 # Milestone F36: whenever the planner is planning and answering my questions and when tickets need to be made, i want to know if it's a…
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Priority:** 90 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

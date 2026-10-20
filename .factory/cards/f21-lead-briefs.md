@@ -1,6 +1,6 @@
 # Milestone F21: the lead's briefs
 
-> **Status: planned** (2026-10-07, with the owner, in a terminal session). **State:** ready · **Priority:** 3 · **Area:** factory
+> **Status: planned** (2026-10-07, with the owner, in a terminal session). **State:** ready · **Priority:** 8 · **Area:** factory
 > The owner planted questions (F12–F19) that went unanswered, then asked whether the lead checks the plan and reads lead.md when it answers. The planner logs of 2026-10-07 say no: neither planner job opened `docs/agents/lead.md`, and only one looked at `.factory/tasks/` and `state.json`. Prompts name lead.md's sections but don't give them.
 
 ## Outcome

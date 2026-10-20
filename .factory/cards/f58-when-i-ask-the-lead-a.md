@@ -1,6 +1,6 @@
 # Milestone F58: when i ask the lead a question through planting an idea
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 90 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

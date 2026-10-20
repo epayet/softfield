@@ -1,6 +1,6 @@
 # Milestone F66: the number of key points under a proposal in the list is…
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Priority:** 90 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

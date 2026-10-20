@@ -1,6 +1,6 @@
 # Milestone F35: when i'm reviewing what's on my desk, i want to click next to keep reviewing everything that needs my attention right…
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** idea · **Priority:** 90 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes
