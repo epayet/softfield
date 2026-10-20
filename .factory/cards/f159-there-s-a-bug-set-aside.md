@@ -1,4 +1,4 @@
-# Milestone F159: there's a bug set aside, what am i supposed to do about…
+# Milestone F159: A set-aside ticket says it won't run, with a Queue it button on its page
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-20.
