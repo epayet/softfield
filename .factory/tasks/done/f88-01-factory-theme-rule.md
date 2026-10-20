@@ -29,3 +29,10 @@ Read F88's Decisions D1–D5 in `.factory/cards/f88-add-to-lead-memory-that-new.
 - A test in `tests/runner/test_prompts.py` checks that `PLANNER` asks for the factory theme in mock-ups and that neither `PLANNER` nor `PLANNER_GENERAL` contains "Endfield".
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
