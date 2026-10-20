@@ -162,12 +162,12 @@ def test_page_shows_note_on_sprouting_but_not_other_stages(board_db, board_clien
     finally:
         conn.close()
     html = _page(board_client)
-    _, words = _card(html, "/milestones/f21-parallel")
+    _, words, _ = _card(html, "/milestones/f21-parallel")
     assert "waits for your answer since 2 Oct" in words
-    _, words = _card(html, "/milestones/f23-planted")
+    _, words, _ = _card(html, "/milestones/f23-planted")
     assert "waits for your answer" not in words
     assert "the lead is answering" not in words
-    _, words = _card(html, "/milestones/f24-growing")
+    _, words, _ = _card(html, "/milestones/f24-growing")
     assert "waits for your answer" not in words
     assert "the lead is answering" not in words
 
@@ -545,13 +545,26 @@ def _links(html: str) -> list[str]:
     return re.findall(r'<a class="card[^"]*" href="([^"?]+)', html)
 
 
-def _card(html: str, link: str) -> tuple[list[str], str]:
-    """A card by its link: its classes and its words."""
+def _card(html: str, link: str) -> tuple[list[str], str, str]:
+    """A card by its link: its classes, its words, and its raw HTML."""
     found = re.search(
         rf'<a class="card([^"]*)" href="{re.escape(link)}\?[^"]*">(.*?)</a>', html, re.S
     )
     assert found, link
-    return found[1].split(), " ".join(unescape(re.sub(r"<[^>]+>", " ", found[2])).split())
+    return found[1].split(), " ".join(unescape(re.sub(r"<[^>]+>", " ", found[2])).split()), found[2]
+
+
+def _card_note(html: str, link: str) -> str:
+    """Extract the card-note text of a card by its link."""
+    found = re.search(
+        rf'<a class="card([^"]*)" href="{re.escape(link)}\?[^"]*">'
+        rf'.*?<span class="card-note">([^<]*)</span>',
+        html,
+        re.S,
+    )
+    if found:
+        return unescape(found[2])
+    return ""
 
 
 def test_the_page_lists_each_card_in_its_stage_s_column(board_db, board_client):
@@ -622,12 +635,12 @@ def test_no_more_harvested_shows_when_four_or_fewer_are(board_client):
 
 def test_a_bug_card_says_bug_and_links_to_its_ticket_page(board_client):
     html = _page(board_client)
-    classes, words = _card(html, "/tickets/bug-01-duck-count")
+    classes, words, _ = _card(html, "/tickets/bug-01-duck-count")
     assert "bug" in classes  # the striped edge
     assert "factory" in classes
     assert "bug · factory" in words
     assert "ticket written, set aside" in words
-    classes, words = _card(html, "/milestones/f20-duck-pond")
+    classes, words, _ = _card(html, "/milestones/f20-duck-pond")
     assert "bug" not in classes
     assert "product" in classes
     assert "bug" not in words
@@ -637,11 +650,11 @@ def test_a_bug_card_says_bug_and_links_to_its_ticket_page(board_client):
 def test_a_card_shows_its_place_and_no_p_number_on_the_page(board_db):
     write(board_db, _planted(("f27-third", 9)))
     html = _page(_client(board_db))
-    _, words = _card(html, "/milestones/f27-third")
+    _, words, _ = _card(html, "/milestones/f27-third")
     assert words.startswith("#3 F27 factory")
     assert not re.search(r"\bP\d", words)
     for link in ("/milestones/f1", "/milestones/m3"):  # ripe, harvested
-        _, words = _card(html, link)
+        _, words, _ = _card(html, link)
         assert "#" not in words
         assert not re.search(r"\bP\d", words)
 
@@ -650,11 +663,11 @@ def test_a_card_on_its_way_has_a_dashed_edge_and_says_where_it_was(board_db):
     write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
     write(board_db, _reorder('["f9", "f7"]'))
     html = _page(_client(board_db))
-    classes, words = _card(html, "/milestones/f9-second")
+    classes, words, _ = _card(html, "/milestones/f9-second")
     assert "on-its-way" in classes
     assert words.startswith("#1 F9")
     assert "on its way · was #2 · at the runner's next pick" in words
-    classes, words = _card(html, "/milestones/f7-first")
+    classes, words, _ = _card(html, "/milestones/f7-first")
     assert "on-its-way" not in classes
     assert "on its way" not in words
     assert words.startswith("#2 F7")
@@ -662,13 +675,13 @@ def test_a_card_on_its_way_has_a_dashed_edge_and_says_where_it_was(board_db):
 
 def test_a_growing_card_shows_its_tickets_and_what_runs_now(board_client):
     html = _page(board_client)
-    _, words = _card(html, "/milestones/f24-growing")
+    _, words, _ = _card(html, "/milestones/f24-growing")
     assert "1 of 3 tickets · 1 set aside" in words
     assert f"Now: f24-02-working · Goal of f24-02-working. · {LOCAL}, attempt 2" in words
     growing = _columns(html)["growing"]
     assert re.search(r'<span class="meter"><span style="width: 33%">', growing)
     # a ripe card carries the sign-off text
-    _, ripe = _card(html, "/milestones/f1")
+    _, ripe, _ = _card(html, "/milestones/f1")
     assert "Read the review and sign off" in ripe
     assert "softfield signoff" not in ripe
 
@@ -943,7 +956,7 @@ def test_ripe_card_says_read_the_review_and_signs_off(board_db, board_client):
     found = read(board_db)
     for c in found.stages["ripe"]:
         link = f"/milestones/{c.full_key}"
-        _, words = _card(html, link)
+        _, words, _ = _card(html, link)
         assert "Read the review and sign off" in words
         assert "softfield signoff" not in words
 
@@ -964,7 +977,7 @@ def test_growing_and_harvested_cards_have_no_review_fragment(board_db, board_cli
     for stage in ("growing", "harvested"):
         for c in found.stages[stage]:
             link = f"{'/tickets' if c.bug else '/milestones'}/{c.full_key}"
-            _, words = _card(html, link)
+            _, words, _ = _card(html, link)
             match = re.search(
                 rf'<a class="card[^"]*" href="{re.escape(link)}\?[^"]*#review">', html
             )
@@ -1171,8 +1184,8 @@ def test_a_planted_card_says_what_it_waits_for(board_db):
     assert f23.stage == "planted"
     assert f23.waits == ("F22",)
     html = _page(_client(board_db))
-    _, words = _card(html, "/milestones/f23-planted")
-    assert "waits for F22" in words
+    _, _, _ = _card(html, "/milestones/f23-planted")
+    assert _card_note(html, "/milestones/f23-planted") == "waits for F22"
 
 
 def test_two_ready_tickets_one_free_means_no_waits(board_db):
@@ -1198,7 +1211,7 @@ def test_two_ready_tickets_one_free_means_no_waits(board_db):
     f23 = card(found, "F23")
     assert f23.waits == ()
     html = _page(_client(board_db))
-    _, words = _card(html, "/milestones/f23-planted")
+    _, words, _ = _card(html, "/milestones/f23-planted")
     assert "waits for" not in words
 
 
@@ -1235,8 +1248,8 @@ def test_ready_tickets_depend_on_two_other_cards(board_db):
     f23 = card(found, "F23")
     assert f23.waits == ("F22", "F63")
     html = _page(_client(board_db))
-    _, words = _card(html, "/milestones/f23-planted")
-    assert "waits for F22, F63" in words
+    _, _, _ = _card(html, "/milestones/f23-planted")
+    assert _card_note(html, "/milestones/f23-planted") == "waits for F22, F63"
 
 
 def test_done_dependency_and_own_ticket_name_no_card(board_db):
@@ -1255,7 +1268,7 @@ def test_done_dependency_and_own_ticket_name_no_card(board_db):
     f23 = card(found, "F23")
     assert f23.waits == ()
     html = _page(_client(board_db))
-    _, words = _card(html, "/milestones/f23-planted")
+    _, words, _ = _card(html, "/milestones/f23-planted")
     assert "waits for" not in words
 
 
@@ -1269,9 +1282,9 @@ def test_bug_and_ripe_card_have_no_waits_line(board_db):
     ripe = card(found, "F1")
     assert ripe.waits == ()
     html = _page(_client(board_db))
-    _, bug_words = _card(html, "/tickets/bug-02-stale")
+    _, bug_words, _ = _card(html, "/tickets/bug-02-stale")
     assert "waits for" not in bug_words
-    _, ripe_words = _card(html, "/milestones/f1")
+    _, ripe_words, _ = _card(html, "/milestones/f1")
     assert "waits for" not in ripe_words
 
 
