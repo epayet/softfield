@@ -26,3 +26,12 @@ f69-i-want-a-button-to-switch-C1044-3: Rejected worker notifications lose tap na
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 10049
+gate_failures: ['task-tests', 'task-tests']
+tokens: 1727935
+```
