@@ -37,3 +37,10 @@ Read `.factory/cards/f106-where-do-blocked-tickets-go-for.md` (D1, D3), then `bl
 - `docs/workflow.md` and `docs/task-format.md` say how a blocked ticket comes back
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
