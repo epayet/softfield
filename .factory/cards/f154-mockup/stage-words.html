@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F154 mock-up: Planted and Growing become one column</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --qwen: #5fd17a; --product: #7cc4ff;
+    --factory: #f2b10a; --serious-ink: var(--opus); --warn-ink: var(--hazard); --accent: var(--sonnet);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; margin-top: 14px; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions [data-version] { display: block !important; }
+    .switch { display: none; }
+  }
+  .version-name { font: 700 14px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 0 0 6px; }
+  .tap { font: 11px var(--mono); color: var(--muted); margin: 14px 0 4px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card changes */
+  .note { display: block; font: 11px var(--mono); color: var(--good); margin: 2px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 520px; }
+  .legend .new { padding: 0 4px; }
+  [hidden] { display: none !important; }
+  .phone { max-width: 360px; }
+
+  /* ---- the plots, as drawn (dashboard.css, under 900 px) ---- */
+  .plots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding: 12px;
+    background: var(--bay) repeating-linear-gradient(135deg, transparent 0 10px,
+      color-mix(in srgb, var(--hazard) 9%, transparent) 10px 12px);
+    border: 1px solid var(--rule); }
+  .plot { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr);
+    grid-template-areas: "plant count" "name name"; align-items: center; gap: 2px 6px; min-width: 0;
+    min-height: 64px; padding: 6px 8px; background: var(--plate); border: 1px solid var(--rule);
+    color: var(--ink-2); text-align: left; font: inherit; }
+  .plot svg { grid-area: plant; width: 40px; height: 36px; color: var(--stage, var(--ink-2)); }
+  .plot svg .soil { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 5 3; fill: none; }
+  .plot svg .stem { stroke: currentColor; stroke-width: 2.5; fill: none; }
+  .plot svg .leaf { fill: currentColor; }
+  .plot svg .crate { stroke: currentColor; stroke-width: 2; fill: none; }
+  .plot b { grid-area: count; font: 600 20px/1 var(--display); color: var(--fg); }
+  .plot span { grid-area: name; font: 600 10.5px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .plot::after { content: "›"; position: absolute; right: -12px; top: 50%; translate: 0 -50%;
+    font: 600 16px var(--mono); color: var(--hazard); }
+  .plot:nth-child(3n)::after, .plot:last-child::after { content: none; }
+  .plot::before { content: ""; position: absolute; left: -1px; top: -1px; width: 8px; height: 8px;
+    border-left: 2px solid var(--muted); border-top: 2px solid var(--muted); }
+  .plot[aria-pressed="true"] { border-color: var(--hazard); box-shadow: inset 0 -4px 0 var(--hazard); color: var(--fg); }
+  .plot[aria-pressed="true"]::before { border-color: var(--hazard); }
+  .at-sprouting { --stage: var(--qwen); } .at-planted { --stage: var(--product); }
+  .at-growing { --stage: var(--opus); } .at-ripe { --stage: var(--warn-ink); }
+
+  /* ---- a stage and its cards, as drawn ---- */
+  .stage { background: var(--bay); display: flex; flex-direction: column; border: 1px solid var(--rule); margin-top: 12px; }
+  .stage.growing { border-color: var(--opus); --stage: var(--opus); }
+  .stage.planted { --stage: var(--product); }
+  .stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+  .stage-head svg { flex: none; color: var(--stage, var(--ink-2)); }
+  .stage-head h3 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  /* proposed (agreed last round): the stage's next step, a second line with the hazard tick (ornament) */
+  .stage-head .stage-next { display: block; margin-top: 4px; padding: 2px 6px; font: 12px var(--mono);
+    color: var(--ink-2); background: var(--floor); border-left: 2px solid var(--hazard); }
+  .stage-head .stage-next b { font: 600 10.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--fg); margin-right: 4px; }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; background: var(--plate);
+    border: 1px solid var(--rule); border-left: 4px solid var(--factory); color: var(--fg); text-decoration: none; }
+  .stage.growing .card, .card.started { border-color: var(--opus); border-left-color: var(--factory); }
+  .card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .meter { display: block; height: 8px; background: var(--grid); position: relative; }
+  .meter > span { position: absolute; inset: 0 auto 0 0; background: var(--opus); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-note { font-size: 12.5px; color: var(--muted); }
+  /* proposed: a started card's tag, the growing plant and its word, in the growing colour */
+  .card-growing { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; padding: 1px 6px 1px 3px;
+    font: 600 10.5px var(--display); letter-spacing: .08em; text-transform: uppercase;
+    color: var(--opus); border: 1px solid var(--opus); background: var(--floor); }
+  .card-growing svg { width: 14px; height: 14px; }
+</style>
+</head>
+<body>
+<h1>F154: Planted and Growing become one column</h1>
+<p class="lede">The board on a phone, with today's cards (26 planted, 12 growing). Today a planted card can't be dragged above a growing one: F151, I had to restart the runner, sits first in Planted, but it can never go before F106, Where do blocked tickets go. Proposed: one Planted column of 38 cards in the runner's order, and a card with work started says so.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/board.html (plots, stage-head, card_link) -->
+<div data-version="today" hidden class="phone">
+  <p class="version-name">Today</p>
+  <section class="plots" aria-label="Stages">
+    <button type="button" class="plot at-seed"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><ellipse class="leaf" cx="24" cy="37" rx="5" ry="3"/></svg><b>68</b><span>Seed</span></button>
+    <button type="button" class="plot at-sprouting"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><path class="stem" d="M24 40V31"/><path class="leaf" d="M24 32.5q-9 -7 -13 1q7 5 13 -1z"/></svg><b>6</b><span>Sprouting</span></button>
+    <button type="button" class="plot at-planted" aria-pressed="true"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><path class="stem" d="M24 40V24"/><path class="leaf" d="M24 32.7q-9 -7 -13 1q7 5 13 -1z"/><path class="leaf" d="M24 25.5q9 -7 13 1q-7 5 -13 -1z"/></svg><b>26</b><span>Planted</span></button>
+    <button type="button" class="plot at-growing"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><path class="stem" d="M24 40V16"/><path class="leaf" d="M24 32.3q-9 -7 -13 1q7 5 13 -1z"/><path class="leaf" d="M24 24.5q9 -7 13 1q-7 5 -13 -1z"/><path class="leaf" d="M24 16.8q-9 -7 -13 1q7 5 13 -1z"/></svg><b>12</b><span>Growing</span></button>
+    <button type="button" class="plot at-ripe"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><path class="stem" d="M24 40V10"/></svg><b>0</b><span>Ripe</span></button>
+    <button type="button" class="plot at-harvested"><svg viewBox="0 0 48 44"><path class="crate" d="M10 16h28v24H10z M10 24h28 M19 16v24 M29 16v24"/><path class="crate" d="M16 12l8-7 8 7"/></svg><b>32</b><span>Harvested</span></button>
+  </section>
+
+  <p class="tap">tap Planted</p>
+  <section class="stage planted">
+    <div class="stage-head">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 24h22"/><path d="M14 24V8"/><path d="M14 18c-4 0-6-2-6-6 4 0 6 2 6 6z"/><path d="M14 14c0-4 2-6 6-6 0 4-2 6-6 6z"/><path d="M14 10c-2 0-3-1-3-3 2 0 3 1 3 3z"/></svg>
+      <div><h3>Planted</h3><span>tickets ready · 26</span></div>
+    </div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><span><b>#1</b> F151 factory</span></span>
+        <span class="card-title">I had to restart the runner manually after f114-02, why.…</span>
+        <span class="meter"><span style="width: 0%"></span></span><span class="card-count">0 of 1 ticket</span></a>
+      <a class="card" href="#"><span class="card-meta"><span><b>#2</b> F142 factory</span></span>
+        <span class="card-title">Phone notifications: every project, and with the dashboard closed</span>
+        <span class="meter"><span style="width: 0%"></span></span><span class="card-count">0 of 3 tickets</span></a>
+    </div>
+  </section>
+
+  <p class="tap">tap Growing</p>
+  <section class="stage growing">
+    <div class="stage-head">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 25h22"/><path d="M14 25V5"/><path d="M14 20c-5 0-7-2-7-6 5 0 7 2 7 6z"/><path d="M14 16c0-5 2-7 7-7 0 5-2 7-7 7z"/><path d="M14 11c-3 0-4-2-4-4 3 0 4 1 4 4z"/><path d="M8 25l2-3h8l2 3"/></svg>
+      <div><h3>Growing</h3><span>in the factory · 12</span></div>
+    </div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><span><b>#1</b> F5 factory</span></span>
+        <span class="card-title">steer from the phone, and the board</span>
+        <span class="meter"><span style="width: 94%"></span></span><span class="card-count">17 of 18 tickets · 1 set aside</span></a>
+      <a class="card" href="#"><span class="card-meta"><span><b>#5</b> F106 factory</span></span>
+        <span class="card-title">where do blocked tickets go for me to review</span>
+        <span class="meter"><span style="width: 17%"></span></span><span class="card-count">1 of 6 tickets</span></a>
+      <a class="card" href="#"><span class="card-meta"><span><b>#6</b> F26 factory</span></span>
+        <span class="card-title">I want to see numbers next to "Coming" and "Your desk" to have a sense of how many there are</span>
+        <span class="meter"><span style="width: 50%"></span></span><span class="card-count">1 of 2 tickets</span>
+        <span class="card-note">waits for F63</span></a>
+    </div>
+  </section>
+  <p class="legend">Two columns, each with its own #1. A card can be moved only inside its column, so a new planted card can't go before one with work started.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="phone">
+  <p class="version-name">Proposed</p>
+  <section class="plots new" aria-label="Stages">
+    <button type="button" class="plot at-seed"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><ellipse class="leaf" cx="24" cy="37" rx="5" ry="3"/></svg><b>68</b><span>Seed</span></button>
+    <button type="button" class="plot at-sprouting"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><path class="stem" d="M24 40V31"/><path class="leaf" d="M24 32.5q-9 -7 -13 1q7 5 13 -1z"/></svg><b>6</b><span>Sprouting</span></button>
+    <button type="button" class="plot at-planted" aria-pressed="true"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><path class="stem" d="M24 40V24"/><path class="leaf" d="M24 32.7q-9 -7 -13 1q7 5 13 -1z"/><path class="leaf" d="M24 25.5q9 -7 13 1q-7 5 -13 -1z"/></svg><b>38</b><span>Planted</span></button>
+    <button type="button" class="plot at-ripe"><svg viewBox="0 0 48 44"><path class="soil" d="M4 40h40"/><path class="stem" d="M24 40V10"/></svg><b>0</b><span>Ripe</span></button>
+    <button type="button" class="plot at-harvested"><svg viewBox="0 0 48 44"><path class="crate" d="M10 16h28v24H10z M10 24h28 M19 16v24 M29 16v24"/><path class="crate" d="M16 12l8-7 8 7"/></svg><b>32</b><span>Harvested</span></button>
+  </section>
+  <span class="note">five plots: no Growing plot, Planted counts all 38</span>
+
+  <p class="tap">tap Planted</p>
+  <section class="stage planted">
+    <div class="stage-head">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 24h22"/><path d="M14 24V8"/><path d="M14 18c-4 0-6-2-6-6 4 0 6 2 6 6z"/><path d="M14 14c0-4 2-6 6-6 0 4-2 6-6 6z"/><path d="M14 10c-2 0-3-1-3-3 2 0 3 1 3 3z"/></svg>
+      <div><h3>Planted</h3><span class="new">in line for the factory, #1 first · 38, 12 growing</span>
+        <span class="stage-next new"><b>Next</b>every ticket done, then Claude reviews it</span></div>
+    </div>
+    <div class="cards">
+      <a class="card started new" href="#"><span class="card-meta"><span><b>#1</b> F5 factory</span>
+        <span class="card-growing"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 25V5"/><path d="M14 20c-5 0-7-2-7-6 5 0 7 2 7 6z"/><path d="M14 16c0-5 2-7 7-7 0 5-2 7-7 7z"/></svg>growing</span></span>
+        <span class="card-title">steer from the phone, and the board</span>
+        <span class="meter"><span style="width: 94%"></span></span><span class="card-count">17 of 18 tickets · 1 set aside</span></a>
+      <span class="note">a card with a ticket started: orange edge and a "growing" tag</span>
+      <a class="card started" href="#"><span class="card-meta"><span><b>#2</b> F15 factory</span>
+        <span class="card-growing"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 25V5"/><path d="M14 20c-5 0-7-2-7-6 5 0 7 2 7 6z"/><path d="M14 16c0-5 2-7 7-7 0 5-2 7-7 7z"/></svg>growing</span></span>
+        <span class="card-title">Reprioritising tickets</span>
+        <span class="meter"><span style="width: 88%"></span></span><span class="card-count">7 of 8 tickets</span>
+        <span class="card-note">waits for F73</span></a>
+      <a class="card started" href="#"><span class="card-meta"><span><b>#5</b> F106 factory</span>
+        <span class="card-growing"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 25V5"/><path d="M14 20c-5 0-7-2-7-6 5 0 7 2 7 6z"/><path d="M14 16c0-5 2-7 7-7 0 5-2 7-7 7z"/></svg>growing</span></span>
+        <span class="card-title">where do blocked tickets go for me to review</span>
+        <span class="meter"><span style="width: 17%"></span></span><span class="card-count">1 of 6 tickets</span></a>
+      <a class="card started" href="#"><span class="card-meta"><span><b>#6</b> F26 factory</span>
+        <span class="card-growing"><svg viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 25V5"/><path d="M14 20c-5 0-7-2-7-6 5 0 7 2 7 6z"/><path d="M14 16c0-5 2-7 7-7 0 5-2 7-7 7z"/></svg>growing</span></span>
+        <span class="card-title">I want to see numbers next to "Coming" and "Your desk" to have a sense of how many there are</span>
+        <span class="meter"><span style="width: 50%"></span></span><span class="card-count">1 of 2 tickets</span>
+        <span class="card-note">waits for F63</span></a>
+      <a class="card new" href="#"><span class="card-meta"><span><b>#7</b> F151 factory</span></span>
+        <span class="card-title">I had to restart the runner manually after f114-02, why.…</span>
+        <span class="meter"><span style="width: 0%"></span></span><span class="card-count">0 of 1 ticket</span></a>
+      <span class="note">nothing started yet: no tag. Drag it above F106 and the runner takes it first</span>
+      <a class="card" href="#"><span class="card-meta"><span><b>#8</b> F142 factory</span></span>
+        <span class="card-title">Phone notifications: every project, and with the dashboard closed</span>
+        <span class="meter"><span style="width: 0%"></span></span><span class="card-count">0 of 3 tickets</span></a>
+    </div>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what changes. One column in the runner's own order, by priority (#3 and #4 are F19 and F28). Every card can be dragged anywhere in it. Orange stays the growing colour it is today, now on the card itself; the one being worked on also keeps its "Now:" line. On a wide screen the field has five columns, and a card's page says "Planted · growing since" the day its first ticket started.</p>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
