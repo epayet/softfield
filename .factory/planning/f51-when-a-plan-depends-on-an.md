@@ -44,3 +44,68 @@ The planning thread behind F51's plan, oldest first, as it was when the owner ap
 > Proposals:
 > - F51: the desk counts only what you can do now (plan)
 > - Merge F16 into F51 (merge)
+
+## The lead, 2026-10-20 11:15
+
+> Merged F157 here: The owner asked whether archiving F156 (merged into F135) also archived F135. Answer: no, Archive touches only its own thread. F135 was archived separately by the owner four minutes later, and its ticket f135-01 still runs. They also asked about the tickets for 'smarter actions' (Approve ADR then Approve plan at once), which are F51's f51-01 and f51-02. Nothing is still open.
+
+## The owner, 2026-10-20 11:15
+
+> From F157, merged here:
+> if i archive something that got merged, it does'nt archive the merged plan right? i just archived f156, so just checking. there are tickets i believe about being smarter when doing actions (approve adr means approve plan for example)
+
+## The lead, 2026-10-20 11:15
+
+> Merged F99 here: When a proposal has bundled things like both a mock-up and…
+
+## The owner, 2026-10-20 11:15
+
+> From F99, merged here:
+> When a proposal has bundled things like both a mock-up and and a plan. Bundle them in tbr planning list too. Right now it looks like I have 2 things to look into but one approval approves both. Like the current both f54
+
+## The lead, 2026-10-20 11:26
+
+> I folded F99, Bundle a mock-up with its plan, into F51: the desk would show one item per card. Below is a mock-up of the desk and a replan of f51-01.
+>
+> 1. **Archiving a merged card leaves the card it joined alone**: Right: Archive only touches the thread you press it on. Archiving F156 didn't archive F135, Reviews stop at once; you archived F135 yourself four minutes later. F135's ticket f135-01 still runs: archiving hides a conversation, not its work.
+>    Action: Nothing
+> 2. **'Accept ADR means approve plan' is f51-02, with two presses, not one**: f51-02, Approve plan once Accept ADR is asked, lets you press Approve plan as soon as you've pressed Accept ADR. At the next pick the runner accepts the ADR first, then approves the plan. I'd keep these as two presses rather than have one press do both. An ADR is a rule for all later work, and a plan is one card's tickets. You sometimes accept an ADR and still send its plan back, and a single button would take that choice away. Both presses happen on the same visit, so you don't have to come back.
+>    Action: Nothing: f51-02 stays as it is
+> 3. **One desk item per card, F99 included**: Your desk today has ten 'Proposals to review' for five cards. F27, Planning beside the line, has ADR 27, a plan and a merge of F34. F154, F158 and F159 each have a plan and a mock-up, and F153 has a plan alone. One Approve plan settles a card's plan, mock-ups and merges together, so five of the ten aren't real extra work. Proposed: one item per card. It lists the card's parts in the order you settle them (ADR first), says 'accept the ADR first' while the ADR is open, and links to the first part still to do. It counts until every part is on its way, then goes dashed. Your desk count would drop from 80 to 75. The general thread's seeds stay one item each, because each is planted by its own press.
+>    Action: Rework f51-01 (replan) to this picture
+> 4. **The mock-up**: Today is the desk's list as it stands, copied from the live template. Proposed shows the same five cards as one item each, plus F27's item before and after you press Accept ADR. Parts on their way use the desk's existing dashed orange, so no new colour.
+>    Action: Review the mock-up
+> 5. **Pause first if you want to be safe**: f51-01 is ready, at priority 7, behind about thirty tickets, so the line is unlikely to start it while we talk. If you'd rather be certain, pause the factory from the dashboard. Approving the replan lifts your pause.
+>    Action: Optional: pause from the dashboard
+>
+> Proposals:
+> - F51: one desk item per card, counted only while it waits on you (replan)
+> - Your desk: one item per card (mockup)
+
+## The lead, 2026-10-20 11:26
+
+> Your F99 note was already covered in my last reply on this thread, so this reply changes nothing and the earlier proposals stand.
+>
+> 1. **F99's bundling is already in F51's replan**: My last reply on this thread already covers this note. The replan makes each card's open proposals one desk item: plan, mock-ups, merges, and the ADR when there is one. It lists the parts in the order you settle them, counts the item while any part still waits on you, and goes dashed once every part is on its way. The mock-up shows the desk with today's ten proposal items as five. Nothing has changed since, so the replan and the mock-up are still waiting for your Approve.
+>    Action: Review and approve the replan (f51-replan) and the mock-up (f51-mockup) already listed on this thread
+> 2. **Your example is F154, not F54**: F54, the reprioritise arrows that did nothing, is archived and has no proposals. I think you meant F154, One Planted column, a growing tag, and stages that say what comes next. It has a plan and a board mock-up that one Approve plan settles together, and it's one of the five bundled items in the mock-up's Proposed view.
+>    Action: Nothing
+
+## The owner, 2026-10-20 22:05
+
+> How do I approve replan? There's nothing linked to this card and on f51 it just says 'replaced by a newer rrsplnse' or something
+
+## The lead, 2026-10-20 22:06
+
+> That was my fault: my last reply sent an empty list of proposals, which hid the replan and the mock-up. This reply lists them again, plus a small fix so it can't happen again.
+>
+> 1. **Approve it from this reply's buttons**: My previous reply listed no proposals. It was meant to leave the earlier list standing, but it was stored as an empty list. The thread page takes that as a newer list, so the replan and the mock-up showed 'replaced by a newer reply' and lost their buttons. Your desk still listed them, because it skips empty lists. Both are listed again below, unchanged: the replan of f51-01 (one desk item per card) and the desk mock-up. Approve them from here.
+>    Action: Approve the replan and the mock-up below
+> 2. **A fix so an empty reply can't hide proposals again**: The desk ignores a lead reply with an empty proposal list, but the thread page and the proposal pages don't. New ticket f51-03, Empty list keeps proposals (developer, difficulty 2): those pages read lead replies the way the desk does, so a reply without proposals no longer hides the earlier ones. A reply with new proposals still replaces the old list, as now. I've added it to this replan. It's the same file f51-01 changes, and it's about the same thing: what's still waiting on you.
+>    Action: Ticket f51-03 in the replan
+> 3. **Pause first if you want to be safe**: F51 is now priority 14, behind about forty ready tickets, so the line won't reach f51-01 while you read this. Pause from the dashboard only if you want to be certain. Approving the replan lifts the pause.
+>    Action: Optional: pause from the dashboard
+>
+> Proposals:
+> - F51: one desk item per card, counted only while it waits on you (replan)
+> - Your desk: one item per card (mockup)

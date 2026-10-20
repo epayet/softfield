@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F51 mock-up: one desk item per card's proposals</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: inherit; text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card changes */
+  .legend { color: var(--ink-2); font-size: 13px; margin: 10px 0 0; max-width: 390px; }
+  .version h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  [hidden] { display: none !important; }
+  @media (min-width: 860px) { .version[hidden] { display: block !important; } .switch { display: none; } }
+
+  /* ---- the desk as drawn (factory_dashboard/templates/planning.html) ---- */
+  .desk { width: 390px; max-width: 100%; background: var(--bay); border: 1px solid var(--rule); }
+  .desk h2 { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .group { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px; }
+  .group h4 { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--opus); }
+  .item { display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); min-height: 44px; box-sizing: border-box; }
+  .item .t { font-size: 14px; }
+  .item .w { font: 11.5px var(--mono); color: var(--muted); }
+  .item.way { border-style: dashed; border-color: var(--hazard); }
+  .item.way .w { color: var(--hazard); }
+
+  /* ---- proposed: one item per card, its parts in the order they're approved ---- */
+  .parts { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+  .part { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2);
+    border: 1px solid var(--rule); background: var(--bay); padding: 1px 6px; }
+  .part.done { color: var(--hazard); border: 1px dashed var(--hazard); }
+  .part + .part::before { content: "→ "; color: var(--muted); }
+  .item .key { font: 600 11px var(--display); letter-spacing: .08em; color: var(--muted); margin-right: 6px; }
+</style>
+</head>
+<body>
+<h1>F51: one desk item per card</h1>
+<p class="lede">The desk's "Proposals to review" on 2026-10-20, with the real items. Today there are ten items for five cards, because one press of Approve plan settles a card's plan, mock-up and merges together. The F27 item shows the moment after you press Accept ADR.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from the desk in factory_dashboard/templates/planning.html -->
+<div class="version" data-version="today" hidden>
+  <h3>Today</h3>
+  <section class="desk">
+    <h2>Your desk · 80</h2>
+    <div class="group">
+      <h4>Proposals to review</h4>
+      <a class="item" href="#"><span class="t">ADR 27: Planning beside the line</span><span class="w">9 key points</span></a>
+      <a class="item" href="#"><span class="t">F27: planning beside the line</span><span class="w">6 key points</span></a>
+      <a class="item" href="#"><span class="t">Merge F34 into F27</span><span class="w">2 key points</span></a>
+      <a class="item" href="#"><span class="t">F153: Sonnet on the easier lead tickets</span><span class="w">3 key points</span></a>
+      <a class="item" href="#"><span class="t">One Planted column, a growing tag, and stages that say what comes next</span><span class="w">4 key points</span></a>
+      <a class="item" href="#"><span class="t">Board on a phone: two columns today, one Planted column proposed</span><span class="w">2 key points</span></a>
+      <a class="item" href="#"><span class="t">A card's page says what it's about</span><span class="w">4 key points</span></a>
+      <a class="item" href="#"><span class="t">Card page: What it's about</span><span class="w">3 key points</span></a>
+      <a class="item" href="#"><span class="t">F159: a set-aside ticket says it won't run, and you can queue it from its page</span><span class="w">4 key points</span></a>
+      <a class="item" href="#"><span class="t">A set-aside ticket's page and board card, today and proposed</span><span class="w">2 key points</span></a>
+    </div>
+  </section>
+  <p class="legend">Ten items, counted ten times in the Planning tab and "Needs you". F27's plan and merge can't be approved until its ADR is accepted on main, yet they count.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed</h3>
+  <section class="desk">
+    <h2>Your desk · <span class="new">75</span></h2>
+    <div class="group">
+      <h4>Proposals to review</h4>
+      <a class="item new" href="#"><span class="t"><span class="key">F27</span>Planning beside the line</span>
+        <span class="parts"><span class="part">ADR 27</span><span class="part">plan</span><span class="part">merge F34</span></span>
+        <span class="w">17 key points · accept the ADR first</span></a>
+      <a class="item" href="#"><span class="t"><span class="key">F153</span>Sonnet on the easier lead tickets</span>
+        <span class="w">3 key points</span></a>
+      <a class="item new" href="#"><span class="t"><span class="key">F154</span>One Planted column, a growing tag, and stages that say what comes next</span>
+        <span class="parts"><span class="part">plan</span><span class="part">mock-up</span></span>
+        <span class="w">6 key points · one Approve plan settles both</span></a>
+      <a class="item new" href="#"><span class="t"><span class="key">F158</span>A card's page says what it's about</span>
+        <span class="parts"><span class="part">plan</span><span class="part">mock-up</span></span>
+        <span class="w">7 key points</span></a>
+      <a class="item new" href="#"><span class="t"><span class="key">F159</span>A set-aside ticket says it won't run, and you can queue it from its page</span>
+        <span class="parts"><span class="part">plan</span><span class="part">mock-up</span></span>
+        <span class="w">6 key points</span></a>
+    </div>
+    <div class="group">
+      <h4>After you press Accept ADR on F27</h4>
+      <a class="item new" href="#"><span class="t"><span class="key">F27</span>Planning beside the line</span>
+        <span class="parts"><span class="part done">ADR 27 · on its way</span><span class="part">plan</span><span class="part">merge F34</span></span>
+        <span class="w">approve the plan now: the runner accepts the ADR first</span></a>
+      <a class="item way new" href="#"><span class="t"><span class="key">F27</span>Planning beside the line</span>
+        <span class="parts"><span class="part done">ADR 27</span><span class="part done">plan</span><span class="part done">merge F34</span></span>
+        <span class="w">accepting and approving at the runner's next pick</span></a>
+    </div>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what changes. One item per card, titled by its plan, its parts in the order they're settled: still to do in grey, on their way in dashed orange, as the desk already marks a request on its way. The item counts until every part is on its way, then turns dashed like the others. The general thread's seeds and merges stay one item each.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
