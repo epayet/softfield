@@ -1,6 +1,7 @@
 # Milestone F49: don't ask me to merge conversations, just do it and keep context from both in a smart way
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-20. Base: git tag `f49-don-t-ask-me-to-merge-start`. Report: [`.factory/reviews/f49-don-t-ask-me-to-merge.md`](../reviews/f49-don-t-ask-me-to-merge.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes

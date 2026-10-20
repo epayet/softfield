@@ -1,6 +1,6 @@
 # Review: F49, the lead merges repeated cards itself and keeps what both said
 
-- **Status:** reviewed, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-20.
 
 ## Sign-off sheet
 
