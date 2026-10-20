@@ -30,3 +30,12 @@ Read `.factory/cards/f15-reprioritising-tickets.md` (D6). In `factory_dashboard/
 - a bug card and a ripe card have no such line
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 7069
+gate_failures: ['ruff']
+tokens: 8574093
+```
