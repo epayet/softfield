@@ -44,3 +44,10 @@ Read `.factory/cards/f15-reprioritising-tickets.md` (D8 and the Replan). The own
 - the tests that pressed the arrows are replaced by tests of the above
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
