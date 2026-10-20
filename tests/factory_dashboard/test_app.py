@@ -25,6 +25,15 @@ from tests.layout import DISPLAY, PHONE, layout_problems
 STATIC = Path(app_module.__file__).parent / "static"
 VENDOR = STATIC / "vendor"
 
+_CDN_EXEMPTION = "http://www.w3.org/2000/svg"
+_CDN_RE = re.compile(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}(/[^\s\"'<>]*)?")
+
+
+def _find_third_party_hosts(text: str) -> list[str]:
+    """Return every URL-like host in *text* except the SVG namespace exemption."""
+    return [m.group() for m in _CDN_RE.finditer(text) if m.group() != _CDN_EXEMPTION]
+
+
 TABS = [
     "/projects",  # every project, first (ADR 30 item 6)
     "/",
@@ -87,12 +96,7 @@ def test_no_page_or_stylesheet_names_a_third_party_host(client):
     """AGENTS.md rule 7: no CDN at run time, fonts included (f5-14)."""
     for path in [*PAGES, "/static/dashboard.css"]:
         text = client.get(path).text
-        # SVG namespace declarations are not third-party hosts
-        found = [
-            m.group()
-            for m in re.finditer(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}(/[^\s\"'<>]*)?", text)
-            if m.group() not in ("http://www.w3.org/2000/svg",)
-        ]
+        found = _find_third_party_hosts(text)
         assert found == [], path
         assert "@import" not in text, path
 
@@ -125,12 +129,7 @@ def test_a_page_that_names_cdn_example_com_after_the_top_bar_fails():
         + "\n<script src='https://cdn.example.com/x.js'></script>"
         + html[header_close + len("</header>") :]
     )
-    text = injected
-    found = [
-        m.group()
-        for m in re.finditer(r"(?:https?:)?//[a-z0-9.-]+\.[a-z]{2,}(/[^\s\"'<>]*)?", text)
-        if m.group() not in ("http://www.w3.org/2000/svg",)
-    ]
+    found = _find_third_party_hosts(injected)
     assert "https://cdn.example.com/x.js" in found, (
         "expected https://cdn.example.com/x.js to be detected as third-party host"
     )
