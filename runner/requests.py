@@ -15,6 +15,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 import yaml
 
@@ -292,10 +293,14 @@ def _has_branch(git: Git, branch: str) -> bool:
     return bool(git.run("branch", "--list", branch).strip())
 
 
-def _undo(git: Git) -> None:
-    """Main as it was before an approval that failed: it was clean (``_waits``)."""
+def _undo(git: Git, *made: Path | None) -> None:
+    """Main as it was before an approval that failed: it was clean (``_waits``). ``made``, the
+    files it wrote that main hadn't, which the reset leaves (untracked)."""
     git.run("reset", "-q", "--hard", "HEAD")
     Path(git.repo, git.run("rev-parse", "--git-path", "SQUASH_MSG").strip()).unlink(missing_ok=True)
+    for path in made:
+        if path is not None:
+            path.unlink(missing_ok=True)
 
 
 def _drafts(git: Git, branch: str) -> list[tuple[str, str]]:
@@ -435,10 +440,35 @@ def _merges(proposals: list[dict[str, object]]) -> list[tuple[str, str]]:
     ]
 
 
-def _merge(repo: Path, now: datetime, duplicate: str, kept: str, by: str = "owner") -> str:
+class _Moved(NamedTuple):
+    """What a merge moved: the duplicate's notes, what the kept thread's line says of it (the
+    lead's summary, else its title), and its thread's export when the merge made the file."""
+
+    notes: str
+    said: str
+    made: Path | None
+
+
+def _summary(proposal: Mapping[str, object]) -> str | None:
+    """A ``merge``'s summary of the duplicate's thread (F49 D3), when it gives one."""
+    summary = proposal.get("summary")
+    return summary.strip() or None if isinstance(summary, str) else None
+
+
+def _merge(
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    now: datetime,
+    duplicate: str,
+    kept: str,
+    by: str = "owner",
+    summary: str | None = None,
+) -> _Moved:
     """The duplicate's notes appended to the kept card's Notes, saying where they came from,
-    and its doc removed (``git rm``), for the approval's one commit; the notes moved. A card
-    with tickets isn't merged away: they would be left without their milestone."""
+    then the lead's ``summary`` of its thread (F49 D3); its doc removed (``git rm``) and its
+    thread exported to .factory/planning/ (F49 D4), for the merge's one commit. A card with
+    tickets isn't merged away: they would be left without their milestone."""
     names = (planner.thread_name(duplicate), planner.thread_name(kept))
     docs = [milestone_file(repo, "cards", full_key(repo, key)) for key in (duplicate, kept)]
     for name, path in zip(names, docs, strict=True):
@@ -456,24 +486,27 @@ def _merge(repo: Path, now: datetime, duplicate: str, kept: str, by: str = "owne
     source = f"From {names[0]}: {title} (merged by the {by} on {now.date().isoformat()})"
     doc = docs[1].read_text(encoding="utf-8")
     notes = planner.card_notes(text)
-    docs[1].write_text(planner.merged_card(doc, notes, source), "utf-8")
+    docs[1].write_text(planner.merged_card(doc, notes, source, summary=summary), "utf-8")
     Git(repo).run("rm", "-q", "--", docs[0].relative_to(repo).as_posix())
-    return notes
+    made = _export(repo, conn, project_id, duplicate, docs[0].stem, title, into=names[1])
+    return _Moved(notes, summary or title, made)
 
 
 def _merged(
     conn: sqlite3.Connection,
     project_id: int,
     now: datetime,
-    merges: list[tuple[str, str]],
+    merges: list[tuple[str, str, str]],
     by: str = "owner",
 ) -> None:
-    """Each merged card's thread points to the kept card's, and it leaves the board. When the
-    owner approved the merge, the thread is archived and its item answered: they have seen it.
-    When the lead merged on its own (F49 D1), the thread stays on the desk until the owner
-    reads the reply: F63, F64 and F65's answers were archived unseen (2026-10-08)."""
+    """Each merged card's thread points to the kept card's, and it leaves the board; the kept
+    card's thread says what was merged (each merge's duplicate, kept card and what ``_merge``
+    said of it), and its next job reads the duplicate's thread (F49 D4). When the owner
+    approved the merge, the thread is archived and its item answered: they have seen it. When
+    the lead merged on its own (F49 D1), the thread stays on the desk until the owner reads the
+    reply: F63, F64 and F65's answers were archived unseen (2026-10-08)."""
     at = now.isoformat()
-    for duplicate, kept in merges:
+    for duplicate, kept, said in merges:
         metrics.remove_cards(conn, project_id, gone=duplicate)
         name, there = planner.thread_name(duplicate), planner.thread_name(kept)
         text = (
@@ -484,8 +517,13 @@ def _merged(
         metrics.add_planner_message(conn, thread_id, "lead", at, text)
         if by == "owner":  # a message from the owner opens it again
             metrics.set_thread_archived(conn, thread_id, at, planner.APPROVED)
+        kept_id = metrics.planner_thread(conn, project_id, kept, at)["id"]
+        metrics.add_planner_message(conn, kept_id, "lead", at, f"Merged {name} here: {said}")
+        unread = metrics.unread_merges(conn, kept_id)
+        if duplicate not in unread:
+            metrics.set_unread_merges(conn, kept_id, [*unread, duplicate])
     if by == "owner":
-        _resolve_items(conn, project_id, now, [d for d, _ in merges])
+        _resolve_items(conn, project_id, now, [d for d, _, _ in merges])
 
 
 def _resolve_items(
@@ -520,19 +558,22 @@ def auto_merge(
     branch = planner.plan_branch(duplicate)
     if branch is not None and _has_branch(git, branch) and _drafts(git, branch):
         return f"{name} has drafts on {branch}"
+    moved: _Moved | None = None
     try:
-        notes = _merge(repo, now, duplicate, kept, by="lead")
+        moved = _merge(
+            repo, conn, project_id, now, duplicate, kept, by="lead", summary=_summary(proposal)
+        )
         message = f"{name} merged into {planner.thread_name(kept)} by the lead"
         git.commit_all(with_trailers(message, agent=loop.CLAUDE_HEADLESS_AGENT))
     except planner.PlannerError as exc:
-        _undo(git)
+        _undo(git, None if moved is None else moved.made)
         return str(exc)
     except Exception:
-        _undo(git)
+        _undo(git, None if moved is None else moved.made)
         raise
-    _merged(conn, project_id, now, [(duplicate, kept)], by="lead")
+    _merged(conn, project_id, now, [(duplicate, kept, moved.said)], by="lead")
     if kept != thread:
-        _carry_on(conn, project_id, now, duplicate, kept, notes)
+        _carry_on(conn, project_id, now, duplicate, kept, moved.notes)
     return None
 
 
@@ -558,18 +599,23 @@ def _ready_changes(
 
 
 def _export(
-    repo: Path, conn: sqlite3.Connection, project_id: int, thread: str, doc: Path
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    thread: str,
+    key: str,
+    title: str | None,
+    into: str | None = None,
 ) -> Path | None:
     """The card's thread written whole to ``.factory/planning/<card's full key>.md`` (f20 D2), for
-    the approval's commit; the file, when the approval made it, for an undo to remove (``_undo``
-    restores one main had). None when the card has no thread."""
+    the approval's commit, or the merge's ``into`` a card (F49 D4); the file, when this made it,
+    for an undo to remove (``_undo`` restores one main had). None when the card has no thread."""
     found = metrics.find_thread(conn, project_id, thread)
     if found is None:
         return None
-    title = milestone.milestone_doc(doc.read_text(encoding="utf-8")).get("title")
     messages = metrics.planner_messages(conn, found["id"])
-    text = planner.export(planner.thread_name(thread), title, messages)
-    path = repo / ".factory" / "planning" / f"{doc.stem}.md"
+    text = planner.export(planner.thread_name(thread), title, messages, into)
+    path = repo / ".factory" / "planning" / f"{key}.md"
     made = not path.exists()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -605,6 +651,11 @@ def _approve_plan(
         if proposal.get("id") not in rejected
     ]
     merges = _merges(proposals)
+    summaries = {
+        planner.merge_cards(p)[0]: _summary(p)
+        for p in proposals
+        if p.get("kind") == planner.MERGE and not p.get(planner.APPLIED)
+    }
     # A duplicate whose card left the repo was merged (or dropped) already: approving its merge
     # again settles it rather than refusing it forever (F24, F45, F47 on 2026-10-08)
     gone = [d for d, _ in merges if not milestone_file(repo, "cards", full_key(repo, d)).is_file()]
@@ -651,6 +702,7 @@ def _approve_plan(
             _undo(git)
             return f"{branch} clashes with {loop.MAIN}: not approved"
     made: Path | None = None
+    moved: dict[tuple[str, str], _Moved] = {}
     try:
         if planned:
             checked = sorted([*tickets, *added, *changed], key=lambda path: Path(path).name)
@@ -666,23 +718,24 @@ def _approve_plan(
                 doc.write_text(planner.ready_card(text), encoding="utf-8")
             for rel in tickets:
                 git.move(repo / rel, repo / ".factory" / "tasks" / "ready" / Path(rel).name)
-        moved = {(d, kept): _merge(repo, now, d, kept) for d, kept in merges}
+        for d, kept in merges:
+            summary = summaries.get(d)
+            moved[d, kept] = _merge(repo, conn, project_id, now, d, kept, summary=summary)
         merged = [words.replace(" into ", " merged into ", 1) for words in joined]
         if planned:
-            made = _export(repo, conn, project_id, thread, doc)
+            title = milestone.milestone_doc(doc.read_text(encoding="utf-8")).get("title")
+            made = _export(repo, conn, project_id, thread, doc.stem, title)
             git.commit_all("; ".join([f"{name} plan approved by the owner", *merged]))
         else:
             git.commit_all(f"{'; '.join(merged)} by the owner")
     except Exception:
-        _undo(git)
-        if made is not None:  # untracked: the reset leaves it
-            made.unlink(missing_ok=True)
+        _undo(git, made, *(m.made for m in moved.values()))  # untracked: the reset leaves them
         raise
-    _merged(conn, project_id, now, merges)
+    _merged(conn, project_id, now, [(d, k, m.said) for (d, k), m in moved.items()])
     _resolve_items(conn, project_id, now, gone)
-    for (duplicate, kept), notes in moved.items():
+    for (duplicate, kept), m in moved.items():
         if kept != thread:  # there the lead is on the kept card already
-            _carry_on(conn, project_id, now, duplicate, kept, notes)
+            _carry_on(conn, project_id, now, duplicate, kept, m.notes)
     said = [f"merged {words}" for words in joined] + already
     if not planned:
         return f"approved: {'; '.join(said)}"

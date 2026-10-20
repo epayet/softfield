@@ -69,7 +69,7 @@ def test_a_fresh_path_gets_every_table_and_the_latest_version(tmp_path):
     conn = metrics.open_db(path)
     assert path.is_file()
     assert _tables(conn) >= TABLES
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 13 == len(metrics.MIGRATIONS)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == 14 == len(metrics.MIGRATIONS)
     assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
     assert conn.execute("PRAGMA foreign_keys").fetchone()[0] == 1
     conn.close()

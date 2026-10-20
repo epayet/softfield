@@ -4040,6 +4040,13 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         while said and said[-1]["author"] == "owner":
             said.pop()
         earlier = planner.history(said)
+    # F49 D4: the threads of the cards merged into this one, read once, by a resumed job too
+    merged = _record(s, metrics.unread_merges, found["id"]) or []
+    for card in merged:
+        gone = _record(s, metrics.find_thread, s.project_id, card)
+        if gone is not None:
+            said = list(_record(s, metrics.planner_messages, gone["id"]) or [])
+            earlier += planner.history(said, merged=card)
     try:  # on main, before the plan branch: the runner's order, not a draft's
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
         minutes = _record(s, ticket_minutes, s.project_id) or []
@@ -4088,6 +4095,10 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         _name_card(s, thread, reply.title)
     if result.session_id:
         _record(s, metrics.set_thread_session, found["id"], result.session_id)
+    if result.ok and merged:  # read: a merge this reply applied is still to read
+        unread = _record(s, metrics.unread_merges, found["id"]) or []
+        left = [card for card in unread if card not in merged]
+        _record(s, metrics.set_unread_merges, found["id"], left)
     _record(
         s,
         metrics.add_planner_message,

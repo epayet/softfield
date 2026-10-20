@@ -367,10 +367,13 @@ Before answering, look for a repeat (f6-12): read the cards in .factory/cards/ w
 is idea, planning or ready, and think of the other threads. Other threads: {threads}. When \
 this idea or message repeats another card or thread, even in other words, say so as a point \
 and propose a `merge`: `path` the duplicate card's doc, `into` the short key of the card it \
-joins (`f10`), key points saying what moves where. Keep the more advanced card (ready over \
+joins (`f10`), key points saying what moves where, and a `summary`: a few plain lines on \
+what the duplicate's thread said (what was asked, what was answered, what is still open), \
+left out when it said nothing beyond the card's notes. Keep the more advanced card (ready over \
 planning over idea), else the older one. Don't edit or remove either card yourself: right \
 after your reply the runner applies the merge on its own: it moves the duplicate's notes into \
-the kept card, removes the duplicate and points its thread to the kept one, where the \
+the kept card as they are, your summary under them, exports the duplicate's thread to \
+.factory/planning/, removes the duplicate and points its thread to the kept one, where the \
 conversation goes on. It can't when the duplicate has tickets or drafts on its plan branch: \
 then the merge waits for the owner. On a duplicate, say only which card it repeats and why \
 that one is kept, in one or two points, and draft nothing: the runner brings their note to \
@@ -416,7 +419,7 @@ in this block, that proposal's id as `proposal`:
     "outcome": "info" | "ticket" | "adr" | "mockup" | "roadmap" | "merge" | "question",
     "proposal": "…" (an id below, when it leads to one)}}],
   "proposals": [{{"id": "…", "kind": "adr" | "mockup" | "plan" | "seed" | "replan" | "merge",
-    "title": "…", "path": "docs/…" | null, "into": "f10" (a merge only),
+    "title": "…", "path": "docs/…" | null, "into": "f10", "summary": "…" (a merge only),
     "key_points": [{{"n": 1, "title": "…", "text": "…", "flag": false}}]}}]}}
 ```"""
 

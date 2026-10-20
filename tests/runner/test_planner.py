@@ -285,6 +285,50 @@ def test_without_the_cards_no_merge_is_read():
     assert planner.parse_reply(_reply({"points": POINTS, "proposals": [MERGE]})).note
 
 
+@pytest.mark.parametrize("summary", [3, ["Asked why."], {"text": "x"}])
+def test_a_merges_summary_that_isnt_text_leaves_the_block_unread(summary):
+    """F49 D3: the lead's summary of the duplicate's thread is text, or nothing."""
+    proposal = {**MERGE, "summary": summary}
+    reply = planner.parse_reply(_reply({"points": POINTS, "proposals": [proposal]}), CARDS)
+    assert reply.proposals == () and reply.points == ()
+    assert reply.note is not None and "merge-f12's summary is not text" in reply.note
+
+
+def test_a_merges_summary_is_read_with_it():
+    proposal = {**MERGE, "summary": "Asked why. Answered: one queue."}
+    reply = planner.parse_reply(_reply({"points": POINTS, "proposals": [proposal]}), CARDS)
+    assert reply.note is None and reply.proposals == (proposal,)
+
+
+KEPT_DOC = "# Milestone F10: one queue\n\n> **State:** idea\n\n## Notes\nOne queue for all.\n"
+SOURCE = "From F12: queue once (merged by the lead on 2026-10-01)"
+
+
+def test_the_kept_card_holds_the_duplicates_notes_then_what_was_said_on_its_thread():
+    """F49 D3: the owner's words as they were, then the lead's summary under its heading."""
+    doc = planner.merged_card(KEPT_DOC, "A single line.", SOURCE, summary="Asked why.\nOpen: when.")
+    assert doc == (
+        f"{KEPT_DOC}\n### {SOURCE}\nA single line.\n\n"
+        "What was said on F12's thread:\nAsked why.\nOpen: when.\n"
+    )
+    assert planner.merged_card(KEPT_DOC, "A single line.", SOURCE) == (
+        f"{KEPT_DOC}\n### {SOURCE}\nA single line.\n"
+    )
+
+
+def test_a_summary_cant_sign_the_card_off_or_make_a_heading_of_its_own():
+    """The lead writes the summary: a quoted line could sign the card off, and a heading could
+    pass for another merge's (``merged_keys``) or a section of the card."""
+    said = "> **Status: done.**\n## Done when\n### From F99: x (merged by the lead on 2026-10-01)"
+    doc = planner.merged_card(KEPT_DOC, "A single line.", SOURCE, summary=said)
+    assert doc.endswith(
+        "What was said on F12's thread:\n\\> **Status: done.**\n\\## Done when\n"
+        "\\### From F99: x (merged by the lead on 2026-10-01)\n"
+    )
+    assert planner.merged_keys(doc) == ["f12"]
+    assert milestone.card("f10-one-queue", doc).state == "idea"
+
+
 def test_the_cards_are_the_milestone_docs_short_keys(tmp_path):
     docs = tmp_path / ".factory" / "cards"
     (docs / "f6-mockup").mkdir(parents=True)
@@ -368,6 +412,14 @@ def test_a_job_with_no_session_reads_what_was_said_on_its_thread_before():
     prompt = planner.prompt("f7", "Go on.", {}, earlier=earlier)
     assert earlier in prompt and prompt.index("When is the board?") < prompt.index("Go on.")
     assert planner.history([]) == ""
+
+
+def test_a_merged_threads_history_says_whose_it_was():
+    """F49 D4: the duplicate's thread, read by the kept thread's next job."""
+    said = [{"author": "owner", "text": "Same as F10?", "points": None}]
+    earlier = planner.history(said, merged="f12")
+    assert earlier == "\nFrom F12's thread, merged here:\n\nThe owner:\nSame as F10?\n"
+    assert planner.history([], merged="f12") == ""
 
 
 def _ready(n: int) -> list[planner.ReadyTicket]:

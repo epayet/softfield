@@ -4888,7 +4888,11 @@ def test_a_merge_in_a_planner_reply_is_applied_at_once_by_the_lead(
     assert [kind for kind, _, _ in events] == ["planner", "planner"]
     [kept] = [t for t in _rows(repo, "planner_threads") if t["card"] == "f10"]
     said = [(m["author"], m["text"]) for m in _messages(repo) if m["thread_id"] == kept["id"]]
-    assert said == [("owner", "From F12, merged here:\nA single line."), ("lead", "On F10.")]
+    assert said == [
+        ("lead", "Merged F12 here: queue once"),
+        ("owner", "From F12, merged here:\nA single line."),
+        ("lead", "On F10."),
+    ]
     doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
     assert "### From F12: queue once (merged by the lead on " in doc and "A single line." in doc
     log = git(repo, "log", "--format=%s|%(trailers:key=Agent,valueonly)", f"{head}..main")
@@ -4902,6 +4906,42 @@ def test_a_merge_in_a_planner_reply_is_applied_at_once_by_the_lead(
     [found] = [t for t in _rows(repo, "planner_threads") if t["card"] == thread]
     assert found["archived"] is None
     assert [m["text"] for m in _messages(repo) if m["thread_id"] == found["id"]][-1] == "Yes."
+
+
+def test_the_kept_threads_next_job_reads_the_duplicates_thread_once(repo, fake_model, monkeypatch):
+    """F49 D4: F10's thread resumes its session, which never saw F12's: its next prompt holds
+    F12's history once, and the one after doesn't."""
+    _twin_cards(repo)
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+    kept = metrics.planner_thread(conn, project, "f10", THURSDAY.isoformat())["id"]
+    metrics.add_planner_message(conn, kept, "owner", THURSDAY.isoformat(), "One queue?")
+    metrics.add_planner_message(conn, kept, "lead", THURSDAY.isoformat(), "Yes.")
+    metrics.set_thread_session(conn, kept, "s0")
+    conn.commit()
+    conn.close()
+    _plan_message(repo, "f12", "The queue, said once more")
+    merge = {**MERGE_F12, "summary": "Asked for one queue."}
+    block = json.dumps({"points": POINTS, "proposals": [merge]})
+    replies = [f"Same.\n```json\n{block}\n```", "On F10.", "Later."]
+    prompts: list[tuple[str | None, str]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        prompts.append((resume, job.prompt))
+        session = "s1" if resume is None else resume
+        return JobResult(ok=True, text=replies.pop(0), duration_s=1.0, session_id=session)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    _run(repo)
+    _plan_message(repo, "f10", "And then?")
+    _run(repo)
+    [(_, on_f12), (resumed, carried), (again, later)] = prompts
+    assert "From F12's thread, merged here:" not in on_f12
+    assert resumed == "s0" and carried.count("From F12's thread, merged here:") == 1
+    assert carried.count("The queue, said once more") == 1  # the history, not this message
+    assert carried.index("From F12's thread") < carried.index("From F12, merged here:")
+    assert again == "s0" and "From F12's thread" not in later
+    assert "The queue, said once more" not in later
 
 
 def test_a_merge_the_runner_cant_apply_waits_for_the_owner(repo, fake_model, monkeypatch):

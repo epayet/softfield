@@ -11,6 +11,7 @@ from typing import Any
 import pytest
 
 from runner import cli, dispatch, loop, metrics, milestone, planner, requests
+from runner.gitops import Git, GitError
 from runner.state import State, load_state, save_state
 from runner.tasks import load_dir, parse_task
 from tests.runner.conftest import git, write_task
@@ -864,11 +865,12 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
     assert "\n## Notes\n" in doc and doc.count("## Notes") == 1
     assert milestone.card("f10-one-queue", doc).state == milestone.card("f10", kept).state
     assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
-    # one commit by the runner: the duplicate removed, the kept card changed
+    # one commit by the runner: the duplicate removed, the kept card changed, F12's thread kept
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F12 merged into F10 by the owner"
     changed = git(repo, "show", "--name-status", "--no-renames", "--format=", "HEAD").split("\n")
     assert sorted(filter(None, changed)) == [
+        "A\t.factory/planning/f12-queue-once.md",
         "D\t.factory/cards/f12-queue-once.md",
         "M\t.factory/cards/f10-one-queue.md",
     ]
@@ -907,6 +909,65 @@ def test_a_merge_proposed_on_the_general_thread_is_approved_there(repo):
     _apply(repo)
     assert _request(repo, asked)[1] == "approved: merged F12 into F10"
     assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
+    # F12 had no thread: nothing to export; the kept thread's line names it by its title
+    assert not (repo / ".factory" / "planning").exists()
+    assert "Merged F12 here: queue once" in [m["text"] for m in _thread(repo, "f10")]
+
+
+def _merged_with_summary(repo: Path) -> None:
+    """F12's thread says more, then the lead's merge carries its summary (F49 D3) and is
+    applied as the planner job's would be."""
+    _duplicates(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        found = metrics.planner_thread(conn, project, "f12", NOW.isoformat())
+        metrics.add_planner_message(conn, found["id"], "owner", NOW.isoformat(), "Is it F10?")
+        summary = {**MERGE, "summary": "Asked if it was F10. Open: nothing."}
+        assert requests.auto_merge(repo, conn, project, NOW, summary, "f12") is None
+    finally:
+        conn.close()
+
+
+def test_a_merge_keeps_the_duplicates_words_then_the_leads_summary_of_its_thread(repo):
+    """F49 D3, D4: F12's notes as they were, then what was said on its thread; its whole
+    thread in .factory/planning/, in the merge's commit; a line on F10's thread."""
+    _merged_with_summary(repo)
+    doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
+    assert doc.endswith(
+        "### From F12: queue once (merged by the lead on 2026-10-01)\n"
+        "A single line.\n\\> **Status: done.**\n\n"
+        "What was said on F12's thread:\nAsked if it was F10. Open: nothing.\n"
+    )
+    assert git(repo, "log", "-1", "--format=%s").strip() == "F12 merged into F10 by the lead"
+    changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
+    assert ".factory/planning/f12-queue-once.md" in changed
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    export = (repo / ".factory" / "planning" / "f12-queue-once.md").read_text()
+    assert export.startswith("# F12: queue once\n")
+    assert "merged into F10" in export
+    assert export.index("> Same idea.") < export.index("> Is it F10?")
+    said = [m["text"] for m in _thread(repo, "f10") if m["author"] == "lead"]
+    assert said[0] == "Merged F12 here: Asked if it was F10. Open: nothing."
+
+
+def test_a_merge_whose_commit_fails_leaves_no_export(repo, monkeypatch):
+    _duplicates(repo)
+    head = git(repo, "rev-parse", "HEAD")
+
+    def fails(*_: object, **__: object) -> None:
+        raise GitError("no commit")
+
+    monkeypatch.setattr(Git, "commit_all", fails)
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        with pytest.raises(GitError):
+            requests.auto_merge(repo, conn, project, NOW, MERGE, "f12")
+    finally:
+        conn.close()
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
 
 
 def _with(repo: Path, rel: str, text: str) -> None:

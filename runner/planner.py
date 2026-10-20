@@ -525,10 +525,16 @@ def card_notes(doc: str) -> str:
     return re.sub(r"^>", r"\\>", text, flags=re.MULTILINE) or "(none)"
 
 
-def merged_card(doc: str, notes: str, source: str) -> str:
+def merged_card(doc: str, notes: str, source: str, *, summary: str | None = None) -> str:
     """The kept card's doc with ``notes`` at the end of its Notes section (made when it has
-    none), under a heading saying where they came from."""
+    none), under a heading saying where they came from; then the lead's ``summary`` of the
+    duplicate's thread, when there is one (F49 D3), its headings and quoted lines escaped: the
+    lead's words can't sign the card off or pass for a section or another merge."""
     block = f"### {source}\n{notes}\n"
+    if summary and summary.strip():
+        name = source.removeprefix("From ").partition(":")[0]
+        said = re.sub(r"^([>#])", r"\\\1", summary.strip(), flags=re.MULTILINE)
+        block += f"\nWhat was said on {name}'s thread:\n{said}\n"
     section = re.search(r"^## Notes[ \t]*\n.*?(?=^## |\Z)", doc, re.MULTILINE | re.DOTALL)
     if section is None:
         return f"{doc.rstrip()}\n\n## Notes\n{block}"
@@ -549,9 +555,10 @@ def merged_keys(doc: str) -> list[str]:
     return [found[1].lower() for found in _MERGED_RE.finditer(doc)]
 
 
-def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]]) -> str:
+def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]], merged: str | None = None) -> str:
     """A thread's earlier messages in words, for a job with no session to resume: the lead's
-    text and its points. Lead replies written outside a job (2026-10-07) have no session."""
+    text and its points. Lead replies written outside a job (2026-10-07) have no session. With
+    ``merged``, the thread of that card, merged into the job's, read once (F49 D4)."""
     said = []
     for message in messages:
         who = "The owner" if message["author"] == "owner" else "You (the lead)"
@@ -566,7 +573,11 @@ def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]]) -> str:
         said.append("\n".join([f"{who}:", str(message["text"]).strip(), *lines]).strip())
     if not said:
         return ""
-    return "\nWhat was said on this thread before, oldest first:\n\n" + "\n\n".join(said) + "\n"
+    if merged is not None:
+        heading = f"\nFrom {thread_name(merged)}'s thread, merged here:\n\n"
+    else:
+        heading = "\nWhat was said on this thread before, oldest first:\n\n"
+    return heading + "\n\n".join(said) + "\n"
 
 
 # --- where the work stands (F21 D1): the runner's own order, written into the prompt ----------
@@ -686,14 +697,20 @@ def _exported(message: sqlite3.Row | Mapping[str, Any]) -> str:
 
 
 def export(
-    name: str, title: str | None, messages: Sequence[sqlite3.Row | Mapping[str, Any]]
+    name: str,
+    title: str | None,
+    messages: Sequence[sqlite3.Row | Mapping[str, Any]],
+    into: str | None = None,
 ) -> str:
     """A card's thread for a person reading the repo (f20 D2): a title, then every message
-    oldest first (``_exported``). ``history`` says the same to a planner job."""
+    oldest first (``_exported``). ``history`` says the same to a planner job. ``into``, the
+    card it was merged into (F49 D4)."""
     heading = f"# {name}: {title}" if title else f"# {name}"
     about = (
         f"The planning thread behind {name}'s plan, oldest first,"
         " as it was when the owner approved it."
+        if into is None
+        else f"{name}'s planning thread, oldest first, as it was when it was merged into {into}."
     )
     return "\n".join([heading, "", about, "", *(_exported(m) for m in messages)])
 
@@ -869,6 +886,8 @@ def _proposal(proposal: object, known: Collection[str]) -> None:
         for card in merge_cards(proposal):
             if card not in known:
                 raise PlannerError(f"merge {name} names {card}, but {card} is no card")
+        if not isinstance(proposal.get("summary"), str | None):  # F49 D3
+            raise PlannerError(f"merge {name}'s summary is not text")
 
 
 # --- a proposal's state (F31 D3): the desk, the thread and the runner read the same one -------

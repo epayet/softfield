@@ -275,10 +275,19 @@ ALTER TABLE projects ADD COLUMN priority INTEGER NOT NULL DEFAULT 100;
 ALTER TABLE projects ADD COLUMN paused TEXT;
 """
 
+# F49 D4: the cards merged into a thread's card whose threads its next planner job hasn't read
+# yet, as a JSON list of short keys; NULL when there are none.
+_V14 = """
+ALTER TABLE planner_threads ADD COLUMN merges_unread TEXT;
+"""
+
 ONCE_STEPS = ("f55 clear-out",)  # one-off steps an older database still owes (F55 D3)
 
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
-MIGRATIONS: list[str] = [_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13]
+MIGRATIONS: list[str] = [
+    *(_V1, _V2, _V3, _V4, _V5, _V6, _V7, _V8, _V9, _V10, _V11, _V12, _V13),
+    _V14,
+]
 
 type Value = str | int | float | Sequence[object] | Mapping[str, object] | None
 
@@ -1038,6 +1047,20 @@ def once(conn: sqlite3.Connection, name: str, at: str) -> bool:
 def set_thread_session(conn: sqlite3.Connection, thread_id: int, session_id: str) -> None:
     """The Claude session the thread's next planner job resumes (f6 D3)."""
     _update(conn, "planner_threads", thread_id, {"session_id": session_id})
+
+
+def unread_merges(conn: sqlite3.Connection, thread_id: int) -> list[str]:
+    """The cards merged into the thread's card whose threads its next job reads (F49 D4)."""
+    row = conn.execute(
+        "SELECT merges_unread FROM planner_threads WHERE id = ?", (thread_id,)
+    ).fetchone()
+    return list(json.loads(row[0])) if row is not None and row[0] else []
+
+
+def set_unread_merges(conn: sqlite3.Connection, thread_id: int, cards: Sequence[str]) -> None:
+    """The cards merged into the thread's card still to be read by its next job (F49 D4)."""
+    value = json.dumps(list(cards)) if cards else None
+    conn.execute("UPDATE planner_threads SET merges_unread = ? WHERE id = ?", (value, thread_id))
 
 
 def add_planner_message(
