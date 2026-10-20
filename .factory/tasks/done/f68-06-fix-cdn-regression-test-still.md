@@ -26,3 +26,12 @@ f68-i-want-the-factory-to-be-C1080-3: CDN regression test still bypasses the act
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2802
+gate_failures: []
+tokens: 207434
+```
