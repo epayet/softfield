@@ -21,6 +21,9 @@ if i archive something that got merged, it does'nt archive the merged plan right
 What was said on F157's thread:
 The owner asked whether archiving F156 (merged into F135) also archived F135. Answer: no, Archive touches only its own thread. F135 was archived separately by the owner four minutes later, and its ticket f135-01 still runs. They also asked about the tickets for 'smarter actions' (Approve ADR then Approve plan at once), which are F51's f51-01 and f51-02. Nothing is still open.
 
+### From F99: When a proposal has bundled things like both a mock-up and… (merged by the lead on 2026-10-20)
+When a proposal has bundled things like both a mock-up and and a plan. Bundle them in tbr planning list too. Right now it looks like I have 2 things to look into but one approval approves both. Like the current both f54
+
 ## Outcome
 The desk, the Planning tab's count and the Overview's "Needs you" count only what the owner can do now (the owner, 2026-10-08):
 - A card with an ADR and a plan: before the ADR is accepted, the desk shows **one** item, the ADR, "then its plan". The plan isn't a second thing to do.
