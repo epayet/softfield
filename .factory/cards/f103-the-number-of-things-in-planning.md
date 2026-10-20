@@ -1,4 +1,4 @@
-# Milestone F103: The number of things in planning number in tab should not…
+# Milestone F103: The Planning tab's number counts only what you have to answer, not seeds
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-10.
