@@ -1138,3 +1138,138 @@ def test_a_drag_near_the_bottom_edge_scrolls_the_page(page, board_db):
     page.mouse.move(grip["x"] + 20, PHONE["height"] - 10, steps=4)
     page.wait_for_function("() => scrollY > 200")
     page.mouse.up()
+
+
+# --- waits (f15-08) ------------------------------------------------
+
+
+def test_a_planted_card_says_what_it_waits_for(board_db):
+    """A planted card whose only ready ticket depends on F22's unfinished ticket has
+    ``waits == ("F22",)`` and its card reads "waits for F22"."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        # create f22's ticket that will be a dependency target
+        f22 = metrics.upsert_milestone(
+            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+        )
+        metrics.upsert_ticket(
+            conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
+        )
+        # make f23-01-first depend on f22-01-unfinished, and f23-02-second set aside
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f22-01-unfinished"]), "f23-01-first"),
+        )
+        conn.execute(
+            "UPDATE tickets SET state = ? WHERE ticket = ?",
+            ("later", "f23-02-second"),
+        )
+
+    write(board_db, change)
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.stage == "planted"
+    assert f23.waits == ("F22",)
+    html = _page(_client(board_db))
+    _, words = _card(html, "/milestones/f23-planted")
+    assert "waits for F22" in words
+
+
+def test_two_ready_tickets_one_free_means_no_waits(board_db):
+    """With two ready tickets, one depending on F22's unfinished ticket and one free,
+    ``waits`` is empty and the card shows no such line."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        # create f22's ticket
+        f22 = metrics.upsert_milestone(
+            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+        )
+        metrics.upsert_ticket(
+            conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
+        )
+        # f23-01-first depends on f22-01-unfinished, but f23-02-second is free
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f22-01-unfinished"]), "f23-01-first"),
+        )
+
+    write(board_db, change)
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.waits == ()
+    html = _page(_client(board_db))
+    _, words = _card(html, "/milestones/f23-planted")
+    assert "waits for" not in words
+
+
+def test_ready_tickets_depend_on_two_other_cards(board_db):
+    """With ready tickets depending on unfinished tickets of F22 and F63, the line reads
+    "waits for F22, F63", each once."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        # create f22 and f63 milestones
+        f22 = metrics.upsert_milestone(
+            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+        )
+        metrics.upsert_ticket(
+            conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
+        )
+        f63 = metrics.upsert_milestone(
+            conn, p, "f63-later", title="Later", state="planning", priority=10, area="product"
+        )
+        metrics.upsert_ticket(
+            conn, p, "f63-01-unfinished", milestone_id=f63, kind="developer", state="ready"
+        )
+        # f23-01-first depends on f22-01-unfinished, f23-02-second depends on f63-01-unfinished
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f22-01-unfinished"]), "f23-01-first"),
+        )
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f63-01-unfinished"]), "f23-02-second"),
+        )
+
+    write(board_db, change)
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.waits == ("F22", "F63")
+    html = _page(_client(board_db))
+    _, words = _card(html, "/milestones/f23-planted")
+    assert "waits for F22, F63" in words
+
+
+def test_done_dependency_and_own_ticket_name_no_card(board_db):
+    """A dependency that is done, and one on the card's own earlier ticket, name no card."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        # f24-01-merged is done
+        # make f23-01-first depend on f24-01-merged (done) and f23-02-second (own ticket)
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f24-01-merged", "f23-02-second"]), "f23-01-first"),
+        )
+
+    write(board_db, change)
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.waits == ()
+    html = _page(_client(board_db))
+    _, words = _card(html, "/milestones/f23-planted")
+    assert "waits for" not in words
+
+
+def test_bug_and_ripe_card_have_no_waits_line(board_db):
+    """A bug card and a ripe card have no such line."""
+    found = read(board_db)
+    # bug card should have no waits
+    bug = card(found, "bug-02-stale")
+    assert bug.waits == ()
+    # ripe card should have no waits
+    ripe = card(found, "F1")
+    assert ripe.waits == ()
+    html = _page(_client(board_db))
+    _, bug_words = _card(html, "/tickets/bug-02-stale")
+    assert "waits for" not in bug_words
+    _, ripe_words = _card(html, "/milestones/f1")
+    assert "waits for" not in ripe_words

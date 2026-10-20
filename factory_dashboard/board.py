@@ -33,7 +33,7 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.line import _LONG_AGO, _natural, _when
 from factory_dashboard.overview import running_jobs
-from factory_dashboard.queries import ticket_priority
+from factory_dashboard.queries import depends_on, ticket_priority
 from runner import metrics
 from runner.requests import REORDER
 from runner.tasks import BUGS, DEFAULT_PRIORITY, short_key
@@ -85,6 +85,7 @@ class Card:
     place: int = 0  # its place in its stage, from 1; 0 in a stage not ``PLACED``
     on_its_way: bool = False  # an open reorder puts it out of place
     was: int = 0  # then, its place without the reorder
+    waits: tuple[str, ...] = ()  # other card keys this card's ready tickets depend on
 
     @property
     def kind(self) -> str:
@@ -128,12 +129,48 @@ def _bug_stage(state: str | None, running: bool) -> str:
     return "planted"
 
 
+def _card_waits(
+    tickets: list[sqlite3.Row],
+    all_name_to_mkey: dict[str, str],
+    done: set[str],
+    own_key: str,
+) -> tuple[str, ...]:
+    """The other card keys a milestone's ready tickets depend on, in key order, each once.
+    Empty when any ready ticket can start or only depends on its own milestone."""
+    ready = [t for t in tickets if t["state"] == "ready"]
+    if not ready:
+        return ()
+    # if any ready ticket can start (no deps or all deps done), card waits for nothing
+    for t in ready:
+        deps = depends_on(t)
+        if not deps or all(d in done for d in deps):
+            return ()
+    # collect the other card keys from unfinished deps
+    others: set[str] = set()
+    for t in ready:
+        for dep in depends_on(t):
+            m = all_name_to_mkey.get(dep)
+            if m is None:
+                continue
+            if m != own_key and dep not in done:
+                others.add(m.upper())
+    return tuple(sorted(others))
+
+
 def _card_note(
-    key: str, stage: str, latest: Mapping[str, sqlite3.Row | None], sent: set[str]
+    key: str,
+    stage: str,
+    latest: Mapping[str, sqlite3.Row | None],
+    sent: set[str],
+    waits: tuple[str, ...] = (),
 ) -> str:
     """Who a sprouting card's conversation waits for (D4). The owner's message still on its
-    way to the runner counts as theirs at once (the owner, 2026-10-07)."""
+    way to the runner counts as theirs at once (the owner, 2026-10-07). For planted and
+    growing cards, appends a "waits for F22" line when its ready tickets depend on other
+    cards."""
     if stage != "sprouting":
+        if stage in ("planted", "growing") and waits:
+            return f"waits for {', '.join(waits)}"
         return ""
     if key in sent:
         return "the lead is answering"
@@ -161,13 +198,23 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
         "SELECT m.* FROM milestones m JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
         (project,),
     ).fetchall()
+    mkey: dict[int, str] = {}  # milestone id → its short key (lowercase)
+    for m in milestones:
+        mkey[m["id"]] = short_key(m["key"]).lower()
     tickets: dict[int, list[sqlite3.Row]] = {}
+    ticket_to_milestone: dict[int, str] = {}  # ticket id → milestone's short key
+    all_name_to_mkey: dict[str, str] = {}  # ticket name → milestone's short key
+    done_tickets: set[str] = set()
     for t in conn.execute(
         "SELECT t.* FROM tickets t JOIN projects p ON p.id = t.project_id"
         " WHERE p.name = ? AND t.milestone_id IS NOT NULL AND t.state IS NOT ? ORDER BY t.ticket",
         (project, metrics.REMOVED),
     ):
         tickets.setdefault(t["milestone_id"], []).append(t)
+        ticket_to_milestone[t["id"]] = mkey[t["milestone_id"]]
+        all_name_to_mkey[t["ticket"]] = mkey[t["milestone_id"]]
+        if t["state"] == "done":
+            done_tickets.add(t["ticket"])
     threads = {
         r["card"]
         for r in conn.execute(
@@ -244,6 +291,7 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
         counted = [t for t in own if t["state"] not in _OFF]
         stage = _milestone_stage(m, counted, threads, worked)
         key = short_key(m["key"]).upper()
+        waits = _card_waits(own, all_name_to_mkey, done_tickets, mkey[m["id"]])
         card = Card(
             key=key,
             full_key=m["key"],
@@ -255,7 +303,8 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             done=sum(t["state"] == "done" for t in counted),
             total=len(counted),
             set_aside=sum(t["state"] == "later" for t in own),
-            note=_card_note(key.lower(), stage, latest_messages, sent),
+            note=_card_note(key.lower(), stage, latest_messages, sent, waits),
+            waits=waits,
             running=running(counted) if stage == "growing" else None,
         )
         found.append((card, _when(m["ended"]) if m["ended"] else _LONG_AGO))
