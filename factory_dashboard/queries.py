@@ -543,17 +543,6 @@ def ticket_priority(body: str | None, milestone: str | None, card: int | None) -
     return DEFAULT_PRIORITY if card is None else card
 
 
-def moves(priorities: Sequence[int]) -> list[tuple[int, int]]:
-    """The priorities each row's ↑ and ↓ ask for (f6-18), the rows in run order: ↑ one less
-    than the row above's (0 at least), ↓ one more than the row below's; the first's ↑ and the
-    last's ↓ are by one from its own."""
-    last = len(priorities) - 1
-    return [
-        (max((priorities[i - 1] if i else p) - 1, 0), (priorities[i + 1] if i < last else p) + 1)
-        for i, p in enumerate(priorities)
-    ]
-
-
 def as_task(
     ticket: str, milestone: str | None, after: Sequence[str], priority: int | None = None
 ) -> Task:

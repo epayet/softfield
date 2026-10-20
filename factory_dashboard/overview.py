@@ -790,7 +790,6 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         "pause_words": pause_words(conn, project, now),
         "queue": all_queued,
         "next": live_line(conn, project, now.astimezone())["now"]["next"],
-        "drain": _drain(all_queued[0].milestone or "") if all_queued else None,
         "waits": waits,
         "queued_jobs": qjobs,
         # Claude's allowance and its reserve switches, below Now (f8-06)

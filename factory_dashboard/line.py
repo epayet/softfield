@@ -677,11 +677,6 @@ def live_line(
         }
         for u in upcoming
     ]
-    # the priorities its ↑ and ↓ ask for, against its neighbours in the run order (f6-18)
-    for crate, (up, down) in zip(
-        tickets_next, queries.moves([u.priority for u in upcoming]), strict=True
-    ):
-        crate.update(up=up, down=down)
     # a parked review goes behind the last ticket that can run; the run order is kept
     reviews = _due_reviews(conn, project, now)
     free = max((n for n, t in enumerate(tickets_next, start=1) if not t["waits"]), default=0)

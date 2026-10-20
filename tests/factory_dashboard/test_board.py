@@ -744,7 +744,7 @@ def test_the_top_bar_has_a_board_tab_right_after_planning(board_client):
 
 def test_the_board_replaces_the_milestones_tab_and_links_to_the_list(board_client):
     """The owner, 2026-10-06: the board is how milestones are found (f5-17). The list keeps
-    each card's ↑ and ↓ and the trends, so it still answers and the board links to it."""
+    each card's priority and the trends, so it still answers and the board links to it."""
     html = _page(board_client)
     tabs = re.findall(r'<nav class="tabs"[^>]*>(.*?)</nav>', html, re.S)[0]
     assert "/milestones" not in re.findall(r'href="([^"?]*)\?', tabs)

@@ -394,7 +394,7 @@ def test_cached_only_shown_when_input_null(client, db_path):
     assert "read 500k tokens · 10 turns" in running
 
 
-def test_now_holds_what_works_then_next_in_line_and_the_command_that_drains_it(client):
+def test_now_holds_what_works_then_next_in_line_and_no_terminal_command(client):
     html = client.get("/").text
     now = section(html, "now")
     assert "f1-04-live" in now and "attempt 2" in now and "Running now." in now
@@ -402,9 +402,11 @@ def test_now_holds_what_works_then_next_in_line_and_the_command_that_drains_it(c
     _unused, next_in_line = queue_section.split("Next in line", 1)
     assert re.search(r"\b1 f1-05-first Queued first\. · a developer\b", next_in_line)
     assert next_in_line.index("1 f1-05-first") < next_in_line.index("2 f1-06-second")
-    # The command to drain the queue is in the queue section, not in now.
-    assert "softfield run" in queue_section
-    assert "softfield run" not in now
+    # No terminal command on the page (the owner, 2026-10-13): the queue only counts
+    assert "softfield run" not in queue_section and "softfield run" not in now
+    markup = html.split('id="queue"', 1)[1].split("</section>", 1)[0]
+    assert "<code>" not in markup
+    assert re.search(r"<p>\d+ tickets? waiting\.</p>", markup)
     assert "f1-01-first" not in next_in_line  # merged
 
 
@@ -661,8 +663,8 @@ def test_another_project_shows_only_its_own(client):
     html = client.get(f"/?project={OTHER}").text
     queue_section = section(html, "queue")
     assert "m1-01-elsewhere" in queue_section
-    assert "softfield run" in queue_section
     assert "Next in line" in queue_section
+    assert f'<a href="/board?project={OTHER}">Reorder on the board ›</a>' in html
     page = html.split("<main>", 1)[1]  # the top bar says what the whole factory does (ADR 30)
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
         assert mine not in page
@@ -750,7 +752,7 @@ def test_next_in_line_says_what_a_parked_review_waits_for(client, db_path):
     rows = section(client.get("/").text, "queue").split("Next in line", 1)[1]
     assert rows.index("1 f1-05-first") < rows.index("2 f1-06-second") < rows.index("3 review F1")
     reset = f"Claude's reset at {until.astimezone():%H:%M}"
-    assert rows.endswith(f"3 review F1 · a batch · waits for {reset}")
+    assert rows.endswith(f"3 review F1 · a batch · waits for {reset} Reorder on the board ›")
 
 
 def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path):
@@ -764,34 +766,18 @@ def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path)
     assert "4 f1-" not in rows
 
 
-def _moves(html: str) -> list[tuple[str, str, dict[str, object]]]:
-    """Next in line's ↑ and ↓ buttons: each one's arrow, label and the request it posts."""
-    rows = html.split("Next in line", 1)[1].split("</section>", 1)[0]
-    button = r"<button[^>]*?hx-vals='([^']*)'[^>]*aria-label=\"([^\"]*)\"[^>]*>(.)</"
-    found = re.findall(button, rows)
-    return [(arrow, label, json.loads(vals)) for vals, label, arrow in found]
-
-
-def _post(ticket: str, value: str) -> dict[str, object]:
-    return {"kind": "priority", "project": PROJECT, "subject": ticket, "value": value}
-
-
-def test_next_in_line_shows_each_priority_with_buttons_that_move_it(queue_client, db_path):
-    """f6-18: ↑ asks for one less than the ticket above's (0 at least), ↓ one more than the
-    one below's; the first's ↑ is by one from its own. All at the default 100 here."""
+def test_next_in_line_shows_each_priority_and_sends_reordering_to_the_board(queue_client):
+    """F15 D8: no ↑ and ↓ any more, the board is the one place to reorder; each ticket still
+    shows its priority, all at the default 100 here."""
     html = queue_client.get("/").text
     rows = section(html, "queue").split("Next in line", 1)[1]
     for ticket in ("f1-05-first", "f1-06-second", "f1-10-queued"):
-        assert re.search(rf"\b{ticket}\b[^·]*· [^·]+ · priority 100 ↑ ↓", rows), ticket
-    assert all(h == "/requests" for h in re.findall(r'hx-post="([^"]*)"', html.split("Next in")[1]))
-    assert _moves(html) == [
-        ("↑", "Move f1-05-first up: priority 99", _post("f1-05-first", "99")),
-        ("↓", "Move f1-05-first down: priority 101", _post("f1-05-first", "101")),
-        ("↑", "Move f1-06-second up: priority 99", _post("f1-06-second", "99")),
-        ("↓", "Move f1-06-second down: priority 101", _post("f1-06-second", "101")),
-        ("↑", "Move f1-10-queued up: priority 99", _post("f1-10-queued", "99")),
-        ("↓", "Move f1-10-queued down: priority 101", _post("f1-10-queued", "101")),
-    ]
+        assert re.search(rf"\b{ticket}\b[^·]*· [^·]+ · priority 100\b", rows), ticket
+    assert "↑" not in rows and "↓" not in rows
+    markup = html.split("Next in line", 1)[1].split("</section>", 1)[0]
+    assert "move-button" not in markup and "<button" not in markup
+    assert "hx-post" not in markup and '"priority"' not in markup
+    assert re.search(r'<a href="/board[^"]*">Reorder on the board ›</a>', markup)
 
 
 def _prioritise(db_path: Path, ticket: str, own: int, card: int) -> None:
@@ -816,22 +802,14 @@ def test_next_in_line_follows_the_priorities_the_runner_reads(queue_client, db_p
         "f1-05-first",
         "f1-06-second",
     ]
-    assert "priority 5 ↑ ↓" in rows and "priority 50 ↑ ↓" in rows
-    assert [(arrow, post["subject"], post["value"]) for arrow, _, post in _moves(html)] == [
-        ("↑", "f1-10-queued", "4"),
-        ("↓", "f1-10-queued", "51"),
-        ("↑", "f1-05-first", "4"),
-        ("↓", "f1-05-first", "51"),
-        ("↑", "f1-06-second", "49"),
-        ("↓", "f1-06-second", "51"),  # one more than f1-11-waits-done's, below it
-    ]
+    assert re.findall(r"· priority (\d+)\b", rows) == ["5", "50", "50"]
     assert list(waits(db_path))[:3] == ["f1-10-queued", "f1-05-first", "f1-06-second"]
 
 
-def test_a_priority_at_0_has_no_up_button(queue_client, db_path):
+def test_a_priority_at_0_shows_as_0_and_goes_first(queue_client, db_path):
     _prioritise(db_path, "f1-10-queued", own=0, card=100)
-    moves = [(arrow, post["subject"]) for arrow, _, post in _moves(queue_client.get("/").text)]
-    assert moves[:2] == [("↓", "f1-10-queued"), ("↑", "f1-05-first")]
+    rows = section(queue_client.get("/").text, "queue").split("Next in line", 1)[1]
+    assert re.search(r"\b1 f1-10-queued\b[^·]*· [^·]+ · priority 0\b", rows)
 
 
 def test_empty_queue_shows_message_once(serve):

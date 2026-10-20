@@ -246,36 +246,17 @@ def _row_cells(html: str, key: str) -> tuple[list[str], str]:
     raise AssertionError(f"no row {key}")
 
 
-def _posts(row: str) -> list[tuple[str, dict[str, object]]]:
-    found = re.findall(r"<button[^>]*?hx-vals='([^']*)'[^>]*>(.)</button>", row)
-    return [(arrow, json.loads(vals)) for vals, arrow in found]
-
-
-def test_each_milestone_not_done_shows_its_priority_with_buttons_that_move_it(
-    milestones_client, db_path
-):
-    """f6-18: ↑ asks for one less than the milestone before it in the run order (0 at least),
-    ↓ one more than the one after it; a done milestone, or one with no card, has none."""
-    from tests.factory_dashboard.conftest import PROJECT
-
+def test_each_milestone_not_done_shows_its_priority_and_no_arrows(milestones_client, db_path):
+    """F15 D8: the board is the one place to reorder, so the list only shows each card's
+    priority; a done milestone, or one with no card, shows –."""
     _cards(db_path)
     html = milestones_client.get("/milestones").text
     assert "<th>Priority</th>" in html or '<th class="num">Priority</th>' in html
-
-    def post(key: str, value: str) -> dict[str, object]:
-        return {"kind": "priority", "project": PROJECT, "subject": key, "value": value}
-
-    cells, row = _row_cells(html, "F2")
-    assert cells[-1] == "5 ↑ ↓"
-    # Run order includes F3(2), F2(5), F5(10), F10(100); F2's neighbors are F3 and F5
-    assert _posts(row) == [("↑", post("f2", "1")), ("↓", post("f2", "11"))]
-    cells, row = _row_cells(html, "F10")
-    assert cells[-1] == "100 ↑ ↓"
-    # F10's neighbor above is F5(10)
-    assert _posts(row) == [("↑", post("f10", "9")), ("↓", post("f10", "101"))]
-    for key in ("F1", "M4"):
+    assert "move-button" not in html and '"priority"' not in html
+    for key, priority in (("F2", "5"), ("F10", "100"), ("F1", "–"), ("M4", "–")):
         cells, row = _row_cells(html, key)
-        assert cells[-1] == "–" and _posts(row) == []
+        assert cells[-1] == priority, key
+        assert "<button" not in row and "hx-post" not in row, key
     # the columns before it are as they were
     assert _row_cells(html, "F1")[0][:4] == ["F1", "The factory measures itself", "done", "3"]
 

@@ -1,7 +1,0 @@
-{# A ticket's or a milestone's priority with its ↑ and ↓ (f6-18): each asks the runner for the
-   priority it names (`queries.moves`), and says "Asked" below until the runner has done it.
-   No ↑ when it can't go higher. Given: subject, name, priority, up, down, and said (words
-   before the number, if any). #}
-<span class="move">{{ said }}{{ priority }}
-  {%- if up != priority %} <button type="button" class="move-button" hx-post="/requests" hx-target="#move-{{ subject }}" hx-vals='{"kind": "priority", "project": {{ project | tojson }}, "subject": {{ subject | tojson }}, "value": {{ up | string | tojson }}}' aria-label="Move {{ name }} up: priority {{ up }}" title="Move up: priority {{ up }}">↑</button>{% endif %} <button type="button" class="move-button" hx-post="/requests" hx-target="#move-{{ subject }}" hx-vals='{"kind": "priority", "project": {{ project | tojson }}, "subject": {{ subject | tojson }}, "value": {{ down | string | tojson }}}' aria-label="Move {{ name }} down: priority {{ down }}" title="Move down: priority {{ down }}">↓</button></span>
-<div id="move-{{ subject }}" class="move-status"></div>

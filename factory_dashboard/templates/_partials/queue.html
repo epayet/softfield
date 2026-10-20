@@ -2,7 +2,7 @@
   <h3>Queue</h3>
   {% if queue or queued_jobs %}
     {% if queue %}
-    <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting. Drain it with <code>{{ drain }}</code></p>
+    <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting.</p>
     {% elif queued_jobs %}
     <p>{{ queued_jobs | length }} job{{ "s" if queued_jobs | length != 1 }} waiting.</p>
     {% endif %}
@@ -26,10 +26,11 @@
     {% endfor %}
     {% for t in next %}
     {% if t.ticket %}
-    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · waits for {{ waits[t.ticket] }}{% endif %} · {% with subject = t.ticket, name = t.ticket, priority = t.priority, up = t.up, down = t.down, said = "priority " %}{% include "_partials/move.html" %}{% endwith %}</div>
+    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · waits for {{ waits[t.ticket] }}{% endif %} · priority {{ t.priority }}</div>
     {% else %}
     <div class="next-row"><b class="mono">{{ t.number }} {{ t.title }}</b> · a batch{% if t.waits %} · waits for {{ t.waits | join(", ") }}{% endif %}</div>
     {% endif %}
     {% endfor %}
+    <p><a href="/board{{ q }}">Reorder on the board ›</a></p>
   </div>
 </section>

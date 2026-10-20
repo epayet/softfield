@@ -25,7 +25,7 @@ from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.board import STAGES, WORDS, Card, milestone_card
 from factory_dashboard.line import _natural
 from runner import metrics
-from runner.tasks import milestone_order, short_key
+from runner.tasks import short_key
 
 router = APIRouter()
 
@@ -44,19 +44,16 @@ class MilestoneRow:
     review_rounds: int
     claude_dollars: float
     net_savings: float
-    priority: int | None = None  # a card not done's (f6-18), with what its ↑ and ↓ ask for
-    up: int | None = None
-    down: int | None = None
+    priority: int | None = None  # a card not done's (f6-18)
 
 
 UNMOVED = (None, "done", "removed")  # card states without a priority to change
 
 
-def _with_moves(
+def _with_priorities(
     conn: sqlite3.Connection, project: str, rows: list[MilestoneRow]
 ) -> list[MilestoneRow]:
-    """Each card not done with its priority, and the priorities its ↑ and ↓ ask for against
-    its neighbours in the run order (priority, then milestone order), not the page's order."""
+    """Each card not done with its priority; the others keep none."""
     cards = {
         row["key"]: row["priority"]
         for row in conn.execute(
@@ -66,14 +63,7 @@ def _with_moves(
         )
         if row["state"] not in UNMOVED and row["status"] != "done" and row["priority"] is not None
     }
-    order = sorted(cards, key=lambda key: (cards[key], milestone_order(key), key))
-    moved = dict(zip(order, queries.moves([cards[key] for key in order]), strict=True))
-    return [
-        replace(r, priority=cards[r.key], up=moved[r.key][0], down=moved[r.key][1])
-        if r.key in moved
-        else r
-        for r in rows
-    ]
+    return [replace(r, priority=cards[r.key]) if r.key in cards else r for r in rows]
 
 
 def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]:
@@ -202,7 +192,7 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
         + sorted(done, key=_done_key)
     )
 
-    return _with_moves(conn, project, result)
+    return _with_priorities(conn, project, result)
 
 
 def _rate_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
