@@ -533,20 +533,40 @@ tbody tr:hover { background: var(--accent-wash); }
 #actions.on-its-way .way-title { display: block; }
 #actions.on-its-way .action-buttons, #actions.on-its-way #settled { display: none !important; }
 
-/* The board (f5-16, after docs/milestones/f5-board-mockup/): the totals, the search and the
-   kind, then the field, a column per stage that scrolls sideways when the six don't fit. A
-   card's left edge is its area's colour; a bug's is striped. Every control is at least 44 px */
+/* The board (f5-16, after docs/milestones/f5-board-mockup/): the plots, the search and the
+   kind, then the field, a column per stage, six side by side from 900 px and one at a time
+   under it (F15 D2). A card's left edge is its area's colour; a bug's is striped. Every control
+   is at least 44 px */
 main:has(.board) { max-width: 1360px; }
 .board-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .board-head p { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
 .badge { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase;
   color: var(--hazard-ink); background: var(--hazard); padding: 3px 8px; }
-.totals { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1px;
-  background: var(--rule); border: 1px solid var(--rule); }
-.totals div { background: var(--bay); padding: 10px 14px; display: flex; flex-direction: column; gap: 2px; }
-.totals b { font: 600 20px var(--mono); }
-.totals .ripe b { color: var(--warn-ink); }
-.totals span { font: 500 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+/* The plots (after .factory/cards/f15-mockup/board-edit.html): six in growth order, three to a
+   row under 900 px, each its plant, its count and its name; a › leads from one to the next */
+.plots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding: 12px;
+  background: var(--bay) repeating-linear-gradient(135deg, transparent 0 10px,
+    color-mix(in srgb, var(--hazard) 9%, transparent) 10px 12px);
+  border: 1px solid var(--rule); }
+.plot { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-areas: "plant count" "name name"; align-items: center; gap: 2px 6px; min-width: 0;
+  min-height: 64px; padding: 6px 8px; background: var(--plate); border: 1px solid var(--rule);
+  color: var(--ink-2); text-align: left; text-transform: none; letter-spacing: 0; }
+.plot svg { grid-area: plant; width: 40px; height: 36px; color: var(--stage, var(--ink-2)); }
+.plot svg .soil { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 5 3; fill: none; }
+.plot svg .stem { stroke: currentColor; stroke-width: 2.5; fill: none; }
+.plot svg .leaf { fill: currentColor; }
+.plot svg .fruit { fill: var(--warn-ink); }
+.plot svg .crate { stroke: currentColor; stroke-width: 2; fill: none; }
+.plot b { grid-area: count; font: 600 20px/1 var(--display); color: var(--fg); }
+.plot.ripe b { color: var(--warn-ink); }
+.plot span { grid-area: name; font: 600 10.5px var(--display); letter-spacing: .06em;
+  text-transform: uppercase; overflow-wrap: anywhere; }
+.plot::after { content: "›"; position: absolute; right: -12px; top: 50%; translate: 0 -50%;
+  font: 600 16px var(--mono); color: var(--hazard); }
+.plot:nth-child(3n)::after { content: none; }
+.plot::before { content: ""; position: absolute; left: -1px; top: -1px; width: 8px; height: 8px;
+  border-left: 2px solid var(--muted); border-top: 2px solid var(--muted); }
 .board-filter { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
 .board-filter label { display: flex; align-items: center; gap: 8px; font: 500 12px var(--display);
   letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
@@ -563,8 +583,7 @@ main:has(.board) { max-width: 1360px; }
   padding: 10px 14px; border-bottom: 1px solid var(--rule); }
 .field-head h2 { margin: 0; font: 600 15px var(--display); letter-spacing: .08em; text-transform: uppercase; }
 .field-head p { margin: 0; color: var(--muted); font-size: 13px; }
-.stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: var(--rule);
-  min-width: 1200px; }
+.stages { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 1px; background: var(--rule); }
 .stage { background: var(--bay); display: flex; flex-direction: column; min-width: 0; }
 .stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--plate);
   border-bottom: 1px solid var(--rule); }
@@ -642,12 +661,23 @@ main:has(.board) { max-width: 1360px; }
 .card-tickets .state { font-weight: 600; }
 .card-tickets .is-done { color: var(--qwen); } .card-tickets .is-running { color: var(--serious-ink); }
 .card-tickets .is-ready { color: var(--fg); }
-/* Phone: the stages stack, what needs the owner and what runs first (the owner, 2026-10-03);
-   the heads carry the counts, so the totals go, and so does a stage with no card */
-@media (max-width: 639px) {
-  .board-head p, .totals, .field-head { display: none; }
-  .board-filter label { flex: 1 1 100%; flex-direction: column; align-items: stretch; gap: 4px; }
-  .board-filter input[type=search] { width: 100%; font-size: 15px; }
+/* From 900 px every stage shows, so a plot is a count: six in a row, none pressed */
+@media (min-width: 900px) {
+  .plots { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  .plot:nth-child(3n)::after { content: "›"; }
+  .plot:last-child::after { content: none; }
+}
+/* Under 900 px a plot shows its stage (board.js marks it pressed) and no other stage shows */
+@media (max-width: 899px) {
+  .plot { cursor: pointer; }
+  .plot[aria-pressed="true"] { border-color: var(--hazard); box-shadow: inset 0 -4px 0 var(--hazard); color: var(--fg); }
+  .plot[aria-pressed="true"]::before { border-color: var(--hazard); }
+  #field[data-shown] .stage { display: none; }
+  #field[data-shown] .stage.shown { display: flex; }
+}
+/* Without board.js the stages stack under 900 px, what needs the owner and what runs first (the
+   owner, 2026-10-03), and a stage with no card goes */
+@media (max-width: 899px) {
   .field { background: none; border: 0; display: grid; gap: 12px; }
   .stages { display: flex; flex-direction: column; gap: 12px; min-width: 0; background: none; }
   .stage { border: 1px solid var(--rule); }
@@ -657,6 +687,12 @@ main:has(.board) { max-width: 1360px; }
   #stage-planted { order: 3; } #stage-sprouting { order: 4; } #stage-seed { order: 5; }
   #stage-harvested { order: 6; border-style: dashed; }
   .field-foot { border: 1px solid var(--rule); padding: 8px 12px; }
+}
+/* Phone: the plots carry the counts, so the words around the field go */
+@media (max-width: 639px) {
+  .board-head p, .field-head { display: none; }
+  .board-filter label { flex: 1 1 100%; flex-direction: column; align-items: stretch; gap: 4px; }
+  .board-filter input[type=search] { width: 100%; font-size: 15px; }
 }
 
 /* The Projects page (ADR 30 item 6, .factory/cards/projects-page-mockup/projects.html) */

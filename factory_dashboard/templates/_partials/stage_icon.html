@@ -17,3 +17,29 @@
   {%- endif -%}
 </svg>
 {% endmacro %}
+
+{# A plot's plant on the board's field (F15 D2, after .factory/cards/f15-mockup/board-edit.html):
+   a seed, then a stem taller stage by stage with a leaf more, a fruit when ripe, a crate when
+   harvested. Our own drawing, in its stage's colour (dashboard.css) #}
+{% macro plant(stage) %}
+{%- set i = ["seed", "sprouting", "planted", "growing", "ripe", "harvested"].index(stage) -%}
+<svg viewBox="0 0 48 44" aria-hidden="true">
+  {%- if stage == "harvested" -%}
+  <path class="crate" d="M10 16h28v24H10z M10 24h28 M19 16v24 M29 16v24"/><path class="crate" d="M16 12l8-7 8 7"/>
+  {%- else -%}
+  <path class="soil" d="M4 40h40"/>
+  {%- if stage == "seed" -%}
+  <ellipse class="leaf" cx="24" cy="37" rx="5" ry="3"/>
+  {%- else -%}
+  {%- set h = [0, 9, 16, 24, 30][i] -%}
+  <path class="stem" d="M24 40V{{ 40 - h }}"/>
+  {%- for k in range(i) -%}
+  {%- set y = (40 - (k + 1) * h / (i + 0.2)) | round(1) -%}
+  {%- set side = 1 if k % 2 else -1 -%}
+  <path class="leaf" d="M24 {{ y }}q{{ side * 9 }} -7 {{ side * 13 }} 1q{{ side * -7 }} 5 {{ side * -13 }} -1z"/>
+  {%- endfor -%}
+  {%- if stage == "ripe" -%}<circle class="fruit" cx="24" cy="{{ 38 - h }}" r="5.5"/>{%- endif -%}
+  {%- endif -%}
+  {%- endif -%}
+</svg>
+{% endmacro %}

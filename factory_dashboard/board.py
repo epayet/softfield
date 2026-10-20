@@ -1,7 +1,8 @@
 """The board's cards (f5 D4–D6, ADR 19 items 1–4): every milestone and every bug ticket, in
 its growth stage. ``board`` returns plain data; ``/board`` (f5-16) draws it, read-only: a
-column per stage, the totals, and a plain GET form for the search and the kind (``?q=``,
-``?kind=``). ``milestone_card`` is one milestone's card, for its page (f5-17).
+column per stage, a plot per stage with its count (F15 D2), and a plain GET form for the
+search and the kind (``?q=``, ``?kind=``). ``milestone_card`` is one milestone's card, for
+its page (f5-17).
 
 - **A milestone's stage** is derived from its thread and its tickets (D4), the first that
   holds: signed off → harvested; an idea no open thread is about (nor a message of the
@@ -357,38 +358,6 @@ def board(
 # --- the page (f5-16) ---------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class Total:
-    count: int
-    label: str
-    ripe: bool = False  # the one that waits for the owner
-
-
-def _some(count: int, word: str) -> str:
-    return f"{count} {word}{'' if count == 1 else 's'}"
-
-
-def totals(found: Board) -> list[Total]:
-    """The strip above the field: each stage's cards, then the tickets set aside on them."""
-    seeds = found.stages["seed"]
-    bugs = sum(card.bug for card in seeds)
-    counts = {stage: len(cards) for stage, cards in found.stages.items()}
-    return [
-        Total(counts["seed"], f"Seeds: {_some(len(seeds) - bugs, 'idea')}, {_some(bugs, 'bug')}"),
-        *(
-            Total(
-                counts[stage], ": ".join(WORDS[stage]), ripe=stage == "ripe" and counts[stage] > 0
-            )
-            for stage in ("sprouting", "planted", "growing", "ripe")
-        ),
-        Total(counts["harvested"] + found.more_harvested, "Harvested"),
-        Total(
-            sum(card.set_aside for cards in found.stages.values() for card in cards),
-            "Tickets set aside",
-        ),
-    ]
-
-
 @router.get("/board", response_class=HTMLResponse)
 def board_page(
     request: Request,
@@ -409,7 +378,6 @@ def board_page(
             "active": "/board",
             "found": found,
             "words": WORDS,
-            "totals": totals(found),
             "search": q or "",  # ``q`` is the links' ``?project=`` in every template
             "kind": kind,
             "kinds": [("", "All"), ("factory", "Factory"), ("product", "Product"), ("bug", "Bugs")],

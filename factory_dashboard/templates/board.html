@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Board · {{ project }}{% endblock %}
-{# The board (f5-16, after .factory/cards/f5-board-mockup/): read-only, no script. The columns
-   come in growth order; under 640 px dashboard.css stacks them, what needs the owner and what
-   runs first. #}
+{# The board (f5-16, after .factory/cards/f5-board-mockup/): read-only. The columns come in
+   growth order; under 900 px board.js shows one at a time, and without it dashboard.css stacks
+   them, what needs the owner and what runs first. #}
 
-{% from "_partials/stage_icon.html" import icon %}
+{% from "_partials/stage_icon.html" import icon, plant %}
 
 {# A card: its edge is its area's colour, a bug's is striped and its label says "bug" #}
 {% macro card_link(c) %}
@@ -33,9 +33,16 @@
   <p>Every feature starts as a seed in the field. Planning sprouts it, the factory grows it ticket by ticket, you harvest it at sign-off. Each card shows its place in its stage: #1 is first in line.</p>
 </header>
 
-<section id="totals" class="totals" aria-label="Totals">
-  {% for total in totals %}
-  <div{% if total.ripe %} class="ripe"{% endif %}><b>{{ total.count }}</b> <span>{{ total.label }}</span></div>
+{# The field (F15 D2): a plot per stage with its count. Under 900 px board.js shows the stage
+   of the plot pressed and no other; from 900 px every stage shows and a plot is a count #}
+<section id="plots" class="plots" aria-label="Stages">
+  {% for stage, cards in found.stages.items() %}
+  {% set count = cards | length + (found.more_harvested if stage == "harvested" else 0) %}
+  <button type="button" class="plot at-{{ stage }}{% if stage == "ripe" and count %} ripe{% endif %}" data-stage="{{ stage }}" aria-pressed="false">
+    {{ plant(stage) }}
+    <b>{{ count }}</b>
+    <span>{{ words[stage][0] }}</span>
+  </button>
   {% endfor %}
 </section>
 
@@ -58,7 +65,6 @@
     <h2>The field</h2>
     <p>Left to right, a card grows. The runner takes tickets from growing cards by priority.</p>
   </div>
-  <div class="scroll">
   <div class="stages">
     {% for stage, cards in found.stages.items() %}
     {% set more = found.more_harvested if stage == "harvested" else 0 %}
@@ -78,7 +84,6 @@
     </section>
     {% endfor %}
   </div>
-  </div>
   <div class="field-foot">
     <p class="legend">
       <span><i class="swatch factory"></i>factory</span>
@@ -92,4 +97,6 @@
 </section>
 
 </div>
+{# not deferred: it picks the stage before the page first shows #}
+<script src="{{ static('board.js') }}"></script>
 {% endblock %}

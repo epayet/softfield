@@ -597,9 +597,7 @@ def test_the_harvested_column_shows_four_cards_and_how_many_more(db_path):
     assert _links(harvested) == [f"/milestones/f{n}" for n in (33, 32, 31, 30)]
     assert re.search(r">\s*2 more harvested\b", harvested)
     assert re.search(r"· 6, latest 4\b", harvested)
-    totals = re.search(r'<section id="totals"(.*?)</section>', html, re.S)
-    assert totals
-    assert re.search(r"<b>6</b>\s*<span>Harvested</span>", totals[1])
+    assert _plots(html)["harvested"] == (6, "Harvested", False)
 
 
 def test_no_more_harvested_shows_when_four_or_fewer_are(board_client):
@@ -659,29 +657,53 @@ def test_a_growing_card_shows_its_tickets_and_what_runs_now(board_client):
     assert "softfield signoff" not in ripe
 
 
-def test_the_totals_count_each_stage(board_client):
-    html = _page(board_client)
-    totals = re.search(r'<section id="totals"(.*?)</section>', html, re.S)
-    assert totals
-    found = dict(
-        (unescape(label), int(count))
-        for count, label in re.findall(r"<b>(\d+)</b>\s*<span>([^<]*)</span>", totals[1])
+def _plots(html: str) -> dict[str, tuple[int, str, bool]]:
+    """Each plot by its stage, in the page's order: its count, its name, and whether its
+    count is ripe's yellow."""
+    section = re.search(r'<section id="plots"(.*?)</section>', html, re.S)
+    assert section
+    found = re.findall(
+        r'<button type="button" class="plot at-([a-z]+)( ripe)?" data-stage="\1"'
+        r' aria-pressed="false">'
+        r"\s*<svg[^>]*>.*?</svg>\s*<b>(\d+)</b>\s*<span>([^<]*)</span>\s*</button>",
+        section[1],
+        re.S,
     )
-    assert found == {
-        "Seeds: 1 idea, 1 bug": 2,
-        "Sprouting: being planned": 2,
-        "Planted: tickets ready": 2,
-        "Growing: in the factory": 4,
-        "Ripe: needs your sign-off": 2,
-        "Harvested": 2,
-        "Tickets set aside": 1,
+    return {stage: (int(count), name, bool(ripe)) for stage, ripe, count, name in found}
+
+
+def test_the_plots_count_each_stage(board_client):
+    html = _page(board_client)
+    plots = _plots(html)
+    assert tuple(plots) == STAGES
+    assert plots == {
+        "seed": (2, "Seed", False),
+        "sprouting": (2, "Sprouting", False),
+        "planted": (2, "Planted", False),
+        "growing": (4, "Growing", False),
+        "ripe": (2, "Ripe", True),
+        "harvested": (2, "Harvested", False),
     }
+    assert 'id="totals"' not in html  # the plots replace the totals row
+
+
+def test_ripe_s_plot_is_plain_with_no_card(board_client):
+    assert _plots(_page(board_client, "?q=duck"))["ripe"] == (0, "Ripe", False)
+
+
+def test_without_scripts_every_stage_is_in_the_page(board_client):
+    html = _page(board_client)
+    assert re.findall(r'<section id="stage-([a-z]+)"', html) == list(STAGES)
+    assert not re.search(r'<section id="stage-[a-z]+"[^>]*hidden', html)
 
 
 def test_the_page_is_read_only_and_links_to_the_factory_floor(board_client):
     html = _page(board_client)
     main = html.split("<main>", 1)[1]
-    assert "<script" not in main
+    # the board's one script picks the stage shown on a phone; it sends nothing
+    scripts = re.findall(r"<script[^>]*>", main)
+    assert len(scripts) == 1
+    assert re.fullmatch(r'<script src="/static/board\.js\?v=[0-9a-f]{10}">', scripts[0])
     assert "hx-post" not in main
     assert re.search(
         r'<a href="/\?project=coucou">\s*Growing cards feed the factory floor ›\s*</a>', main
@@ -749,40 +771,109 @@ def test_the_board_lays_out_at_phone_and_display_sizes(page, board_client, size)
     page.set_viewport_size(size)
     open_page(page, board_client, "/board")
     page.evaluate("() => document.fonts.ready")
-    assert page.locator("#stage-growing").is_visible()
     # the tabs scroll sideways on a phone by design, as test_planning.py's layout test has it
     page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
     assert layout_problems(page) == []
+    assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth"), (
+        "the page scrolls sideways"
+    )
+    plots = page.evaluate(
+        "() => [...document.querySelectorAll('.plot')].map((el) => {"
+        " const r = el.getBoundingClientRect();"
+        " return {top: Math.round(r.top), left: r.left, right: r.right, height: r.height}; })"
+    )
+    assert len(plots) == 6
+    assert all(p["left"] >= 0 and p["right"] <= size["width"] for p in plots)
+    rows = [p["top"] for p in plots]
     tops = page.evaluate(
-        "() => Object.fromEntries([...document.querySelectorAll('.stage')].map((el) =>"
-        " [el.id.replace('stage-', ''), el.getBoundingClientRect().top]))"
+        "() => [...document.querySelectorAll('.stage')]"
+        ".filter((el) => el.getBoundingClientRect().height > 0)"
+        ".map((el) => [el.id.replace('stage-', ''), el.getBoundingClientRect().top])"
     )
     lefts = page.evaluate(
         "() => [...document.querySelectorAll('.stage')]"
         ".map((el) => el.getBoundingClientRect().left)"
     )
     if size is PHONE:
-        # what needs the owner and what runs come first (the owner, 2026-10-03)
-        order = sorted(tops, key=lambda stage: tops[stage])
-        assert order == ["ripe", "growing", "planted", "sprouting", "seed", "harvested"]
+        assert rows == sorted(rows) and len(set(rows)) == 2, "three plots to a row"
+        assert rows[0] == rows[2] and rows[3] == rows[5]
+        assert all(p["height"] >= 44 for p in plots)
+        assert [stage for stage, _ in tops] == ["planted"]  # one stage at a time
+        assert page.locator(".plot.at-planted").get_attribute("aria-pressed") == "true"
+        assert page.locator('.plot[aria-pressed="true"]').count() == 1
         small = page.evaluate(
             """() => [...document.querySelectorAll(
                     '.board a, .board button, .board input:not([type=hidden])')]
+                .filter((el) => el.getBoundingClientRect().height > 0)  // shown
                 .filter((el) => el.getBoundingClientRect().height < 44)
                 .map((el) => el.textContent.trim() || el.name)"""
         )
         assert small == [], f"tap targets under 44 px: {small}"
     else:
-        assert len(set(tops.values())) == 1, "the columns sit side by side"
+        assert len(set(rows)) == 1, "the six plots sit in one row"
+        assert [stage for stage, _ in tops] == list(STAGES)
+        assert len({top for _, top in tops}) == 1, "the columns sit side by side"
         assert lefts == sorted(lefts)
-        scroller = page.locator("#field .scroll")
-        assert scroller.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+
+
+def _shown(page) -> list[str]:
+    """The stages whose column shows."""
+    shown: list[str] = page.evaluate(
+        "() => [...document.querySelectorAll('.stage')]"
+        ".filter((el) => el.getBoundingClientRect().height > 0)"
+        ".map((el) => el.id.replace('stage-', ''))"
+    )
+    return shown
+
+
+def test_a_tap_on_a_plot_shows_its_stage_alone_on_a_phone(page, board_client):
+    page.set_viewport_size(PHONE)
+    open_page(page, board_client, "/board")
+    seed = page.locator(".plot.at-seed")
+    assert seed.get_attribute("aria-pressed") == "false"
+    seed.click()
+    assert _shown(page) == ["seed"]
+    assert seed.get_attribute("aria-pressed") == "true"
+    assert page.locator('.plot[aria-pressed="true"]').count() == 1
+    # a stage with no card shows too, saying so
+    open_page(page, board_client, "/board?q=duck")
+    page.locator(".plot.at-ripe").click()
+    assert _shown(page) == ["ripe"]
+    assert page.locator("#stage-ripe .none").is_visible()
+
+
+def test_the_address_names_the_stage_shown_on_a_phone(page, board_client):
+    page.set_viewport_size(PHONE)
+    open_page(page, board_client, "/board#stage-ripe")
+    assert _shown(page) == ["ripe"]
+    assert page.locator(".plot.at-ripe").get_attribute("aria-pressed") == "true"
+    page.goto(f"{ORIGIN}/board#stage-seed")  # a new hash, the same page
+    assert _shown(page) == ["seed"]
+    page.goto(f"{ORIGIN}/board?q=#stage-nowhere")  # a stage no plot names
+    assert _shown(page) == ["planted"]
+
+
+def test_without_scripts_a_phone_stacks_every_stage_with_cards(browser, board_client):
+    page = browser.new_page(java_script_enabled=False, viewport=PHONE)
+    try:
+        open_page(page, board_client, "/board")
+        tops = page.evaluate(
+            "() => Object.fromEntries([...document.querySelectorAll('.stage')]"
+            ".filter((el) => el.getBoundingClientRect().height > 0)"
+            ".map((el) => [el.id.replace('stage-', ''), el.getBoundingClientRect().top]))"
+        )
+        # what needs the owner and what runs come first (the owner, 2026-10-03)
+        order = sorted(tops, key=lambda stage: tops[stage])
+        assert order == ["ripe", "growing", "planted", "sprouting", "seed", "harvested"]
+        assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
+    finally:
+        page.close()
 
 
 @pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
 def test_ripe_card_words_fit_inside_the_card(page, board_client, size):
     page.set_viewport_size(size)
-    open_page(page, board_client, "/board")
+    open_page(page, board_client, "/board#stage-ripe")
     page.evaluate("() => document.fonts.ready")
     cards = page.query_selector_all("#stage-ripe .card")
     assert cards
@@ -800,6 +891,8 @@ def test_the_on_its_way_line_fits_inside_the_card(page, board_db, size):
     open_page(page, _client(board_db), "/board")
     page.evaluate("() => document.fonts.ready")
     (moved,) = page.query_selector_all(".card.on-its-way")
+    stage = moved.evaluate("el => el.closest('.stage').id.replace('stage-', '')")
+    page.locator(f".plot.at-{stage}").click()
     box, words = moved.bounding_box(), moved.query_selector(".card-way").bounding_box()
     assert box and words
     assert box["x"] <= words["x"] and words["x"] + words["width"] <= box["x"] + box["width"] + 1
@@ -807,14 +900,20 @@ def test_the_on_its_way_line_fits_inside_the_card(page, board_db, size):
     assert layout_problems(page) == []
 
 
-def test_the_columns_scroll_sideways_on_a_narrow_desktop(page, board_client):
-    page.set_viewport_size({"width": 1000, "height": 800})
+@pytest.mark.parametrize("width", [700, 1000])
+def test_nothing_scrolls_sideways_on_a_narrow_desktop(page, board_client, width):
+    """Under 900 px one stage shows, from 900 px the six fit: neither scrolls sideways."""
+    page.set_viewport_size({"width": width, "height": 800})
     open_page(page, board_client, "/board")
-    scroller = page.locator("#field .scroll")
-    assert scroller.evaluate("el => el.scrollWidth > el.clientWidth")
+    field = page.locator("#field")
+    assert field.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
     assert page.evaluate(
         "() => document.documentElement.scrollWidth <= document.documentElement.clientWidth"
     )
+    assert _shown(page) == (["planted"] if width < 900 else list(STAGES))
+    # from 900 px a plot is a count: a press changes nothing shown
+    page.locator(".plot.at-seed").click()
+    assert _shown(page) == (["seed"] if width < 900 else list(STAGES))
 
 
 def test_ripe_card_says_read_the_review_and_signs_off(board_db, board_client):
