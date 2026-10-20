@@ -1,6 +1,7 @@
 """The board's cards (f5 D4, ADR 19 item 4): ``board.board`` over ``write_board``'s rows, then
 its page, ``/board`` (f5-16)."""
 
+import json
 import re
 import sqlite3
 from collections.abc import Callable
@@ -18,7 +19,7 @@ from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
 from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT
-from tests.factory_dashboard.test_planning import ORIGIN
+from tests.factory_dashboard.test_planning import ORIGIN, STATIC
 from tests.factory_dashboard.test_planning import _open as open_page
 from tests.layout import DISPLAY, PHONE, layout_problems
 
@@ -429,6 +430,21 @@ def test_places_are_counted_before_q_and_kind_narrow_the_cards(board_db):
     assert _places(read(board_db, q="f24"), "growing") == [("F24", 3, True, 1)]
 
 
+def test_the_board_holds_every_open_card_in_the_order_shown_for_a_send(board_db):
+    """F15 D10: a send is the whole open line, whatever q and kind keep, each card by the key
+    a reorder names it by and with its stage; harvested cards are done and not in it."""
+    write(board_db, _reorder('["bug-02-stale"]'))
+    whole = read(board_db)
+    line = whole.line
+    assert line[0] == ("bug-02-stale", "planted")  # the order on its way
+    assert read(board_db, q="duck", kind="bug").line == line
+    for stage in STAGES:
+        assert [key for key, at in line if at == stage] == (
+            [] if stage == "harvested" else [c.key.lower() for c in whole.stages[stage]]
+        ), stage
+    assert len({key for key, _ in line}) == len(line)
+
+
 def test_q_keeps_the_cards_whose_key_or_title_contains_it(board_db):
     found = read(board_db, q="DUCK")
     every = sorted(c.key for cards in found.stages.values() for c in cards)
@@ -697,14 +713,20 @@ def test_without_scripts_every_stage_is_in_the_page(board_client):
     assert not re.search(r'<section id="stage-[a-z]+"[^>]*hidden', html)
 
 
-def test_the_page_is_read_only_and_links_to_the_factory_floor(board_client):
+def test_the_page_posts_only_a_reorder_and_links_to_the_factory_floor(board_client):
     html = _page(board_client)
     main = html.split("<main>", 1)[1]
-    # the board's one script picks the stage shown on a phone; it sends nothing
+    # the board's script picks the stage shown on a phone and sends the order (F15 D3), from
+    # the line the page holds
     scripts = re.findall(r"<script[^>]*>", main)
-    assert len(scripts) == 1
-    assert re.fullmatch(r'<script src="/static/board\.js\?v=[0-9a-f]{10}">', scripts[0])
+    assert len(scripts) == 2
+    assert scripts[0] == '<script type="application/json" id="board-line">'
+    assert re.fullmatch(r'<script src="/static/board\.js\?v=[0-9a-f]{10}">', scripts[1])
     assert "hx-post" not in main
+    assert "Read-only" not in main
+    script = (STATIC / "board.js").read_text(encoding="utf-8")
+    assert re.findall(r'kind: "(\w+)"', script) == ["reorder"]
+    assert script.count('fetch("/requests"') == 1
     assert re.search(
         r'<a href="/\?project=coucou">\s*Growing cards feed the factory floor ›\s*</a>', main
     )
@@ -949,3 +971,170 @@ def test_growing_and_harvested_cards_have_no_review_fragment(board_db, board_cli
             assert match is None, f"{stage} card {link} should not have #review"
             if stage == "harvested":
                 assert "Read the review and sign off" not in words
+
+
+# --- moving cards and sending the order (f15-04) ---------------------------------------------
+
+
+def _three_planted(page, board_db: Path, size: dict[str, int] = PHONE) -> None:
+    """The board in Chromium with three planted cards: F23, bug-02-stale, F27."""
+    write(board_db, _planted(("f27-third", 9)))
+    page.set_viewport_size(size)
+    open_page(page, _client(board_db), "/board")
+    assert _order(page, "planted") == ["f23", "bug-02-stale", "f27"]
+
+
+def _order(page, stage: str) -> list[str]:
+    order: list[str] = page.evaluate(
+        f"() => [...document.querySelectorAll('#stage-{stage} .slot')].map((s) => s.dataset.key)"
+    )
+    return order
+
+
+def _drag(page, key: str, onto: str, *, below: bool = False) -> None:
+    """Drag ``key``'s card by its grip and drop it over the top (or bottom) fifth of ``onto``,
+    the stage in the middle of the screen first, clear of the bar."""
+    page.locator(f'.slot[data-key="{key}"]').evaluate(
+        "el => el.closest('.cards').scrollIntoView({block: 'center'})"
+    )
+    grip = page.locator(f'.slot[data-key="{key}"] .grip').bounding_box()
+    target = page.locator(f'.slot[data-key="{onto}"]').bounding_box()
+    assert grip and target
+    page.mouse.move(grip["x"] + grip["width"] / 2, grip["y"] + grip["height"] / 2)
+    page.mouse.down()
+    y = target["y"] + target["height"] * (0.8 if below else 0.2)
+    page.mouse.move(target["x"] + target["width"] / 2, y, steps=8)
+    page.mouse.up()
+
+
+def _words(page, key: str) -> str:
+    return " ".join(page.locator(f'.slot[data-key="{key}"] .card').inner_text().split())
+
+
+def _bar(page) -> str | None:
+    """The bar's words, None while it is hidden."""
+    bar = page.locator("#order-bar")
+    return " ".join(bar.locator("p").inner_text().split()) if bar.is_visible() else None
+
+
+def test_dragging_a_card_by_its_grip_moves_it_and_back_again(page, board_db):
+    _three_planted(page, board_db)
+    _drag(page, "f27", "f23")
+    assert _order(page, "planted") == ["f27", "f23", "bug-02-stale"]
+    moved = page.locator('.slot[data-key="f27"] .card')
+    assert "moved" in (moved.get_attribute("class") or "").split()
+    assert moved.evaluate("el => getComputedStyle(el).borderTopStyle") == "dashed"
+    assert _words(page, "f27").startswith("#1 F27")
+    assert "moved · was #3 · not sent yet" in _words(page, "f27")
+    # the cards it passed are not moved, but their places change
+    assert page.locator(".card.moved").count() == 1
+    assert _words(page, "f23").startswith("#2 F23")
+    assert _bar(page) == "1 card moved. Nothing is sent yet."
+    assert page.get_by_role("button", name="Send new order").is_visible()
+    assert page.get_by_role("button", name="Cancel").is_visible()
+
+    _drag(page, "f27", "bug-02-stale", below=True)  # back to third
+    assert _order(page, "planted") == ["f23", "bug-02-stale", "f27"]
+    assert page.locator(".card.moved").count() == 0
+    assert "moved" not in _words(page, "f27")
+    assert _words(page, "f27").startswith("#3 F27")
+    assert _bar(page) is None
+
+
+def test_the_menu_does_the_same_moves_by_keyboard_too(page, board_db):
+    _three_planted(page, board_db)
+    more = page.locator('.slot[data-key="f27"] .more')
+    assert more.get_attribute("aria-label") == "Move F27"
+    more.focus()
+    page.keyboard.press("Enter")
+    sheet = page.locator("#order-sheet")
+    assert sheet.is_visible()
+    page.keyboard.press("Enter")  # Top, the first button, has the focus
+    assert not sheet.is_visible()
+    assert _order(page, "planted") == ["f27", "f23", "bug-02-stale"]
+    assert page.evaluate("() => document.activeElement.closest('.slot').dataset.key") == "f27"
+    for move, order in (
+        ("Down", ["f23", "f27", "bug-02-stale"]),
+        ("Bottom", ["f23", "bug-02-stale", "f27"]),
+        ("Up", ["f23", "f27", "bug-02-stale"]),
+    ):
+        page.keyboard.press("Enter")  # the focus is back on F27's ⋯
+        page.get_by_role("button", name=move, exact=True).focus()
+        page.keyboard.press("Enter")
+        assert _order(page, "planted") == order, move
+    assert "moved · was #3 · not sent yet" in _words(page, "f27")
+    page.keyboard.press("Enter")
+    page.keyboard.press("Escape")
+    assert not sheet.is_visible()
+
+
+def test_cancel_puts_the_order_back(page, board_db):
+    _three_planted(page, board_db)
+    _drag(page, "f27", "f23")
+    _drag(page, "f23", "bug-02-stale", below=True)  # the two ends swapped
+    assert _order(page, "planted") == ["f27", "bug-02-stale", "f23"]
+    assert page.locator(".card.moved").count() == 2
+    assert _bar(page) == "2 cards moved. Nothing is sent yet."
+    page.get_by_role("button", name="Cancel").click()
+    assert _order(page, "planted") == ["f23", "bug-02-stale", "f27"]
+    assert page.locator(".card.moved").count() == 0
+    assert _bar(page) is None
+
+
+def test_send_posts_the_whole_open_order_once_and_the_board_shows_it_on_its_way(page, board_db):
+    _three_planted(page, board_db)
+    line = [key for key, _ in read(board_db).line]
+    posts: list[str] = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+    _drag(page, "f27", "f23")
+    page.get_by_role("button", name="Send new order").click()
+    page.locator(".slot[data-key=f27] .card.on-its-way").wait_for()
+    assert posts == [f"{ORIGIN}/requests"]
+    conn = connect(board_db)
+    try:
+        rows = conn.execute("SELECT kind, subject, value, done FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    assert [(r["kind"], r["subject"], r["done"]) for r in rows] == [("reorder", None, None)]
+    sent = json.loads(rows[0]["value"])
+    line.remove("f27")
+    line.insert(line.index("f23"), "f27")
+    assert sent == line  # every open card once, F27 just before the card it was dropped above
+    assert "on its way · was #3 · at the runner's next pick" in _words(page, "f27")
+    assert _words(page, "f27").startswith("#1 F27")
+    assert _bar(page) is None
+    # the cards stay draggable: a second order is held until it is sent
+    _drag(page, "f23", "f27")
+    assert _bar(page) == "1 card moved. Nothing is sent yet."
+    assert posts == [f"{ORIGIN}/requests"]
+
+
+def test_a_card_stays_in_its_stage_and_a_ripe_or_harvested_one_has_no_grip(page, board_db):
+    _three_planted(page, board_db, DISPLAY)
+    growing = _order(page, "growing")
+    _drag(page, "f23", "f25")  # over the growing column: it lands in its own
+    assert sorted(_order(page, "planted")) == ["bug-02-stale", "f23", "f27"]
+    assert _order(page, "growing") == growing
+    for stage in ("ripe", "harvested"):
+        assert page.locator(f"#stage-{stage} .card").count()
+        assert page.locator(f"#stage-{stage} .grip, #stage-{stage} .more").count() == 0
+    for stage in ("seed", "sprouting", "planted", "growing"):
+        assert (
+            page.locator(f"#stage-{stage} .grip").count()
+            == page.locator(f"#stage-{stage} .card").count()
+        )
+    assert page.locator(".grip").first.evaluate("el => getComputedStyle(el).touchAction") == "none"
+
+
+def test_a_drag_near_the_bottom_edge_scrolls_the_page(page, board_db):
+    write(board_db, _planted(*((f"f{n}-more", 9) for n in range(40, 56))))
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    assert page.evaluate("() => scrollY") == 0
+    grip = page.locator(".slot[data-key=f23] .grip").bounding_box()
+    assert grip
+    page.mouse.move(grip["x"] + 20, grip["y"] + 20)
+    page.mouse.down()
+    page.mouse.move(grip["x"] + 20, PHONE["height"] - 10, steps=4)
+    page.wait_for_function("() => scrollY > 200")
+    page.mouse.up()

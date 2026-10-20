@@ -1,8 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Board · {{ project }}{% endblock %}
-{# The board (f5-16, after .factory/cards/f5-board-mockup/): read-only. The columns come in
-   growth order; under 900 px board.js shows one at a time, and without it dashboard.css stacks
-   them, what needs the owner and what runs first. #}
+{# The board (f5-16, after .factory/cards/f5-board-mockup/). The columns come in growth order;
+   under 900 px board.js shows one at a time, and without it dashboard.css stacks them, what
+   needs the owner and what runs first. board.js also gives each card of a stage the owner
+   orders a grip and a ⋯ menu, holds the moves in the bar and sends them as one reorder
+   (F15 D1, D3, after .factory/cards/f15-mockup/board-edit.html). #}
 
 {% from "_partials/stage_icon.html" import icon, plant %}
 
@@ -29,8 +31,7 @@
 
 <header class="board-head">
   <h1>The board</h1>
-  <span class="badge">Read-only</span>
-  <p>Every feature starts as a seed in the field. Planning sprouts it, the factory grows it ticket by ticket, you harvest it at sign-off. Each card shows its place in its stage: #1 is first in line.</p>
+  <p>Every feature starts as a seed in the field. Planning sprouts it, the factory grows it ticket by ticket, you harvest it at sign-off. Each card shows its place in its stage: #1 is first in line. Drag a card by its grip, or use ⋯, to change the order inside a stage; nothing is sent until you press Send new order, and the runner follows it from its next pick.</p>
 </header>
 
 {# The field (F15 D2): a plot per stage with its count. Under 900 px board.js shows the stage
@@ -60,7 +61,7 @@
   </div>
 </form>
 
-<section id="field" class="field" aria-label="The field">
+<section id="field" class="field" aria-label="The field" data-project="{{ project }}">
   <div class="field-head">
     <h2>The field</h2>
     <p>Left to right, a card grows. The runner takes tickets from growing cards by priority.</p>
@@ -75,7 +76,7 @@
       </div>
       <div class="cards">
         {% for c in cards %}
-        {{ card_link(c) }}
+        <div class="slot" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}</div>
         {% else %}
         <p class="none">Nothing here.</p>
         {% endfor %}
@@ -84,6 +85,8 @@
     </section>
     {% endfor %}
   </div>
+  {# the whole open order, which a send carries with its moves (F15 D10) #}
+  <script type="application/json" id="board-line">{{ found.line | tojson }}</script>
   <div class="field-foot">
     <p class="legend">
       <span><i class="swatch factory"></i>factory</span>
@@ -95,6 +98,24 @@
     <a href="/milestones{{ q }}">All milestones and their trends ›</a>
   </div>
 </section>
+
+{# The moves held until sent (F15 D3), and a card's ⋯ menu (F15 D1); board.js shows them #}
+<div id="order-bar" class="order-bar" role="region" aria-label="Moves not sent" hidden>
+  <p role="status"></p>
+  <button type="button" data-order="cancel">Cancel</button>
+  <button type="button" class="go" data-order="send">Send new order</button>
+</div>
+<dialog id="order-sheet" class="order-sheet" aria-labelledby="order-sheet-title">
+  <h3 id="order-sheet-title"></h3>
+  <small>Move in this stage</small>
+  <div class="order-moves">
+    <button type="button" data-move="top">Top</button>
+    <button type="button" data-move="up">Up</button>
+    <button type="button" data-move="down">Down</button>
+    <button type="button" data-move="bottom">Bottom</button>
+  </div>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
 
 </div>
 {# not deferred: it picks the stage before the page first shows #}

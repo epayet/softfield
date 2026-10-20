@@ -540,8 +540,6 @@ tbody tr:hover { background: var(--accent-wash); }
 main:has(.board) { max-width: 1360px; }
 .board-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .board-head p { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
-.badge { font: 600 11px var(--mono); letter-spacing: .12em; text-transform: uppercase;
-  color: var(--hazard-ink); background: var(--hazard); padding: 3px 8px; }
 /* The plots (after .factory/cards/f15-mockup/board-edit.html): six in growth order, three to a
    row under 900 px, each its plant, its count and its name; a › leads from one to the next */
 .plots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding: 12px;
@@ -624,6 +622,44 @@ main:has(.board) { max-width: 1360px; }
 #field .card.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid;
   border-left-color: var(--c, var(--muted)); }
 .card-way { font: 600 11.5px/1.35 var(--mono); color: var(--hazard); }
+/* Moving cards (F15 D1, D3, after .factory/cards/f15-mockup/board-edit.html): board.js gives a
+   card of a stage the owner orders a grip to drag it by (it alone keeps the page from
+   scrolling under a finger) and a ⋯ for the same moves. A card moved and not sent has the
+   same dashed edge; the bar holds the moves until they are sent */
+.slot.movable { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; }
+.slot .grip, .slot .more { min-height: 44px; padding: 0; background: var(--plate); color: var(--muted);
+  border: 1px solid var(--rule); font: 600 18px var(--mono); }
+.slot .grip { touch-action: none; cursor: grab; border-right: 0; }
+.slot .more { border-left: 0; }
+.slot.dragging { position: relative; z-index: 2; opacity: .85; outline: 2px solid var(--hazard);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, .35); }
+.slot.dragging .grip { cursor: grabbing; }
+.slot.drop-before { box-shadow: 0 -5px 0 var(--hazard); }
+.slot.drop-after { box-shadow: 0 5px 0 var(--hazard); }
+#field .card.moved { border-style: dashed; border-color: var(--hazard); border-left-style: solid;
+  border-left-color: var(--c, var(--muted)); }
+@media (prefers-reduced-motion: no-preference) { .slot .card { transition: border-color .15s; } }
+.slot.dragging .card { transition: none; }
+body.has-order-bar main { padding-bottom: 120px; }
+.order-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap;
+  gap: 8px 12px; align-items: center; justify-content: flex-end;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px)); background: var(--bay);
+  border-top: 2px solid var(--hazard); }
+.order-bar[hidden] { display: none; }
+.order-bar p { margin: 0; flex: 1 1 200px; min-width: 0; font-size: 13.5px; }
+.order-bar button, .order-sheet button { min-height: 44px; padding: 0 14px;
+  font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+.order-bar .go { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+.order-sheet { width: 100%; max-width: 520px; margin: auto auto 0; padding: 12px 16px
+  calc(14px + env(safe-area-inset-bottom, 0px)); background: var(--bay); color: var(--fg);
+  border: 1px solid var(--rule); }
+.order-sheet[open] { display: flex; flex-direction: column; gap: 6px; }
+.order-sheet::backdrop { background: rgba(0, 0, 0, .5); }
+.order-sheet h3 { margin: 0 0 4px; font: 600 14px var(--body); overflow-wrap: anywhere; }
+.order-sheet small { color: var(--muted); font-size: 12px; }
+.order-moves { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.order-moves button { padding: 0 4px; }
+.order-sheet form { margin: 0; } .order-sheet form button { width: 100%; }
 .cards .more, .field-foot a { display: inline-flex; align-items: center; min-height: 44px; }
 .cards .more { font-size: 13px; }
 .field-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 16px;
@@ -666,6 +702,9 @@ main:has(.board) { max-width: 1360px; }
   .plots { grid-template-columns: repeat(6, minmax(0, 1fr)); }
   .plot:nth-child(3n)::after { content: "›"; }
   .plot:last-child::after { content: none; }
+  .slot.movable { grid-template-columns: 26px minmax(0, 1fr) 26px; }  /* six columns, a mouse */
+  .slot .grip, .slot .more { font-size: 15px; }
+  .order-sheet { margin: auto; }
 }
 /* Under 900 px a plot shows its stage (board.js marks it pressed) and no other stage shows */
 @media (max-width: 899px) {

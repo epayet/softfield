@@ -1,8 +1,9 @@
 """The board's cards (f5 D4–D6, ADR 19 items 1–4): every milestone and every bug ticket, in
-its growth stage. ``board`` returns plain data; ``/board`` (f5-16) draws it, read-only: a
-column per stage, a plot per stage with its count (F15 D2), and a plain GET form for the
-search and the kind (``?q=``, ``?kind=``). ``milestone_card`` is one milestone's card, for
-its page (f5-17).
+its growth stage. ``board`` returns plain data; ``/board`` (f5-16) draws it: a column per
+stage, a plot per stage with its count (F15 D2), and a plain GET form for the search and the
+kind (``?q=``, ``?kind=``). Its script moves cards and sends the whole order as one
+``reorder`` (F15 D1, D3), through ``POST /requests``. ``milestone_card`` is one milestone's
+card, for its page (f5-17).
 
 - **A milestone's stage** is derived from its thread and its tickets (D4), the first that
   holds: signed off → harvested; an idea no open thread is about (nor a message of the
@@ -95,6 +96,9 @@ class Card:
 class Board:
     stages: dict[str, list[Card]]  # every stage of ``STAGES``, in order
     more_harvested: int  # harvested cards beyond the ``HARVESTED`` shown
+    # every card not harvested, in the order shown, whatever ``q`` and ``kind`` keep: the key a
+    # reorder names it by, and its stage. The page sends it whole, with its moves (F15 D10)
+    line: tuple[tuple[str, str], ...] = ()
 
 
 def _milestone_stage(
@@ -352,7 +356,8 @@ def board(
         (c for c in kept if c[0].stage == "harvested"), key=lambda c: c[1], reverse=True
     )
     stages["harvested"] = [card for card, _ in harvested[:HARVESTED]]
-    return Board(stages, max(len(harvested) - HARVESTED, 0))
+    line = tuple((card.key.lower(), card.stage) for card, _ in found if card.stage != "harvested")
+    return Board(stages, max(len(harvested) - HARVESTED, 0), line)
 
 
 # --- the page (f5-16) ---------------------------------------------------------------------
