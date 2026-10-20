@@ -1,4 +1,4 @@
-# Milestone F132: The Overview shows the whole factory, not the picked project
+# Milestone F132: One view of the whole factory: the top bar, the Overview, Jobs and the floor
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
