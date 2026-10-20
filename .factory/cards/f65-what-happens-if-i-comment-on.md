@@ -1,6 +1,6 @@
 # Milestone F65: review rounds until you sign off
 
-> **State:** ready · **Priority:** 5 · **Area:** factory
+> **State:** ready · **Priority:** 11 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

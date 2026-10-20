@@ -1,6 +1,6 @@
 # Milestone F153: Sonnet does the easier lead tickets, Opus keeps planning and checks
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory
 > Planted by the owner on 2026-10-20.
 
 ## Notes

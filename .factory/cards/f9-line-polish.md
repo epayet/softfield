@@ -1,6 +1,6 @@
 # Milestone F9: line polish
 
-> **Status: planned** (2026-10-04, with the owner). **State:** building · **Priority:** 9 · **Area:** factory
+> **Status: planned** (2026-10-04, with the owner). **State:** building · **Priority:** 16 · **Area:** factory
 > The owner's notes from using the line on 2026-10-04, plus five of f3-22's proposals they confirmed (f3-25, f3-28, f3-29, f3-30, f3-31, re-homed here with their ids). Developer tickets, each a small change on the lead-written line (F3's lesson: no SVG geometry for developers); 01 is the lead's.
 
 ## Outcome

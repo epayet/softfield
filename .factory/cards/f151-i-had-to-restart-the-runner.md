@@ -1,6 +1,6 @@
 # Milestone F151: I had to restart the runner manually after f114-02, why.…
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** ready · **Priority:** 10 · **Area:** factory
 > Planted by the owner on 2026-10-17.
 
 ## Notes

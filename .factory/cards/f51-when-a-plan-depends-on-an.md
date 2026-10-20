@@ -1,6 +1,6 @@
 # Milestone F51: when a plan depends on an adr i have approved but is waiting for planner
 
-> **State:** ready · **Priority:** 7 · **Area:** factory
+> **State:** ready · **Priority:** 14 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

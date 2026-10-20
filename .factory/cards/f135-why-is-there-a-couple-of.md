@@ -1,6 +1,6 @@
 # Milestone F135: Reviews stop at once: they look for end-to-end tests the split removed
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 11 · **Area:** factory
 > Planted by the owner on 2026-10-15.
 
 ## Notes

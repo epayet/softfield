@@ -1,6 +1,6 @@
 # Milestone F75: I believe right now, when a plan gets approved or…
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes
