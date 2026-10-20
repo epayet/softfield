@@ -2,7 +2,7 @@
 id: f142-01-notify-every-project
 milestone: f142-why-am-i-not-getting-notifications
 difficulty: 3
-depends_on: [f114-07-fix-rejected-worker-notifications-lose, f114-08-fix-bundled-link-test-accepts, f114-09-fix-notification-tests-do-not]
+depends_on: [f114-07-fix-rejected-worker-notifications-lose, f114-08-fix-bundled-link-test-accepts, f114-09-fix-notification-tests-do-not, f114-10-fix-fallback-onclick-test-always-passes]
 files:
   - factory_dashboard/overview.py
   - factory_dashboard/static/notify.js
