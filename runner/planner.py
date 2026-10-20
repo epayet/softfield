@@ -733,8 +733,9 @@ def prompt(
 ) -> str:
     """The planner job's prompt for one message: a card's drafts on its plan branch, none on
     the general thread (``prompts.PLANNER``); the other threads named, to spot a repeat;
-    ``earlier`` the thread's ``history`` when the job has no session to resume; ``stands``
-    where the work stands now (``where_it_stands``)."""
+    ``earlier`` the thread's ``history`` when the job has no session to resume, then the
+    histories of the threads merged into it not yet read (F49 D4); ``stands`` where the work
+    stands now (``where_it_stands``)."""
     lines = "".join(f"- On your point {n}: {comment}\n" for n, comment in comments.items())
     said = _LOOK + stands + earlier
     said += f"\nTheir comments on your last points:\n{lines}" if lines else ""
