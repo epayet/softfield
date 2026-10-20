@@ -1,5 +1,7 @@
 # Review: F88, new factory work in the factory theme
 
+- **Status:** done, signed off by the owner on 2026-10-20.
+
 ## Sign-off sheet
 
 ### 1. What changed

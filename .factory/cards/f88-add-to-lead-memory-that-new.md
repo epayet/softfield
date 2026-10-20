@@ -1,6 +1,7 @@
 # Milestone F88: add to lead memory that new software factory features…
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-20. Base: git tag `f88-add-to-lead-memory-that-new-start`. Report: [`.factory/reviews/f88-add-to-lead-memory-that-new.md`](../reviews/f88-add-to-lead-memory-that-new.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes
