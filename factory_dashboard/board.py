@@ -291,7 +291,10 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
         counted = [t for t in own if t["state"] not in _OFF]
         stage = _milestone_stage(m, counted, threads, worked)
         key = short_key(m["key"]).upper()
-        waits = _card_waits(own, all_name_to_mkey, done_tickets, mkey[m["id"]])
+        if stage in ("planted", "growing"):
+            waits = _card_waits(own, all_name_to_mkey, done_tickets, mkey[m["id"]])
+        else:
+            waits = ()
         card = Card(
             key=key,
             full_key=m["key"],

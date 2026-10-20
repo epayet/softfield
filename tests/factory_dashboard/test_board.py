@@ -1273,3 +1273,91 @@ def test_bug_and_ripe_card_have_no_waits_line(board_db):
     assert "waits for" not in bug_words
     _, ripe_words = _card(html, "/milestones/f1")
     assert "waits for" not in ripe_words
+
+
+def test_waits_populated_only_for_planted_and_growing_stages(board_db):
+    """waits is empty for seed, sprouting, ripe, and harvested cards even when their
+    tickets have dependencies, because only planted and growing cards expose waits."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        # create f22 milestone with a ready ticket (to be a dependency target)
+        f22 = metrics.upsert_milestone(
+            conn, p, "f22-research", title="Research", state="planning", priority=10, area="factory"
+        )
+        metrics.upsert_ticket(
+            conn, p, "f22-01-unfinished", milestone_id=f22, kind="developer", state="ready"
+        )
+        # create a growing milestone with a ready ticket that depends on f22
+        growing = metrics.upsert_milestone(
+            conn, p, "f63-growing", title="Growing", state="ready", priority=10, area="factory"
+        )
+        growing_ticket = metrics.upsert_ticket(
+            conn, p, "f63-01-ticket", milestone_id=growing, kind="developer", state="ready"
+        )
+        # add a job so the milestone is "growing" (not just "planted")
+        run = conn.execute(
+            "SELECT r.id FROM runs r JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? ORDER BY r.id DESC LIMIT 1",
+            (PROJECT,),
+        ).fetchone()
+        metrics.start_job(
+            conn,
+            run[0],
+            ticket_id=growing_ticket,
+            milestone_id=growing,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+        # set f23-02-second aside so f23-01-first is the only counting ticket
+        conn.execute(
+            "UPDATE tickets SET state = ? WHERE ticket = ?",
+            ("later", "f23-02-second"),
+        )
+        # make f23-01-first depend on f22-01-unfinished
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f22-01-unfinished"]), "f23-01-first"),
+        )
+        # make f63-01-ticket depend on f22-01-unfinished
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f22-01-unfinished"]), "f63-01-ticket"),
+        )
+        # make f22-01-unfinished depend on f63-01-ticket so F22 has a nonempty waits on main
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = ?",
+            (json.dumps(["f63-01-ticket"]), "f22-01-unfinished"),
+        )
+
+    write(board_db, change)
+    found = read(board_db)
+    # planted card F23: waits is populated
+    f23 = card(found, "F23")
+    assert f23.stage == "planted"
+    assert f23.waits == ("F22",)
+    # growing card F63: waits is populated
+    f63 = card(found, "F63")
+    assert f63.stage == "growing"
+    assert f63.waits == ("F22",)
+    # sprouting card F22: waits is empty even though its ticket depends on another card
+    f22 = card(found, "F22")
+    assert f22.stage == "sprouting"
+    assert f22.waits == ()
+    # seed card F20: waits is empty even though its tickets may have deps
+    f20 = card(found, "F20")
+    assert f20.stage == "seed"
+    assert f20.waits == ()
+    # sprouting card F21: waits is empty
+    f21 = card(found, "F21")
+    assert f21.stage == "sprouting"
+    assert f21.waits == ()
+    # ripe card F1: waits is empty
+    f1 = card(found, "F1")
+    assert f1.stage == "ripe"
+    assert f1.waits == ()
+    # harvested card M3: waits is empty
+    m3 = card(found, "M3")
+    assert m3.stage == "harvested"
+    assert m3.waits == ()
