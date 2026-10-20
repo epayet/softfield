@@ -36,3 +36,10 @@ Read `.factory/cards/f15-reprioritising-tickets.md` (D1, D3, D4, D9) and the pic
 - a drag near the bottom edge scrolls the page
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
