@@ -33,3 +33,10 @@ Read `.factory/cards/f15-reprioritising-tickets.md` (D2) and the picture, `.fact
 - at 390 px `document.documentElement.scrollWidth` is not wider than the window
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
