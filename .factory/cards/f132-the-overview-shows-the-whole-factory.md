@@ -29,3 +29,6 @@ does the Overview show several projects' queues: one list in the runner's real o
 
 A mock-up first (owner.md, 2026-10-09): Today and Proposed of the Overview on real data, two
 projects running.
+
+### From F160: the top bar on what's running atm is a bit buggy depending… (merged by the lead on 2026-10-20)
+the top bar on what's running atm is a bit buggy depending on what project i'm looking at, it should the same regardless of current project viewed. similalrly, the overview should be the same across all projects, as there is one factory and runner for all projects. right now a developer ticket is working on softfield but top bar says Running: travel-companion · picking the next ticket.
