@@ -130,6 +130,10 @@ def test_a_page_that_names_cdn_example_com_after_the_top_bar_fails():
         + html[header_close + len("</header>") :]
     )
     found = _find_third_party_hosts(injected)
+    assert found != [], (
+        "the injected page must fail the third-party-host check "
+        "(test_no_page_or_stylesheet_names_a_third_party_host)"
+    )
     assert "https://cdn.example.com/x.js" in found, (
         "expected https://cdn.example.com/x.js to be detected as third-party host"
     )
