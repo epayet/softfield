@@ -1,6 +1,6 @@
 # Milestone F33: overview now check-all how long
 
-> **Status: planned** (2026-10-08, with the owner, in the planning room). **State:** ready · **Priority:** 7 · **Area:** factory
+> **Status: planned** (2026-10-08, with the owner, in the planning room). **State:** ready · **Priority:** 8 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes
