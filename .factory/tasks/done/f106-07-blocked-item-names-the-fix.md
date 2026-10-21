@@ -35,3 +35,12 @@ In `tests/factory_dashboard/test_planning.py`, beside `test_two_blocked_tickets_
 ### Done when
 - the four tests pass and would fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3280
+gate_failures: []
+tokens: 1203046
+```
