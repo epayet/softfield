@@ -120,6 +120,19 @@ def test_live_poller_has_no_hx_swap_oob(client):
     assert "hx-swap-oob" not in poll[0], "poller must not carry hx-swap-oob"
 
 
+def test_only_the_overviews_poller_picks_now_queue_and_allowance(client):
+    """F19 review: the Overview's poller picks the three sections out of band; /live's sections
+    don't swap themselves, so every other page's poll of /live finds no missing target."""
+    html = client.get("/").text
+    poll = re.search(r'<div id="live-needs-you"[^>]*>', html)
+    picked = 'hx-select-oob="#now:innerHTML,#queue:innerHTML,#allowance:innerHTML"'
+    assert poll and picked in poll[0]
+    live = client.get("/live?project=coucou").text
+    for part in ("now", "queue", "allowance"):
+        opening = re.search(rf'<section id="{part}"[^>]*>', live)
+        assert opening and "hx-swap-oob" not in opening[0], part
+
+
 def test_the_live_partial_answers_on_its_own_for_htmx(client):
     response = client.get("/live?project=coucou")
     assert response.status_code == 200

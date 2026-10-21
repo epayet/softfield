@@ -461,6 +461,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** both findings sat between tickets, not in one. A decision applied in one ticket and needed by a later one (D3's copy, then f106-05's replan), and a decision no ticket carried (D4). Checkpoints read one ticket at a time and skip lead tickets, so only the review can see this; a plan check that every decision is named by a ticket would catch the second kind (F14's "Done when" lesson, for decisions).
 - **Decisions affected:** none.
 
+### F19 (2026-10-21): the desk and an open thread refresh by themselves ([review](../reviews/f19-will-i-need-to-refresh-planning.md))
+
+- **Q1:** three developer tickets: f19-01 (desk poll, `liveIdle` waits while typing) merged first time; f19-02 (one Overview poll) on its third attempt after a direction; f19-03 (a checkpoint's fix ticket: a browser test for f19-02) on its third. Two checkpoints, four findings, all confirmed. The review fixed three findings itself, one blocking, and filed no ticket.
+- **Q3:** Qwen 1/3 first time, 24.9M tokens over 294 minutes of model for about 30 lines of template and script. Five of its six failed attempts were no-edit stops or timeouts.
+- **Q5:** see the review's numbers.
+- **Anything else:** the card's headline ("the lead's answer appears on an open thread") was carved out of f19-01 as "the lead's", and no lead ticket was ever written; three tickets merged, two checkpoints passed, and the outcome the owner asked for was not built. A plan check that every Done-when line is carried by a ticket (F14 and F106 said the same) would have caught it at planning. Second, an attribute moved into a partial shared by every page (`hx-swap-oob` in `/live`) logged errors on every other page; checkpoints read the diff, not who else includes the file.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

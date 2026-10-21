@@ -128,8 +128,10 @@
     {% endif %}
     {% endmacro %}
 
-    {# F30 D1: the latest exchange first, Send under it, the older messages folded under it #}
+    {# F30 D1: the latest exchange first, Send under it, the older messages folded under it.
+       Its stamp changes with what the runner and the lead write, for the poll below (F19). #}
     <div id="conversation">
+    <i id="conversation-stamp" hidden data-stamp="{{ next_reply }}|{{ earlier | length }}|{{ merged_on | length }}{% for m in messages %}|{{ m.author }} {{ m.at }} {{ m.waiting }} {{ m.change.id if m.change }}{% endfor %}"></i>
     {% if next_reply %}
     <p id="waiting" style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted)">Next for the lead · {{ next_reply }}</p>
     {% endif %}
@@ -208,6 +210,19 @@
         if (!event.detail.successful || !event.detail.elt.closest(".waiting-message")) return;
         htmx.ajax("GET", window.location.href, {target: "#conversation", select: "#conversation", swap: "outerHTML"});
       });
+      // F19: the lead's answer arrives by itself. Every 5 s, unless the owner scrolls, selects
+      // or types (liveIdle), the page is read again; the conversation is drawn again only when
+      // its stamp changed, so an open Full reply or a deck's point stays as it is otherwise.
+      setInterval(async () => {
+        if (!window.liveIdle()) return;
+        const response = await fetch(window.location.href);
+        if (!response.ok) return;
+        const fresh = new DOMParser().parseFromString(await response.text(), "text/html").getElementById("conversation");
+        const shown = document.getElementById("conversation");
+        const stamp = (c) => c.querySelector("#conversation-stamp").dataset.stamp;
+        if (!fresh || !shown || stamp(fresh) === stamp(shown) || !window.liveIdle()) return;
+        htmx.swap(shown, fresh.outerHTML, {swapStyle: "outerHTML"});
+      }, 5000);
       // f23-01: the summary on a point's details opens the box and focuses the textarea in the
       // tap itself (iOS Safari only raises the keyboard on the tap that touches the element).
       document.addEventListener("click", (event) => {

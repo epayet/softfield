@@ -43,7 +43,7 @@
     if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return false;
     for (const el of document.querySelectorAll('textarea, input')) {
       if (el.type === 'hidden') continue;
-      if (!el.offsetParent) continue;
+      if (el.tagName === 'INPUT' && !el.offsetParent) continue; // a folded comment still counts
       if (el.value !== el.defaultValue) return false;
     }
     for (const details of document.querySelectorAll('details[open]')) {

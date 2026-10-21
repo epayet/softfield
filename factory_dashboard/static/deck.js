@@ -1,7 +1,9 @@
 // One point at a time on a phone (f6-10). Each .deck's children are its points; the .deck-nav
 // right after it holds a dot per point and the ◀ ▶ buttons. dashboard.css hides the .off points
 // and shows the nav only under 640 px, so on wider screens this changes nothing you see.
-document.querySelectorAll(".deck").forEach((deck) => {
+const deckUp = (deck) => {
+  if (deck.dataset.up) return; // bound once per deck drawn
+  deck.dataset.up = "1";
   const points = Array.from(deck.children);
   const nav = deck.nextElementSibling;
   if (!nav || !nav.classList.contains("deck-nav")) return; // no points, no nav
@@ -24,4 +26,7 @@ document.querySelectorAll(".deck").forEach((deck) => {
   deck.addEventListener("input", show);
   deck.addEventListener("click", show);
   show();
-});
+};
+document.querySelectorAll(".deck").forEach(deckUp);
+// the conversation drawn again (a send, or the lead's answer arriving: F19) brings its decks up
+document.addEventListener("htmx:afterSettle", () => document.querySelectorAll(".deck").forEach(deckUp));

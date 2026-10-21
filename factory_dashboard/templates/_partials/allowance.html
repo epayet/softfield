@@ -1,7 +1,7 @@
 {# The agents' allowance (f2-13), in the live partial below Now (f8-06): each Claude meter has
    the owner's reserve switch (f8 D4), which posts a reserve request; one asked for shows at once,
    on its way (a dashed orange edge), until the runner takes it. #}
-<section id="allowance" class="panel" hx-swap-oob="innerHTML">
+<section id="allowance" class="panel">
   <h2>Agent allowance <span class="src">latest reading per window</span></h2>
   <div class="allow">
     {% for a in allowance %}

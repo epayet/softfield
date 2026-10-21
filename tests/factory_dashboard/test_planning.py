@@ -3136,7 +3136,69 @@ def test_desk_coming_poll_wrapper_absent_when_no_items(planning, serve):
     assert "desk-coming" not in html
 
 
-# --- merge links (f109-01) -------------------------------------------------------------------
+# --- the desk and an open thread refresh by themselves (F19 review) ---------------------------
+
+LIVE = 9000  # one 5 s poll, and room to draw it
+
+
+def _lead_says(db_path: Path, project_id: int, card: str, text: str) -> None:
+    def write(conn: sqlite3.Connection) -> None:
+        thread = metrics.planner_thread(conn, project_id, card, _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(conn, thread, "lead", _at(timedelta(minutes=1)), text)
+
+    _write(db_path, write)
+
+
+def test_the_desk_poll_moves_an_answered_seed_to_the_answers(page, planning, db_path, serve):
+    """F9 is a seed when the desk opens; the lead answers on its thread: within a poll F9 sits
+    under "Your answers wanted" and no longer under the seeds, without a reload."""
+    _open(page, serve())
+    assert page.locator('#desk-seeds a[href^="/planning/f9"]').count() == 1
+    _lead_says(db_path, planning, "f9", "Here is what I think.")
+    page.locator('#desk-answers a[href^="/planning/f9"]').wait_for(timeout=LIVE)
+    assert page.locator('#desk-seeds a[href^="/planning/f9"]').count() == 0
+
+
+def test_the_leads_answer_appears_on_an_open_thread(page, planning, db_path, serve):
+    """With F6's thread open, the lead's new answer shows in the conversation within a poll,
+    and its points come back as a deck (deck.js binds the drawn-again conversation)."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    _lead_says(db_path, planning, "f6", "A second answer.")
+    page.locator("#conversation >> text=A second answer.").wait_for(timeout=LIVE)
+    assert page.locator("#conversation").count() == 1
+    assert page.locator(".deck").count() == page.locator(".deck[data-up]").count() > 0
+
+
+def test_an_open_thread_waits_while_the_owner_types(page, planning, db_path, serve):
+    """Text in the reply box holds the conversation as it is (the text stays); emptied and
+    left, the lead's answer arrives."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    page.fill('#reply textarea[name="text"]', "Half a thought")
+    _lead_says(db_path, planning, "f6", "A second answer.")
+    page.wait_for_timeout(LIVE)
+    assert page.locator("#conversation >> text=A second answer.").count() == 0
+    assert page.input_value('#reply textarea[name="text"]') == "Half a thought"
+    page.fill('#reply textarea[name="text"]', "")
+    page.evaluate("() => document.activeElement.blur()")
+    page.locator("#conversation >> text=A second answer.").wait_for(timeout=LIVE)
+
+
+def test_a_comment_folded_away_still_holds_the_refresh(page, planning, db_path, serve):
+    """A comment typed on a point, its box then closed, is still sent with the message: the
+    page doesn't count as idle while it waits, though the box is hidden."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _open(page, serve(), "/planning/f6")
+    page.click('li[data-point="2"] summary')
+    page.fill('li[data-point="2"] textarea', "Inside, but say how it stops.")
+    page.click('li[data-point="2"] summary')
+    page.evaluate("() => document.activeElement.blur()")
+    assert not page.locator('li[data-point="2"] textarea').is_visible()
+    assert page.evaluate("() => window.liveIdle()") is False
+
+
+# --- merge links (f109-01)-------------------------------------------------------------------
 
 
 def test_a_merge_whose_card_left_main_shows_both_ways(planning, db_path, serve, checkout):
