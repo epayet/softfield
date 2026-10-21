@@ -126,6 +126,22 @@ def test_all_tests_runs_every_test_file_whatever_the_queue_holds(repo: Path, mon
     assert not [arg for arg in calls[0] if arg.startswith("--ignore")]
 
 
+def test_all_tests_runs_on_the_projects_workers(repo: Path, monkeypatch):
+    """F71: the gate runs the same suite as check-all, on the same workers."""
+    toml = repo / ".factory" / "project.toml"
+    toml.write_text(toml.read_text().replace("[checks]\n", "[checks]\ntest_workers = 4\n"))
+    calls: list[tuple[str, ...]] = []
+
+    def fake_command(name: str, ctx: GateContext, *args: str) -> GateResult:
+        calls.append(args)
+        return GateResult(name, True, "")
+
+    monkeypatch.setattr(gates, "_command", fake_command)
+    task = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-current")
+    assert gate_all_tests(GateContext(repo, Git(repo), parse_task(task, 150), "main", (), 60)).ok
+    assert calls[0][3:6] == ("-q", "-n", "4")
+
+
 def test_added_skips_finds_ways_to_silence_a_test():
     diff = "\n".join(
         [

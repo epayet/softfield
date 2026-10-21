@@ -23,6 +23,7 @@ dev = [
     "types-pyyaml>=6",
     "pytest-playwright>=0.5",  # the dashboard's pages on a phone and a wide screen
     "playwright==1.63.0",  # the browsers installed in ~/.cache/ms-playwright
+    "pytest-xdist>=3",
 ]
 
 [build-system]

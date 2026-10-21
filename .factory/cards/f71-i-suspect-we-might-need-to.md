@@ -44,8 +44,32 @@ The full test suite takes 19 minutes and grows each day: find the slowest tests 
 ## Decisions (2026-10-16)
 - **D8: Claude's jobs get 75 minutes** (`claude = 4500`, the developer's D5), the owner's call after f17-01. Escalations and lead tickets already share this one limit. f17-01's escalation built the whole ticket, ran check-all, fixed a mypy error and was cut at 45 minutes while waiting on its second check-all, after writing its decision. Reviews stay at 3600.
 
+## Findings (2026-10-21, f71-02, a terminal session with the owner)
+Found because `check-all` timed out at its 1,200 s limit that night, with every test passing.
+- **The suite took 19.6 minutes in one process** (1,177 s, 2,468 tests) on a 24-core machine: the gate limit is 20 minutes. By file: `test_app.py` 338 s (98 tests, 3.5 s each), `test_planning.py` 168 s, `test_loop.py` 151 s, `test_line.py` 115 s, `test_overview.py` 105 s; the rest under 65 s each. `mypy`, `ruff` and the layout check are seconds.
+- **The browser tests are 6% of the tests and 40% of the time** (152 tests, 468 s). They wait on the pages' real 5 s polls, eight notification tests first wait 12 s for something that never comes before their fallback (17.5 s each), and one test backfills a database from this repo's runs to get one page (28 s, and it leaves a file in `/tmp`).
+- **The tests are ready to run in parallel:** each uses its own `tmp_path`, none opens a real port, and Playwright serves pages from disk. With `pytest-xdist`, everything passed: 6.5 min on 8 workers and 4.9 min on 16 (load average under 9, so the slow waits set the pace, not the CPU). `check-all` with 16 workers: **4.5 min, all checks OK.**
+- **Full suite runs per developer ticket:** the developer's own `check-all` (2–3 per attempt) and the `all-tests` gate. Lead tickets and escalations add one `check-all` before their merge. At 19.5 min a run, check-all was 40–60 of a 75-minute attempt; at 4.5 min it is 10–15.
+- **Jobs over the last two weeks** (`softfield look`, from 2026-10-07): 257 developer attempts, 36 cut off (14%); 13 of the 82 attempts that passed since 2026-10-13 ran over 75 min, gates included. Claude's jobs: none cut off; the longest was a lead ticket at 66.5 min (limit 75), escalations at most 45, reviews 46.6 (limit 60).
+
+### Verdicts
+| Step | Verdict | Saving per ticket | Risk |
+|---|---|---|---|
+| Run the suite in parallel (`pytest-xdist`, 16 workers) | **Done** in the session: `[checks] test_workers` in `.factory/project.toml`, used by `check-all` and the `all-tests` gate. Other projects keep 0 (one process) until their dev dependencies have `pytest-xdist` | 15 min per suite run: 45–60 min per developer ticket (3–4 runs), 15–30 per lead ticket | A test sharing state across workers would fail at random. All 2,468 passed three times on workers; f71-03 asks for three runs in a row |
+| Browser tests on a fake clock, not real 5 s polls | **Do**: f71-03 (lead, after f68-07 and f114-08/09/10, which rewrite the same tests) | 1–2 min per suite run on workers (the slowest tests set the pace) | A test whose meaning changes. f71-03 has each test fail on purpose once |
+| Run the same tree once (drop the `all-tests` gate after a developer's `check-all`) | **Don't**: the developer's run is its own word, not proven to be on the final tree; the gate is the runner's own run, and now 4.5 min | 4.5 min | — |
+| What a developer runs while working: its tests first, `check-all` at the finish | **Already so** (`docs/agents/developer.md`, D7) | — | — |
+| Shared slow fixtures (one browser or server per session) | **Don't**: pytest-playwright already shares the browser per worker; a page per test keeps tests apart | under 1 min | Tests leaking into each other |
+| Quick checks first, answering at once when one fails | **Later**: with the suite at 4.5 min, a `ruff` slip costs 4.5 min, not 12.5. Look again if the suite grows past 10 | up to 4 min, when one fails | A developer fixing lint, then waiting on a second run for the tests |
+| The developer's prompt sets no time limit on `check-all` | **Already so** (`docs/agents/developer.md` item 14, from f109-03); its "about 12 minutes" now says 5 | — | — |
+
+### The limits (D4, and F148's question)
+- **Keep them all.** Developer attempts at 75 min, Claude's jobs at 75 and reviews at 60 fit: no Claude job was cut off, and the developers' cuts came from check-all eating 40–60 of their 75 minutes. With the suite 15 minutes shorter per run, a developer attempt gets 30–45 minutes back, more than any raise did. F148's answer: no bigger limit; the suite was the cause.
+- **The gate limit (`gate = 1200`) stays:** the suite on workers takes a quarter of it. Watch it from the jobs table at the periodic factory review (F59, F150).
+
 ## Tickets
 | # | Id | Who | Difficulty | What |
 |---|----|-----|------------|------|
 | 01 | longer-attempts | lead | 1 | **Done on 2026-10-12** in a terminal session (commit `119a206`): `opencode = 3600`, `claude = 2700`. No ticket left |
-| 02 | slow-tests-study | lead | 4 | D3: measure where the suite's time goes and propose steps that keep every test. Waits for f95-02 (`runner look`) to read the jobs table |
+| 02 | slow-tests-study | lead | 4 | **Done on 2026-10-21** in a terminal session: Findings above; the suite runs on 16 workers |
+| 03 | browser-tests-on-a-fake-clock | lead | 5 | The browser tests on Playwright's fake clock, after f68-07 and f114-08/09/10 |

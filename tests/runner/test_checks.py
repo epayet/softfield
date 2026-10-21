@@ -110,3 +110,22 @@ def test_the_hook_reads_the_commits_index_before_anything_clears_it():
     code = [line for line in hook.read_text().splitlines() if not line.startswith("#")]
     assert not [line for line in code if "GIT_INDEX_FILE" in line]
     assert code[-1] == "exec softfield check-all --hook"
+
+
+def test_the_suite_runs_on_the_projects_workers(repo: Path, monkeypatch):
+    """F71: Softfield's suite took 19.5 min in one process and 5 on 16 workers."""
+    toml = repo / ".factory" / "project.toml"
+    toml.write_text(toml.read_text().replace("[checks]\n", "[checks]\ntest_workers = 4\n"))
+    calls: list[list[str]] = []
+    monkeypatch.setattr(checks, "_exec", _fake_exec({}, calls))
+    monkeypatch.setattr(checks, "_i18n_problems", lambda repo, timeout: [])
+    checks.check_all(repo, 60)
+    assert calls[-1][3:9] == ["-q", "-p", "no:cacheprovider", "-n", "4", "tests/unit"]
+
+
+def test_without_workers_the_suite_runs_in_one_process(repo: Path, monkeypatch):
+    calls: list[list[str]] = []
+    monkeypatch.setattr(checks, "_exec", _fake_exec({}, calls))
+    monkeypatch.setattr(checks, "_i18n_problems", lambda repo, timeout: [])
+    checks.check_all(repo, 60)
+    assert "-n" not in calls[-1]

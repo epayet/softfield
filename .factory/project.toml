@@ -8,6 +8,7 @@ description = "The software factory itself: the runner, the dashboard and the wo
 # What check-all and the gates run (ADR 30 item 3)
 [checks]
 test_dirs = ["tests/runner", "tests/factory_dashboard"]
+test_workers = 16                       # 2026-10-21 (F71): 19.5 min alone, 6.5 on 8, 5 on 16
 mypy = ["runner", "factory_dashboard", "tests"]
 dependency_files = ["pyproject.toml", "uv.lock"]
 dependency_dirs = ["factory_dashboard/static/vendor/"]

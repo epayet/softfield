@@ -70,7 +70,7 @@ itself. A merge that changes `pyproject.toml` or `uv.lock` reinstalls first. Job
 
 ```sh
 uv sync
-uv run softfield check-all      # ruff, mypy, the layout rule, the full suite (about 13 min)
+uv run softfield check-all      # ruff, mypy, the layout rule, the full suite (about 5 min, on 16 workers)
 uv run pytest tests/runner      # or one folder
 ```
 

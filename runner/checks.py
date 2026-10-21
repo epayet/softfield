@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from runner import i18n
-from runner.config import project_checks
+from runner.config import project_checks, suite_args
 from runner.gates import layout_problems
 from runner.procs import run_bounded
 
@@ -86,7 +86,7 @@ def check_all(
         _exec(repo, ["uv", "run", "ruff", "format", "."], timeout)
         _exec(repo, ["uv", "run", "ruff", "check", "--fix", "."], timeout)
     project = project_checks(repo)
-    tests = ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *project.test_dirs]
+    tests = ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *suite_args(project)]
     runs: list[tuple[str, Callable[[], Check]]] = [
         (
             "ruff check",

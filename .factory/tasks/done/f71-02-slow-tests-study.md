@@ -28,3 +28,11 @@ Read `.factory/cards/f71-i-suspect-we-might-need-to.md` (D3 lists the questions)
 - every "do" step is a ticket in `.factory/tasks/later/` (developer when unprotected and on an existing pattern); one that changes a gate or the workflow is a draft ADR in `.factory/adr/`, status Proposed
 - the tickets it writes pass `uv run pytest -q tests/runner/test_tasks.py`
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: done by the lead in a terminal session with the owner on 2026-10-21; its findings are on the card, and the suite runs on 16 workers
+```

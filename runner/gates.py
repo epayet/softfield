@@ -8,7 +8,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePosixPath
 
 from runner import i18n
-from runner.config import Checks, project_checks
+from runner.config import Checks, project_checks, suite_args
 from runner.gitops import Git
 from runner.procs import run_bounded
 from runner.tasks import Task
@@ -333,8 +333,8 @@ def gate_task_tests(ctx: GateContext) -> GateResult:
 
 def gate_all_tests(ctx: GateContext) -> GateResult:
     """Every test file on main, whatever the queue holds (ADR 21)."""
-    test_dirs = project_checks(ctx.repo).test_dirs
-    return _command("all-tests", ctx, "uv", "run", "pytest", "-q", *test_dirs)
+    suite = suite_args(project_checks(ctx.repo))
+    return _command("all-tests", ctx, "uv", "run", "pytest", "-q", *suite)
 
 
 def gate_tests_fail_on_main(ctx: GateContext) -> GateResult:

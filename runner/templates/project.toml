@@ -9,6 +9,7 @@ origin = "{origin}"                     # "new" or "existing": set up by `softfi
 # What check-all and the gates run (ADR 30 item 3). The setup fills these in for the stack.
 [checks]
 test_dirs = ["tests"]
+test_workers = 0                        # pytest-xdist workers for the full suite; 0: one process
 mypy = []                               # mypy's targets; none skips it
 dependency_files = []                   # manifests and lockfiles a developer may not change
 dependency_dirs = []                    # vendored code

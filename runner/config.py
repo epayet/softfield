@@ -196,6 +196,9 @@ class Checks:
     project (ADR 30 item 3). The defaults suit any uv project with its tests in ``tests/``."""
 
     test_dirs: tuple[str, ...] = ("tests",)
+    # pytest-xdist's workers for the full suite; 0 runs it in one process (F71: Softfield's
+    # took 19.5 min alone, 5 on 16 workers). The project's dev dependencies must have it.
+    test_workers: int = 0
     mypy: tuple[str, ...] = ()  # mypy's targets; none skips it
     translations: bool = False  # the gettext check of ``runner/i18n.py`` (ADR 00 A2)
     dependency_files: tuple[str, ...] = ("pyproject.toml", "uv.lock")
@@ -217,6 +220,7 @@ def project_checks(repo: Path) -> Checks:
     try:
         return Checks(
             test_dirs=tuple(table.get("test_dirs", default.test_dirs)),
+            test_workers=int(table.get("test_workers", default.test_workers)),
             mypy=tuple(table.get("mypy", default.mypy)),
             translations=bool(table.get("translations", default.translations)),
             dependency_files=tuple(table.get("dependency_files", default.dependency_files)),
@@ -224,8 +228,14 @@ def project_checks(repo: Path) -> Checks:
             e2e=tuple(table.get("e2e", default.e2e)),
             layouts={str(k): (str(v[0]), str(v[1])) for k, v in table.get("layouts", {}).items()},
         )
-    except (TypeError, IndexError) as exc:
+    except (TypeError, IndexError, ValueError) as exc:
         raise ConfigError(f"[checks] in {PROJECT_TOML}: {exc}") from exc
+
+
+def suite_args(checks: Checks) -> list[str]:
+    """pytest's arguments for the whole suite: its folders, on its workers."""
+    workers = ["-n", str(checks.test_workers)] if checks.test_workers > 0 else []
+    return [*workers, *checks.test_dirs]
 
 
 def read_protected(repo: Path) -> list[str]:
