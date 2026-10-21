@@ -31,3 +31,10 @@ Read `.factory/adr/29-the-lead-looks-at-a-blocked-ticket.md` (item 3; it must be
 - a reworked ticket that fails pre-flight refuses the approval with its problems
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
