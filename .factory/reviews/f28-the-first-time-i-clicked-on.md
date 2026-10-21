@@ -1,6 +1,6 @@
 # Review: F28, Pause and Resume hold what you asked through the refresh
 
-- **Status:** round 1 done, ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-21.
 
 ## Sign-off sheet
 

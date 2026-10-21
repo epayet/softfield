@@ -1,6 +1,7 @@
 # Milestone F28: the first time i clicked on the pause button nothing happened, but then eventually it worked
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-21. Base: git tag `f28-the-first-time-i-clicked-on-start`. Report: [`.factory/reviews/f28-the-first-time-i-clicked-on.md`](../reviews/f28-the-first-time-i-clicked-on.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes
