@@ -26,3 +26,10 @@ Read "What we know" and Decisions D1–D2 in `.factory/cards/f135-why-is-there-a
 - a milestone whose recorded stop is the e2e stop is due again when the repo has no `tests/e2e/`, and not due when it has one; other stops are unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
