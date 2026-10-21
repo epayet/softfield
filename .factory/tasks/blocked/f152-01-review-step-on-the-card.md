@@ -44,3 +44,9 @@ attempts: 3
 tokens: 11934749
 logs: .factory/var/runs/20261021-090717/f152-01-review-step-on-the-card
 ```
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the finished work failed check-all; its work is on task/f152-01-review-step-on-the-card
+```
