@@ -427,10 +427,12 @@ def test_the_desk_page_lays_out_at_phone_and_display_sizes(page, planning, db_pa
         ),
     )
     _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    _two_blocked(db_path)
     page.set_viewport_size(size)
     _open(page, serve())
     assert page.locator("#desk-seeds").is_visible()
     assert page.locator("#desk-refused").is_visible()
+    assert page.locator(f"#set-aside-{SECOND}").is_visible()
     # On a phone the tabs scroll sideways by design, Planning centred, Overview cut off (f3-30:
     # test_phone_top_bar_is_compact_and_tabs_scroll in test_app.py checks them)
     page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
@@ -3871,3 +3873,101 @@ def test_no_open_blocked_tickets_means_empty_group_and_no_heading(planning, db_p
     assert "Blocked tickets" not in blocked_markup
     [_, blocked_group, *_] = desk(db, PROJECT, NOW)
     assert blocked_group.items == []
+
+
+# --- Try again or Set aside a blocked ticket (F106 D3) --------------------------------------
+
+FIRST, SECOND = "f1-01-first", "f1-02-second"
+ON_ITS_WAY = {
+    "queue": "Trying again at the runner's next pick",
+    "set_aside": "Set aside at the runner's next pick",
+}
+
+
+def _two_blocked(db_path: Path) -> None:
+    def write(conn: sqlite3.Connection) -> None:
+        project = metrics.upsert_project(conn, PROJECT)
+        for hours, ticket in ((4, FIRST), (2, SECOND)):
+            metrics.upsert_owner_item(
+                conn,
+                project,
+                "blocked",
+                ticket,
+                text=f"{ticket} blocked: waiting on f12-03",
+                created=_at(timedelta(hours=hours)),
+            )
+
+    _write(db_path, write)
+
+
+def _blocked_item(html: str, ticket: str) -> str:
+    found = re.search(
+        rf'<article class="blocked-ticket" id="blocked-{ticket}".*?</article>', html, re.S
+    )
+    assert found, ticket
+    return found[0]
+
+
+def _desk_count(html: str) -> int:
+    found = re.search(r"Your desk(?: · (\d+))?</h2>", html)
+    assert found
+    return int(found[1] or 0)
+
+
+@pytest.mark.parametrize(("button", "kind"), [("try-again", "queue"), ("set-aside", "set_aside")])
+def test_a_blocked_tickets_button_asks_for_it_by_its_id_and_shows_it_on_its_way(
+    page, planning, db_path, serve, button, kind
+):
+    """Pressed on the second of two blocked tickets: one request of its kind naming that
+    ticket; the item shows on its way at once, without buttons; the first keeps both."""
+    _two_blocked(db_path)
+    _open(page, serve())
+    page.click(f"#{button}-{SECOND}")
+    item = page.locator(f"#blocked-{SECOND}")
+    item.locator(f"text={ON_ITS_WAY[kind]}").wait_for()
+    assert "dashed" in item.locator("a").get_attribute("style")
+    assert not page.locator(f"#try-again-{SECOND}").is_visible()
+    assert not page.locator(f"#set-aside-{SECOND}").is_visible()
+    page.wait_for_selector(f"#blocked-status-{SECOND} >> text=Asked")
+    assert page.locator(f"#try-again-{FIRST}").is_visible()
+    assert page.locator(f"#set-aside-{FIRST}").is_visible()
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT kind, subject FROM owner_requests WHERE kind IN ('queue', 'set_aside')"
+        ).fetchall()
+        assert [(r["kind"], r["subject"]) for r in rows] == [(kind, SECOND)]
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("kind", ["queue", "set_aside"])
+def test_a_blocked_ticket_asked_for_is_on_its_way_and_leaves_the_count(
+    planning, db_path, db, serve, kind
+):
+    """An open request for the second ticket: dashed, its words, no button, one fewer in the
+    desk's heading; the first ticket keeps its buttons. A finished request changes nothing."""
+    _two_blocked(db_path)
+    client = serve()
+    before = _desk_count(_page(client))
+    _finished(db_path, planning, kind, FIRST, None, "done")  # done: the first still waits
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(conn, planning, kind, SECOND, None, NOW.isoformat()),
+    )
+    html = _page(client)
+    assert _desk_count(html) == before - 1
+    blocked = _groups(html)["blocked"]
+    assert _items(blocked)[1] == (f"/tickets/{SECOND}", SECOND)
+    assert f'id="blocked-{SECOND}"' not in html
+    second = blocked.split(f'href="/tickets/{SECOND}', 1)[1].split("</a>", 1)[0]
+    assert "on-its-way-item" in second and "dashed var(--hazard)" in second
+    assert ON_ITS_WAY[kind] in unescape(second)
+    assert f"try-again-{SECOND}" not in html and f"set-aside-{SECOND}" not in html
+    first = _blocked_item(html, FIRST)
+    assert f'id="try-again-{FIRST}"' in first and f'id="set-aside-{FIRST}"' in first
+    [_, group, *_] = desk(db, PROJECT, NOW)
+    assert [(i.title, i.on_its_way, i.words) for i in group.items] == [
+        (FIRST, False, "waiting on f12-03"),
+        (SECOND, True, ON_ITS_WAY[kind]),
+    ]

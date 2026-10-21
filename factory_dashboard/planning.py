@@ -689,15 +689,16 @@ _NEXT_PICK = "on its way · the runner applies it at its next pick"
 
 
 def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) -> list[DeskItem]:
-    """The owner's Archive, Sign off or Remove seed still waiting for the runner: the item
-    shows on its way, dashed, saying what is coming (the owner, 2026-10-08: an archived thread
-    still looked like it needed them)."""
+    """The owner's Archive, Sign off or Remove seed still waiting for the runner, or Try again
+    and Set aside on a blocked ticket (F106 D3): the item shows on its way, dashed, saying what
+    is coming (the owner, 2026-10-08: an archived thread still looked like it needed them)."""
     pending = conn.execute(
         "SELECT kind, subject, value FROM owner_requests WHERE project_id = ? AND done IS NULL"
-        " AND kind IN ('archive', 'signoff', 'drop_seed')",
+        " AND kind IN ('archive', 'signoff', 'drop_seed', 'queue', 'set_aside')",
         (project_id,),
     ).fetchall()
     asked: dict[str, str] = {}
+    tickets: dict[str, str] = {}  # by ticket id: a blocked ticket's item links to its page
     for r in pending:
         subject = str(r["subject"] or "")
         if r["kind"] == "archive" and r["value"] == "on":
@@ -708,10 +709,17 @@ def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) 
             )
         elif r["kind"] == "drop_seed":
             asked[subject] = "removing at the runner's next pick"
+        elif r["kind"] == "queue":
+            tickets[subject] = "Trying again at the runner's next pick"
+        elif r["kind"] == "set_aside":
+            tickets[subject] = "Set aside at the runner's next pick"
     found = []
     for item in items:
         thread = item.link.removeprefix("/planning/").split("/")[0]
-        words = asked.get(thread) if "/proposals/" not in item.link else None
+        if item.link.startswith("/tickets/"):
+            words = tickets.get(item.link.removeprefix("/tickets/"))
+        else:
+            words = asked.get(thread) if "/proposals/" not in item.link else None
         found.append(replace(item, words=words, on_its_way=True) if words else item)
     return found
 
@@ -767,7 +775,7 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         proposals = _open_proposals(conn, project_id, _known_cards(_repo(conn, project)))
         ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
-        blocked = _blocked(conn, project_id)
+        blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
     return [
         DeskGroup("refused", "Didn't go through", "--hazard", refusals),
         DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),

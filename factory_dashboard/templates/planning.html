@@ -152,6 +152,26 @@
         </div>
         <p class="refused-gone">Dismissed {{ item.title }}: <span id="refused-status-{{ item.id }}"></span></p>
       </article>
+      {% elif group.key == "blocked" and not item.on_its_way %}
+      {# F106 D3: a blocked ticket keeps its link, Try again or Set aside under it; a press shows
+         it on its way at once (blockedOnItsWay below) #}
+      <article class="blocked-ticket" id="blocked-{{ item.title }}" style="display: flex; flex-direction: column; gap: 6px">
+        <a href="{{ item.link }}{{ q }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+          <span style="font-size: 14px">{{ item.title }}</span>
+          <span class="blocked-words" style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>
+        </a>
+        <p class="blocked-buttons" style="margin: 0; display: flex; gap: 8px; flex-wrap: wrap">
+          <button type="button" id="try-again-{{ item.title }}" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
+            hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ item.title | tojson }}}'
+            hx-on::before-request="blockedOnItsWay(this, 'Trying again at the runner\'s next pick')"
+            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Try again</button>
+          <button type="button" id="set-aside-{{ item.title }}" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
+            hx-vals='{"kind": "set_aside", "project": {{ project | tojson }}, "subject": {{ item.title | tojson }}}'
+            hx-on::before-request="blockedOnItsWay(this, 'Set aside at the runner\'s next pick')"
+            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Set aside</button>
+        </p>
+        <span id="blocked-status-{{ item.title }}" style="font-size: 12.5px; color: var(--muted)"></span>
+      </article>
       {% else %}
       {# the owner acted on it: on its way, dashed orange, until the runner's next pick #}
       <a href="{{ item.link }}{{ q }}"{% if item.on_its_way %} class="on-its-way-item"{% endif %} style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px {% if item.on_its_way %}dashed var(--hazard){% else %}solid var(--rule){% endif %}; color: var(--fg); min-height: 44px; box-sizing: border-box">
@@ -168,6 +188,19 @@
   </div>
 </div>
 <script>
+  // F106 D3: Try again or Set aside on a blocked ticket shows it on its way before the answer
+  // comes, as the desk draws it once the request is stored: dashed orange, its words, no button
+  function blockedOnItsWay(button, words) {
+    const item = button.closest(".blocked-ticket");
+    const link = item.querySelector("a");
+    item.classList.add("on-its-way");
+    link.classList.add("on-its-way-item");
+    link.style.border = "1px dashed var(--hazard)";
+    const said = item.querySelector(".blocked-words");
+    said.textContent = words;
+    said.style.color = "var(--hazard)";
+    item.querySelector(".blocked-buttons").style.display = "none";
+  }
   // F48 D2: a retry sent takes the card it retries off the desk at once (its group too, when
   // it was the last), and the form names it no more. The status's own polls bubble here too.
   // Both listeners sit on the document: the form is drawn again after each plant (F13).
