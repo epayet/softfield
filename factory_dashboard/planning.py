@@ -485,7 +485,12 @@ def _failed_edit(
 
 
 def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
-    """Open blocked tickets with their reason: one plain DeskItem per row, oldest first."""
+    """Open blocked tickets with their reason: one plain DeskItem per row, oldest first.
+
+    If the runner has a look on the card's thread and the lead has since replied, the words
+    say where the fix waits. If the runner has a look but the lead hasn't yet, the words say
+    the lead is looking. A bug ticket with no card gets nothing extra.
+    """
     rows = conn.execute(
         "SELECT subject, text FROM owner_items"
         " WHERE project_id = ? AND kind = ? AND resolved IS NULL"
@@ -496,7 +501,33 @@ def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     for r in rows:
         prefix = f"{r['subject']} blocked: "
         words = r["text"][len(prefix) :] if r["text"].startswith(prefix) else r["text"]
-        items.append(DeskItem("blocked", r["subject"], words, f"/tickets/{r['subject']}"))
+        ticket = r["subject"]
+        # Find the latest runner message starting with "<ticket> blocked:" on this project
+        runner = conn.execute(
+            "SELECT m.at, t.card FROM planner_messages m"
+            " JOIN planner_threads t ON t.id = m.thread_id"
+            " WHERE t.project_id = ? AND m.author = 'runner'"
+            " AND m.text LIKE ?"
+            " ORDER BY m.at DESC LIMIT 1",
+            (project_id, f"{ticket} blocked:%"),
+        ).fetchone()
+        if runner is not None:
+            runner_at = runner["at"]
+            card = runner["card"]
+            # Check for a lead message after the runner's on the same thread
+            lead = conn.execute(
+                "SELECT max(id) FROM planner_messages"
+                " WHERE thread_id = ("
+                "   SELECT id FROM planner_threads"
+                "   WHERE project_id = ? AND card = ?)"
+                " AND author = 'lead' AND at > ?",
+                (project_id, card, runner_at),
+            ).fetchone()
+            if lead["max(id)"] is not None:
+                words = f"{words} · the lead's fix waits on {card.upper()}'s thread"
+            else:
+                words = f"{words} · the lead is looking at it"
+        items.append(DeskItem("blocked", ticket, words, f"/tickets/{ticket}"))
     return items
 
 

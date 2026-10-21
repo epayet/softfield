@@ -3979,6 +3979,105 @@ def test_a_blocked_ticket_asked_for_is_on_its_way_and_leaves_the_count(
 LOOK = "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board."
 
 
+def _blocked_words(db, project_id):
+    """Return the blocked group's items' words."""
+    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    return [i.words for i in blocked_group.items]
+
+
+def test_runner_message_only_says_lead_is_looking(planning, db_path, db):
+    """Runner message on F9's thread without a lead follow-up: the words add
+    " · the lead is looking at it"."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-01-board",
+            text="f9-01-board blocked: check-all failed; the work is on task/f9-01-board",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(conn, thread, "runner", _at(timedelta(minutes=5)), LOOK)
+    finally:
+        conn.close()
+    assert _blocked_words(db, project) == [
+        "check-all failed; the work is on task/f9-01-board · the lead is looking at it"
+    ]
+
+
+def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db):
+    """Runner message followed by a lead message on F9's thread: the words add
+    " · the lead's fix waits on F9's thread"."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-01-board",
+            text="f9-01-board blocked: check-all failed; the work is on task/f9-01-board",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(conn, thread, "runner", _at(timedelta(minutes=5)), LOOK)
+        metrics.add_planner_message(
+            conn, thread, "lead", _at(timedelta(minutes=1)), "I'll take a look."
+        )
+    finally:
+        conn.close()
+    assert _blocked_words(db, project) == [
+        "check-all failed; the work is on task/f9-01-board · the lead's fix waits on F9's thread"
+    ]
+
+
+def test_no_runner_message_words_unchanged(planning, db_path, db):
+    """No runner message on the card: words stay as the reason alone."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f1-01",
+            text="f1-01 blocked: waiting on f12-03",
+            created=_at(timedelta(hours=4)),
+        )
+    finally:
+        conn.close()
+    assert _blocked_words(db, project) == ["waiting on f12-03"]
+
+
+def test_another_tickets_runner_message_does_not_count(planning, db_path, db):
+    """A runner message about another ticket on the same thread doesn't count for this one."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-02-other",
+            text="f9-02-other blocked: waiting on f95-01",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board.",
+        )
+    finally:
+        conn.close()
+    assert _blocked_words(db, project) == ["waiting on f95-01"]
+
+
 def test_the_runners_look_shows_as_the_runners_and_waits_for_the_lead(planning, db_path, serve):
     """The runner's message on F9's thread, its planner row open: drawn as the runner's, not
     as the owner's words; nowhere under "Didn't go through" or "Your answers wanted"; the
