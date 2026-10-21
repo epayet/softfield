@@ -1934,6 +1934,25 @@ def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
     )
 
 
+@pytest.mark.parametrize(
+    "setup",
+    [_pause_asked, _pause_held_client, _pause_held_planner, _resume_asked],
+    ids=["pause-asked", "paused", "paused-planner", "resume-asked"],
+)
+def test_now_says_the_pause_in_the_top_bars_words_without_a_button(
+    serve, serve_between, db_path, setup
+):
+    """F28 D3, with F29 and F34: Now's pause line is the top bar's own words, the lead's answer
+    and Resuming… included, and the top bar holds the one Pause/Resume."""
+    client = setup(serve, serve_between, db_path)
+    html = client.get("/live").text
+    start = html.index('<section id="now"')
+    now = html[start : html.index("</section>", start)]
+    bar = _status(html)[0].removesuffix(f" · {PROJECT}")
+    assert re.findall(r'<span class="pill warn">([^<]*)</span>', now) == [bar]
+    assert '"kind": "pause"' not in now and '"kind": "resume"' not in now
+
+
 def test_the_status_dot_wears_the_floors_colours_from_the_tokens(serve):
     css = (STATIC / "dashboard.css").read_text()
 
@@ -2061,6 +2080,19 @@ def _bar(words: str, tone: str, button: str | None, dot: str) -> str:
     return partial.render(bar_status=status, project=PROJECT)
 
 
+def _count_bar_polls(page) -> None:
+    """Count the polls' bars as they arrive, after base.html's script has judged each one, so a
+    test can check the stale one was kept out rather than only the last state (f28-01)."""
+    page.evaluate(
+        """() => {
+          window.barPolls = 0;
+          document.addEventListener("htmx:oobBeforeSwap", (event) => {
+            if (event.detail.target.id === "factory-status") window.barPolls += 1;
+          });
+        }"""
+    )
+
+
 def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     """A /live answer still showing Running and Pause leaves Pausing after this job and no button;
     a later /live with Pausing after this job and Resume is swapped in (f28-01 D1)."""
@@ -2094,6 +2126,7 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Running: coucou · f1-04-live"
+    _count_bar_polls(page)
     page.get_by_role("button", name="Pause after this job", exact=True).click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent"
@@ -2106,6 +2139,11 @@ def test_pause_survives_a_stale_live_poll(page, serve, db_path):
             break
         page.wait_for_timeout(100)
     assert [parse_qs(body)["kind"] for body in posted] == [["pause"]]
+
+    # the stale poll came back and was kept out: still the asked words, no sign
+    page.wait_for_function("window.barPolls >= 1", timeout=REFRESH)
+    assert words.text_content() == "Pausing after f1-04-live · coucou"
+    assert page.locator("#factory-status .sign").count() == 0
 
     # Wait for the fresh /live poll to arrive with Pausing and Resume.
     page.wait_for_function(
@@ -2149,6 +2187,7 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
     page.goto(ORIGIN + "/tickets")
     words = page.locator("#factory-status [role=status]")
     assert words.text_content() == "Paused by you since 11:40 · coucou"
+    _count_bar_polls(page)
     page.get_by_role("button", name="Resume", exact=True).click()
     page.wait_for_function(
         "document.querySelector('#factory-status [role=status]').textContent === 'Resuming…'"
@@ -2161,6 +2200,12 @@ def test_resume_survives_a_stale_live_poll(page, serve, db_path):
             break
         page.wait_for_timeout(100)
     assert [parse_qs(body)["kind"] for body in posted] == [["resume"]]
+
+    # the stale poll came back and was kept out: still Resuming…, on its way, no sign
+    page.wait_for_function("window.barPolls >= 1", timeout=REFRESH)
+    assert words.text_content() == "Resuming…"
+    assert page.locator("#factory-status .sign").count() == 0
+    assert page.locator("#factory-status.asked").count() == 1
 
     # Wait for the fresh /live poll to arrive with Running and Pause.
     page.wait_for_function(

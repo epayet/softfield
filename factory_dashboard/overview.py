@@ -18,7 +18,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
-from factory_dashboard.app import Db, Now, Project, ago, render
+from factory_dashboard.app import Db, Now, Project, ago, factory_status, render
 from runner import loop, metrics
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import load_state
@@ -168,8 +168,6 @@ def running_jobs(conn: sqlite3.Connection, project: str, now: datetime) -> list[
 def pause_words(conn: sqlite3.Connection, project: str, now: datetime) -> str | None:
     """The owner's pause for Now, in the top bar's own words (f28-02): held, asked, or a
     resume asked; None otherwise. The top bar holds the one Pause/Resume button."""
-    from factory_dashboard.app import factory_status
-
     status = factory_status(conn, project, now)
     return status.words if status.button == "resume" or status.words == "Resuming…" else None
 

@@ -82,13 +82,12 @@
   });
   // The top bar's Pause or Resume (f6-16) shows what was asked at once, on its way, and goes
   // until the next poll brings the runner's own state: the request waits for its next pick.
-  let askedKind = null, askedWords = null, askedKindFromButton = null;
+  // askedKind: the kind just posted, until a poll's bar no longer offers it (f28-01 D1).
+  let askedKind = null;
   document.addEventListener("htmx:beforeRequest", (event) => {
     const button = event.detail && event.detail.elt;
     if (!(button instanceof Element) || !button.matches("#factory-status button[data-asked]")) return;
     askedKind = JSON.parse(button.getAttribute("hx-vals") || "{}").kind;
-    askedWords = button.dataset.asked;
-    askedKindFromButton = askedKind;
     const bar = button.parentElement;
     const words = bar.querySelector("[role=status]");
     words.textContent = button.dataset.asked;
@@ -105,8 +104,6 @@
         bar.classList.remove("asked");
       }
       askedKind = null;
-      askedWords = null;
-      askedKindFromButton = null;
     };
     button.addEventListener("htmx:responseError", failed);
     button.addEventListener("htmx:sendError", failed);
@@ -118,27 +115,16 @@
     const dot = event.target instanceof Element && event.target.closest("#factory-status .dot-btn");
     if (dot) dot.closest(".bar-top").classList.toggle("show-words");
   });
-  // On OOB swap: block stale bars while waiting for the runner's state (f28-01 D1).
+  // A poll's bar that still offers the kind just asked is stale (it left before the request was
+  // stored): keep the asked state. The first bar that differs is the runner's, and is swapped in
+  // (f28-01 D1).
   document.addEventListener("htmx:oobBeforeSwap", (event) => {
     if (event.detail.target.id !== "factory-status" || !askedKind) return;
-    const fragment = event.detail.fragment;
-    const btn = fragment.querySelector("button[data-asked]");
-    if (!btn) {
-      askedKind = null;
-      askedWords = null;
-      askedKindFromButton = null;
-      return;
-    }
-    const kind = btn.getAttribute("hx-vals");
-    let parsedKind;
-    try { parsedKind = JSON.parse(kind || "{}").kind; } catch(e) { return; }
-    if (parsedKind === askedKind) {
-      event.detail.shouldSwap = false;
-      return;
-    }
-    askedKind = null;
-    askedWords = null;
-    askedKindFromButton = null;
+    const btn = event.detail.fragment.querySelector("button[data-asked]");
+    let offered = null;
+    try { offered = btn && JSON.parse(btn.getAttribute("hx-vals") || "{}").kind; } catch(e) {}
+    if (offered === askedKind) event.detail.shouldSwap = false;
+    else askedKind = null;
   });
 </script>
 </head>

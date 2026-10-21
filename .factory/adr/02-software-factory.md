@@ -469,6 +469,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the card's headline ("the lead's answer appears on an open thread") was carved out of f19-01 as "the lead's", and no lead ticket was ever written; three tickets merged, two checkpoints passed, and the outcome the owner asked for was not built. A plan check that every Done-when line is carried by a ticket (F14 and F106 said the same) would have caught it at planning. Second, an attribute moved into a partial shared by every page (`hx-swap-oob` in `/live`) logged errors on every other page; checkpoints read the diff, not who else includes the file.
 - **Decisions affected:** none.
 
+### F28 (2026-10-21): Pause and Resume hold what you asked through the 5 s refresh ([review](../reviews/f28-the-first-time-i-clicked-on.md))
+
+- **Q1:** two developer tickets. f28-01 (the top bar's script) merged on its third attempt after a direction (a no-edit stop, a timeout); f28-02 escalated after three attempts and the lead built it, because the ticket asked to remove buttons that a protected test asserted (the lead's ticket at fault; lesson in `docs/task-writing.md`). One checkpoint, no findings. The review fixed four findings itself (two should-fix, two nits) and filed no ticket.
+- **Q3:** Qwen 0/2 first time, 13.4M tokens and about 2 hours of model for 48 lines of script.
+- **Q5:** see the review's numbers.
+- **Anything else:** f28-01's stale-poll tests passed without the fix: they waited for the final state within two polls, so a stale bar swapped in and then replaced still ended right. The checkpoint read them and called them sound. "Fail without the change" is in every ticket and checked by nobody for each test; a test of a race must assert in the window the race opens, not after it.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
