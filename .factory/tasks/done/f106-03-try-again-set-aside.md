@@ -28,3 +28,10 @@ Read lines 79–114 of `factory_dashboard/templates/planning.html` (the desk's g
 - the desk page still lays out at phone and display sizes with a blocked ticket on it
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
