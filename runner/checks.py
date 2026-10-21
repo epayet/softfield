@@ -5,6 +5,7 @@ pass it before the runner commits their work. It runs everything and reports eve
 then exits non-zero, so nothing hides behind a pipe (M4: `mypy | tail`).
 """
 
+from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -66,43 +67,50 @@ def _command(repo: Path, name: str, args: list[str], timeout: int) -> Check:
     return Check(name, code == 0, output)
 
 
+def _problems(name: str, problems: list[str]) -> Check:
+    return Check(name, not problems, "\n".join(problems))
+
+
 def check_all(
-    repo: Path, timeout: int, *, task_id: str | None = None, fix: bool = False
+    repo: Path,
+    timeout: int,
+    *,
+    task_id: str | None = None,
+    fix: bool = False,
+    only: Collection[str] | None = None,
 ) -> list[Check]:
     """Run every check, every test file on main included (ADR 21). ``fix`` formats first;
-    ``task_id`` names the task, whose checks are the same as any other's."""
+    ``task_id`` names the task, whose checks are the same as any other's. ``only`` runs just
+    the checks it names (the runner's look at main, F106 D5)."""
     if fix:
         _exec(repo, ["uv", "run", "ruff", "format", "."], timeout)
         _exec(repo, ["uv", "run", "ruff", "check", "--fix", "."], timeout)
-    translations = _i18n_problems(repo, timeout)
-    layout = layout_problems(repo)
     project = project_checks(repo)
-    mypy = (
-        _command(repo, "mypy", ["uv", "run", "mypy", *project.mypy], timeout)
-        if project.mypy
-        else Check("mypy", True)
-    )
-    return [
-        _command(repo, "ruff check", ["uv", "run", "ruff", "check", "."], timeout),
-        _command(repo, "ruff format", ["uv", "run", "ruff", "format", "--check", "."], timeout),
-        mypy,
-        Check("translations", not translations, "\n".join(translations)),
-        Check("layout", not layout, "\n".join(layout)),
-        _command(
-            repo,
-            "tests",
-            [
-                "uv",
-                "run",
-                "pytest",
-                "-q",
-                "-p",
-                "no:cacheprovider",
-                *project.test_dirs,
-            ],
-            timeout,
+    tests = ["uv", "run", "pytest", "-q", "-p", "no:cacheprovider", *project.test_dirs]
+    runs: list[tuple[str, Callable[[], Check]]] = [
+        (
+            "ruff check",
+            lambda: _command(repo, "ruff check", ["uv", "run", "ruff", "check", "."], timeout),
         ),
+        (
+            "ruff format",
+            lambda: _command(
+                repo, "ruff format", ["uv", "run", "ruff", "format", "--check", "."], timeout
+            ),
+        ),
+        (
+            "mypy",
+            lambda: (
+                _command(repo, "mypy", ["uv", "run", "mypy", *project.mypy], timeout)
+                if project.mypy
+                else Check("mypy", True)
+            ),
+        ),
+        ("translations", lambda: _problems("translations", _i18n_problems(repo, timeout))),
+        ("layout", lambda: _problems("layout", layout_problems(repo))),
+        ("tests", lambda: _command(repo, "tests", tests, timeout)),
     ]
+    return [run() for name, run in runs if only is None or name in only]
 
 
 def render(results: list[Check]) -> str:

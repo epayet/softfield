@@ -2364,11 +2364,116 @@ def _merged_line(s: Session, agent: str, task_id: str, rec: TaskRecord) -> None:
 # --- lead tickets (ADR 12 item 9) --------------------------------------------------------
 
 
-def _check_all(s: Session, task_id: str | None, logs: Path, name: str) -> bool:
+def _check_results(s: Session, task_id: str | None, logs: Path, name: str) -> list[checks.Check]:
     with doing(s, f"check-all · {task_id}" if task_id else "check-all on main"):
         results = checks.check_all(s.repo, s.cfg.gate_timeout, task_id=task_id)
     (logs / name).write_text(checks.render(results), encoding="utf-8")
-    return all(r.ok for r in results)
+    return results
+
+
+def _check_all(s: Session, task_id: str | None, logs: Path, name: str) -> bool:
+    return all(r.ok for r in _check_results(s, task_id, logs, name))
+
+
+def _on_main(s: Session, names: Sequence[str], logs: Path) -> list[checks.Check]:
+    """Only the checks ``names``, on main (F106 D5)."""
+    with doing(s, f"{', '.join(names)} on main"):
+        results = checks.check_all(s.repo, s.cfg.gate_timeout, only=names)
+    (logs / "check-main.txt").write_text(checks.render(results), encoding="utf-8")
+    return results
+
+
+MAIN_RED_KIND = "main-red"  # main fails a lead ticket's checks too; its subject is the check
+FIRST_LINES = 3  # of the failing check's output, in the owner's item
+
+
+def red_main_text(failing: checks.Check, task_id: str, branch: str, mender: str | None) -> str:
+    """The owner's item when main fails a check a lead ticket failed (F106 D5)."""
+    lines = " / ".join(line for line in failing.output.splitlines()[:FIRST_LINES] if line.strip())
+    text = f"main fails {failing.name}" + (f": {lines}" if lines else "")
+    text += f" · {task_id}'s work waits on {branch}; no other lead ticket runs until main passes"
+    return text + (f" · {mender} would mend it" if mender else "")
+
+
+def _mender(s: Session, task_id: str, failing: Sequence[checks.Check]) -> str | None:
+    """The first ready ticket whose ``files:`` names a file the failing checks name."""
+    said = "\n".join(c.output for c in failing)
+    for t in load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff):
+        if t.id != task_id and any(f in said for f in t.files):
+            return t.id
+    return None
+
+
+def _main_is_red(s: Session, task: Task, failed: Sequence[str], logs: Path) -> bool:
+    """F106 D5: a lead ticket failed ``failed``; whether main fails every one of them too. Then
+    the ticket isn't blocked: its work waits on its branch for main to pass, the owner has one
+    item saying what fails and which ticket would mend it, and no other lead ticket runs."""
+    on_main = _on_main(s, failed, logs)
+    if any(r.ok for r in on_main):
+        return False
+    branch = f"task/{task.id}"
+    mender = _mender(s, task.id, on_main)
+    s.state.main_red = {
+        "checks": list(failed),
+        "head": _main_head(s),
+        "ticket": task.id,
+        "mender": mender,
+    }
+    s.state.waits_on_main[task.id] = branch
+    save_state(s.state, s.state_path)
+    text = red_main_text(on_main[0], task.id, branch, mender)
+    if s.project_id is not None:
+        _record(
+            s,
+            metrics.upsert_owner_item,
+            s.project_id,
+            MAIN_RED_KIND,
+            on_main[0].name,
+            text=text,
+            command="",
+            created=now().isoformat(),
+        )
+    s.report.notes.append(f"Main is red: {text}")
+    s.log(f"⚠ [{RUNNER_AGENT}] {text}")
+    return True
+
+
+def _look_at_main(s: Session) -> None:
+    """While main is red, each commit on it that could change a check (not docs or tickets
+    alone) runs the checks it failed again; once it passes them all, the owner's item
+    resolves and the lead's tickets run again (F106 D5)."""
+    red = s.state.main_red
+    head = _main_head(s)
+    if red is None or head is None or head == red["head"]:
+        return
+    try:
+        changed = s.git.run("diff", "--name-only", str(red["head"]), head).split()
+    except GitError:
+        changed = []  # its old head is gone: look again
+    red["head"] = head
+    save_state(s.state, s.state_path)
+    if checks.hook_can_skip(changed):
+        return
+    names = list(red["checks"])
+    if not all(r.ok for r in _on_main(s, names, _logs_dir(s.run_dir, "main"))):
+        return
+    s.state.main_red = None
+    save_state(s.state, s.state_path)
+    _resolve_item(s, MAIN_RED_KIND, "")
+    s.log(f"[{RUNNER_AGENT}] main passes {', '.join(names)} again: the lead's tickets run again")
+
+
+def waits_for_main(s: Session, ready: Iterable[Task]) -> set[str]:
+    """The lead's tickets held while main is red, all but the one that would mend it."""
+    red = s.state.main_red
+    if red is None:
+        return set()
+    protected = tuple(read_protected(s.repo))
+    return {
+        t.id
+        for t in ready
+        if router.lead_only(t.agent, t.files, protected) and t.id != red.get("mender")
+    }
 
 
 BLOCKED_KIND = "blocked"  # a blocked ticket's owner item; its subject is the ticket's id
@@ -2410,14 +2515,11 @@ def block(s: Session, task_path: Path, reason: str) -> None:
 
 def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     """The lead's own ticket, as a headless job on its branch; merged only if check-all
-    passes. A lead ticket that fails is blocked: there's no one above the lead but the owner."""
+    passes. A lead ticket that fails is blocked: there's no one above the lead but the owner.
+    One that failed only where main fails too had its work kept: it merges from its branch,
+    with no new session, once its checks pass (F106 D5)."""
     logs = rec.logs or _logs_dir(s.run_dir, task.id)
     branch = f"task/{task.id}"
-    parked = s.state.interrupted.get(job_key("lead-ticket", task.id))
-    if parked and parked["branch"] == branch:
-        s.git.checkout(branch)  # an interrupted run's work, which its session resumes
-    else:
-        s.git.fresh_branch(branch, MAIN)
     rec.attempts = 1
     job = JobSpec(
         role="lead-ticket",
@@ -2428,6 +2530,24 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
         edit=(ANY,),
         commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, *task.commands),
     )
+    waited = s.state.waits_on_main.pop(task.id, None)
+    if waited is not None:
+        save_state(s.state, s.state_path)
+    if waited is not None and _has_branch(s.git, waited):
+        # its work was done when main went red (F106 D5): main joins it, its checks run again
+        if not _catch_up(s, waited):
+            rec.result = "stopped"
+            block(s, task.path, f"its work on {waited} clashes with {MAIN}")
+            return
+        s.log(f"[{RUNNER_AGENT}] {task.id}'s work waited on {waited} for {MAIN}: checks again")
+        with _settling(s, job.role, task, None):
+            _settle_lead_task(s, task, rec, logs, job)
+        return
+    parked = s.state.interrupted.get(job_key("lead-ticket", task.id))
+    if parked and parked["branch"] == branch:
+        s.git.checkout(branch)  # an interrupted run's work, which its session resumes
+    else:
+        s.git.fresh_branch(branch, MAIN)
     try:
         result = call_claude(s, job, task.milestone, task.id, ticket=task.id, park=True)
     except Parked:
@@ -2447,8 +2567,12 @@ def _settle_lead_task(s: Session, task: Task, rec: TaskRecord, logs: Path, job: 
         rec.result = "stopped"
         block(s, task.path, "the lead ticket changed nothing")
         return
-    if not _check_all(s, task.id, logs, "check-all.txt"):
+    failed = [r.name for r in _check_results(s, task.id, logs, "check-all.txt") if not r.ok]
+    if failed:
         s.git.checkout(MAIN)
+        if _main_is_red(s, task, failed, logs):
+            rec.result = "waits for main"
+            return
         rec.result = "stopped"
         block(s, task.path, f"check-all failed; the work is on {branch}")
         return
@@ -4466,6 +4590,7 @@ OWNER_WAITS = {
     "review-stop": "review",
     "signoff": "sign-off",
     "planning": "planning reply",
+    MAIN_RED_KIND: "failing check on main",
 }
 
 
@@ -4497,6 +4622,8 @@ def _idle_line(s: Session, ready: list[Task], paused: set[str], held: Mapping[st
         causes.append(_tickets_wait(len(paused), "behind a blocked or escalated one"))
     if held:
         causes.append(_tickets_wait(len(held), "for a sign-off"))
+    if red := waits_for_main(s, ready):
+        causes.append(_tickets_wait(len(red), f"for {MAIN} to pass its checks"))
     items = [] if s.project_id is None else _record(s, metrics.open_owner_items, s.project_id)
     kinds = Counter(row["kind"] for row in items or [])
     asked = [
@@ -4723,6 +4850,7 @@ def work_queue(
         fresh_reading(s)
         if reviews:
             _queue_due_review(s)
+        _look_at_main(s)
         ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
         if milestone is not None:  # either form of the key (ADR 16 item 6)
             ready = [t for t in ready if short_key(t.milestone) == short_key(milestone)]
@@ -4731,8 +4859,9 @@ def work_queue(
         held = _held(s.repo, ready)
         rows = _runnable_rows(s, ready, escalate=escalate, reviews=reviews)
         behind = waiting_rows(s, ready)
+        red = waits_for_main(s, ready)
         task = (
-            _next_task(s, ready, done, paused | held.keys() | behind.keys())
+            _next_task(s, ready, done, paused | held.keys() | behind.keys() | red)
             if take_tickets
             else None
         )

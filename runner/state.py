@@ -48,6 +48,12 @@ class State:
     # The owner paused the factory (f5-18), and when it took: the run finishes the job it is
     # on, then picks nothing until they resume. Not `paused_until`, which is a limit's.
     owner_pause: str | None = None
+    # Main fails checks a lead ticket failed too (F106 D5): {"checks", "head", "ticket"}. No
+    # other lead ticket runs until main passes them again; "head" is main when last looked at.
+    main_red: dict[str, Any] | None = None
+    # task id -> its branch: a lead ticket whose work waits there for main to pass, and merges
+    # on its next run without a new session
+    waits_on_main: dict[str, str] = field(default_factory=dict)
 
     def runs_used(self, milestone: str) -> int:
         return self.headless_runs.get(milestone, 0)

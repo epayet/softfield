@@ -73,6 +73,21 @@ def test_a_tasks_own_tests_run_even_when_another_queued_task_lists_them(repo: Pa
     assert not [arg for arg in calls[-1] if arg.startswith("--ignore=")]
 
 
+def test_only_runs_the_checks_it_names(repo: Path, monkeypatch):
+    """F106 D5: the runner runs on main only the checks a lead ticket failed."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(checks, "_exec", _fake_exec({"ruff check": 1}, calls))
+
+    def translations(repo: Path, timeout: int) -> list[str]:
+        raise AssertionError("translations ran")
+
+    monkeypatch.setattr(checks, "_i18n_problems", translations)
+    monkeypatch.setattr(checks, "layout_problems", lambda repo: ["tests/stray_tmp.py"])
+    results = checks.check_all(repo, 60, only=["layout", "ruff check"])
+    assert [(r.name, r.ok) for r in results] == [("ruff check", False), ("layout", False)]
+    assert calls == [["uv", "run", "ruff", "check", "."]]
+
+
 def test_report_ends_with_a_verdict():
     results = [checks.Check("ruff check", True), checks.Check("mypy", False, "bad type")]
     text = checks.render(results)

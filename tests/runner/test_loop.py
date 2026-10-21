@@ -922,7 +922,9 @@ def _passes(monkeypatch, ok: bool = True) -> list[str | None]:
     """Fake check-all; returns the task ids it was run for."""
     calls: list[str | None] = []
 
-    def check_all(repo, timeout, *, task_id=None, fix=False):
+    def check_all(repo, timeout, *, task_id=None, fix=False, only=None):
+        if only is not None:  # the failed checks again, on main: main passes them
+            return [checks.Check(name, True) for name in only]
         calls.append(task_id)
         return [checks.Check("tests", ok, "" if ok else "1 failed")]
 
@@ -1016,6 +1018,136 @@ def test_a_blocked_lead_ticket_is_on_the_owners_desk_at_once(
     reason = "check-all failed; the work is on task/m1-01-lead"
     assert item["text"] == f"m1-01-lead blocked: {reason}{said}"
     assert not item["command"] and item["resolved"] is None
+
+
+# --- a red main blocks nothing (F106 D5, ADR 29 item 7) -----------------------------------
+
+STRAY = "coucou/stray_tmp.py"
+
+
+def _red_main(monkeypatch, fails: dict[str | None, list[str]]) -> list[tuple[str | None, object]]:
+    """Fake check-all: ``fails`` names the checks that fail, by ticket on its branch and under
+    ``None`` on main (the runner's run of only the failed checks). A test changes it to fix
+    main. Returns (task id, the checks asked for) for each run."""
+    calls: list[tuple[str | None, object]] = []
+
+    def check_all(repo_, timeout, *, task_id=None, fix=False, only=None):
+        calls.append((task_id, None if only is None else tuple(only)))
+        failing = fails.get(None, []) if only is not None else fails.get(task_id, [])
+        names = list(only) if only is not None else ["ruff check", "layout", "tests"]
+        return [
+            checks.Check(
+                name, name not in failing, f"{STRAY}: stray\n2\n3\n4\n5" * (name in failing)
+            )
+            for name in names
+        ]
+
+    monkeypatch.setattr(checks, "check_all", check_all)
+    return calls
+
+
+def _fix_main(repo: Path) -> None:
+    """Someone mends main outside the run (a terminal session)."""
+    (repo / "coucou" / "mended.py").write_text("MENDED = True\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "mend main")
+
+
+def test_a_lead_ticket_failing_only_where_main_fails_waits_on_its_branch(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _lead_task(repo, "m1-02-lead")
+    _add_task(repo, "m2-01-thing")
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    fake_model.append(_implement)
+    calls = _red_main(monkeypatch, {"m1-01-lead": ["layout"], None: ["layout"]})
+    report = _run(repo)
+    ready = repo / ".factory" / "tasks" / "ready"
+    assert (ready / "m1-01-lead.md").exists() and (ready / "m1-02-lead.md").exists()
+    assert not (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").exists()
+    assert "return 42" in git(repo, "show", "task/m1-01-lead:coucou/thing.py")
+    assert len(jobs) == 1  # no other lead ticket was taken
+    assert (repo / ".factory" / "tasks" / "done" / "m2-01-thing.md").exists()  # developers go on
+    assert ("m1-01-lead", None) in calls and (None, ("layout",)) in calls
+    [item] = _rows(repo, "owner_items")
+    assert (item["kind"], item["subject"], item["resolved"]) == ("main-red", "layout", None)
+    text = str(item["text"])
+    assert STRAY in text and "m1-01-lead" in text
+    assert "5" not in text.split(STRAY, 1)[1]  # its first lines only
+    assert {t.id: t.result for t in report.tasks}["m1-01-lead"] != "blocked"
+
+
+def test_once_main_passes_the_waiting_lead_ticket_merges_from_its_branch(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    fails: dict[str | None, list[str]] = {"m1-01-lead": ["layout"], None: ["layout"]}
+    _red_main(monkeypatch, fails)
+    _run(repo)
+    fails.clear()
+    _fix_main(repo)
+    report = _run(repo)
+    assert len(jobs) == 1  # its work isn't done again
+    assert [t.result for t in report.tasks] == ["done"]
+    assert (repo / ".factory" / "tasks" / "done" / "m1-01-lead.md").exists()
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+    assert (repo / "coucou" / "mended.py").exists()
+    [item] = _rows(repo, "owner_items")
+    assert item["kind"] == "main-red" and item["resolved"] is not None
+
+
+def test_the_ticket_that_would_mend_main_is_named_and_runs(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _lead_task(repo, "m1-02-mend")
+    mend = repo / ".factory" / "tasks" / "ready" / "m1-02-mend.md"
+    mend.write_text(mend.read_text().replace("files:\n", f"files:\n  - {STRAY}\n"))
+    (repo / STRAY).write_text("")  # the scratch file that fails the layout check
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the mend")
+    fails: dict[str | None, list[str]] = {"m1-01-lead": ["layout"], None: ["layout"]}
+    script, jobs = fake_lead
+
+    def mends(job, repo_):
+        (repo_ / STRAY).write_text("# mended\n")
+        fails.clear()
+
+    script.extend([_lead_implements, mends])
+    _red_main(monkeypatch, fails)
+    report = _run(repo)
+    [item] = _rows(repo, "owner_items")
+    assert "m1-02-mend" in str(item["text"]) and item["resolved"] is not None
+    assert len(jobs) == 2
+    assert {t.id: t.result for t in report.tasks if t.result == "done"}.keys() == {
+        "m1-01-lead",
+        "m1-02-mend",
+    }
+
+
+@pytest.mark.parametrize(
+    ("branch", "main"),
+    [
+        (["layout"], []),  # main passes it
+        (["layout", "tests"], ["layout"]),  # one of two fails on the branch only
+    ],
+)
+def test_a_lead_ticket_failing_a_check_main_passes_is_blocked(
+    repo, fake_model, fake_lead, monkeypatch, branch, main
+):
+    _lead_task(repo, "m1-01-lead")
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    calls = _red_main(monkeypatch, {"m1-01-lead": branch, None: main})
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["stopped"]
+    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").exists()
+    assert (None, tuple(branch)) in calls
+    assert [item["kind"] for item in _rows(repo, "owner_items")] == ["blocked"]
 
 
 def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fake_lead):
