@@ -38,3 +38,10 @@ Read `.factory/adr/29-the-lead-looks-at-a-blocked-ticket.md` (every item; it mus
 - `docs/workflow.md` says what follows a block
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
