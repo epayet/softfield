@@ -34,3 +34,10 @@ Read `.factory/cards/f106-where-do-blocked-tickets-go-for.md` (D5 and "What happ
 - `docs/workflow.md` says what a red main does to the queue
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
