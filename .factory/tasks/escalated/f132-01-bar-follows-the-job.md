@@ -30,3 +30,12 @@ Read `.factory/cards/f132-the-overview-shows-the-whole-factory.md` ("What happen
 - the backlog line is gone
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: all-tests)
+attempts: 3
+tokens: 6710315
+logs: .factory/var/runs/20261021-090717/f132-01-bar-follows-the-job
+```
