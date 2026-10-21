@@ -1,4 +1,4 @@
-# Milestone F167: what's your current verdict on splitting the work between…
+# Milestone F167: Is the split between local developers and the lead smart and cheap?
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-21.
