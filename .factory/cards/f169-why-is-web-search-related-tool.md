@@ -1,4 +1,4 @@
-# Milestone F169: Why is web search related tool not allowed for the…
+# Milestone F169: Let the planner search and read the web for research
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-21.
