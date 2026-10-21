@@ -35,3 +35,12 @@ Read `.factory/cards/f152-when-a-ticket-is-on-the.md` (D1–D3) and the mock-up 
 - a card with one set-aside ticket reads "1 set aside, won't run" on the board and on its page
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: all-tests)
+attempts: 3
+tokens: 11934749
+logs: .factory/var/runs/20261021-090717/f152-01-review-step-on-the-card
+```
