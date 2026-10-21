@@ -2511,6 +2511,42 @@ def block(s: Session, task_path: Path, reason: str) -> None:
         )
     where = f"ticket in {target.relative_to(s.repo).as_posix()}"
     s.log(console.stopped(task_path.stem, "blocked", reason, where, waiting))
+    _look_at_block(s, target, reason, escalated=task_path.parent.name == "escalated")
+
+
+def _look_at_block(s: Session, ticket: Path, reason: str, *, escalated: bool) -> None:
+    """ADR 29 items 1, 4–6: one look each time a ticket of a card is blocked. The runner's own
+    message on the card's thread (an archived one opens again) and its planner row; none for a
+    bug, which has no card, nor without the metrics database."""
+    if s.project_id is None or s.db is None:
+        return
+    try:
+        thread = planner.thread_key(parse_task(ticket, s.cfg.default_max_diff).milestone)
+    except (TaskError, planner.PlannerError):  # a bug's thread key is refused: no card
+        return
+    branches = ([f"escalation/{ticket.stem}"] if escalated else []) + [f"task/{ticket.stem}"]
+    branch = next((b for b in branches if _has_branch(s.git, b)), None)
+    runs = [p for p in s.run_dir.glob(f"{ticket.stem}*") if _run_of(p.name, ticket.stem)]
+    logs = max(runs, key=lambda p: _run_of(p.name, ticket.stem) or 0, default=s.run_dir)
+    text = planner.look_text(ticket.stem, reason, branch, _rel(s, logs))
+    _record(s, _queue_look, s.project_id, thread, text, now().isoformat())
+
+
+def _run_of(name: str, task_id: str) -> int | None:
+    """Which run of ``task_id`` a log folder is (``_logs_dir``'s names): 1, 2, …, else None."""
+    if name == task_id:
+        return 1
+    n = name.removeprefix(f"{task_id}-run")
+    return int(n) if n != name and n.isdigit() else None
+
+
+def _queue_look(conn: sqlite3.Connection, project_id: int, thread: str, text: str, at: str) -> None:
+    found = metrics.planner_thread(conn, project_id, thread, at)
+    if found["archived"] is not None:  # as an owner's message does
+        metrics.set_thread_archived(conn, found["id"], None)
+    said = metrics.add_planner_message(conn, found["id"], planner.RUNNER, at, text)
+    reason = f"a ticket blocked on {planner.thread_name(thread)}"
+    metrics.queue_job(conn, project_id, PLANNER, planner.look_subject(thread, said), reason, at)
 
 
 def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
@@ -4166,9 +4202,16 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     if s.project_id is None:
         return
     try:
-        thread, request_id = planner.request_of(row.subject)
-        request = _record(s, metrics.find_request, request_id)
-        text, comments = planner.message(request["value"] if request else None)
+        if (looked := planner.look_of(row.subject)) is not None:  # the runner's (ADR 29)
+            thread, message_id = looked
+            runners = _record(s, metrics.find_planner_message, message_id)
+            if runners is None or runners["author"] != planner.RUNNER:
+                raise planner.PlannerError(f"the runner's message {message_id} is gone")
+            text, comments = str(runners["text"]), dict[int, str]()
+        else:
+            thread, request_id = planner.request_of(row.subject)
+            request = _record(s, metrics.find_request, request_id)
+            text, comments = planner.message(request["value"] if request else None)
     except planner.PlannerError as exc:
         s.report.notes.append(f"The planner's {row.subject} can't run: {exc}.")
         return
@@ -4184,8 +4227,9 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     earlier = ""
     if not found["session_id"]:  # a new thread, or replies written outside a job
         said = list(_record(s, metrics.planner_messages, found["id"]) or [])
-        # up to the lead's last reply: the owner's after it are this message or queued ones
-        while said and said[-1]["author"] == "owner":
+        # up to the lead's last reply: the owner's or the runner's after it are this message
+        # or queued ones
+        while said and said[-1]["author"] != "lead":
             said.pop()
         earlier = planner.history(said)
     # F49 D4: the threads of the cards merged into this one, read once, by a resumed job too
@@ -4206,7 +4250,9 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         stands = ""
     job = JobSpec(
         role=PLANNER,
-        prompt=planner.prompt(thread, text, comments, threads, earlier, stands),
+        prompt=planner.prompt(
+            thread, text, comments, threads, earlier, stands, blocked=looked is not None
+        ),
         timeout=s.cfg.claude_timeout,
         # A card's drafts, on its plan branch only; the general thread only talks (f6 D4)
         edit=planner.drafts(thread) if branch else (),
@@ -4259,11 +4305,18 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         job_id=s.last_job_id,
     )
     name = planner.thread_name(thread)
-    item = (
-        f"The lead answered your message on {name}: your answers are wanted."
-        if result.ok
-        else f"The lead couldn't answer your message on {name}: send it again."
-    )
+    if looked is not None:
+        item = (
+            f"The lead looked at a ticket blocked on {name}: your answers are wanted."
+            if result.ok
+            else f"The lead couldn't look at the ticket blocked on {name}: it waits on your desk."
+        )
+    else:
+        item = (
+            f"The lead answered your message on {name}: your answers are wanted."
+            if result.ok
+            else f"The lead couldn't answer your message on {name}: send it again."
+        )
     _record(
         s,
         metrics.upsert_owner_item,

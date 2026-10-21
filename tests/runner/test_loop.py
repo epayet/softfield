@@ -705,11 +705,15 @@ def _timed_out(repo: Path, prompt: str) -> OpencodeRun:
 
 @pytest.fixture
 def fake_lead(monkeypatch):
-    """Scripted headless Claude: each call runs the next function with the job and the repo."""
+    """Scripted headless Claude: each call runs the next function with the job and the repo.
+    The lead's look at a ticket the runner blocked (f106-04) isn't scripted: it answers
+    nothing and isn't listed."""
     script: list[Callable[[ClaudeJob, Path], None]] = []
     jobs: list[ClaudeJob] = []
 
     def run_claude(job, repo, timeout, log_path, now, resume=None):
+        if job.kind == "planner" and "This message is the runner's" in job.prompt:
+            return JobResult(ok=True, text="", duration_s=1.0)
         jobs.append(job)
         script.pop(0)(job, repo)
         return JobResult(ok=True, text="", duration_s=1.0)
@@ -1013,11 +1017,130 @@ def test_a_blocked_lead_ticket_is_on_the_owners_desk_at_once(
     script.append(_lead_implements)
     _passes(monkeypatch, ok=False)
     _run(repo)
-    [item] = _rows(repo, "owner_items")
+    [item, look] = _rows(repo, "owner_items")
+    assert look["kind"] == "planning"  # the lead's look waits for the owner (f106-04)
     assert (item["kind"], item["subject"]) == ("blocked", "m1-01-lead")
     reason = "check-all failed; the work is on task/m1-01-lead"
     assert item["text"] == f"m1-01-lead blocked: {reason}{said}"
     assert not item["command"] and item["resolved"] is None
+
+
+# --- the lead looks at a blocked ticket (ADR 29 items 1, 2, 4–6, f106-04) --------------------
+
+LOOKED = 'It failed its tests.\n\n```json\n{"points": [{"n": 1, "title": "Rework it", "answer":'
+LOOKED += ' "The test needs the fixture.", "action": "A replan", "outcome": "question"}]}\n```'
+
+
+def _blocks_then_looks(
+    monkeypatch, prompts: list[str], limited: datetime | None = None
+) -> list[tuple[str, str | None]]:
+    """Headless Claude: a lead ticket writes its file; a planner job (a look) answers with
+    ``LOOKED``, after a limit first with ``limited``. Returns (kind, resume) for each job."""
+    calls: list[tuple[str, str | None]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        calls.append((job.kind, resume))
+        if job.kind == "lead-ticket":
+            _implement(repo_, "")
+            return JobResult(ok=True, text="", duration_s=1.0)
+        prompts.append(job.prompt)
+        if limited is not None and resume is None:
+            raise UsageLimited(limited, session_id="s1")
+        return JobResult(ok=True, text=LOOKED, duration_s=1.0, num_turns=2, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    return calls
+
+
+def test_a_blocked_lead_ticket_of_a_card_gets_one_look_on_its_thread(repo, fake_model, monkeypatch):
+    """The runner's message on M1's thread names the ticket, the reason, the branch and the
+    logs; one planner row for it; the lead's reply then waits for the owner's answers."""
+    _lead_task(repo, "m1-01-lead")
+    prompts: list[str] = []
+    calls = _blocks_then_looks(monkeypatch, prompts)
+    _passes(monkeypatch, ok=False)
+    _run(repo)
+    assert calls == [("lead-ticket", None), ("planner", None)]
+    [thread] = _rows(repo, "planner_threads")
+    assert thread["card"] == "m1"
+    look, reply = _messages(repo)
+    assert (look["author"], reply["author"]) == ("runner", "lead")
+    said = str(look["text"])
+    assert "m1-01-lead" in said and "check-all failed" in said and "task/m1-01-lead" in said
+    assert ".factory/var/runs/" in said and "/m1-01-lead" in said  # its log folder
+    [row] = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
+    assert row["subject"] == f"m1#m{look['id']}" and row["done"] is not None
+    [prompt] = prompts
+    assert said in prompt and "the runner's" in prompt  # what a look is
+    assert reply["text"] == "It failed its tests." and reply["points"]
+    [item] = [i for i in _rows(repo, "owner_items") if i["kind"] == "planning"]
+    assert (item["subject"], item["resolved"]) == ("m1", None)
+    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").is_file()
+
+
+def test_a_look_at_a_limit_parks_and_runs_after_the_reset(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """ADR 29 item 5: a look is a planner job like any other."""
+    resets = THURSDAY + timedelta(hours=1)
+    _lead_task(repo, "m1-01-lead")
+    prompts: list[str] = []
+    calls = _blocks_then_looks(monkeypatch, prompts, limited=resets)
+    _passes(monkeypatch, ok=False)
+    _run(repo)
+    assert calls == [("lead-ticket", None), ("planner", None), ("planner", "s1")]
+    assert [m["author"] for m in _messages(repo)] == ["runner", "lead"]  # one look, one reply
+    [row] = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
+    assert row["done"] is not None
+
+
+def test_a_blocked_bug_ticket_gets_no_look(repo, fake_model, monkeypatch):
+    """ADR 29 item 6: a bug has no card, so no thread."""
+    _add_bug(repo, "bug-01-thing")
+    path = repo / ".factory" / "tasks" / "ready" / "bug-01-thing.md"
+    path.write_text(path.read_text().replace("milestone: bugs\n", "milestone: bugs\nagent: lead\n"))
+    git(repo, "commit", "-qam", "the bug is the lead's")
+    prompts: list[str] = []
+    calls = _blocks_then_looks(monkeypatch, prompts)
+    _passes(monkeypatch, ok=False)
+    _run(repo)
+    assert calls == [("lead-ticket", None)]
+    assert (repo / ".factory" / "tasks" / "blocked" / "bug-01-thing.md").is_file()
+    assert _messages(repo) == [] and _rows(repo, "planner_threads") == []
+    assert [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"] == []
+
+
+def test_with_no_metrics_database_a_ticket_is_still_blocked(repo, fake_model, monkeypatch):
+    _lead_task(repo, "m1-01-lead")
+    (repo / "var").mkdir()
+    (repo / "var" / "a-file").write_text("")
+    cfg = replace(_config(repo), metrics_db=repo / "var" / "a-file" / "metrics.sqlite")
+    prompts: list[str] = []
+    calls = _blocks_then_looks(monkeypatch, prompts)
+    _passes(monkeypatch, ok=False)
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None and [t.result for t in report.tasks] == ["stopped"]
+    assert calls == [("lead-ticket", None)]
+    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").is_file()
+
+
+def test_a_look_opens_an_archived_thread_again(repo, fake_model, monkeypatch):
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+    thread = metrics.planner_thread(conn, project, "m1", THURSDAY.isoformat())["id"]
+    metrics.add_planner_message(conn, thread, "lead", THURSDAY.isoformat(), "Planned.")
+    metrics.set_thread_archived(conn, thread, THURSDAY.isoformat(), "approved")
+    conn.close()
+    _lead_task(repo, "m1-01-lead")
+    prompts: list[str] = []
+    _blocks_then_looks(monkeypatch, prompts)
+    _passes(monkeypatch, ok=False)
+    _run(repo)
+    [row] = _rows(repo, "planner_threads")
+    assert row["archived"] is None
+    assert [m["author"] for m in _messages(repo)] == ["lead", "runner", "lead"]
+    [prompt] = prompts
+    assert "Planned." in prompt  # the thread's history, up to the lead's last reply
 
 
 # --- a red main blocks nothing (F106 D5, ADR 29 item 7) -----------------------------------
@@ -1147,7 +1270,7 @@ def test_a_lead_ticket_failing_a_check_main_passes_is_blocked(
     assert [t.result for t in report.tasks] == ["stopped"]
     assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").exists()
     assert (None, tuple(branch)) in calls
-    assert [item["kind"] for item in _rows(repo, "owner_items")] == ["blocked"]
+    assert [item["kind"] for item in _rows(repo, "owner_items")] == ["blocked", "planning"]
 
 
 def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fake_lead):
@@ -1550,6 +1673,8 @@ def test_an_escalation_whose_work_fails_check_all_stays_off_main(
         in (repo / ".factory" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
     )
     assert git(repo, "status", "--porcelain") == ""
+    [look] = [m for m in _messages(repo) if m["author"] == "runner"]
+    assert "Its work is on escalation/m1-01-thing" in str(look["text"])
 
 
 def test_an_escalation_with_no_decision_keeps_its_work_off_main(
@@ -1883,11 +2008,14 @@ def test_a_clean_requeue_gets_no_repair_turn(repo, fake_model, fake_lead):
 
 
 def _lead_sessions(monkeypatch):
-    """Scripted headless Claude that hands out session ids and records what each job resumed."""
+    """Scripted headless Claude that hands out session ids and records what each job resumed.
+    As in ``fake_lead``, the lead's look at a blocked ticket isn't scripted."""
     script: list[Callable[[ClaudeJob, Path], None]] = []
     calls: list[tuple[ClaudeJob, str | None]] = []
 
     def run_claude(job, repo, timeout, log_path, now, resume=None):
+        if job.kind == "planner" and "This message is the runner's" in job.prompt:
+            return JobResult(ok=True, text="", duration_s=1.0)
         calls.append((job, resume))
         script.pop(0)(job, repo)
         return JobResult(ok=True, text="", duration_s=1.0, session_id=f"s{len(calls)}")

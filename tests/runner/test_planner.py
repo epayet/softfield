@@ -414,6 +414,36 @@ def test_a_job_with_no_session_reads_what_was_said_on_its_thread_before():
     assert planner.history([]) == ""
 
 
+def test_a_look_is_the_runners_message_by_its_own_subject():
+    """ADR 29 item 1: a look's row names the runner's message (``f7#m12``), never a request,
+    and its history and its export say it was the runner's."""
+    subject = planner.look_subject("f7", 12)
+    assert subject == "f7#m12" and planner.look_of(subject) == ("f7", 12)
+    assert planner.look_of(planner.row_subject("f7", 12)) is None  # an owner's message
+    with pytest.raises(planner.PlannerError):
+        planner.request_of(subject)
+    text = planner.look_text("f7-02-x", "check-all failed", "task/f7-02-x", ".factory/var/runs/r")
+    assert "f7-02-x blocked: check-all failed." in text and "task/f7-02-x" in text
+    assert ".factory/var/runs/r" in text and "replan" in text
+    assert "left no branch" in planner.look_text("f7-02-x", "why", None, "logs")
+    said = [{"author": "runner", "text": text, "points": None, "proposals": None}]
+    assert planner.history(said).startswith(
+        "\nWhat was said on this thread before, oldest first:\n\nThe runner:\n"
+    )
+    assert (
+        planner.export("F7", None, [{**said[0], "at": "2026-10-21T10:00:00"}]).count(
+            "## The runner, 2026-10-21 10:00"
+        )
+        == 1
+    )
+
+
+def test_a_looks_prompt_says_what_a_look_is_and_a_message_doesnt():
+    looked = planner.prompt("f7", "f7-02-x blocked.", {}, blocked=True)
+    assert "the runner's, not the owner's" in looked and "`replan`" in looked
+    assert "the runner's, not the owner's" not in planner.prompt("f7", "Go on.", {})
+
+
 def test_a_merged_threads_history_says_whose_it_was():
     """F49 D4: the duplicate's thread, read by the kept thread's next job."""
     said = [{"author": "owner", "text": "Same as F10?", "points": None}]

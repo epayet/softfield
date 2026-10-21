@@ -110,6 +110,33 @@ def request_of(subject: str) -> tuple[str, int]:
     return thread_key(thread), int(request_id)
 
 
+RUNNER = "runner"  # the author of a look's message: never the owner's words (ADR 29 item 1)
+
+
+def look_subject(thread: str, message_id: int) -> str:
+    """The planner row's subject for a look at a blocked ticket: ``f7#m12``, the runner's
+    message on the thread, as no request of the owner's carries it."""
+    return f"{thread}#m{message_id}"
+
+
+def look_of(subject: str) -> tuple[str, int] | None:
+    """A look's thread and message id, from its row's subject; None for an owner's message."""
+    thread, _, said = subject.rpartition("#")
+    if not (said.startswith("m") and said[1:].isdigit()):
+        return None
+    return thread_key(thread), int(said[1:])
+
+
+def look_text(ticket: str, reason: str, branch: str | None, logs: str) -> str:
+    """The runner's message when it blocks ``ticket`` (ADR 29 items 1 and 2)."""
+    work = f"Its work is on {branch}" if branch else "It left no branch"
+    return (
+        f"{ticket} blocked: {reason}.\n{work}; its run's logs are in {logs}.\n"
+        "What went wrong, and what is the fix? Propose it as a replan: the ticket reworked,"
+        " split or set aside."
+    )
+
+
 def message(value: object) -> tuple[str, dict[int, str]]:
     """A ``plan_message``'s value: its free text and the owner's comments by point number."""
     try:
@@ -560,8 +587,9 @@ def history(messages: Sequence[sqlite3.Row | Mapping[str, Any]], merged: str | N
     text and its points. Lead replies written outside a job (2026-10-07) have no session. With
     ``merged``, the thread of that card, merged into the job's, read once (F49 D4)."""
     said = []
+    names = {"owner": "The owner", RUNNER: "The runner"}
     for message in messages:
-        who = "The owner" if message["author"] == "owner" else "You (the lead)"
+        who = names.get(message["author"], "You (the lead)")
         points = json.loads(message["points"]) if message["points"] else []
         if message["author"] == "owner":
             lines = [f"On point {p['n']}: {p['comment']}" for p in points if "comment" in p]
@@ -676,7 +704,7 @@ def _quoted(text: str) -> str:
 def _exported(message: sqlite3.Row | Mapping[str, Any]) -> str:
     """One message for the export: its author and time as a heading, then what it said, quoted:
     its text, the lead's points and proposals, or the owner's comments by point."""
-    who = "The owner" if message["author"] == "owner" else "The lead"
+    who = {"owner": "The owner", RUNNER: "The runner"}.get(message["author"], "The lead")
     at = datetime.fromisoformat(str(message["at"])).strftime("%Y-%m-%d %H:%M")
     points = json.loads(message["points"]) if message["points"] else []
     proposals = json.loads(message["proposals"]) if message["proposals"] else []
@@ -721,6 +749,11 @@ _LOOK = (
     f" dashboard page as text with `{look.COMMAND} page <address>` (`/`, `/planning`,"
     " `/planning/f95`), both read-only: look before answering what the owner sees.\n"
 )
+# ADR 29 items 1 and 2: what a look is, in two lines
+_BLOCKED = (
+    "\nThis message is the runner's, not the owner's: it blocked a ticket of this card. Read its"
+    " branch and logs, then say what went wrong and propose the fix as a `replan`.\n"
+)
 
 
 def prompt(
@@ -730,14 +763,17 @@ def prompt(
     threads: Collection[str] = (),
     earlier: str = "",
     stands: str = "",
+    *,
+    blocked: bool = False,
 ) -> str:
     """The planner job's prompt for one message: a card's drafts on its plan branch, none on
     the general thread (``prompts.PLANNER``); the other threads named, to spot a repeat;
     ``earlier`` the thread's ``history`` when the job has no session to resume, then the
     histories of the threads merged into it not yet read (F49 D4); ``stands`` where the work
-    stands now (``where_it_stands``)."""
+    stands now (``where_it_stands``). ``blocked``: the message is the runner's look at a
+    ticket it blocked (ADR 29)."""
     lines = "".join(f"- On your point {n}: {comment}\n" for n, comment in comments.items())
-    said = _LOOK + stands + earlier
+    said = _LOOK + stands + earlier + (_BLOCKED if blocked else "")
     said += f"\nTheir comments on your last points:\n{lines}" if lines else ""
     others = [t for t in threads if t not in (thread, GENERAL)]
     others += [GENERAL] if GENERAL in threads and thread != GENERAL else []

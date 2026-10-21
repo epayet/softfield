@@ -640,9 +640,10 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
                 )
             )
 
-    # Threads waiting for the lead: the owner's message is the latest and a planner row about
-    # it is open, or an open plan_message request names it whatever is stored (the runner
-    # stores that message, and makes the thread, only at its next pick). Each shows once.
+    # Threads waiting for the lead: the owner's message (or the runner's look at a blocked
+    # ticket, ADR 29) is the latest and a planner row about it is open, or an open plan_message
+    # request names it whatever is stored (the runner stores that message, and makes the
+    # thread, only at its next pick). Each shows once.
     if project_id is not None:
         planned = {
             str(r["subject"] or "").split("#")[0]
@@ -653,7 +654,7 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
             "SELECT t.card FROM planner_threads t"
             " JOIN planner_messages m ON m.id = ("
             "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
-            " WHERE t.project_id = ? AND m.author = 'owner' ORDER BY t.id",
+            " WHERE t.project_id = ? AND m.author IN ('owner', 'runner') ORDER BY t.id",
             (project_id,),
         ).fetchall()
         asked = conn.execute(

@@ -1001,7 +1001,8 @@ def find_request(conn: sqlite3.Connection, request_id: int) -> sqlite3.Row | Non
     return row
 
 
-AUTHORS = ("owner", "lead")  # who writes in a planning thread (f6 D1)
+# who writes in a planning thread (f6 D1); the runner, when it blocks a ticket (ADR 29 item 1)
+AUTHORS = ("owner", "lead", "runner")
 
 
 def planner_thread(
@@ -1091,6 +1092,13 @@ def add_planner_message(
         ),
     ).fetchone()
     return int(row[0])
+
+
+def find_planner_message(conn: sqlite3.Connection, message_id: int) -> sqlite3.Row | None:
+    found: sqlite3.Row | None = conn.execute(
+        "SELECT * FROM planner_messages WHERE id = ?", (message_id,)
+    ).fetchone()
+    return found
 
 
 def planner_messages(conn: sqlite3.Connection, thread_id: int) -> list[sqlite3.Row]:

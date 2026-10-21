@@ -3971,3 +3971,34 @@ def test_a_blocked_ticket_asked_for_is_on_its_way_and_leaves_the_count(
         (FIRST, False, "waiting on f12-03"),
         (SECOND, True, ON_ITS_WAY[kind]),
     ]
+
+
+# --- the lead looks at a blocked ticket (ADR 29 items 1 and 4, f106-04) ----------------------
+
+
+LOOK = "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board."
+
+
+def test_the_runners_look_shows_as_the_runners_and_waits_for_the_lead(planning, db_path, serve):
+    """The runner's message on F9's thread, its planner row open: drawn as the runner's, not
+    as the owner's words; nowhere under "Didn't go through" or "Your answers wanted"; the
+    thread waits for the lead."""
+
+    def look(conn: sqlite3.Connection) -> None:
+        thread = metrics.planner_thread(conn, planning, "f9", _at(timedelta(minutes=5)))["id"]
+        said = metrics.add_planner_message(conn, thread, "runner", _at(timedelta(minutes=5)), LOOK)
+        metrics.queue_job(
+            conn, planning, "planner", f"f9#m{said}", "a blocked ticket", _at(timedelta(minutes=5))
+        )
+
+    _write(db_path, look)
+    client = serve()
+    page = _thread(client, "f9")
+    [drawn] = re.findall(r'<article class="message[^"]*"[^>]*>(.*?)</article>', page, re.S)
+    assert _text(drawn).startswith("The runner · ") and LOOK in _text(drawn)
+    assert "You ·" not in _text(drawn) and "Edit" not in _text(drawn)
+    assert 'id="waiting"' in page  # the lead's reply is next
+    html = _page(client)
+    assert not _refused_items(html)
+    assert "/planning/f9" not in dict(_items(_groups(html).get("answers", "")))
+    assert ("/planning/f9", "Parallel developers") in _coming_items(html)

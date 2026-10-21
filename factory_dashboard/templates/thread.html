@@ -85,6 +85,12 @@
       </div>
       {% endif %}
     </article>
+    {% elif msg.author == "runner" %}
+    {# ADR 29 item 1: the runner's word when it blocks a ticket, never the owner's #}
+    <article class="message runner-message" style="background: var(--plate); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font: 600 12px var(--mono); color: var(--muted)">The runner · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+    </article>
     {% else %}
     <article class="message" style="background: var(--bay); border: 1px solid var(--opus); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
       <span style="font: 600 12px var(--mono); color: var(--opus)">The lead · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
