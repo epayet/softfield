@@ -1,6 +1,6 @@
 # Review: F135, reviews stopped at once on end-to-end tests the split removed
 
-- **Status:** round 1 done, clean, ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-21.
 
 ## Sign-off sheet
 

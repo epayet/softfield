@@ -1,6 +1,7 @@
 # Milestone F135: Reviews stop at once: they look for end-to-end tests the split removed
 
-> **State:** ready · **Priority:** 11 · **Area:** factory
+> **State:** done · **Priority:** 11 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-21. Base: git tag `f135-why-is-there-a-couple-of-start`. Report: [`.factory/reviews/f135-why-is-there-a-couple-of.md`](../reviews/f135-why-is-there-a-couple-of.md).
 > Planted by the owner on 2026-10-15.
 
 ## Notes
