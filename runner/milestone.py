@@ -435,6 +435,7 @@ def _e2e(s: Session) -> GateResult:
 
 
 RESTART = "restart"
+E2E_STOP = "end-to-end tests fail on staging"
 PAUSED = "tickets paused behind a blocked or escalated one: "
 WAITS = "waits for "
 
@@ -492,8 +493,12 @@ def _ticket_milestones(repo: Path, folder: str) -> set[str]:
 
 def _reviewed(repo: Path, state: State, key: str) -> bool:
     """Whether ``key`` has its review: the loop recorded its stop (a restart's carries on), or
-    a report was written outside the runner, with no rounds of its own in state.json."""
+    a report was written outside the runner, with no rounds of its own in state.json. An
+    end-to-end stop in a project that names no end-to-end tests is stale: F28's and F19's
+    came from the `tests/e2e` the split removed (F135 D2)."""
     stop = state.review_stop.get(key)
+    if stop == E2E_STOP:
+        return bool(project_checks(repo).e2e)
     if stop is not None:
         return stop != RESTART
     return key not in state.review_counts and milestone_file(repo, "reviews", key).is_file()
@@ -625,7 +630,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         s.log("The whole milestone diff." if round_no == 1 else "The fixes since the last round.")
         e2e = _e2e(s)
         if not e2e.ok:
-            stop = "end-to-end tests fail on staging"
+            stop = E2E_STOP
             (s.run_dir / "e2e.txt").write_text(e2e.output, encoding="utf-8")
             break
         out = s.run_dir / f"review-{milestone}-r{round_no}.json"

@@ -642,6 +642,39 @@ def test_a_reviewed_or_signed_off_milestone_isnt_due_again(repo):
     assert milestone.due_reviews(repo, State()) == []
 
 
+def test_a_review_stopped_for_end_to_end_tests_the_project_doesnt_name_is_due_again(repo):
+    """F135 D2: F28's and F19's reviews stopped on a `tests/e2e` the split removed. With no
+    end-to-end tests in `[checks]`, that stop can only be stale: the review runs again."""
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    stopped = State(review_stop={"f9": milestone.E2E_STOP})
+    assert milestone.due_reviews(repo, stopped) == ["f9"]
+    assert milestone.due_reviews(repo, State(review_stop={"f9": "clean"})) == []
+    toml = repo / ".factory" / "project.toml"
+    toml.write_text(toml.read_text().replace("[checks]\n", '[checks]\ne2e = ["tests/e2e"]\n'))
+    assert milestone.due_reviews(repo, stopped) == []  # a real failure waits for the owner
+
+
+def test_a_review_with_no_end_to_end_tests_goes_on_to_claudes_round(repo, monkeypatch, capsys):
+    """F135 D1: no end-to-end tests in `[checks]`, so nothing runs and the round goes on."""
+    _milestone_repo(repo)
+    ran: list[list[str]] = []
+
+    def run_bounded(cmd, *a):
+        ran.append(cmd)
+        return 1, "", ""
+
+    monkeypatch.setattr(loop, "run_bounded", run_bounded)
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        _review_writes(job, repo_, [])
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
+    assert ran == []
+    assert f"e2e tests skipped ({loop.NO_E2E})" in capsys.readouterr().out
+
+
 def test_a_due_review_diffs_from_the_plans_commit(repo, monkeypatch):
     """No plan session tagged F3's or F4's start: the review tags the commit that added the
     milestone's doc, where `runner milestone` would have tagged its first run."""
