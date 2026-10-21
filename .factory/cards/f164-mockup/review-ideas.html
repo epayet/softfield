@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F164 mock-up: plant a review's ideas from the review</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --factory: #f2b10a; --product: #4fd1a5;
+    --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255,255,255,.07) 5px 7px);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 48px 48px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .col > h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { font: 12px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+  .versions { display: grid; gap: 28px; }
+  .col { min-width: 0; max-width: 560px; }
+  .col > h2 { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 18px 0 0;
+    color: var(--hazard); }
+  /* Wide screen: Today and Proposed side by side, no switch */
+  @media (min-width: 1000px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [data-version] { display: block !important; }
+  }
+
+  /* ---- Today, copied: the thread's "The review" (thread.html, #review) ---- */
+  .review { background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px;
+    display: flex; flex-direction: column; gap: 8px; }
+  .review > h2 { margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .review > h3 { margin: 4px 0 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .sheet ul { margin: 0; padding-left: 20px; }
+  .sheet p { margin: 0; }
+  .whole { display: inline-flex; align-items: center; min-height: 44px; }
+  /* ---- Today, copied: the milestone page's sections (milestone.html, .page section) ---- */
+  .msection h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .msection ul { margin: 0; padding-left: 20px; }
+  .msection li { margin: 2px 0; }
+
+  /* ---- Proposed: an idea plate (new tokens: none; ink, rules and the hazard only) ---- */
+  .ideas-head { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 0;
+    font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .ideas-head .count { font-family: var(--mono); color: var(--fg); }
+  .idea { position: relative; background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--c, var(--factory));
+    padding: 10px 12px 10px 14px; display: flex; flex-direction: column; gap: 8px; margin: 6px 0; }
+  .idea.factory { --c: var(--factory); } .idea.product { --c: var(--product); }
+  /* corner ticks: ornament, in the rules' ink */
+  .idea::before, .idea::after { content: ""; position: absolute; width: 8px; height: 8px; border-color: var(--muted); border-style: solid; }
+  .idea::before { top: -1px; right: -1px; border-width: 1px 1px 0 0; }
+  .idea::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+  .idea .tag { font: 600 11px var(--mono); letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+  .idea .tag b { color: var(--ink-2); font-weight: 600; }
+  .idea q { quotes: none; font-size: 15px; color: var(--fg); }
+  .idea .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; border: 0; padding: 0 14px; min-height: 44px; cursor: pointer; }
+  .btn.solid { color: var(--hazard-ink); background: var(--hazard); }
+  .btn.line { color: var(--hazard); background: transparent; border: 1px solid var(--hazard); }
+  .idea .planted { display: inline-flex; align-items: center; min-height: 44px; font: 600 12px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; }
+  .idea .planted .k { font-family: var(--mono); color: var(--fg); margin-right: 6px; }
+  .idea.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid; }
+  .idea .way { font: 600 12px/1.35 var(--mono); color: var(--hazard); }
+  .idea .done-note { font-size: 12.5px; color: var(--muted); }
+  .phone { width: 390px; max-width: 100%; }
+</style>
+</head>
+<body>
+<h1>F164: plant a review's ideas from the review</h1>
+<p class="lede">F19's review (signed off 21 Oct), as you read it on its thread and on its milestone page. Its first idea is the one you planted by hand as F166; its second is a plain bullet today, which the new rule would write as an idea line.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/thread.html (#review) and milestone.html (#what-next) -->
+<div class="col" data-version="today" hidden>
+  <h2>Today</h2>
+  <h3>The card's thread · /planning/f19</h3>
+  <section class="review">
+    <h2>The review</h2>
+    <h3>What changed</h3>
+    <div class="sheet"><ul>
+      <li><strong>The desk refreshes itself.</strong> On `/planning`, a card moves to its new group within about 5 seconds when the lead answers or the runner takes something.</li>
+      <li><strong>An open thread refreshes itself.</strong> Leave a card's page open after sending: the lead's answer appears in the conversation by itself.</li>
+    </ul></div>
+    <h3>How to test</h3>
+    <div class="sheet"><p>1. On the phone, open a card's thread, send a short message, and leave the page open. When the lead answers, its message appears without a reload.</p></div>
+    <h3>Decisions waiting for you</h3>
+    <div class="sheet"><p>None.</p></div>
+    <a class="whole" href="#">The whole review</a>
+  </section>
+
+  <h3>The whole review · /milestones/f19-…</h3>
+  <section class="msection">
+    <h2>What next</h2>
+    <ul>
+      <li><strong>Product:</strong> on hold, as you asked.</li>
+      <li><strong>Factory:</strong></li>
+      <li>A plan check that each Done-when line is named by a ticket's Done when. This is the third milestone where an outcome fell between tickets (F14, F106, F19). Worth a planted card:</li>
+    </ul>
+    <p>&gt; Plans: every Done-when line of a card is carried by at least one ticket's Done when, checked when the plan is approved, so no outcome falls between tickets.</p>
+    <ul>
+      <li>Checkpoints on template work should list the other pages that include a changed partial; a one-line addition to the checkpoint brief.</li>
+    </ul>
+  </section>
+  <p class="legend">The idea is a line of text starting "&gt;". To plant it you copy it into the Plant box on /planning (as you did for F166); the second idea has no ready words at all.</p>
+</div>
+
+<!-- Proposed -->
+<div class="col" data-version="proposed">
+  <h2>Proposed</h2>
+  <h3>The card's thread · /planning/f19 · phone width</h3>
+  <section class="review phone">
+    <h2>The review</h2>
+    <h3>What changed</h3>
+    <div class="sheet"><ul>
+      <li><strong>The desk refreshes itself.</strong> On `/planning`, a card moves to its new group within about 5 seconds when the lead answers or the runner takes something.</li>
+      <li><strong>An open thread refreshes itself.</strong> Leave a card's page open after sending: the lead's answer appears in the conversation by itself.</li>
+    </ul></div>
+    <h3>How to test</h3>
+    <div class="sheet"><p>1. On the phone, open a card's thread, send a short message, and leave the page open. When the lead answers, its message appears without a reload.</p></div>
+    <h3>Decisions waiting for you</h3>
+    <div class="sheet"><p>None.</p></div>
+
+    <div class="new">
+      <div class="ideas-head">Ideas from this review · <span class="count">2</span></div>
+      <div class="idea factory">
+        <span class="tag">Idea 1 · factory · <b>for Softfield</b></span>
+        <q>Plans: every Done-when line of a card is carried by at least one ticket's Done when, checked when the plan is approved, so no outcome falls between tickets.</q>
+        <a class="planted" href="#"><span class="k">F166</span> Planted · open its thread ›</a>
+      </div>
+      <div class="idea factory" id="idea-2">
+        <span class="tag">Idea 2 · factory · <b>for Softfield</b></span>
+        <q>Checkpoints on template work list the other pages that include a changed partial, and check each, so a shared partial can't break a page nobody opened.</q>
+        <div class="actions">
+          <button type="button" class="btn solid" data-press="idea-2">Plant</button>
+          <button type="button" class="btn line" data-press="idea-2">Plant and ask the lead</button>
+        </div>
+        <span class="way" hidden>On its way · planted at the runner's next pick</span>
+      </div>
+    </div>
+    <p class="note">New: the review's ideas, each with Plant and Plant and ask the lead. Try a button on idea 2.</p>
+    <a class="whole" href="#">The whole review</a>
+  </section>
+
+  <h3>The whole review · /milestones/f19-…</h3>
+  <section class="msection">
+    <h2>What next</h2>
+    <ul>
+      <li><strong>Product:</strong> on hold, as you asked.</li>
+      <li><strong>Factory:</strong></li>
+      <li>A plan check that each Done-when line is named by a ticket's Done when. This is the third milestone where an outcome fell between tickets (F14, F106, F19).</li>
+    </ul>
+    <div class="idea factory new">
+      <span class="tag">Idea 1 · factory · <b>for Softfield</b></span>
+      <q>Plans: every Done-when line of a card is carried by at least one ticket's Done when, checked when the plan is approved, so no outcome falls between tickets.</q>
+      <a class="planted" href="#"><span class="k">F166</span> Planted · open its thread ›</a>
+    </div>
+    <ul>
+      <li>A shared partial broke three pages in F19 that no checkpoint opened.</li>
+    </ul>
+    <div class="idea factory new on-its-way">
+      <span class="tag">Idea 2 · factory · <b>for Softfield</b></span>
+      <q>Checkpoints on template work list the other pages that include a changed partial, and check each, so a shared partial can't break a page nobody opened.</q>
+      <span class="way">On its way · planted at the runner's next pick</span>
+    </div>
+    <p class="note">New: each "&gt;" line is drawn in place as a plate; idea 2 shows the state after you press.</p>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what this card adds. A plate's left edge is its area's colour, as on the board (yellow factory, green product). Once pressed it turns dashed yellow, "on its way", until the runner plants it; then it links to the new card. A factory idea from Coucou's or Travel companion's review is planted on Softfield's board, which "for Softfield" says.</p>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+  document.querySelectorAll("[data-press]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const plate = document.getElementById(button.dataset.press);
+      plate.classList.add("on-its-way");
+      plate.querySelector(".actions").remove();
+      plate.querySelector(".way").hidden = false;
+    });
+  });
+</script>
+</body>
+</html>
