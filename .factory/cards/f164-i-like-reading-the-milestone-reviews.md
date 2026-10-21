@@ -1,4 +1,4 @@
-# Milestone F164: i like reading the milestone reviews and suggestions for…
+# Milestone F164: Plant a review's ideas straight from the review
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-21.
