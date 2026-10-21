@@ -444,6 +444,14 @@ def test_a_looks_prompt_says_what_a_look_is_and_a_message_doesnt():
     assert "the runner's, not the owner's" not in planner.prompt("f7", "Go on.", {})
 
 
+def test_a_planners_prompt_says_a_replan_brings_back_its_cards_blocked_tickets():
+    """ADR 29 item 3: written at the new path, the blocked copy left for the runner."""
+    said = planner.prompt("f7", "Go on.", {})
+    assert ".factory/tasks/blocked/f7-*.md" in said
+    assert "removes the blocked copy when the owner approves" in said
+    assert planner.drafts("f7") == (*planner.DRAFTS, ".factory/tasks/ready/f7-*")  # not blocked/
+
+
 def test_a_merged_threads_history_says_whose_it_was():
     """F49 D4: the duplicate's thread, read by the kept thread's next job."""
     said = [{"author": "owner", "text": "Same as F10?", "points": None}]

@@ -461,6 +461,11 @@ pre-flight: after writing or changing tickets, run \
 `softfield check-tickets` (every draft in .factory/tasks/later/; or name files) and fix \
 what it reports, since Approve refuses the plan for the same problems. Only a `replan` may touch \
 .factory/tasks/ready/.
+- A `replan` may also bring back {card}'s blocked tickets, .factory/tasks/blocked/{card}-*.md \
+(ADR 29 item 3): write the ticket, under the same name, reworked in .factory/tasks/ready/ \
+(it must pass pre-flight) or set aside in .factory/tasks/later/, without its runner footers. \
+Leave .factory/tasks/blocked/ as it is: you can't edit there, and the runner removes the blocked \
+copy when the owner approves, carrying its footers over. Never another card's blocked ticket.
 - When a change touches tickets the line may start while you talk (a `replan`, a ticket \
 reworked), suggest the owner pause the factory from the dashboard first, and say so in a \
 point; approving the `replan` lifts their pause.

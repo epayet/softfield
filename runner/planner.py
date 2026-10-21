@@ -34,6 +34,9 @@ PLANNER = "planner"  # the role, and the queued job's kind (`dispatch.PLANNER`)
 DRAFT_DIRS = ("docs/", ".factory/cards/", ".factory/adr/", ".factory/tasks/later/")
 DRAFTS = tuple(f"{d}**" for d in DRAFT_DIRS)
 READY_DIR = ".factory/tasks/ready/"
+# A replan brings its card's blocked tickets back (ADR 29 item 3): the planner writes one in ready/
+# or later/, and the runner removes the blocked copy at the approval, as a job can't remove a file
+BLOCKED_DIR = ".factory/tasks/blocked/"
 PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `message`'s JSON
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
@@ -180,9 +183,10 @@ def is_draft(path: str, card: str | None = None) -> bool:
     return path.startswith(DRAFT_DIRS) or (card is not None and is_ready_ticket(path, card))
 
 
-def is_ready_ticket(path: str, card: str) -> bool:
-    """Whether ``path`` is one of ``card``'s ready tickets (``.factory/tasks/ready/f7-01-….md``)."""
-    pattern = rf"{re.escape(READY_DIR)}{re.escape(card)}-\d[\w.-]*\.md"
+def is_ready_ticket(path: str, card: str, folder: str = READY_DIR) -> bool:
+    """Whether ``path`` is one of ``card``'s ready tickets (``.factory/tasks/ready/f7-01-….md``),
+    or its tickets in another ``folder`` (``BLOCKED_DIR``)."""
+    pattern = rf"{re.escape(folder)}{re.escape(card)}-\d[\w.-]*\.md"
     return re.fullmatch(pattern, path) is not None
 
 
@@ -752,7 +756,8 @@ _LOOK = (
 # ADR 29 items 1 and 2: what a look is, in two lines
 _BLOCKED = (
     "\nThis message is the runner's, not the owner's: it blocked a ticket of this card. Read its"
-    " branch and logs, then say what went wrong and propose the fix as a `replan`.\n"
+    " branch and logs, then say what went wrong and propose the fix as a `replan` that brings"
+    " the ticket back from .factory/tasks/blocked/, reworked or set aside.\n"
 )
 
 

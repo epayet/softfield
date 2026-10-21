@@ -27,6 +27,7 @@ from runner.tasks import (
     BUGS,
     LATER,
     TaskError,
+    carry_footers,
     full_key,
     milestone_arg,
     milestone_file,
@@ -317,14 +318,35 @@ _OUTSIDE = "outside docs/, .factory/cards/, .factory/adr/ and .factory/tasks/lat
 _BUILDING = "building"  # a card's state while its tickets run (f5 D4): a plan keeps it
 
 
+def _why_not_blocked(path: str, mode: str, card: str, replan: bool, placed: set[str]) -> str:
+    """Why the plan branch may not change a blocked ticket: a ``replan`` only removes its card's,
+    written again in .factory/tasks/ready/ or .factory/tasks/later/ (ADR 29 item 3)."""
+    if not planner.is_ready_ticket(path, card, planner.BLOCKED_DIR):
+        return "another card's blocked ticket"
+    if not replan:
+        return "a blocked ticket only a replan brings back"
+    if mode != "000000":
+        return "a blocked ticket edited but left in .factory/tasks/blocked/"
+    return "" if Path(path).name in placed else "a blocked ticket removed and put nowhere"
+
+
 def _why_not(
-    path: str, mode: str, card: str, replan: bool, running: str | None, later: set[str]
+    path: str,
+    mode: str,
+    card: str,
+    replan: bool,
+    running: str | None,
+    later: set[str],
+    placed: set[str],
 ) -> str | None:
     """Why the plan branch may not change ``path``: a draft may change, and a ``replan`` its
     card's ready tickets too (f6-13), but not the running one, and one it removes only to set
-    it aside in .factory/tasks/later/."""
+    it aside in .factory/tasks/later/; its card's blocked ones only to bring them back to one of
+    the ``placed`` names, in ready/ or later/ (``_why_not_blocked``)."""
     if planner.is_draft(path):
         return None
+    if path.startswith(planner.BLOCKED_DIR):
+        return _why_not_blocked(path, mode, card, replan, placed) or None
     if not path.startswith(planner.READY_DIR):
         return _OUTSIDE
     if not planner.is_draft(path, card):
@@ -349,9 +371,14 @@ def _outside(
         for mode, path in changes
         if path.startswith(f".factory/tasks/{LATER}/") and mode != "000000"
     }
+    placed = later | {
+        Path(path).name
+        for mode, path in changes
+        if path.startswith(planner.READY_DIR) and mode != "000000"
+    }
     stray: dict[str, list[str]] = {}
     for mode, path in changes:
-        if (why := _why_not(path, mode, card, replan, running, later)) is not None:
+        if (why := _why_not(path, mode, card, replan, running, later, placed)) is not None:
             stray.setdefault(why, []).append(path)
     if stray:  # the first reason found, with every path it holds for
         why, paths = next(iter(stray.items()))
@@ -599,6 +626,35 @@ def _ready_changes(
     return added, changed, aside
 
 
+def _brought_back(repo: Path, changes: list[tuple[str, str]], card: str) -> dict[str, str]:
+    """A replan's blocked tickets brought back (ADR 29 item 3), read while main is checked out:
+    each of ``card``'s tickets in .factory/tasks/blocked/ on main, by path, to the path the branch
+    wrote it at again, in .factory/tasks/ready/ or .factory/tasks/later/."""
+    placed = {
+        Path(path).name: path
+        for mode, path in changes
+        if path.startswith((planner.READY_DIR, f".factory/tasks/{LATER}/")) and mode != "000000"
+    }
+    brought = {}
+    for found in sorted((repo / planner.BLOCKED_DIR).glob(f"{card}-*.md")):
+        rel = found.relative_to(repo).as_posix()
+        if planner.is_ready_ticket(rel, card, planner.BLOCKED_DIR) and found.name in placed:
+            brought[rel] = placed[found.name]
+    return brought
+
+
+def _unblock(git: Git, brought: Mapping[str, str]) -> None:
+    """After the plan branch's merge: each blocked copy's runner footers carried onto the ticket
+    the replan wrote again, and the copy removed (``git rm``), whether the branch removed it or not:
+    a planner job can't."""
+    for blocked, back in brought.items():
+        source = Path(git.repo, blocked)
+        if not source.is_file():  # the branch removed it: main's copy holds the footers
+            git.run("checkout", "-q", "HEAD", "--", blocked)
+        carry_footers(source, Path(git.repo, back))
+        git.run("rm", "-q", "--", blocked)
+
+
 def _export(
     repo: Path,
     conn: sqlite3.Connection,
@@ -640,7 +696,8 @@ def _approve_plan(
 
     A ``replan`` (f6-13) may change its card's ready tickets too, but not the running one: a changed
     one is pre-flighted, one moved to .factory/tasks/later/ stays there, and the owner's pause is
-    lifted once it is applied. A building card keeps its state."""
+    lifted once it is applied. A building card keeps its state. It may bring back its card's
+    blocked tickets too (ADR 29 item 3): the blocked copy goes (``_unblock``), its item answered."""
     thread = planner.thread_key(subject)
     branch = planner.plan_branch(thread)
     git = Git(repo)
@@ -681,6 +738,7 @@ def _approve_plan(
     added: list[str] = []
     changed: list[str] = []
     aside: list[str] = []
+    brought: dict[str, str] = {}
     if planned and branch is not None:
         changes = _drafts(git, branch)
         if (refused := _outside(branch, changes, thread, replan, running)) is not None:
@@ -688,6 +746,10 @@ def _approve_plan(
         if (refused := _owners_marks(git, branch, changes)) is not None:
             return refused
         added, changed, aside = _ready_changes(repo, changes)
+        if replan:
+            brought = _brought_back(repo, changes, thread)
+        # a blocked ticket brought back to later/ stays there, set aside (ADR 29 item 3)
+        aside += sorted(back for back in brought.values() if not back.startswith(planner.READY_DIR))
         set_aside = {Path(path).name for path in aside}
         tickets = sorted(
             path
@@ -706,6 +768,7 @@ def _approve_plan(
     moved: dict[tuple[str, str], _Moved] = {}
     try:
         if planned:
+            _unblock(git, brought)
             checked = sorted([*tickets, *added, *changed], key=lambda path: Path(path).name)
             if problems := ticket_problems(repo, checked):
                 _undo(git)
@@ -734,6 +797,8 @@ def _approve_plan(
         raise
     _merged(conn, project_id, now, [(d, k, m.said) for (d, k), m in moved.items()])
     _resolve_items(conn, project_id, now, gone)
+    for blocked in brought:
+        _answered_block(conn, project_id, now, Path(blocked).stem)
     for (duplicate, kept), m in moved.items():
         if kept != thread:  # there the lead is on the kept card already
             _carry_on(conn, project_id, now, duplicate, kept, m.notes)

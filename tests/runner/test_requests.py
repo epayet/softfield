@@ -2147,6 +2147,125 @@ def test_a_changed_ticket_failing_pre_flight_refuses_the_replan(repo):
     assert not (repo / ".factory" / "tasks" / "later" / "f7-03-c.md").exists()
 
 
+# --- a replan brings back its card's blocked tickets (ADR 29 item 3, f106-05) ----------------
+
+BLOCKED_C = ".factory/tasks/blocked/f7-03-c.md"
+REWORKED = _ticket("f7-03-c").replace("Make the thing work.", "Make the thing work, smaller.")
+
+
+def _blocked_too(repo: Path, kind: str = "replan") -> str:
+    """F7 running (``_running``, the lead proposing a ``kind``), with f7-03-c and f5-02-y
+    blocked, their items open; main's head."""
+    _running(repo, kind)
+    for task_id in ("f7-03-c", "f5-02-y"):
+        path = repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_ticket(task_id))
+        append_footer(path, {"result": "blocked", "reason": "check-all failed"})
+        _item(repo, "blocked", task_id)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "runner: blocked")
+    return git(repo, "rev-parse", "HEAD")
+
+
+@pytest.mark.parametrize("gone", [(), (BLOCKED_C,)])
+def test_approving_a_replan_brings_a_reworked_blocked_ticket_back_to_ready(repo, gone):
+    """The planner writes the reworked ticket in ready/; the approval removes the blocked copy
+    (or applies the branch's removal), keeping its footers on the ticket."""
+    _blocked_too(repo)
+    _plan(repo, {".factory/tasks/ready/f7-03-c.md": REWORKED}, gone=gone)
+    state = _paused(repo)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued f7-03-c; resumed"
+    back = _ready(repo)["f7-03-c"]
+    assert back.startswith(REWORKED.rstrip("\n"))
+    assert "result: blocked" in back and "reason: check-all failed" in back  # its old footers
+    assert not (repo / BLOCKED_C).exists()
+    assert (repo / ".factory" / "tasks" / "blocked" / "f5-02-y.md").is_file()
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+    assert _items(repo) == [
+        ("blocked", "f7-03-c", "x", False),
+        ("blocked", "f5-02-y", "x", True),
+    ]
+    assert state.owner_pause is None
+
+
+def test_approving_a_replan_sets_a_blocked_ticket_aside_in_later(repo):
+    _blocked_too(repo)
+    _plan(repo, {".factory/tasks/later/f7-03-c.md": REWORKED})
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; set aside f7-03-c"
+    aside = (repo / ".factory" / "tasks" / "later" / "f7-03-c.md").read_text()
+    assert aside.startswith(REWORKED.rstrip("\n")) and "result: blocked" in aside
+    assert "f7-03-c" not in _ready(repo)
+    assert not (repo / BLOCKED_C).exists()
+    assert _items(repo)[0] == ("blocked", "f7-03-c", "x", False)
+
+
+def _blocked_kept(repo: Path, head: str, state: State, asked: int) -> str:
+    """``_replan_refused``, the blocked tickets and their items as they were too."""
+    for task_id in ("f7-03-c", "f5-02-y"):
+        assert (repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md").is_file()
+    assert _items(repo) == [("blocked", "f7-03-c", "x", True), ("blocked", "f5-02-y", "x", True)]
+    return _replan_refused(repo, head, state, asked)
+
+
+@pytest.mark.parametrize(
+    ("files", "gone", "kind", "error"),
+    [
+        (
+            {".factory/tasks/later/f5-02-y.md": _ticket("f5-02-y")},
+            (".factory/tasks/blocked/f5-02-y.md",),
+            "replan",
+            "plan/f7 changes .factory/tasks/blocked/f5-02-y.md, another card's blocked ticket:"
+            " not approved",
+        ),
+        (
+            {},
+            (BLOCKED_C,),
+            "replan",
+            f"plan/f7 changes {BLOCKED_C}, a blocked ticket removed and put nowhere: not approved",
+        ),
+        (
+            {BLOCKED_C: REWORKED},
+            (),
+            "replan",
+            f"plan/f7 changes {BLOCKED_C}, a blocked ticket edited but left in"
+            " .factory/tasks/blocked/: not approved",
+        ),
+        (
+            {".factory/tasks/later/f7-03-c.md": REWORKED},
+            (BLOCKED_C,),
+            "plan",
+            f"plan/f7 changes {BLOCKED_C}, a blocked ticket only a replan brings back:"
+            " not approved",
+        ),
+    ],
+)
+def test_a_replan_reaching_past_its_cards_blocked_tickets_is_refused(
+    repo, files, gone, kind, error
+):
+    head = _blocked_too(repo, kind)
+    _plan(repo, files, gone=gone)
+    state = _paused(repo)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    assert _blocked_kept(repo, head, state, asked) == error
+
+
+def test_a_reworked_blocked_ticket_failing_pre_flight_refuses_the_replan(repo):
+    head = _blocked_too(repo)
+    _plan(repo, {".factory/tasks/ready/f7-03-c.md": _ticket("f7-03-c", "Fix `conftest.py`.")})
+    state = _paused(repo)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    assert _blocked_kept(repo, head, state, asked) == (
+        "not approved: f7-03-c: referenced path does not exist: conftest.py"
+    )
+
+
 # --- `runner reserve` and `runner run --use-reserve` (ADR 22 item 4, f8 D4) ------------------
 
 
