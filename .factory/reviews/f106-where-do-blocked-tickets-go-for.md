@@ -1,6 +1,6 @@
 # Review: F106, where blocked tickets go for you to review
 
-- **Status:** round 2 done, both findings fixed; ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-21.
 
 ## Sign-off sheet
 

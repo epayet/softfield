@@ -1,6 +1,7 @@
 # Milestone F106: where do blocked tickets go for me to review
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-21. Base: git tag `f106-where-do-blocked-tickets-go-for-start`. Report: [`.factory/reviews/f106-where-do-blocked-tickets-go-for.md`](../reviews/f106-where-do-blocked-tickets-go-for.md).
 > Planted by the owner on 2026-10-12.
 
 ## Notes
