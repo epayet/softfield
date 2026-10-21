@@ -3135,7 +3135,7 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
         job.role, None, 1, candidates(s, job.role), {}, {}, {}, now(), authors=_authors(s, merged)
     )
     try:
-        call_claude(
+        result = call_claude(
             s,
             job,
             milestone,
@@ -3151,6 +3151,21 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
     save_state(s.state, s.state_path)
     if out.is_file():
         s.report.notes.append("Checkpoint: " + out.read_text(encoding="utf-8").strip())
+    # A ticket it wrote that fails to parse stopped the runner at its next pick (travel
+    # companion's f3-07, its milestone a finding's key): one repair turn, else it's blocked.
+    broken: dict[Path, list[str]] = {}
+    for ticket in _written_tickets(s):
+        problems = _repair_ticket(
+            s,
+            ticket,
+            result.session_id,
+            role="checkpoint",
+            wrote="wrote",
+            milestone=milestone,
+            subject=CHECKPOINT,
+        )
+        if problems:
+            broken[ticket] = problems
     try:
         findings = parse_checkpoint(findings_out)
     except ReviewFileError as exc:
@@ -3168,6 +3183,8 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
             agent=CLAUDE_HEADLESS_AGENT,
         )
     )
+    for ticket, problems in broken.items():
+        block(s, ticket, "the checkpoint wrote it failing pre-flight: " + "; ".join(problems))
     shadow_checkpoint(s, milestone, merged, out)
 
 
@@ -3493,44 +3510,76 @@ def _only_docs_and_tasks(s: Session) -> bool:
     return checks.hook_can_skip(changed) or not changed
 
 
-REQUEUE_REPAIR_PROMPT = """\
-The ticket you requeued, {path}, fails the runner's pre-flight:
+TICKET_REPAIR_PROMPT = """\
+The ticket you {wrote}, {path}, fails the runner's pre-flight:
 {problems}
-Fix that file only: name repo-relative paths (`tests/conftest.py`, not `conftest.py`) and only
-paths and symbols that exist, or that its `files:` or `tests:` list. If it still fails, the
-runner blocks the ticket with these problems."""
+Fix that file only: its `milestone:` is its card's key (as in its source ticket's frontmatter,
+never a finding's key), it names repo-relative paths (`tests/conftest.py`, not `conftest.py`)
+and only paths and symbols that exist, or that its `files:` or `tests:` list. If it still
+fails, the runner blocks the ticket with these problems."""
 
 
-def _requeue_problems(s: Session, path: Path) -> list[str]:
+def _ticket_problems(s: Session, path: Path) -> list[str]:
     try:
         return preflight(parse_task(path, s.cfg.default_max_diff), s.repo)
     except (OSError, ValueError, yaml.YAMLError) as e:
         return [f"the ticket doesn't parse: {e}"]
 
 
-def _repair_requeue(s: Session, task: Task, requeued: Path, session: str | None) -> list[str]:
-    """f2-F4: a requeue naming a missing path (f1-36, f1-15, f2-06) cost the next run at its
-    pre-flight. Pre-flight it now; with problems, the escalation's session gets one turn to
-    fix them, as a direction's repair is checked (f1-50). Returns the problems left."""
-    if not requeued.is_file() or not (problems := _requeue_problems(s, requeued)):
+def _repair_ticket(
+    s: Session,
+    path: Path,
+    session: str | None,
+    *,
+    role: str,
+    wrote: str,
+    milestone: str,
+    subject: str,
+    ticket: str | None = None,
+) -> list[str]:
+    """f2-F4: a ticket a Claude job wrote that fails pre-flight (a requeue naming a missing
+    path: f1-36, f1-15, f2-06; a checkpoint's fix ticket with a finding key for milestone,
+    which stopped the runner at its next pick) gets one turn of that job's session to fix it,
+    as a direction's repair is checked (f1-50). Returns the problems left."""
+    if not path.is_file() or not (problems := _ticket_problems(s, path)):
         return []
-    rel = requeued.relative_to(s.repo).as_posix()
-    s.log(f"escalation {task.id}: requeue fails pre-flight: {'; '.join(problems)}")
+    rel = path.relative_to(s.repo).as_posix()
+    s.log(f"{role} {subject}: {path.stem} fails pre-flight: {'; '.join(problems)}")
     job = JobSpec(
-        role="escalation",
-        prompt=REQUEUE_REPAIR_PROMPT.format(
-            path=rel, problems="\n".join(f"- {p}" for p in problems)
+        role=role,
+        prompt=TICKET_REPAIR_PROMPT.format(
+            wrote=wrote, path=rel, problems="\n".join(f"- {p}" for p in problems)
         ),
         timeout=s.cfg.claude_timeout,
         edit=(rel,),
         commands=GIT_READ_COMMANDS,
         resume=session,
     )
-    call_claude(s, job, task.milestone, task.id, ticket=task.id)
-    problems = _requeue_problems(s, requeued) if requeued.is_file() else ["the repair removed it"]
+    call_claude(s, job, milestone, subject, ticket=ticket)
+    return _ticket_problems(s, path) if path.is_file() else ["the repair removed it"]
+
+
+def _repair_requeue(s: Session, task: Task, requeued: Path, session: str | None) -> list[str]:
+    problems = _repair_ticket(
+        s,
+        requeued,
+        session,
+        role="escalation",
+        wrote="requeued",
+        milestone=task.milestone,
+        subject=task.id,
+        ticket=task.id,
+    )
     if problems:
         s.report.notes.append(f"Requeue of {task.id} still fails pre-flight after its repair.")
     return problems
+
+
+def _written_tickets(s: Session) -> list[Path]:
+    """The ready tickets a job added or changed, not yet committed."""
+    lines = s.git.run("status", "--porcelain", "-uall", "--", ".factory/tasks/ready").splitlines()
+    paths = [s.repo / line[3:] for line in lines if line.endswith(".md")]
+    return [p for p in paths if p.is_file()]
 
 
 def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:

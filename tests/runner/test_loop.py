@@ -1306,6 +1306,49 @@ def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fa
     assert "Checkpoint: Sound. Tightened m1-03." in report.notes
 
 
+def _checkpoint_files_a_fix(job, repo_):
+    """Travel companion's f3-07: a checkpoint copied a fix ticket and put its finding's key in
+    `milestone:`, and the runner stopped at its next pick on that ticket."""
+    fix = write_task(repo_ / ".factory" / "tasks" / "ready", "m1-03-fix")
+    fix.write_text(fix.read_text().replace("milestone: 1\n", "milestone: m1-C12-2\n"))
+
+
+@pytest.mark.parametrize("repaired", [True, False])
+def test_a_ticket_the_checkpoint_wrote_failing_to_parse_gets_one_repair_turn(
+    repo, fake_model, monkeypatch, repaired
+):
+    for n in (1, 2):
+        _add_task(repo, f"m1-0{n}-thing")
+    script, calls = _lead_sessions(monkeypatch)
+
+    def repair(job, repo_):
+        if repaired:
+            fix = repo_ / ".factory" / "tasks" / "ready" / "m1-03-fix.md"
+            fix.write_text(fix.read_text().replace("milestone: m1-C12-2", "milestone: 1"))
+
+    def change(n: int):
+        def run(repo_, prompt):
+            (repo_ / "coucou" / f"part{n}.py").write_text(f"PART = {n}\n")
+
+        return run
+
+    fake_model.extend([change(1), change(2), *([change(3)] if repaired else [])])
+    script.extend([_checkpoint_files_a_fix, repair])
+    report = _run(repo)
+    (_, _), (fix_turn, resumed) = calls
+    assert (fix_turn.kind, resumed) == ("checkpoint", "s1")  # the checkpoint's own session
+    assert "m1-C12-2" in fix_turn.prompt and "finding's key" in fix_turn.prompt
+    assert "Edit(.factory/tasks/ready/m1-03-fix.md)" in fix_turn.allowed_tools
+    tasks = repo / ".factory" / "tasks"
+    if repaired:
+        assert [t.result for t in report.tasks] == ["done", "done", "done"]
+    else:
+        assert [t.result for t in report.tasks] == ["done", "done"]
+        assert "m1-C12-2" in (tasks / "blocked" / "m1-03-fix.md").read_text()
+        assert not (tasks / "ready" / "m1-03-fix.md").exists()
+    assert git(repo, "status", "--porcelain") == ""
+
+
 def _add_bug(repo: Path, task_id: str, area: str = "factory") -> None:
     path = write_task(repo / ".factory" / "tasks" / "ready", task_id)
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: bugs\narea: {area}\n"))
