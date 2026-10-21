@@ -477,6 +477,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** f28-01's stale-poll tests passed without the fix: they waited for the final state within two polls, so a stale bar swapped in and then replaced still ended right. The checkpoint read them and called them sound. "Fail without the change" is in every ticket and checked by nobody for each test; a test of a race must assert in the window the race opens, not after it.
 - **Decisions affected:** none.
 
+### F135 (2026-10-21): reviews stopped at once on end-to-end tests the split removed ([review](../reviews/f135-why-is-there-a-couple-of.md))
+
+- **Q1:** one lead ticket (protected `runner/`), merged first time; no checkpoint, a clean review round with no findings. Its own Done when (F28 and F19 reviewed without a command) was met by the runner within the hour.
+- **Q3:** Claude only, ≈272k token-equivalents; no local tokens, as fits protected code.
+- **Q5:** see the review's numbers.
+- **Anything else:** the cause was fixed in a terminal session on 2026-10-15 (`[checks] e2e`), but the two stops it had already recorded stayed on Needs you six more days, until this ticket. A fix that removes a stop's cause should clear the stops it recorded in the same change. The owner planted the same question twice (F135, F156): a stop on Needs you should say whether it will clear by itself.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
