@@ -1,6 +1,6 @@
 # Review: F19, the Planning desk and an open thread refresh by themselves
 
-- **Status:** round 1 done, ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-21.
 
 ## Sign-off sheet
 

@@ -1,6 +1,7 @@
 # Milestone F19: Will I need to refresh planning page when my questions get answered on planning
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-21. Base: git tag `f19-will-i-need-to-refresh-planning-start`. Report: [`.factory/reviews/f19-will-i-need-to-refresh-planning.md`](../reviews/f19-will-i-need-to-refresh-planning.md).
 > Planted by the owner on 2026-10-07.
 
 ## Expected outcome
