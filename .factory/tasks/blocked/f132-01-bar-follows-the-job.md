@@ -39,3 +39,9 @@ attempts: 3
 tokens: 6710315
 logs: .factory/var/runs/20261021-090717/f132-01-bar-follows-the-job
 ```
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the finished work failed check-all; its work is on task/f132-01-bar-follows-the-job
+```
