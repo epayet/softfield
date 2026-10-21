@@ -646,8 +646,9 @@ def _brought_back(repo: Path, changes: list[tuple[str, str]], card: str) -> dict
 def _unblock(git: Git, brought: Mapping[str, str]) -> None:
     """After the plan branch's merge: each blocked copy's runner footers carried onto the ticket
     the replan wrote again, and the copy removed (``git rm``), whether the branch removed it or not:
-    a planner job can't."""
+    a planner job can't. Its failed work is kept as for a Try again (``loop.keep_blocked_work``)."""
     for blocked, back in brought.items():
+        loop.keep_blocked_work(git, Path(blocked).stem)
         source = Path(git.repo, blocked)
         if not source.is_file():  # the branch removed it: main's copy holds the footers
             git.run("checkout", "-q", "HEAD", "--", blocked)

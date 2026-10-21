@@ -5179,19 +5179,29 @@ def move_to_ready(repo: Path, wanted: str) -> str:
         except TaskError:
             raise later from None
     git = Git(repo)
-    if src.parent.name == "blocked" and git.run("branch", "--list", f"task/{src.stem}").strip():
-        git.run("branch", "-f", f"blocked/{src.stem}", f"task/{src.stem}")
+    if src.parent.name == "blocked":
+        keep_blocked_work(git, src.stem)
     _move_alone(git, src, tasks / "ready", f"queue {src.stem} (by the owner)")
     return src.stem
 
 
+def keep_blocked_work(git: Git, task_id: str) -> None:
+    """A ticket leaving blocked/ (tried again, set aside, or brought back by a replan): its
+    ``task/<id>`` copied to ``blocked/<id>``, replacing an older copy, since a lead ticket
+    starts again from main and resets its branch (F106 D3)."""
+    if _has_branch(git, f"task/{task_id}"):
+        git.run("branch", "-f", f"blocked/{task_id}", f"task/{task_id}")
+
+
 def set_aside(repo: Path, wanted: str) -> str:
     """A blocked ticket moved to later/ in a commit of its own, the owner's ``set_aside``
-    request (F106 D3); its branch stays as it is."""
+    request (F106 D3); its branch stays as it is, copied too (``keep_blocked_work``) for when
+    it is queued again from later/."""
     src = find_ticket(repo / ".factory" / "tasks", "blocked", wanted)
-    _move_alone(
-        Git(repo), src, repo / ".factory" / "tasks" / LATER, f"set aside {src.stem} (by the owner)"
-    )
+    git = Git(repo)
+    keep_blocked_work(git, src.stem)
+    later = repo / ".factory" / "tasks" / LATER
+    _move_alone(git, src, later, f"set aside {src.stem} (by the owner)")
     return src.stem
 
 

@@ -453,6 +453,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** both visible findings ("finished … · finished", "took 142.2 h") came from reading the page on the live database, and neither the mock-up nor the tests could show them. Third milestone running (F109, F30, F94) where a real record found what the hand-built ones hid. Reading the page on real data belongs in the checkpoint or review of every UI ticket (card text in the review, for the owner to plant).
 - **Decisions affected:** none.
 
+### F106 (2026-10-21): blocked tickets reach the owner, and the lead looks first ([review](../reviews/f106-where-do-blocked-tickets-go-for.md))
+
+- **Q1:** six tickets: five the lead's (`runner/` is protected), each merged first time and each restarting the runner; one developer ticket (f106-02), merged on its third attempt after a direction. The review fixed one should-fix itself (failed work kept on only one of three ways out of `blocked/`) and filed one developer ticket (f106-07, D4 had no ticket).
+- **Q3:** Qwen 0/1 first time on a desk group (two stops, 2.1M tokens); the lead 5/5 on runner work.
+- **Q5:** see the review's numbers.
+- **Anything else:** both findings sat between tickets, not in one. A decision applied in one ticket and needed by a later one (D3's copy, then f106-05's replan), and a decision no ticket carried (D4). Checkpoints read one ticket at a time and skip lead tickets, so only the review can see this; a plan check that every decision is named by a ticket would catch the second kind (F14's "Done when" lesson, for decisions).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

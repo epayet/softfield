@@ -221,6 +221,7 @@ def test_a_queue_request_takes_later_first(repo):
 def test_a_set_aside_request_moves_a_blocked_ticket_to_later_alone(repo):
     _blocked(repo, "f9-01-lead", work="first try")
     _blocked(repo, "f9-02-other")
+    held = git(repo, "rev-parse", "task/f9-01-lead").strip()
     asked = _ask(repo, "set_aside", "f9-01-lead")
     assert _apply(repo) == ["set_aside f9-01-lead: set aside f9-01-lead"]
     assert (repo / ".factory" / "tasks" / "later" / "f9-01-lead.md").is_file()
@@ -232,6 +233,8 @@ def test_a_set_aside_request_moves_a_blocked_ticket_to_later_alone(repo):
         ("blocked", "f9-02-other", "x", True),
     ]
     assert "task/f9-01-lead" in git(repo, "branch")  # the work stays where it was
+    # and is copied, for a queue from later/ that starts the lead ticket again from main
+    assert git(repo, "rev-parse", "blocked/f9-01-lead").strip() == held
     assert _request(repo, asked) == (NOW.isoformat(), "set aside f9-01-lead")
 
 
@@ -2189,6 +2192,24 @@ def test_approving_a_replan_brings_a_reworked_blocked_ticket_back_to_ready(repo,
         ("blocked", "f5-02-y", "x", True),
     ]
     assert state.owner_pause is None
+
+
+def test_a_blocked_ticket_brought_back_keeps_its_failed_work(repo):
+    """Its ``task/<id>`` copied to ``blocked/<id>``, as a Try again does: the reworked lead
+    ticket starts again from main."""
+    _blocked_too(repo)
+    git(repo, "checkout", "-q", "-b", "task/f7-03-c")
+    (repo / "work.txt").write_text("first try")
+    git(repo, "add", "work.txt")
+    git(repo, "commit", "-q", "-m", "wip f7-03-c")
+    git(repo, "checkout", "-q", "main")
+    held = git(repo, "rev-parse", "task/f7-03-c").strip()
+    _plan(repo, {".factory/tasks/ready/f7-03-c.md": REWORKED})
+    state = _paused(repo)
+    _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    assert "f7-03-c" in _ready(repo)
+    assert git(repo, "rev-parse", "blocked/f7-03-c").strip() == held
 
 
 def test_approving_a_replan_sets_a_blocked_ticket_aside_in_later(repo):
