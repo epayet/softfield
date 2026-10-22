@@ -1,6 +1,6 @@
 # Milestone F159: A set-aside ticket says it won't run, with a Queue it button on its page
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 4 · **Area:** factory
 > Planted by the owner on 2026-10-20.
 
 ## Notes
