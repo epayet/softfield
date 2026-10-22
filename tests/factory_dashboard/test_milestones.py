@@ -276,6 +276,21 @@ def test_an_empty_milestone_with_no_state_and_no_tickets_is_not_in_the_list(db_p
     assert "F99" not in keys
 
 
+def test_an_empty_milestone_with_no_state_but_with_status_is_not_in_the_list(db_path):
+    """The bug: a row with no state, a non-null status, and no tickets still appeared."""
+    from factory_dashboard.milestones import milestone_rows
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        metrics.upsert_milestone(conn, project, "f98-empty", status="in progress")
+    finally:
+        conn.close()
+    rows = milestone_rows(metrics.open_db(db_path), PROJECT)
+    keys = {r.key for r in rows}
+    assert "F98" not in keys
+
+
 def test_milestone_detail_answers_200(milestone_detail_client):
     resp = milestone_detail_client.get("/milestones/f1")
     assert resp.status_code == 200

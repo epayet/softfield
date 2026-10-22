@@ -326,7 +326,12 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
 
     found: list[tuple[Card, datetime]] = []  # each card, and when it was harvested
     for m in milestones:
-        if m["state"] is None and m["status"] is None and m["id"] not in tickets:
+        if (
+            m["state"] is None
+            and m["ended"] is None
+            and m["status"] != "done"
+            and m["id"] not in tickets
+        ):
             continue
         own = tickets.get(m["id"], [])
         if m["key"] == BUGS:

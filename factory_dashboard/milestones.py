@@ -149,7 +149,8 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
             mid = milestone_ids.get(m["key"])
             if (
                 info.get("state") is None
-                and info.get("status") is None
+                and info.get("ended") is None
+                and info.get("status") != "done"
                 and (
                     mid is None
                     or mid
