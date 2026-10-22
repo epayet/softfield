@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F170 mock-up: a blocked ticket on the desk offers the lead's fix</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 48px 48px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.size { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--fg); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; margin-top: 8px; }
+  .version { flex: 1 1 390px; max-width: 520px; min-width: 0; }
+  @media (max-width: 820px) { .version[hidden-on-phone] { display: none; } }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; position: relative; }
+  .note { display: block; font: 11.5px var(--mono); color: var(--good); margin-top: 4px; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+
+  /* ---- the desk as drawn (planning.html, F106 D3) ---- */
+  .desk { background: var(--bay); border: 1px solid var(--rule); }
+  .desk > h2 { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .group { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px; }
+  .group h3 { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); }
+  .item { display: flex; flex-direction: column; gap: 6px; }
+  .item > a { display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); min-height: 44px; box-sizing: border-box; }
+  .item .title { font-size: 14px; }
+  .item .words { font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+  .buttons { margin: 0; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .btn { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; border: 0; padding: 0 14px; min-height: 44px; cursor: default; }
+  .btn.main { color: var(--hazard-ink); background: var(--hazard); }
+  .btn.quiet { color: var(--muted); background: transparent; border: 1px solid var(--rule); }
+
+  /* ---- proposed: the lead's fix as a plate inside the item, corner ticks and a stripe ---- */
+  .fix { position: relative; padding: 8px 10px 9px 14px; background: var(--plate); border: 1px solid var(--rule); }
+  .fix::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+  .fix::after { content: ""; position: absolute; right: -1px; top: -1px; width: 9px; height: 9px;
+    border-top: 2px solid var(--ink-2); border-right: 2px solid var(--ink-2); }
+  .fix .head { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+  .fix .what { font-size: 14px; margin: 2px 0 0; }
+  .fix .plan { font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0; }
+  .fix .plan a { color: var(--sonnet); }
+  .caveat { font-size: 12.5px; color: var(--muted); }
+</style>
+</head>
+<body>
+<h1>F170: a blocked ticket on the desk offers the lead's fix</h1>
+<p class="lede">The Blocked tickets group of the desk on /planning, with the real f152-01 item as it stood on 2026-10-21 at 22:27, and the lead's reply on F152's thread. The second item of Proposed shows the same ticket while the lead is still looking.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/planning.html, the "blocked" group -->
+<div class="version" data-version="today">
+  <h3 class="size">Today</h3>
+  <section class="desk" aria-label="Your desk">
+    <h2>Your desk · 78</h2>
+    <div class="group">
+      <h3>Blocked tickets</h3>
+      <article class="item">
+        <a href="#">
+          <span class="title">f152-01-review-step-on-the-card</span>
+          <span class="words">the finished work failed check-all; its work is on task/f152-01-review-step-on-the-card · 1 ticket waits behind it · the lead's fix waits on F152's thread</span>
+        </a>
+        <p class="buttons">
+          <button type="button" class="btn main">Try again</button>
+          <button type="button" class="btn quiet">Set aside</button>
+        </p>
+      </article>
+    </div>
+  </section>
+  <p class="legend">The big yellow button runs the ticket again as it was, and the lead's fix sits on another page with nothing to press here. On 2026-10-21 Try again on f132-01 put it back unchanged, and F132's fix could then no longer be approved ("clashes with main").</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3 class="size">Proposed</h3>
+  <section class="desk" aria-label="Your desk">
+    <h2>Your desk · 78</h2>
+    <div class="group">
+      <h3>Blocked tickets</h3>
+      <article class="item">
+        <a href="#">
+          <span class="title">f152-01-review-step-on-the-card</span>
+          <span class="words">the finished work failed check-all · 1 ticket waits behind it</span>
+        </a>
+        <div class="fix new">
+          <div class="head">The lead's fix</div>
+          <p class="what">What went wrong: the code was fine, the test run was cut</p>
+          <p class="plan">F152: bring back the card's review step after the test-time cut · 4 key points · <a href="#">read it on F152's thread ›</a></p>
+          <span class="note">new: the lead's first point and its proposal, from the card's thread</span>
+        </div>
+        <p class="buttons">
+          <button type="button" class="btn main new">Approve the lead's fix</button>
+          <button type="button" class="btn quiet new">Try again as it is</button>
+          <button type="button" class="btn quiet">Set aside</button>
+        </p>
+        <span class="caveat new">Try again as it is runs the same ticket unchanged; the lead's fix then still waits on F152's thread.</span>
+      </article>
+
+      <article class="item">
+        <a href="#">
+          <span class="title">f152-01-review-step-on-the-card</span>
+          <span class="words">the finished work failed check-all · 1 ticket waits behind it</span>
+        </a>
+        <div class="fix new">
+          <div class="head">The lead's fix</div>
+          <p class="what">The lead is reading the work and its logs; its fix comes here</p>
+          <span class="note">new: while the lead's look runs (the second state)</span>
+        </div>
+        <p class="buttons">
+          <button type="button" class="btn quiet new">Try again as it is</button>
+          <button type="button" class="btn quiet">Set aside</button>
+        </p>
+      </article>
+    </div>
+  </section>
+  <p class="legend"><span class="new" style="padding: 0 4px">Dashed green</span> marks what changes. When the lead's fix waits, it is the yellow button, right on the desk. Try again stays for when you know better, says what it does, and no longer makes the lead's fix unapprovable. A bug ticket (no card, no look) keeps today's two buttons.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.toggleAttribute("hidden-on-phone", v.dataset.version !== button.dataset.show); });
+    });
+  });
+  document.querySelector('[data-version="today"]').setAttribute("hidden-on-phone", "");
+</script>
+</body>
+</html>
