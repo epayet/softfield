@@ -6215,6 +6215,22 @@ def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
     assert preflight(task, repo) == []
 
 
+def test_a_fix_ticket_on_a_feature_ticket_drops_its_old_priority(repo):
+    """F173: a done feature ticket may still carry a `priority:` from before; its fix runs in
+    the card's place, so it gets none and passes pre-flight."""
+    source = write_task(repo / ".factory" / "tasks" / "done", "f4-03-thing")
+    source.write_text(source.read_text().replace("milestone: 1\n", "milestone: f4\npriority: 3\n"))
+    write_task(repo / ".factory" / "tasks" / "ready", "f4-12-mine")
+    path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("f4-03-thing")}, "copilot-auto")
+    assert path is not None
+    task = parse_task(path, 150)
+    assert (task.milestone, task.priority) == ("f4", None)
+    assert "priority:" not in path.read_text()
+    from runner.tasks import preflight
+
+    assert preflight(task, repo) == []
+
+
 def test_a_fix_ticket_drops_the_repo_name_from_the_findings_path(repo):
     """2026-10-03: f4-25 … f4-29 named `coucou/factory_dashboard/…`, the repo's own name first."""
     (repo / "factory_dashboard").mkdir()

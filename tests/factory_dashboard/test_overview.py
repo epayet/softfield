@@ -812,7 +812,7 @@ def test_next_in_line_follows_the_card_not_a_feature_tickets_own_priority(queue_
     html = queue_client.get("/").text
     rows = section(html, "queue").split("Next in line", 1)[1]
     shown = [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)]
-    assert shown[:2] == ["f1-05-first", "f1-06-second"]
+    assert shown == ["f1-05-first", "f1-06-second", "f1-10-queued"]
     assert re.findall(r"· priority (\d+)\b", rows) == ["50"] * len(shown)
     assert list(waits(db_path))[: len(shown)] == shown
 
