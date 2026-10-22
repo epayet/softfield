@@ -27,3 +27,12 @@ f171-there-are-dupliacted-tickets-on-the-C1265-1: State-less empty milestones wi
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3317
+gate_failures: ['stopped']
+tokens: 1968114
+```
