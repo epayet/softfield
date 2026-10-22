@@ -493,6 +493,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the bug lived behind a test that drove the parked row by hand, so the loop never had to start it. A scheduling rule's test should go through `work_queue`; and a "falls back as today" acceptance case should take the new path before falling back.
 - **Decisions affected:** none; F140 would make the fix's branch unnecessary.
 
+### F153 (2026-10-22): Sonnet can take the easier lead tickets, Opus steps in when it fails ([review](../reviews/f153-i-wonder-if-sonnet-would-be.md))
+
+- **Q1:** two lead tickets (protected `runner/`), both merged first time on Opus (17 and 6 minutes); no checkpoint. Review round 1: one should-fix (the workflow docs didn't say who does a lead ticket now; fixed by the review) and three nits (backlog).
+- **Q3:** Claude only, $2.94 for the two tickets, under ADR 32's $5 estimate; no local tokens, as fits protected code.
+- **Q5:** see the review's numbers.
+- **Anything else:** nothing changes until the machine's `factory.toml` gets ADR 32's two lines (D7); the trial (ADR 32 item 6) starts then. Its pass rate must be read from tickets and step-up jobs, since a lead job's `jobs.outcome` is its session's, not its `check-all`'s.
+- **Decisions affected:** ADR 32 is now code; its item 6 trial is the next factory question.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

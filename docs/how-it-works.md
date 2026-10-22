@@ -18,7 +18,7 @@ flowchart TD
   gates -->|"fail 3 times, or BLOCKED.md"| esc["Escalation (Opus)<br/>finish, repair, or do it"]
   esc -->|"repaired"| ready
   esc -->|"needs the owner"| adr(["ADR for the owner<br/>softfield accept N"])
-  pick -->|"lead ticket"| lead["Lead ticket (Opus)<br/>test-first, protected code, replans"]
+  pick -->|"lead ticket"| lead["Lead ticket (Opus, or Sonnet up to a difficulty)<br/>test-first, protected code, replans<br/>Sonnet fails: one Opus attempt"]
   gates -->|pass| merge["Squash-merge to main"]
   lead -->|"check-all passes"| merge
   esc -->|"finished or done"| merge
