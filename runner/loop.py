@@ -709,6 +709,15 @@ def wait_for_claude(
             check_backup(s)
 
 
+def _milestone_row(s: Session, milestone: str) -> int | None:
+    """The milestone's row, by its card's full key: a ticket may name it short (`milestone:
+    f2`), and F2's and F4's tickets then sat on a row of their own, so the card holding the
+    review's sheet looked empty and theirs waited for a review that was done (2026-10-22)."""
+    if s.project_id is None:
+        return None
+    return _record(s, metrics.upsert_milestone, s.project_id, full_key(s.repo, milestone))
+
+
 def record_ticket(
     s: Session,
     path: Path,
@@ -737,7 +746,7 @@ def record_ticket(
         metrics.upsert_ticket,
         s.project_id,
         path.stem,
-        milestone_id=_record(s, metrics.upsert_milestone, s.project_id, milestone),
+        milestone_id=_milestone_row(s, milestone),
         title=goal.splitlines()[0] if goal else None,
         body=text,
         kind="lead" if meta.get("agent") == "lead" else "developer",
@@ -802,9 +811,7 @@ def record_start(
         return None
     at = now().isoformat()
     # The planning room's general thread is about no milestone (f6-01)
-    milestone_id = (
-        _record(s, metrics.upsert_milestone, s.project_id, milestone) if milestone else None
-    )
+    milestone_id = _milestone_row(s, milestone) if milestone else None
     ticket_id = _record(s, metrics.upsert_ticket, s.project_id, ticket) if ticket else None
     _record(s, metrics.update_run_heartbeat, s.run_id, at)
     job_id = _record(
@@ -2671,7 +2678,7 @@ def record_findings(
     findings were all filed under F9's, so its review saw none (f8 review)."""
     if s.project_id is None:
         return
-    milestone_id = _record(s, metrics.upsert_milestone, s.project_id, milestone)
+    milestone_id = _milestone_row(s, milestone)
     if milestone_id is None:
         return
     for finding in findings:

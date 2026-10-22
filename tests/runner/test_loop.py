@@ -4052,6 +4052,23 @@ def test_a_deleted_tickets_row_leaves_whatever_its_state_but_done(repo):
     }
 
 
+def test_a_ticket_naming_its_milestone_short_sits_on_its_cards_row(repo):
+    """F2's ticket said `milestone: f2`: its row was a second F2 card, waiting for a review
+    that was done, while the card with the review's sheet showed no tickets (2026-10-22)."""
+    docs = repo / ".factory" / "cards"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / "f2-a-readme.md").write_text("# Milestone F2: a readme\n\n> **State:** ready\n")
+    path = write_task(repo / ".factory" / "tasks" / "ready", "f2-01-readme")
+    path.write_text(path.read_text().replace("milestone: 1\n", "milestone: f2\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a card and its ticket")
+    loop.open_session(_config(repo))
+    keys = {row["id"]: row["key"] for row in _rows(repo, "milestones")}
+    tickets = {row["ticket"]: keys[row["milestone_id"]] for row in _rows(repo, "tickets")}
+    assert tickets == {"f2-01-readme": "f2-a-readme"}
+    assert "f2" not in keys.values()
+
+
 def test_a_card_whose_doc_is_gone_leaves_the_board(repo):
     """A card merged away or `git rm`ed stayed a seed on the desk (f6-17): its row is
     `removed`. A milestone row that was never a card (no state) is left as it is."""
