@@ -3,7 +3,6 @@ id: f172-02-reserve-request-marks-a-card
 milestone: f172-i-d-like-to-be-able
 agent: lead
 difficulty: 4
-priority: 2
 depends_on: [f172-01-marked-cards-pass-the-reserve]
 files:
   - runner/requests.py

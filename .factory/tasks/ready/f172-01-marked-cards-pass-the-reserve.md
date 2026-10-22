@@ -3,7 +3,6 @@ id: f172-01-marked-cards-pass-the-reserve
 milestone: f172-i-d-like-to-be-able
 agent: lead
 difficulty: 5
-priority: 2
 depends_on: []
 files:
   - runner/milestone.py

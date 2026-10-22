@@ -4,7 +4,6 @@ milestone: f153-i-wonder-if-sonnet-would-be
 depends_on: []
 agent: lead
 difficulty: 4
-priority: 100
 area: factory
 files:
   - runner/config.py

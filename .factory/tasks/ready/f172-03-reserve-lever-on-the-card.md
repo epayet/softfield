@@ -2,7 +2,6 @@
 id: f172-03-reserve-lever-on-the-card
 milestone: f172-i-d-like-to-be-able
 difficulty: 4
-priority: 2
 depends_on: [f172-02-reserve-request-marks-a-card]
 files:
   - factory_dashboard/templates/thread.html
