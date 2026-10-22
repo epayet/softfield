@@ -262,6 +262,18 @@ def test_a_removed_card_a_removed_ticket_and_the_bugs_row_make_no_card(board_db)
     assert len(every) == len(set(every))
 
 
+def test_an_empty_milestone_with_no_state_and_no_tickets_makes_no_card(board_db):
+    """D3: a row with neither state nor tickets is no card."""
+
+    def add_empty(conn: sqlite3.Connection, p: int) -> None:
+        metrics.upsert_milestone(conn, p, "f99-empty")
+
+    write(board_db, add_empty)
+    found = read(board_db)
+    every = [c.key for cards in found.stages.values() for c in cards]
+    assert "F99" not in every
+
+
 def test_a_set_aside_bug_is_a_seed_marked_as_a_bug_and_planted_once_ready(board_db):
     bug = card(read(board_db), "bug-01-duck-count")
     assert (bug.stage, bug.bug, bug.area, bug.kind) == ("seed", True, "factory", "bug")

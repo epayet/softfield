@@ -261,6 +261,21 @@ def test_each_milestone_not_done_shows_its_priority_and_no_arrows(milestones_cli
     assert _row_cells(html, "F1")[0][:4] == ["F1", "The factory measures itself", "done", "3"]
 
 
+def test_an_empty_milestone_with_no_state_and_no_tickets_is_not_in_the_list(db_path):
+    """D3: a row with neither state nor tickets is left out of the milestones list."""
+    from factory_dashboard.milestones import milestone_rows
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        metrics.upsert_milestone(conn, project, "f99-empty")
+    finally:
+        conn.close()
+    rows = milestone_rows(metrics.open_db(db_path), PROJECT)
+    keys = {r.key for r in rows}
+    assert "F99" not in keys
+
+
 def test_milestone_detail_answers_200(milestone_detail_client):
     resp = milestone_detail_client.get("/milestones/f1")
     assert resp.status_code == 200

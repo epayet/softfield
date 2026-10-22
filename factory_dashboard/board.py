@@ -239,7 +239,8 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
     """Every card of the project's, with when it was harvested. ``now`` tells which jobs are
     live."""
     milestones = conn.execute(
-        "SELECT m.* FROM milestones m JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
+        "SELECT m.*, m.state FROM milestones m JOIN projects p ON p.id = m.project_id"
+        " WHERE p.name = ?",
         (project,),
     ).fetchall()
     mkey: dict[int, str] = {}  # milestone id → its short key (lowercase)
@@ -325,6 +326,8 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
 
     found: list[tuple[Card, datetime]] = []  # each card, and when it was harvested
     for m in milestones:
+        if m["state"] is None and m["status"] is None and m["id"] not in tickets:
+            continue
         own = tickets.get(m["id"], [])
         if m["key"] == BUGS:
             for t in own:

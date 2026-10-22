@@ -71,7 +71,7 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
     then not started (by priority), then done (by end date)."""
     # Lookup table for milestone status and dates.
     milestone_meta = conn.execute(
-        "SELECT m.key, m.status, m.started, m.ended, m.id FROM milestones m"
+        "SELECT m.key, m.status, m.started, m.ended, m.id, m.state FROM milestones m"
         " JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
         (project,),
     ).fetchall()
@@ -82,6 +82,7 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
             "status": row["status"],
             "started": row["started"],
             "ended": row["ended"],
+            "state": row["state"],
         }
         milestone_ids[row["key"]] = row["id"]
 
@@ -144,6 +145,26 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
     no_data_rows: list[MilestoneRow] = []
     for m in no_data:
         if m["key"] not in seen:
+            info = meta.get(m["key"], {})
+            mid = milestone_ids.get(m["key"])
+            if (
+                info.get("state") is None
+                and info.get("status") is None
+                and (
+                    mid is None
+                    or mid
+                    not in {
+                        r["milestone_id"]
+                        for r in conn.execute(
+                            "SELECT t.milestone_id FROM tickets t"
+                            " JOIN projects p ON p.id = t.project_id"
+                            " WHERE p.name = ? AND t.state IS NOT ?",
+                            (project, metrics.REMOVED),
+                        )
+                    }
+                )
+            ):
+                continue
             no_data_rows.append(
                 MilestoneRow(
                     key=m["key"],
