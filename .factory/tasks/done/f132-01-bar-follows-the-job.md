@@ -45,3 +45,11 @@ logs: .factory/var/runs/20261021-090717/f132-01-bar-follows-the-job
 result: blocked
 reason: the finished work failed check-all; its work is on task/f132-01-bar-follows-the-job
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: its escalation's work from task/f132-01-bar-follows-the-job, landed in a terminal session on 2026-10-21 once check-all passed on 16 workers (it was blocked only by the 1200 s cut, then put back by Try again); its gate change left out (F71)
+```

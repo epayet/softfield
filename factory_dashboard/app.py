@@ -250,7 +250,8 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
     """The top bar's status for the whole factory, whichever project the page shows (the
     owner, 2026-10-14: picking a project is for planning and the board, not for what the
     factory does). Of every project's status: a pause first (it holds every project), then a
-    running job, a wait for Claude, anything else live, and Stopped last; it names its project
+    running job (its dot is the lead's or a developer's, F132), a wait for Claude, a project
+    between jobs, Idle, and Stopped last; it names its project
     when there is more than one, and its button posts there."""
     from runner import metrics
 
@@ -260,13 +261,15 @@ def factory_wide_status(conn: sqlite3.Connection, project: str, now: datetime) -
     def rank(status: Status) -> int:
         if status.button == "resume" or "asked" in status.tone:
             return 0
-        if status.words.startswith("Running: "):
+        if status.dot in ("lead", "developer"):
             return 1
         if status.words.startswith("Waiting for Claude"):
             return 2
-        if status.words.startswith("Idle: "):
+        if status.words.startswith("Running: "):
             return 3
-        return 4 if status.words == "Stopped" else 3
+        if status.words.startswith("Idle: "):
+            return 4
+        return 5 if status.words == "Stopped" else 4
 
     name, status = min(found, key=lambda pair: rank(pair[1]))
     if len(names) == 1 or status.words == "Stopped":

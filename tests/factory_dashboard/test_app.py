@@ -2267,6 +2267,304 @@ def test_the_top_bar_says_what_the_factory_does_whichever_project_is_shown(serve
     assert '"kind": "pause", "project": "coucou"' in html
 
 
+def test_factory_wide_status_ranks_live_job_before_between_jobs(db_path):
+    """D1: a status whose dot is ``lead`` or ``developer`` (a live job) comes before any
+    other ``Running: …``. Order: pause, live job, wait for Claude, between-jobs line, Idle,
+    Stopped. Among equals, the owner's project order.
+
+    travel-companion first in the order, its run "picking the next ticket" with 9 ready
+    tickets, and softfield running a developer job on f15-10-fix-wait-note-assertions-check:
+    the bar says "Running: softfield · f15-10-fix-wait-note-assertions-check" with the
+    developer's dot, on a page for any of the three projects."""
+    from factory_dashboard.app import PICKING, factory_status, factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        # Seed two more projects: travel-companion and softfield
+        tc = metrics.upsert_project(conn, "travel-companion")
+        sf = metrics.upsert_project(conn, "softfield")
+        # Set order: travel-companion first, coucou second, softfield third
+        metrics.set_project_order(conn, ["travel-companion", "coucou", "softfield"])
+
+        # travel-companion: between jobs, "picking the next ticket", with 9 ready tickets
+        tc_run = metrics.upsert_run(
+            conn,
+            tc,
+            "20261002-110000",
+            command="milestone m1",
+            started=(NOW - timedelta(minutes=10)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.update_run_activity(conn, tc_run, PICKING, None)
+        m1 = metrics.upsert_milestone(conn, tc, "m1", started=(NOW - timedelta(days=1)).isoformat())
+        for i in range(9):
+            metrics.upsert_ticket(
+                conn, tc, f"m1-0{i + 1}-ready", milestone_id=m1, kind="developer", state="ready"
+            )
+
+        # softfield: running a developer job
+        sf_run = metrics.upsert_run(
+            conn,
+            sf,
+            "20261002-113500",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        sf_ticket = metrics.upsert_ticket(
+            conn,
+            sf,
+            "f15-10-fix-wait-note-assertions-check",
+            milestone_id=metrics.upsert_milestone(conn, sf, "f15"),
+            kind="developer",
+            state="running",
+        )
+        metrics.start_job(
+            conn,
+            sf_run,
+            ticket_id=sf_ticket,
+            milestone_id=metrics.upsert_milestone(conn, sf, "f15"),
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+
+        # coucou: also between jobs (already seeded by db_path fixture)
+        cc = metrics.upsert_project(conn, "coucou")
+        cc_run = metrics.upsert_run(
+            conn,
+            cc,
+            "20261002-100000",
+            command="milestone f1",
+            started=(NOW - timedelta(hours=1)).isoformat(),
+            heartbeat=(NOW - timedelta(minutes=30)).isoformat(),
+        )
+        metrics.update_run_activity(conn, cc_run, "Idle: 2 tickets wait", None)
+
+        # softfield's developer job should win, not travel-companion's "picking the next ticket"
+        assert factory_status(conn, "travel-companion", NOW).words == f"Running: {PICKING}"
+        expected_words = "Running: softfield · f15-10-fix-wait-note-assertions-check"
+        for proj in ("travel-companion", "coucou", "softfield"):
+            status = factory_wide_status(conn, proj, NOW)
+            assert status.words == expected_words, f"for {proj}: {status.words}"
+            assert status.dot == "developer"
+    finally:
+        conn.close()
+
+
+def test_factory_wide_status_ranks_planner_job(db_path):
+    """D1: a planner job shows ``planner, job <id>`` with the lead's dot."""
+    from factory_dashboard.app import PICKING, factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        # Seed travel-companion first with "picking the next ticket"
+        tc = metrics.upsert_project(conn, "travel-companion")
+        sf = metrics.upsert_project(conn, "softfield")
+        metrics.set_project_order(conn, ["travel-companion", "softfield"])
+
+        tc_run = metrics.upsert_run(
+            conn,
+            tc,
+            "20261002-110000",
+            command="milestone m1",
+            started=(NOW - timedelta(minutes=10)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.update_run_activity(conn, tc_run, PICKING, None)
+
+        # softfield: running a planner job
+        sf_run = metrics.upsert_run(
+            conn,
+            sf,
+            "20261002-113500",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        job_id = metrics.start_job(
+            conn,
+            sf_run,
+            ticket_id=None,
+            milestone_id=metrics.upsert_milestone(conn, sf, "f1"),
+            role="planner",
+            agent=LOCAL,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+        status = factory_wide_status(conn, PROJECT, NOW)
+        assert status.words == f"Running: softfield · planner, job {job_id}"
+        assert status.dot == "lead"
+    finally:
+        conn.close()
+
+
+def test_factory_wide_status_two_projects_between_jobs(db_path):
+    """D1: two projects between jobs and none running a job: the first in the order is named."""
+    from factory_dashboard.app import PICKING, factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        tc = metrics.upsert_project(conn, "travel-companion")
+        cc = metrics.upsert_project(conn, "coucou")
+        metrics.set_project_order(conn, ["travel-companion", "coucou"])
+        tc_run = metrics.upsert_run(
+            conn,
+            tc,
+            "20261002-110000",
+            command="milestone m1",
+            started=(NOW - timedelta(minutes=10)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.update_run_activity(conn, tc_run, PICKING, None)
+        cc_run = metrics.upsert_run(
+            conn,
+            cc,
+            "20261002-100000",
+            command="milestone f1",
+            started=(NOW - timedelta(hours=1)).isoformat(),
+            heartbeat=(NOW - timedelta(minutes=30)).isoformat(),
+        )
+        metrics.update_run_activity(conn, cc_run, "Idle: nothing to do", None)
+        status = factory_wide_status(conn, PROJECT, NOW)
+        assert status.project == "travel-companion"
+        assert "travel-companion" in status.words
+    finally:
+        conn.close()
+
+
+def test_factory_wide_status_pause_before_running(db_path):
+    """D1: a pause still comes before a running job."""
+    from factory_dashboard.app import factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        # coucou: paused
+        _pause_held(db_path)
+        cc = metrics.upsert_project(conn, "coucou")
+        cc_run = metrics.upsert_run(
+            conn,
+            cc,
+            "20261002-113500",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        cc_ticket = metrics.upsert_ticket(
+            conn,
+            cc,
+            "f1-04-live",
+            milestone_id=metrics.upsert_milestone(conn, cc, "f1"),
+            kind="developer",
+            state="running",
+        )
+        metrics.start_job(
+            conn,
+            cc_run,
+            ticket_id=cc_ticket,
+            milestone_id=metrics.upsert_milestone(conn, cc, "f1"),
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+        status = factory_wide_status(conn, PROJECT, NOW)
+        assert status.words.startswith("Paused by you since 11:40")
+        assert status.button == "resume"
+    finally:
+        conn.close()
+
+
+def test_factory_wide_status_waiting_for_claude_before_between_jobs(db_path):
+    """D1: ``Waiting for Claude until …`` comes before a between-jobs line."""
+    from factory_dashboard.app import PICKING, factory_status, factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        tc = metrics.upsert_project(conn, "travel-companion")
+        cc = metrics.upsert_project(conn, "coucou")
+        # travel-companion first: only the rank, not the order, puts coucou's wait ahead
+        metrics.set_project_order(conn, ["travel-companion", "coucou"])
+        # coucou: waiting for Claude
+        cc_run = metrics.upsert_run(
+            conn,
+            cc,
+            "20261002-120000",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=5)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.update_run_activity(
+            conn,
+            cc_run,
+            "waiting for Claude · f1-20-next until 15:00",
+            "2026-10-02T15:00:00+00:00",
+        )
+        # travel-companion: between jobs
+        tc_run = metrics.upsert_run(
+            conn,
+            tc,
+            "20261002-110000",
+            command="milestone m1",
+            started=(NOW - timedelta(minutes=10)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.update_run_activity(conn, tc_run, PICKING, None)
+        m1 = metrics.upsert_milestone(conn, tc, "m1", started=(NOW - timedelta(days=1)).isoformat())
+        metrics.upsert_ticket(
+            conn, tc, "m1-01-ready", milestone_id=m1, kind="developer", state="ready"
+        )
+        tc_status = factory_status(conn, "travel-companion", NOW)
+        assert tc_status.words == f"Running: {PICKING}"  # between jobs, not idle
+        status = factory_wide_status(conn, PROJECT, NOW)
+        assert status.words == "Waiting for Claude until 15:00 · coucou"
+        assert status.dot == "waiting"
+    finally:
+        conn.close()
+
+
+def test_factory_wide_status_one_project_names_no_project(db_path):
+    """D1: one project only: the words name no project, as today."""
+    from factory_dashboard.app import factory_wide_status
+
+    conn = metrics.open_db(db_path)
+    try:
+        # Only coucou exists
+        cc = metrics.upsert_project(conn, "coucou")
+        cc_run = metrics.upsert_run(
+            conn,
+            cc,
+            "20261002-113500",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=25)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        cc_ticket = metrics.upsert_ticket(
+            conn,
+            cc,
+            "f1-04-live",
+            milestone_id=metrics.upsert_milestone(conn, cc, "f1"),
+            kind="developer",
+            state="running",
+        )
+        metrics.start_job(
+            conn,
+            cc_run,
+            ticket_id=cc_ticket,
+            milestone_id=metrics.upsert_milestone(conn, cc, "f1"),
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=(NOW - timedelta(minutes=12)).isoformat(),
+        )
+        status = factory_wide_status(conn, PROJECT, NOW)
+        assert " · coucou" not in status.words
+        assert status.words == "Running: f1-04-live"
+    finally:
+        conn.close()
+
+
 def _open_tickets(page, client: TestClient, size: dict[str, int]) -> None:
     page.set_viewport_size(size)
 
