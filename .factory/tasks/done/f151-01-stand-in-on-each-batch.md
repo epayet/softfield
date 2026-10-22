@@ -25,3 +25,10 @@ Read "What happened" and Decisions D1–D2 in `.factory/cards/f151-i-had-to-rest
 - a stand-in that may not run (none configured, or past its cap) leaves the row parked again and the developer tickets go on, as today
 - the listed `tests:` pass, and the new test fails without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
