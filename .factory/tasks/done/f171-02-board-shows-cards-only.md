@@ -28,3 +28,12 @@ Read D3 in `.factory/cards/f171-there-are-dupliacted-tickets-on-the.md`, then `_
 - a card (a row with a state) with no tickets is still on both, as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 1911
+gate_failures: []
+tokens: 2515844
+```
