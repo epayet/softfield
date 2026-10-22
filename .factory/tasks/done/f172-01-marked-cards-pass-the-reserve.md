@@ -33,3 +33,10 @@ Read ADR 34 in `.factory/adr/34-a-card-may-use-the-reserve.md` (it must be Accep
 - a card signed off has no `**Reserve:**` in its header
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
