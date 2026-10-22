@@ -1,6 +1,7 @@
 # Milestone F151: I had to restart the runner manually after f114-02, why.…
 
-> **State:** ready · **Priority:** 10 · **Area:** factory
+> **State:** done · **Priority:** 10 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-22. Base: git tag `f151-i-had-to-restart-the-runner-start`. Report: [`.factory/reviews/f151-i-had-to-restart-the-runner.md`](../reviews/f151-i-had-to-restart-the-runner.md).
 > Planted by the owner on 2026-10-17.
 
 ## Notes

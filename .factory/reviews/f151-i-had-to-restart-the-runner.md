@@ -1,5 +1,7 @@
 # Review: F151, I had to restart the runner
 
+- **Status:** done, signed off by the owner on 2026-10-22.
+
 ## Sign-off sheet
 
 ### 1. What changed
