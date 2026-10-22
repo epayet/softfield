@@ -206,7 +206,8 @@ Do exactly one of:
    work there and make `softfield check-all --task {id}` pass. The runner merges the
    branch, crediting you both. Check out nothing else, and only for this outcome.
 2. requeue: repair or split the ticket and write the task file(s) to .factory/tasks/ready/
-   (docs/task-format.md). Add facts, not a solution. Its next run builds on the branch; if
+   (docs/task-format.md), then run `softfield check-tickets <its files>` until it passes. Add
+   facts, not a solution. Its next run builds on the branch; if
    the work there is unusable, add "reset": true to decision.json and it starts from main.
 3. requeue: answer the model's question by adding the facts to the task's Context, and write
    the task to .factory/tasks/ready/{id}.md (as in 2, about the branch).
@@ -255,8 +256,8 @@ explaining. Then do what helps the next tickets most, any of:
 - tighten upcoming tickets in .factory/tasks/ready/ with what you saw (facts, not solutions)
 - one line in docs/agents/developer.md (its budget is in docs/agents/lead.md ("Developers' notes"))
 
-If you wrote or changed a ticket, run `uv run pytest -q tests/runner/test_tasks.py` and fix
-what it reports: it checks the tickets' format and that every path they name exists
+If you wrote or changed a ticket, run `softfield check-tickets <its files>` and fix what it
+reports: the format (`tests:` is never empty), pre-flight, and that every path it names exists
 (repo-relative, e.g. `tests/factory_dashboard/conftest.py`, not `conftest.py`).
 
 Write {out}: 2-5 lines on what you found and did. Also write {findings}, one entry per
@@ -316,7 +317,9 @@ developer edited (the session reports in .factory/sessions/ list them). Check th
 
 Grade each finding blocking / should-fix / nit and route it:
 - local: write a ticket in .factory/tasks/ready/ (docs/task-format.md), `finding: <id>` in the
-  frontmatter. Findings listed as recurring must NOT go to the local model.
+  frontmatter, and run `softfield check-tickets <its files>` until it passes (`tests:` is never
+  empty: a ticket with nothing to test, like deleting a file, you do yourself as a claude fix).
+  Findings listed as recurring must NOT go to the local model.
 - claude: fix it yourself now, keeping `uv run pytest -q {tests}` green.
 - adr: only for what the owner is asked for (their preferences, above). Draft an ADR (status
   Proposed) and set "stop": "adr-needed". Decide everything else yourself; never park a

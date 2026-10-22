@@ -17,6 +17,7 @@ from runner.config import Config, project_checks
 from runner.gates import GateResult
 from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
+    CHECK_TICKETS,
     CLAUDE_HEADLESS_AGENT,
     MAIN,
     NO_E2E,
@@ -654,7 +655,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
             timeout=cfg.review_timeout,
             edit=(ANY,),
             # ADR 28: its times and counts from the database, read-only
-            commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, look.COMMAND),
+            commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, look.COMMAND, CHECK_TICKETS),
         )
         since = s.git.head()
         if s.project_id is not None:  # under way: off the line's queue (f4-20)

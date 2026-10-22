@@ -623,7 +623,7 @@ def sync_cards(s: Session) -> None:
 
 
 PICKING = "picking the next ticket"
-# A planner job checks its drafted tickets as Approve will (`runner check-tickets`, read-only)
+# A job that writes tickets checks them as Approve will (`runner check-tickets`, read-only)
 CHECK_TICKETS = "softfield check-tickets"
 
 
@@ -3126,7 +3126,7 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
         timeout=s.cfg.claude_timeout,
         edit=(".factory/tasks/ready/**", "docs/agents/developer.md", ".factory/var/runs/**"),
         # pytest: the tickets' pre-flight test; its commit skips the hook
-        commands=(*GIT_READ_COMMANDS, "uv run pytest"),
+        commands=(*GIT_READ_COMMANDS, "uv run pytest", CHECK_TICKETS),
     )
     s.log("")
     s.log(console.ticket_header(f"{milestone} checkpoint", "lead", None))
@@ -3619,7 +3619,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
         timeout=s.cfg.claude_timeout,
         edit=(ANY,),
         # `finish` checks out the ticket's branch itself: only that one (ADR 15 item 8)
-        commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, f"git checkout {branch}"),
+        commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, CHECK_TICKETS, f"git checkout {branch}"),
     )
     decision_path = logs / "decision.json"
     if earlier is None:  # only this escalation's decision counts (a parked one resumes too)
@@ -4949,6 +4949,7 @@ def work_queue(
             set_activity(s, PICKING)
         apply_owner_requests(s)
         check_backup(s)
+        set_aside_unreadable(s)
         fresh_reading(s)
         if reviews:
             _queue_due_review(s)
@@ -5261,6 +5262,22 @@ def _move_alone(git: Git, src: Path, folder: Path, message: str) -> None:
     git.move(src, dst)
     paths = (src.relative_to(git.repo).as_posix(), dst.relative_to(git.repo).as_posix())
     git.run("commit", "-q", "--no-verify", "-m", message, "--", *paths)
+
+
+def set_aside_unreadable(s: Session) -> None:
+    """A ready ticket that doesn't parse, moved to later/ with a console line and a report note,
+    so it waits on its card for a fix instead of stopping the run: F6's review wrote one with
+    ``tests: []`` and every `load_dir` of ready/ raised (2026-10-22)."""
+    ready, later = s.tasks_dir("ready"), s.tasks_dir(LATER)
+    for path in sorted(ready.glob("*.md")):
+        try:
+            parse_task(path, s.cfg.default_max_diff)
+        except (ValueError, yaml.YAMLError, UnicodeDecodeError) as exc:  # TaskError among them
+            later.mkdir(parents=True, exist_ok=True)
+            _move_alone(s.git, path, later, f"runner: set aside {path.stem}: {exc}")
+            line = f"Set aside {path.stem} in later/: it doesn't read as a ticket ({exc})."
+            s.log(f"[{RUNNER_AGENT}] {line}")
+            s.report.notes.append(line)
 
 
 def close_session(s: Session) -> SessionReport:

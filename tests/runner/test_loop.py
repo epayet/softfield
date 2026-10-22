@@ -381,6 +381,25 @@ def test_the_queue_goes_on_with_other_milestones_while_one_waits(repo, monkeypat
     assert "Waiting: m2-01-held waits for m1-first's sign-off" in s.report.notes
 
 
+def test_a_ready_ticket_that_does_not_parse_is_set_aside_and_the_queue_goes_on(repo, monkeypatch):
+    """F6's review wrote a ticket with `tests: []`: every read of ready/ raised and the run
+    died at each start (2026-10-22)."""
+    tasks = repo / ".factory" / "tasks"
+    write_task(tasks / "ready", "m1-01-good")
+    broken = write_task(tasks / "ready", "m1-02-broken")
+    broken.write_text(re.sub(r"tests:\n(  - .*\n)+", "tests: []\n", broken.read_text()))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "tickets")
+    ran: list[str] = []
+    monkeypatch.setattr(loop, "run_task", _merge_any(repo, ran))
+    s = loop.open_session(_config(repo), None)
+    assert loop.work_queue(s) is False
+    assert ran == ["m1-01-good"]
+    assert (tasks / "later" / "m1-02-broken.md").is_file()
+    assert any("Set aside m1-02-broken" in note and "'tests'" in note for note in s.report.notes)
+    assert git(repo, "status", "--porcelain") == ""  # the move is committed
+
+
 def _two_milestones(repo: Path) -> None:
     """F9's last ticket is ready, F10 has one too (f4-20)."""
     for folder, task_id in (
@@ -1302,7 +1321,8 @@ def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fa
     assert "Bash(uv run pytest:*)" in jobs[0].allowed_tools
     assert "Edit(docs/agents/developer.md)" in jobs[0].allowed_tools  # ADR 14 item 1
     assert LOOK not in jobs[0].allowed_tools  # ADR 28 item 4: planner and review jobs only
-    assert "tests/runner/test_tasks.py" in jobs[0].prompt
+    assert "Bash(softfield check-tickets:*)" in jobs[0].allowed_tools  # any project, not ours
+    assert "softfield check-tickets <its files>" in jobs[0].prompt
     assert "Checkpoint: Sound. Tightened m1-03." in report.notes
 
 
