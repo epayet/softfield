@@ -485,6 +485,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the cause was fixed in a terminal session on 2026-10-15 (`[checks] e2e`), but the two stops it had already recorded stayed on Needs you six more days, until this ticket. A fix that removes a stop's cause should clear the stops it recorded in the same change. The owner planted the same question twice (F135, F156): a stop on Needs you should say whether it will clear by itself.
 - **Decisions affected:** none.
 
+### F151 (2026-10-22): each batch gets its stand-in while the checkpoint waits for Claude ([review](../reviews/f151-i-had-to-restart-the-runner.md))
+
+- **Q1:** one lead ticket (protected `runner/`), merged first time in 13.5 minutes; no checkpoint. Review round 1: one should-fix (an acceptance case untested, fixed by the review) and one nit (backlog).
+- **Q3:** Claude only, $0.84 for the ticket; no local tokens, as fits protected code.
+- **Q5:** see the review's numbers.
+- **Anything else:** the bug lived behind a test that drove the parked row by hand, so the loop never had to start it. A scheduling rule's test should go through `work_queue`; and a "falls back as today" acceptance case should take the new path before falling back.
+- **Decisions affected:** none; F140 would make the fix's branch unnecessary.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

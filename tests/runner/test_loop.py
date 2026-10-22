@@ -5838,6 +5838,31 @@ def test_each_batch_of_merges_gets_its_stand_in_while_the_checkpoint_waits_for_c
     assert jobs == [] and s.state.unchecked == []
 
 
+def test_a_stand_in_that_fails_on_the_next_batch_parks_the_checkpoint_again_for_claude(
+    repo, fake_model, fake_lead, fake_clock, monkeypatch
+):
+    """F151: the parked row starts again for the new batch, but its stand-in fails: the row
+    parks again until Claude's reset, with both batches kept for Claude."""
+    _claude_at(repo, 0.80)
+    _four_merges(repo, fake_model)
+    _fake_copilot(monkeypatch, JobResult(ok=True, text='{"findings": []}', duration_s=1))
+    roles = {**ROLES, "checkpoint-stand-in": (COPILOT.id,)}
+    agents = {**_config(repo).agents, COPILOT.id: COPILOT}
+    s = loop.open_session(replace(_config(repo), agents=agents, roles=roles))
+    for _ in range(3):  # m1-01, m1-02 and its stand-in, then m1-03
+        loop.work_queue(s, escalate=False, once=True)
+    failed = _fake_copilot(monkeypatch, JobResult(ok=False, text="", duration_s=1))
+    loop.work_queue(s, escalate=False, once=True)  # m1-04, then the stand-in that fails
+    assert len(failed) == 1 and "m1-04-thing" in failed[0].prompt
+    assert len(s.report.tasks) == 4 and all(t.result == "done" for t in s.report.tasks)
+    [row] = _queue(repo)
+    assert (row["done"], row["not_before"]) == (None, FIVE_RESETS.isoformat())
+    assert [m.split()[0] for m in s.state.recheck] == ["m1-01-thing", "m1-02-thing"]
+    assert [m.split()[0] for m in s.state.unchecked] == ["m1-03-thing", "m1-04-thing"]
+    _, jobs = fake_lead
+    assert jobs == []
+
+
 def test_without_a_stand_in_the_next_batch_leaves_the_checkpoint_parked_for_claude(
     repo, fake_model, fake_lead, fake_clock
 ):
