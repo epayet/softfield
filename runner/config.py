@@ -65,6 +65,8 @@ class Config:
     review_timeout: int = 1800  # a milestone review's own limit; Claude's when unset (2026-10-08)
     five_hour_reserve: float = 0.25  # Claude's 5-hour window kept for the owner (ADR 16 item 1)
     developer_five_hour_cap: float = 0.5  # Claude develops only under it (ADR 16 item 2)
+    # the hardest lead ticket the first `[roles] lead-ticket` agent takes; 0: none (ADR 32)
+    lead_first_up_to: int = 0
     agents: Mapping[str, Agent] = field(default_factory=dict)  # by id (ADR 14 item 3)
     roles: Mapping[str, tuple[str, ...]] = field(default_factory=dict)  # role → agent ids
     # `[bench] dir`: where the bench clones its copies of the repo (f2-12)
@@ -110,6 +112,12 @@ def _roles(data: dict[str, Any], agents: Mapping[str, Agent]) -> dict[str, tuple
         if unknown := [i for i in ids if i not in agents]:
             raise ConfigError(f"[roles] {role} names undeclared agents: {', '.join(unknown)}")
     return roles
+
+
+def _lead_first_up_to(value: Any) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ConfigError("[claude] lead_first_up_to must be a whole difficulty, 0 for none")
+    return value
 
 
 def _backup(table: dict[str, Any]) -> Backup:
@@ -183,6 +191,7 @@ def load_config(repo: Path) -> Config:
         claude_reserve=data["claude"]["reserve"],
         five_hour_reserve=data["claude"].get("five_hour_reserve", 0.25),
         developer_five_hour_cap=data["claude"].get("developer_five_hour_cap", 0.5),
+        lead_first_up_to=_lead_first_up_to(data["claude"].get("lead_first_up_to", 0)),
         agents=agents,
         roles=_roles(data, agents),
         bench_copies=Path(data.get("bench", {}).get("dir", DEFAULT_BENCH_DIR)).expanduser(),

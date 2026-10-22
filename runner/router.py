@@ -18,6 +18,9 @@ plain line, the job's ``routing_reason``.
 - **A checkpoint** goes to the first agent its role lists whose model differs from every
   author of the merges it reviews. When Claude can't take it, a read-only agent may stand in
   (ADR 16 item 9): ``stand_in``.
+- **A lead ticket** (ADR 32 item 1): with two agents listed and a limit, the first takes a
+  ticket of difficulty up to the limit, the second the rest and an unestimated one; with one
+  agent, or the limit 0, the last listed takes them all.
 """
 
 from collections.abc import Callable, Collection, Mapping, Sequence
@@ -33,6 +36,7 @@ from runner.ratings import may_review
 
 DEVELOPER_ROLES = ("developer", "last-attempt")
 CHECKPOINT = "checkpoint"
+LEAD_TICKET = "lead-ticket"
 STEP_UP = 2  # rating points above the agent that failed (ADR 15 item 7)
 READ_ONLY_HARNESSES = frozenset({"copilot"})  # reviews only, never a developer (f1-22)
 CLAUDE = "claude"  # the lead's harness: its 5-hour window is shared with the owner (ADR 16)
@@ -77,6 +81,7 @@ def route(
     authors: Collection[Agent] = (),
     lead_ready: bool = False,
     five_hour_cap: float = 1.0,
+    lead_first_up_to: int = 0,
 ) -> Route:
     """The agent for ``role``'s job on ``ticket`` (None for a milestone-wide job).
 
@@ -86,7 +91,8 @@ def route(
     whose attempt failed before this one, ``refused`` the agents that refused this attempt,
     ``authors`` the developers whose merges a checkpoint reviews. ``lead_ready`` says lead
     work waits (a lead ticket, a direction, an escalation or a checkpoint), and
-    ``five_hour_cap`` is the share of Claude's 5-hour window a developer job may start under."""
+    ``five_hour_cap`` is the share of Claude's 5-hour window a developer job may start under;
+    ``lead_first_up_to`` the hardest lead ticket the first lead agent takes (0: none)."""
     if role in DEVELOPER_ROLES:
         if ticket is None or ticket.lead_only:
             raise LeadOnly(f"{ticket.id if ticket else 'this job'} is the lead's work, not {role}")
@@ -107,6 +113,8 @@ def route(
         raise LookupError(f"[roles] {role} names no agent")
     if role == CHECKPOINT and authors:
         return _reviewer(candidates, authors)
+    if role == LEAD_TICKET:
+        return _lead(ticket, candidates, lead_first_up_to)
     return Route(candidates[0], f"{candidates[0].id}, the first agent [roles] {role} names")
 
 
@@ -230,6 +238,26 @@ def _first_pick(
     if local is None:  # only cloud agents listed: the first left tries, until refused
         return Route(pool[0], f"{pool[0].id}, the first left: {why}")
     return Route(local, f"{local.id}, the floor: {why}")
+
+
+def _lead(ticket: Ticket | None, candidates: Sequence[Agent], up_to: int) -> Route:
+    if len(candidates) < 2 or up_to <= 0:
+        last = candidates[-1]
+        return Route(last, f"{last.id}, the last agent [roles] {LEAD_TICKET} names")
+    first, second = candidates[0], candidates[1]
+    difficulty = ticket.difficulty if ticket is not None else None
+    if difficulty is None:
+        why = f"of no difficulty (the first agent only up to {up_to})"
+        return Route(second, f"{second.id}, a lead ticket {why}")
+    if difficulty <= up_to:
+        return Route(
+            first,
+            f"{first.id}, a lead ticket of difficulty {difficulty} (the first agent up to {up_to})",
+        )
+    return Route(
+        second,
+        f"{second.id}, a lead ticket of difficulty {difficulty} (the second agent above {up_to})",
+    )
 
 
 def _reviewer(candidates: Sequence[Agent], authors: Collection[Agent]) -> Route:

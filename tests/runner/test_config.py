@@ -93,6 +93,18 @@ def test_the_owners_share_of_the_5_hour_window_and_the_developers_cap_are_read(t
     assert (cfg.five_hour_reserve, cfg.developer_five_hour_cap) == (0.2, 0.4)
 
 
+def test_the_first_lead_agents_limit_is_read_and_is_0_unset(tmp_path, machine):
+    """ADR 32 item 1 (F153 D1): with no setting, no lead ticket goes to the first agent."""
+    assert load_config(REPO).lead_first_up_to == 0
+    repo = _repo(tmp_path, "")
+    toml = repo / ".factory" / "project.toml"
+    toml.write_text(toml.read_text().replace("[claude]\n", "[claude]\nlead_first_up_to = 4\n"))
+    assert load_config(repo).lead_first_up_to == 4
+    toml.write_text(toml.read_text().replace("= 4\n", '= "4"\n'))
+    with pytest.raises(ConfigError, match="lead_first_up_to"):
+        load_config(repo)
+
+
 def test_the_repos_toml_declares_f1s_agents_and_roles(machine):
     """ADR 14 item 3, D6; f1-25 turns on Sonnet as a developer after local (ADR 15 item 6),
     with Opus to check Sonnet's merges (item 9); f1-26 shadows the checkpoint with Copilot."""

@@ -328,3 +328,41 @@ def test_other_roles_take_their_first_agent():
         OPUS,
         "claude-opus, the first agent [roles] direction names",
     )
+
+
+def lead(difficulty, candidates=(SONNET, OPUS), up_to=4):
+    ticket = Ticket("f1-98-lead", difficulty, lead_only=True)
+    return route("lead-ticket", ticket, 1, candidates, {}, {}, {}, THURSDAY, lead_first_up_to=up_to)
+
+
+@pytest.mark.parametrize("difficulty", [1, 3, 4])
+def test_the_first_lead_agent_takes_a_lead_ticket_up_to_the_limit(difficulty):
+    """ADR 32 item 1, F153 D1."""
+    assert lead(difficulty) == (
+        SONNET,
+        f"claude-sonnet, a lead ticket of difficulty {difficulty} (the first agent up to 4)",
+    )
+
+
+@pytest.mark.parametrize("difficulty", [5, 9])
+def test_the_second_lead_agent_takes_a_harder_lead_ticket(difficulty):
+    assert lead(difficulty) == (
+        OPUS,
+        f"claude-opus, a lead ticket of difficulty {difficulty} (the second agent above 4)",
+    )
+
+
+def test_the_second_lead_agent_takes_a_lead_ticket_with_no_difficulty():
+    assert lead(None) == (
+        OPUS,
+        "claude-opus, a lead ticket of no difficulty (the first agent only up to 4)",
+    )
+
+
+@pytest.mark.parametrize(("candidates", "up_to"), [((OPUS,), 4), ((OPUS,), 0), ((SONNET, OPUS), 0)])
+def test_one_lead_agent_or_no_limit_gives_the_last_listed(candidates, up_to):
+    """Today's config, one agent and no setting, behaves as today; the limit 0 goes back."""
+    assert lead(3, candidates, up_to) == (
+        OPUS,
+        "claude-opus, the last agent [roles] lead-ticket names",
+    )

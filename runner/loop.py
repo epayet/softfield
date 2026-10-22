@@ -351,12 +351,15 @@ def _in_flight_session(s: Session, session_id: str | None) -> None:
 
 
 @contextmanager
-def _settling(s: Session, role: str, task: Task, session_id: str | None) -> Iterator[None]:
+def _settling(
+    s: Session, role: str, task: Task, session_id: str | None, agent: str | None = None
+) -> Iterator[None]:
     """The runner's own steps on a Claude job's work once its session ended (check-all, the
     commits, the merge): still the job in flight, so a stop among them is recovered at the next
     start like one inside the session, its work kept on a branch and its session resumed.
     f17-01 (2026-10-16): stopped during the escalation's check-all, its finished work was left
-    on main with nothing in flight, and the runner wouldn't start again. A stop keeps it."""
+    on main with nothing in flight, and the runner wouldn't start again. A stop keeps it.
+    ``agent`` is the one whose session it was, else the role's first."""
     _set_in_flight(
         s,
         kind=role,
@@ -364,7 +367,7 @@ def _settling(s: Session, role: str, task: Task, session_id: str | None) -> Iter
         subject=task.id,
         milestone=task.milestone,
         branch=s.git.current_branch(),
-        agent=s.cfg.agent_for(role).id,
+        agent=agent or s.cfg.agent_for(role).id,
         session_id=session_id,
     )
     yield
@@ -437,7 +440,11 @@ def _recover(git: Git, state: State, state_path: Path) -> str:
         # stopped during its check-all: the runner had committed it)
         where = target if target and (kept or branch != MAIN) else ""
         kept = kept or bool(where)  # what the line below says
-        state.interrupted[job_key(kind, str(name))] = {"session_id": session, "branch": where}
+        state.interrupted[job_key(kind, str(name))] = {
+            "session_id": session,
+            "branch": where,
+            "agent": agent,  # the session resumes on it (ADR 32 item 1)
+        }
         after = (
             f"its session {session} resumes on its next run"
             if session
@@ -1142,7 +1149,7 @@ def _park(
     if kept and kept != branch:
         s.git.checkout(MAIN)
     entry = {"session_id": session or "", "branch": kept}
-    s.state.interrupted[job_key(job.role, name)] = {**entry, "cause": "limit"}
+    s.state.interrupted[job_key(job.role, name)] = {**entry, "agent": agent, "cause": "limit"}
     if job.role in QUEUED:
         subject = milestone if job.role == CHECKPOINT else name
         park_row(s, job.role, subject, resets, **(extra or {}))
@@ -2574,6 +2581,9 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
         edit=(ANY,),
         commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, *task.commands),
     )
+    parked = s.state.interrupted.get(job_key(job.role, task.id))
+    routed = _lead_route(s, task, parked)
+    lead = routed.agent.id
     waited = s.state.waits_on_main.pop(task.id, None)
     if waited is not None:
         save_state(s.state, s.state_path)
@@ -2584,26 +2594,50 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
             block(s, task.path, f"its work on {waited} clashes with {MAIN}")
             return
         s.log(f"[{RUNNER_AGENT}] {task.id}'s work waited on {waited} for {MAIN}: checks again")
-        with _settling(s, job.role, task, None):
-            _settle_lead_task(s, task, rec, logs, job)
+        with _settling(s, job.role, task, None, lead):
+            _settle_lead_task(s, task, rec, logs, job, lead)
         return
-    parked = s.state.interrupted.get(job_key("lead-ticket", task.id))
     if parked and parked["branch"] == branch:
         s.git.checkout(branch)  # an interrupted run's work, which its session resumes
     else:
         s.git.fresh_branch(branch, MAIN)
     try:
-        result = call_claude(s, job, task.milestone, task.id, ticket=task.id, park=True)
+        result = call_claude(
+            s, job, task.milestone, task.id, ticket=task.id, park=True, routed=routed
+        )
     except Parked:
         s.git.checkout(MAIN)
         rec.result = "parked"
         return
-    with _settling(s, job.role, task, result.session_id):
-        _settle_lead_task(s, task, rec, logs, job)
+    with _settling(s, job.role, task, result.session_id, lead):
+        _settle_lead_task(s, task, rec, logs, job, lead)
 
 
-def _settle_lead_task(s: Session, task: Task, rec: TaskRecord, logs: Path, job: JobSpec) -> None:
-    """The lead ticket's work, merged once check-all passes, else blocked on its branch."""
+def _lead_route(s: Session, task: Task, interrupted: Mapping[str, Any] | None) -> router.Route:
+    """Who does a lead ticket (ADR 32 item 1): an interrupted one resumes on the agent whose
+    session it was; else the router picks by its difficulty."""
+    agent = s.cfg.agents.get(str((interrupted or {}).get("agent") or ""))
+    if agent is not None:
+        return router.Route(agent, f"{agent.id}, whose interrupted session this ticket resumes")
+    ticket = router.Ticket(task.id, task.difficulty, lead_only=True)
+    return router.route(
+        "lead-ticket",
+        ticket,
+        1,
+        candidates(s, "lead-ticket"),
+        {},
+        {},
+        {},
+        now(),
+        lead_first_up_to=s.cfg.lead_first_up_to,
+    )
+
+
+def _settle_lead_task(
+    s: Session, task: Task, rec: TaskRecord, logs: Path, job: JobSpec, lead: str
+) -> None:
+    """The lead ticket's work, merged once check-all passes, else blocked on its branch;
+    ``lead`` is the agent that did it (ADR 32 item 4)."""
     branch = f"task/{task.id}"
     s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT))
     if not s.git.changed_files(MAIN):  # an interrupted run's commit counts too
@@ -2629,7 +2663,6 @@ def _settle_lead_task(s: Session, task: Task, rec: TaskRecord, logs: Path, job: 
     s.git.move(task.path, target)
     append_footer(target, {"result": "done", "agent": "lead", "attempts": 1})
     runner_commit(s, messages.done_message(task.id, rec))
-    lead = s.cfg.agent_for(job.role).id
     record_ticket(s, target, merged_by=lead, commit=rec.commit)
     rate_finished(s, task.id)
     s.git.run("branch", "-D", branch)

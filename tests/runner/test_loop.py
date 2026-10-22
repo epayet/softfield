@@ -1826,7 +1826,11 @@ def test_a_lead_ticket_stopped_during_its_check_all_keeps_its_branch(repo, monke
     s = loop.open_session(_config(repo), None)
     assert s.git.current_branch() == "main" and s.git.is_clean()
     assert s.state.interrupted == {
-        "lead-ticket:m1-01-lead": {"session_id": "s1", "branch": "task/m1-01-lead"}
+        "lead-ticket:m1-01-lead": {
+            "session_id": "s1",
+            "branch": "task/m1-01-lead",
+            "agent": "claude-opus",
+        }
     }
     assert "return 42" in git(repo, "show", "task/m1-01-lead:coucou/thing.py")
     assert "its changes are on task/m1-01-lead;" in s.report.notes[-1]
@@ -2915,6 +2919,57 @@ def test_a_merged_lead_ticket_is_merged_by_claude(repo, fake_model, fake_lead, m
     assert (ticket["commit"], ticket["lines_changed"]) == (report.tasks[0].commit, 2)
 
 
+@pytest.mark.parametrize(
+    ("difficulty", "agent", "model"), [(3, "claude-sonnet", "sonnet"), (6, "claude-opus", "opus")]
+)
+def test_a_lead_ticket_runs_on_the_agent_its_difficulty_routes_to(
+    repo, fake_model, fake_lead, monkeypatch, capsys, difficulty, agent, model
+):
+    """ADR 32 items 1 and 4 (F153 D1, D4): the job, the ticket's record and the merged line
+    name the routed agent; the commit trailer stays claude-headless."""
+    _lead_task(repo, "m1-01-lead")
+    path = repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md"
+    path.write_text(
+        path.read_text().replace("agent: lead\n", f"agent: lead\ndifficulty: {difficulty}\n")
+    )
+    git(repo, "commit", "-qam", "difficulty")
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    roles = {**ROLES, "lead-ticket": ("claude-sonnet", "claude-opus")}
+    cfg = replace(_config(repo), roles=roles, lead_first_up_to=4)
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None and [t.result for t in report.tasks] == ["done"]
+    assert jobs[0].model == model
+    [ticket] = _rows(repo, "tickets")
+    assert ticket["merged_by"] == agent
+    [job] = [j for j in _rows(repo, "jobs") if j["role"] == "lead-ticket"]
+    assert job["agent"] == agent and f"difficulty {difficulty}" in str(job["routing_reason"])
+    assert f"✔ [{agent}] m1-01-lead merged" in capsys.readouterr().out
+    assert "Agent: claude-headless" in git(repo, "log", "-1", "--format=%B", report.tasks[0].commit)
+
+
+def test_an_interrupted_lead_ticket_resumes_on_the_agent_whose_session_it_was(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    """Its difficulty 3 routes to Sonnet now, but Opus's session resumes, on Opus."""
+    _lead_task(repo, "m1-01-lead")
+    path = repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md"
+    path.write_text(path.read_text().replace("agent: lead\n", "agent: lead\ndifficulty: 3\n"))
+    git(repo, "commit", "-qam", "difficulty")
+    roles = {**ROLES, "lead-ticket": ("claude-sonnet", "claude-opus")}
+    cfg = replace(_config(repo), roles=roles, lead_first_up_to=4)
+    entry = {"session_id": "s1", "branch": "", "agent": "claude-opus"}
+    save_state(State(interrupted={"lead-ticket:m1-01-lead": entry}), cfg.runs_dir / "state.json")
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert jobs[0].model == "opus"
+    [ticket] = _rows(repo, "tickets")
+    assert ticket["merged_by"] == "claude-opus"
+
+
 def test_escalated_and_blocked_tickets_get_their_state(repo, fake_model, fake_lead, monkeypatch):
     _lead_task(repo, "m1-01-lead")
     _add_task(repo, "m2-01-thing")
@@ -3208,7 +3263,11 @@ def test_an_interrupted_job_on_main_is_kept_on_its_own_branch(repo, monkeypatch)
     assert "coucou/fix.py" in kept and "(interrupted)" in kept
     assert s.state.in_flight is None
     assert s.state.interrupted == {
-        "review:m1-review-r1": {"session_id": "", "branch": "interrupted/review-m1"}
+        "review:m1-review-r1": {
+            "session_id": "",
+            "branch": "interrupted/review-m1",
+            "agent": "claude-opus",
+        }
     }
 
     calls = _limited_then(monkeypatch, JobResult(ok=True, text="", duration_s=1.0))
