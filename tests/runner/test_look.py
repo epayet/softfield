@@ -324,12 +324,16 @@ def test_looking_applies_no_owner_request_and_changes_nothing(in_repo, capsys):
 LOOK = "Bash(softfield look:*)"
 
 
-def test_the_review_job_may_look(repo, monkeypatch):
+def test_the_review_job_may_look_and_is_told_so(repo, monkeypatch):
+    """Allowed since f95-02, but its prompt never said so: F19's, F28's and F135's reviews
+    wrote that they couldn't read the metrics database (2026-10-21)."""
     _milestone_repo(repo)
     tools: list[tuple[str, ...]] = []
+    prompts: list[str] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         tools.append(job.allowed_tools)
+        prompts.append(job.prompt)
         out = re.search(r"Write (\S+) as:", job.prompt)
         assert out
         (repo_ / out[1]).write_text(json.dumps({"findings": [], "stop": None}))
@@ -341,6 +345,7 @@ def test_the_review_job_may_look(repo, monkeypatch):
     monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
     assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
     assert tools and all(LOOK in job for job in tools)
+    assert all('`softfield look sql "<one SELECT>"`' in prompt for prompt in prompts)
 
 
 @pytest.mark.parametrize("thread", ["f7", "general"])

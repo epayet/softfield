@@ -662,3 +662,72 @@ def test_projects_come_in_the_owners_order_and_a_new_one_goes_last(tmp_path):
     ]
     metrics.upsert_project(conn, "later", repo="/r/later")
     assert metrics.projects_in_order(conn)[-1].name == "later"
+
+
+def _milestone_of(db, table: str, row_id: int) -> str:
+    return str(
+        db.execute(
+            f"SELECT m.key FROM {table} x JOIN milestones m ON m.id = x.milestone_id"  # noqa: S608
+            " WHERE x.id = ?",
+            (row_id,),
+        ).fetchone()[0]
+    )
+
+
+def test_an_empty_short_row_is_folded_into_its_card(db):
+    """F171 D2: travel-companion's `f4` row held F4's tickets and findings beside its card's row,
+    and the board drew F4 twice."""
+    project = metrics.upsert_project(db, "travel-companion")
+    card = metrics.upsert_milestone(
+        db, project, "f4-after-my-message", title="After", state="ready"
+    )
+    stray = metrics.upsert_milestone(db, project, "f4")
+    ticket = metrics.upsert_ticket(db, project, "f4-01-chips", milestone_id=stray)
+    run = metrics.upsert_run(db, project, "20261022-1900", command="run", started=T0)
+    job = metrics.start_job(
+        db,
+        run,
+        ticket_id=ticket,
+        milestone_id=stray,
+        role="developer",
+        agent="a",
+        attempt=1,
+        started=T0,
+    )
+    moved = metrics.add_finding(db, stray, "C1-1")
+    metrics.add_finding(db, card, "C2-1")
+    assert metrics.fold_short_milestones(db, project) == 1
+    assert _milestone_of(db, "tickets", ticket) == "f4-after-my-message"
+    assert _milestone_of(db, "jobs", job) == "f4-after-my-message"
+    assert _milestone_of(db, "findings", moved) == "f4-after-my-message"
+    keys = [r[0] for r in db.execute("SELECT key FROM milestones WHERE project_id = ?", (project,))]
+    assert keys == ["f4-after-my-message"]
+
+
+@pytest.mark.parametrize(
+    ("own", "cards"),
+    [
+        ({"title": "F4 of its own"}, ["f4-after-my-message"]),
+        ({"status": "done"}, ["f4-after-my-message"]),
+        ({}, []),  # no card to fold into: F107's, merged away
+        ({}, ["f4-after-my-message", "f4-again"]),  # two: which one is unknown
+    ],
+)
+def test_a_short_row_of_its_own_or_with_no_one_card_stays(db, own, cards):
+    project = metrics.upsert_project(db, "travel-companion")
+    for key in cards:
+        metrics.upsert_milestone(db, project, key, state="ready")
+    stray = metrics.upsert_milestone(db, project, "f4", **own)
+    ticket = metrics.upsert_ticket(db, project, "f4-01-chips", milestone_id=stray)
+    assert metrics.fold_short_milestones(db, project) == 0
+    assert _milestone_of(db, "tickets", ticket) == "f4"
+
+
+def test_a_short_row_whose_finding_the_card_has_already_stays(db):
+    project = metrics.upsert_project(db, "travel-companion")
+    card = metrics.upsert_milestone(db, project, "f4-after-my-message", state="ready")
+    stray = metrics.upsert_milestone(db, project, "f4")
+    metrics.add_finding(db, stray, "C1-1")
+    metrics.add_finding(db, card, "C1-1")
+    assert metrics.fold_short_milestones(db, project) == 0
+    assert db.execute("SELECT 1 FROM milestones WHERE id = ?", (stray,)).fetchone()

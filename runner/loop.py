@@ -575,6 +575,7 @@ def sync_tickets(s: Session) -> None:
             present.add(path.stem)
     if s.project_id is not None:
         _record(s, metrics.remove_missing_tickets, s.project_id, present)
+        _record(s, metrics.fold_short_milestones, s.project_id)  # F171 D2
 
 
 def sync_cards(s: Session) -> None:

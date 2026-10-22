@@ -315,6 +315,10 @@ Round {round} of at most {max_rounds}. {scope}
 Read the tests as closely as the code: missing edge cases, and every existing test a
 developer edited (the session reports in .factory/sessions/ list them). Check the French.
 
+The hours, jobs and counts the report quotes come from the metrics database: read it with
+`softfield look sql "<one SELECT>"` (read-only; `PRAGMA table_list` shows the tables), and a
+dashboard page as text with `softfield look page <address>` (ADR 28).
+
 Grade each finding blocking / should-fix / nit and route it:
 - local: write a ticket in .factory/tasks/ready/ (docs/task-format.md), `finding: <id>` in the
   frontmatter, and run `softfield check-tickets <its files>` until it passes (`tests:` is never

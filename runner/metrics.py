@@ -572,6 +572,40 @@ def _card_short(key: str) -> str:
     return found[0] if found else key
 
 
+def fold_short_milestones(conn: sqlite3.Connection, project_id: int) -> int:
+    """F171 D2: each row keyed short (``f4``) with no title, state, status or sign-off of its own,
+    folded into the project's one non-removed card row with that short key: its tickets, jobs
+    and findings move, then the row goes. A finding the card already has under the same key
+    stays, and keeps its row. Returns how many rows went."""
+    rows = conn.execute(
+        "SELECT id, key, title, state, status, signoff FROM milestones WHERE project_id = ?",
+        (project_id,),
+    ).fetchall()
+    cards: dict[str, list[int]] = {}
+    for row in rows:
+        if row["key"] != _card_short(row["key"]) and row["state"] != REMOVED:
+            cards.setdefault(_card_short(row["key"]), []).append(row["id"])
+    folded = 0
+    for row in rows:
+        own = row["title"] or row["state"] or row["status"] or row["signoff"]
+        into = cards.get(row["key"], [])
+        if row["key"] != _card_short(row["key"]) or own or len(into) != 1:
+            continue
+        for update in (
+            "UPDATE tickets SET milestone_id = ? WHERE milestone_id = ?",
+            "UPDATE jobs SET milestone_id = ? WHERE milestone_id = ?",
+            "UPDATE OR IGNORE findings SET milestone_id = ? WHERE milestone_id = ?",
+        ):
+            conn.execute(update, (into[0], row["id"]))
+        if not conn.execute(
+            "SELECT 1 FROM findings WHERE milestone_id = ?", (row["id"],)
+        ).fetchone():
+            conn.execute("DELETE FROM milestones WHERE id = ?", (row["id"],))
+            folded += 1
+    conn.commit()
+    return folded
+
+
 def remove_cards(
     conn: sqlite3.Connection,
     project_id: int,
