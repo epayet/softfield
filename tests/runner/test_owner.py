@@ -107,6 +107,27 @@ def test_signoff_takes_a_planning_room_card_and_a_review_with_no_status_line(rep
     assert git(repo, "status", "--porcelain") == ""
 
 
+def test_a_card_signed_off_drops_its_reserve_mark(repo: Path):
+    """F172 D5: the mark ends with the work."""
+    (repo / ".factory" / "cards").mkdir(parents=True)
+    card = repo / ".factory" / "cards" / "f7-one-queue.md"
+    card.write_text(
+        "# Milestone F7: one queue\n\n"
+        "> **State:** building · **Priority:** 2 · **Area:** factory · **Reserve:** yes\n"
+        "> Planted by the owner on 2026-10-01.\n\n## Notes\n**Reserve:** stays here\n"
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "docs")
+    owner.signoff(repo, "f7-one-queue", TODAY)
+    doc = card.read_text()
+    assert doc.startswith(
+        "# Milestone F7: one queue\n\n> **State:** done · **Priority:** 2 · **Area:** factory\n"
+        "> **Status: done.** Signed off by the owner on 2026-10-01."
+    )
+    assert "## Notes\n**Reserve:** stays here\n" in doc  # the header's only
+    assert not milestone.card("f7-one-queue", doc).reserve
+
+
 def test_a_refused_signoff_writes_nothing(repo: Path):
     (repo / ".factory" / "cards").mkdir(parents=True)
     card = repo / ".factory" / "cards" / "f7-one-queue.md"

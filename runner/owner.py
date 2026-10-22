@@ -39,6 +39,7 @@ _UNFINISHED = ("ready", *STOPPED)
 _STATUS_MILESTONE = re.compile(r"^> \*\*Status:.*$", re.MULTILINE)
 _STATUS_LINE = re.compile(r"^- \*\*Status:\*\*.*$", re.MULTILINE)
 _CARD_STATE_LINE = re.compile(r"^> \*\*State:\*\*.*$", re.MULTILINE)  # a planning-room card
+_CARD_RESERVE = re.compile(r"[ \t]*·[ \t]*\*\*Reserve:\*\*[^·\n]*")  # ` · **Reserve:** yes`
 _TEST_STEPS = re.compile(r"^### \d+\. How to test it yourself\n(.*?)(?=^#|\Z)", re.M | re.S)
 
 
@@ -280,8 +281,12 @@ def record_verdict(repo: Path, text: str) -> Path | None:
 def _signed_doc(doc: Path, status: str) -> str:
     """The milestone doc with its status line done. A planning-room card has a State line
     instead (``> **State:** ready · …``): its state becomes done, and the status line goes
-    under it (2026-10-08: F41 and F55 couldn't be signed off)."""
+    under it (2026-10-08: F41 and F55 couldn't be signed off). Its reserve mark goes: the
+    mark ends with the work (F172 D5)."""
     text = doc.read_text(encoding="utf-8")
+    if (state := _CARD_STATE_LINE.search(text)) is not None:
+        unmarked = _CARD_RESERVE.sub("", state[0])
+        text = f"{text[: state.start()]}{unmarked}{text[state.end() :]}"
     if _STATUS_MILESTONE.search(text):
         return _STATUS_MILESTONE.sub(lambda _: status, text, count=1)
     if (found := _CARD_STATE_LINE.search(text)) is None:

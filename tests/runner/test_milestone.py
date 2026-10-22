@@ -179,6 +179,16 @@ def test_a_card_without_its_line_is_derived():
     assert card("f7", unknown) == Card("building", 100, "factory")
 
 
+def test_a_card_marked_reserve_yes_may_use_the_reserve():
+    """F172 D1: `**Reserve:** yes` after the Area; anything else, or no field, is no."""
+    marked = "# F9\n\n> **State:** ready · **Priority:** 2 · **Area:** factory · **Reserve:** yes\n"
+    assert card("f9", marked) == Card("ready", 2, "factory", reserve=True)
+    assert not card("f9", marked.replace("yes", "no")).reserve
+    assert not card("f9", marked.replace(" · **Reserve:** yes", "")).reserve
+    below = "# F9\n\n> **State:** ready\n\n## Outcome\n**Reserve:** yes\n"
+    assert not card("f9", below).reserve  # only the header counts
+
+
 def test_every_milestone_doc_gets_its_card_at_session_start(repo):
     """f5 D4: an idea with no tickets yet is a card on the board too, as a ticket is in the
     queue (`sync_tickets`)."""

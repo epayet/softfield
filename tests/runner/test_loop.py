@@ -4858,6 +4858,173 @@ def test_the_week_switch_doesnt_lift_the_5_hour_reserve(
     }
 
 
+# --- A card may use Claude's reserve (ADR 34, F172) -------------------------------------------
+
+
+def _card_ticket(repo: Path, task_id: str, deps: str = "[]", agent: str = "lead") -> None:
+    """A ready ticket of the milestone its id names (``m2-01-…`` is m2's)."""
+    path = write_task(repo / ".factory" / "tasks" / "ready", task_id, deps)
+    milestone = task_id.split("-")[0][1:]
+    path.write_text(
+        path.read_text().replace("milestone: 1\n", f"milestone: {milestone}\nagent: {agent}\n")
+    )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", f"add {task_id}")
+
+
+def _marked(repo: Path, key: str) -> None:
+    """The owner marked ``key``'s card "may use Claude's reserve" (F172 D1)."""
+    _milestone_doc(repo, key, "> **State:** building · **Area:** factory · **Reserve:** yes")
+    _kept_open(repo, key)
+
+
+def _kept_open(repo: Path, key: str) -> None:
+    """A ticket of ``key`` stopped for the owner: its review won't end the run once the rest
+    is done."""
+    path = write_task(repo / ".factory" / "tasks" / "blocked", f"{key}-99-stopped")
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key[1:]}\n"))
+
+
+def _leads_in_order(
+    script: list[Callable[..., None]], ran: list[tuple[str, datetime]], count: int
+) -> None:
+    def lead(job, repo_):
+        task_id = git(repo_, "rev-parse", "--abbrev-ref", "HEAD").strip().removeprefix("task/")
+        ran.append((task_id, loop.now()))
+        _lead_writes(repo_, task_id.replace("-", "_"))
+
+    script.extend([lead] * count)
+
+
+def test_past_the_week_mark_a_marked_cards_lead_ticket_runs_after_the_developers(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
+):
+    """ADR 34 items 3 and 6: developer tickets first, then the marked card's lead ticket; the
+    unmarked one parks as before, though it comes first by milestone."""
+    _readings_at(repo, 0.79)
+    _marked(repo, "m2")
+    _card_ticket(repo, "m1-01-lead")
+    _card_ticket(repo, "m1-02-thing", agent="developer")
+    _card_ticket(repo, "m2-01-lead")
+    script, _ = fake_lead
+    ran: list[tuple[str, datetime]] = []
+    _leads_in_order(script, ran, 1)
+    fake_model.append(_implement)
+    _passes(monkeypatch)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-02-thing", "done"),
+        ("m2-01-lead", "done"),
+    ]
+    assert set(_state(repo).parked) == {"m1-01-lead"}
+    assert {(i["kind"], i["subject"]) for i in _rows(repo, "owner_items")} == {
+        ("reserve", "m1-01-lead")
+    }
+    assert fake_clock[0] == THURSDAY
+
+
+def test_the_tickets_a_marked_card_waits_for_pass_the_reserve_too(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
+):
+    """ADR 34 item 3: marking m3 must not leave it behind m1's lead tickets, directly or
+    through another; m4's, which nothing marked waits for, parks."""
+    _readings_at(repo, 0.79)
+    _marked(repo, "m3")
+    _kept_open(repo, "m1")
+    _card_ticket(repo, "m1-01-lead")
+    _card_ticket(repo, "m1-02-lead", deps="[m1-01-lead]")
+    _card_ticket(repo, "m3-01-lead", deps="[m1-02-lead]")
+    _card_ticket(repo, "m4-01-lead")
+    script, _ = fake_lead
+    ran: list[tuple[str, datetime]] = []
+    _leads_in_order(script, ran, 3)
+    _passes(monkeypatch)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-01-lead", "done"),
+        ("m1-02-lead", "done"),
+        ("m3-01-lead", "done"),
+    ]
+    assert set(_state(repo).parked) == {"m4-01-lead"}
+
+
+def test_reserve_cards_follows_the_ready_tickets_only(repo):
+    """F172 D3: a marked card's tickets and what they wait for, through the ready tickets; a
+    dependency already done adds nothing."""
+    _marked(repo, "m3")
+    _card_ticket(repo, "m1-01-lead")
+    _card_ticket(repo, "m1-02-lead", deps="[m1-01-lead, m1-00-done]")
+    _card_ticket(repo, "m2-01-lead", deps="[m1-02-lead]")
+    _card_ticket(repo, "m3-01-lead", deps="[m2-01-lead]")
+    _card_ticket(repo, "m3-02-thing", agent="developer")
+    _card_ticket(repo, "m4-01-lead", deps="[m1-01-lead]")
+    ready = load_dir(repo / ".factory" / "tasks" / "ready", 400)
+    assert loop.reserve_cards(repo, ready) == {
+        "m1-01-lead",
+        "m1-02-lead",
+        "m2-01-lead",
+        "m3-01-lead",
+        "m3-02-thing",
+    }
+    _milestone_doc(repo, "m3", "> **State:** building · **Reserve:** no")
+    assert loop.reserve_cards(repo, ready) == set()
+
+
+def test_past_the_owners_25_percent_a_marked_cards_lead_ticket_runs(
+    repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
+):
+    """ADR 34 item 5: both reserves; the unmarked one waits for the reset as today."""
+    _claude_at(repo, 0.80)
+    _marked(repo, "m2")
+    _card_ticket(repo, "m1-01-lead")
+    _card_ticket(repo, "m2-01-lead")
+    script, _ = fake_lead
+    ran: list[tuple[str, datetime]] = []
+    _leads_in_order(script, ran, 2)
+    _passes(monkeypatch)
+    report = _run(repo)
+    assert [t.result for t in report.tasks] == ["done", "done"]
+    [(first, first_at), (second, second_at)] = ran
+    assert (first, first_at) == ("m2-01-lead", THURSDAY)
+    assert second == "m1-01-lead" and second_at > FIVE_RESETS
+    assert {(i["kind"], i["subject"]) for i in _rows(repo, "owner_items")} == {
+        ("five-hour", "m1-01-lead")
+    }
+
+
+def test_a_marked_cards_lead_ticket_waits_while_claude_is_limited(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """ADR 34 and F172 D3: the mark lifts the owner's switches, not a real limit."""
+    _readings_at(repo, 0.79)
+    _marked(repo, "m1")
+    _card_ticket(repo, "m1-01-lead")
+    _card_ticket(repo, "m1-02-lead")
+    _passes(monkeypatch)
+    resets = THURSDAY + timedelta(hours=1)
+    ran: list[tuple[str, datetime]] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        task_id = git(repo_, "rev-parse", "--abbrev-ref", "HEAD").strip().removeprefix("task/")
+        ran.append((task_id, loop.now()))
+        if len(ran) == 1:
+            _lead_writes(repo_, "first")
+            raise UsageLimited(resets, session_id="s1")
+        if task_id == "m1-02-lead":
+            _lead_writes(repo_, "second")
+        return JobResult(ok=True, text="", duration_s=1.0, num_turns=3, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    report = _run(repo)
+    assert [(t.id, t.result) for t in report.tasks] == [
+        ("m1-01-lead", "done"),
+        ("m1-02-lead", "done"),
+    ]
+    assert ran[0] == ("m1-01-lead", THURSDAY)
+    assert all(at > resets for _, at in ran[1:])  # m1-02-lead waited for the reset
+    assert _rows(repo, "owner_items") == []
+
+
 @pytest.mark.parametrize(("lead", "agent"), [(False, "claude-sonnet"), (True, "local-m")])
 def test_at_40_percent_claude_develops_only_with_no_lead_work_ready(
     repo, fake_model, fake_lead, fake_clock, monkeypatch, lead, agent

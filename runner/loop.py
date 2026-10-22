@@ -4582,10 +4582,11 @@ def at_reserve(s: Session, task: Task) -> bool:
     """Before a lead ticket: whether it waits for Claude's reserve (ADR 15 item 5): with the
     week's switch off, the ticket parks and becomes a Needs-you item naming the switch (ADR
     22 item 4); it goes once the switch is on. It parks only when nothing else can run
-    (`_next_task`). Support roles may always use the reserve."""
+    (`_next_task`). Support roles may always use the reserve, and so may a marked card's
+    tickets (`reserve_cards`, ADR 34)."""
     at = now()
     found = None if switch_on(s.state, WEEK, at) else _at_the_reserve(s, at)
-    if found is None:
+    if found is None or _uses_reserve(s, task):
         return False
     where, resets = found
     text = f"{task.id} waits for Claude's reserve ({where}): turn on “{SWITCHES[WEEK]}” to run it"
@@ -4669,10 +4670,10 @@ def at_five_hour(s: Session, task: Task) -> bool:
     (ADR 16 items 1 and 3). With the 5-hour switch off (ADR 22 item 4), the ticket parks
     until the window resets and then goes on by itself; meanwhile it is a Needs-you item
     naming the switch, and the switch turned on lets it go at once. It parks only when
-    nothing else can run (`_next_task`)."""
+    nothing else can run (`_next_task`). A marked card's tickets go on (ADR 34 item 5)."""
     at = now()
     found = None if switch_on(s.state, FIVE_HOUR, at) else _at_five_hour(s, at)
-    if found is None:
+    if found is None or _uses_reserve(s, task):
         return False
     used, resets = found
     text = (
@@ -4706,8 +4707,11 @@ def at_five_hour(s: Session, task: Task) -> bool:
     return True
 
 
-def _waits_for_the_owner(s: Session, at: datetime) -> bool:
-    """A lead ticket would park for a switch that is off (the week's or the 5-hour's)."""
+def _waits_for_the_owner(s: Session, at: datetime, task: Task, marked: set[str]) -> bool:
+    """Lead ticket ``task`` would park for a switch that is off (the week's or the 5-hour's);
+    one of the ``marked`` set (`reserve_cards`) never does."""
+    if task.id in marked:
+        return False
     week = not switch_on(s.state, WEEK, at) and _at_the_reserve(s, at) is not None
     five = not switch_on(s.state, FIVE_HOUR, at) and _at_five_hour(s, at) is not None
     return week or five
@@ -4717,8 +4721,9 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
     """Parked tickets whose reset has passed go first; while Claude is limited, only work that
     needs no Claude: developer tickets, which local takes. At Claude's reserve or the owner's
     share of its 5-hour window with its switch off, developer tickets go before lead ones, so
-    a lead ticket parks only when nothing else can run (ADR 15 item 5, ADR 16 item 3). Each by
-    priority (f5 D6)."""
+    a lead ticket parks only when nothing else can run (ADR 15 item 5, ADR 16 item 3); then the
+    tickets of a card marked to use the reserve, and what they wait for (ADR 34 item 6). Each
+    by priority (f5 D6)."""
     at = now()
     cards = _cards(s.repo, ready)
     held = {t.id for t in ready if t.id in s.state.parked}
@@ -4728,10 +4733,14 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
     limited = bool(_limits_ahead(s, at, five_hour=False))
     free = [t for t in ready if t.id not in held and not (limited and t.agent != "developer")]
     task = pick_next(free, done, paused, cards)
-    if task is None or task.agent != "lead" or not _waits_for_the_owner(s, at):
+    if task is None or task.agent != "lead":
+        return task
+    marked = reserve_cards(s.repo, ready)
+    if not _waits_for_the_owner(s, at, task, marked):
         return task
     developers = pick_next([t for t in free if t.agent != "lead"], done, paused, cards)
-    return developers or task
+    passing = pick_next([t for t in free if t.id in marked], done, paused, cards)
+    return developers or passing or task
 
 
 def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queued]) -> bool:
@@ -5427,6 +5436,33 @@ def _cards(repo: Path, ready: list[Task]) -> dict[str, int]:
         if doc.is_file():
             found[short_key(key)] = card(key, doc.read_text(encoding="utf-8")).priority
     return found
+
+
+def reserve_cards(repo: Path, ready: list[Task]) -> set[str]:
+    """The ready tickets that may use Claude's reserve (ADR 34 item 3, F172 D3): those of a
+    card marked ``**Reserve:** yes``, and every ready ticket they wait for through
+    ``depends_on``, whatever its card. A dependency already done adds nothing."""
+    from runner.milestone import card  # runner.milestone imports this module
+
+    marked = set()
+    for key in {t.milestone for t in ready if t.milestone != BUGS}:
+        doc = milestone_file(repo, "cards", key)
+        if doc.is_file() and card(key, doc.read_text(encoding="utf-8")).reserve:
+            marked.add(short_key(key))
+    by_id = {t.id: t for t in ready}
+    found: set[str] = set()
+    todo = [t.id for t in ready if t.milestone != BUGS and short_key(t.milestone) in marked]
+    while todo:
+        task_id = todo.pop()
+        if task_id in by_id and task_id not in found:
+            found.add(task_id)
+            todo.extend(by_id[task_id].depends_on)
+    return found
+
+
+def _uses_reserve(s: Session, task: Task) -> bool:
+    """Whether ``task`` may use Claude's reserve without the owner's switch (`reserve_cards`)."""
+    return task.id in reserve_cards(s.repo, load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff))
 
 
 def _waits_text(held: dict[str, str]) -> str:

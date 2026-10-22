@@ -245,6 +245,7 @@ DEFAULT_PRIORITY = 100
 _CARD_STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*([^·*\n]+)")
 _CARD_PRIORITY_RE = re.compile(r"\*\*Priority:\*\*[ \t]*(\d+)\b")
 _CARD_AREA_RE = re.compile(r"\*\*Area:\*\*[ \t]*(factory|product)\b")
+CARD_RESERVE_RE = re.compile(r"\*\*Reserve:\*\*[ \t]*([^·*\n]*)")  # F172 D1
 
 
 @dataclass(frozen=True)
@@ -252,16 +253,19 @@ class Card:
     state: str
     priority: int
     area: str
+    reserve: bool = False  # the owner's "may use Claude's reserve" (ADR 34)
 
 
 def card(key: str, text: str) -> Card:
     """A milestone doc's card, from its header. A missing (or unknown) state is derived: done
     once its doc says "Status: done", else building. A missing priority is 100; a missing area
-    is the key's series: ``f`` factory, ``m`` product."""
+    is the key's series: ``f`` factory, ``m`` product. It may use the reserve only when it
+    says ``**Reserve:** yes``."""
     header = _header(text)
     state = _CARD_STATE_RE.search(header)
     priority = _CARD_PRIORITY_RE.search(header)
     area = _CARD_AREA_RE.search(header)
+    reserve = CARD_RESERVE_RE.search(header)
     named = state.group(1).strip() if state else ""
     if named not in CARD_STATES:
         status = _STATUS_RE.search(text)
@@ -270,6 +274,7 @@ def card(key: str, text: str) -> Card:
         state=named,
         priority=int(priority.group(1)) if priority else DEFAULT_PRIORITY,
         area=area.group(1) if area else ("factory" if key.startswith("f") else "product"),
+        reserve=reserve is not None and reserve.group(1).strip() == "yes",
     )
 
 
