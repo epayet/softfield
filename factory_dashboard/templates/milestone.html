@@ -19,10 +19,10 @@
   </div>
   {% if card %}
   <dl>
-    <dt>Stage</dt><dd class="stage-name">{{ words[card.stage][0] }}: {{ words[card.stage][1] }}</dd>
+    <dt>Stage</dt><dd class="stage-name">{{ words[card.stage][0] }}: {{ words[card.stage][1] }}{% if card.review_step %} · {{ card.review_step.label | lower }}: {{ card.review_step.text }}{% endif %}</dd>
     <dt>Priority</dt><dd>{% if card.stage in ("ripe", "harvested") %}–{% else %}P{{ card.priority }}{% endif %}</dd>
     <dt>Area</dt><dd>{{ card.area }}</dd>
-    <dt>Tickets</dt><dd>{% if card.total %}{{ card.done }} of {{ card.total }} done{% else %}none yet{% endif %}{% if card.set_aside %} · {{ card.set_aside }} set aside{% endif %}</dd>
+    <dt>Tickets</dt><dd>{% if card.total %}{{ card.done }} of {{ card.total }} done{% else %}none yet{% endif %}{% if card.set_aside %} · {{ card.set_aside }} set aside, won't run{% endif %}</dd>
   </dl>
   {% endif %}
   <a class="card-thread" href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a>

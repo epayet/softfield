@@ -32,7 +32,7 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.line import _LONG_AGO, _natural, _when
-from factory_dashboard.overview import running_jobs
+from factory_dashboard.overview import Running, running_jobs
 from factory_dashboard.queries import depends_on, ticket_priority
 from runner import metrics
 from runner.requests import REORDER
@@ -69,6 +69,14 @@ class Work:
 
 
 @dataclass(frozen=True)
+class ReviewStep:
+    """The review step on a growing card whose tickets are all done."""
+
+    label: str
+    text: str
+
+
+@dataclass(frozen=True)
 class Card:
     key: str  # the short key in capitals, ``F5``; a bug's ticket id
     full_key: str  # for its link: the milestone's key, or the bug's ticket id
@@ -82,6 +90,7 @@ class Card:
     set_aside: int = 0
     note: str = ""
     running: Work | None = None  # on a growing card, from a live job
+    review_step: ReviewStep | None = None  # on a growing card with all tickets done
     place: int = 0  # its place in its stage, from 1; 0 in a stage not ``PLACED``
     on_its_way: bool = False  # an open reorder puts it out of place
     was: int = 0  # then, its place without the reorder
@@ -117,6 +126,41 @@ def _milestone_stage(
     if any(t["state"] in STARTED or t["id"] in worked for t in tickets):
         return "growing"
     return "planted"
+
+
+def _review_step(
+    milestone_full_key: str,
+    stage: str,
+    done: int,
+    total: int,
+    signoff: object,
+    live_jobs: list[Running],
+    stop_items: dict[str, str],
+) -> ReviewStep | None:
+    """The review step on a growing card whose counted tickets are all done.
+
+    Only applies when every ticket is done and the review's sheet isn't stored yet.
+    """
+    if stage != "growing" or done != total or signoff is not None:
+        return None
+    short = short_key(milestone_full_key)
+    # live review job on this milestone
+    for job in live_jobs:
+        if job.role == "review" and job.milestone == milestone_full_key:
+            return ReviewStep(
+                label="Review running",
+                text=f"{job.agent} reads the work · then it's yours to sign off",
+            )
+    # unresolved review-stop item
+    if short in stop_items:
+        return ReviewStep(
+            label="Review stopped",
+            text=f"{stop_items[short]} · shown under Needs you",
+        )
+    return ReviewStep(
+        label="Review next",
+        text="Claude reviews it before the next ticket · then it's yours to sign off",
+    )
 
 
 def _bug_stage(state: str | None, running: bool) -> str:
@@ -259,9 +303,21 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
         if j["ended"]:
             ended[j["ticket_id"]] = max(_when(j["ended"]), ended.get(j["ticket_id"], _LONG_AGO))
     live: dict[str, Work] = {}  # by ticket, its oldest live job
+    all_jobs: list[Running] = []  # every live job, once for the whole board
     for job in running_jobs(conn, project, now):
+        all_jobs.append(job)
         if job.live and job.ticket:
             live.setdefault(job.ticket, Work(job.ticket, job.title, job.agent, job.attempt))
+    # unresolved review-stop items, by milestone key
+    stop_items: dict[str, str] = {}
+    for r in conn.execute(
+        "SELECT subject, text FROM owner_items"
+        " JOIN projects p ON p.id = owner_items.project_id"
+        " WHERE p.name = ? AND kind = 'review-stop' AND resolved IS NULL",
+        (project,),
+    ):
+        mk = short_key(r["subject"])
+        stop_items[mk] = r["text"] or ""
 
     def running(own: list[sqlite3.Row]) -> Work | None:
         names = {t["ticket"] for t in own}
@@ -309,6 +365,15 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             note=_card_note(key.lower(), stage, latest_messages, sent, waits),
             waits=waits,
             running=running(counted) if stage == "growing" else None,
+            review_step=_review_step(
+                m["key"],
+                stage,
+                sum(t["state"] == "done" for t in counted),
+                len(counted),
+                m["signoff"],
+                all_jobs,
+                stop_items,
+            ),
         )
         found.append((card, _when(m["ended"]) if m["ended"] else _LONG_AGO))
     return found

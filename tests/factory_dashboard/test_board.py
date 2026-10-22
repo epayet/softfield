@@ -18,7 +18,7 @@ from factory_dashboard.board import STAGES, Board, Card, board, milestone_card
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, PROJECT
+from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, PROJECT
 from tests.factory_dashboard.test_planning import ORIGIN, STATIC
 from tests.factory_dashboard.test_planning import _open as open_page
 from tests.layout import DISPLAY, PHONE, layout_problems
@@ -217,6 +217,13 @@ def test_every_ticket_done_is_growing_until_the_sheet_is_stored_then_ripe_then_h
     # a row the runner made before reading its doc: 100, and its series' area
     assert (unreviewed.priority, unreviewed.area) == (100, "factory")
     assert card(read(board_db), "M4").area == "product"
+    # every ticket done, no sheet stored: "Review next"
+    assert unreviewed.review_step is not None
+    assert unreviewed.review_step.label == "Review next"
+    assert (
+        unreviewed.review_step.text
+        == "Claude reviews it before the next ticket · then it's yours to sign off"
+    )
 
     write(
         board_db,
@@ -1154,6 +1161,130 @@ def test_a_drag_near_the_bottom_edge_scrolls_the_page(page, board_db):
 
 
 # --- waits (f15-08) ------------------------------------------------
+
+
+def test_review_next_running_stopped(board_db):
+    """F25: no review job and no stop → "Review next"; live review job
+    → "Review running"; another role → "Review next"; unresolved
+    review-stop → "Review stopped"; resolved → "Review next"."""
+    # default: "Review next"
+    f25 = card(read(board_db), "F25")
+    assert f25.review_step is not None
+    assert f25.review_step.label == "Review next"
+
+    # live review job by claude-opus → "Review running"
+    def add_review_job(conn: sqlite3.Connection, p: int) -> None:
+        run = metrics.upsert_run(conn, p, "20261002-120000", heartbeat=NOW.isoformat())
+        m = conn.execute("SELECT id FROM milestones WHERE key = ?", ("f25-unreviewed",)).fetchone()
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=m["id"],
+            role="review",
+            agent=OPUS,
+            attempt=1,
+            started=NOW.isoformat(),
+        )
+
+    write(board_db, add_review_job)
+    f25 = card(read(board_db), "F25")
+    assert f25.review_step is not None
+    assert f25.review_step.label == "Review running"
+    assert f25.review_step.text == f"{OPUS} reads the work · then it's yours to sign off"
+
+    # live job of another role → "Review next" (not a review role)
+    def change_to_developer(conn: sqlite3.Connection, p: int) -> None:
+        sql = (
+            "SELECT id FROM jobs WHERE milestone_id = "
+            "(SELECT id FROM milestones WHERE key = ?) "
+            "AND outcome = 'running'"
+        )
+        jobs = conn.execute(sql, ("f25-unreviewed",)).fetchall()
+        for j in jobs:
+            conn.execute("UPDATE jobs SET role = ? WHERE id = ?", ("developer", j["id"]))
+
+    write(board_db, change_to_developer)
+    f25 = card(read(board_db), "F25")
+    assert f25.review_step is not None
+    assert f25.review_step.label == "Review next"
+
+    # unresolved review-stop → "Review stopped"
+    def add_review_stop(conn: sqlite3.Connection, p: int) -> None:
+        metrics.upsert_owner_item(
+            conn,
+            p,
+            "review-stop",
+            "f25-unreviewed",
+            text="end-to-end tests fail on staging",
+            created=NOW.isoformat(),
+        )
+
+    write(board_db, add_review_stop)
+    f25 = card(read(board_db), "F25")
+    assert f25.review_step is not None
+    assert f25.review_step.label == "Review stopped"
+    assert f25.review_step.text == "end-to-end tests fail on staging · shown under Needs you"
+
+    # resolved review-stop → "Review next"
+    def resolve_review_stop(conn: sqlite3.Connection, p: int) -> None:
+        item = conn.execute(
+            "SELECT id FROM owner_items WHERE kind = 'review-stop' AND subject = ?",
+            ("f25-unreviewed",),
+        ).fetchone()
+        conn.execute(
+            "UPDATE owner_items SET resolved = ? WHERE id = ?", (NOW.isoformat(), item["id"])
+        )
+
+    write(board_db, resolve_review_stop)
+    f25 = card(read(board_db), "F25")
+    assert f25.review_step is not None
+    assert f25.review_step.label == "Review next"
+
+
+def test_no_step_on_non_growing_or_done_cards(board_db):
+    """A growing card with a ticket not done, a ripe card and a bug have no step."""
+    # F24 is growing but has a ticket not done
+    f24 = card(read(board_db), "F24")
+    assert f24.review_step is None
+
+    # F1 is ripe
+    f1 = card(read(board_db), "F1")
+    assert f1.review_step is None
+
+    # a bug
+    bug = card(read(board_db), "bug-03-working")
+    assert bug.review_step is None
+
+
+def test_board_page_shows_review_step(board_db, board_client):
+    """The board page shows the step inside F25's card."""
+    html = _page(board_client)
+    _, words, _ = _card(html, "/milestones/f25-unreviewed")
+    assert "Review next" in words
+    assert "Claude reviews it before the next ticket" in words
+
+
+def test_set_aside_says_wont_run(board_db, board_client):
+    """A card with one set-aside ticket reads
+    "1 set aside, won't run" on the board and on its page."""
+    # F24 has one set aside ticket (f24-04-later)
+    found = read(board_db)
+    f24 = card(found, "F24")
+    assert f24.set_aside == 1
+    html = _page(board_client)
+    _, words, _ = _card(html, "/milestones/f24-growing")
+    assert "1 set aside, won't run" in words
+
+
+def test_milestone_page_shows_review_step_on_stage_line(board_client):
+    """F25's page shows the step on its Stage line."""
+    html = board_client.get("/milestones/f25-unreviewed").text
+    match = re.search(r"<dt>Stage</dt><dd[^>]*>(.*?)</dd>", html, re.S)
+    assert match, "no Stage dd"
+    stage_text = " ".join(re.sub(r"<[^>]+>", " ", match.group(1)).split())
+    assert "review next" in stage_text
+    assert "Claude reviews it before the next ticket" in stage_text
 
 
 def test_a_planted_card_says_what_it_waits_for(board_db):

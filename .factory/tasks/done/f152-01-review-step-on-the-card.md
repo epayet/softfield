@@ -50,3 +50,11 @@ logs: .factory/var/runs/20261021-090717/f152-01-review-step-on-the-card
 result: blocked
 reason: the finished work failed check-all; its work is on task/f152-01-review-step-on-the-card
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+note: its escalation's work from task/f152-01-review-step-on-the-card, landed in a terminal session on 2026-10-21 once check-all passed on 16 workers (it was blocked only by the 1200 s cut); its gate and developer-note changes left out (F71)
+```

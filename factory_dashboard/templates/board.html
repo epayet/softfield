@@ -15,9 +15,10 @@
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
   <span class="meter"><span style="width: {{ (100 * c.done / c.total) | round | int }}%"></span></span>
-  <span class="card-count">{{ c.done }} of {{ c.total }} ticket{{ "" if c.total == 1 else "s" }}{% if c.set_aside %} · {{ c.set_aside }} set aside{% endif %}</span>
+  <span class="card-count">{{ c.done }} of {{ c.total }} ticket{{ "" if c.total == 1 else "s" }}{% if c.set_aside %} · {{ c.set_aside }} set aside, won't run{% endif %}</span>
   {% endif %}
   {% if c.note %}<span class="card-note">{{ c.note }}</span>{% endif %}
+  {% if c.review_step %}<span class="card-review"><b>{{ c.review_step.label }}</b>{{ c.review_step.text }}</span>{% endif %}
   {% if c.running %}
   <span class="card-now"><b>Now:</b> {{ c.running.ticket }}{% if c.running.goal %} · {{ c.running.goal }}{% endif %} · {{ c.running.agent }}, attempt {{ c.running.attempt }}</span>
   {% endif %}

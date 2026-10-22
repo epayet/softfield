@@ -605,6 +605,9 @@ main:has(.board) { max-width: 1360px; }
 .card-count { font: 12px var(--mono); color: var(--muted); }
 .card-note, .card-now { font-size: 12.5px; line-height: 1.35; }
 .card-note { color: var(--muted); }
+.card-review { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35;
+  padding: 5px 8px; background: var(--floor); border-left: 2px solid var(--hazard); color: var(--ink-2); }
+.card-review b { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--fg); }
 .card-now b { color: var(--serious-ink); font-weight: 600; }
 .card code { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px;
   font-size: 12px; border-radius: 0; }
