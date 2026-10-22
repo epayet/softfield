@@ -2642,14 +2642,18 @@ def _settle_lead_task(s: Session, task: Task, rec: TaskRecord, logs: Path, job: 
 
 def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     """After a developer merge (``_merge`` lists it as unchecked): every ``checkpoint_every``
-    of them, queue a checkpoint. One already queued runs on every merge since."""
+    of them, queue a checkpoint. One already queued runs on every merge since; one parked for
+    Claude's re-check after a stand-in starts again at the next pick, for a stand-in on the new
+    batch (F151 D1). One parked only for Claude's limit waits for its reset."""
     if rec.result != "done" or task.agent != "developer":
         return
-    if find_row(s, CHECKPOINT) is not None:
+    if len(s.state.unchecked) < s.cfg.checkpoint_every:
         return
-    if len(s.state.unchecked) >= s.cfg.checkpoint_every:
-        reason = checkpoint_reason(s.state)
-        enqueue(s, CHECKPOINT, task.milestone, reason, milestone=task.milestone)
+    if (row := find_row(s, CHECKPOINT)) is not None:
+        if s.state.recheck and _row_waits(s, CHECKPOINT, row.subject):
+            _unpark_row(s, row)
+        return
+    enqueue(s, CHECKPOINT, task.milestone, checkpoint_reason(s.state), milestone=task.milestone)
 
 
 def _ticket_row(
