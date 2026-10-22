@@ -25,3 +25,10 @@ Read Decisions D2 and D3 in `.factory/cards/f153-i-wonder-if-sonnet-would-be.md`
 - no lead ticket's merge, by either agent, adds to `state.unchecked`
 - the listed `tests:` pass, and the new tests fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
