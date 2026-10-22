@@ -1,6 +1,6 @@
 # Milestone F172: Mark a card to use Claude's reserve, so only its tickets run past the mark
 
-> **State:** ready · **Priority:** 0 · **Area:** factory
+> **State:** ready · **Priority:** 1 · **Area:** factory
 > Planted by the owner on 2026-10-22.
 
 ## Notes

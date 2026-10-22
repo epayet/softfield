@@ -1,6 +1,6 @@
 # Milestone F158: A card's page says what it's about: its Outcome, else your note
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-20.
 
 ## Notes
