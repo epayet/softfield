@@ -30,3 +30,10 @@ Read D2 and D4 in `.factory/cards/f172-i-d-like-to-be-able.md`. Then in `runner/
 - `reserve week on` and `reserve five_hour off` behave as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
