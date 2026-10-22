@@ -1,6 +1,6 @@
 # Milestone F164: Plant a review's ideas straight from the review
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-10-21.
 
 ## Notes

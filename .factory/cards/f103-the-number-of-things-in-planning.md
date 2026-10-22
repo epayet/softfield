@@ -1,6 +1,6 @@
 # Milestone F103: The Planning tab's number counts only what you have to answer, not seeds
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory
 > Planted by the owner on 2026-10-10.
 
 ## Notes

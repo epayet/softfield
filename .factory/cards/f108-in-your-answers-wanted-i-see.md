@@ -1,6 +1,6 @@
 # Milestone F108: Desk boxes say when: proposals and sign-offs show their time too
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory
 > Planted by the owner on 2026-10-13.
 
 ## Notes

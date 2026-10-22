@@ -1,6 +1,6 @@
 # Milestone F26: I want to see numbers next to "Coming" and "Your desk" to have a sense of how many there are
 
-> **Status: planned** (2026-10-07, with the owner, in the planning room). **State:** ready · **Priority:** 2 · **Area:** factory
+> **Status: planned** (2026-10-07, with the owner, in the planning room). **State:** ready · **Priority:** 1 · **Area:** factory
 > Planted by the owner on 2026-10-07.
 
 ## Notes
