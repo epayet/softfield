@@ -310,7 +310,12 @@ def test_an_old_5_hour_answer_is_an_unknown_request_and_sets_no_switch(repo):
 @pytest.mark.parametrize(
     ("kind", "subject", "value", "error"),
     [
-        ("reserve", "month", "on", "a reserve switch is week or five_hour, not 'month'"),
+        (
+            "reserve",
+            "month",
+            "on",
+            "a reserve request names week, five_hour or a card, not 'month'",
+        ),
         ("reserve", "week", "yes", "a reserve switch is turned on or off, not 'yes'"),
         ("reboot", "now", None, "unknown request: reboot"),
     ],
@@ -412,6 +417,163 @@ def test_a_wait_takes_only_the_switches_and_leaves_the_rest_for_the_pick(repo):
         conn.close()
     assert _request(repo, asked) == (NOW.isoformat(), line.split(": ", 1)[1])
     assert loop.switch_on(state, "five_hour", NOW)
+
+
+# --- `reserve` on a card: it may use Claude's reserve (F172 D2, D4) ----------------------------
+
+MARKED = "f142-reserve"
+MARKED_CARD = (
+    "# Milestone F142: reserve\n\n> **State:** ready · **Priority:** 1 · **Area:** factory\n"
+    "> Planted by the owner on 2026-10-22.\n\n## Notes\nSoon.\n"
+)
+
+
+def _marked_doc(repo: Path) -> str:
+    return (repo / ".factory" / "cards" / f"{MARKED}.md").read_text()
+
+
+def _reserve_card(repo: Path, card: str = MARKED_CARD) -> str:
+    """F142's card on main with two ready tickets, F9's with one; main's head."""
+    docs = repo / ".factory" / "cards"
+    docs.mkdir(parents=True, exist_ok=True)
+    (docs / f"{MARKED}.md").write_text(card)
+    (docs / "f9-other.md").write_text(card.replace("F142", "F9"))
+    ready = repo / ".factory" / "tasks" / "ready"
+    ready.mkdir(parents=True, exist_ok=True)
+    for task_id, key in (("f142-01-a", MARKED), ("f142-02-b", MARKED), ("f9-01-c", "f9-other")):
+        text = _ticket(task_id).replace("milestone: f7", f"milestone: {key}")
+        (ready / f"{task_id}.md").write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    return git(repo, "rev-parse", "HEAD")
+
+
+def test_a_reserve_request_on_a_card_marks_its_header_and_commits_it(repo):
+    head = _reserve_card(repo)
+    asked = _ask(repo, "reserve", "f142", "on")
+    assert _apply(repo) == ["reserve f142: F142 may use Claude's reserve"]
+    assert _request(repo, asked) == (NOW.isoformat(), "F142 may use Claude's reserve")
+    doc = _marked_doc(repo)
+    assert doc == MARKED_CARD.replace("**Area:** factory", "**Area:** factory · **Reserve:** yes")
+    assert milestone.card(MARKED, doc).reserve
+    assert git(repo, "rev-parse", "HEAD~1") == head
+    assert git(repo, "log", "-1", "--format=%s").strip() == (
+        "F142 may use Claude's reserve, by the owner"
+    )
+    assert git(repo, "show", "--name-only", "--format=", "HEAD").split() == [
+        f".factory/cards/{MARKED}.md"
+    ]
+    assert git(repo, "status", "--porcelain") == ""
+    _ask(repo, "reserve", "f142", "off")
+    assert _apply(repo) == ["reserve f142: F142 may no longer use Claude's reserve"]
+    assert _marked_doc(repo) == MARKED_CARD
+    assert git(repo, "log", "-1", "--format=%s").strip() == (
+        "F142 may no longer use Claude's reserve, by the owner"
+    )
+
+
+@pytest.mark.parametrize("value", ["on", "off"])
+def test_a_reserve_request_on_a_card_already_so_commits_nothing(repo, value):
+    card = MARKED_CARD
+    if value == "on":
+        card = card.replace("**Area:** factory", "**Area:** factory · **Reserve:** yes")
+    head = _reserve_card(repo, card)
+    _ask(repo, "reserve", "f142", value)
+    said = "may use Claude's reserve" if value == "on" else "may not use Claude's reserve"
+    assert _apply(repo) == [f"reserve f142: F142 {said} already"]
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert _marked_doc(repo) == card
+
+
+def test_a_card_without_an_area_is_marked_after_its_priority(repo):
+    card = MARKED_CARD.replace(" · **Area:** factory", "")
+    _reserve_card(repo, card)
+    _ask(repo, "reserve", "f142", "on")
+    _apply(repo)
+    assert _marked_doc(repo) == card.replace(
+        "**Priority:** 1", "**Priority:** 1 · **Reserve:** yes"
+    )
+
+
+@pytest.mark.parametrize(
+    ("card", "subject", "value", "error"),
+    [
+        (MARKED_CARD, "f143", "on", "F143 has no card in .factory/cards/: not marked"),
+        (
+            MARKED_CARD.replace("ready", "idea"),
+            "f142",
+            "on",
+            "F142 is idea: only a ready or building card may use Claude's reserve",
+        ),
+        (
+            MARKED_CARD.replace("ready", "done"),
+            "f142",
+            "on",
+            "F142 is done: only a ready or building card may use Claude's reserve",
+        ),
+        (MARKED_CARD, "f142", "yes", "a card's reserve is turned on or off, not 'yes'"),
+        (
+            MARKED_CARD,
+            "../f142",
+            "on",
+            "a reserve request names week, five_hour or a card, not '../f142'",
+        ),
+        (MARKED_CARD, None, "on", "a reserve request names week, five_hour or a card, not None"),
+    ],
+)
+def test_a_reserve_request_the_runner_cant_apply_to_a_card_is_refused(
+    repo, card, subject, value, error
+):
+    head = _reserve_card(repo, card)
+    asked = _ask(repo, "reserve", subject, value)
+    _apply(repo)
+    assert _request(repo, asked) == (NOW.isoformat(), error)
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_marking_a_card_frees_its_tickets_parked_at_either_reserve(repo):
+    """F172 D4: as a switch turned on does, for the card's tickets alone."""
+    _reserve_card(repo)
+    for kind, subject in (
+        ("reserve", "f142-01-a"),
+        ("five-hour", "f142-02-b"),
+        ("reserve", "f9-01-c"),
+        ("reserve", "week"),
+    ):
+        _item(repo, kind, subject)
+    state = State(
+        parked={
+            "f142-01-a": {"kind": "reserve"},
+            "f142-02-b": {"kind": "five-hour", "five_hour": True},
+            "f9-01-c": {"kind": "reserve"},
+        }
+    )
+    _ask(repo, "reserve", "f142", "on")
+    _apply(repo, state)
+    assert state.parked == {
+        "f142-01-a": {"kind": "reserve", "retry": True},
+        "f142-02-b": {"kind": "five-hour", "five_hour": True, "retry": True},
+        "f9-01-c": {"kind": "reserve"},
+    }
+    resolved = {(kind, subject) for kind, subject, _, open_ in _items(repo) if not open_}
+    assert resolved == {("reserve", "f142-01-a"), ("five-hour", "f142-02-b")}
+    assert state.switches == {}
+
+
+def test_a_card_reserve_waits_for_main_and_isnt_taken_by_a_wait(repo):
+    _reserve_card(repo)
+    asked = _ask(repo, "reserve", "f142", "on")
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.find_project(conn, repo.name)
+        assert project is not None
+        assert requests.take_switches(conn, project, State(), NOW) == []  # it commits
+    finally:
+        conn.close()
+    git(repo, "checkout", "-q", "-b", "elsewhere")
+    assert _apply(repo) == ["reserve f142: waits for the repo to be on main"]
+    assert _request(repo, asked) == (None, None)
 
 
 # --- `plan_message`: the owner's message to the lead (ADR 20 items 3 and 9, f6 D1) ------------

@@ -41,7 +41,7 @@ from runner.tasks import (
 )
 
 SIGNOFF = "signoff"  # subject: the milestone key
-RESERVE = "reserve"  # subject: week or five_hour; value: on or off (f8 D4)
+RESERVE = "reserve"  # subject: week, five_hour or a card's short key; value: on or off (f8 D4)
 QUEUE = "queue"  # subject: the ticket id, in later/ or blocked/ (F106 D3)
 SET_ASIDE = "set_aside"  # subject: a blocked ticket's id, moved to later/ (F106 D3)
 PLAN_MESSAGE = planner.PLAN_MESSAGE  # subject: the thread; value: {text, comments} (f6 D1)
@@ -1460,11 +1460,133 @@ def _reorder(
     return f"{result}, skipped {', '.join(skipped)}" if skipped else result
 
 
-def _waits(repo: Path, kind: str) -> str | None:
+# --- reserve on a card: it may use Claude's reserve (ADR 34, F172 D1, D2, D4) ------------------
+
+_RESERVE_CARD_STATES = ("ready", _BUILDING)  # a card whose tickets may still run
+_CARD_AREA_RE = re.compile(r"\*\*Area:\*\*[ \t]*[^·*\n]*[^·*\n \t]")
+_CARD_PRIORITY_FIELD_RE = re.compile(r"\*\*Priority:\*\*[ \t]*\d+")
+# the field with the " · " before it, up to the next field or the line's end
+_CARD_RESERVE_FIELD_RE = re.compile(
+    r"(?:[ \t]*·[ \t]*)?\*\*Reserve:\*\*[^·*\n]*?(?=[ \t]*(?:·|\n|$))"
+)
+_MARK = "**Reserve:** yes"
+
+
+def _card_reserve_subject(subject: object) -> str | None:
+    """A card's short key as a reserve request names it (``f142``), or None."""
+    if isinstance(subject, str) and len(subject) <= _MAX_ID and _SHORT_KEY_RE.fullmatch(subject):
+        return subject
+    return None
+
+
+def _card_marked(doc: str, on: bool) -> str:
+    """A card's doc with its header's ``**Reserve:** yes`` (F172 D1): written after its Area,
+    else its Priority, else its State, else on a line of its own under the title; or removed
+    with its `` · ``."""
+    section = re.search(r"^## ", doc, re.MULTILINE)
+    end = section.start() if section else len(doc)
+    header, body = doc[:end], doc[end:]
+    header = _CARD_RESERVE_FIELD_RE.sub("", header, count=1)
+    if not on:
+        return header + body
+    for field in (_CARD_AREA_RE, _CARD_PRIORITY_FIELD_RE, _CARD_STATE_RE):
+        if (found := field.search(header)) is not None:
+            return f"{header[: found.end()]} · {_MARK}{header[found.end() :]}{body}"
+    title, _, rest = doc.partition("\n")
+    return f"{title}\n\n> {_MARK}\n{rest}"
+
+
+def _free_parked(
+    repo: Path, conn: sqlite3.Connection, project_id: int, state: State, now: datetime
+) -> None:
+    """F172 D4: the marked cards' tickets parked at either reserve, and those they wait for
+    (``loop.reserve_cards``), go at the next pick; their Needs-you items are answered."""
+    ready = []
+    for path in sorted((repo / ".factory" / "tasks" / "ready").glob("*.md")):
+        try:
+            ready.append(parse_task(path, _MAX_DIFF))
+        except (ValueError, yaml.YAMLError, OSError):  # as ticket_problems: it won't read
+            continue
+    held = (loop.RESERVE_KIND, loop.FIVE_HOUR_KIND)
+    freed = {
+        task_id
+        for task_id in loop.reserve_cards(repo, ready)
+        if (state.parked.get(task_id) or {}).get("kind") in held
+    }
+    for task_id in freed:
+        state.parked[task_id][loop.RETRY] = True
+    for row in metrics.open_owner_items(conn, project_id):
+        if row["kind"] in held and row["subject"] in freed:
+            metrics.resolve_owner_item(conn, row["id"], now.isoformat())
+
+
+def _card_reserve(
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    state: State,
+    now: datetime,
+    subject: object,
+    value: object,
+) -> str:
+    """The owner marks a ready or building card as one that may use Claude's reserve, or
+    unmarks it (F172 D2): its header's ``**Reserve:** yes`` written or removed in a commit of
+    its own. Marked, its tickets parked at either reserve go (``_free_parked``). Already so,
+    nothing is committed."""
+    key = _card_reserve_subject(subject)
+    if key is None:
+        return f"a reserve request names week, five_hour or a card, not {subject!r}"
+    if value not in _SWITCHED:
+        return f"a card's reserve is turned on or off, not {value!r}"
+    on = value == "on"
+    name = planner.thread_name(key)
+    doc = milestone_file(repo, "cards", full_key(repo, key))
+    if not doc.is_file():
+        return f"{name} has no card in .factory/cards/: not marked"
+    text = doc.read_text(encoding="utf-8")
+    found = milestone.card(doc.stem, text)
+    if found.state not in _RESERVE_CARD_STATES:
+        return f"{name} is {found.state}: only a ready or building card may use Claude's reserve"
+    said = (
+        f"{name} may use Claude's reserve" if on else f"{name} may no longer use Claude's reserve"
+    )
+    if found.reserve == on:
+        return f"{name} may {'' if on else 'not '}use Claude's reserve already"
+    changed = _card_marked(text, on)
+    if milestone.card(doc.stem, changed) != replace(found, reserve=on):
+        return f"{name}'s header can't take the reserve's mark: not changed"
+    _commit_file(Git(repo), doc, changed, f"{said}, by the owner")
+    if on:
+        _free_parked(repo, conn, project_id, state, now)
+    return said
+
+
+def _reserve(
+    repo: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    state: State,
+    now: datetime,
+    subject: object,
+    value: object,
+) -> str:
+    """A reserve request: one of the owner's two switches (``_switch``), or a card's mark
+    (``_card_reserve``, F172 D2)."""
+    if subject in loop.SWITCHES:
+        return _switch(conn, project_id, state, now, subject, value)
+    return _card_reserve(repo, conn, project_id, state, now, subject, value)
+
+
+def _commits(kind: str, subject: object) -> bool:
+    """Whether a request commits: a reserve request on a card does, its switches don't."""
+    return kind in _COMMITS or (kind == RESERVE and subject not in loop.SWITCHES)
+
+
+def _waits(repo: Path, kind: str, subject: object = None) -> str | None:
     """Why a request that commits must wait, if it must: a queue commits on the branch it is
     on, and a sign-off or an approval commits the whole tree, so none goes anywhere but a main
     that is as clean as it needs to be. It stays open for a later command or pick."""
-    if kind not in _COMMITS:
+    if not _commits(kind, subject):
         return None
     git = Git(repo)
     if git.current_branch() != loop.MAIN:
@@ -1502,7 +1624,7 @@ def _apply(
             _answered_block(conn, project_id, now, ticket)
             return f"{said} {ticket}"
         if kind == RESERVE:
-            return _switch(conn, project_id, state, now, subject, value)
+            return _reserve(repo, conn, project_id, state, now, subject, value)
         if kind in (PAUSE, RESUME):
             return _pause(conn, state, now, kind)
         if kind == PLAN_MESSAGE:
@@ -1814,7 +1936,7 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
         # Only the latest order is the board's (F15 D4): an earlier one still open is replaced
         latest = max((row["id"] for row in waiting if row["kind"] == REORDER), default=None)
         for row in waiting:
-            if (why := _waits(repo, row["kind"])) is not None:
+            if (why := _waits(repo, row["kind"], row["subject"])) is not None:
                 lines.append(f"{_what(row)}: {why}")
                 continue
             if row["kind"] == REORDER and row["id"] != latest:
@@ -1839,7 +1961,7 @@ def take_switches(
     lines = []
     for row in metrics.open_requests(conn, project_id):
         kind = row["kind"]
-        if kind not in _STATE_ONLY:
+        if kind not in _STATE_ONLY or _commits(kind, row["subject"]):  # a card's mark commits
             continue
         if kind == RESERVE:
             result = _switch(conn, project_id, state, now, row["subject"], row["value"])
