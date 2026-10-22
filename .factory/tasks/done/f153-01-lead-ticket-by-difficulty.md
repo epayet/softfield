@@ -30,3 +30,10 @@ Read "What we know" and Decisions D1, D4 and D7 in `.factory/cards/f153-i-wonder
 - with `[roles] lead-ticket = ["claude-opus"]` and no setting, the existing lead-ticket tests pass unchanged
 - the listed `tests:` pass, and the new tests fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
