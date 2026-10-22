@@ -1,4 +1,4 @@
-# Milestone F172: I'd like to be able to use the reserve at the ticket…
+# Milestone F172: Mark a card to use Claude's reserve, so only its tickets run past the mark
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-22.
