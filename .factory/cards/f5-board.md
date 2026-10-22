@@ -1,7 +1,7 @@
 # Milestone F5: steer from the phone, and the board
 
 > **Status: planned** (2026-10-02), on [ADR 18](../adr/18-dashboard-writes.md) and [ADR 19](../adr/19-feature-board.md). The owner's priorities 2 and 3: a backlog of features, and reviewing from the dashboard. Its tickets can run beside F4's; some depend on F4 tickets by id.
-> **State:** building · **Priority:** 0 · **Area:** factory
+> **State:** building · **Priority:** 2 · **Area:** factory
 
 ## Outcome
 - From the phone, on the home Wi-Fi (`runner dashboard --lan`), the owner can:
