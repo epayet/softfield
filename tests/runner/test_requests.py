@@ -1334,43 +1334,84 @@ def _body(repo: Path, task_id: str) -> object:
         conn.close()
 
 
-def test_a_priority_request_sets_a_ready_tickets_priority_in_one_commit_and_the_pick_follows(
+BUG_A, BUG_B = "bug-01-a", "bug-02-b"
+
+
+def _two_bugs(repo: Path) -> str:
+    """bug-01-a and bug-02-b ready, both at a bug's default priority, each with its row;
+    main's head."""
+    ready = repo / ".factory" / "tasks" / "ready"
+    for task_id in (BUG_A, BUG_B):
+        path = write_task(ready, task_id)
+        path.write_text(
+            path.read_text().replace("milestone: 1\n", "milestone: bugs\narea: factory\n")
+        )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "two bugs")
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+        for task_id in (BUG_A, BUG_B):
+            text = (ready / f"{task_id}.md").read_text()
+            metrics.upsert_ticket(conn, project, task_id, state="ready", body=text)
+    finally:
+        conn.close()
+    return git(repo, "rev-parse", "HEAD")
+
+
+def test_a_priority_request_sets_a_ready_bugs_priority_in_one_commit_and_the_pick_follows(
     repo,
 ):
-    head = _two_ready(repo)
-    assert _pick_order(repo) == ["m1-01-a", "m1-02-b"]
-    asked = _ask(repo, "priority", "m1-02-b", "4")
-    assert _apply(repo) == ["priority m1-02-b: priority of m1-02-b set to 4"]
-    assert _request(repo, asked) == (NOW.isoformat(), "priority of m1-02-b set to 4")
-    path = repo / ".factory" / "tasks" / "ready" / "m1-02-b.md"
+    head = _two_bugs(repo)
+    assert _pick_order(repo) == [BUG_A, BUG_B]
+    asked = _ask(repo, "priority", BUG_B, "4")
+    assert _apply(repo) == [f"priority {BUG_B}: priority of {BUG_B} set to 4"]
+    assert _request(repo, asked) == (NOW.isoformat(), f"priority of {BUG_B} set to 4")
+    path = repo / ".factory" / "tasks" / "ready" / f"{BUG_B}.md"
     assert parse_task(path, 400).priority == 4
     assert path.read_text().count("priority:") == 1
-    assert _pick_order(repo) == ["m1-02-b", "m1-01-a"]
+    assert _pick_order(repo) == [BUG_B, BUG_A]
     # one commit of that one file, by the owner's request; a clean tree
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == (
-        "m1-02-b: priority 100 → 4, by the owner"
+        f"{BUG_B}: priority 50 → 4, by the owner"
     )
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == [".factory/tasks/ready/m1-02-b.md"]
+    assert changed == [f".factory/tasks/ready/{BUG_B}.md"]
     assert git(repo, "status", "--porcelain") == ""
     # the dashboard's row has the new text at once; the other ticket's is as it was
-    assert "priority: 4" in str(_body(repo, "m1-02-b"))
-    assert "priority:" not in str(_body(repo, "m1-01-a"))
+    assert "priority: 4" in str(_body(repo, BUG_B))
+    assert "priority:" not in str(_body(repo, BUG_A))
     assert _apply(repo) == []  # finished once
 
 
-def test_a_priority_request_replaces_a_set_aside_tickets_own_priority(repo):
+def test_a_priority_request_replaces_a_set_aside_bugs_own_priority(repo):
     (repo / ".factory" / "tasks" / "later").mkdir(parents=True)
-    text = TICKET.format(id="f7-01-a", context="x").replace("depends_on", "priority: 7\ndepends_on")
-    (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").write_text(text)
+    text = TICKET.format(id=BUG_A, context="x").replace(
+        "milestone: f7\n", "milestone: bugs\narea: factory\npriority: 7\n"
+    )
+    assert "priority: 7" in text
+    (repo / ".factory" / "tasks" / "later" / f"{BUG_A}.md").write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "set aside")
-    _ask(repo, "priority", "f7-01-a", "2")
-    assert _apply(repo) == ["priority f7-01-a: priority of f7-01-a set to 2"]
-    after = (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").read_text()
+    _ask(repo, "priority", BUG_A, "2")
+    assert _apply(repo) == [f"priority {BUG_A}: priority of {BUG_A} set to 2"]
+    after = (repo / ".factory" / "tasks" / "later" / f"{BUG_A}.md").read_text()
     assert after == text.replace("priority: 7", "priority: 2")
-    assert git(repo, "log", "-1", "--format=%s").strip() == "f7-01-a: priority 7 → 2, by the owner"
+    assert git(repo, "log", "-1", "--format=%s").strip() == f"{BUG_A}: priority 7 → 2, by the owner"
+
+
+def test_a_priority_request_on_a_feature_ticket_is_refused_for_its_cards_place(repo):
+    """F173 D3: a feature ticket runs in its card's place; main is unchanged."""
+    head = _two_ready(repo)
+    asked = _ask(repo, "priority", "m1-02-b", "4")
+    assert _apply(repo) == [f"priority m1-02-b: {requests.CARD_PLACE}"]
+    assert _request(repo, asked) == (
+        NOW.isoformat(),
+        "a ticket runs in its card's place: move the card on the board",
+    )
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert "priority:" not in (repo / ".factory" / "tasks" / "ready" / "m1-02-b.md").read_text()
 
 
 def _priority_of(repo: Path, key: str) -> object:
@@ -1446,6 +1487,12 @@ def _done_card(repo: Path) -> None:
         (_two_ready, "m1-02-b", None, "a priority is a whole number from 0, not None"),
         (
             _two_ready,
+            "m1-02-b",
+            "1",
+            "a ticket runs in its card's place: move the card on the board",
+        ),
+        (
+            _two_ready,
             "m1-02",
             "1",
             "m1-02 is no ticket in .factory/tasks/ready/ or .factory/tasks/later/",
@@ -1469,9 +1516,9 @@ def test_a_priority_the_runner_cant_apply_is_refused_and_main_is_unchanged(
 
 
 def test_a_priority_already_set_changes_nothing(repo):
-    head = _two_ready(repo)
-    _ask(repo, "priority", "m1-02-b", "100")
-    assert _apply(repo) == ["priority m1-02-b: priority of m1-02-b is 100 already"]
+    head = _two_bugs(repo)
+    _ask(repo, "priority", BUG_B, "50")
+    assert _apply(repo) == [f"priority {BUG_B}: priority of {BUG_B} is 50 already"]
     assert git(repo, "rev-parse", "HEAD") == head
 
 
@@ -1549,7 +1596,8 @@ def test_a_reorder_to_the_order_the_cards_have_changes_nothing(repo):
     assert git(repo, "status", "--porcelain") == ""
 
 
-def test_a_reorder_sets_a_bug_tickets_priority_and_leaves_a_milestone_tickets_own(repo):
+def test_a_reorder_sets_a_bug_tickets_priority_and_a_cards_tickets_follow_the_card(repo):
+    """F173: a feature ticket's own number, left from before, doesn't beat its card's place."""
     _board(repo, {"f7": 3, "f8": 5}, bug=True)
     own = repo / ".factory" / "tasks" / "ready" / "f8-01-a.md"
     own.write_text(own.read_text().replace("depends_on", "priority: 1\ndepends_on"))
@@ -1561,15 +1609,15 @@ def test_a_reorder_sets_a_bug_tickets_priority_and_leaves_a_milestone_tickets_ow
         metrics.upsert_ticket(conn, project, BUG, state="ready", body=text)
     finally:
         conn.close()
-    assert _pick_order(repo) == ["f8-01-a", "f7-01-a", BUG]
+    assert _pick_order(repo) == ["f7-01-a", "f8-01-a", BUG]
     _ask(repo, "reorder", None, json.dumps([BUG, "f7", "f8"]))
     assert _apply(repo) == ["reorder: reordered: 1 card changed"]
     assert _changed(repo) == [f".factory/tasks/ready/{BUG}.md"]
     assert parse_task(repo / ".factory" / "tasks" / "ready" / f"{BUG}.md", 400).priority == 0
     assert "priority: 0" in str(_body(repo, BUG))  # the dashboard's row, at once
-    # the ticket's own priority is as it was, and still wins over its card's
+    # the ticket's file is not touched; its card's place orders it
     assert parse_task(own, 400).priority == 1
-    assert _pick_order(repo) == [BUG, "f8-01-a", "f7-01-a"]
+    assert _pick_order(repo) == [BUG, "f7-01-a", "f8-01-a"]
 
 
 def test_a_reorder_puts_an_unlisted_card_last_and_names_what_it_skipped(repo):

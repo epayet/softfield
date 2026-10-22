@@ -437,8 +437,9 @@ def test_milestone_scores_detail(milestone_detail_with_scores_client):
 
 @pytest.fixture
 def card_client(board_db):
-    """A client over ``write_board``'s rows, plus on ``f24-growing``: a lead ticket that goes
-    first (``priority: 0``) and a developer one that waits for ``f24-03-next``."""
+    """A client over ``write_board``'s rows, plus on ``f24-growing``: a lead ticket whose
+    ``priority: 0`` its card's place overrides (F173) and a developer one that waits for
+    ``f24-03-next``."""
     from factory_dashboard.app import create_app, get_now
 
     conn = metrics.open_db(board_db)
@@ -596,14 +597,15 @@ def test_how_it_grew_dates_growing_and_harvested_where_the_database_has_them(car
 
 def test_the_tickets_come_in_run_order_with_who_works_on_each(card_client):
     """Done, then what's being worked on, then the ready ones as the runner will take them
-    (priority, then id; one that waits after those it can take), then the set-aside ones. A
-    removed ticket (``f24-05-gone``) is left out."""
+    (inside the card by id, whatever a ticket's own ``priority:`` says, F173; one that waits
+    after those it can take), then the set-aside ones. A removed ticket (``f24-05-gone``) is
+    left out."""
     rows = _ticket_rows(card_client.get("/milestones/f24-growing").text)
     assert rows == [
         ["f24-01-merged", "Goal of f24-01-merged.", LOCAL, "done"],
         ["f24-02-working", "Goal of f24-02-working.", LOCAL, "running"],
-        ["f24-06-lead", "Goal of f24-06-lead.", "the lead", "ready"],
         ["f24-03-next", "Goal of f24-03-next.", "a developer", "ready"],
+        ["f24-06-lead", "Goal of f24-06-lead.", "the lead", "ready"],
         ["f24-07-waits", "Goal of f24-07-waits.", "a developer", "waits for f24-03-next"],
         ["f24-04-later", "Goal of f24-04-later.", "a developer", "set aside"],
     ]

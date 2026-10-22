@@ -3457,7 +3457,8 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     meta: dict[str, Any] = {"id": task_id, "milestone": milestone}
     if milestone == source.milestone:  # its card and place in the queue (ADR 19)
         meta |= {"area": source.area} if source.area else {}
-        meta |= {"priority": source.priority} if source.priority is not None else {}
+        if milestone == BUGS and source.priority is not None:  # a feature's has none (F173)
+            meta["priority"] = source.priority
     if source.difficulty is not None:
         meta["difficulty"] = source.difficulty
     meta |= {

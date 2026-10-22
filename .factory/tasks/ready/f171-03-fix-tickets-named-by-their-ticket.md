@@ -3,7 +3,6 @@ id: f171-03-fix-tickets-named-by-their-ticket
 milestone: f171-there-are-dupliacted-tickets-on-the
 agent: lead
 difficulty: 3
-priority: 3
 depends_on: []
 files:
   - runner/loop.py

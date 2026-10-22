@@ -2,7 +2,6 @@
 id: f103-01-seeds-not-counted
 milestone: f103-the-number-of-things-in-planning
 difficulty: 2
-priority: 100
 depends_on: [f26-02-group-counts]
 files:
   - factory_dashboard/planning.py

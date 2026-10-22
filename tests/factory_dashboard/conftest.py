@@ -2081,7 +2081,8 @@ def write_later_priority(conn: sqlite3.Connection) -> None:
     ordering tests.
 
     - ``f1-99-later`` (developer, f1 milestone, no explicit priority → uses milestone's default 100)
-    - ``f1-95-low-priority`` (developer, f1 milestone, explicit ``priority: 5`` in body)
+    - ``f1-95-low-priority`` (developer, bugs, explicit ``priority: 5`` in body: only a bug's
+      is read, F173)
     - ``f1-97-bug`` (developer, bugs milestone, no explicit priority → bug priority 50)
     - ``f1-98-milestone`` (developer, f2 milestone with priority 10 → uses milestone's priority 10)
     """
@@ -2095,7 +2096,7 @@ def write_later_priority(conn: sqlite3.Connection) -> None:
         conn,
         project,
         "f1-95-low-priority",
-        milestone_id=f1,
+        milestone_id=bugs,
         kind="developer",
         state="later",
         difficulty=2,

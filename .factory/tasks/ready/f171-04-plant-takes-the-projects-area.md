@@ -3,7 +3,6 @@ id: f171-04-plant-takes-the-projects-area
 milestone: f171-there-are-dupliacted-tickets-on-the
 agent: lead
 difficulty: 3
-priority: 3
 depends_on: []
 files:
   - runner/planner.py

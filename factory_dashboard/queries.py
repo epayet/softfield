@@ -28,9 +28,11 @@ from runner.tasks import (
     blocked_ids,
     milestone_order,
     pick_next,
+    short_key,
     split_frontmatter,
 )
 from runner.tasks import run_order as _run_order
+from runner.tasks import task_priority as _task_priority
 from runner.usage import CACHE_READ_WEIGHT, OUTPUT_WEIGHT
 
 DOLLARS_PER_TOKEN = 4 / 1_000_000  # per token-equivalent (D7)
@@ -529,18 +531,17 @@ def depends_on(ticket: sqlite3.Row) -> tuple[str, ...]:
 
 
 def ticket_priority(body: str | None, milestone: str | None, card: int | None) -> int:
-    """A ticket row's priority as the runner reads it (`runner.tasks.task_priority`): the
-    ``priority:`` in its text, else a bug's 50, else its card's, else 100. Lower goes first."""
+    """A ticket row's priority as the runner reads it (`runner.tasks.task_priority`): a bug's
+    ``priority:`` in its text, else 50; a feature ticket's card's, else 100, whatever its text
+    says (F173 D5). Lower goes first."""
+    if milestone != BUGS:
+        return DEFAULT_PRIORITY if card is None else card
     try:
         meta = split_frontmatter(body or "")[0]
     except (TaskError, yaml.YAMLError):
         meta = {}
     own = meta.get("priority")
-    if type(own) is int and own >= 0:
-        return own
-    if milestone == BUGS:
-        return BUG_PRIORITY
-    return DEFAULT_PRIORITY if card is None else card
+    return own if type(own) is int and own >= 0 else BUG_PRIORITY
 
 
 def as_task(
@@ -562,18 +563,23 @@ def as_task(
 
 
 def in_run_order(
-    ready: Sequence[Task], done: set[str], stopped: set[str]
+    ready: Sequence[Task],
+    done: set[str],
+    stopped: set[str],
+    cards: Mapping[str, int] | None = None,
 ) -> tuple[list[Task], list[Task]]:
     """``pick_next`` applied again and again, each pick counted as merged: the tickets of
     ``ready`` in the order the runner takes them, then those it never would (waiting on a
-    ticket that isn't ready, or paused behind a ``stopped`` one)."""
+    ticket that isn't ready, or paused behind a ``stopped`` one). ``cards`` maps a card's
+    short key to its place on the board, as the runner's pick has it."""
+    cards = cards or {}
     paused = blocked_ids(ready, stopped)
     left, merged, picked = list(ready), set(done), []
-    while (task := pick_next(left, merged, paused)) is not None:
+    while (task := pick_next(left, merged, paused, cards)) is not None:
         picked.append(task)
         left.remove(task)
         merged.add(task.id)
-    return picked, sorted(left, key=lambda t: _run_order(t, {}))
+    return picked, sorted(left, key=lambda t: _run_order(t, cards))
 
 
 def run_order(
@@ -602,7 +608,12 @@ def run_order(
         )
         for r in ready.values()
     ]
-    picked, left = in_run_order(tasks, done, stopped)
+    cards = {  # each feature ticket's priority is its card's place
+        short_key(t.milestone): t.priority
+        for t in tasks
+        if t.milestone != BUGS and t.priority is not None
+    }
+    picked, left = in_run_order(tasks, done, stopped, cards)
     return [
         Upcoming(
             ticket=t.id,
@@ -610,7 +621,7 @@ def run_order(
             kind=ready[t.id]["kind"],
             milestone=ready[t.id]["milestone"],
             waits=tuple(d for d in t.depends_on if d not in done),
-            priority=t.priority if t.priority is not None else DEFAULT_PRIORITY,
+            priority=_task_priority(t, cards),
         )
         for t in [*picked, *left]
     ]

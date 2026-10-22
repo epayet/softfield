@@ -67,6 +67,7 @@ _COMMITS = (SIGNOFF, QUEUE, SET_ASIDE, PLANT, DROP_SEED, PRIORITY, REORDER, REJE
 _PROPOSAL_ID_RE = re.compile(r"[\w.-]{1,64}")
 _SWITCHED = ("on", "off")
 QUEUED_FOR_THE_LEAD = "queued for the lead"
+CARD_PLACE = "a ticket runs in its card's place: move the card on the board"  # F173 D3
 _PLAIN = ("100644", "100755", "000000")  # a draft's mode: a file, or none (deleted)
 _MAX_DIFF = 1000  # parse_task needs one; pre-flight doesn't read it
 # The kinds that carry the owner's words (F31 D9). Their value may name, as `again`, the refused
@@ -1224,9 +1225,9 @@ def _ticket_priority(
     ticket: str,
     priority: int,
 ) -> str:
-    """A ticket's ``priority:``, for one in .factory/tasks/ready/ or .factory/tasks/later/ that
-    isn't running;
-    the dashboard's row gets its new text at once."""
+    """A bug ticket's ``priority:``, for one in .factory/tasks/ready/ or .factory/tasks/later/
+    that isn't running; the dashboard's row gets its new text at once. A feature ticket runs in
+    its card's place, so its priority is refused (F173 D3)."""
     if ticket == (state.in_flight or {}).get("ticket"):
         return f"{ticket} is running: its priority stays"
     found = sorted((repo / ".factory" / "tasks").glob(f"*/{ticket}.md"))
@@ -1236,10 +1237,9 @@ def _ticket_priority(
             return f"{ticket} is in .factory/tasks/{found[0].parent.name}/: its priority stays"
         return f"{ticket} is no ticket in .factory/tasks/ready/ or .factory/tasks/later/"
     task = parse_task(path, _MAX_DIFF)
-    doc = milestone_file(repo, "cards", task.milestone)
-    text = doc.read_text(encoding="utf-8") if doc.is_file() else None
-    cards = {short_key(task.milestone): milestone.card(doc.stem, text).priority} if text else {}
-    was = task_priority(task, cards)
+    if task.milestone != BUGS:
+        return CARD_PLACE
+    was = task_priority(task, {})
     if was == priority:
         return f"priority of {ticket} is {priority} already"
     changed = _ticket_with(path.read_text(encoding="utf-8"), priority)
@@ -1288,7 +1288,7 @@ def _priority(
     subject: object,
     value: object,
 ) -> str:
-    """The owner reorders the work (f6-18): a ticket's ``priority:`` or a card's header
+    """The owner reorders the work (f6-18): a bug ticket's ``priority:`` or a card's header
     Priority set, in a commit of its own, for the next pick to follow. Refused, main
     unchanged, for a ticket done or running, a card done, or a value that isn't a whole
     number from 0."""
@@ -1413,8 +1413,8 @@ def _reorder(
     list's, in one commit of the files whose number changed, and none when the order holds
     already. An open card or bug the list doesn't name comes after the listed ones, in the
     order it had. A key that is no open card or bug ticket (unknown, done, removed, running,
-    general) is skipped and named. A ticket's own ``priority:`` inside a milestone is not
-    touched: it still wins over its card's (``task_priority``). Refused, main unchanged, for
+    general) is skipped and named. A card's tickets follow it: they have no ``priority:`` of
+    their own (F173, ``task_priority``). Refused, main unchanged, for
     a value that isn't a JSON list of strings or holds a key twice."""
     try:
         keys = json.loads(value) if isinstance(value, str) else None

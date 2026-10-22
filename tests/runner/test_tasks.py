@@ -5,6 +5,7 @@ import pytest
 from runner.tasks import (
     AREA_MISSING,
     DEFAULT_PRIORITY,
+    FEATURE_PRIORITY,
     STOPPED,
     TESTS_ONLY,
     TESTS_ONLY_CODE,
@@ -534,18 +535,47 @@ def test_pick_next_goes_by_the_milestone_card_priority_first(tmp_path):
 def test_a_bug_at_priority_1_goes_before_milestone_tickets_at_2(tmp_path):
     ready = [
         _in(tmp_path, "f1-01-a", "f1"),
-        _in(tmp_path, "m1-01-b", "1", "priority: 2\n"),
+        _in(tmp_path, "m1-01-b", "1"),
         _in(tmp_path, "bug-01-x", "bugs", "area: factory\npriority: 1\n"),
     ]
-    picked = pick_next(ready, done=set(), paused=set(), cards={"f1": 2})
+    picked = pick_next(ready, done=set(), paused=set(), cards={"f1": 2, "m1": 2})
     assert picked is not None and picked.id == "bug-01-x"
 
 
-def test_a_ticket_priority_wins_over_its_card_and_no_card_is_100(tmp_path):
+def test_a_feature_ticket_runs_in_its_cards_place_and_no_card_is_100(tmp_path):
+    """F173 D1: the card's place wins over a feature ticket's own number; a bug keeps its own."""
     ticket = _in(tmp_path, "f1-01-a", "f1", "priority: 7\n")
-    assert task_priority(ticket, {"f1": 3}) == 7
+    assert task_priority(ticket, {"f1": 3}) == 3
     assert task_priority(_in(tmp_path, "f1-02-b", "f1"), {}) == DEFAULT_PRIORITY == 100
     assert task_priority(_in(tmp_path, "bug-01-x", "bugs", "area: factory\n"), {}) == 50
+    assert task_priority(_in(tmp_path, "bug-02-y", "bugs", "area: factory\npriority: 4\n"), {}) == 4
+
+
+def test_a_card_at_0_goes_before_one_at_1_whatever_its_tickets_say(tmp_path):
+    """F173: F153's card was dragged first, but its tickets' `priority: 100` sent them last."""
+    first = _in(tmp_path, "f9-01-first", "f9", "priority: 100\n")
+    second = _in(tmp_path, "f2-01-second", "f2", "priority: 2\n")
+    picked = pick_next([second, first], done=set(), paused=set(), cards={"f9": 0, "f2": 1})
+    assert picked is not None and picked.id == "f9-01-first"
+
+
+def test_inside_a_card_tickets_go_by_what_they_wait_for_then_id(tmp_path):
+    later = _in(tmp_path, "f1-01-a", "f1", deps="[f1-02-b]")
+    sooner = _in(tmp_path, "f1-02-b", "f1")
+    third = _in(tmp_path, "f1-03-c", "f1", "priority: 0\n")
+    picked = pick_next([later, sooner, third], done=set(), paused=set(), cards={"f1": 0})
+    assert picked is not None and picked.id == "f1-02-b"
+    picked = pick_next([later, third], done={"f1-02-b"}, paused=set(), cards={"f1": 0})
+    assert picked is not None and picked.id == "f1-01-a"
+
+
+def test_preflight_refuses_a_feature_tickets_priority_and_passes_a_bugs(repo):
+    """F173 D2: the board orders the work."""
+    ready = repo / ".factory" / "tasks" / "ready"
+    assert preflight(_in(ready, "m1-01-a", "1", "priority: 3\n"), repo) == [FEATURE_PRIORITY]
+    assert "the board orders the work" in FEATURE_PRIORITY
+    assert preflight(_in(ready, "m1-02-b", "1"), repo) == []
+    assert preflight(_in(ready, "bug-01-x", "bugs", "area: factory\npriority: 3\n"), repo) == []
 
 
 def test_equal_priorities_keep_milestone_then_id_order(tmp_path):

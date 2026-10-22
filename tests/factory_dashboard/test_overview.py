@@ -805,24 +805,23 @@ def _prioritise(db_path: Path, ticket: str, own: int, card: int) -> None:
         conn.close()
 
 
-def test_next_in_line_follows_the_priorities_the_runner_reads(queue_client, db_path):
-    """A ticket's own priority, else its card's: lower first, as `pick_next` takes them."""
+def test_next_in_line_follows_the_card_not_a_feature_tickets_own_priority(queue_client, db_path):
+    """F173: a feature ticket runs in its card's place, whatever its own number says, as
+    `pick_next` takes them."""
     _prioritise(db_path, "f1-10-queued", own=5, card=50)
     html = queue_client.get("/").text
     rows = section(html, "queue").split("Next in line", 1)[1]
-    assert [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)] == [
-        "f1-10-queued",
-        "f1-05-first",
-        "f1-06-second",
-    ]
-    assert re.findall(r"· priority (\d+)\b", rows) == ["5", "50", "50"]
-    assert list(waits(db_path))[:3] == ["f1-10-queued", "f1-05-first", "f1-06-second"]
+    shown = [t for _, t in re.findall(r"\b(\d) (f1-\d\d-[a-z-]+)", rows)]
+    assert shown[:2] == ["f1-05-first", "f1-06-second"]
+    assert re.findall(r"· priority (\d+)\b", rows) == ["50"] * len(shown)
+    assert list(waits(db_path))[: len(shown)] == shown
 
 
-def test_a_priority_at_0_shows_as_0_and_goes_first(queue_client, db_path):
-    _prioritise(db_path, "f1-10-queued", own=0, card=100)
+def test_a_card_at_0_shows_as_0(queue_client, db_path):
+    _prioritise(db_path, "f1-10-queued", own=7, card=0)
     rows = section(queue_client.get("/").text, "queue").split("Next in line", 1)[1]
-    assert re.search(r"\b1 f1-10-queued\b[^·]*· [^·]+ · priority 0\b", rows)
+    assert re.search(r"\b1 f1-05-first\b[^·]*· [^·]+ · priority 0\b", rows)
+    assert "priority 7" not in rows
 
 
 def test_empty_queue_shows_message_once(serve):

@@ -161,7 +161,7 @@ class Task:
     commands: tuple[str, ...] = ()  # a lead ticket's extra Bash prefixes (f1's probes)
     difficulty: int | None = None  # 1 to 10, set at plan time (ADR 14 item 5)
     difficulty_corrected: int | None = None  # set by the lead at review when it was off
-    priority: int | None = None  # lower first (ADR 19 item 3); a bug's defaults to 50
+    priority: int | None = None  # a bug's place on the board, 50 by default (F173 D1)
     area: str | None = None  # factory or product (ADR 19 item 2b); required on a bug
     tests_only: bool = False  # a weak test's fix: its tests pass on main (f8-09)
 
@@ -250,7 +250,7 @@ def difficulty(meta: dict[str, Any], key: str) -> int | None:
 
 def _priority(meta: dict[str, Any], milestone: str) -> int | None:
     """``priority``: absent (a bug's is 50; a milestone ticket's comes from its card) or a
-    whole number from 0, lower first."""
+    whole number from 0, lower first. Pre-flight refuses one on a feature ticket (F173 D2)."""
     if "priority" not in meta:
         return BUG_PRIORITY if milestone == BUGS else None
     value = meta["priority"]
@@ -373,15 +373,17 @@ def held_ids(ready: Iterable[Task], waits: Mapping[str, str]) -> dict[str, str]:
 
 
 def task_priority(task: Task, cards: Mapping[str, int]) -> int:
-    """A ticket's own ``priority:``, else its milestone card's (``cards`` maps a short key to
-    it), else 100. Lower goes first (ADR 19 item 3)."""
-    if task.priority is not None:
-        return task.priority
+    """A bug's own ``priority:`` (its place on the board, 50 when none); a feature ticket's
+    card's (``cards`` maps a short key to it), else 100. Lower goes first (ADR 19 item 3). A
+    feature ticket's own ``priority:`` is never read: the board orders the work (F173 D1)."""
+    if task.milestone == BUGS:
+        return BUG_PRIORITY if task.priority is None else task.priority
     return cards.get(short_key(task.milestone), DEFAULT_PRIORITY)
 
 
 def run_order(task: Task, cards: Mapping[str, int]) -> tuple[int, tuple[str, int], str]:
-    """f5 D6: priority, then milestone order, then id."""
+    """f5 D6: priority, then milestone order, then id; ``depends_on`` filters before it
+    (``pick_next``)."""
     return task_priority(task, cards), milestone_order(task.milestone), task.id
 
 
@@ -405,6 +407,10 @@ TESTS_ONLY = (
 )
 TESTS_ONLY_CODE = "a `tests_only` ticket lists only tests in `files:`"
 AREA_MISSING = "a bug ticket needs `area:` (factory or product), ADR 19 item 2b"
+FEATURE_PRIORITY = (
+    "a feature ticket has no `priority:`: the board orders the work, and the ticket runs in"
+    " its card's place (F173)"
+)
 
 
 def preflight(task: Task, repo: Path) -> list[str]:
@@ -423,6 +429,8 @@ def preflight(task: Task, repo: Path) -> list[str]:
         problems.append(TESTS_ONLY)
     if task.milestone == BUGS and task.area is None:
         problems.append(AREA_MISSING)
+    if task.milestone != BUGS and task.priority is not None:
+        problems.append(FEATURE_PRIORITY)
     paths = set(_PATH_RE.findall(text))
     listed = (*task.files, *task.tests)
     named = {Path(f).name for f in listed}  # `overview.py` once its path is listed (f33-01)

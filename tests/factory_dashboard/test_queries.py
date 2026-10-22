@@ -44,6 +44,46 @@ def test_run_order_is_pick_next_applied_again_and_again(line_db):
     )
 
 
+def test_run_order_follows_the_board_not_a_feature_tickets_own_priority(tmp_path):
+    """F173: the order the runner picks, read from the rows: a card at 0 before one at 1
+    whatever its tickets say, inside a card by what they wait for then id, a bug by its own."""
+    db = metrics.open_db(tmp_path / "factory-metrics.sqlite")
+    project = metrics.upsert_project(db, PROJECT)
+    first = metrics.upsert_milestone(db, project, "f9", priority=0)
+    second = metrics.upsert_milestone(db, project, "f2", priority=1)
+    bugs = metrics.upsert_milestone(db, project, "bugs")
+    rows = [
+        ("f9-02-b", first, "---\npriority: 100\n---\n", []),
+        ("f9-01-a", first, "---\npriority: 100\n---\n", ["f9-02-b"]),
+        ("f9-03-c", first, None, []),
+        ("f2-01-a", second, "---\npriority: 0\n---\n", []),
+        ("bug-01-x", bugs, "---\npriority: 2\n---\n", []),
+        ("bug-02-y", bugs, None, []),
+    ]
+    for ticket, milestone_id, body, after in rows:
+        metrics.upsert_ticket(
+            db,
+            project,
+            ticket,
+            milestone_id=milestone_id,
+            state="ready",
+            body=body,
+            depends_on=after,
+        )
+    try:
+        order = run_order(db, PROJECT)
+    finally:
+        db.close()
+    assert [(u.ticket, u.priority) for u in order] == [
+        ("f9-02-b", 0),
+        ("f9-01-a", 0),
+        ("f9-03-c", 0),
+        ("f2-01-a", 1),
+        ("bug-01-x", 2),
+        ("bug-02-y", 50),
+    ]
+
+
 def test_run_order_of_an_empty_queue(db):
     assert run_order(db, PROJECT) == []
     assert run_order(db, "elsewhere") == []
