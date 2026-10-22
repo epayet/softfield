@@ -2594,13 +2594,20 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
             block(s, task.path, f"its work on {waited} clashes with {MAIN}")
             return
         s.log(f"[{RUNNER_AGENT}] {task.id}'s work waited on {waited} for {MAIN}: checks again")
-        with _settling(s, job.role, task, None, lead):
-            _settle_lead_task(s, task, rec, logs, job, lead)
+        _settle_or_step_up(s, task, rec, logs, job, lead, None)
         return
     if parked and parked["branch"] == branch:
         s.git.checkout(branch)  # an interrupted run's work, which its session resumes
     else:
         s.git.fresh_branch(branch, MAIN)
+    if (result := _call_lead(s, task, rec, job, routed)) is not None:
+        _settle_or_step_up(s, task, rec, logs, job, lead, result.session_id)
+
+
+def _call_lead(
+    s: Session, task: Task, rec: TaskRecord, job: JobSpec, routed: router.Route
+) -> JobResult | None:
+    """A lead ticket's job on its branch; None when Claude's limit parked it."""
     try:
         result = call_claude(
             s, job, task.milestone, task.id, ticket=task.id, park=True, routed=routed
@@ -2608,9 +2615,48 @@ def run_lead_task(s: Session, task: Task, rec: TaskRecord) -> None:
     except Parked:
         s.git.checkout(MAIN)
         rec.result = "parked"
+        return None
+    return result
+
+
+def _settle_or_step_up(
+    s: Session,
+    task: Task,
+    rec: TaskRecord,
+    logs: Path,
+    job: JobSpec,
+    lead: str,
+    session_id: str | None,
+) -> None:
+    """ADR 32 item 3 (F153 D3): when ``lead`` isn't the last agent `[roles] lead-ticket` lists
+    and its check-all fails, the next agent gets one fresh job on the same branch, told of the
+    earlier work and its check-all, before the ticket is blocked."""
+    ids = list(s.cfg.roles.get(job.role, ()))
+    up = ids[ids.index(lead) + 1] if lead in ids[:-1] else None
+    with _settling(s, job.role, task, session_id, lead):
+        settled = _settle_lead_task(s, task, rec, logs, job, lead, last=up is None)
+    if settled or up is None:
         return
-    with _settling(s, job.role, task, result.session_id, lead):
-        _settle_lead_task(s, task, rec, logs, job, lead)
+    branch = f"task/{task.id}"
+    rec.attempts = 2
+    s.git.checkout(branch)
+    note = LEAD_STEP_UP_NOTE.format(
+        agent=lead, branch=branch, main=MAIN, checks=_rel(s, logs / "check-all.txt")
+    )
+    routed = router.Route(
+        s.cfg.agents[up], f"{up} steps up from {lead}, whose check-all failed (ADR 32 item 3)"
+    )
+    step = replace(job, prompt=job.prompt + note, resume=None)  # a fresh session, not lead's
+    if (result := _call_lead(s, task, rec, step, routed)) is not None:
+        with _settling(s, step.role, task, result.session_id, up):
+            _settle_lead_task(s, task, rec, logs, step, up)
+
+
+LEAD_STEP_UP_NOTE = (
+    "\nAn earlier attempt by {agent} is committed on `{branch}` (`git diff {main}...{branch}`"
+    " shows it) and failed `check-all`: its output is in `{checks}`. Build on that work or"
+    " undo it, so the checks pass."
+)
 
 
 def _lead_route(s: Session, task: Task, interrupted: Mapping[str, Any] | None) -> router.Route:
@@ -2634,26 +2680,36 @@ def _lead_route(s: Session, task: Task, interrupted: Mapping[str, Any] | None) -
 
 
 def _settle_lead_task(
-    s: Session, task: Task, rec: TaskRecord, logs: Path, job: JobSpec, lead: str
-) -> None:
+    s: Session,
+    task: Task,
+    rec: TaskRecord,
+    logs: Path,
+    job: JobSpec,
+    lead: str,
+    *,
+    last: bool = True,
+) -> bool:
     """The lead ticket's work, merged once check-all passes, else blocked on its branch;
-    ``lead`` is the agent that did it (ADR 32 item 4)."""
+    ``lead`` is the agent that did it (ADR 32 item 4). Unless it's the ``last`` attempt, a
+    failed check-all leaves it for the next agent's: False, and nothing settled."""
     branch = f"task/{task.id}"
     s.git.commit_all(with_trailers(f"wip {task.id} (lead)", agent=CLAUDE_HEADLESS_AGENT))
     if not s.git.changed_files(MAIN):  # an interrupted run's commit counts too
         s.git.checkout(MAIN)
         rec.result = "stopped"
         block(s, task.path, "the lead ticket changed nothing")
-        return
+        return True
     failed = [r.name for r in _check_results(s, task.id, logs, "check-all.txt") if not r.ok]
     if failed:
         s.git.checkout(MAIN)
         if _main_is_red(s, task, failed, logs):
             rec.result = "waits for main"
-            return
+            return True
+        if not last:
+            return False
         rec.result = "stopped"
         block(s, task.path, f"check-all failed; the work is on {branch}")
-        return
+        return True
     rec.commit = s.git.squash_merge(
         branch,
         MAIN,
@@ -2661,13 +2717,14 @@ def _settle_lead_task(
     )
     target = s.tasks_dir("done") / task.path.name
     s.git.move(task.path, target)
-    append_footer(target, {"result": "done", "agent": "lead", "attempts": 1})
+    append_footer(target, {"result": "done", "agent": "lead", "attempts": rec.attempts})
     runner_commit(s, messages.done_message(task.id, rec))
     record_ticket(s, target, merged_by=lead, commit=rec.commit)
     rate_finished(s, task.id)
     s.git.run("branch", "-D", branch)
     rec.result = "done"
     _merged_line(s, lead, task.id, rec)
+    return True
 
 
 # --- checkpoints (ADR 12 item 8) ------------------------------------------------------

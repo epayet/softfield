@@ -2970,6 +2970,95 @@ def test_an_interrupted_lead_ticket_resumes_on_the_agent_whose_session_it_was(
     assert ticket["merged_by"] == "claude-opus"
 
 
+def _two_lead_agents(repo: Path, difficulty: int) -> Config:
+    """Sonnet then Opus for lead tickets, Sonnet up to 4; the ticket's difficulty set."""
+    path = repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md"
+    path.write_text(
+        path.read_text().replace("agent: lead\n", f"agent: lead\ndifficulty: {difficulty}\n")
+    )
+    git(repo, "commit", "-qam", "difficulty")
+    roles = {**ROLES, "lead-ticket": ("claude-sonnet", "claude-opus")}
+    return replace(_config(repo), roles=roles, lead_first_up_to=4)
+
+
+def _check_all_says(monkeypatch, *oks: bool) -> list[str | None]:
+    """Fake check-all passing or failing in turn; main passes the failed checks again."""
+    said, calls = list(oks), list[str | None]()
+
+    def check_all(repo, timeout, *, task_id=None, fix=False, only=None):
+        if only is not None:
+            return [checks.Check(name, True) for name in only]
+        calls.append(task_id)
+        ok = said.pop(0)
+        return [checks.Check("tests", ok, "" if ok else "1 failed")]
+
+    monkeypatch.setattr(checks, "check_all", check_all)
+    return calls
+
+
+@pytest.mark.parametrize(("second", "result"), [(True, "done"), (False, "stopped")])
+def test_a_sonnet_lead_ticket_that_fails_check_all_steps_up_to_opus_on_its_branch(
+    repo, fake_model, fake_lead, monkeypatch, second, result
+):
+    """ADR 32 items 2 and 3 (F153 D2, D3): one fresh Opus job on Sonnet's branch, told of the
+    earlier work and its check-all; merged by Opus, else blocked with the branch kept. Neither
+    merge is checkpointed."""
+    _lead_task(repo, "m1-01-lead")
+    cfg = _two_lead_agents(repo, 3)
+    script, jobs = fake_lead
+
+    def opus_builds_on_it(job, repo_):
+        assert "return 42" in (repo_ / "coucou" / "thing.py").read_text()  # not reset
+        (repo_ / "coucou" / "more.py").write_text("X = 1\n")
+
+    script.extend([_lead_implements, opus_builds_on_it])
+    calls = _check_all_says(monkeypatch, False, second)
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None and [t.result for t in report.tasks] == [result]
+    assert calls == ["m1-01-lead", "m1-01-lead"]
+    assert [j.model for j in jobs] == ["sonnet", "opus"]
+    assert jobs[1].kind == "lead-ticket" and "task/m1-01-lead" in jobs[1].prompt
+    assert "m1-01-lead/check-all.txt" in jobs[1].prompt
+    lead_jobs = [j for j in _rows(repo, "jobs") if j["role"] == "lead-ticket"]
+    assert [j["agent"] for j in lead_jobs] == ["claude-sonnet", "claude-opus"]
+    assert "steps up" in str(lead_jobs[1]["routing_reason"])
+    [ticket] = _rows(repo, "tickets")
+    if second:
+        assert (ticket["state"], ticket["merged_by"]) == ("done", "claude-opus")
+        assert (repo / "coucou" / "more.py").exists()
+    else:
+        assert ticket["state"] == "blocked"
+        blocked = repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md"
+        assert "check-all failed" in blocked.read_text()
+        assert "task/m1-01-lead" in git(repo, "branch")
+        assert "more.py" in git(repo, "show", "--stat", "task/m1-01-lead")
+    assert load_state(cfg.runs_dir / "state.json").unchecked == []
+
+
+def test_a_lead_ticket_the_last_agent_did_is_blocked_at_once(
+    repo, fake_model, fake_lead, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    cfg = _two_lead_agents(repo, 6)
+    script, jobs = fake_lead
+    script.append(_lead_implements)
+    _check_all_says(monkeypatch, False)
+    report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert report is not None and [t.result for t in report.tasks] == ["stopped"]
+    assert [j.model for j in jobs] == ["opus"]
+    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").exists()
+
+
+def test_a_sonnet_lead_merge_is_not_checkpointed(repo, fake_model, fake_lead, monkeypatch):
+    _lead_task(repo, "m1-01-lead")
+    cfg = _two_lead_agents(repo, 3)
+    script, _ = fake_lead
+    script.append(_lead_implements)
+    _passes(monkeypatch)
+    loop.run_session(cfg, once=False, dry_run=False, escalate=False)
+    assert load_state(cfg.runs_dir / "state.json").unchecked == []
+
+
 def test_escalated_and_blocked_tickets_get_their_state(repo, fake_model, fake_lead, monkeypatch):
     _lead_task(repo, "m1-01-lead")
     _add_task(repo, "m2-01-thing")
