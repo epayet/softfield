@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F172 mock-up: a card may use Claude's reserve</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --opus: #ff9640; --sonnet: #ffc48a;
+    --factory: #f2b10a; --product: #4fd1a5; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .version { flex: 1 1 390px; max-width: 520px; min-width: 0; }
+  .version > h2 { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 18px 0 0; color: var(--hazard); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds or changes */
+  .note { display: block; margin-top: 6px; font: 12px var(--mono); color: var(--good); }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none !important; }
+  @media (min-width: 900px) { .switch { display: none; } .version[hidden] { display: block !important; } }
+
+  /* ---- the card's page header (factory_dashboard/templates/thread.html) ---- */
+  .card-head { background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard);
+    padding: 12px 16px; display: flex; flex-direction: column; }
+  .card-head .meta { font: 600 12px var(--mono); color: var(--muted); }
+  .card-head h2 { margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+
+  /* ---- the reserve lever (dashboard.css, f8-14) ---- */
+  .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+    border: 1px solid transparent; background: none; color: var(--ink-2); cursor: pointer;
+    font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .lever .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--grid); box-shadow: inset 0 0 0 1px var(--rule); }
+  .lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate);
+    border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+  .lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule); transition: left .22s; }
+  .lever[aria-checked="true"] { color: var(--fg); }
+  .lever[aria-checked="true"] .slot { background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+  .lever[aria-checked="true"] .knob { left: 24px; background: linear-gradient(#fff, var(--ink-2)); }
+  .lever[aria-checked="true"] .lamp { background: var(--hazard); box-shadow: 0 0 6px var(--hazard); }
+  .lever.on-its-way { border: 1px dashed var(--hazard); cursor: default; }
+  .lever.on-its-way .knob { left: 13px; }
+  .until { color: var(--hazard); font-family: var(--mono); }
+
+  /* ---- proposed: the card's reserve bay, under its title ---- */
+  .reserve-bay { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+    padding: 4px 10px 6px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .reserve-bay::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .reserve-bay .lever { margin-left: 4px; }
+  .reserve-bay small { flex-basis: 100%; padding-left: 4px; color: var(--ink-2); font-size: 13px; line-height: 1.4; }
+  .reserve-bay small code { font: 12px var(--mono); color: var(--fg); }
+
+  /* ---- the board's cards (dashboard.css, .card) ---- */
+  .stage { background: var(--bay); border: 1px solid var(--rule); }
+  .stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .stage-head h4 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; background: var(--plate);
+    border: 1px solid var(--rule); border-left: 4px solid var(--c, var(--muted)); color: var(--fg); }
+  .card.factory { --c: var(--factory); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card .meter { display: block; height: 8px; background: var(--grid); }
+  .card .meter span { display: block; height: 100%; background: var(--good); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  /* proposed: the card's plate, the lever's stripe and its words */
+  .card-reserve { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 0;
+    background: var(--floor); font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+  .card-reserve i { width: 14px; align-self: stretch; background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+
+  /* ---- the allowance panel (_partials/allowance.html) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; }
+  .panel > h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel > h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .allow > div { padding: 6px 0; }
+  .allow .line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; justify-content: space-between; }
+  .allow .agent { font: 600 13px var(--mono); }
+  .allow small { color: var(--muted); font-size: 12.5px; }
+  .allow .meter { position: relative; height: 10px; background: var(--grid); margin: 2px 0 4px; }
+  .allow .meter > span:first-child { position: absolute; left: 0; top: 0; bottom: 0; }
+  .allow .past-mark { background: var(--hazard); } .allow .under-mark { background: var(--good); } .allow .nearly-out { background: var(--fail); }
+  .allow .mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--fg); }
+  .allow .cards-on { flex-basis: 100%; font-size: 13px; color: var(--ink-2); }
+  .allow .cards-on b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); margin-right: 4px; }
+</style>
+</head>
+<body>
+<h1>F172: a card may use Claude's reserve</h1>
+<p class="lede">Three places change: the card's page gets the lever, the board shows which cards have it on, and the Overview names them under Claude's week. Values from the Overview on 2026-10-22: the 5-hour window at 91% (your mark at 75%), the week at 67% (its mark at 70%), both switches on until Fri 09:35. In Proposed you have turned both switches off and marked F142 and F171.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from thread.html, board.html and _partials/allowance.html -->
+<div class="version" data-version="today" hidden>
+  <h2>Today</h2>
+
+  <h3>The card's page · /planning/f142</h3>
+  <header class="card-head">
+    <span class="meta">softfield · factory</span>
+    <h2>Phone notifications: every project, and with the dashboard closed</h2>
+  </header>
+
+  <h3>The board · Planted</h3>
+  <section class="stage">
+    <div class="stage-head"><h4>Planted</h4><span>tickets ready · 35</span></div>
+    <div class="cards">
+      <a class="card factory" href="#"><span class="card-meta"><b>#1</b> F153 factory</span><span class="card-title">Sonnet does the easier lead tickets, Opus keeps planning and checks</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 2 tickets</span></a>
+      <a class="card factory" href="#"><span class="card-meta"><b>#2</b> F142 factory</span><span class="card-title">Phone notifications: every project, and with the dashboard closed</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span></a>
+      <a class="card factory" href="#"><span class="card-meta"><b>#3</b> F171 factory</span><span class="card-title">Each card once on the board, and fix tickets named after what they fix</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 4 tickets</span></a>
+    </div>
+  </section>
+
+  <h3>The Overview · Agent allowance</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 91%</span>
+          <button type="button" class="lever" role="switch" aria-checked="true">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter"><span class="past-mark" style="width:91%"></span><span class="mark" style="left:75%"></span></div>
+        <div class="line"><small>resets at 12:40</small><small>kept for you from here</small><small class="until">on until Fri 09:35</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 67%</span>
+          <button type="button" class="lever" role="switch" aria-checked="true">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter"><span class="under-mark" style="width:67%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Oct 26 17:00</small><small>reserve kept for the lead from here</small><small class="until">on until Fri 09:35</small></div>
+      </div>
+    </div>
+  </section>
+  <p class="legend">Each switch lets every lead ticket past its mark for 24 hours. To get only the tickets you want, you turn it on and watch for when to turn it off.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h2>Proposed</h2>
+
+  <h3>The card's page · /planning/f142</h3>
+  <header class="card-head">
+    <span class="meta">softfield · factory</span>
+    <h2>Phone notifications: every project, and with the dashboard closed</h2>
+    <div class="reserve-bay new">
+      <button type="button" class="lever" role="switch" aria-checked="true" data-toggle>may use Claude's reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+      <small>Comes before Claude's reserves: its lead tickets, and the ones they wait for, use the week's reserve and your 25% of the 5-hour window, with both switches off. Ends by itself when its tickets are done.</small>
+    </div>
+    <span class="note">new: the card's lever, only on a planted or growing card. Tap it: it goes halfway with a dashed edge until the runner takes it.</span>
+  </header>
+
+  <h3>The board · Planted</h3>
+  <section class="stage">
+    <div class="stage-head"><h4>Planted</h4><span>tickets ready · 35</span></div>
+    <div class="cards">
+      <a class="card factory" href="#"><span class="card-meta"><b>#1</b> F153 factory</span><span class="card-title">Sonnet does the easier lead tickets, Opus keeps planning and checks</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 2 tickets</span></a>
+      <a class="card factory" href="#"><span class="card-meta"><b>#2</b> F142 factory</span><span class="card-title">Phone notifications: every project, and with the dashboard closed</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span><span class="card-reserve new"><i></i>uses Claude's reserve</span></a>
+      <a class="card factory" href="#"><span class="card-meta"><b>#3</b> F171 factory</span><span class="card-title">Each card once on the board, and fix tickets named after what they fix</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 4 tickets</span><span class="card-reserve new"><i></i>uses Claude's reserve</span></a>
+    </div>
+  </section>
+  <span class="note">new: a striped plate in words on each marked card; F153 isn't marked, so it parks past either mark.</span>
+
+  <h3>The Overview · Agent allowance</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 91%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter"><span class="past-mark" style="width:91%"></span><span class="mark" style="left:75%"></span></div>
+        <div class="line"><small>resets at 12:40</small><small>kept for you from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 67%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter"><span class="under-mark" style="width:67%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Oct 26 17:00</small><small>reserve kept for the lead from here</small></div>
+      </div>
+      <div class="line"><span class="cards-on new"><b>Past both marks for:</b><a href="#">F142, Phone notifications</a> · <a href="#">F171, Each card once on the board</a></span></div>
+    </div>
+  </section>
+  <span class="note">new: the cards that may use both reserves, named once under Claude's meters, so you see what draws on them. Here the 5-hour window is at 91%, past your mark: F142 and F171 go on, F153 waits for 12:40. The switches stay for "everything, 24 hours".</span>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll('.switch button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.switch button').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+      document.querySelectorAll('[data-version]').forEach(function (v) { v.hidden = v.dataset.version !== b.dataset.show; });
+    });
+  });
+  // the card's lever: a tap shows it on its way, as the page would until the runner takes it
+  document.querySelectorAll('[data-toggle]').forEach(function (l) {
+    l.addEventListener('click', function () {
+      if (l.classList.contains('on-its-way')) { l.classList.remove('on-its-way');
+        l.setAttribute('aria-checked', l.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); return; }
+      l.classList.add('on-its-way');
+    });
+  });
+</script>
+</body>
+</html>
