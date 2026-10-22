@@ -36,3 +36,10 @@ Read D1 to D5 in `.factory/cards/f173-dragging-a-card-on-the-board.md`, then `ta
 - no feature ticket in ready/ or later/ has a `priority:`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
