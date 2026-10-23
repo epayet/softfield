@@ -28,3 +28,12 @@ Facts from reading `review_ideas` and `_factory_project` in `factory_dashboard/m
 - an idea whose request has `from` equal to its id and `done` NULL is "on its way" (a test)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2449
+gate_failures: []
+tokens: 3524299
+```
