@@ -58,6 +58,8 @@ Checked and fine: the lever's `hx-vals` escape the project and key (`tojson`); t
 
 The French: no `coucou/locale/fr/` change in this milestone.
 
+Round 2 re-read the round 1 fixes (`git diff 4c32ec8^..main`: only the lead's own F1 and F2 fixes and the F3 backlog line; no developer work since). Both fixes hold: `_CARD_RESERVE` runs on the State line alone, so its `$` is that line's end, and both test files those fixes touched pass in full (`test_owner.py` and `test_planning.py`, 249 tests). The whole runner and dashboard suite again ran past the 10-minute foreground limit, and was stopped at 93% with no failure up to then (the `E`s printed after the kill are its teardown). No new finding; the review loop stops here.
+
 ## Factory
 - Flow: two lead tickets merged first time; one developer ticket escalated after three no-edit attempts and a direction, then built by the lead. No stops for the owner, no limit waits, no parks. Two designed restarts for `runner/` changes.
 - Models: Claude Opus about $7.24 in all (f172-01 $2.16, f172-02 $1.54, direction $0.61, escalation $2.93). Local Qwen 2.1M tokens, nothing merged.
