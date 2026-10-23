@@ -25,3 +25,12 @@ f51-when-a-plan-depends-on-an-C1369-1: Id-less plant requests can still be match
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1397
+gate_failures: []
+tokens: 942266
+```
