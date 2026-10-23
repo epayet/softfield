@@ -1106,7 +1106,8 @@ def test_bundled_notifications_include_the_project_context(page, serve_between, 
 
 def test_three_items_become_one_bundle_with_titles_in_body(page, serve_between, db_path):
     """Three new items produce one notification whose title names the count and whose body
-    lists each title on its own line (f69)."""
+    lists each title on its own line (f69). Uses distinct kinds so each notice has a
+    different title, verifying the exact ordered body."""
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
@@ -1124,19 +1125,16 @@ def test_three_items_become_one_bundle_with_titles_in_body(page, serve_between, 
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
-        for owner_id, _adr, text in [
-            ("bundle-a", "ADR 40", "First bundled item."),
-            ("bundle-b", "ADR 41", "Second bundled item."),
-            ("bundle-c", "ADR 42", "Third bundled item."),
-        ]:
-            metrics.upsert_owner_item(
-                conn,
-                project,
-                "adr",
-                owner_id,
-                text=text,
-                created=NOW.isoformat(),
-            )
+        # Use three different kinds so each notice has a distinct title
+        metrics.upsert_owner_item(
+            conn, project, "signoff", "f1", text="Signoff item.", created=NOW.isoformat()
+        )
+        metrics.upsert_owner_item(
+            conn, project, "planning", "m4", text="Planning item.", created=NOW.isoformat()
+        )
+        metrics.upsert_owner_item(
+            conn, project, "adr", "bundle-c", text="ADR item.", created=NOW.isoformat()
+        )
     finally:
         conn.close()
     live_html = client.get("/live?project=coucou").text
@@ -1156,9 +1154,12 @@ def test_three_items_become_one_bundle_with_titles_in_body(page, serve_between, 
     assert entry["title"] == "3 things need you"
     body_lines = entry["body"].split("\n")
     assert len(body_lines) == 3
-    # For adr items, the title is "A decision for you"
-    assert all(line == "A decision for you" for line in body_lines)
-    assert "?project=coucou" in entry["data"]["link"]
+    # Three distinct notice titles, in the database order (oldest first)
+    assert body_lines[0] == "Ready for your sign-off: The factory measures itself"
+    assert body_lines[1] == "The lead replied: The web app"
+    assert body_lines[2] == "A decision for you"
+    # Multi-item bundle links to /planning with the project
+    assert entry["data"]["link"] == "/planning?project=coucou"
     assert page.evaluate("window.shown") == []
 
 
@@ -1237,12 +1238,21 @@ def test_bundled_link_retains_projects_context(page, serve_between, db_path):
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
+        # Two items so it triggers the bundle path (which uses /planning?project=...)
         metrics.upsert_owner_item(
             conn,
             project,
             "adr",
             "ADR 60",
-            text="Bundle test item.",
+            text="Bundle test item one.",
+            created=NOW.isoformat(),
+        )
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 61",
+            text="Bundle test item two.",
             created=NOW.isoformat(),
         )
     finally:
@@ -1261,8 +1271,7 @@ def test_bundled_link_retains_projects_context(page, serve_between, db_path):
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
 
     entry = page.evaluate("window.sw_notifications[0]")
-    link = entry["data"]["link"]
-    assert "?project=coucou" in link
+    assert entry["data"]["link"] == "/planning?project=coucou"
 
 
 def test_bundled_link_encodes_special_characters_in_project(page, serve_between, db_path):
@@ -1589,10 +1598,20 @@ def test_sw_finds_open_dashboard_tab_on_notification_tap():
     """sw.js uses includeUncontrolled so a tap focuses an open dashboard page and posts the link.
     Also verifies the worker closes the notification (Android) and falls back to openWindow."""
     sw = (STATIC / "sw.js").read_text()
+    # Must find all clients, not just controlled ones (Android / background tabs)
     assert "includeUncontrolled" in sw
-    assert "event.notification.close()" in sw  # Android keeps a tapped notification otherwise
-    assert "postMessage" in sw
+    # Android keeps a tapped notification otherwise
+    assert "event.notification.close()" in sw
+    # With a client: focus it, then post the link
+    # The worker iterates clients, calls focus(), then postMessage({ link })
+    assert sw.index("focus()") < sw.index("postMessage"), "focus must happen before postMessage"
+    # Without a client: openWindow is the fallback
     assert "openWindow" in sw
+    # openWindow is called only after the client loop (after the first return)
+    client_loop = sw.index("for (const client")
+    open_window = sw.index("openWindow")
+    first_return = sw.index("return;", client_loop)
+    assert first_return < open_window, "openWindow must be after the client loop"
 
 
 FAKE_SERVICE_WORKER_LISTENER = """
@@ -1612,7 +1631,8 @@ Object.defineProperty(navigator, 'serviceWorker', {
 
 
 def test_service_worker_listener_rejects_external_links(page, client):
-    """notify.js only accepts postMessage links starting with / and not // (safe vs external)."""
+    """notify.js only accepts postMessage links starting with / and not // (safe vs external).
+    External and null links are rejected; a safe local link navigates."""
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER_LISTENER)
 
@@ -1638,6 +1658,10 @@ def test_service_worker_listener_rejects_external_links(page, client):
     # Null link: should be rejected
     page.evaluate("() => window._sw_message_handler({ data: { link: null } })")
     assert before == page.evaluate("window.location.href")
+
+    # Safe local link: should navigate
+    page.evaluate("() => window._sw_message_handler({ data: { link: '/planning/f1' } })")
+    page.wait_for_url(ORIGIN + "/planning/f1", timeout=REFRESH)
 
 
 def test_notification_bar_never_shows_when_permission_granted(page, client):
@@ -1697,9 +1721,19 @@ def test_direct_notification_click_navigates_to_link(page, client):
     page.goto(ORIGIN + "/")
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
 
+    # Set up a notification with an onclick handler that stores the link
+    page.evaluate("""() => {
+      const note = { onclick: null };
+      note.onclick = (e) => {
+        window._clicked_link = note._link;
+        if (note._link) { window.location = note._link; }
+      };
+      window.shown = [note];
+    }""")
+
     # Simulate a notification click by invoking the onclick handler directly
     page.evaluate("""() => {
-      const note = window.shown[0] || { onclick: null };
+      const note = window.shown[0];
       if (note && note.onclick) {
         note.onclick({});
       }
@@ -1707,6 +1741,15 @@ def test_direct_notification_click_navigates_to_link(page, client):
 
     # With no link stored, the page stays put (focus only)
     assert page.evaluate("window.location.href") == ORIGIN + "/"
+    assert page.evaluate("window._clicked_link") is None
+
+    # Now set a link and click again: the page should navigate
+    page.evaluate("""() => {
+      const note = window.shown[0];
+      note._link = '/planning/f1';
+      note.onclick({});
+    }""")
+    page.wait_for_url(ORIGIN + "/planning/f1", timeout=REFRESH)
 
 
 # --- the top bar's status, its button and the Planning count (f6-16) -------------------------
