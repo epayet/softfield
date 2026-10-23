@@ -25,3 +25,12 @@ f51-when-a-plan-depends-on-an-C1366-1: Plant requests are not matched independen
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 943
+gate_failures: []
+tokens: 563238
+```
