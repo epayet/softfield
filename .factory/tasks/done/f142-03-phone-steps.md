@@ -24,3 +24,10 @@ Read `.factory/adr/31-notifications-to-a-closed-phone.md` (items 1, 4 and Cost a
 - `doctor` without one names `softfield notify setup` and `docs/notifications-on-the-phone.md`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
