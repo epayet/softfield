@@ -1336,7 +1336,8 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
 
 def test_fallback_notification_has_onclick_handler(page, serve_between, db_path):
     """f69: when the service worker rejects, the fallback notification has an onclick
-    handler so the owner can navigate on tap."""
+    handler so the owner can navigate on tap. Taps the notification notify.js created
+    and asserts the page navigates to the item's link."""
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
@@ -1377,10 +1378,12 @@ def test_fallback_notification_has_onclick_handler(page, serve_between, db_path)
     page.evaluate("window._notifyCheck()")
     page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
 
-    shown = page.evaluate("window.shown")
-    assert len(shown) == 1 and "Fallback navigation test." in shown[0]["body"]
-    # The notification must have an onclick handler so the owner can navigate on tap.
-    assert page.evaluate("window.shown[0] && window.shown[0].onclick !== null")
+    assert len(page.evaluate("window.shown")) == 1
+    assert "Fallback navigation test." in page.evaluate("window.shown[0].body")
+    # Tap the notification notify.js created and verify navigation to the item's link.
+    assert page.evaluate("typeof window.shown[0].onclick") == "function"
+    page.evaluate("window.shown[0].onclick({})")
+    page.wait_for_url(lambda url: "/planning" in url or "/?" in url, timeout=REFRESH)
 
 
 # --- notification bar (f12-01, ADR 26 item 2) ----------------------------------------------
@@ -1389,7 +1392,12 @@ def test_fallback_notification_has_onclick_handler(page, serve_between, db_path)
 FAKE_NOTIFICATION_GRANTED = """
 window.shown = []; window.asked = 0;
 class FakeNotification {
-  constructor(title, options) { window.shown.push({ title, body: options && options.body }); }
+  constructor(title, options) {
+    this.title = title;
+    this.body = options && options.body;
+    this.options = options || {};
+    window.shown.push(this);
+  }
 }
 FakeNotification.permission = "granted";
 FakeNotification.requestPermission = async () => {
@@ -1704,10 +1712,13 @@ def test_notification_bar_never_shows_when_permission_denied(page, client):
     bar.wait_for(state="hidden", timeout=REFRESH)
 
 
-def test_direct_notification_click_navigates_to_link(page, client):
+def test_direct_notification_click_navigates_to_link(page, client, db_path):
     """When a notification is clicked, the dashboard navigates to the link stored in the
-    notification data. This exercises direct-notification click navigation (f69)."""
+    notification data. Taps the notification notify.js created and fails if its onclick
+    is removed (f69)."""
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    # Force the direct-notification path: service worker available but rejects.
+    page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
 
     def route(r) -> None:
         url = r.request.url.removeprefix(ORIGIN)
@@ -1720,36 +1731,46 @@ def test_direct_notification_click_navigates_to_link(page, client):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    try:
+        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    except Exception:
+        page.wait_for_function(
+            "() => typeof window._notifyEstablishBaseline === 'function'",
+            timeout=REFRESH,
+        )
+        page.evaluate("window._notifyEstablishBaseline()")
 
-    # Set up a notification with an onclick handler that stores the link
-    page.evaluate("""() => {
-      const note = { onclick: null };
-      note.onclick = (e) => {
-        window._clicked_link = note._link;
-        if (note._link) { window.location = note._link; }
-      };
-      window.shown = [note];
-    }""")
+    # Seed a new item so compare() produces a notification.
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR 90",
+            text="Direct click test.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    live_html = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
+        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
+        live_html,
+    )
+    page.wait_for_function(
+        "() => typeof window._notifyCheck === 'function'",
+        timeout=REFRESH,
+    )
+    page.evaluate("window._notifyCheck()")
+    page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
 
-    # Simulate a notification click by invoking the onclick handler directly
-    page.evaluate("""() => {
-      const note = window.shown[0];
-      if (note && note.onclick) {
-        note.onclick({});
-      }
-    }""")
-
-    # With no link stored, the page stays put (focus only)
-    assert page.evaluate("window.location.href") == ORIGIN + "/"
-    assert page.evaluate("window._clicked_link") is None
-
-    # Now set a link and click again: the page should navigate
-    page.evaluate("""() => {
-      const note = window.shown[0];
-      note._link = '/planning/f1';
-      note.onclick({});
-    }""")
-    page.wait_for_url(ORIGIN + "/planning/f1", timeout=REFRESH)
+    # Tap the notification notify.js created and assert navigation to the item's link.
+    assert page.evaluate("typeof window.shown[0].onclick") == "function"
+    page.evaluate("window.shown[0].onclick({})")
+    page.wait_for_url(lambda url: "/planning" in url or "/?" in url, timeout=REFRESH)
 
 
 # --- the top bar's status, its button and the Planning count (f6-16) -------------------------
