@@ -36,3 +36,12 @@ Read `.factory/cards/f158-milestones-don-t-show-me-their.md` (Why it happens, D1
 - with no sign-off sheet: `#review-wait`, and none of `#what-changed` … `#clogged`; with a sheet: those sections, no `#review-wait`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3900
+gate_failures: []
+tokens: 9714446
+```
