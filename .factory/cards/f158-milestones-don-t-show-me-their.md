@@ -1,6 +1,7 @@
 # Milestone F158: A card's page says what it's about: its Outcome, else your note
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f158-milestones-don-t-show-me-their-start`. Report: [`.factory/reviews/f158-milestones-don-t-show-me-their.md`](../reviews/f158-milestones-don-t-show-me-their.md).
 > Planted by the owner on 2026-10-20.
 
 ## Notes

@@ -1,6 +1,6 @@
 # Review: F158, a card's page says what it's about
 
-- **Status:** reviewed in one round, 2026-10-23; waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-23.
 
 ## Sign-off sheet
 
