@@ -4336,6 +4336,16 @@ def test_a_card_with_a_thread_folds_the_note(planning, checkout, db_path, serve)
     assert '<section id="note"' not in html
 
 
+def test_a_merged_note_shows_without_the_factorys_marks(planning, checkout, serve):
+    """f90-F1: F15's page showed "### From F18: …" and a quoted line's escaping backslash."""
+    merged = "When?\n\n### From F18: Arrows (merged by the owner on 2026-10-13)\n\\> as I said"
+    _doc(checkout, "f9", f"## Notes\n{merged}\n\n## Why\nx\n")
+    html = _thread(serve(), "f9")
+    note = unescape(html.split('<section id="note"', 1)[1].split("</section>", 1)[0])
+    assert "From F18: Arrows" in note and "\n> as I said" in note
+    assert "###" not in note and "\\" not in note
+
+
 def test_no_notes_none_or_the_general_thread_show_no_note(planning, checkout, serve):
     client = serve()
     _doc(checkout, "f9", "## Why\nNo notes here.\n")

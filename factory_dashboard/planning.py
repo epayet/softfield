@@ -1351,7 +1351,11 @@ def _note(repo: Path | None, thread: str) -> str:
         return ""
     found = re.search(r"^## Notes[ \t]*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
     note = found[1].strip() if found else ""
-    return "" if note == "(none)" else note
+    if note == "(none)":
+        return ""
+    # the factory's marks, not the owner's words: a merged note's "### From F18: …" heading,
+    # and the backslash seed_card and merged_card put before a line's ">" or "#"
+    return re.sub(r"^(?:#{1,6} |\\(?=[>#]))", "", note, flags=re.MULTILINE)
 
 
 def _adr_waits(repo: Path | None, proposals: list[dict[str, object]]) -> bool:

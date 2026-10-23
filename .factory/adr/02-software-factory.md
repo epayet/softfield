@@ -525,6 +525,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the checkpoint caught the id mismatch but not the two other slips in the same diff (words without the card's titles; one "all done" flag for every project). A worded notice's test should use a kind whose words depend on the data (a reply, not an `adr`), or it can't see missing titles.
 - **Decisions affected:** ADR 31 is now code.
 
+### F90 (2026-10-23): a card's page shows the owner's whole note ([review](../reviews/f90-editing-seeds-that-i-ve-planted.md))
+
+- **Q1:** one lead ticket (difficulty 3), taken by Sonnet under ADR 32: its work was right, but a flaky `test_loop.py` timing test failed its `check-all`, so Opus stepped up, found the work correct and passed the gate on a rerun (two timing tests failed in turn). No checkpoint. Review round 1: one should-fix fixed by the review (the factory's merge headings and escapes showed raw in the note), one should-fix to the backlog (the flaky tests).
+- **Q3:** Claude only: $0.88 planning, $0.60 building (Sonnet $0.28, Opus $0.32); no local tokens.
+- **Q5:** see the review's numbers.
+- **Anything else:** ADR 32's trial counts a step-up as Sonnet failing; here the failure was the gate's. Read the step-up job's log before counting it against Sonnet. The ticket named `.factory/milestones/`, the cards' old folder; the lead used `cards/`.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
