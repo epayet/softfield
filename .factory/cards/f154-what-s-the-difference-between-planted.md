@@ -1,6 +1,7 @@
 # Milestone F154: Each board stage says what it means and what moves a card on
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** done · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f154-what-s-the-difference-between-planted-start`. Report: [`.factory/reviews/f154-what-s-the-difference-between-planted.md`](../reviews/f154-what-s-the-difference-between-planted.md).
 > Planted by the owner on 2026-10-20.
 
 ## Notes

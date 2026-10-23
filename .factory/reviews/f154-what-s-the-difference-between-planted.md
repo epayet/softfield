@@ -1,5 +1,7 @@
 # Review: F154, each board stage says what it means and what moves a card on
 
+- **Status:** done, signed off by the owner on 2026-10-23.
+
 ## Sign-off sheet
 
 ### 1. What changed
