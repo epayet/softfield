@@ -25,3 +25,12 @@ f68-i-want-the-factory-to-be-C16-1: f68-06 only added `assert found != []`, whic
 - each finding above no longer holds: the real test and the regression test share the one check, and the regression fails if that check stops flagging `https://cdn.example.com/x.js`
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1042
+gate_failures: []
+tokens: 463362
+```
