@@ -26,3 +26,12 @@ f51-when-a-plan-depends-on-an-C1366-2: The empty-proposals test does not verify 
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 975
+gate_failures: []
+tokens: 784521
+```
