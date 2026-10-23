@@ -27,3 +27,12 @@ On a ticket's page, the Goal and the folded "The lead's notes for the agent" kee
 - a bullet wrapped over two lines is one list item holding both lines
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1575
+gate_failures: []
+tokens: 987469
+```
