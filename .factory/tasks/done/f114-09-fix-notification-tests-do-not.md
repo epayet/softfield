@@ -27,3 +27,12 @@ f69-i-want-a-button-to-switch-C1044-5: Notification tests do not exercise the sp
 - each finding above no longer holds: the tests it names check content, and would fail if the code were wrong
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3118
+gate_failures: []
+tokens: 4014781
+```
