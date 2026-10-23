@@ -80,7 +80,7 @@ def board_counts(db: Path, now: datetime = LINE_NOW) -> dict[str, int]:
     return {
         "seeds": cards["seed"],
         "planting": cards["sprouting"],
-        "rows": cards["planted"] + cards["growing"],
+        "rows": cards["planted"],  # started or not (F154 D1)
         "ripe": cards["ripe"],
         "stash": cards["harvested"] + found.more_harvested,
     }

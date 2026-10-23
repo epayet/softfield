@@ -49,7 +49,7 @@ def card(found: Board, key: str) -> Card:
 
 
 def test_the_stages_come_in_growth_order(board_db):
-    assert STAGES == ("seed", "sprouting", "planted", "growing", "ripe", "harvested")
+    assert STAGES == ("seed", "sprouting", "planted", "ripe", "harvested")
     assert tuple(read(board_db).stages) == STAGES
 
 
@@ -172,9 +172,10 @@ def test_page_shows_note_on_sprouting_but_not_other_stages(board_db, board_clien
     assert "the lead is answering" not in words
 
 
-def test_a_ready_card_with_a_ticket_merged_is_growing_and_shows_what_runs(board_db):
+def test_a_ready_card_with_a_ticket_merged_is_planted_started_and_shows_what_runs(board_db):
+    """F154 D1: a ticket started keeps the card in Planted, marked started."""
     growing = card(read(board_db), "F24")
-    assert growing.stage == "growing"
+    assert (growing.stage, growing.started) == ("planted", True)
     assert (growing.done, growing.total, growing.set_aside) == (1, 3, 1)
     assert growing.full_key == "f24-growing"
     assert (growing.title, growing.area, growing.bug, growing.priority) == (
@@ -199,21 +200,21 @@ def test_a_job_whose_run_stopped_beating_is_not_what_runs_now(board_db):
         lambda conn, p: metrics.upsert_run(conn, p, "20261002-113500", heartbeat=stale),
     )
     growing = card(read(board_db), "F24")
-    assert growing.stage == "growing"
+    assert (growing.stage, growing.started) == ("planted", True)
     assert growing.running is None
 
 
 def test_a_planted_card_has_tickets_all_still_ready(board_db):
     planted = card(read(board_db), "F23")
-    assert planted.stage == "planted"
+    assert (planted.stage, planted.started) == ("planted", False)
     assert (planted.done, planted.total, planted.running) == (0, 2, None)
 
 
-def test_every_ticket_done_is_growing_until_the_sheet_is_stored_then_ripe_then_harvested(
+def test_every_ticket_done_is_planted_until_the_sheet_is_stored_then_ripe_then_harvested(
     board_db,
 ):
     unreviewed = card(read(board_db), "F25")
-    assert unreviewed.stage == "growing"
+    assert (unreviewed.stage, unreviewed.started) == ("planted", True)
     # a row the runner made before reading its doc: 100, and its series' area
     assert (unreviewed.priority, unreviewed.area) == (100, "factory")
     assert card(read(board_db), "M4").area == "product"
@@ -301,19 +302,25 @@ def test_a_set_aside_bug_is_a_seed_marked_as_a_bug_and_planted_once_ready(board_
         lambda conn, p: metrics.upsert_ticket(conn, p, "bug-01-duck-count", state="ready"),
     )
     bug = card(read(board_db), "bug-01-duck-count")
-    assert (bug.stage, bug.note) == ("planted", "")
+    assert (bug.stage, bug.note, bug.started) == ("planted", "", False)
 
 
 def test_a_bug_grows_while_it_runs_or_is_stuck_and_is_harvested_once_done(board_db):
     found = read(board_db)
-    assert card(found, "bug-02-stale").stage == "planted"
+    assert (card(found, "bug-02-stale").stage, card(found, "bug-02-stale").started) == (
+        "planted",
+        False,
+    )
     assert card(found, "bug-02-stale").priority == 7  # its own `priority:`
-    assert card(found, "bug-03-working").stage == "growing"
-    assert card(found, "bug-04-stuck").stage == "growing"
-    assert card(found, "bug-05-fixed").stage == "harvested"
+    for key in ("bug-03-working", "bug-04-stuck"):
+        assert (card(found, key).stage, card(found, key).started) == ("planted", True), key
+    assert (card(found, "bug-05-fixed").stage, card(found, "bug-05-fixed").started) == (
+        "harvested",
+        False,
+    )
 
 
-def test_a_ready_bug_with_a_running_job_is_growing_and_shows_it(board_db):
+def test_a_ready_bug_with_a_running_job_is_planted_started_and_shows_it(board_db):
     def change(conn: sqlite3.Connection, p: int) -> None:
         run = metrics.upsert_run(conn, p, "20261002-113500")
         bugs = metrics.upsert_milestone(conn, p, "bugs")
@@ -331,7 +338,7 @@ def test_a_ready_bug_with_a_running_job_is_growing_and_shows_it(board_db):
 
     write(board_db, change)
     bug = card(read(board_db), "bug-02-stale")
-    assert bug.stage == "growing"
+    assert (bug.stage, bug.started) == ("planted", True)
     assert bug.running is not None
     assert (bug.running.ticket, bug.running.attempt) == ("bug-02-stale", 1)
 
@@ -340,9 +347,15 @@ def test_cards_within_a_stage_come_in_priority_order_then_by_key(board_db):
     found = read(board_db)
     assert keys(found, "seed") == ["F20", "bug-01-duck-count"]  # 30, 50
     assert keys(found, "sprouting") == ["F22", "F21"]  # 10, 20
-    assert keys(found, "planted") == ["F23", "bug-02-stale"]  # 5, 7
-    # 1, then the bugs' 50 by key, then 100
-    assert keys(found, "growing") == ["F24", "bug-03-working", "bug-04-stuck", "F25"]
+    # one line, started or not (F154 D1): 1, 5, 7, the bugs' 50 by key, then 100
+    assert keys(found, "planted") == [
+        "F24",
+        "F23",
+        "bug-02-stale",
+        "bug-03-working",
+        "bug-04-stuck",
+        "F25",
+    ]
     assert keys(found, "ripe") == ["F1", "M4"]  # both 100
 
 
@@ -374,17 +387,21 @@ def _places(found: Board, stage: str) -> list[tuple[str, int, bool, int]]:
 
 
 def test_a_card_shows_its_place_in_its_stage_but_not_once_ripe_or_harvested(board_db):
-    """F15 D1: #1, #2… in place of a P number, in the stages the owner orders."""
+    """F15 D1: #1, #2… in place of a P number, in the stages the owner orders; the planted
+    cards, started or not, are one line (F154 D1)."""
     write(board_db, _planted(("f27-third", 9)))
     found = read(board_db)
     assert _places(found, "planted") == [
-        ("F23", 1, False, 0),
-        ("bug-02-stale", 2, False, 0),
-        ("F27", 3, False, 0),
+        ("F24", 1, False, 0),
+        ("F23", 2, False, 0),
+        ("bug-02-stale", 3, False, 0),
+        ("F27", 4, False, 0),
+        ("bug-03-working", 5, False, 0),
+        ("bug-04-stuck", 6, False, 0),
+        ("F25", 7, False, 0),
     ]
     assert [c.place for c in found.stages["seed"]] == [1, 2]
     assert [c.place for c in found.stages["sprouting"]] == [1, 2]
-    assert [c.place for c in found.stages["growing"]] == [1, 2, 3, 4]
     assert [c.place for c in found.stages["ripe"] + found.stages["harvested"]] == [0, 0, 0, 0]
 
 
@@ -392,40 +409,44 @@ def test_an_open_reorder_shows_at_once_with_where_the_moved_card_was(board_db):
     """F15 D4: F9 sent before F7, which the priorities put first: F9 is on its way, F7 is not
     marked (the card moved is the one out of place, not the one it passed)."""
     write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
-    assert keys(read(board_db), "planted") == ["F7", "F9", "F23", "bug-02-stale"]
+    assert keys(read(board_db), "planted")[:5] == ["F24", "F7", "F9", "F23", "bug-02-stale"]
 
-    write(board_db, _reorder('["f9", "f7"]'))
+    write(board_db, _reorder('["f24", "f9", "f7"]'))
     found = read(board_db)
-    assert _places(found, "planted") == [
-        ("F9", 1, True, 2),
-        ("F7", 2, False, 0),
-        ("F23", 3, False, 0),
-        ("bug-02-stale", 4, False, 0),
+    assert _places(found, "planted")[:5] == [
+        ("F24", 1, False, 0),
+        ("F9", 2, True, 3),
+        ("F7", 3, False, 0),
+        ("F23", 4, False, 0),
+        ("bug-02-stale", 5, False, 0),
     ]
     assert not any(c.on_its_way for cards in found.stages.values() for c in cards if c.key != "F9")
 
 
 def test_a_card_whose_neighbours_moved_past_it_is_not_marked(board_db):
     write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
-    # F7 sent to the end of the planted cards: only F7 is out of place
-    write(board_db, _reorder('["f9", "f23", "bug-02-stale", "f7"]'))
-    assert _places(read(board_db), "planted") == [
-        ("F9", 1, False, 0),
-        ("F23", 2, False, 0),
-        ("bug-02-stale", 3, False, 0),
-        ("F7", 4, True, 1),
+    # F7 sent below the cards not started: only F7 is out of place
+    write(board_db, _reorder('["f24", "f9", "f23", "bug-02-stale", "f7"]'))
+    assert _places(read(board_db), "planted")[:6] == [
+        ("F24", 1, False, 0),
+        ("F9", 2, False, 0),
+        ("F23", 3, False, 0),
+        ("bug-02-stale", 4, False, 0),
+        ("F7", 5, True, 2),
+        ("bug-03-working", 6, False, 0),
     ]
 
 
 def test_the_latest_open_reorder_is_the_one_shown(board_db):
     write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
     write(board_db, _reorder('["f9", "f7"]'))
-    write(board_db, _reorder('["f23", "f7", "f9"]'))
-    assert _places(read(board_db), "planted") == [
-        ("F23", 1, True, 3),
-        ("F7", 2, False, 0),
-        ("F9", 3, False, 0),
-        ("bug-02-stale", 4, False, 0),
+    write(board_db, _reorder('["f24", "f23", "f7", "f9"]'))
+    assert _places(read(board_db), "planted")[:5] == [
+        ("F24", 1, False, 0),
+        ("F23", 2, True, 4),
+        ("F7", 3, False, 0),
+        ("F9", 4, False, 0),
+        ("bug-02-stale", 5, False, 0),
     ]
 
 
@@ -437,28 +458,37 @@ def test_a_done_or_refused_reorder_shows_no_mark(board_db):
     write(board_db, _reorder("not a list"))  # the runner will refuse it: nothing to show
     after = read(board_db)
     assert after.stages == before.stages
-    assert _places(after, "planted")[0] == ("F7", 1, False, 0)
+    assert _places(after, "planted")[:2] == [("F24", 1, False, 0), ("F7", 2, False, 0)]
 
 
 def test_a_card_the_reorder_doesnt_name_keeps_its_place_after_the_listed_ones(board_db):
     write(board_db, _reorder('["bug-02-stale", "f25", "nowhere"]'))
     found = read(board_db)
-    assert _places(found, "planted") == [("bug-02-stale", 1, True, 2), ("F23", 2, False, 0)]
-    # F25 is listed first of the growing cards; the others keep their own order after it
-    assert keys(found, "growing") == ["F25", "F24", "bug-03-working", "bug-04-stuck"]
-    assert card(found, "F25").was == 4
+    # the two listed come first, started or not (F154 D1); the others keep their own order
+    assert _places(found, "planted") == [
+        ("bug-02-stale", 1, True, 3),
+        ("F25", 2, True, 6),
+        ("F24", 3, False, 0),
+        ("F23", 4, False, 0),
+        ("bug-03-working", 5, False, 0),
+        ("bug-04-stuck", 6, False, 0),
+    ]
     assert keys(found, "seed") == ["F20", "bug-01-duck-count"]
 
 
 def test_places_are_counted_before_q_and_kind_narrow_the_cards(board_db):
-    assert _places(read(board_db, q="stale"), "planted") == [("bug-02-stale", 2, False, 0)]
-    write(board_db, _reorder('["bug-03-working", "bug-04-stuck", "f24"]'))
+    assert _places(read(board_db, q="stale"), "planted") == [("bug-02-stale", 3, False, 0)]
+    write(
+        board_db,
+        _reorder('["f23", "bug-02-stale", "bug-03-working", "bug-04-stuck", "f24"]'),
+    )
     bugs = read(board_db, kind="bug")
-    assert _places(bugs, "growing") == [
-        ("bug-03-working", 1, False, 0),
-        ("bug-04-stuck", 2, False, 0),
+    assert _places(bugs, "planted") == [
+        ("bug-02-stale", 2, False, 0),
+        ("bug-03-working", 3, False, 0),
+        ("bug-04-stuck", 4, False, 0),
     ]
-    assert _places(read(board_db, q="f24"), "growing") == [("F24", 3, True, 1)]
+    assert _places(read(board_db, q="f24"), "planted") == [("F24", 5, True, 1)]
 
 
 def test_the_board_holds_every_open_card_in_the_order_shown_for_a_send(board_db):
@@ -480,7 +510,7 @@ def test_q_keeps_the_cards_whose_key_or_title_contains_it(board_db):
     found = read(board_db, q="DUCK")
     every = sorted(c.key for cards in found.stages.values() for c in cards)
     assert every == ["F20", "bug-01-duck-count"]  # a title, a key
-    assert keys(read(board_db, q="f24"), "growing") == ["F24"]
+    assert keys(read(board_db, q="f24"), "planted") == ["F24"]
     assert read(board_db, q="").stages == read(board_db).stages
 
 
@@ -608,9 +638,45 @@ def test_the_page_lists_each_card_in_its_stage_s_column(board_db, board_client):
             for c in found.stages[stage]
         ], stage
     assert _links(columns["seed"]) == ["/milestones/f20-duck-pond", "/tickets/bug-01-duck-count"]
-    assert _links(columns["growing"])[0] == "/milestones/f24-growing"
-    # each column's head counts its cards
-    assert re.search(r"in the factory · 4\b", columns["growing"])
+    assert _links(columns["planted"])[0] == "/milestones/f24-growing"
+
+
+def _head(column: str) -> str:
+    """A column's head, as words."""
+    found = re.search(r'<div class="stage-head">(.*?)</div>\s*<div class="cards">', column, re.S)
+    assert found
+    return " ".join(unescape(re.sub(r"<[^>]+>", " ", found[1])).split())
+
+
+def test_each_stage_s_head_says_what_it_means_and_what_comes_next(board_client):
+    """F154 D2: its meaning and its count, then what moves a card on; Planted counts its
+    started cards too, and Harvested has no next step."""
+    columns = _columns(_page(board_client))
+    assert {stage: _head(column) for stage, column in columns.items()} == {
+        "seed": "Seed an idea, or a ticket set aside · 2"
+        " Next a conversation with the lead plans it",
+        "sprouting": "Sprouting being planned with the lead · 2 Next you approve the plan",
+        "planted": "Planted in line for the factory, #1 first · 6, 4 growing"
+        " Next every ticket done, then Claude reviews it",
+        "ripe": "Ripe needs your sign-off · 2 Next you sign off",
+        "harvested": "Harvested signed off or fixed · 2",
+    }
+    assert 'class="stage-next"' not in columns["harvested"]
+
+
+def test_a_started_card_carries_the_growing_tag_and_one_not_started_none(board_client):
+    """F154 D3: the class ``started`` (the orange edge) and the "growing" tag."""
+    html = _page(board_client)
+    for link, started in (
+        ("/milestones/f24-growing", True),
+        ("/tickets/bug-03-working", True),
+        ("/milestones/f23-planted", False),
+        ("/tickets/bug-02-stale", False),
+    ):
+        classes, words, raw = _card(html, link)
+        assert ("started" in classes) is started, link
+        assert ('class="card-growing"' in raw) is started, link
+        assert (" growing " in f"{words} ") is started, link
 
 
 def test_a_card_s_link_opens_its_page(board_client):
@@ -621,11 +687,11 @@ def test_a_card_s_link_opens_its_page(board_client):
 def test_a_marked_card_shows_the_uses_reserve_plate_and_an_unmarked_one_doesn_t(
     board_db, board_client, tmp_path
 ):
-    """F172 D6: the plate on a planted (F23) and a growing (F24) card whose doc says
+    """F172 D6: the plate on a planted card (F23) and a started one (F24) whose doc says
     ``**Reserve:** yes``; none on F25, unmarked, nor on F20, a seed whose doc is marked."""
     mark_reserve(board_db, tmp_path / "repo", "f23-planted", "f24-growing", "f20-duck-pond")
     found = read(board_db)
-    assert [c.key for cards in found.stages.values() for c in cards if c.reserve] == ["F23", "F24"]
+    assert [c.key for cards in found.stages.values() for c in cards if c.reserve] == ["F24", "F23"]
     html = _page(board_client)
     for link, plate in (
         ("/milestones/f23-planted", True),
@@ -706,7 +772,7 @@ def test_a_card_shows_its_place_and_no_p_number_on_the_page(board_db):
     write(board_db, _planted(("f27-third", 9)))
     html = _page(_client(board_db))
     _, words, _ = _card(html, "/milestones/f27-third")
-    assert words.startswith("#3 F27 factory")
+    assert words.startswith("#4 F27 factory")
     assert not re.search(r"\bP\d", words)
     for link in ("/milestones/f1", "/milestones/m3"):  # ripe, harvested
         _, words, _ = _card(html, link)
@@ -716,25 +782,25 @@ def test_a_card_shows_its_place_and_no_p_number_on_the_page(board_db):
 
 def test_a_card_on_its_way_has_a_dashed_edge_and_says_where_it_was(board_db):
     write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
-    write(board_db, _reorder('["f9", "f7"]'))
+    write(board_db, _reorder('["f24", "f9", "f7"]'))
     html = _page(_client(board_db))
     classes, words, _ = _card(html, "/milestones/f9-second")
     assert "on-its-way" in classes
-    assert words.startswith("#1 F9")
-    assert "on its way · was #2 · at the runner's next pick" in words
+    assert words.startswith("#2 F9")
+    assert "on its way · was #3 · at the runner's next pick" in words
     classes, words, _ = _card(html, "/milestones/f7-first")
     assert "on-its-way" not in classes
     assert "on its way" not in words
-    assert words.startswith("#2 F7")
+    assert words.startswith("#3 F7")
 
 
-def test_a_growing_card_shows_its_tickets_and_what_runs_now(board_client):
+def test_a_started_card_shows_its_tickets_and_what_runs_now(board_client):
     html = _page(board_client)
     _, words, _ = _card(html, "/milestones/f24-growing")
     assert "1 of 3 tickets · 1 set aside" in words
     assert f"Now: f24-02-working · Goal of f24-02-working. · {LOCAL}, attempt 2" in words
-    growing = _columns(html)["growing"]
-    assert re.search(r'<span class="meter"><span style="width: 33%">', growing)
+    planted = _columns(html)["planted"]
+    assert re.search(r'<span class="meter"><span style="width: 33%">', planted)
     # a ripe card carries the sign-off text
     _, ripe, _ = _card(html, "/milestones/f1")
     assert "Read the review and sign off" in ripe
@@ -763,8 +829,7 @@ def test_the_plots_count_each_stage(board_client):
     assert plots == {
         "seed": (2, "Seed", False),
         "sprouting": (2, "Sprouting", False),
-        "planted": (2, "Planted", False),
-        "growing": (4, "Growing", False),
+        "planted": (6, "Planted", False),
         "ripe": (2, "Ripe", True),
         "harvested": (2, "Harvested", False),
     }
@@ -796,7 +861,7 @@ def test_the_page_posts_only_a_reorder_and_links_to_the_factory_floor(board_clie
     assert re.findall(r'kind: "(\w+)"', script) == ["reorder"]
     assert script.count('fetch("/requests"') == 1
     assert re.search(
-        r'<a href="/\?project=coucou">\s*Growing cards feed the factory floor ›\s*</a>', main
+        r'<a href="/\?project=coucou">\s*Planted cards feed the factory floor ›\s*</a>', main
     )
 
 
@@ -872,7 +937,7 @@ def test_the_board_lays_out_at_phone_and_display_sizes(page, board_client, size)
         " const r = el.getBoundingClientRect();"
         " return {top: Math.round(r.top), left: r.left, right: r.right, height: r.height}; })"
     )
-    assert len(plots) == 6
+    assert len(plots) == 5
     assert all(p["left"] >= 0 and p["right"] <= size["width"] for p in plots)
     rows = [p["top"] for p in plots]
     tops = page.evaluate(
@@ -886,7 +951,7 @@ def test_the_board_lays_out_at_phone_and_display_sizes(page, board_client, size)
     )
     if size is PHONE:
         assert rows == sorted(rows) and len(set(rows)) == 2, "three plots to a row"
-        assert rows[0] == rows[2] and rows[3] == rows[5]
+        assert rows[0] == rows[2] and rows[3] == rows[4]
         assert all(p["height"] >= 44 for p in plots)
         assert [stage for stage, _ in tops] == ["planted"]  # one stage at a time
         assert page.locator(".plot.at-planted").get_attribute("aria-pressed") == "true"
@@ -900,7 +965,7 @@ def test_the_board_lays_out_at_phone_and_display_sizes(page, board_client, size)
         )
         assert small == [], f"tap targets under 44 px: {small}"
     else:
-        assert len(set(rows)) == 1, "the six plots sit in one row"
+        assert len(set(rows)) == 1, "the five plots sit in one row"
         assert [stage for stage, _ in tops] == list(STAGES)
         assert len({top for _, top in tops}) == 1, "the columns sit side by side"
         assert lefts == sorted(lefts)
@@ -954,7 +1019,7 @@ def test_without_scripts_a_phone_stacks_every_stage_with_cards(browser, board_cl
         )
         # what needs the owner and what runs come first (the owner, 2026-10-03)
         order = sorted(tops, key=lambda stage: tops[stage])
-        assert order == ["ripe", "growing", "planted", "sprouting", "seed", "harvested"]
+        assert order == ["ripe", "planted", "sprouting", "seed", "harvested"]
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth")
     finally:
         page.close()
@@ -1026,10 +1091,10 @@ def test_ripe_card_link_ends_with_review_fragment(board_db, board_client):
         assert match, f"link for {link} should end with #review"
 
 
-def test_growing_and_harvested_cards_have_no_review_fragment(board_db, board_client):
+def test_planted_and_harvested_cards_have_no_review_fragment(board_db, board_client):
     html = _page(board_client)
     found = read(board_db)
-    for stage in ("growing", "harvested"):
+    for stage in ("planted", "harvested"):
         for c in found.stages[stage]:
             link = f"{'/tickets' if c.bug else '/milestones'}/{c.full_key}"
             _, words, _ = _card(html, link)
@@ -1044,12 +1109,16 @@ def test_growing_and_harvested_cards_have_no_review_fragment(board_db, board_cli
 # --- moving cards and sending the order (f15-04) ---------------------------------------------
 
 
+STARTED = ["bug-03-working", "bug-04-stuck", "f25"]  # the planted cards after F27, all started
+
+
 def _three_planted(page, board_db: Path, size: dict[str, int] = PHONE) -> None:
-    """The board in Chromium with three planted cards: F23, bug-02-stale, F27."""
+    """The board in Chromium with three planted cards not started, F23, bug-02-stale, F27,
+    after the started F24 and before the ``STARTED`` ones: one line (F154 D1)."""
     write(board_db, _planted(("f27-third", 9)))
     page.set_viewport_size(size)
     open_page(page, _client(board_db), "/board")
-    assert _order(page, "planted") == ["f23", "bug-02-stale", "f27"]
+    assert _order(page, "planted") == ["f24", "f23", "bug-02-stale", "f27", *STARTED]
 
 
 def _order(page, stage: str) -> list[str]:
@@ -1061,9 +1130,17 @@ def _order(page, stage: str) -> list[str]:
 
 def _drag(page, key: str, onto: str, *, below: bool = False) -> None:
     """Drag ``key``'s card by its grip and drop it over the top (or bottom) fifth of ``onto``,
-    the stage in the middle of the screen first, clear of the bar."""
-    page.locator(f'.slot[data-key="{key}"]').evaluate(
-        "el => el.closest('.cards').scrollIntoView({block: 'center'})"
+    the two cards in the middle of the screen first, clear of the bar: one Planted column is
+    taller than a phone (F154 D1)."""
+    page.evaluate(
+        """([a, b]) => {
+            const box = (k) =>
+                document.querySelector(`.slot[data-key="${k}"]`).getBoundingClientRect();
+            const top = Math.min(box(a).top, box(b).top);
+            const bottom = Math.max(box(a).bottom, box(b).bottom);
+            scrollBy(0, (top + bottom) / 2 - innerHeight / 2);
+        }""",
+        [key, onto],
     )
     grip = page.locator(f'.slot[data-key="{key}"] .grip').bounding_box()
     target = page.locator(f'.slot[data-key="{onto}"]').bounding_box()
@@ -1087,25 +1164,25 @@ def _bar(page) -> str | None:
 
 def test_dragging_a_card_by_its_grip_moves_it_and_back_again(page, board_db):
     _three_planted(page, board_db)
-    _drag(page, "f27", "f23")
-    assert _order(page, "planted") == ["f27", "f23", "bug-02-stale"]
+    _drag(page, "f27", "f24")  # a card not started, above a started one (F154 D1)
+    assert _order(page, "planted") == ["f27", "f24", "f23", "bug-02-stale", *STARTED]
     moved = page.locator('.slot[data-key="f27"] .card')
     assert "moved" in (moved.get_attribute("class") or "").split()
     assert moved.evaluate("el => getComputedStyle(el).borderTopStyle") == "dashed"
     assert _words(page, "f27").startswith("#1 F27")
-    assert "moved · was #3 · not sent yet" in _words(page, "f27")
+    assert "moved · was #4 · not sent yet" in _words(page, "f27")
     # the cards it passed are not moved, but their places change
     assert page.locator(".card.moved").count() == 1
-    assert _words(page, "f23").startswith("#2 F23")
+    assert _words(page, "f24").startswith("#2 F24")
     assert _bar(page) == "1 card moved. Nothing is sent yet."
     assert page.get_by_role("button", name="Send new order").is_visible()
     assert page.get_by_role("button", name="Cancel").is_visible()
 
-    _drag(page, "f27", "bug-02-stale", below=True)  # back to third
-    assert _order(page, "planted") == ["f23", "bug-02-stale", "f27"]
+    _drag(page, "f27", "bug-02-stale", below=True)  # back to fourth
+    assert _order(page, "planted") == ["f24", "f23", "bug-02-stale", "f27", *STARTED]
     assert page.locator(".card.moved").count() == 0
     assert "moved" not in _words(page, "f27")
-    assert _words(page, "f27").startswith("#3 F27")
+    assert _words(page, "f27").startswith("#4 F27")
     assert _bar(page) is None
 
 
@@ -1119,18 +1196,18 @@ def test_the_menu_does_the_same_moves_by_keyboard_too(page, board_db):
     assert sheet.is_visible()
     page.keyboard.press("Enter")  # Top, the first button, has the focus
     assert not sheet.is_visible()
-    assert _order(page, "planted") == ["f27", "f23", "bug-02-stale"]
+    assert _order(page, "planted") == ["f27", "f24", "f23", "bug-02-stale", *STARTED]
     assert page.evaluate("() => document.activeElement.closest('.slot').dataset.key") == "f27"
     for move, order in (
-        ("Down", ["f23", "f27", "bug-02-stale"]),
-        ("Bottom", ["f23", "bug-02-stale", "f27"]),
-        ("Up", ["f23", "f27", "bug-02-stale"]),
+        ("Down", ["f24", "f27", "f23", "bug-02-stale", *STARTED]),
+        ("Bottom", ["f24", "f23", "bug-02-stale", *STARTED, "f27"]),
+        ("Up", ["f24", "f23", "bug-02-stale", *STARTED[:2], "f27", "f25"]),
     ):
         page.keyboard.press("Enter")  # the focus is back on F27's ⋯
         page.get_by_role("button", name=move, exact=True).focus()
         page.keyboard.press("Enter")
         assert _order(page, "planted") == order, move
-    assert "moved · was #3 · not sent yet" in _words(page, "f27")
+    assert "moved · was #4 · not sent yet" in _words(page, "f27")
     page.keyboard.press("Enter")
     page.keyboard.press("Escape")
     assert not sheet.is_visible()
@@ -1140,11 +1217,11 @@ def test_cancel_puts_the_order_back(page, board_db):
     _three_planted(page, board_db)
     _drag(page, "f27", "f23")
     _drag(page, "f23", "bug-02-stale", below=True)  # the two ends swapped
-    assert _order(page, "planted") == ["f27", "bug-02-stale", "f23"]
+    assert _order(page, "planted") == ["f24", "f27", "bug-02-stale", "f23", *STARTED]
     assert page.locator(".card.moved").count() == 2
     assert _bar(page) == "2 cards moved. Nothing is sent yet."
     page.get_by_role("button", name="Cancel").click()
-    assert _order(page, "planted") == ["f23", "bug-02-stale", "f27"]
+    assert _order(page, "planted") == ["f24", "f23", "bug-02-stale", "f27", *STARTED]
     assert page.locator(".card.moved").count() == 0
     assert _bar(page) is None
 
@@ -1168,8 +1245,8 @@ def test_send_posts_the_whole_open_order_once_and_the_board_shows_it_on_its_way(
     line.remove("f27")
     line.insert(line.index("f23"), "f27")
     assert sent == line  # every open card once, F27 just before the card it was dropped above
-    assert "on its way · was #3 · at the runner's next pick" in _words(page, "f27")
-    assert _words(page, "f27").startswith("#1 F27")
+    assert "on its way · was #4 · at the runner's next pick" in _words(page, "f27")
+    assert _words(page, "f27").startswith("#2 F27")
     assert _bar(page) is None
     # the cards stay draggable: a second order is held until it is sent
     _drag(page, "f23", "f27")
@@ -1179,14 +1256,16 @@ def test_send_posts_the_whole_open_order_once_and_the_board_shows_it_on_its_way(
 
 def test_a_card_stays_in_its_stage_and_a_ripe_or_harvested_one_has_no_grip(page, board_db):
     _three_planted(page, board_db, DISPLAY)
-    growing = _order(page, "growing")
-    _drag(page, "f23", "f25")  # over the growing column: it lands in its own
-    assert sorted(_order(page, "planted")) == ["bug-02-stale", "f23", "f27"]
-    assert _order(page, "growing") == growing
+    sprouting = _order(page, "sprouting")
+    _drag(page, "f23", "f22")  # over the sprouting column: it lands in its own
+    assert sorted(_order(page, "planted")) == sorted(
+        ["f24", "f23", "bug-02-stale", "f27", *STARTED]
+    )
+    assert _order(page, "sprouting") == sprouting
     for stage in ("ripe", "harvested"):
         assert page.locator(f"#stage-{stage} .card").count()
         assert page.locator(f"#stage-{stage} .grip, #stage-{stage} .more").count() == 0
-    for stage in ("seed", "sprouting", "planted", "growing"):
+    for stage in ("seed", "sprouting", "planted"):
         assert (
             page.locator(f"#stage-{stage} .grip").count()
             == page.locator(f"#stage-{stage} .card").count()
@@ -1290,11 +1369,21 @@ def test_review_next_running_stopped(board_db):
     assert f25.review_step.label == "Review next"
 
 
-def test_no_step_on_non_growing_or_done_cards(board_db):
-    """A growing card with a ticket not done, a ripe card and a bug have no step."""
-    # F24 is growing but has a ticket not done
+def test_no_step_on_cards_not_started_or_not_done(board_db):
+    """A started card with a ticket not done, a planted card not started with none left to
+    do, a ripe card and a bug have no step (F154: started, not a stage, asks for it)."""
+    # F24 is started but has a ticket not done
     f24 = card(read(board_db), "F24")
     assert f24.review_step is None
+
+    # F28: its only ticket set aside, so none counted is left to do, and none started
+    def nothing_started(conn: sqlite3.Connection, p: int) -> None:
+        m = metrics.upsert_milestone(conn, p, "f28-quiet", title="Quiet", state="ready")
+        metrics.upsert_ticket(conn, p, "f28-01-only", milestone_id=m, state="later")
+
+    write(board_db, nothing_started)
+    f28 = card(read(board_db), "F28")
+    assert (f28.stage, f28.started, f28.review_step) == ("planted", False, None)
 
     # F1 is ripe
     f1 = card(read(board_db), "F1")
@@ -1467,9 +1556,9 @@ def test_bug_and_ripe_card_have_no_waits_line(board_db):
     assert "waits for" not in ripe_words
 
 
-def test_waits_populated_only_for_planted_and_growing_stages(board_db):
+def test_waits_populated_only_for_planted_cards(board_db):
     """waits is empty for seed, sprouting, ripe, and harvested cards even when their
-    tickets have dependencies, because only planted and growing cards expose waits."""
+    tickets have dependencies, because only planted cards, started or not, expose waits."""
 
     def change(conn: sqlite3.Connection, p: int) -> None:
         # create f22 milestone with a ready ticket (to be a dependency target)
@@ -1529,9 +1618,9 @@ def test_waits_populated_only_for_planted_and_growing_stages(board_db):
     f23 = card(found, "F23")
     assert f23.stage == "planted"
     assert f23.waits == ("F22",)
-    # growing card F63: waits is populated
+    # started card F63: waits is populated
     f63 = card(found, "F63")
-    assert f63.stage == "growing"
+    assert (f63.stage, f63.started) == ("planted", True)
     assert f63.waits == ("F22",)
     # sprouting card F22: waits is empty even though its ticket depends on another card
     f22 = card(found, "F22")

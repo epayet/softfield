@@ -373,14 +373,15 @@ def _date(at: str) -> str:
 
 
 def how_it_grew(card: Card | None, started: str | None, ended: str | None) -> list[Grown]:
-    """The six stages, the card's own marked and the later ones dimmed. Only two have a date
-    in the database: ``started`` on growing, ``ended`` on harvested."""
+    """The five stages, the card's own marked and the later ones dimmed. Only two have a date
+    in the database: ``started`` on planted, once a ticket has (F154 D4), and ``ended`` on
+    harvested."""
     at = STAGES.index(card.stage) if card else -1
     grown: list[Grown] = []
     for n, stage in enumerate(STAGES):
         when = ""
-        if stage == "growing" and started and at >= n:
-            when = ("since " if at == n else "") + _date(started)
+        if stage == "planted" and started and (at > n or (at == n and card and card.started)):
+            when = ("growing since " if at == n else "") + _date(started)
         if stage == "harvested" and ended and at == n:
             when = _date(ended)
         grown.append(Grown(stage, WORDS[stage][0], current=at == n, later=at < n, when=when))
@@ -477,6 +478,7 @@ def milestone_detail(
     project_id = metrics.find_project(conn, project)
     review = None if project_id is None else _review(conn, project, project_id, short_key(key), now)
     card = milestone_card(conn, project, now, key)  # None for a removed one: no stage
+    grew = how_it_grew(card, detail.started, detail.ended)
     return render(
         request,
         conn,
@@ -487,7 +489,9 @@ def milestone_detail(
             "milestone": detail,
             "card": card,
             "words": WORDS,
-            "grew": how_it_grew(card, detail.started, detail.ended),
+            "grew": grew,
+            # the header's "growing since", on a started card's own stage (F154 D4)
+            "growing_since": next((g.when for g in grew if g.current and g.when), ""),
             "thread": short_key(key),
             "outcome_html": _to_html(detail.outcome),
             "done_when_html": _to_html(detail.done_when),

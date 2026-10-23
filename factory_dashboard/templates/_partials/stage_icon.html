@@ -1,5 +1,5 @@
 {# Each stage's icon, drawn in its stage's colour (dashboard.css): the board's columns (f5-16)
-   and a card's page (f5-17) #}
+   and a card's page (f5-17). "growing" is no stage since F154: it draws a started card's tag #}
 {% macro icon(stage, size=28) %}
 <svg width="{{ size }}" height="{{ size }}" viewBox="0 0 28 28" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
   {%- if stage == "seed" -%}
@@ -22,7 +22,7 @@
    a seed, then a stem taller stage by stage with a leaf more, a fruit when ripe, a crate when
    harvested. Our own drawing, in its stage's colour (dashboard.css) #}
 {% macro plant(stage) %}
-{%- set i = ["seed", "sprouting", "planted", "growing", "ripe", "harvested"].index(stage) -%}
+{%- set i = ["seed", "sprouting", "planted", "ripe", "harvested"].index(stage) -%}
 <svg viewBox="0 0 48 44" aria-hidden="true">
   {%- if stage == "harvested" -%}
   <path class="crate" d="M10 16h28v24H10z M10 24h28 M19 16v24 M29 16v24"/><path class="crate" d="M16 12l8-7 8 7"/>
@@ -31,10 +31,11 @@
   {%- if stage == "seed" -%}
   <ellipse class="leaf" cx="24" cy="37" rx="5" ry="3"/>
   {%- else -%}
-  {%- set h = [0, 9, 16, 24, 30][i] -%}
+  {%- set h = [0, 9, 16, 30][i] -%}
+  {%- set leaves = [0, 1, 2, 4][i] -%}
   <path class="stem" d="M24 40V{{ 40 - h }}"/>
-  {%- for k in range(i) -%}
-  {%- set y = (40 - (k + 1) * h / (i + 0.2)) | round(1) -%}
+  {%- for k in range(leaves) -%}
+  {%- set y = (40 - (k + 1) * h / (leaves + 0.2)) | round(1) -%}
   {%- set side = 1 if k % 2 else -1 -%}
   <path class="leaf" d="M24 {{ y }}q{{ side * 9 }} -7 {{ side * 13 }} 1q{{ side * -7 }} 5 {{ side * -13 }} -1z"/>
   {%- endfor -%}

@@ -8,10 +8,11 @@
 
 {% from "_partials/stage_icon.html" import icon, plant %}
 
-{# A card: its edge is its area's colour, a bug's is striped and its label says "bug" #}
+{# A card: its edge is its area's colour, a bug's is striped and its label says "bug". A
+   planted card with a ticket started has the orange edge and a "growing" tag (F154 D3) #}
 {% macro card_link(c) %}
-<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.on_its_way %} on-its-way{% endif %}" href="{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}">
-  <span class="card-meta">{% if c.place %}<b>#{{ c.place }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span></span>
+<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way %} on-its-way{% endif %}" href="{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}">
+  <span class="card-meta">{% if c.place %}<b>#{{ c.place }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span>{% if c.started %} <span class="card-growing">{{ icon("growing", 14) }}growing</span>{% endif %}</span>
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
   <span class="meter"><span style="width: {{ (100 * c.done / c.total) | round | int }}%"></span></span>
@@ -66,7 +67,7 @@
 <section id="field" class="field" aria-label="The field" data-project="{{ project }}">
   <div class="field-head">
     <h2>The field</h2>
-    <p>Left to right, a card grows. The runner takes tickets from growing cards by priority.</p>
+    <p>Left to right, a card grows. The runner takes tickets from planted cards, #1 first.</p>
   </div>
   <div class="stages">
     {% for stage, cards in found.stages.items() %}
@@ -74,7 +75,9 @@
     <section id="stage-{{ stage }}" class="stage{% if not cards %} bare{% endif %}">
       <div class="stage-head">
         {{ icon(stage) }}
-        <div><h3>{{ words[stage][0] }}</h3><span>{{ words[stage][1] }} · {{ cards | length + more }}{% if more %}, latest {{ cards | length }}{% endif %}</span></div>
+        {% set growing = cards | selectattr("started") | list | length %}
+        <div><h3>{{ words[stage][0] }}</h3><span>{{ words[stage][1] }}{% if stage == "planted" %}, #1 first{% endif %} · {{ cards | length + more }}{% if more %}, latest {{ cards | length }}{% endif %}{% if growing %}, {{ growing }} growing{% endif %}</span>
+          {% if words[stage][2] %}<span class="stage-next"><b>Next</b>{{ words[stage][2] }}</span>{% endif %}</div>
       </div>
       <div class="cards">
         {% for c in cards %}
@@ -94,8 +97,9 @@
       <span><i class="swatch factory"></i>factory</span>
       <span><i class="swatch product"></i>product (for Mum)</span>
       <span><i class="swatch bug"></i>bug (striped edge, and says "bug")</span>
+      <span><i class="swatch started"></i>growing (orange edge: a ticket has started)</span>
     </p>
-    <a href="/{{ q }}">Growing cards feed the factory floor ›</a>
+    <a href="/{{ q }}">Planted cards feed the factory floor ›</a>
     {# the list has no tab (f5-17): it keeps each card's priority and the trend charts #}
     <a href="/milestones{{ q }}">All milestones and their trends ›</a>
   </div>

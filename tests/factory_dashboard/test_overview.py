@@ -568,7 +568,7 @@ def _reserve_client(board_db: Path, tmp_path: Path, *marked: str):
 
 
 def test_the_marked_cards_are_named_once_under_claude_s_meters(board_db, tmp_path):
-    """F172 D6: the planted F23 and the growing F24 are marked, and the seed F20's doc too: the
+    """F172 D6: the planted F23 and the started F24 are marked, and the seed F20's doc too: the
     two cards that use the reserve are named once, after Claude's week and before Copilot's
     meter, each a link to its page, on the Overview and in the live partial."""
     client = _reserve_client(board_db, tmp_path, "f23-planted", "f24-growing", "f20-duck-pond")
@@ -581,8 +581,8 @@ def test_the_marked_cards_are_named_once_under_claude_s_meters(board_db, tmp_pat
         assert week < listed < panel.index('id="allow-copilot-month"'), path
         row = panel[listed:].split("</div>", 1)[0]
         links = re.findall(r'<a href="([^"?]+)[^"]*">([^<]*)</a>', row)
-        # in the board's order: Planted's column, then Growing's
-        assert links == [("/planning/f23", "F23, Planted"), ("/planning/f24", "F24, Growing")]
+        # in the board's order: one Planted line, F24 (P1) before F23 (P5) (F154 D1)
+        assert links == [("/planning/f24", "F24, Growing"), ("/planning/f23", "F23, Planted")]
         assert "Past both marks for:" in row
 
 

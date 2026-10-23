@@ -9,10 +9,10 @@ card, for its page (f5-17).
   holds: signed off → harvested; an idea no open thread is about (nor a message of the
   owner's on its way) → seed, as the desk's seeds; state planning, or an idea with one →
   sprouting, its note saying who the conversation waits for (F110 D4); every ticket done and the
-  review's sheet stored → ripe, as the line's field has it; a ticket started → growing;
-  otherwise → planted. Set-aside and removed tickets count for none of these.
+  review's sheet stored → ripe, as the line's field has it; otherwise → planted, ``started``
+  once a ticket has (F154 D1). Set-aside and removed tickets count for none of these.
 - **A bug ticket's stage** is its ticket's state (ADR 19 item 2): set aside → seed, ready →
-  planted, running or stopped → growing, done → harvested.
+  planted, running or stopped → planted and started, done → harvested.
 - **Left out:** a removed card, a removed ticket, and the ``bugs`` row (a standing key).
 - **Order:** by priority, then key; harvested, the latest first, and only the latest
   ``HARVESTED``. A card in a stage of ``PLACED`` shows its place there, ``#1``… (F15 D1).
@@ -42,18 +42,18 @@ from runner.tasks import BUGS, DEFAULT_PRIORITY, milestone_file, short_key
 
 router = APIRouter()
 
-STAGES = ("seed", "sprouting", "planted", "growing", "ripe", "harvested")
-# each stage's words on the page: its name, and what a card there is doing
+STAGES = ("seed", "sprouting", "planted", "ripe", "harvested")
+# each stage's words on the page (F154 D2): its name, what a card there is doing, and what
+# moves it on ("" for the last)
 WORDS = {
-    "seed": ("Seed", "idea or set aside"),
-    "sprouting": ("Sprouting", "being planned"),
-    "planted": ("Planted", "tickets ready"),
-    "growing": ("Growing", "in the factory"),
-    "ripe": ("Ripe", "needs your sign-off"),
-    "harvested": ("Harvested", "signed off or fixed"),
+    "seed": ("Seed", "an idea, or a ticket set aside", "a conversation with the lead plans it"),
+    "sprouting": ("Sprouting", "being planned with the lead", "you approve the plan"),
+    "planted": ("Planted", "in line for the factory", "every ticket done, then Claude reviews it"),
+    "ripe": ("Ripe", "needs your sign-off", "you sign off"),
+    "harvested": ("Harvested", "signed off or fixed", ""),
 }
-PLACED = ("seed", "sprouting", "planted", "growing")  # the stages whose order the owner sets
-RESERVABLE = ("planted", "growing")  # the stages a card may be marked to use the reserve in
+PLACED = ("seed", "sprouting", "planted")  # the stages whose order the owner sets
+RESERVABLE = ("planted",)  # the stages a card may be marked to use the reserve in
 KINDS = ("factory", "product", "bug")
 HARVESTED = 4  # the harvested cards shown; the rest are counted
 SET_ASIDE = "ticket written, set aside"
@@ -63,7 +63,7 @@ _OFF = ("later", metrics.REMOVED)  # tickets that count for no stage
 
 @dataclass(frozen=True)
 class Work:
-    """What runs now on a growing card."""
+    """What runs now on a planted card."""
 
     ticket: str
     goal: str | None
@@ -73,7 +73,7 @@ class Work:
 
 @dataclass(frozen=True)
 class ReviewStep:
-    """The review step on a growing card whose tickets are all done."""
+    """The review step on a started card whose tickets are all done."""
 
     label: str
     text: str
@@ -92,13 +92,14 @@ class Card:
     total: int = 0  # set-aside ones aren't in it
     set_aside: int = 0
     note: str = ""
-    running: Work | None = None  # on a growing card, from a live job
-    review_step: ReviewStep | None = None  # on a growing card with all tickets done
+    started: bool = False  # a planted card with a ticket started: it says "growing" (F154 D3)
+    running: Work | None = None  # on a planted card, from a live job
+    review_step: ReviewStep | None = None  # on a started card with all tickets done
     place: int = 0  # its place in its stage, from 1; 0 in a stage not ``PLACED``
     on_its_way: bool = False  # an open reorder puts it out of place
     was: int = 0  # then, its place without the reorder
     waits: tuple[str, ...] = ()  # other card keys this card's ready tickets depend on
-    reserve: bool = False  # a planted or growing card marked to use Claude's reserve (F172 D6)
+    reserve: bool = False  # a planted card marked to use Claude's reserve (F172 D6)
 
     @property
     def kind(self) -> str:
@@ -115,9 +116,7 @@ class Board:
     line: tuple[tuple[str, str], ...] = ()
 
 
-def _milestone_stage(
-    m: sqlite3.Row, tickets: list[sqlite3.Row], threads: set[str], worked: set[int]
-) -> str:
+def _milestone_stage(m: sqlite3.Row, tickets: list[sqlite3.Row], threads: set[str]) -> str:
     """D4's rule, over the milestone's tickets that count."""
     if m["status"] == "done":
         return "harvested"
@@ -127,25 +126,28 @@ def _milestone_stage(
         return "sprouting"
     if tickets and all(t["state"] == "done" for t in tickets) and m["signoff"] is not None:
         return "ripe"
-    if any(t["state"] in STARTED or t["id"] in worked for t in tickets):
-        return "growing"
     return "planted"
+
+
+def _milestone_started(tickets: list[sqlite3.Row], worked: set[int]) -> bool:
+    """Whether a planted milestone has a ticket started (F154 D1)."""
+    return any(t["state"] in STARTED or t["id"] in worked for t in tickets)
 
 
 def _review_step(
     milestone_full_key: str,
-    stage: str,
+    started: bool,
     done: int,
     total: int,
     signoff: object,
     live_jobs: list[Running],
     stop_items: dict[str, str],
 ) -> ReviewStep | None:
-    """The review step on a growing card whose counted tickets are all done.
+    """The review step on a started planted card whose counted tickets are all done.
 
     Only applies when every ticket is done and the review's sheet isn't stored yet.
     """
-    if stage != "growing" or done != total or signoff is not None:
+    if not started or done != total or signoff is not None:
         return None
     short = short_key(milestone_full_key)
     # live review job on this milestone
@@ -167,14 +169,19 @@ def _review_step(
     )
 
 
-def _bug_stage(state: str | None, running: bool) -> str:
+def _bug_stage(state: str | None) -> str:
     if state == "later":
         return "seed"
     if state == "done":
         return "harvested"
-    if running or state in ("running", "escalated", "blocked"):
-        return "growing"
     return "planted"
+
+
+def _bug_started(state: str | None, running: bool) -> bool:
+    """Whether a planted bug runs or has stopped (F154 D1)."""
+    return state not in ("later", "done") and (
+        running or state in ("running", "escalated", "blocked")
+    )
 
 
 def _card_waits(
@@ -213,11 +220,10 @@ def _card_note(
     waits: tuple[str, ...] = (),
 ) -> str:
     """Who a sprouting card's conversation waits for (D4). The owner's message still on its
-    way to the runner counts as theirs at once (the owner, 2026-10-07). For planted and
-    growing cards, appends a "waits for F22" line when its ready tickets depend on other
-    cards."""
+    way to the runner counts as theirs at once (the owner, 2026-10-07). For planted cards,
+    a "waits for F22" line when its ready tickets depend on other cards."""
     if stage != "sprouting":
-        if stage in ("planted", "growing") and waits:
+        if stage == "planted" and waits:
             return f"waits for {', '.join(waits)}"
         return ""
     if key in sent:
@@ -352,7 +358,8 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
         own = tickets.get(m["id"], [])
         if m["key"] == BUGS:
             for t in own:
-                stage = _bug_stage(t["state"], t["id"] in at_work)
+                stage = _bug_stage(t["state"])
+                started = _bug_started(t["state"], t["id"] in at_work)
                 card = Card(
                     key=t["ticket"],
                     full_key=t["ticket"],
@@ -362,16 +369,18 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
                     priority=ticket_priority(t["body"], BUGS, None),
                     stage=stage,
                     note=SET_ASIDE if stage == "seed" else "",
-                    running=running([t]) if stage == "growing" else None,
+                    started=started,
+                    running=running([t]) if stage == "planted" else None,
                 )
                 found.append((card, ended.get(t["id"], _LONG_AGO)))
             continue
         if m["state"] == metrics.REMOVED:
             continue
         counted = [t for t in own if t["state"] not in _OFF]
-        stage = _milestone_stage(m, counted, threads, worked)
+        stage = _milestone_stage(m, counted, threads)
+        started = stage == "planted" and _milestone_started(counted, worked)
         key = short_key(m["key"]).upper()
-        if stage in ("planted", "growing"):
+        if stage == "planted":
             waits = _card_waits(own, all_name_to_mkey, done_tickets, mkey[m["id"]])
         else:
             waits = ()
@@ -389,10 +398,11 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             note=_card_note(key.lower(), stage, latest_messages, sent, waits),
             waits=waits,
             reserve=stage in RESERVABLE and marked(repo, m["key"]),
-            running=running(counted) if stage == "growing" else None,
+            started=started,
+            running=running(counted) if stage == "planted" else None,
             review_step=_review_step(
                 m["key"],
-                stage,
+                started,
                 sum(t["state"] == "done" for t in counted),
                 len(counted),
                 m["signoff"],
@@ -508,7 +518,7 @@ def board(
 
 
 def reserve_marked(conn: sqlite3.Connection, project: str, now: datetime) -> list[Card]:
-    """The planted and growing cards marked to use Claude's reserve, in the board's order: the
+    """The planted cards marked to use Claude's reserve, in the board's order: the
     Overview names them under Claude's meters (F172 D6)."""
     found = board(conn, project, now)
     return [c for stage in RESERVABLE for c in found.stages[stage] if c.reserve]

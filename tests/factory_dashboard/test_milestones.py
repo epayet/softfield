@@ -510,22 +510,26 @@ def _ticket_rows(page: str) -> list[list[str]]:
 def test_the_header_shows_the_card_s_stage_priority_and_area(card_client):
     head = _card_head(card_client.get("/milestones/f24-growing").text)
     assert head.startswith("F24 · f24-growing Growing")  # its keys, then its title
-    assert "Stage Growing: in the factory" in head
+    # a ticket started (F154 D1): Planted, growing, and no ``started`` stored to date it
+    assert "Stage Planted: in line for the factory · growing Priority" in head
     assert "Priority P1" in head
     assert "Area factory" in head
     assert "Tickets 1 of 5 done · 1 set aside" in head
 
+    planted = _card_head(card_client.get("/milestones/f23-planted").text)
+    assert "Stage Planted: in line for the factory Priority" in planted  # none started
+
     seed = _card_head(card_client.get("/milestones/f20-duck-pond").text)
-    assert "Stage Seed: idea or set aside" in seed
+    assert "Stage Seed: an idea, or a ticket set aside" in seed
     assert "Priority P30" in seed
     assert "Area product" in seed
     assert "Tickets none yet" in seed
 
 
 def test_the_header_s_stage_is_the_board_s_not_the_doc_s_status(card_client, board_db):
-    """``f25-unreviewed`` has every ticket done: growing until the review's sheet is stored,
+    """``f25-unreviewed`` has every ticket done: planted until the review's sheet is stored,
     then ripe, whatever its ``status`` says."""
-    assert "Stage Growing" in _card_head(card_client.get("/milestones/f25-unreviewed").text)
+    assert "Stage Planted" in _card_head(card_client.get("/milestones/f25-unreviewed").text)
     conn = metrics.open_db(board_db)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -541,15 +545,8 @@ def test_the_header_s_stage_is_the_board_s_not_the_doc_s_status(card_client, boa
 
 def test_how_it_grew_marks_the_current_stage_and_dims_the_later_ones(card_client):
     grew = _grew(card_client.get("/milestones/f24-growing").text)
-    assert [name for name, *_ in grew] == [
-        "Seed",
-        "Sprouting",
-        "Planted",
-        "Growing",
-        "Ripe",
-        "Harvested",
-    ]
-    assert [name for name, current, _, _ in grew if current] == ["Growing"]
+    assert [name for name, *_ in grew] == ["Seed", "Sprouting", "Planted", "Ripe", "Harvested"]
+    assert [name for name, current, _, _ in grew if current] == ["Planted"]
     assert [name for name, _, later, _ in grew if later] == ["Ripe", "Harvested"]
 
     seed = _grew(card_client.get("/milestones/f20-duck-pond").text)
@@ -557,7 +554,6 @@ def test_how_it_grew_marks_the_current_stage_and_dims_the_later_ones(card_client
     assert [name for name, _, later, _ in seed if later] == [
         "Sprouting",
         "Planted",
-        "Growing",
         "Ripe",
         "Harvested",
     ]
@@ -567,15 +563,15 @@ def test_how_it_grew_marks_the_current_stage_and_dims_the_later_ones(card_client
     assert not any(later for _, _, later, _ in harvested)
 
 
-def test_how_it_grew_dates_growing_and_harvested_where_the_database_has_them(card_client, board_db):
+def test_how_it_grew_dates_planted_and_harvested_where_the_database_has_them(card_client, board_db):
     words = {name: rest for name, _, _, rest in _grew(card_client.get("/milestones/m3").text)}
     assert words["Harvested"] == "15 Sep 12:00"  # ``milestones.ended``
-    assert words["Growing"] == ""  # no ``started`` stored: no date made up
-    assert words["Seed"] == words["Sprouting"] == words["Planted"] == ""
+    assert words["Planted"] == ""  # no ``started`` stored: no date made up
+    assert words["Seed"] == words["Sprouting"] == ""
 
-    # f1 started on 2026-09-30 and is ripe: growing has its date, harvested none yet
+    # f1 started on 2026-09-30 and is ripe: planted has its date, harvested none yet
     words = {name: rest for name, _, _, rest in _grew(card_client.get("/milestones/f1").text)}
-    assert words["Growing"] == "30 Sep 09:00"
+    assert words["Planted"] == "30 Sep 09:00"
     assert words["Harvested"] == ""
 
     conn = metrics.open_db(board_db)
@@ -585,14 +581,18 @@ def test_how_it_grew_dates_growing_and_harvested_where_the_database_has_them(car
             metrics.upsert_milestone(conn, project, key, started="2026-10-01T08:30:00+02:00")
     finally:
         conn.close()
-    growing = _grew(card_client.get("/milestones/f24-growing").text)
-    assert [(name, rest) for name, current, _, rest in growing if current] == [
-        ("Growing", "since 1 Oct 08:30")
+    page = card_client.get("/milestones/f24-growing").text
+    assert [(name, rest) for name, current, _, rest in _grew(page) if current] == [
+        ("Planted", "growing since 1 Oct 08:30")
     ]
-    # a card not growing yet shows no growing date, even with one stored
-    planted = _grew(card_client.get("/milestones/f23-planted").text)
+    # its header says so too (F154 D4)
+    assert "Stage Planted: in line for the factory · growing since 1 Oct 08:30" in _card_head(page)
+    # a card not started yet shows no growing date, even with one stored
+    page = card_client.get("/milestones/f23-planted").text
+    planted = _grew(page)
     assert [(name, rest) for name, current, _, rest in planted if current] == [("Planted", "")]
     assert all(rest == "" for *_, rest in planted)
+    assert "growing" not in _card_head(page)
 
 
 def test_the_tickets_come_in_run_order_with_who_works_on_each(card_client):

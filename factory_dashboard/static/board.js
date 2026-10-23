@@ -35,7 +35,7 @@
   addEventListener("hashchange", () => named() && show(named()));
   show(named() || "planted");
 
-  const PLACED = ["seed", "sprouting", "planted", "growing"]; // the stages the owner orders
+  const PLACED = ["seed", "sprouting", "planted"]; // the stages the owner orders
   const bar = document.getElementById("order-bar");
   const sheet = document.getElementById("order-sheet");
   let stageOf = {}; // each open card's stage, by its key

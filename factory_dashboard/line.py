@@ -15,7 +15,7 @@ draws it (and lays it out), so its tests are on this document, plus one browser 
   ticket merged and wait for the owner's sign-off, the stash holds signed-off ones, seeds are
   tickets set aside (``later``, which lists them), planting counts the cards being planned
   with the owner (``_planting``). Its five stations' counts come from the board's cards
-  (``board.py``): seed, sprouting, planted plus growing, ripe, harvested; at a past ``at``,
+  (``board.py``), one each: seed, sprouting, planted, ripe, harvested; at a past ``at``,
   which the board doesn't know, from ``field``.
 - **A wait** (f9-01): while the live run waits instead of working, ``wait`` names the one
   machine or station it waits at and says for what (``_wait``); the floor draws it clogged.
@@ -732,7 +732,7 @@ def live_line(
         count.update(
             seeds=stages["seed"],
             planting=stages["sprouting"],
-            rows=stages["planted"] + stages["growing"],
+            rows=stages["planted"],
             ripe=stages["ripe"],
             stash=stages["harvested"] + cards.more_harvested,
         )
