@@ -1,6 +1,6 @@
 # Review: F90, a card's page shows your whole note
 
-- **Status:** review round 1 done; nothing left in the line, ready for sign-off.
+- **Status:** done, signed off by the owner on 2026-10-23.
 
 ## Sign-off sheet
 

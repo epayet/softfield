@@ -1,6 +1,7 @@
 # Milestone F90: editing seeds that i've planted but not sent to the lead…
 
-> **State:** ready · **Priority:** 3 · **Area:** factory · **Reserve:** yes
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f90-editing-seeds-that-i-ve-planted-start`. Report: [`.factory/reviews/f90-editing-seeds-that-i-ve-planted.md`](../reviews/f90-editing-seeds-that-i-ve-planted.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes
