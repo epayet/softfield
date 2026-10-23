@@ -1,6 +1,6 @@
 # Milestone F165: A point that speaks of a mock-up opens it in one tap
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-10-21.
 
 ## Notes

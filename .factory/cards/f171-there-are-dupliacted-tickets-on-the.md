@@ -1,6 +1,6 @@
 # Milestone F171: Each card once on the board, and fix tickets named after what they fix
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** ready · **Priority:** 5 · **Area:** factory
 > Planted by the owner on 2026-10-22.
 
 ## Notes

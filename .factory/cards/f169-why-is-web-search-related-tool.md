@@ -1,6 +1,6 @@
 # Milestone F169: Let the planner search and read the web for research
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-10-21.
 
 ## Notes

@@ -1,6 +1,6 @@
 # Milestone F15: Reprioritising tickets
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** ready · **Priority:** 5 · **Area:** factory
 > Planted by the owner on 2026-10-07.
 
 ## Notes
