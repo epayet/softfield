@@ -633,37 +633,32 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
     if not ideas:
         return []
 
-    # Determine state from owner_requests of the target project
-    # Product ideas → review's own project; factory ideas → the factory's project
-    target_project = project
     for idea in ideas:
-        if idea.area == "factory":
-            target_project = _factory_project(conn, project)
-            break
-    target_project_id = conn.execute(
-        "SELECT id FROM projects WHERE name = ?", (target_project,)
-    ).fetchone()
-    if target_project_id is None:
-        return ideas
-    target_project_id = target_project_id["id"]
-
-    plant_requests = conn.execute(
-        "SELECT * FROM owner_requests WHERE project_id = ? AND kind = 'plant' ORDER BY id DESC",
-        (target_project_id,),
-    ).fetchall()
-
-    # Build a list of (request, parsed_value) pairs
-    req_list: list[tuple[sqlite3.Row, dict[str, Any]]] = []
-    for req in plant_requests:
-        try:
-            value = json.loads(req["value"] or "{}")
-        except json.JSONDecodeError:
+        # Determine state from owner_requests of the idea's own target project
+        idea_project = idea.project
+        project_id_row = conn.execute(
+            "SELECT id FROM projects WHERE name = ?", (idea_project,)
+        ).fetchone()
+        if project_id_row is None:
             continue
-        if not isinstance(value, dict):
-            continue
-        req_list.append((req, value))
+        project_id = project_id_row["id"]
 
-    for idea in ideas:
+        plant_requests = conn.execute(
+            "SELECT * FROM owner_requests WHERE project_id = ? AND kind = 'plant' ORDER BY id DESC",
+            (project_id,),
+        ).fetchall()
+
+        # Build a list of (request, parsed_value) pairs
+        req_list: list[tuple[sqlite3.Row, dict[str, Any]]] = []
+        for req in plant_requests:
+            try:
+                value = json.loads(req["value"] or "{}")
+            except json.JSONDecodeError:
+                continue
+            if not isinstance(value, dict):
+                continue
+            req_list.append((req, value))
+
         req = None
         req_value: dict[str, Any] = {}
         # Try matching by request's ``from`` field first
@@ -680,14 +675,10 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
                     break
         # Then by project_id
         if req is None:
-            project_id_row = conn.execute(
-                "SELECT id FROM projects WHERE name = ?", (idea.project,)
-            ).fetchone()
-            if project_id_row is not None:
-                for r, v in req_list:
-                    if r["project_id"] == project_id_row["id"]:
-                        req, req_value = r, v
-                        break
+            for r, v in req_list:
+                if r["project_id"] == project_id:
+                    req, req_value = r, v
+                    break
         if req is None:
             continue
 

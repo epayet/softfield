@@ -1564,3 +1564,94 @@ def test_idea_on_its_way_when_done_is_null(db_path, tmp_path):
     ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f33")
     assert len(ideas) == 1
     assert ideas[0].state == "on its way"
+
+
+def test_mixed_product_factory_ideas_match_independently(db_path, tmp_path):
+    """Two ideas of one review, each with its own plant request in a different project,
+    each show their own state.
+
+    Product requests are stored in the review project; factory requests in the factory project.
+    The old code chose one target project for the whole review, so Product requests
+    stored in the review project were ignored when a Factory idea existed.
+    """
+    from factory_dashboard.milestones import review_ideas
+    from runner import metrics
+    from tests.factory_dashboard.conftest import NOW
+
+    factory_repo = tmp_path / "factory_repo"
+    (factory_repo / "runner").mkdir(parents=True)
+    (factory_repo / "factory_dashboard").mkdir(parents=True)
+    (factory_repo / "runner" / "loop.py").write_text("# loop", encoding="utf-8")
+    (factory_repo / "factory_dashboard" / "app.py").write_text("# app", encoding="utf-8")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "factory", repo=str(factory_repo))
+        review_pid = metrics.find_project(conn, PROJECT)
+        assert review_pid is not None
+        metrics.upsert_milestone(
+            conn,
+            review_pid,
+            "f34",
+            title="Milestone f34",
+            status="in progress",
+            signoff={
+                "what_next": (
+                    "- **Product:**\n  > A product idea.\n- **Factory:**\n  > A factory idea.\n"
+                )
+            },
+        )
+        # Product idea's plant request is stored in the review project
+        metrics.add_request(
+            conn,
+            review_pid,
+            "plant",
+            "",
+            json.dumps({"text": "A product idea.", "from": "f34/1"}),
+            NOW.isoformat(),
+        )
+        req_prod = conn.execute(
+            "SELECT id FROM owner_requests WHERE project_id = ? AND kind = 'plant'",
+            (review_pid,),
+        ).fetchone()
+        if req_prod and req_prod[0]:
+            conn.execute(
+                "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                (
+                    "2026-10-01T10:00:00+00:00",
+                    "planted .factory/cards/f168-product.md",
+                    req_prod[0],
+                ),
+            )
+        # Factory idea's plant request is stored in the factory project
+        factory_pid = metrics.find_project(conn, "factory")
+        assert factory_pid is not None
+        metrics.add_request(
+            conn,
+            factory_pid,
+            "plant",
+            "",
+            json.dumps({"text": "A factory idea.", "from": "f34/2"}),
+            NOW.isoformat(),
+        )
+        req_fact = conn.execute(
+            "SELECT id FROM owner_requests WHERE project_id = ? AND kind = 'plant'",
+            (factory_pid,),
+        ).fetchone()
+        if req_fact and req_fact[0]:
+            conn.execute(
+                "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                (
+                    "2026-10-01T10:00:00+00:00",
+                    "planted .factory/cards/f169-factory.md",
+                    req_fact[0],
+                ),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f34")
+    assert len(ideas) == 2
+    assert ideas[0].state == "planted"
+    assert ideas[0].card == "f168"
+    assert ideas[1].state == "planted"
+    assert ideas[1].card == "f169"
