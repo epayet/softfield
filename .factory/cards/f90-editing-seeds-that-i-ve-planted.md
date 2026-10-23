@@ -1,6 +1,6 @@
 # Milestone F90: editing seeds that i've planted but not sent to the lead…
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory · **Reserve:** yes
 > Planted by the owner on 2026-10-09.
 
 ## Notes
