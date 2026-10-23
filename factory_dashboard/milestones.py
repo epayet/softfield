@@ -11,6 +11,8 @@ ticket and savings per milestone, as small charts (D5). The list has no tab sinc
 how far it has grown, then what the page showed before, its tickets now in run order.
 """
 
+import contextlib
+import json
 import re
 import sqlite3
 from dataclasses import dataclass, replace
@@ -40,6 +42,19 @@ class AboutDoc:
     outcome_html: str
     done_when_html: str
     note: str
+
+
+@dataclass(frozen=True)
+class Idea:
+    """One idea from a review's sign-off sheet (D1, D2, D3)."""
+
+    id: str
+    text: str
+    area: str  # "product" or "factory"
+    project: str  # where it plants
+    state: str  # "plant", "on its way", "planted", "refused"
+    card: str | None  # the planted card's short key, else None
+    said: str | None  # a refusal's words, else None
 
 
 def read_card_doc(repo: Path | None, thread: str) -> AboutDoc | None:
@@ -537,3 +552,173 @@ def milestone_detail(
             "review": review,
         },
     )
+
+
+def _factory_project(conn: sqlite3.Connection, review_project: str) -> str:
+    """The factory's own project: the registered project whose repo folder holds the
+    factory's code (``runner/loop.py`` and ``factory_dashboard/app.py``); the review's
+    own project when no such project exists."""
+    try:
+        rows = conn.execute(
+            "SELECT repo FROM projects WHERE name = ?", (review_project,)
+        ).fetchall()
+    except Exception:
+        return review_project
+    for row in rows:
+        repo = row["repo"]
+        if not repo:
+            continue
+        with contextlib.suppress(Exception):
+            p = Path(repo)
+            if (
+                p.is_dir()
+                and (p / "runner" / "loop.py").is_file()
+                and (p / "factory_dashboard" / "app.py").is_file()
+            ):
+                # Check the projects table for the name
+                name_row = conn.execute(
+                    "SELECT name FROM projects WHERE repo = ?", (repo,)
+                ).fetchone()
+                if name_row is not None:
+                    return str(name_row["name"])
+    return review_project
+
+
+def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]:
+    """The review's ideas from its stored sign-off sheet, each with its area, the project it
+    plants in and whether it is planted, on its way or refused (D2, D3)."""
+    detail = get_milestone_detail(conn, project, key)
+    if detail is None or detail.signoff is None:
+        return []
+
+    sheet = detail.signoff
+    what_next = sheet.get("what_next")
+    if not what_next:
+        return []
+
+    # Parse quoted lines from all sections in order
+    ideas: list[Idea] = []
+    n = 0
+    last_bullet: str = ""  # nearest bullet above the current line
+
+    for section_key in (
+        "changed",
+        "how_to_test",
+        "decisions",
+        "what_next",
+        "later",
+        "lessons",
+        "clogged",
+    ):
+        section_text = sheet.get(section_key, "")
+        if not section_text:
+            continue
+        for line in section_text.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                last_bullet = stripped
+                continue
+            if stripped.startswith(">") and len(stripped) > 1:
+                n += 1
+                text = stripped[1:].strip()
+                # Area: product when the nearest bullet above starts with **Product
+                area = "product" if "**Product" in last_bullet else "factory"
+                # Project: product → the review's own; factory → the factory's own
+                target_project = project if area == "product" else _factory_project(conn, project)
+                ideas.append(
+                    Idea(
+                        id=f"{short_key(key)}/{n}",
+                        text=text,
+                        area=area,
+                        project=target_project,
+                        state="plant",
+                        card=None,
+                        said=None,
+                    )
+                )
+
+    if not ideas:
+        return []
+
+    # Determine state from owner_requests of the target project
+    project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
+    if project_id is None:
+        return ideas
+    project_id = project_id["id"]
+
+    plant_requests = conn.execute(
+        "SELECT * FROM owner_requests WHERE project_id = ? AND kind = 'plant' ORDER BY id DESC",
+        (project_id,),
+    ).fetchall()
+
+    # Latest request per target project
+    latest_per_project: dict[str, sqlite3.Row | None] = {}
+    for req in plant_requests:
+        try:
+            value = json.loads(req["value"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict):
+            continue
+        target = value.get("project") or value.get("area") or ""
+        if target and target not in latest_per_project:
+            latest_per_project[target] = req
+        # Also store by project_id for backward compatibility (value.project
+        # is added in the next ticket; until then the request's project_id
+        # is the only way to know which project it belongs to).
+        rid = req["project_id"]
+        if rid not in latest_per_project:
+            latest_per_project[str(rid)] = req
+
+    for idea in ideas:
+        # Try matching by project name first, then by project_id.
+        req = latest_per_project.get(idea.project)
+        if req is None:
+            # Fall back to matching by project_id
+            project_id_row = conn.execute(
+                "SELECT id FROM projects WHERE name = ?", (idea.project,)
+            ).fetchone()
+            if project_id_row is not None:
+                req = latest_per_project.get(str(project_id_row["id"]))
+        if req is None:
+            continue
+        try:
+            value = json.loads(req["value"] or "{}")
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(value, dict):
+            continue
+
+        from_id = value.get("from")
+        req_text = value.get("text", "")
+
+        # Exact match on ``from``
+        if from_id == idea.id:
+            idea = _update_idea_state(idea, req)
+        else:
+            # Hand-made plant: text matches (whitespace collapsed, final full stop ignored)
+            norm_idea = re.sub(r"\s+", " ", idea.text).strip()
+            if norm_idea.endswith("."):
+                norm_idea = norm_idea[:-1]
+            norm_req = re.sub(r"\s+", " ", req_text).strip()
+            if norm_req.endswith("."):
+                norm_req = norm_req[:-1]
+            if norm_req.startswith(norm_idea):
+                idea = _update_idea_state(idea, req)
+
+        # Rebuild the list since Idea is frozen
+        idx = next(i for i, ix in enumerate(ideas) if ix.id == idea.id)
+        ideas[idx] = idea
+
+    return ideas
+
+
+def _update_idea_state(idea: Idea, req: sqlite3.Row) -> Idea:
+    """Update an idea's state based on a plant request, returning a new Idea."""
+    if req["done"] is None:
+        return replace(idea, state="on its way")
+    result = str(req["result"] or "")
+    if result.startswith("planted "):
+        card_path = result[len("planted ") :]
+        return replace(idea, state="planted", card=short_key(Path(card_path).stem))
+    return replace(idea, state="refused", said=result)

@@ -1134,3 +1134,223 @@ def test_with_signoff_sheet_shows_individual_sections(milestone_detail_client):
     ):
         assert f'id="{sid}"' in html, f"section {sid} should exist with signoff"
     assert 'id="review-wait"' not in html
+
+
+# --- review_ideas (f164-02) -------------------------------------------------------------------
+
+
+def _make_milestone_with_what_next(db_path, project_name, key, what_next):
+    """Create a milestone with a signoff sheet containing a what_next section."""
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, project_name)
+        if pid is None:
+            pid = metrics.upsert_project(conn, project_name)
+        metrics.upsert_milestone(
+            conn,
+            pid,
+            key,
+            title=f"Milestone {key}",
+            status="in progress",
+            signoff={"what_next": what_next},
+        )
+    finally:
+        conn.close()
+    return db_path
+
+
+def _make_plant_request(db_path, project_name, value, done=None, result=None):
+    """Create a plant request in owner_requests."""
+    from tests.factory_dashboard.conftest import NOW
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, project_name)
+        assert pid is not None
+        metrics.add_request(conn, pid, "plant", "", json.dumps(value), NOW.isoformat())
+        if done is not None:
+            # Get the last request id
+            last = conn.execute(
+                "SELECT max(id) FROM owner_requests WHERE project_id = ? AND kind = 'plant'",
+                (pid,),
+            ).fetchone()
+            if last and last[0]:
+                conn.execute(
+                    "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                    (done, result or "", last[0]),
+                )
+                conn.commit()
+    finally:
+        conn.close()
+
+
+def test_a_sheet_with_what_next_holding_factory_gives_one_factory_idea(db_path):
+    """A sheet whose what_next holds \"- **Factory:**\" then an indented \"> Plans: …\" line
+    gives one factory idea with id \"f19/1\" and that text, without the \">\"."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = (
+        "- **Product:** on hold, as you asked.\n"
+        "- **Factory:**\n"
+        "  - A plan check that each Done-when line is named by a ticket's Done when.\n"
+        "    This is the third milestone where an outcome fell between tickets.\n"
+        "    Worth a planted card:\n"
+        "    > Plans: every Done-when line of a card is carried by at least one\n"
+        "    ticket's Done when, checked when the plan is approved, so no outcome\n"
+        "    falls between tickets.\n"
+    )
+    _make_milestone_with_what_next(db_path, PROJECT, "f19", what_next)
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f19")
+    assert len(ideas) == 1
+    idea = ideas[0]
+    assert idea.id == "f19/1"
+    assert "Plans: every Done-when line" in idea.text
+    assert idea.area == "factory"
+    assert idea.state == "plant"
+    assert idea.card is None
+    assert idea.said is None
+
+
+def test_a_quoted_line_under_product_is_a_product_idea(db_path):
+    """A quoted line under \"- **Product:**\" is a product idea."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = (
+        "- **Product:**\n  > A new feature for users.\n- **Factory:**\n  > A factory improvement.\n"
+    )
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert len(ideas) == 2
+    assert ideas[0].area == "product"
+    assert ideas[1].area == "factory"
+
+
+def test_a_factory_idea_plants_in_the_factory_s_own_project(db_path):
+    """A factory idea from another project's review plants in the project whose folder
+    holds the factory's code."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = "- **Factory:**\n  > A factory idea.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert len(ideas) == 1
+    # Since the review's project (coucou) doesn't have the factory code,
+    # it should default to the review's own project
+    assert ideas[0].project == PROJECT
+
+
+def test_a_product_idea_plants_in_the_review_s_own_project(db_path):
+    """A product idea plants in the review's own project."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = "- **Product:**\n  > A product idea.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert len(ideas) == 1
+    assert ideas[0].project == PROJECT
+
+
+def test_no_plant_request_gives_plant_state(db_path):
+    """No plant request: \"plant\"."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = "- **Factory:**\n  > A factory idea.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert len(ideas) == 1
+    assert ideas[0].state == "plant"
+
+
+def test_done_with_planted_result_gives_planted_state(db_path):
+    """One whose ``from`` is the id and ``done`` is not NULL with \"planted .factory/cards/…\":
+    \"planted\" with card \"f166\"."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = "- **Factory:**\n  > Plans: every Done-when line of a card.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f19", what_next)
+    _make_plant_request(
+        db_path,
+        PROJECT,
+        {"text": "Plans: every Done-when line of a card.", "from": "f19/1"},
+        done="2026-10-01T10:00:00+00:00",
+        result="planted .factory/cards/f166-plans-every-done-when-line-of.md",
+    )
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f19")
+    assert len(ideas) == 1
+    assert ideas[0].state == "planted"
+    assert ideas[0].card == "f166"
+    assert ideas[0].said is None
+
+
+def test_done_with_other_result_gives_refused_state(db_path):
+    """Done with any other result: \"refused\" with that result."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = "- **Factory:**\n  > A factory idea.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    _make_plant_request(
+        db_path,
+        PROJECT,
+        {"text": "A factory idea.", "from": "f28/1"},
+        done="2026-10-01T10:00:00+00:00",
+        result="not enough time",
+    )
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert len(ideas) == 1
+    assert ideas[0].state == "refused"
+    assert ideas[0].said == "not enough time"
+
+
+def test_hand_made_plant_counts_as_planted(db_path):
+    """A hand-made plant whose text is the idea's without its final full stop counts as planted."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = "- **Factory:**\n  > Plans: every Done-when line of a card.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f19", what_next)
+    _make_plant_request(
+        db_path,
+        PROJECT,
+        {"text": "Plans: every Done-when line of a card"},  # no final full stop
+        done="2026-10-01T10:00:00+00:00",
+        result="planted .factory/cards/f166-plans-every-done-when-line-of.md",
+    )
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f19")
+    assert len(ideas) == 1
+    assert ideas[0].state == "planted"
+    assert ideas[0].card == "f166"
+
+
+def test_no_quoted_line_gives_no_ideas(db_path):
+    """A sheet with no quoted line gives no ideas."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = "- **Factory:**\n  - A plain bullet.\n"
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert ideas == []
+
+
+def test_no_sheet_gives_no_ideas(db_path):
+    """No sheet gives no ideas."""
+    from factory_dashboard.milestones import review_ideas
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_milestone(conn, pid, "f99-no-sheet", title="No sheet", status="in progress")
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f99-no-sheet")
+    assert ideas == []
+
+
+def test_no_what_next_gives_no_ideas(db_path):
+    """A sheet with no what_next gives no ideas."""
+    from factory_dashboard.milestones import review_ideas
+
+    what_next = ""
+    _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
+    assert ideas == []
