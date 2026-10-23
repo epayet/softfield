@@ -28,3 +28,10 @@ Read `.factory/cards/f90-editing-seeds-that-i-ve-planted.md` (Why it happens, D1
 - a project whose repo isn't a folder here: the page renders, no `#note`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 2
+```
