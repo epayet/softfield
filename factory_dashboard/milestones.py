@@ -55,10 +55,13 @@ def read_card_doc(repo: Path | None, thread: str) -> AboutDoc | None:
     except OSError:
         return None
     doc = milestone_doc(text)
+    note = _note(repo, thread)
+    if doc.get("outcome") is None and doc.get("done_when") is None and not note:
+        return None
     return AboutDoc(
         outcome_html=_to_html(doc.get("outcome")),
         done_when_html=_to_html(doc.get("done_when")),
-        note=_note(repo, thread),
+        note=note,
     )
 
 

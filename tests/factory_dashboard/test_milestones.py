@@ -984,6 +984,116 @@ def test_a_card_with_neither_outcome_nor_note_says_nothing_written(card_nothing_
     assert 'href="/planning/f1' in html
 
 
+@pytest.fixture
+def card_stored_outcome_client(db_path, tmp_path):
+    """A project whose repo points to a temp dir with a card doc
+    that has neither Outcome nor Notes, but the milestone has a stored outcome."""
+    from factory_dashboard.app import create_app, get_now
+
+    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir.mkdir(parents=True)
+    cards_dir.joinpath("f1-test.md").write_text(
+        "---\n"
+        "id: f1-test\n"
+        "milestone: f1\n"
+        "agent: developer\n"
+        "files: []\n"
+        "tests: []\n"
+        "priority: 1\n"
+        "area: factory\n"
+        "---\n"
+        "# Milestone F1: Test card\n"
+        "\n"
+        "> **State:** planted · **Priority:** 1 · **Area:** factory\n",
+        encoding="utf-8",
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_project(conn, PROJECT, repo=str(tmp_path))
+        metrics.upsert_milestone(
+            conn,
+            pid,
+            "f1",
+            status="in progress",
+            outcome="The factory now measures itself end-to-end.",
+            done_when="- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`.",
+        )
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def card_done_when_only_client(db_path, tmp_path):
+    """A project whose repo points to a temp dir with a card doc
+    that has only Done when (no Outcome, no Notes)."""
+    from factory_dashboard.app import create_app, get_now
+
+    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir.mkdir(parents=True)
+    cards_dir.joinpath("f1-test.md").write_text(
+        "---\n"
+        "id: f1-test\n"
+        "milestone: f1\n"
+        "agent: developer\n"
+        "files: []\n"
+        "tests: []\n"
+        "priority: 1\n"
+        "area: factory\n"
+        "---\n"
+        "# Milestone F1: Test card\n"
+        "\n"
+        "> **State:** planted · **Priority:** 1 · **Area:** factory\n"
+        "\n"
+        "## Done when\n"
+        "- The card doc has no Outcome or Notes\n"
+        "- But the done when shows\n",
+        encoding="utf-8",
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_project(conn, PROJECT, repo=str(tmp_path))
+        metrics.upsert_milestone(conn, pid, "f1", status="in progress")
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_a_card_doc_with_neither_outcome_nor_notes_shows_stored_outcome(card_stored_outcome_client):
+    """A card doc with neither Outcome nor Notes, and a stored outcome,
+    shows the stored outcome in #about."""
+    html = card_stored_outcome_client.get("/milestones/f1").text
+    about = section(html, "about")
+    assert "What it will do" in about
+    assert "The factory now measures itself end-to-end." in about
+    assert "Done when" in about
+    assert "All tickets in" in about
+    # the outcome is a real list, not its tags as text (section() unescapes, so check the HTML)
+    assert "<p>The factory now measures itself end-to-end.</p>" in html
+    assert "&lt;p&gt;" not in html
+
+
+def test_a_card_doc_with_only_done_when_shows_it(card_done_when_only_client):
+    """A card doc with only ## Done when (no Outcome, no Notes)
+    shows 'Done when' and its items in #about."""
+    html = card_done_when_only_client.get("/milestones/f1").text
+    about = section(html, "about")
+    assert "Done when" in about
+    assert "The card doc has no Outcome or Notes" in about
+    assert "But the done when shows" in about
+    # the done_when items are real <li>, not escaped
+    assert "<li>The card doc has no Outcome or Notes</li>" in html
+    assert "&lt;li&gt;" not in html
+
+
 def test_a_project_with_no_local_repo_shows_stored_outcome(no_repo_client):
     """A project whose repo isn't a local folder shows the stored outcome, and the page renders."""
     resp = no_repo_client.get("/milestones/f1")

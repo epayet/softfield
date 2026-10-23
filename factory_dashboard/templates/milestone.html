@@ -32,21 +32,26 @@
   <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
   <div class="body">
     {# outcome_html and done_when_html are escaped by _to_html; the note is plain text #}
+    {% if about.outcome_html or about.done_when_html or about.note %}
     {% if about.outcome_html %}
     <p class="label">What it will do</p>
     {{ about.outcome_html | safe }}
+    {% endif %}
     {% if about.done_when_html %}
     <p class="label">Done when</p>
     {{ about.done_when_html | safe }}
     {% endif %}
-    {% if about.note %}
+    {% if about.note and about.outcome_html %}
     <details><summary>Your note ›</summary>
       <p class="note">{{ about.note }}</p></details>
-    {% endif %}
-    {% elif about.note %}
+    {% elif not about.outcome_html and not about.done_when_html and about.note %}
     <p class="label">Your note</p>
     <p class="note">{{ about.note }}</p>
     <p class="later">The lead writes what it will do when it plans the card.</p>
+    {% else %}
+    <p class="later">Nothing written about it yet.</p>
+    <p class="later"><a href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a></p>
+    {% endif %}
     {% else %}
     <p class="later">Nothing written about it yet.</p>
     <p class="later"><a href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a></p>
