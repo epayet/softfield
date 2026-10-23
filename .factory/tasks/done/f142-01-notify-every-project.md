@@ -30,3 +30,12 @@ Read `.factory/cards/f142-why-am-i-not-getting-notifications.md` (D1, D2), then 
 - a new item on project B while a page on A is open: one notification
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 4628
+gate_failures: []
+tokens: 5400008
+```
