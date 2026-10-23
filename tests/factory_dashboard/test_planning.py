@@ -2472,7 +2472,12 @@ def test_a_lead_message_with_empty_proposals_keeps_earlier_on_thread_and_review(
     )
     # The thread should still show the earlier proposal with its approve button
     thread_html = _thread(serve(), "f9")
-    assert "Parallel, said twice" in _text(thread_html)
+    text = _text(thread_html)
+    assert "Parallel, said twice" in text
+    # The link to the proposal's review page is on the thread
+    assert 'href="/planning/f9/proposals/merge-f9?' in thread_html
+    # The proposal card shows it is still open
+    assert '<span class="state">open</span>' in thread_html
     # The review page should show the proposal as open, not "replaced"
     review_html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert "Replaced by a newer reply" not in _text(review_html)
