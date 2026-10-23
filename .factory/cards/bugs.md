@@ -12,5 +12,5 @@
 - `runner milestone bugs`, `runner review --milestone bugs` and `runner signoff bugs` refuse: there is nothing to plan, review or sign off.
 
 ## Where bugs come from
-- The backlog (`docs/backlog.md`), which the lead turns into bug tickets over time (f5-13).
+- The backlog (`docs/backlog.md`), which the lead turns into bug tickets over time. The first pass (f5-13, 2026-10-23) set aside bug-05 to bug-47 in `.factory/tasks/later/`, each with a starting `priority:` (factory first, should-fix first) that the board's drag then owns; what stayed in the backlog says why.
 - A finding that doesn't belong to a running milestone.
