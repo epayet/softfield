@@ -27,9 +27,9 @@
 {% if parsed and (parsed.goal or parsed.done_when or parsed.context) %}
 <section id="goal" class="panel readable">
   <h2>Goal &amp; Done when <span class="src">from the ticket</span></h2>
-  {% if parsed.goal %}<h4>Goal</h4><p>{{ parsed.goal }}</p>{% endif %}
+  {% if parsed.goal %}<h4>Goal</h4>{% for block in parsed.goal %}{% if block.type == "paragraph" %}<p>{{ block.text }}</p>{% elif block.type == "list" %}<ul>{% for item in block.items %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}{% endfor %}{% endif %}
   {% if parsed.done_when %}<h4>Done when</h4><ul>{% for item in parsed.done_when %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
-  {% if parsed.context %}<details><summary>The lead's notes for the agent</summary><p>{{ parsed.context }}</p></details>{% endif %}
+  {% if parsed.context %}<details><summary>The lead's notes for the agent</summary>{% for block in parsed.context %}{% if block.type == "paragraph" %}<p>{{ block.text }}</p>{% elif block.type == "list" %}<ul>{% for item in block.items %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}{% endfor %}</details>{% endif %}
 </section>
 {% elif ticket.body %}
 <section id="goal" class="panel">

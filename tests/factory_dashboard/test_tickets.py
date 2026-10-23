@@ -479,7 +479,7 @@ def test_milestone_ticket_without_priority_shows_milestone_priority(later_priori
 
 
 def test_parse_ticket_body_extracts_goal_done_when_context():
-    from factory_dashboard.tickets import parse_ticket_body
+    from factory_dashboard.tickets import Paragraph, parse_ticket_body
 
     body = (
         "---\nid: f1-01\npriority: 50\n---\n\n"
@@ -488,28 +488,73 @@ def test_parse_ticket_body_extracts_goal_done_when_context():
         "### Done when\n- item one\n- item two\n"
     )
     parsed = parse_ticket_body(body)
-    assert parsed.goal == "A goal paragraph."
-    assert parsed.context == "The lead's notes."
+    assert parsed.goal == [Paragraph(text="A goal paragraph.")]
+    assert parsed.context == [Paragraph(text="The lead's notes.")]
     assert parsed.done_when == ["item one", "item two"]
 
 
 def test_parse_ticket_body_without_front_matter():
-    from factory_dashboard.tickets import parse_ticket_body
+    from factory_dashboard.tickets import Paragraph, parse_ticket_body
 
     body = "### Goal\nA goal.\n\n### Done when\n- done\n"
     parsed = parse_ticket_body(body)
-    assert parsed.goal == "A goal."
+    assert parsed.goal == [Paragraph(text="A goal.")]
     assert parsed.done_when == ["done"]
 
 
 def test_parse_ticket_body_without_known_headings():
-    from factory_dashboard.tickets import parse_ticket_body
+    from factory_dashboard.tickets import Paragraph, parse_ticket_body
 
     body = "### Context\nJust context.\n"
     parsed = parse_ticket_body(body)
     assert parsed.goal is None
     assert parsed.done_when is None
-    assert parsed.context == "Just context."
+    assert parsed.context == [Paragraph(text="Just context.")]
+
+
+def test_context_with_intro_bullets_and_paragraph_becomes_three_blocks():
+    """Context of "Intro line.\n- first\n- second\n\nLast paragraph."
+    shows as a paragraph, a list of two items and a paragraph."""
+    from factory_dashboard.tickets import ListBlock, Paragraph, parse_ticket_body
+
+    body = (
+        "### Goal\nA goal.\n\n"
+        "### Context\nIntro line.\n- first\n- second\n\nLast paragraph.\n\n"
+        "### Done when\n- done\n"
+    )
+    parsed = parse_ticket_body(body)
+    assert parsed.context == [
+        Paragraph(text="Intro line."),
+        ListBlock(items=["first", "second"]),
+        Paragraph(text="Last paragraph."),
+    ]
+
+
+def test_goal_with_two_paragraphs_shows_as_two_blocks():
+    """A Goal of two paragraphs shows as two paragraph blocks."""
+    from factory_dashboard.tickets import Paragraph, parse_ticket_body
+
+    body = "### Goal\nFirst paragraph.\n\nSecond paragraph.\n\n### Done when\n- done\n"
+    parsed = parse_ticket_body(body)
+    assert parsed.goal == [
+        Paragraph(text="First paragraph."),
+        Paragraph(text="Second paragraph."),
+    ]
+
+
+def test_bullet_wrapped_over_two_lines_is_one_list_item():
+    """A bullet wrapped over two lines is one list item holding both lines."""
+    from factory_dashboard.tickets import ListBlock, parse_ticket_body
+
+    body = (
+        "### Goal\nA goal.\n\n"
+        "### Context\n- a bullet that wraps\n  over two lines\n\n"
+        "### Done when\n- done\n"
+    )
+    parsed = parse_ticket_body(body)
+    assert parsed.context == [
+        ListBlock(items=["a bullet that wraps over two lines"]),
+    ]
 
 
 def test_a_later_ticket_page_shows_set_aside_panel(later_client):

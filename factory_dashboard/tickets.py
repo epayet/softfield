@@ -23,10 +23,68 @@ router = APIRouter()
 
 
 @dataclass(frozen=True)
+class Paragraph:
+    type: str = "paragraph"
+    text: str = ""
+
+
+@dataclass(frozen=True)
+class ListBlock:
+    type: str = "list"
+    items: list[str] | None = None
+
+    def __post_init__(self) -> None:
+        if self.items is None:
+            object.__setattr__(self, "items", [])
+
+
+@dataclass(frozen=True)
 class ParsedBody:
-    goal: str | None = None
+    goal: list[Paragraph | ListBlock] | None = None
     done_when: list[str] | None = None
-    context: str | None = None
+    context: list[Paragraph | ListBlock] | None = None
+
+
+def _parse_blocks(text: str) -> list[Paragraph | ListBlock]:
+    """Parse text into a list of paragraph and list blocks.
+
+    A blank line starts a new block. Lines starting with ``- `` begin or
+    continue a list. A non-bullet line immediately after a bullet continues
+    that bullet's text (joined with a space).
+    """
+    lines = text.split("\n")
+    blocks: list[Paragraph | ListBlock] = []
+    current_items: list[str] | None = None
+    para_text: str | None = None
+
+    for line in lines:
+        if not line.strip():
+            if current_items is not None:
+                blocks.append(ListBlock(items=current_items))
+                current_items = None
+            if para_text is not None:
+                blocks.append(Paragraph(text=para_text))
+                para_text = None
+        elif line.startswith("- ") and current_items is None:
+            if para_text is not None:
+                blocks.append(Paragraph(text=para_text))
+                para_text = None
+            current_items = [line[2:]]
+        elif line.startswith("- ") and current_items is not None:
+            current_items.append(line[2:])
+        elif current_items is not None:
+            current_items[-1] = current_items[-1] + " " + line.strip()
+        elif para_text is None:
+            para_text = line.strip()
+        else:
+            para_text = para_text + " " + line.strip()
+
+    if current_items is not None:
+        blocks.append(ListBlock(items=current_items))
+    if para_text is not None:
+        blocks.append(Paragraph(text=para_text))
+
+    return blocks
 
 
 def parse_ticket_body(body: str) -> ParsedBody:
@@ -55,19 +113,19 @@ def parse_ticket_body(body: str) -> ParsedBody:
     if current_heading is not None:
         sections[current_heading] = "\n".join(current_lines)
 
-    goal: str | None = None
+    goal: list[Paragraph | ListBlock] | None = None
     done_when: list[str] | None = None
-    context: str | None = None
+    context: list[Paragraph | ListBlock] | None = None
 
     for heading, content in sections.items():
         stripped = content.strip()
         if heading == "Goal":
-            goal = stripped
+            goal = _parse_blocks(stripped)
         elif heading == "Done when":
             items = [line for line in stripped.split("\n") if line.strip()]
             done_when = [line[2:] for line in items if line.startswith("- ")] or items
         elif heading == "Context":
-            context = stripped
+            context = _parse_blocks(stripped)
 
     return ParsedBody(goal=goal, done_when=done_when, context=context)
 
