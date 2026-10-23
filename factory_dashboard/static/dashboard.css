@@ -758,6 +758,29 @@ body.has-order-bar main { padding-bottom: 120px; }
   .board-filter input[type=search] { width: 100%; font-size: 15px; }
 }
 
+/* A set-aside ticket's plate panel (f159) */
+.aside { position: relative; border-color: var(--hazard); padding-top: 0; }
+.aside .plate { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+  background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px) left / 14px 100% no-repeat, var(--plate);
+  border-bottom: 1px solid var(--rule); padding-left: 26px; }
+.aside .plate b { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+.aside .plate span { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+.aside::before, .aside::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--ink-2); }
+.aside::before { left: -1px; bottom: -1px; border-width: 0 0 2px 2px; }
+.aside::after { right: -1px; bottom: -1px; border-width: 0 2px 2px 0; }
+.aside .say { font-size: 15px; margin: 0 0 6px; }
+.aside .then { color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px; }
+.aside .go { font: 700 14px var(--display); letter-spacing: .08em; text-transform: uppercase; min-height: 44px; padding: 0 20px;
+  background: var(--hazard); color: var(--hazard-ink); border: 0; cursor: pointer; }
+.aside .way { display: none; border: 1px dashed var(--hazard); padding: 8px 10px; font: 600 12px/1.4 var(--mono); color: var(--hazard); }
+.aside.sent .go { display: none; } .aside.sent .way { display: block; }
+/* Parsed ticket body: headings and list */
+.readable h4 { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; }
+.readable h4:first-child { margin-top: 0; }
+.readable p, .readable ul { margin: 0; } .readable ul { padding-left: 18px; }
+.readable details { margin-top: 10px; color: var(--ink-2); font-size: 13.5px; }
+.readable summary { color: var(--accent); }
+
 /* The Projects page (ADR 30 item 6, .factory/cards/projects-page-mockup/projects.html) */
 .projects-page .rank { list-style: none; margin: 0; padding: 0; }
 .projects-page .muted { color: var(--muted); }

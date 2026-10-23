@@ -476,3 +476,168 @@ def test_milestone_ticket_without_priority_shows_milestone_priority(later_priori
     for ticket, priority in rows:
         if ticket == "f1-98-milestone":
             assert priority == "10"
+
+
+def test_parse_ticket_body_extracts_goal_done_when_context():
+    from factory_dashboard.tickets import parse_ticket_body
+
+    body = (
+        "---\nid: f1-01\npriority: 50\n---\n\n"
+        "### Goal\nA goal paragraph.\n\n"
+        "### Context\nThe lead's notes.\n\n"
+        "### Done when\n- item one\n- item two\n"
+    )
+    parsed = parse_ticket_body(body)
+    assert parsed.goal == "A goal paragraph."
+    assert parsed.context == "The lead's notes."
+    assert parsed.done_when == ["item one", "item two"]
+
+
+def test_parse_ticket_body_without_front_matter():
+    from factory_dashboard.tickets import parse_ticket_body
+
+    body = "### Goal\nA goal.\n\n### Done when\n- done\n"
+    parsed = parse_ticket_body(body)
+    assert parsed.goal == "A goal."
+    assert parsed.done_when == ["done"]
+
+
+def test_parse_ticket_body_without_known_headings():
+    from factory_dashboard.tickets import parse_ticket_body
+
+    body = "### Context\nJust context.\n"
+    parsed = parse_ticket_body(body)
+    assert parsed.goal is None
+    assert parsed.done_when is None
+    assert parsed.context == "Just context."
+
+
+def test_a_later_ticket_page_shows_set_aside_panel(later_client):
+    """D2: a ticket in state `later` starts with a Set aside panel and a Queue it button."""
+    html = later_client.get("/tickets/f1-99-later").text
+    assert re.search(r'<section[^>]*\bid="aside"', html, re.S)
+    assert "This ticket won't run until you queue it." in html
+    assert re.search(r'<button[^>]*class="go"[^>]*>Queue it</button>', html, re.S)
+
+
+def test_a_later_ticket_page_state_pill_says_set_aside(later_client):
+    """`later` reads "set aside" in the Result section's State pill."""
+    html = later_client.get("/tickets/f1-99-later").text
+    result = section(html, "result")
+    assert "set aside" in result
+
+
+def test_a_set_aside_ticket_page_shows_parsed_body_as_text(db_path, later_client):
+    """D3: Goal as a paragraph, Done when as a list, Context folded; no front-matter line."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-96-parsed",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="Parsed body ticket.",
+            body=(
+                "---\nid: f1-96-parsed\n---\n\n"
+                "### Goal\nA parsed goal.\n\n"
+                "### Done when\n- item one\n- item two\n"
+            ),
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets/f1-96-parsed").text
+    # Check the goal section exists and has parsed content
+    goal_section = section_raw(html, "goal")
+    assert "A parsed goal." in goal_section
+    assert "item one" in goal_section
+    assert "item two" in goal_section
+    # No front matter
+    assert "id: f1-96-parsed" not in goal_section
+    assert "---" not in goal_section
+    # Should use readable panel (parsed body), not raw pre
+    assert "<ul>" in goal_section
+    assert "<li>" in goal_section
+
+
+def test_a_non_later_ticket_has_no_set_aside_panel(tickets_client):
+    """A ticket in any other state has no set-aside panel."""
+    html = tickets_client.get("/tickets/f1-10-ticket-a").text
+    assert re.search(r'<section[^>]*\bid="aside"', html, re.S) is None
+
+
+def test_a_ticket_with_parsed_body_folds_context(db_path, later_client):
+    """Context shows inside a closed <details> element."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-95-context",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="Context ticket.",
+            body=(
+                "---\nid: f1-95-context\n---\n\n"
+                "### Goal\nA goal.\n\n"
+                "### Context\nThe lead's notes for the agent.\n\n"
+                "### Done when\n- done\n"
+            ),
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets/f1-95-context").text
+    goal_section = section_raw(html, "goal")
+    assert "<details>" in goal_section
+    assert "<summary>" in goal_section
+    assert "The lead&#39;s notes for the agent." in goal_section
+
+
+def test_later_ticket_page_on_its_way_message(db_path, later_client):
+    """With an open queue request for the ticket, the panel shows on its way and no button."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-94-later",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="On its way ticket.",
+        )
+        # Add an open queue request for this ticket
+        from tests.factory_dashboard.conftest import _at
+
+        metrics.add_request(conn, project, "queue", "f1-94-later", "", _at(timedelta(minutes=5)))
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets/f1-94-later").text
+    # The panel should be marked as "sent"
+    aside_match = re.search(r'<section[^>]*\bid="aside"[^>]*class="([^"]*)"', html, re.S)
+    assert aside_match, "no aside section"
+    assert "sent" in aside_match.group(1)
+    # No Queue it button
+    assert re.search(r'<button[^>]*class="go"', html, re.S) is None
+    # On its way message
+    assert "on its way" in html.lower()

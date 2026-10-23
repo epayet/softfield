@@ -5,6 +5,7 @@
 """
 
 import json
+import re
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -17,6 +18,56 @@ from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.queries import ticket_priority
 
 router = APIRouter()
+
+
+@dataclass(frozen=True)
+class ParsedBody:
+    goal: str | None = None
+    done_when: list[str] | None = None
+    context: str | None = None
+
+
+def parse_ticket_body(body: str) -> ParsedBody:
+    """Parse a ticket body: front matter between ``---`` lines, then ``###`` sections."""
+    # Strip front matter
+    text = body
+    if text.startswith("---"):
+        end = text.find("---", 3)
+        if end != -1:
+            text = text[end + 3 :].strip()
+
+    sections: dict[str, str] = {}
+    current_heading: str | None = None
+    current_lines: list[str] = []
+
+    for line in text.split("\n"):
+        m = re.match(r"^###\s+(.+)", line)
+        if m:
+            if current_heading is not None:
+                sections[current_heading] = "\n".join(current_lines)
+            current_heading = m.group(1).strip()
+            current_lines = []
+        else:
+            current_lines.append(line)
+
+    if current_heading is not None:
+        sections[current_heading] = "\n".join(current_lines)
+
+    goal: str | None = None
+    done_when: list[str] | None = None
+    context: str | None = None
+
+    for heading, content in sections.items():
+        stripped = content.strip()
+        if heading == "Goal":
+            goal = stripped
+        elif heading == "Done when":
+            items = [line for line in stripped.split("\n") if line.strip()]
+            done_when = [line[2:] for line in items if line.startswith("- ")] or items
+        elif heading == "Context":
+            context = stripped
+
+    return ParsedBody(goal=goal, done_when=done_when, context=context)
 
 
 @dataclass(frozen=True)
@@ -417,6 +468,25 @@ def ticket_page(
     if ticket_row:
         agent_work = ticket_agent_work(conn, ticket_row["id"])
 
+    # Set-aside info: only for tickets with state "later"
+    is_later = detail.state == "later"
+    on_its_way = False
+    later_priority: int | None = None
+    if is_later and ticket_row:
+        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()[
+            "id"
+        ]
+        open_reqs = conn.execute(
+            "SELECT subject FROM owner_requests "
+            "WHERE project_id = ? AND kind = 'queue' AND done IS NULL",
+            (project_id,),
+        ).fetchall()
+        on_its_way = any(r["subject"] == ticket_id for r in open_reqs)
+        later_priority = ticket_priority(detail.body, detail.milestone, None)
+
+    # Parse ticket body for Goal, Done when, Context
+    parsed = parse_ticket_body(detail.body) if detail.body else None
+
     return render(
         request,
         conn,
@@ -428,5 +498,9 @@ def ticket_page(
             "jobs": jobs,
             "findings": findings,
             "agent_work": agent_work,
+            "is_later": is_later,
+            "on_its_way": on_its_way,
+            "later_priority": later_priority,
+            "parsed": parsed,
         },
     )

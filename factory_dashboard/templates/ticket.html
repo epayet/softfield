@@ -7,7 +7,30 @@
 {% block content %}
 <div class="page">
 
-{% if ticket.body %}
+{% if is_later %}
+<section id="aside" class="panel aside{% if on_its_way %} sent{% endif %}">
+  <div class="plate"><b>Set aside</b><span>.factory/tasks/later/</span></div>
+  <p class="say">This ticket won't run until you queue it.</p>
+  <p class="then">Queued, it joins the line at priority {{ later_priority }}, behind the tickets that go first; move it on the board once it is there.</p>
+  {% if not on_its_way %}
+  <button type="button" class="go" id="queue" hx-post="/requests" hx-swap="outerHTML"
+    hx-target="#ticket-aside-status"
+    hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ ticket.ticket | tojson }}}'
+    hx-on::before-request="this.disabled = true">Queue it</button>
+  {% else %}
+  <div class="way" id="ticket-aside-status">Queue it · on its way · at the runner's next pick</div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if parsed and (parsed.goal or parsed.done_when or parsed.context) %}
+<section id="goal" class="panel readable">
+  <h2>Goal &amp; Done when <span class="src">from the ticket</span></h2>
+  {% if parsed.goal %}<h4>Goal</h4><p>{{ parsed.goal }}</p>{% endif %}
+   {% if parsed.done_when %}<h4>Done when</h4><ul>{% for item in parsed.done_when %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+  {% if parsed.context %}<details><summary>The lead's notes for the agent</summary><p>{{ parsed.context }}</p></details>{% endif %}
+</section>
+{% elif ticket.body %}
 <section id="goal" class="panel">
   <h2>Goal &amp; Done when <span class="src">from the ticket body</span></h2>
   <pre style="white-space:pre-wrap;margin:0">{{ ticket.body }}</pre>
@@ -44,7 +67,7 @@
 <section id="result" class="panel">
   <h2>Result <span class="src">state, merged by, commit, lines changed</span></h2>
   <dl class="kv">
-    <dt>State</dt><dd><span class="pill {% if ticket.state == 'done' %}good{% elif ticket.state == 'escalated' %}serious{% elif ticket.state == 'running' %}running{% else %}{% endif %}">{{ ticket.state or "–" }}</span></dd>
+    <dt>State</dt><dd><span class="pill {% if ticket.state == 'done' %}good{% elif ticket.state == 'escalated' %}serious{% elif ticket.state == 'running' %}running{% endif %}">{{ "set aside" if ticket.state == "later" else (ticket.state or "–") }}</span></dd>
     {% if ticket.merged_by %}<dt>Merged by</dt><dd><span class="mono">{{ ticket.merged_by }}</span></dd>{% endif %}
     {% if ticket.commit %}<dt>Commit</dt><dd><span class="mono">{{ ticket.commit }}</span></dd>{% endif %}
     {% if ticket.lines_changed is not none %}<dt>Lines changed</dt><dd class="num">{{ ticket.lines_changed }}</dd>{% endif %}

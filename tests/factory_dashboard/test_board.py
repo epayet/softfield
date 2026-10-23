@@ -290,7 +290,6 @@ def test_an_empty_milestone_with_no_state_but_with_status_makes_no_card(board_db
 def test_a_set_aside_bug_is_a_seed_marked_as_a_bug_and_planted_once_ready(board_db):
     bug = card(read(board_db), "bug-01-duck-count")
     assert (bug.stage, bug.bug, bug.area, bug.kind) == ("seed", True, "factory", "bug")
-    assert bug.note == "ticket written, set aside"
     assert (bug.full_key, bug.title, bug.priority) == (
         "bug-01-duck-count",
         "Goal of bug-01-duck-count.",
@@ -303,6 +302,16 @@ def test_a_set_aside_bug_is_a_seed_marked_as_a_bug_and_planted_once_ready(board_
     )
     bug = card(read(board_db), "bug-01-duck-count")
     assert (bug.stage, bug.note, bug.started) == ("planted", "", False)
+
+
+def test_a_set_aside_bug_card_shows_set_aside_action_on_the_board(board_db, board_client):
+    """A set-aside bug card on the board reads
+    "Set aside, won't run until you queue it ›" as a card-action."""
+    html = _page(board_client)
+    # bug-01-duck-count is set aside (seed stage)
+    _classes, words, raw = _card(html, "/tickets/bug-01-duck-count")
+    assert "Set aside, won't run until you queue it" in words
+    assert "card-action" in raw
 
 
 def test_a_bug_grows_while_it_runs_or_is_stuck_and_is_harvested_once_done(board_db):
@@ -765,7 +774,7 @@ def test_a_bug_card_says_bug_and_links_to_its_ticket_page(board_client):
     assert "bug" in classes  # the striped edge
     assert "factory" in classes
     assert "bug · factory" in words
-    assert "ticket written, set aside" in words
+    assert "Set aside, won't run until you queue it" in words
     classes, words, _ = _card(html, "/milestones/f20-duck-pond")
     assert "bug" not in classes
     assert "product" in classes
