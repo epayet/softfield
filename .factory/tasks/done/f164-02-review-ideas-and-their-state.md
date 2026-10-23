@@ -28,3 +28,12 @@ Read `.factory/cards/f164-i-like-reading-the-milestone-reviews.md` (D2, D3) and 
 - a sheet with no quoted line, or no sheet, gives no ideas
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2211
+gate_failures: []
+tokens: 3353988
+```
