@@ -10,6 +10,19 @@
     <header id="card" style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column">
       {% if card_meta %}<span style="font: 600 12px var(--mono); color: var(--muted)">{{ card_meta }}</span>{% endif %}
       <h2 style="margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">{{ card_title }}</h2>
+      {# a planted or growing card's reserve lever (F172 D6), as the allowance panel's: one pulled
+         shows on its way until the runner writes the mark #}
+      {% if reserve_lever %}
+      <div id="reserve-bay" class="reserve-bay">
+        <button type="button" class="lever{{ ' on-its-way' if reserve_lever.asked }}" role="switch"
+          aria-checked="{{ 'true' if reserve_lever.on else 'false' }}"
+          title="{{ 'asked: ' ~ reserve_lever.asked if reserve_lever.asked else "may use Claude's reserve" }}"
+          hx-post="/requests" hx-swap="none"
+          hx-vals='{"kind": "reserve", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if reserve_lever.on else "on") | tojson }}}'
+          hx-on::before-request="this.classList.add('on-its-way'); this.disabled = true"{{ ' disabled' if reserve_lever.asked }}>may use Claude's reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+        <small>Comes before Claude's reserves: its lead tickets, and the ones they wait for, use the week's reserve and your 25% of the 5-hour window, with both switches off. Ends by itself when its tickets are done.</small>
+      </div>
+      {% endif %}
       {% for link in merged_into %}
       <a href="{{ link.link }}{{ q }}" class="merged-into" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{% if card_on_main %}An earlier {{ thread | upper }} was merged into {% else %}Merged into {% endif %}{{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
       {% endfor %}

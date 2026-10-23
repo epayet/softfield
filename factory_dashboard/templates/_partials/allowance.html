@@ -43,6 +43,12 @@
         {% endif %}
       </div>
     </div>
+    {# once, under Claude's last meter: the cards marked to use both reserves (F172 D6) #}
+    {% if reserve_cards and a.label == "Claude" and (loop.nextitem is none or loop.nextitem.label != "Claude") %}
+    <div id="reserve-cards" class="line cards-on"><b>Past both marks for:</b>
+      {% for c in reserve_cards %}<a href="/planning/{{ c.key | lower }}{{ q }}">{{ c.key }}, {{ c.title or c.key }}</a>{{ " · " if not loop.last }}{% endfor %}
+    </div>
+    {% endif %}
     {% endfor %}
   </div>
   <details class="legend"><summary>How to read the allowance</summary>

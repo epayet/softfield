@@ -208,6 +208,13 @@ tbody tr:hover { background: var(--accent-wash); }
 @media (prefers-reduced-motion: reduce) { .lever .knob { transition: none; }
   .lever.on-its-way .lamp { animation: none; } }
 .until { color: var(--hazard); font-family: var(--mono); }
+/* A card's own reserve lever, under its title (F172 D6) */
+.reserve-bay { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+  padding: 4px 10px 6px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+.reserve-bay::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+  background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+.reserve-bay .lever { margin-left: 4px; }
+.reserve-bay small { flex-basis: 100%; padding-left: 4px; color: var(--ink-2); font-size: 13px; line-height: 1.4; }
 /* An allowance meter says how close it is (owner, 2026-10-02); the legend says it in words */
 .swatch.under-mark, .meter > .under-mark { background: var(--good); }
 .swatch.past-mark, .meter > .past-mark { background: var(--hazard); }
@@ -219,6 +226,8 @@ tbody tr:hover { background: var(--accent-wash); }
 .allow > div { min-width: 180px; }
 .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
 .allow .line small { color: var(--muted); }
+.allow .cards-on { flex-basis: 100%; justify-content: flex-start; color: var(--ink-2); }
+.allow .cards-on b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
 /* Mobile: one row per window with name, bar and reset text (f9-17) */
 @media (max-width: 639px) {
   #allowance { padding: 4px 14px; }
@@ -605,6 +614,11 @@ main:has(.board) { max-width: 1360px; }
 .card-count { font: 12px var(--mono); color: var(--muted); }
 .card-note, .card-now { font-size: 12.5px; line-height: 1.35; }
 .card-note { color: var(--muted); }
+/* A card marked to use Claude's reserve (F172 D6): the lever's stripe and its words, no status colour */
+.card-reserve { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 0;
+  background: var(--floor); font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+.card-reserve i { width: 14px; align-self: stretch;
+  background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
 .card-review { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35;
   padding: 5px 8px; background: var(--floor); border-left: 2px solid var(--hazard); color: var(--ink-2); }
 .card-review b { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--fg); }

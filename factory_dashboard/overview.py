@@ -745,6 +745,7 @@ def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] |
 def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, object]:
     """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
     the run order)."""
+    from factory_dashboard.board import reserve_marked  # board.py imports from here
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
     from factory_dashboard.planning import (  # planning.py imports from overview at module level
         _card_titles,
@@ -793,6 +794,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         # Claude's allowance and its reserve switches, below Now (f8-06)
         "allowance": agent_allowances(conn, now),
         "switches": reserve_switches(conn, project, now),
+        "reserve_cards": reserve_marked(conn, project, now),  # named under them (F172 D6)
     }
 
 

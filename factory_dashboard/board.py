@@ -26,6 +26,7 @@ import sqlite3
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -35,8 +36,9 @@ from factory_dashboard.line import _LONG_AGO, _natural, _when
 from factory_dashboard.overview import Running, running_jobs
 from factory_dashboard.queries import depends_on, ticket_priority
 from runner import metrics
+from runner.milestone import card as milestone_header
 from runner.requests import REORDER
-from runner.tasks import BUGS, DEFAULT_PRIORITY, short_key
+from runner.tasks import BUGS, DEFAULT_PRIORITY, milestone_file, short_key
 
 router = APIRouter()
 
@@ -51,6 +53,7 @@ WORDS = {
     "harvested": ("Harvested", "signed off or fixed"),
 }
 PLACED = ("seed", "sprouting", "planted", "growing")  # the stages whose order the owner sets
+RESERVABLE = ("planted", "growing")  # the stages a card may be marked to use the reserve in
 KINDS = ("factory", "product", "bug")
 HARVESTED = 4  # the harvested cards shown; the rest are counted
 SET_ASIDE = "ticket written, set aside"
@@ -95,6 +98,7 @@ class Card:
     on_its_way: bool = False  # an open reorder puts it out of place
     was: int = 0  # then, its place without the reorder
     waits: tuple[str, ...] = ()  # other card keys this card's ready tickets depend on
+    reserve: bool = False  # a planted or growing card marked to use Claude's reserve (F172 D6)
 
     @property
     def kind(self) -> str:
@@ -228,6 +232,15 @@ def _card_note(
     return ""
 
 
+def marked(repo: Path | None, key: str) -> bool:
+    """Whether the card doc of this full key says ``**Reserve:** yes`` (F172 D1), read as
+    ``loop.reserve_cards`` reads it: the mark is in no table. No checkout or no doc: no."""
+    if repo is None:
+        return False
+    doc = milestone_file(repo, "cards", key)
+    return doc.is_file() and milestone_header(key, doc.read_text(encoding="utf-8")).reserve
+
+
 def _matches(card: Card, q: str | None, kind: str | None) -> bool:
     if kind and card.kind != kind:
         return False
@@ -238,6 +251,9 @@ def _matches(card: Card, q: str | None, kind: str | None) -> bool:
 def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[Card, datetime]]:
     """Every card of the project's, with when it was harvested. ``now`` tells which jobs are
     live."""
+    from factory_dashboard.planning import _repo  # planning.py imports this module
+
+    repo = _repo(conn, project)
     milestones = conn.execute(
         "SELECT m.*, m.state FROM milestones m JOIN projects p ON p.id = m.project_id"
         " WHERE p.name = ?",
@@ -372,6 +388,7 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             set_aside=sum(t["state"] == "later" for t in own),
             note=_card_note(key.lower(), stage, latest_messages, sent, waits),
             waits=waits,
+            reserve=stage in RESERVABLE and marked(repo, m["key"]),
             running=running(counted) if stage == "growing" else None,
             review_step=_review_step(
                 m["key"],
@@ -390,7 +407,12 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
 def milestone_card(conn: sqlite3.Connection, project: str, now: datetime, key: str) -> Card | None:
     """The card of the milestone with this full key, for its page (f5-17); None for a removed
     one. The board keeps only the latest harvested cards; this finds any."""
-    return next((c for c, _ in _cards(conn, project, now) if not c.bug and c.full_key == key), None)
+    return next((c for c in milestone_cards(conn, project, now) if c.full_key == key), None)
+
+
+def milestone_cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[Card]:
+    """Every milestone's card, bugs left out, in no particular order."""
+    return [c for c, _ in _cards(conn, project, now) if not c.bug]
 
 
 def _order_on_its_way(conn: sqlite3.Connection, project: str) -> list[str] | None:
@@ -483,6 +505,13 @@ def board(
     stages["harvested"] = [card for card, _ in harvested[:HARVESTED]]
     line = tuple((card.key.lower(), card.stage) for card, _ in found if card.stage != "harvested")
     return Board(stages, max(len(harvested) - HARVESTED, 0), line)
+
+
+def reserve_marked(conn: sqlite3.Connection, project: str, now: datetime) -> list[Card]:
+    """The planted and growing cards marked to use Claude's reserve, in the board's order: the
+    Overview names them under Claude's meters (F172 D6)."""
+    found = board(conn, project, now)
+    return [c for stage in RESERVABLE for c in found.stages[stage] if c.reserve]
 
 
 # --- the page (f5-16) ---------------------------------------------------------------------

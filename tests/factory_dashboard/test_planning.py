@@ -4163,3 +4163,115 @@ def test_the_runners_look_shows_as_the_runners_and_waits_for_the_lead(planning, 
     assert not _refused_items(html)
     assert "/planning/f9" not in dict(_items(_groups(html).get("answers", "")))
     assert ("/planning/f9", "Parallel developers") in _coming_items(html)
+
+
+# --- a card's reserve lever (F172 D6) -----------------------------------------------------
+
+
+def _reserve_client(board_db: Path, tmp_path: Path) -> TestClient:
+    """``board_db``, its checkout marking F23 (planted) and F20 (a seed); F24 and F25 are
+    growing and unmarked, F1 is ripe."""
+    from factory_dashboard.app import create_app, get_now
+    from tests.factory_dashboard.conftest import mark_reserve
+
+    mark_reserve(board_db, tmp_path / "repo", "f23-planted", "f20-duck-pond")
+    app = create_app(board_db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url=ORIGIN)
+
+
+def _lever(html: str) -> dict[str, Any] | None:
+    """The card's lever: aria-checked, its classes, disabled, and what it posts; None: none."""
+    bay = re.search(r'<div id="reserve-bay"[^>]*>(.*?)</div>', html, re.S)
+    if bay is None:
+        assert 'role="switch"' not in html.split('<header id="card"', 1)[1].split("</header>", 1)[0]
+        return None
+    button = re.search(r"<button[^>]*>", bay[1])
+    assert button, "no lever"
+    tag = button[0]
+    vals = re.search(r"hx-vals='([^']*)'", tag)
+    assert vals, tag
+    return {
+        "checked": re.search(r'aria-checked="([^"]*)"', tag)[1],  # type: ignore[index]
+        "classes": re.search(r'class="([^"]*)"', tag)[1].split(),  # type: ignore[index]
+        "disabled": " disabled" in tag,
+        "posts": json.loads(unescape(vals[1])),
+        "words": _text(bay[1]),
+    }
+
+
+def test_a_ready_card_s_lever_is_on_when_marked_and_off_when_not(board_db, tmp_path):
+    """F23's doc says ``**Reserve:** yes``: on, posting ``off``; F24's doesn't: off, posting
+    ``on``. Each posts the card's short key; the words say it uses both reserves."""
+    client = _reserve_client(board_db, tmp_path)
+    marked = _lever(_thread(client, "f23"))
+    assert marked is not None
+    assert (marked["checked"], marked["disabled"]) == ("true", False)
+    assert "on-its-way" not in marked["classes"]
+    reserve = {"kind": "reserve", "project": PROJECT}
+    assert marked["posts"] == {**reserve, "subject": "f23", "value": "off"}
+    assert "may use Claude's reserve" in marked["words"]
+    assert "the week's reserve and your 25% of the 5-hour window" in marked["words"]
+    unmarked = _lever(_thread(client, "f24"))
+    assert unmarked is not None
+    assert unmarked["checked"] == "false"
+    assert unmarked["posts"] == {**reserve, "subject": "f24", "value": "on"}
+
+
+@pytest.mark.parametrize("thread", ["f20", "f1", "m3"])
+def test_an_idea_ripe_or_done_card_has_no_lever(board_db, tmp_path, thread):
+    """F20 is a seed (its doc marked all the same), F1 ripe, M3 signed off."""
+    assert _lever(_thread(_reserve_client(board_db, tmp_path), thread)) is None
+
+
+def test_a_lever_pulled_shows_on_its_way_until_the_runner_applies_it(board_db, tmp_path):
+    """An open ``reserve`` request for F24 (and a done one for F23, and the week's switch,
+    which name other subjects): F24's lever is on its way and can't be pulled again; F23's
+    isn't. Done, the request leaves F24's lever as its doc says."""
+    client = _reserve_client(board_db, tmp_path)
+
+    def asked(conn: sqlite3.Connection) -> None:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.add_request(conn, project, "reserve", "f24", "on", NOW.isoformat())
+        metrics.add_request(conn, project, "reserve", "week", "on", NOW.isoformat())
+        done = metrics.add_request(conn, project, "reserve", "f23", "off", NOW.isoformat())
+        conn.execute("UPDATE owner_requests SET done = ? WHERE id = ?", (NOW.isoformat(), done))
+        conn.commit()
+
+    _write(board_db, asked)
+    pulled = _lever(_thread(client, "f24"))
+    assert pulled is not None
+    assert "on-its-way" in pulled["classes"] and pulled["disabled"]
+    assert pulled["checked"] == "false"  # the doc isn't marked yet
+    still = _lever(_thread(client, "f23"))
+    assert still is not None
+    assert "on-its-way" not in still["classes"] and not still["disabled"]
+
+    def applied(conn: sqlite3.Connection) -> None:
+        conn.execute("UPDATE owner_requests SET done = ? WHERE done IS NULL", (NOW.isoformat(),))
+        conn.commit()
+
+    _write(board_db, applied)
+    taken = _lever(_thread(client, "f24"))
+    assert taken is not None
+    assert "on-its-way" not in taken["classes"] and not taken["disabled"]
+
+
+def test_pulling_the_lever_posts_its_request_and_shows_it_on_its_way(page, board_db, tmp_path):
+    """In Chromium: the lever on F24's page posts ``reserve`` for ``f24``, ``on``; at once it
+    has the dashed edge and is disabled; the request is stored, open."""
+    client = _reserve_client(board_db, tmp_path)
+    _open(page, client, "/planning/f24")
+    lever = page.locator("#reserve-bay .lever")
+    with page.expect_response(lambda r: r.url.endswith("/requests")):
+        lever.click()
+    assert "on-its-way" in (lever.get_attribute("class") or "")
+    assert lever.is_disabled()
+    conn = metrics.open_db(board_db)
+    try:
+        rows = conn.execute(
+            "SELECT subject, value, done FROM owner_requests WHERE kind = 'reserve'"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert [tuple(r) for r in rows] == [("f24", "on", None)]

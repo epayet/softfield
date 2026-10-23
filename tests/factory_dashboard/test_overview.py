@@ -549,6 +549,49 @@ def switch_row(html: str, row: str) -> tuple[str, str | None, str | None, dict[s
     )
 
 
+def _reserve_client(board_db: Path, tmp_path: Path, *marked: str):
+    """``board_db`` with Claude's and Copilot's readings, its checkout marking ``marked``."""
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+    from tests.factory_dashboard.conftest import mark_reserve, write_allowance
+
+    conn = metrics.open_db(board_db)
+    try:
+        write_allowance(conn)
+    finally:
+        conn.close()
+    mark_reserve(board_db, tmp_path / "repo", *marked)
+    app = create_app(board_db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_the_marked_cards_are_named_once_under_claude_s_meters(board_db, tmp_path):
+    """F172 D6: the planted F23 and the growing F24 are marked, and the seed F20's doc too: the
+    two cards that use the reserve are named once, after Claude's week and before Copilot's
+    meter, each a link to its page, on the Overview and in the live partial."""
+    client = _reserve_client(board_db, tmp_path, "f23-planted", "f24-growing", "f20-duck-pond")
+    for path in ("/", "/live"):
+        html = client.get(path).text
+        assert html.count('id="reserve-cards"') == 1, path
+        panel = html.split('<section id="allowance"', 1)[1].split("</section>", 1)[0]
+        week = panel.index('id="allow-claude-seven_day"')
+        listed = panel.index('id="reserve-cards"')
+        assert week < listed < panel.index('id="allow-copilot-month"'), path
+        row = panel[listed:].split("</div>", 1)[0]
+        links = re.findall(r'<a href="([^"?]+)[^"]*">([^<]*)</a>', row)
+        # in the board's order: Planted's column, then Growing's
+        assert links == [("/planning/f23", "F23, Planted"), ("/planning/f24", "F24, Growing")]
+        assert "Past both marks for:" in row
+
+
+def test_no_marked_card_names_none_under_claude_s_meters(board_db, tmp_path):
+    html = _reserve_client(board_db, tmp_path).get("/").text
+    assert 'id="reserve-cards"' not in html
+    assert "Past both marks for" not in html
+
+
 def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_path):
     """f8-06: the week's switch on (turned on 2.5 h ago, so until tomorrow 09:30) posts "off";
     the 5-hour switch, absent from state.json, is off and posts "on"."""

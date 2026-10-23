@@ -18,7 +18,7 @@ from factory_dashboard.board import STAGES, Board, Card, board, milestone_card
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, PROJECT
+from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, PROJECT, mark_reserve
 from tests.factory_dashboard.test_planning import ORIGIN, STATIC
 from tests.factory_dashboard.test_planning import _open as open_page
 from tests.layout import DISPLAY, PHONE, layout_problems
@@ -616,6 +616,30 @@ def test_the_page_lists_each_card_in_its_stage_s_column(board_db, board_client):
 def test_a_card_s_link_opens_its_page(board_client):
     for link in _links(_page(board_client)):
         assert board_client.get(link).status_code == 200, link
+
+
+def test_a_marked_card_shows_the_uses_reserve_plate_and_an_unmarked_one_doesn_t(
+    board_db, board_client, tmp_path
+):
+    """F172 D6: the plate on a planted (F23) and a growing (F24) card whose doc says
+    ``**Reserve:** yes``; none on F25, unmarked, nor on F20, a seed whose doc is marked."""
+    mark_reserve(board_db, tmp_path / "repo", "f23-planted", "f24-growing", "f20-duck-pond")
+    found = read(board_db)
+    assert [c.key for cards in found.stages.values() for c in cards if c.reserve] == ["F23", "F24"]
+    html = _page(board_client)
+    for link, plate in (
+        ("/milestones/f23-planted", True),
+        ("/milestones/f24-growing", True),
+        ("/milestones/f25-unreviewed", False),
+        ("/milestones/f20-duck-pond", False),
+    ):
+        _, words, raw = _card(html, link)
+        assert ('class="card-reserve"' in raw) is plate, link
+        assert ("uses Claude's reserve" in words) is plate, link
+
+
+def test_no_card_is_marked_without_a_checkout(board_db):
+    assert not any(c.reserve for cards in read(board_db).stages.values() for c in cards)
 
 
 def test_q_and_kind_narrow_the_page_s_cards_and_stay_in_the_form(board_client):

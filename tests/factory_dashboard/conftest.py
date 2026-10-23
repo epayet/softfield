@@ -1971,6 +1971,24 @@ def write_signoff_button(conn: sqlite3.Connection) -> None:
     )
 
 
+def mark_reserve(db: Path, repo: Path, *keys: str) -> None:
+    """The project's checkout at ``repo``, with a card doc for each full key in ``keys`` whose
+    header says ``**Reserve:** yes`` (F172 D1), as the runner writes it."""
+    cards = repo / ".factory" / "cards"
+    cards.mkdir(parents=True, exist_ok=True)
+    for key in keys:
+        (cards / f"{key}.md").write_text(
+            f"# Milestone {key}: a card\n\n> **State:** ready · **Area:** factory"
+            " · **Reserve:** yes\n\n## Goal\nIt.\n",
+            encoding="utf-8",
+        )
+    conn = metrics.open_db(db)
+    try:
+        metrics.upsert_project(conn, PROJECT, repo=str(repo))
+    finally:
+        conn.close()
+
+
 def write_board(conn: sqlite3.Connection) -> None:
     """On top of ``write_fixture`` (``f1`` and ``m4`` are ripe), at ``NOW``, the board's cards:
     - ``f20-duck-pond`` (an idea, priority 30, area product): no thread, a seed;
