@@ -49,8 +49,7 @@
     1. signed off (`milestones.status` is done) → harvested;
     2. state idea with no planning thread → seed, as the desk's seeds; state planning, or an idea a thread is about → sprouting;
     3. every ticket done and the review's sheet stored → ripe (needs sign-off), as the line's field and the desk have it since F50 D1;
-    4. a ticket has started (a job on it, or it is running, done, escalated or blocked) → growing (building);
-    5. otherwise → planted (ready).
+    4. otherwise → planted (ready, or building); a planted card with a ticket started (a job on it, or it is running, done, escalated or blocked) says "growing" on itself. Growing was a column of its own until F154 D1 made it one Planted column in the runner's order.
 
     Set-aside and removed tickets count for none of these; a removed card is on no column.
     - Why not the runner: advancing the doc would be a commit on main at each first job and each last merge, and a second source for what the tickets already say. The doc's `building` stays valid (a card with no state derives to it, and a plan approved on a building card keeps it), but the board doesn't need it.

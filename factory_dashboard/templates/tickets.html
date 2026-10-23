@@ -18,9 +18,9 @@
 
   {% if later_tickets %}
   <section id="later" class="panel">
-    <h2>Set aside <span class="src">tickets waiting in .factory/tasks/later/</span></h2>
+    <h2>Set aside <span class="src">tickets that won't run until you queue them</span></h2>
     <div class="scroll"><table>
-      <thead><tr><th>ID</th><th>Goal</th><th>Kind</th><th class="num">Priority</th></tr></thead>
+      <thead><tr><th>ID</th><th>Goal</th><th>Kind</th><th class="num">Priority</th><th>Queue</th></tr></thead>
       <tbody>
         {% for t in later_tickets %}
         <tr data-ticket="{{ t.ticket }}">
@@ -33,8 +33,8 @@
               hx-target="#answer-{{ t.ticket }}"
               hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ t.ticket | tojson }}}'
               hx-on::before-request="this.disabled = true">Queue</button>
+            <div id="answer-{{ t.ticket }}"></div>
           </td>
-          <td><div id="answer-{{ t.ticket }}"></div></td>
         </tr>
         {% endfor %}
       </tbody>

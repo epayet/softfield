@@ -353,8 +353,9 @@ def test_each_queue_button_answers_in_its_own_row(db_path, later_client):
         parsed = json.loads("{" + vals.group(1) + "}")
         assert parsed["kind"] == "queue"
         assert parsed["subject"] == ticket
-        answer = re.search(r'id="answer-' + re.escape(ticket) + r'"', later_section)
-        assert answer is not None, f"answer div for {ticket} not found"
+        # the answer's place is in this row's own Queue cell, where the button points
+        assert f'hx-target="#answer-{ticket}"' in btn.group(0)
+        assert f'id="answer-{ticket}"' in row["queue"], f"answer div for {ticket} not in its row"
 
     # The answer divs are not shared between rows
     answer_ids = re.findall(r'id="answer-([^"]+)"', later_section)
@@ -427,12 +428,8 @@ def test_non_later_state_filter_does_not_leak_to_later_section(db_path, tickets_
 def later_priority_rows(html: str) -> list[tuple[str, str]]:
     """Each later ticket's id and priority cell, in page order."""
     later_section = section_raw(html, "later")
-    return re.findall(
-        r'<tr[^>]*\bdata-ticket="([^"]+)"[^>]*>.*?'
-        r'<td[^>]*\bdata-col="priority"[^>]*>(.*?)</td>',
-        later_section,
-        re.S,
-    )
+    tickets = re.findall(r'<tr[^>]*\bdata-ticket="([^"]+)"', later_section)
+    return [(ticket, later_row(later_section, ticket)["priority"]) for ticket in tickets]
 
 
 def test_later_tickets_sorted_by_priority_then_id(later_priority_client):
@@ -464,18 +461,12 @@ def test_ticket_with_priority_5_lists_before_earlier_id_no_priority(later_priori
 
 def test_bug_ticket_without_priority_shows_50(later_priority_client):
     html = later_priority_client.get("/tickets").text
-    rows = later_priority_rows(html)
-    for ticket, priority in rows:
-        if ticket == "f1-97-bug":
-            assert priority == "50"
+    assert dict(later_priority_rows(html))["f1-97-bug"] == "50"
 
 
 def test_milestone_ticket_without_priority_shows_milestone_priority(later_priority_client):
     html = later_priority_client.get("/tickets").text
-    rows = later_priority_rows(html)
-    for ticket, priority in rows:
-        if ticket == "f1-98-milestone":
-            assert priority == "10"
+    assert dict(later_priority_rows(html))["f1-98-milestone"] == "10"
 
 
 def test_parse_ticket_body_extracts_goal_done_when_context():
