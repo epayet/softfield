@@ -22,3 +22,10 @@ Read `docs/backlog.md`, `.factory/cards/bugs.md` and `docs/task-format.md` (bug 
 ### Done when
 - every backlog bullet is a ticket in `.factory/tasks/later/`, or stays with a one-line reason
 - `uv run pytest -q tests/runner/test_tasks.py` passes
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
