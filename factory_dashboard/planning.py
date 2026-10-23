@@ -1141,7 +1141,7 @@ _MAX_REQUEST_ID = 12
 
 @dataclass(frozen=True)
 class ReserveLever:
-    """A planted or growing card's "may use Claude's reserve" lever (F172 D6)."""
+    """A planted card's "may use Claude's reserve" lever (F172 D6), started or not."""
 
     on: bool  # its doc says ``**Reserve:** yes``
     asked: str | None  # "on" or "off": the owner's latest request the runner hasn't taken

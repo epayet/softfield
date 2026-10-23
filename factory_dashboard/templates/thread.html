@@ -10,7 +10,7 @@
     <header id="card" style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column">
       {% if card_meta %}<span style="font: 600 12px var(--mono); color: var(--muted)">{{ card_meta }}</span>{% endif %}
       <h2 style="margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">{{ card_title }}</h2>
-      {# a planted or growing card's reserve lever (F172 D6), as the allowance panel's: one pulled
+      {# a planted card's reserve lever (F172 D6), as the allowance panel's: one pulled
          shows on its way until the runner writes the mark #}
       {% if reserve_lever %}
       <div id="reserve-bay" class="reserve-bay">

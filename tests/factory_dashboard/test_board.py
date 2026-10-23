@@ -427,13 +427,15 @@ def test_a_card_whose_neighbours_moved_past_it_is_not_marked(board_db):
     write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
     # F7 sent below the cards not started: only F7 is out of place
     write(board_db, _reorder('["f24", "f9", "f23", "bug-02-stale", "f7"]'))
-    assert _places(read(board_db), "planted")[:6] == [
+    assert _places(read(board_db), "planted") == [
         ("F24", 1, False, 0),
         ("F9", 2, False, 0),
         ("F23", 3, False, 0),
         ("bug-02-stale", 4, False, 0),
         ("F7", 5, True, 2),
         ("bug-03-working", 6, False, 0),
+        ("bug-04-stuck", 7, False, 0),
+        ("F25", 8, False, 0),
     ]
 
 
@@ -441,12 +443,15 @@ def test_the_latest_open_reorder_is_the_one_shown(board_db):
     write(board_db, _planted(("f7-first", 2), ("f9-second", 3)))
     write(board_db, _reorder('["f9", "f7"]'))
     write(board_db, _reorder('["f24", "f23", "f7", "f9"]'))
-    assert _places(read(board_db), "planted")[:5] == [
+    assert _places(read(board_db), "planted") == [
         ("F24", 1, False, 0),
         ("F23", 2, True, 4),
         ("F7", 3, False, 0),
         ("F9", 4, False, 0),
         ("bug-02-stale", 5, False, 0),
+        ("bug-03-working", 6, False, 0),
+        ("bug-04-stuck", 7, False, 0),
+        ("F25", 8, False, 0),
     ]
 
 

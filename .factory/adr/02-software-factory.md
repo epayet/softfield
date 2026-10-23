@@ -501,6 +501,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** nothing changes until the machine's `factory.toml` gets ADR 32's two lines (D7); the trial (ADR 32 item 6) starts then. Its pass rate must be read from tickets and step-up jobs, since a lead job's `jobs.outcome` is its session's, not its `check-all`'s.
 - **Decisions affected:** ADR 32 is now code; its item 6 trial is the next factory question.
 
+### F154 (2026-10-23): one Planted column, a "growing" tag, and each stage says what comes next ([review](../reviews/f154-what-s-the-difference-between-planted.md))
+
+- **Q1:** one lead ticket (a stage list read by three pages, a script and many tests, D5), merged first time in 22 minutes; no checkpoint. Review round 1: two nits (a narrowed test, two stale comments), both fixed by the review.
+- **Q3:** Claude only: $4.69 planning, $3.38 building; no local tokens.
+- **Q5:** see the review's numbers.
+- **Anything else:** the card waited two days on f152-01, whose local developer took four hours before the lead's escalation; a ticket touching the same lines as a lead ticket might as well be the lead's. "An edited test cut to its first rows" recurred (F173, F154) and is now in `docs/agents/developer.md` rule 13.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
