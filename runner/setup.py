@@ -235,6 +235,32 @@ def claude_command(folder: Path, origin: str) -> list[str]:
 class Finding:
     ok: bool
     what: str
+    needed: bool = True  # the project waits for it; else it's only said
+
+
+def passes(findings: list[Finding]) -> bool:
+    """Every check the project waits for passed: the web can take over."""
+    return all(f.ok for f in findings if f.needed)
+
+
+PHONE_STEPS = "docs/notifications-on-the-phone.md"  # in Softfield's checkout
+
+
+def _phone_finding() -> Finding:
+    """The phone's notifications (ADR 31 item 5): the machine's `[notify] ntfy`, read, never
+    sent to. Not needed: without it nothing is sent, and the dashboard still shows it all."""
+    try:
+        address = config.machine_ntfy()
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        return Finding(False, f"notifications on your phone: the machine's settings: {exc}", False)
+    if address is not None:
+        return Finding(True, "notifications on your phone set up (ntfy)", False)
+    return Finding(
+        False,
+        "notifications on your phone, if you want them: run `softfield notify setup`,"
+        f" then the steps in Softfield's {PHONE_STEPS}",
+        False,
+    )
 
 
 def _adr_00(folder: Path) -> Path | None:
@@ -336,6 +362,7 @@ def doctor(
         failed = [c.name for c in checks.check_all(folder, timeout) if not c.ok]
         found.append(Finding(not failed, "softfield check-all passes" + (
             f": {', '.join(failed)} failed" if failed else "")))  # fmt: skip
+    found.append(_phone_finding())
     return found
 
 

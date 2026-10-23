@@ -724,7 +724,7 @@ def main(argv: list[str] | None = None) -> int:
             findings = setup.doctor(repo, cfg.metrics_db, run_checks=not args.quick)
             for finding in findings:
                 print(f"{'ok' if finding.ok else '--'}  {finding.what}")
-            if not all(f.ok for f in findings):
+            if not setup.passes(findings):
                 return 1
             try:
                 host = _lan_address()

@@ -7,7 +7,7 @@ import pytest
 
 from runner import cli, config, metrics, owner, setup
 from runner.config import load_config
-from tests.runner.conftest import git
+from tests.runner.conftest import MACHINE, git
 
 
 def _projects(db: Path) -> list[tuple[str, str | None, int]]:
@@ -97,14 +97,18 @@ def test_init_refuses_what_it_would_get_wrong(tmp_path, why):
         setup.init(folder, tmp_path / "m.sqlite")
 
 
+def _missing(folder: Path, db: Path) -> list[str]:
+    """What the web still needs: the failed checks a project waits for."""
+    return [f.what for f in setup.doctor(folder, db, run_checks=False) if f.needed and not f.ok]
+
+
 def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
     """ADR 30 item 8, with the owner's ADR 00 accepted in the setup session."""
     db = tmp_path / "m.sqlite"
     folder = tmp_path / "ducks"
     folder.mkdir()
     setup.init(folder, db)
-    missing = [f.what for f in setup.doctor(folder, db, run_checks=False) if not f.ok]
-    assert missing == [
+    assert _missing(folder, db) == [
         "a one-line description in [project]",
         "the idea in .factory/seed.md",
         "ADR 00 accepted: none in .factory/adr/",
@@ -120,7 +124,7 @@ def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
     git(folder, "config", "user.name", "Test")
     git(folder, "add", "-A")
     git(folder, "commit", "-q", "--no-verify", "-m", "set up")
-    assert [f.what for f in setup.doctor(folder, db, run_checks=False) if not f.ok] == [
+    assert _missing(folder, db) == [
         "ADR 00 accepted: only `softfield accept 0` accepts it, on your yes"
     ]
     (folder / ".factory/adr/00-initial.md").write_text(
@@ -129,13 +133,54 @@ def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
     git(folder, "commit", "-qam", "proposed", "--no-verify")
     owner.decide_adr(folder, 0, "Accepted", date(2026, 10, 14))  # the owner's yes
     (folder / "stray.py").write_text("X = 1\n")  # untracked work fails it too
-    assert [f.what for f in setup.doctor(folder, db, run_checks=False) if not f.ok] == [
-        "everything committed, on main"
-    ]
+    assert _missing(folder, db) == ["everything committed, on main"]
     (folder / "stray.py").unlink()
-    assert all(f.ok for f in setup.doctor(folder, db, run_checks=False))
+    found = setup.doctor(folder, db, run_checks=False)
+    assert setup.passes(found)  # the phone's notifications aren't set up: they don't hold it
+    assert [f.ok for f in found if not f.needed] == [False]
     assert setup.ready("ducks", db)  # doctor passed: the runner takes it
     assert not setup.ready("ducks", db)  # once
+
+
+def test_doctor_says_whether_the_phones_notifications_are_set_up(tmp_path, monkeypatch, capsys):
+    """ADR 31 item 5, f142-03: read from the machine's `[notify] ntfy`; nothing is sent."""
+    db = tmp_path / "m.sqlite"
+    folder = tmp_path / "ducks"
+    folder.mkdir()
+    setup.init(folder, db)
+    machine = tmp_path / "factory.toml"
+    machine.write_text(MACHINE.read_text())
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(machine))
+
+    def no_request(*args, **kwargs):
+        raise AssertionError("doctor sent a request")
+
+    monkeypatch.setattr("runner.notify._post", no_request)
+    monkeypatch.setattr("urllib.request.urlopen", no_request)
+
+    def phone() -> setup.Finding:
+        (finding,) = [f for f in setup.doctor(folder, db, run_checks=False) if not f.needed]
+        return finding
+
+    off = phone()
+    assert not off.ok
+    assert "softfield notify setup" in off.what
+    assert "docs/notifications-on-the-phone.md" in off.what
+    toml = folder / ".factory/project.toml"
+    toml.write_text(toml.read_text() + f'\n[metrics]\ndb = "{db}"\n')
+    machine.write_text(MACHINE.read_text() + '\n[notify]\nntfy = "https://ntfy.sh/abc123"\n')
+    on = phone()
+    assert on.ok and "set up" in on.what and "abc123" not in on.what  # the topic is the lock
+    monkeypatch.chdir(folder)
+    cli.main(["doctor", "--quick"])
+    assert f"ok  {on.what}" in capsys.readouterr().out
+
+
+def test_the_phone_steps_name_the_commands_as_the_cli_has_them():
+    steps = (Path(setup.__file__).parents[1] / "docs/notifications-on-the-phone.md").read_text()
+    for command in ("softfield notify setup", "softfield notify test"):
+        assert f"`{command}`" in steps
+    assert "1. " in steps and "Use another server" in steps
 
 
 def test_the_setup_session_gets_the_guide_as_its_instructions(monkeypatch):
