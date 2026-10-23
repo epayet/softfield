@@ -40,3 +40,10 @@ Read `.factory/cards/f154-what-s-the-difference-between-planted.md` (D1–D4) an
 - a started planted card with every ticket done still shows F152's review step; a planted card not started shows none
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
