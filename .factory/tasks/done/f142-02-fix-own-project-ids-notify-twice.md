@@ -28,3 +28,12 @@ f142-why-am-i-not-getting-notifications-C1-1: f142-01 asked that every id in `da
 - the weak tests named above assert on content with no `if` that lets them pass empty
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3700
+gate_failures: []
+tokens: 4534625
+```
