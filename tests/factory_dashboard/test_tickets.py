@@ -520,6 +520,17 @@ def test_a_later_ticket_page_shows_set_aside_panel(later_client):
     assert re.search(r'<button[^>]*class="go"[^>]*>Queue it</button>', html, re.S)
 
 
+def test_the_queue_it_button_targets_a_place_on_the_page(later_client):
+    """htmx sends nothing when hx-target matches no element (review f159 F1)."""
+    html = later_client.get("/tickets/f1-99-later").text
+    button = re.search(r'<button[^>]*id="queue"[^>]*>', html, re.S)
+    assert button
+    target = re.search(r'hx-target="#([^"]+)"', button.group(0))
+    assert target
+    assert f'id="{target.group(1)}"' in html
+    assert "classList.add('sent')" in button.group(0)  # on its way at once, as the mock-up
+
+
 def test_a_later_ticket_page_state_pill_says_set_aside(later_client):
     """`later` reads "set aside" in the Result section's State pill."""
     html = later_client.get("/tickets/f1-99-later").text

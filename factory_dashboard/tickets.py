@@ -16,6 +16,8 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.queries import ticket_priority
+from runner import metrics
+from runner.requests import QUEUE
 
 router = APIRouter()
 
@@ -473,15 +475,11 @@ def ticket_page(
     on_its_way = False
     later_priority: int | None = None
     if is_later and ticket_row:
-        project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()[
-            "id"
-        ]
-        open_reqs = conn.execute(
-            "SELECT subject FROM owner_requests "
-            "WHERE project_id = ? AND kind = 'queue' AND done IS NULL",
-            (project_id,),
-        ).fetchall()
-        on_its_way = any(r["subject"] == ticket_id for r in open_reqs)
+        project_id = metrics.find_project(conn, project)
+        on_its_way = project_id is not None and any(
+            r["kind"] == QUEUE and r["subject"] == ticket_id
+            for r in metrics.open_requests(conn, project_id)
+        )
         later_priority = ticket_priority(detail.body, detail.milestone, None)
 
     # Parse ticket body for Goal, Done when, Context

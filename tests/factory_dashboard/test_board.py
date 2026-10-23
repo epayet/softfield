@@ -290,6 +290,7 @@ def test_an_empty_milestone_with_no_state_but_with_status_makes_no_card(board_db
 def test_a_set_aside_bug_is_a_seed_marked_as_a_bug_and_planted_once_ready(board_db):
     bug = card(read(board_db), "bug-01-duck-count")
     assert (bug.stage, bug.bug, bug.area, bug.kind) == ("seed", True, "factory", "bug")
+    assert bug.note == "Set aside, won't run until you queue it ›"
     assert (bug.full_key, bug.title, bug.priority) == (
         "bug-01-duck-count",
         "Goal of bug-01-duck-count.",

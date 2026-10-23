@@ -13,13 +13,14 @@
   <p class="say">This ticket won't run until you queue it.</p>
   <p class="then">Queued, it joins the line at priority {{ later_priority }}, behind the tickets that go first; move it on the board once it is there.</p>
   {% if not on_its_way %}
-  <button type="button" class="go" id="queue" hx-post="/requests" hx-swap="outerHTML"
+  {# pressed, the plate shows on its way at once; the runner's answer lands below it #}
+  <button type="button" class="go" id="queue" hx-post="/requests" hx-swap="innerHTML"
     hx-target="#ticket-aside-status"
     hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ ticket.ticket | tojson }}}'
-    hx-on::before-request="this.disabled = true">Queue it</button>
-  {% else %}
-  <div class="way" id="ticket-aside-status">Queue it · on its way · at the runner's next pick</div>
+    hx-on::before-request="this.disabled = true; this.closest('.aside').classList.add('sent')">Queue it</button>
   {% endif %}
+  <div class="way">Queue it · on its way · at the runner's next pick</div>
+  <div id="ticket-aside-status"></div>
 </section>
 {% endif %}
 
@@ -27,7 +28,7 @@
 <section id="goal" class="panel readable">
   <h2>Goal &amp; Done when <span class="src">from the ticket</span></h2>
   {% if parsed.goal %}<h4>Goal</h4><p>{{ parsed.goal }}</p>{% endif %}
-   {% if parsed.done_when %}<h4>Done when</h4><ul>{% for item in parsed.done_when %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
+  {% if parsed.done_when %}<h4>Done when</h4><ul>{% for item in parsed.done_when %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}
   {% if parsed.context %}<details><summary>The lead's notes for the agent</summary><p>{{ parsed.context }}</p></details>{% endif %}
 </section>
 {% elif ticket.body %}

@@ -56,7 +56,7 @@ PLACED = ("seed", "sprouting", "planted")  # the stages whose order the owner se
 RESERVABLE = ("planted",)  # the stages a card may be marked to use the reserve in
 KINDS = ("factory", "product", "bug")
 HARVESTED = 4  # the harvested cards shown; the rest are counted
-SET_ASIDE = "ticket written, set aside"
+SET_ASIDE = "Set aside, won't run until you queue it ›"  # its card's action (F159)
 STARTED = ("running", "done", "escalated", "blocked")  # a ticket's states once work began
 _OFF = ("later", metrics.REMOVED)  # tickets that count for no stage
 
