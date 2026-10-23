@@ -26,3 +26,12 @@ Read `compare` in `factory_dashboard/static/notify.js`, then `test_compare_uses_
 - a stored `notify:seen` with `done: false` (the old shape), then a look with all done: no notification and no error
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2190
+gate_failures: []
+tokens: 1277316
+```
