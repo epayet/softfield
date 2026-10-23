@@ -3264,6 +3264,30 @@ def test_other_kinds_say_what_and_where(db_path):
         assert result[nid]["link"] == f"/?project={PROJECT}"
 
 
+def test_a_kind_without_its_own_words_still_notifies():
+    """F114 review F1: a failing check on main has its title, and a kind the table doesn't
+    name still notifies, with its text, opening the Overview."""
+    from factory_dashboard.overview import Need, notices
+
+    open_needs = [
+        Need("owner-1", "main-red", "Main fails ruff."),
+        Need("owner-2", "a-kind-from-later", "Something new."),
+    ]
+    result = notices(open_needs, {}, PROJECT, [])
+    assert result == {
+        "owner-1": {
+            "title": "A check fails on main",
+            "body": "Main fails ruff.",
+            "link": f"/?project={PROJECT}",
+        },
+        "owner-2": {
+            "title": "Something needs you",
+            "body": "Something new.",
+            "link": f"/?project={PROJECT}",
+        },
+    }
+
+
 def test_data_notices_has_the_ids(serve_between, db_path):
     """Every link keeps the page's project, as the other links of the partial do.
     ``data-notices`` has the ids of open owner items, with keys matching the open items."""

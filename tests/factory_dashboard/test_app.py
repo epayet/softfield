@@ -896,6 +896,7 @@ FAKE_SERVICE_WORKER = """
 window.sw_registered = null; window.sw_notifications = [];
 Object.defineProperty(navigator, "serviceWorker", {
   value: {
+    addEventListener: () => {},
     register: async (url) => {
       window.sw_registered = url;
       return {
@@ -914,10 +915,27 @@ Object.defineProperty(navigator, "serviceWorker", {
 });
 """
 
+
+def _seen_first_look(page) -> None:
+    """notify.js compared the page's own facts on load: what the next look adds is news."""
+    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+
+
+def _next_look(page, client, html: str | None = None) -> None:
+    """The next poll at once: ``/live`` (or ``html``) swapped into the Overview's
+    ``#live-needs-you`` with the bubbling ``htmx:afterSwap`` htmx sends."""
+    page.evaluate(
+        "(html) => { const el = document.querySelector('#live-needs-you'); el.innerHTML = html;"
+        " el.dispatchEvent(new Event('htmx:afterSwap', { bubbles: true })); }",
+        html if html is not None else client.get("/live?project=coucou").text,
+    )
+
+
 FAKE_SERVICE_WORKER_REJECTS = """
 window.sw_registered = null; window.sw_notifications = [];
 Object.defineProperty(navigator, "serviceWorker", {
   value: {
+    addEventListener: () => {},
     register: async (url) => {
       window.sw_registered = url;
       return {
@@ -942,16 +960,7 @@ def test_notifications_go_through_service_worker_on_android(page, serve_between,
     page.add_init_script(FAKE_SERVICE_WORKER)
     open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    # Wait for the baseline to be established by compare() on DOMContentLoaded
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        # Fallback: establish baseline manually if compare() didn't run
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
@@ -966,20 +975,7 @@ def test_notifications_go_through_service_worker_on_android(page, serve_between,
         )
     finally:
         conn.close()
-    # Fetch the updated partial so data-notices includes the new item,
-    # then swap it in so compare() sees the fresh data
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    # Now trigger compare() on the updated DOM
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
 
     assert page.evaluate("window.sw_registered") == "/static/sw.js"
@@ -1001,14 +997,7 @@ def test_fallback_to_direct_notification_when_showNotification_rejects(
     page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
     open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
@@ -1023,20 +1012,7 @@ def test_fallback_to_direct_notification_when_showNotification_rejects(
         )
     finally:
         conn.close()
-    # Fetch the updated partial so data-notices includes the new item,
-    # then swap it in so compare() sees the fresh data
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    # Now trigger compare() on the updated DOM
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
 
     shown = page.evaluate("window.shown")
@@ -1050,14 +1026,7 @@ def test_bundled_notifications_include_the_project_context(page, serve_between, 
     page.add_init_script(FAKE_SERVICE_WORKER)
     open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
@@ -1080,27 +1049,12 @@ def test_bundled_notifications_include_the_project_context(page, serve_between, 
         )
     finally:
         conn.close()
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
 
     entry = page.evaluate("window.sw_notifications[0]")
     assert entry["title"] == "2 things need you"
-    link = entry["data"]["link"]
-    from urllib.parse import urlparse
-
-    parsed = urlparse(link)
-    assert parsed.path == "/planning"
-    assert parsed.query == "project=coucou"
+    assert entry["data"]["link"] == "/planning?project=coucou"
     assert page.evaluate("window.shown") == []
 
 
@@ -1113,14 +1067,7 @@ def test_three_items_become_one_bundle_with_titles_in_body(page, serve_between, 
     page.add_init_script(FAKE_SERVICE_WORKER)
     open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
@@ -1137,17 +1084,7 @@ def test_three_items_become_one_bundle_with_titles_in_body(page, serve_between, 
         )
     finally:
         conn.close()
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
 
     entry = page.evaluate("window.sw_notifications[0]")
@@ -1171,14 +1108,7 @@ def test_bundled_notification_silent_on_next_look(page, serve_between, db_path):
     page.add_init_script(FAKE_SERVICE_WORKER)
     open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
@@ -1197,17 +1127,7 @@ def test_bundled_notification_silent_on_next_look(page, serve_between, db_path):
             )
     finally:
         conn.close()
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
     initial_count = page.evaluate("window.sw_notifications.length")
     assert initial_count == 1
@@ -1218,59 +1138,43 @@ def test_bundled_notification_silent_on_next_look(page, serve_between, db_path):
     assert final_count == initial_count
 
 
-def test_bundled_link_retains_projects_context(page, serve_between, db_path):
-    """The bundled notification link carries the page's project so the owner lands on the
-    right planning view."""
+def test_a_sign_off_in_the_same_look_as_all_done_is_not_lost(page, serve_between, db_path):
+    """F114 review F2: the last review's verdict opens a sign-off as the queue empties. Both
+    arrive in one look and make one bundle that names each; all done never hides the
+    sign-off."""
     client = serve_between(activity="check-all on main")
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="ready")
+    finally:
+        conn.close()
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
     open_overview(page, client)
-    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    page.wait_for_selector('#live-facts[data-all-done="false"]', state="attached", timeout=REFRESH)
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
-        # Two items so it triggers the bundle path (which uses /planning?project=...)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="done")
         metrics.upsert_owner_item(
-            conn,
-            project,
-            "adr",
-            "ADR 60",
-            text="Bundle test item one.",
-            created=NOW.isoformat(),
-        )
-        metrics.upsert_owner_item(
-            conn,
-            project,
-            "adr",
-            "ADR 61",
-            text="Bundle test item two.",
-            created=NOW.isoformat(),
+            conn, project, "signoff", "f1", text="Signoff item.", created=NOW.isoformat()
         )
     finally:
         conn.close()
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
 
     entry = page.evaluate("window.sw_notifications[0]")
+    assert entry["title"] == "2 things need you"
+    assert entry["body"].split("\n") == [
+        "Ready for your sign-off: The factory measures itself",
+        "All work done",
+    ]
     assert entry["data"]["link"] == "/planning?project=coucou"
 
 
@@ -1281,14 +1185,7 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
     page.add_init_script(FAKE_SERVICE_WORKER)
     open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
@@ -1307,26 +1204,11 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
             )
     finally:
         conn.close()
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-
-    # Set the project to a value with special characters and seed its baseline
-    # from the page-load baseline so enc-a / enc-b are seen as new items.
-    page.evaluate(
-        "() => { "
-        "document.querySelector('#live-facts').dataset.project = 'my&proj#2'; "
-        "localStorage.setItem('notify:my&proj#2', localStorage.getItem('notify:coucou')); "
-        "}"
-    )
-    page.evaluate("window._notifyCheck()")
+    # The next look names a project with special characters, whose first look is coucou's,
+    # so enc-a and enc-b are news
+    page.evaluate("localStorage.setItem('notify:my&proj#2', localStorage.getItem('notify:coucou'))")
+    html = client.get("/live?project=coucou").text
+    _next_look(page, client, html.replace('data-project="coucou"', 'data-project="my&amp;proj#2"'))
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
 
     entry = page.evaluate("window.sw_notifications[0]")
@@ -1343,14 +1225,7 @@ def test_fallback_notification_has_onclick_handler(page, serve_between, db_path)
     page.add_init_script(FAKE_SERVICE_WORKER_REJECTS)
     open_overview(page, client)
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     conn = metrics.open_db(db_path)
     try:
@@ -1365,17 +1240,7 @@ def test_fallback_notification_has_onclick_handler(page, serve_between, db_path)
         )
     finally:
         conn.close()
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
 
     assert len(page.evaluate("window.shown")) == 1
@@ -1383,7 +1248,7 @@ def test_fallback_notification_has_onclick_handler(page, serve_between, db_path)
     # Tap the notification notify.js created and verify navigation to the item's link.
     assert page.evaluate("typeof window.shown[0].onclick") == "function"
     page.evaluate("window.shown[0].onclick({})")
-    page.wait_for_url(lambda url: "/planning" in url or "/?" in url, timeout=REFRESH)
+    page.wait_for_url(ORIGIN + "/?project=coucou", timeout=REFRESH)  # the decision's link
 
 
 # --- notification bar (f12-01, ADR 26 item 2) ----------------------------------------------
@@ -1663,6 +1528,10 @@ def test_service_worker_listener_rejects_external_links(page, client):
     after = page.evaluate("window.location.href")
     assert before == after  # no navigation for external links
 
+    # A backslash after the slash is another host to Chrome: rejected too
+    page.evaluate("() => window._sw_message_handler({ data: { link: '/\\\\evil.com' } })")
+    assert before == page.evaluate("window.location.href")
+
     # Null link: should be rejected
     page.evaluate("() => window._sw_message_handler({ data: { link: null } })")
     assert before == page.evaluate("window.location.href")
@@ -1731,14 +1600,7 @@ def test_direct_notification_click_navigates_to_link(page, client, db_path):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
-    try:
-        page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
-    except Exception:
-        page.wait_for_function(
-            "() => typeof window._notifyEstablishBaseline === 'function'",
-            timeout=REFRESH,
-        )
-        page.evaluate("window._notifyEstablishBaseline()")
+    _seen_first_look(page)
 
     # Seed a new item so compare() produces a notification.
     conn = metrics.open_db(db_path)
@@ -1754,23 +1616,13 @@ def test_direct_notification_click_navigates_to_link(page, client, db_path):
         )
     finally:
         conn.close()
-    live_html = client.get("/live?project=coucou").text
-    page.evaluate(
-        "(html) => { document.querySelector('#live-needs-you').innerHTML = html; "
-        "document.dispatchEvent(new Event('htmx:afterSwap')); }",
-        live_html,
-    )
-    page.wait_for_function(
-        "() => typeof window._notifyCheck === 'function'",
-        timeout=REFRESH,
-    )
-    page.evaluate("window._notifyCheck()")
+    _next_look(page, client)
     page.wait_for_function("window.shown.length > 0", timeout=REFRESH)
 
     # Tap the notification notify.js created and assert navigation to the item's link.
     assert page.evaluate("typeof window.shown[0].onclick") == "function"
     page.evaluate("window.shown[0].onclick({})")
-    page.wait_for_url(lambda url: "/planning" in url or "/?" in url, timeout=REFRESH)
+    page.wait_for_url(ORIGIN + "/?project=coucou", timeout=REFRESH)  # the decision's link
 
 
 # --- the top bar's status, its button and the Planning count (f6-16) -------------------------

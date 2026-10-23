@@ -509,6 +509,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the card waited two days on f152-01, whose local developer took four hours before the lead's escalation; a ticket touching the same lines as a lead ticket might as well be the lead's. "An edited test cut to its first rows" recurred (F173, F154) and is now in `docs/agents/developer.md` rule 13.
 - **Decisions affected:** none.
 
+### F114 (2026-10-23): one notification per look, named after its card, opening its page ([review](../reviews/f114-i-want-to-be-notified-only.md))
+
+- **Q1:** two developer tickets, both merged on the second attempt after a timeout; then eight fix tickets from three checkpoints (two by Copilot standing in for Claude), six of them on the same browser tests, over six days. f114-07 took three attempts and a direction. Review round 1: three should-fix and three nits fixed by the review, one nit to the backlog.
+- **Q3:** Qwen only for the building, about 15 hours of model for roughly 200 lines of code: 5 hours on the two feature tickets, 10 on fixes; Claude $4.82 (planning, one direction, one checkpoint) before the review.
+- **Q5:** see the review's numbers.
+- **Anything else:** a chain of fix tickets on tests is a sign the cause is elsewhere. Here the stand-in service workers broke `notify.js` on load, and the developer hid that behind test hooks in production code; each checkpoint judged the newest test and missed the hook. Lesson in `docs/agents/lead.md` (Known range, F114): a second finding on tests a fix ticket of the same card already rewrote is the lead's to fix.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

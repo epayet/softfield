@@ -11,7 +11,7 @@ import sqlite3
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TypedDict
+from typing import TYPE_CHECKING, TypedDict
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request
@@ -23,6 +23,9 @@ from runner import loop, metrics
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import load_state
 from runner.tasks import milestone_order
+
+if TYPE_CHECKING:
+    from factory_dashboard.planning import DeskItem  # planning.py imports from here
 
 router = APIRouter()
 
@@ -483,7 +486,7 @@ def notices(
     open_needs: list[Need],
     card_titles: dict[str, str],
     project: str,
-    proposals: Sequence[object],
+    proposals: Sequence["DeskItem"],
 ) -> dict[str, Notices]:
     """For every open need, its title, body and link, worded from the item's kind and its card.
 
@@ -510,9 +513,7 @@ def notices(
             count = sum(
                 1
                 for p in proposals
-                if isinstance(p, object)
-                and getattr(p, "link", "").startswith(f"/planning/{card}/proposals/")
-                and not getattr(p, "on_its_way", False)
+                if p.link.startswith(f"/planning/{card}/proposals/") and not p.on_its_way
             )
             if count == 0:
                 body = "Your answer is wanted"
@@ -541,43 +542,27 @@ def notices(
                 "body": need.text,
                 "link": f"/planning/{key}?project={quote(project)}",
             }
-        elif need.kind == "adr":
+        else:  # a kind not named here still notifies (F114 review F1)
             found[need.id] = {
-                "title": "A decision for you",
-                "body": need.text,
-                "link": f"/?project={quote(project)}",
-            }
-        elif need.kind == "blocked" or need.kind == "escalated":
-            found[need.id] = {
-                "title": "A ticket is blocked",
-                "body": need.text,
-                "link": f"/?project={quote(project)}",
-            }
-        elif need.kind == "reserve" or need.kind == "five-hour":
-            found[need.id] = {
-                "title": "Claude's allowance: your choice",
-                "body": need.text,
-                "link": f"/?project={quote(project)}",
-            }
-        elif need.kind == "runner":
-            found[need.id] = {
-                "title": "The runner stopped",
-                "body": need.text,
-                "link": f"/?project={quote(project)}",
-            }
-        elif need.kind == "queue":
-            found[need.id] = {
-                "title": "The runner is idle",
-                "body": need.text,
-                "link": f"/?project={quote(project)}",
-            }
-        elif need.kind == "all_done":
-            found[need.id] = {
-                "title": "All work done",
+                "title": _OVERVIEW_TITLES.get(need.kind, NEEDS_YOU),
                 "body": need.text,
                 "link": f"/?project={quote(project)}",
             }
     return found
+
+
+NEEDS_YOU = "Something needs you"
+# The items that open the Overview, by kind (D1); all the work done is notify.js's own
+_OVERVIEW_TITLES = {
+    "adr": "A decision for you",
+    "blocked": "A ticket is blocked",
+    "escalated": "A ticket is blocked",
+    "reserve": "Claude's allowance: your choice",
+    "five-hour": "Claude's allowance: your choice",
+    loop.MAIN_RED_KIND: "A check fails on main",
+    "runner": "The runner stopped",
+    "queue": "The runner is idle",
+}
 
 
 # --- the allowance, savings ---------------------------------------------
@@ -766,7 +751,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     needs = [n for n in open_needs if n.kind not in ("planning", "signoff", "blocked")]
     project_id = metrics.find_project(conn, project)
     card_titles: dict[str, str] = {}
-    proposals: Sequence[object] = []
+    proposals: Sequence[DeskItem] = []
     if project_id is not None:
         card_titles = _card_titles(conn, project_id)
         proposals = _open_proposals(conn, project_id)

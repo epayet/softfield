@@ -17,21 +17,21 @@
   // The service worker registration (f12-01, ADR 26 item 3).
   let registration = null;
 
-  function show(title, body, tag, link) {
+  // A notification of the page's own, whose tap opens its link here
+  function direct(title, body, tag, link) {
     try {
-      if (registration) {
-        registration.showNotification(title, { body, tag, data: { link } }).catch(() => {
-          const note = new Notification(title, { body, tag });
-          note.onclick = () => { window.focus(); if (link) window.location = link; };
-        });
-        return;
-      }
       const note = new Notification(title, { body, tag });
       note.onclick = () => { window.focus(); if (link) window.location = link; };
     } catch (error) {
       // Chrome on Android shows only a service worker's notifications, and there is none
       console.warn("notify:", error);
     }
+  }
+
+  function show(title, body, tag, link) {
+    if (!registration) return direct(title, body, tag, link);
+    registration.showNotification(title, { body, tag, data: { link } })
+      .catch(() => direct(title, body, tag, link));
   }
 
   function compare(facts) {
@@ -41,20 +41,19 @@
     const before = JSON.parse(localStorage.getItem(key) || "null");
     localStorage.setItem(key, JSON.stringify({ ids: Object.keys(notices), done, at: Date.now() }));
     if (!before || Date.now() - before.at > FRESH) return; // what is already there isn't news
-    const newIds = Object.keys(notices).filter(id => !before.ids.includes(id));
-    if (newIds.length === 0 && !(done && !before.done)) return;
+    const project = "?project=" + encodeURIComponent(facts.dataset.project);
+    const fresh = Object.keys(notices)
+      .filter(id => !before.ids.includes(id))
+      .map(id => Object.assign({ tag: id }, notices[id]));
+    // all done in the same look as a sign-off (the last review's verdict) joins it, never hides it
     if (done && !before.done) {
-      show("All work done", "The queue is empty and nothing runs.", "all-done", "/");
-      return;
+      fresh.push({ tag: "all-done", title: "All work done", body: "The queue is empty and nothing runs.", link: "/" + project });
     }
-    if (newIds.length === 1) {
-      const id = newIds[0];
-      const notice = notices[id];
-      show(notice.title, notice.body, id, notice.link);
-    } else {
-      const count = newIds.length;
-      const titles = newIds.map(id => notices[id].title).join("\n");
-      show(count + " things need you", titles, "bundle", "/planning?project=" + encodeURIComponent(facts.dataset.project));
+    if (fresh.length === 1) {
+      show(fresh[0].title, fresh[0].body, fresh[0].tag, fresh[0].link);
+    } else if (fresh.length > 1) {
+      const titles = fresh.map(notice => notice.title).join("\n");
+      show(fresh.length + " things need you", titles, "bundle", "/planning" + project);
     }
   }
 
@@ -64,8 +63,8 @@
     navigator.serviceWorker.addEventListener("message", (event) => {
       const msg = event.data;
       if (!msg || typeof msg.link !== "string") return;
-      // Only accept links starting with / and not //
-      if (msg.link[0] !== "/" || msg.link[1] === "/") return;
+      // Only a path on this dashboard: "//host" and "/\host" both leave it
+      if (msg.link[0] !== "/" || msg.link[1] === "/" || msg.link[1] === "\\") return;
       window.location = msg.link;
     });
   }
@@ -153,7 +152,7 @@
     setupBar();
     registerSw();
     setupSwListener();
-    // Establish baseline on page load so tests don't need to wait for the first poll
+    // The page's own facts are the first look, so the next poll's news shows at once
     const facts = document.querySelector("#live-facts");
     if (facts && window.notifyOn()) compare(facts);
     document.body.addEventListener("htmx:afterSwap", (event) => {
@@ -161,15 +160,4 @@
       if (el && window.notifyOn()) compare(el);
     });
   });
-
-  // Test helpers: establish the baseline manually if compare() didn't run,
-  // or trigger a comparison after the database changes
-  window._notifyEstablishBaseline = () => {
-    const facts = document.querySelector("#live-facts");
-    if (facts && window.notifyOn()) compare(facts);
-  };
-  window._notifyCheck = () => {
-    const facts = document.querySelector("#live-facts");
-    if (facts && window.notifyOn()) compare(facts);
-  };
 })();
