@@ -1095,7 +1095,12 @@ def test_bundled_notifications_include_the_project_context(page, serve_between, 
 
     entry = page.evaluate("window.sw_notifications[0]")
     assert entry["title"] == "2 things need you"
-    assert "?project=coucou" in entry["data"]["link"]
+    link = entry["data"]["link"]
+    from urllib.parse import urlparse
+
+    parsed = urlparse(link)
+    assert parsed.path == "/planning"
+    assert parsed.query == "project=coucou"
     assert page.evaluate("window.shown") == []
 
 
