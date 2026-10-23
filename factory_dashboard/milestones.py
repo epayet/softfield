@@ -559,9 +559,7 @@ def _factory_project(conn: sqlite3.Connection, review_project: str) -> str:
     factory's code (``runner/loop.py`` and ``factory_dashboard/app.py``); the review's
     own project when no such project exists."""
     try:
-        rows = conn.execute(
-            "SELECT repo FROM projects WHERE name = ?", (review_project,)
-        ).fetchall()
+        rows = conn.execute("SELECT repo, name FROM projects").fetchall()
     except Exception:
         return review_project
     for row in rows:
@@ -575,12 +573,7 @@ def _factory_project(conn: sqlite3.Connection, review_project: str) -> str:
                 and (p / "runner" / "loop.py").is_file()
                 and (p / "factory_dashboard" / "app.py").is_file()
             ):
-                # Check the projects table for the name
-                name_row = conn.execute(
-                    "SELECT name FROM projects WHERE repo = ?", (repo,)
-                ).fetchone()
-                if name_row is not None:
-                    return str(name_row["name"])
+                return str(row["name"])
     return review_project
 
 
@@ -641,18 +634,26 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
         return []
 
     # Determine state from owner_requests of the target project
-    project_id = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
-    if project_id is None:
+    # Product ideas → review's own project; factory ideas → the factory's project
+    target_project = project
+    for idea in ideas:
+        if idea.area == "factory":
+            target_project = _factory_project(conn, project)
+            break
+    target_project_id = conn.execute(
+        "SELECT id FROM projects WHERE name = ?", (target_project,)
+    ).fetchone()
+    if target_project_id is None:
         return ideas
-    project_id = project_id["id"]
+    target_project_id = target_project_id["id"]
 
     plant_requests = conn.execute(
         "SELECT * FROM owner_requests WHERE project_id = ? AND kind = 'plant' ORDER BY id DESC",
-        (project_id,),
+        (target_project_id,),
     ).fetchall()
 
-    # Latest request per target project
-    latest_per_project: dict[str, sqlite3.Row | None] = {}
+    # Build a list of (request, parsed_value) pairs
+    req_list: list[tuple[sqlite3.Row, dict[str, Any]]] = []
     for req in plant_requests:
         try:
             value = json.loads(req["value"] or "{}")
@@ -660,37 +661,38 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
             continue
         if not isinstance(value, dict):
             continue
-        target = value.get("project") or value.get("area") or ""
-        if target and target not in latest_per_project:
-            latest_per_project[target] = req
-        # Also store by project_id for backward compatibility (value.project
-        # is added in the next ticket; until then the request's project_id
-        # is the only way to know which project it belongs to).
-        rid = req["project_id"]
-        if rid not in latest_per_project:
-            latest_per_project[str(rid)] = req
+        req_list.append((req, value))
 
     for idea in ideas:
-        # Try matching by project name first, then by project_id.
-        req = latest_per_project.get(idea.project)
+        req = None
+        req_value: dict[str, Any] = {}
+        # Try matching by request's ``from`` field first
+        for r, v in req_list:
+            if v.get("from") == idea.id:
+                req, req_value = r, v
+                break
+        # Then by target project name
         if req is None:
-            # Fall back to matching by project_id
+            for r, v in req_list:
+                target = v.get("project") or v.get("area") or ""
+                if target == idea.project:
+                    req, req_value = r, v
+                    break
+        # Then by project_id
+        if req is None:
             project_id_row = conn.execute(
                 "SELECT id FROM projects WHERE name = ?", (idea.project,)
             ).fetchone()
             if project_id_row is not None:
-                req = latest_per_project.get(str(project_id_row["id"]))
+                for r, v in req_list:
+                    if r["project_id"] == project_id_row["id"]:
+                        req, req_value = r, v
+                        break
         if req is None:
             continue
-        try:
-            value = json.loads(req["value"] or "{}")
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(value, dict):
-            continue
 
-        from_id = value.get("from")
-        req_text = value.get("text", "")
+        from_id = req_value.get("from")
+        req_text = req_value.get("text", "")
 
         # Exact match on ``from``
         if from_id == idea.id:

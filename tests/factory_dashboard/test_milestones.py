@@ -1354,3 +1354,213 @@ def test_no_what_next_gives_no_ideas(db_path):
     _make_milestone_with_what_next(db_path, PROJECT, "f28", what_next)
     ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f28")
     assert ideas == []
+
+
+def test_factory_idea_uses_factory_project_when_it_has_the_code(tmp_path):
+    """A factory idea from a review whose project has no factory code uses the
+    project whose folder holds the factory's code."""
+    from factory_dashboard.milestones import review_ideas
+    from runner import metrics
+
+    factory_repo = tmp_path / "factory_repo"
+    (factory_repo / "runner").mkdir(parents=True)
+    (factory_repo / "factory_dashboard").mkdir(parents=True)
+    (factory_repo / "runner" / "loop.py").write_text("# loop", encoding="utf-8")
+    (factory_repo / "factory_dashboard" / "app.py").write_text("# app", encoding="utf-8")
+    db_path = tmp_path / "factory-metrics.sqlite"
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "factory", repo=str(factory_repo))
+        metrics.upsert_project(conn, "review_proj")
+        review_pid = metrics.find_project(conn, "review_proj")
+        assert review_pid is not None
+        metrics.upsert_milestone(
+            conn,
+            review_pid,
+            "f30",
+            title="Milestone f30",
+            status="in progress",
+            signoff={"what_next": "- **Factory:**\n  > A factory idea.\n"},
+        )
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), "review_proj", "f30")
+    assert len(ideas) == 1
+    assert ideas[0].project == "factory"
+
+
+def test_factory_idea_state_from_factory_project_requests(db_path, tmp_path):
+    """A factory idea whose plant request is stored on the factory's project shows
+    its state from the review's page."""
+    from factory_dashboard.milestones import review_ideas
+    from runner import metrics
+    from tests.factory_dashboard.conftest import NOW
+
+    factory_repo = tmp_path / "factory_repo"
+    (factory_repo / "runner").mkdir(parents=True)
+    (factory_repo / "factory_dashboard").mkdir(parents=True)
+    (factory_repo / "runner" / "loop.py").write_text("# loop", encoding="utf-8")
+    (factory_repo / "factory_dashboard" / "app.py").write_text("# app", encoding="utf-8")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "factory", repo=str(factory_repo))
+        review_pid = metrics.find_project(conn, PROJECT)
+        assert review_pid is not None
+        metrics.upsert_milestone(
+            conn,
+            review_pid,
+            "f31",
+            title="Milestone f31",
+            status="in progress",
+            signoff={"what_next": "- **Factory:**\n  > Plans: every Done-when line of a card.\n"},
+        )
+        factory_pid = metrics.find_project(conn, "factory")
+        assert factory_pid is not None
+        metrics.add_request(
+            conn,
+            factory_pid,
+            "plant",
+            "",
+            json.dumps({"text": "Plans: every Done-when line of a card.", "from": "f31/1"}),
+            NOW.isoformat(),
+        )
+        last = conn.execute(
+            "SELECT max(id) FROM owner_requests WHERE project_id = ? AND kind = 'plant'",
+            (factory_pid,),
+        ).fetchone()
+        if last and last[0]:
+            conn.execute(
+                "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                (
+                    "2026-10-01T10:00:00+00:00",
+                    "planted .factory/cards/f166-plans-every-done-when-line-of.md",
+                    last[0],
+                ),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f31")
+    assert len(ideas) == 1
+    assert ideas[0].state == "planted"
+    assert ideas[0].card == "f166"
+
+
+def test_two_ideas_each_with_own_plant_request(db_path, tmp_path):
+    """Two ideas of one review, each with its own plant request in the same project,
+    each show their own state."""
+    from factory_dashboard.milestones import review_ideas
+    from runner import metrics
+    from tests.factory_dashboard.conftest import NOW
+
+    factory_repo = tmp_path / "factory_repo"
+    (factory_repo / "runner").mkdir(parents=True)
+    (factory_repo / "factory_dashboard").mkdir(parents=True)
+    (factory_repo / "runner" / "loop.py").write_text("# loop", encoding="utf-8")
+    (factory_repo / "factory_dashboard" / "app.py").write_text("# app", encoding="utf-8")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "factory", repo=str(factory_repo))
+        review_pid = metrics.find_project(conn, PROJECT)
+        assert review_pid is not None
+        metrics.upsert_milestone(
+            conn,
+            review_pid,
+            "f32",
+            title="Milestone f32",
+            status="in progress",
+            signoff={
+                "what_next": ("- **Factory:**\n  > First idea.\n- **Factory:**\n  > Second idea.\n")
+            },
+        )
+        factory_pid = metrics.find_project(conn, "factory")
+        assert factory_pid is not None
+        metrics.add_request(
+            conn,
+            factory_pid,
+            "plant",
+            "",
+            json.dumps({"text": "First idea.", "from": "f32/1"}),
+            NOW.isoformat(),
+        )
+        metrics.add_request(
+            conn,
+            factory_pid,
+            "plant",
+            "",
+            json.dumps({"text": "Second idea.", "from": "f32/2"}),
+            NOW.isoformat(),
+        )
+        req1 = conn.execute(
+            "SELECT id FROM owner_requests WHERE project_id = ? AND kind = 'plant'",
+            (factory_pid,),
+        ).fetchone()
+        if req1 and req1[0]:
+            conn.execute(
+                "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                (
+                    "2026-10-01T10:00:00+00:00",
+                    "planted .factory/cards/f166-first.md",
+                    req1[0],
+                ),
+            )
+        last = conn.execute(
+            "SELECT max(id) FROM owner_requests WHERE project_id = ? AND kind = 'plant'",
+            (factory_pid,),
+        ).fetchone()
+        if last and last[0]:
+            conn.execute(
+                "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                ("2026-10-01T10:00:00+00:00", "planted .factory/cards/f167-second.md", last[0]),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f32")
+    assert len(ideas) == 2
+    assert ideas[0].state == "planted"
+    assert ideas[0].card == "f166"
+    assert ideas[1].state == "planted"
+    assert ideas[1].card == "f167"
+
+
+def test_idea_on_its_way_when_done_is_null(db_path, tmp_path):
+    """An idea whose request has ``from`` equal to its id and ``done`` NULL is
+    \"on its way\"."""
+    from factory_dashboard.milestones import review_ideas
+    from runner import metrics
+    from tests.factory_dashboard.conftest import NOW
+
+    factory_repo = tmp_path / "factory_repo"
+    (factory_repo / "runner").mkdir(parents=True)
+    (factory_repo / "factory_dashboard").mkdir(parents=True)
+    (factory_repo / "runner" / "loop.py").write_text("# loop", encoding="utf-8")
+    (factory_repo / "factory_dashboard" / "app.py").write_text("# app", encoding="utf-8")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "factory", repo=str(factory_repo))
+        review_pid = metrics.find_project(conn, PROJECT)
+        assert review_pid is not None
+        metrics.upsert_milestone(
+            conn,
+            review_pid,
+            "f33",
+            title="Milestone f33",
+            status="in progress",
+            signoff={"what_next": "- **Factory:**\n  > A factory idea.\n"},
+        )
+        factory_pid = metrics.find_project(conn, "factory")
+        assert factory_pid is not None
+        metrics.add_request(
+            conn,
+            factory_pid,
+            "plant",
+            "",
+            json.dumps({"text": "A factory idea.", "from": "f33/1"}),
+            NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f33")
+    assert len(ideas) == 1
+    assert ideas[0].state == "on its way"
