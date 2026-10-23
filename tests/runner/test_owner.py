@@ -107,13 +107,25 @@ def test_signoff_takes_a_planning_room_card_and_a_review_with_no_status_line(rep
     assert git(repo, "status", "--porcelain") == ""
 
 
-def test_a_card_signed_off_drops_its_reserve_mark(repo: Path):
+@pytest.mark.parametrize(
+    ("header", "signed"),
+    [
+        (
+            "> **State:** building · **Priority:** 2 · **Area:** factory · **Reserve:** yes",
+            "> **State:** done · **Priority:** 2 · **Area:** factory",
+        ),
+        (  # a field after the mark keeps its " · "
+            "> **State:** building · **Reserve:** yes · **Area:** factory",
+            "> **State:** done · **Area:** factory",
+        ),
+    ],
+)
+def test_a_card_signed_off_drops_its_reserve_mark(repo: Path, header: str, signed: str):
     """F172 D5: the mark ends with the work."""
     (repo / ".factory" / "cards").mkdir(parents=True)
     card = repo / ".factory" / "cards" / "f7-one-queue.md"
     card.write_text(
-        "# Milestone F7: one queue\n\n"
-        "> **State:** building · **Priority:** 2 · **Area:** factory · **Reserve:** yes\n"
+        f"# Milestone F7: one queue\n\n{header}\n"
         "> Planted by the owner on 2026-10-01.\n\n## Notes\n**Reserve:** stays here\n"
     )
     git(repo, "add", "-A")
@@ -121,7 +133,7 @@ def test_a_card_signed_off_drops_its_reserve_mark(repo: Path):
     owner.signoff(repo, "f7-one-queue", TODAY)
     doc = card.read_text()
     assert doc.startswith(
-        "# Milestone F7: one queue\n\n> **State:** done · **Priority:** 2 · **Area:** factory\n"
+        f"# Milestone F7: one queue\n\n{signed}\n"
         "> **Status: done.** Signed off by the owner on 2026-10-01."
     )
     assert "## Notes\n**Reserve:** stays here\n" in doc  # the header's only

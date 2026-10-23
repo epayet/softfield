@@ -4218,9 +4218,10 @@ def test_a_ready_card_s_lever_is_on_when_marked_and_off_when_not(board_db, tmp_p
     assert unmarked["posts"] == {**reserve, "subject": "f24", "value": "on"}
 
 
-@pytest.mark.parametrize("thread", ["f20", "f1", "m3"])
+@pytest.mark.parametrize("thread", ["f20", "f1", "m3", "f25"])
 def test_an_idea_ripe_or_done_card_has_no_lever(board_db, tmp_path, thread):
-    """F20 is a seed (its doc marked all the same), F1 ripe, M3 signed off."""
+    """F20 is a seed (its doc marked all the same), F1 ripe, M3 signed off, and F25 growing
+    with its one ticket done, waiting for its review: nothing left to run (F172 D6)."""
     assert _lever(_thread(_reserve_client(board_db, tmp_path), thread)) is None
 
 

@@ -39,7 +39,8 @@ _UNFINISHED = ("ready", *STOPPED)
 _STATUS_MILESTONE = re.compile(r"^> \*\*Status:.*$", re.MULTILINE)
 _STATUS_LINE = re.compile(r"^- \*\*Status:\*\*.*$", re.MULTILINE)
 _CARD_STATE_LINE = re.compile(r"^> \*\*State:\*\*.*$", re.MULTILINE)  # a planning-room card
-_CARD_RESERVE = re.compile(r"[ \t]*·[ \t]*\*\*Reserve:\*\*[^·\n]*")  # ` · **Reserve:** yes`
+# ` · **Reserve:** yes`, keeping the space before a field after it
+_CARD_RESERVE = re.compile(r"[ \t]*·[ \t]*\*\*Reserve:\*\*[^·\n]*?(?=[ \t]*(?:·|$))")
 _TEST_STEPS = re.compile(r"^### \d+\. How to test it yourself\n(.*?)(?=^#|\Z)", re.M | re.S)
 
 

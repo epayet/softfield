@@ -1151,9 +1151,10 @@ def _reserve_lever(
     conn: sqlite3.Connection, project: str, project_id: int, now: datetime, thread: str
 ) -> ReserveLever | None:
     """The card's lever, as the board has its mark; None for a card in no ``RESERVABLE``
-    stage. A lever pulled shows on its way, as ``reserve_switches`` finds a switch's."""
+    stage, or with every ticket done (F172 D6: only while it has work to run, not in its
+    review). A lever pulled shows on its way, as ``reserve_switches`` finds a switch's."""
     found = next((c for c in milestone_cards(conn, project, now) if c.key.lower() == thread), None)
-    if found is None or found.stage not in RESERVABLE:
+    if found is None or found.stage not in RESERVABLE or found.done >= found.total:
         return None
     asked = conn.execute(
         "SELECT value FROM owner_requests WHERE project_id = ? AND kind = ? AND subject = ?"
