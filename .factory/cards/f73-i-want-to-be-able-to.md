@@ -1,6 +1,6 @@
 # Milestone F73: I want to be able to mark a proposal as parked for now
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

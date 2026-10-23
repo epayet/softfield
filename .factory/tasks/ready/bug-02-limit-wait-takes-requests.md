@@ -5,7 +5,7 @@ difficulty: 6
 depends_on: []
 agent: lead
 area: factory
-priority: 9
+priority: 11
 finding: f101-uv-runner-run-command-stopped-when-F3
 files:
   - runner/loop.py
