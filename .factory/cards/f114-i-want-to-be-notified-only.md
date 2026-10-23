@@ -1,6 +1,7 @@
 # Milestone F114: Notifications only for what needs me, one per bundle, opening its page
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** done · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f114-i-want-to-be-notified-only-start`. Report: [`.factory/reviews/f114-i-want-to-be-notified-only.md`](../reviews/f114-i-want-to-be-notified-only.md).
 > Planted by the owner on 2026-10-13.
 
 ## Notes
