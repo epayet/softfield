@@ -4,8 +4,9 @@
 // base.html's #live-poll fetches /live's #live-facts every 5 s (f6-16): the open
 // Needs-you items (id -> text) and whether all the work is done. Once allowed,
 // after each swap this compares them with what it saw last and notifies once per
-// new item, and once when all done turns true. What it saw is kept per project in
-// localStorage, so moving to another page or a second tab doesn't notify again.
+// new item, and once when all done turns true. What it saw is kept in one key
+// in localStorage (notify:seen), so moving between projects neither notifies again
+// nor misses.
 "use strict";
 
 (() => {
@@ -35,7 +36,7 @@
   }
 
   function compare(facts) {
-    const key = "notify:" + facts.dataset.project;
+    const key = "notify:seen";
     const notices = JSON.parse(facts.dataset.notices);
     const done = facts.dataset.allDone === "true";
     const before = JSON.parse(localStorage.getItem(key) || "null");

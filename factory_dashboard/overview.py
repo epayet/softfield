@@ -762,6 +762,33 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         needs.insert(0, Need("desk", "desk", text))
     # D1: word each notice from the item's kind and its card
     notice_data = notices(open_needs, card_titles, project, proposals)
+    # Cross-project notices: every other project's open items, prefixed with project name
+    for p in metrics.projects_in_order(conn):
+        if p.name == project:
+            continue
+        other_id = metrics.find_project(conn, p.name)
+        if other_id is None:
+            continue
+        other_items = metrics.open_owner_items(conn, other_id)
+        if not other_items:
+            continue
+        other_needs: list[Need] = []
+        for i in other_items:
+            other_needs.append(
+                Need(
+                    f"owner-{i['id']}",
+                    i["kind"],
+                    i["text"] or i["subject"],
+                    i["command"],
+                    None,
+                    i["subject"],
+                )
+            )
+        other_notices = notices(other_needs, {}, p.name, [])
+        for oid, notice in other_notices.items():
+            key = f"{p.name}/{oid}"
+            notice["title"] = f"{p.name}: {notice['title']}"
+            notice_data[key] = notice
     return {
         "needs": needs,
         "desk_items": items[:3],

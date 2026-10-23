@@ -848,11 +848,11 @@ def test_the_page_notifies_once_per_new_item_and_once_when_all_is_done(
     page.wait_for_timeout(6_000)  # another poll: nothing asked, nothing shown before it's on
     assert page.evaluate("window.asked") == 0
     assert page.evaluate("window.shown") == []
-    assert page.evaluate("localStorage.getItem('notify:coucou')") is None  # nothing compared
+    assert page.evaluate("localStorage.getItem('notify:seen')") is None  # nothing compared
     page.locator('[data-action="yes"]').click()
     bar.wait_for(state="hidden", timeout=REFRESH)
     assert page.evaluate("window.asked") == 1
-    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
     assert page.evaluate("window.shown") == []  # what was there before isn't news
 
     conn = metrics.open_db(db_path)
@@ -918,7 +918,7 @@ Object.defineProperty(navigator, "serviceWorker", {
 
 def _seen_first_look(page) -> None:
     """notify.js compared the page's own facts on load: what the next look adds is news."""
-    page.wait_for_function("localStorage.getItem('notify:coucou') !== null", timeout=REFRESH)
+    page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
 
 
 def _next_look(page, client, html: str | None = None) -> None:
@@ -1206,7 +1206,6 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
         conn.close()
     # The next look names a project with special characters, whose first look is coucou's,
     # so enc-a and enc-b are news
-    page.evaluate("localStorage.setItem('notify:my&proj#2', localStorage.getItem('notify:coucou'))")
     html = client.get("/live?project=coucou").text
     _next_look(page, client, html.replace('data-project="coucou"', 'data-project="my&amp;proj#2"'))
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
@@ -1214,6 +1213,97 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
     entry = page.evaluate("window.sw_notifications[0]")
     link = entry["data"]["link"]
     assert "?project=my%26proj%232" in link, f"expected encoded project in link, got {link}"
+
+
+def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
+    """A page on project A, then a page on project B with the same open items: no
+    notification on B, because compare uses a single localStorage key."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    # Wait for the first look to store in notify:seen
+    page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
+
+    # Add an item on coucou (the page's project)
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR cross-A",
+            text="Item on A.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    _next_look(page, client)
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+    assert page.evaluate("window.sw_notifications.length") == 1
+
+    # Switch to the other project (same database, different project)
+    conn = metrics.open_db(db_path)
+    try:
+        other = metrics.upsert_project(conn, "other")
+        metrics.upsert_owner_item(
+            conn,
+            other,
+            "adr",
+            "ADR other-new",
+            text="Item on other.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    # The coucou item (owner-*) is already in notify:seen, so no notification for it.
+    # But the 'other/owner-*' key is new, so we get one notification for the other project.
+    _next_look(page, client)
+    page.wait_for_timeout(6_000)  # wait for next poll
+    # Only the other project's new item triggers a notification (coucou's was already seen)
+    assert page.evaluate("window.sw_notifications.length") == 2
+    # The new notification is from the other project
+    last = page.evaluate("window.sw_notifications[1]")
+    assert "other:" in last["title"]
+
+    # Now switch back to coucou: the coucou item is in notify:seen, so no notification
+    _next_look(page, client)
+    page.wait_for_timeout(6_000)  # wait for next poll
+    # No new notification: coucou's item was already seen
+    assert page.evaluate("window.sw_notifications.length") == 2
+
+
+def test_new_item_on_other_project_notifies(page, serve_between, db_path):
+    """A new item on project B while a page on A is open: one notification."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    # Wait for the first look to store in notify:seen
+    page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
+
+    # Add a new item on 'other' project
+    conn = metrics.open_db(db_path)
+    try:
+        other = metrics.upsert_project(conn, "other")
+        metrics.upsert_owner_item(
+            conn,
+            other,
+            "adr",
+            "ADR new-other",
+            text="New item on other.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    _next_look(page, client)
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+    entry = page.evaluate("window.sw_notifications[0]")
+    assert "other:" in entry["title"]
+    assert entry["body"] == "New item on other."
 
 
 def test_fallback_notification_has_onclick_handler(page, serve_between, db_path):

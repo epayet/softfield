@@ -3405,3 +3405,133 @@ def test_signoff_notice_uses_short_key_for_full_milestone_key(serve_between, db_
     assert "signoff-1" in result
     assert result["signoff-1"]["title"] == "Ready for your sign-off: f8"
     assert result["signoff-1"]["link"] == "/planning/f8?project=coucou"
+
+
+def test_data_notices_has_cross_project_items(client, db_path):
+    """A page on project A with an open item on project B: data-notices has B's item,
+    titled 'B: ' then its usual title, its link carrying ?project=B."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR cross",
+            text="A cross-project item.",
+            created=NOW.isoformat(),
+        )
+        other = metrics.upsert_project(conn, "other")
+        metrics.upsert_owner_item(
+            conn,
+            other,
+            "adr",
+            "ADR other",
+            text="An item on the other project.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/live?project=coucou").text
+    _, notices, _ = _live_facts(html)
+    # The other project's item is in notices
+    other_keys = [k for k in notices if k.startswith("other/")]
+    assert len(other_keys) == 1
+    other_notice = notices[other_keys[0]]
+    assert other_notice["title"] == "other: A decision for you"
+    assert other_notice["body"] == "An item on the other project."
+    assert "?project=other" in other_notice["link"]
+
+
+def test_data_notices_excludes_forgotten_project(client, db_path):
+    """A forgotten project's items are not in data-notices."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR forgotten",
+            text="A forgotten item.",
+            created=NOW.isoformat(),
+        )
+        # Create a project and mark it forgotten
+        forgotten = metrics.upsert_project(conn, "forgotten-proj")
+        metrics.set_project_paused(conn, "forgotten-proj", metrics.FORGOTTEN)
+        metrics.upsert_owner_item(
+            conn,
+            forgotten,
+            "adr",
+            "ADR forgotten item",
+            text="Should not appear.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/live?project=coucou").text
+    _, notices, _ = _live_facts(html)
+    # No notices from the forgotten project
+    for key in notices:
+        assert not key.startswith("forgotten-proj/"), f"found forgotten-proj key: {key}"
+
+
+def test_data_notices_own_project_no_prefix(client, db_path):
+    """The page's own project's notices keep their titles, without a project name prefix."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR own",
+            text="An own item.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/live?project=coucou").text
+    _, notices, _ = _live_facts(html)
+    # Own project's notices don't have a project name prefix
+    for key, notice in notices.items():
+        if key.startswith("owner-"):
+            assert not notice["title"].startswith("coucou: "), (
+                f"own project notice should not have prefix: {notice['title']}"
+            )
+
+
+def test_data_notices_ids_start_with_project_name(client, db_path):
+    """Every id in data-notices starts with its project's name and a slash."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "adr",
+            "ADR own",
+            text="Own item.",
+            created=NOW.isoformat(),
+        )
+        other = metrics.upsert_project(conn, "other")
+        metrics.upsert_owner_item(
+            conn,
+            other,
+            "adr",
+            "ADR other",
+            text="Other item.",
+            created=NOW.isoformat(),
+        )
+    finally:
+        conn.close()
+    html = client.get("/live?project=coucou").text
+    _, notices, _ = _live_facts(html)
+    for key in notices:
+        # Each key either starts with a project name + / or is the page's own project's item
+        if "/" in key:
+            parts = key.split("/", 1)
+            assert len(parts) == 2, f"key should have exactly one slash: {key}"
+        # Own items (no slash) are from the page's project
+        if "/" not in key:
+            assert key.startswith("owner-"), f"own project key should start with 'owner-': {key}"
