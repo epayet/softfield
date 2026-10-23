@@ -1308,6 +1308,21 @@ def thread_page(
 # --- proposal review (f6-08) ----------------------------------------------------------------
 
 _MOCKUP_RE = re.compile(r"\.factory/cards/[^/]+-mockup/[^/].*")
+# Old mock-up path: ``docs/milestones/<name>-mockup/<file>`` (ADR 30's move).
+_OLD_MOCKUP_RE = re.compile(r"^docs/milestones/([^/]+)-mockup/(.+)$")
+
+
+def _resolve_mockup_path(path: str) -> str | None:
+    """Convert an old mock-up path to the new format, or return it unchanged.
+
+    Returns ``None`` when the path doesn't match either the old or new pattern.
+    """
+    if _MOCKUP_RE.fullmatch(path):
+        return path
+    match = _OLD_MOCKUP_RE.fullmatch(path)
+    if match:
+        return f".factory/cards/{match.group(1)}-mockup/{match.group(2)}"
+    return None
 
 
 def _repo(conn: sqlite3.Connection, project: str) -> Path | None:
@@ -1409,6 +1424,15 @@ def proposal_review(
     number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
     path = str(proposal.get("path") or "")
     repo = _repo(conn, project)
+    resolved = _resolve_mockup_path(path) if path else None
+    mockup: str | None = None
+    mockup_gone: str | None = None
+    if resolved is not None:
+        content = draft(repo, thread, resolved) if repo else None
+        if content is not None:
+            mockup = f"/planning/mockups/{thread}/{resolved}"
+        else:
+            mockup_gone = path
     return render(
         request,
         conn,
@@ -1426,7 +1450,8 @@ def proposal_review(
             "proposals": _proposals(conn, project_id, thread, rows, _known_cards(repo)),
             "adr_number": str(int(number[1])) if number else None,
             "merge": _merge_words(proposal),
-            "mockup": f"/planning/mockups/{thread}/{path}" if _MOCKUP_RE.fullmatch(path) else None,
+            "mockup": mockup,
+            "mockup_gone": mockup_gone,
             "adr_waits": _adr_waits(repo, listed),
             "changes": _plan_changes(repo, thread, kind),
             "word_color": _WORD_COLOR,

@@ -803,3 +803,7 @@ body.has-order-bar main { padding-bottom: 120px; }
   background: var(--hazard); color: var(--hazard-ink); border: 0; padding: 10px 16px; margin-top: 10px; }
 .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
 .projects-page .on-its-way { color: var(--opus); font-size: 13px; margin-left: 10px; }
+
+/* Mock-up gone message */
+.gone { background: var(--bay); border: 1px dashed var(--rule); padding: 10px 12px; font-size: 14px; color: var(--ink-2); }
+.gone code { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }

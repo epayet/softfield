@@ -1223,6 +1223,33 @@ def test_a_mockups_scripts_run_in_the_review_pages_frame_as_no_one(
     assert page.locator("#mockup").get_attribute("sandbox") == "allow-scripts"
 
 
+def test_a_mockup_gone_shows_its_message_and_no_frame(planning, db_path, serve, checkout):
+    """A mock-up whose old path ``docs/milestones/f54-mockup/moves.html`` can't be read
+    from either path: the page shows the gone message with the stored path and no iframe."""
+    git(checkout, "checkout", "-q", "-b", "plan/f54")
+    (checkout / ".factory/cards/f54-mockup").mkdir(parents=True, exist_ok=True)
+    # the mock-up file was never kept: only a placeholder so the branch exists
+    (checkout / ".factory/cards/f54-mockup/.gitkeep").write_text("")
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _gone_mockup = {
+        "id": "mockup",
+        "kind": "mockup",
+        "title": "F54 mock-up",
+        "path": "docs/milestones/f54-mockup/moves.html",
+        "key_points": [],
+    }
+    _write(db_path, lambda conn: _review(conn, planning, "f54", _gone_mockup))
+    client = serve()
+    html = _review_page(client, "/planning/f54/proposals/mockup")
+    assert 'id="mockup"' not in html
+    gone = re.search(r'<div class="gone">(.*?)</div>', html, re.S)
+    assert gone is not None
+    assert "isn't in the repo any more" in gone[1]
+    assert "docs/milestones/f54-mockup/moves.html" in gone[1]
+
+
 _REVIEW_REPLAN: dict[str, Any] = {
     "id": "replan",
     "kind": "replan",
