@@ -30,3 +30,12 @@ Read `.factory/cards/f165-there-s-been-a-few-conversations.md` (D1) and the mock
 - a proposal already under `.factory/cards/` shows as today; a `plan` shows no frame and no line
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2034
+gate_failures: []
+tokens: 2473289
+```
