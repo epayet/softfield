@@ -1069,6 +1069,11 @@ def _messages(rows: list[sqlite3.Row]) -> list[Message]:
     ]
 
 
+def _has_proposals(proposals: str | None) -> bool:
+    """Whether a lead message's proposals column lists proposals (not ``'[]'``)."""
+    return proposals is not None and proposals != "[]"
+
+
 def _proposals(
     conn: sqlite3.Connection,
     project_id: int,
@@ -1078,7 +1083,7 @@ def _proposals(
 ) -> list[Proposal]:
     """The proposals in the thread's latest lead message that lists some, each with where it
     stands (F31 D3); a merge whose card has left main is approved."""
-    lead = [r for r in rows if r["author"] == "lead" and r["proposals"]]
+    lead = [r for r in rows if r["author"] == "lead" and _has_proposals(r["proposals"])]
     if not lead:
         return []
     requests = _since(conn, project_id, lead[-1]["at"])
@@ -1443,7 +1448,7 @@ def proposal_review(
         " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
         (project_id, thread),
     ).fetchall()
-    lead = [r for r in rows if r["author"] == "lead" and r["proposals"]]
+    lead = [r for r in rows if r["author"] == "lead" and _has_proposals(r["proposals"])]
     listed = [p for p in json.loads(lead[-1]["proposals"]) if isinstance(p, dict)] if lead else []
     kind = str(proposal.get("kind") or "")
     key_points = proposal.get("key_points")

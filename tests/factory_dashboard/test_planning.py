@@ -2454,6 +2454,42 @@ def test_a_proposal_from_an_older_reply_is_replaced(planning, db_path, serve):
     assert 'id="approve-merge"' not in html
 
 
+def test_a_lead_message_with_empty_proposals_keeps_earlier_on_thread_and_review(
+    planning, db_path, serve
+):
+    """A lead message whose proposals are ``'[]'`` leaves the thread's earlier proposals
+    open, with their buttons on the thread and on each proposal's review page."""
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    # A later lead reply with no proposals (stored as '[]')
+    conn = metrics.open_db(db_path)
+    f9 = metrics.planner_thread(conn, planning, "f9", _at(timedelta(hours=5)))["id"]
+    conn.close()
+    _write(
+        db_path,
+        lambda conn: metrics.add_planner_message(
+            conn, f9, "lead", _at(timedelta(minutes=15)), "No replan.", proposals=[]
+        ),
+    )
+    # The thread should still show the earlier proposal with its approve button
+    thread_html = _thread(serve(), "f9")
+    assert "Parallel, said twice" in _text(thread_html)
+    # The review page should show the proposal as open, not "replaced"
+    review_html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
+    assert "Replaced by a newer reply" not in _text(review_html)
+    assert 'id="approve-merge"' in review_html
+
+
+def test_a_later_lead_message_with_a_different_proposal_still_replaces(planning, db_path, serve):
+    """A later lead message with a different proposal still replaces the earlier ones, as
+    ``test_a_proposal_from_an_older_reply_is_replaced`` checks."""
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    newer = {**_REVIEW_MERGE, "id": "new-proposal"}
+    _write(db_path, lambda conn: _review(conn, planning, "f9", newer))
+    html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
+    assert "Replaced by a newer reply" in _text(html)
+    assert 'id="approve-merge"' not in html
+
+
 def test_the_threads_cards_say_the_same_word(planning, db_path, serve):
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
     _finished(db_path, planning, "reject", "f9/merge-f9", None, "rejected merge-f9")
