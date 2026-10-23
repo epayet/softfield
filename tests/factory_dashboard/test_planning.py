@@ -4358,3 +4358,43 @@ def test_no_notes_none_or_the_general_thread_show_no_note(planning, checkout, se
 def test_a_repo_that_is_not_a_folder_shows_no_note(planning, db_path, serve):
     _write(db_path, lambda conn: metrics.upsert_project(conn, PROJECT, repo="https://x/y.git"))
     assert 'id="note"' not in _thread(serve(), "f9")
+
+
+# --- old-path resolved mockup (f165-01) -------------------------------------------------------
+
+
+def test_an_old_path_mockup_shows_its_frame_and_serves_its_file(planning, db_path, serve, checkout):
+    """A mock-up whose stored path is ``docs/milestones/f67-mockup/review.html`` but the file
+    lives at ``.factory/cards/f67-mockup/review.html`` on the plan branch: the frame's ``src``
+    ends in the resolved path, there is no gone block, and the file is served."""
+    git(checkout, "checkout", "-q", "-b", "plan/f67")
+    (checkout / ".factory/cards/f67-mockup").mkdir(parents=True, exist_ok=True)
+    (checkout / ".factory/cards/f67-mockup/review.html").write_text("<p>the desk</p>")
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _old_mockup = {
+        "id": "mockup",
+        "kind": "mockup",
+        "title": "F67 mock-up",
+        "path": "docs/milestones/f67-mockup/review.html",
+        "key_points": [],
+    }
+    _write(db_path, lambda conn: _review(conn, planning, "f67", _old_mockup))
+    client = serve()
+    html = _review_page(client, "/planning/f67/proposals/mockup")
+    frame = re.search(r'<iframe id="mockup" src="([^"?]+)[^"]*" sandbox="allow-scripts" ', html)
+    assert frame and frame[1].endswith(".factory/cards/f67-mockup/review.html")
+    assert 'id="mockup"' in html
+    gone = re.search(r'<div class="gone">', html)
+    assert gone is None
+    served = client.get(frame[1])
+    assert (served.status_code, served.text) == (200, "<p>the desk</p>")
+
+
+def test_a_plan_proposal_shows_no_frame_and_no_gone_block(planning, db_path, serve):
+    """A ``plan`` proposal: no mockup iframe and no gone block."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN))
+    html = _review_page(serve(), "/planning/f6/proposals/plan")
+    assert 'id="mockup"' not in html
+    assert re.search(r'<div class="gone">', html) is None
