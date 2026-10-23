@@ -787,7 +787,7 @@ def card_doc_client(db_path, tmp_path):
         "\n"
         "## Notes\n"
         "This is the owner's note.\n"
-        "It has two lines.\n",
+        "It has two lines, <b>not bold</b>.\n",
         encoding="utf-8",
     )
     conn = metrics.open_db(db_path)
@@ -955,6 +955,11 @@ def test_a_card_with_outcome_shows_it_in_about_and_folds_the_note(card_doc_clien
     assert "Done when" in about
     assert "The outcome shows" in about
     assert "The note is folded" in about
+    # the Outcome is a real list, not its tags as text (section() unescapes, so check the HTML)
+    assert "<li>The page shows this outcome</li>" in html
+    assert "&lt;li&gt;" not in html
+    # the note stays the owner's text, escaped
+    assert "&lt;b&gt;not bold&lt;/b&gt;" in html
     # The old #outcome section should not exist
     assert 'id="outcome"' not in html
 

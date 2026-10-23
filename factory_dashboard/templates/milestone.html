@@ -28,24 +28,24 @@
   <a class="card-thread" href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a>
 </header>
 
-{% if about_data %}
 <section class="about" id="about">
   <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
   <div class="body">
-    {% if about_data.outcome_html %}
+    {# outcome_html and done_when_html are escaped by _to_html; the note is plain text #}
+    {% if about.outcome_html %}
     <p class="label">What it will do</p>
-    {{ about_data.outcome_html }}
-    {% if about_data.done_when_html %}
+    {{ about.outcome_html | safe }}
+    {% if about.done_when_html %}
     <p class="label">Done when</p>
-    {{ about_data.done_when_html }}
+    {{ about.done_when_html | safe }}
     {% endif %}
-    {% if about_data.note %}
+    {% if about.note %}
     <details><summary>Your note ›</summary>
-      <p class="note">{{ about_data.note }}</p></details>
+      <p class="note">{{ about.note }}</p></details>
     {% endif %}
-    {% elif about_data.note %}
+    {% elif about.note %}
     <p class="label">Your note</p>
-    <p class="note">{{ about_data.note }}</p>
+    <p class="note">{{ about.note }}</p>
     <p class="later">The lead writes what it will do when it plans the card.</p>
     {% else %}
     <p class="later">Nothing written about it yet.</p>
@@ -53,24 +53,6 @@
     {% endif %}
   </div>
 </section>
-{% else %}
-<section class="about" id="about">
-  <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
-  <div class="body">
-    {% if milestone.outcome %}
-    <p class="label">What it will do</p>
-    {{ outcome_html | safe }}
-    {% if milestone.done_when %}
-    <p class="label">Done when</p>
-    {{ done_when_html | safe }}
-    {% endif %}
-    {% else %}
-    <p class="later">Nothing written about it yet.</p>
-    <p class="later"><a href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a></p>
-    {% endif %}
-  </div>
-</section>
-{% endif %}
 
 <section id="grew" class="panel">
   <h2>How it grew</h2>

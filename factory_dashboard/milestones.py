@@ -34,46 +34,32 @@ router = APIRouter()
 
 @dataclass(frozen=True)
 class AboutDoc:
+    """The card page's "What it's about" (F158 D1): Outcome and Done when as HTML, and the
+    owner's note as plain text."""
+
     outcome_html: str
     done_when_html: str
-    note: str | None
+    note: str
 
 
 def read_card_doc(repo: Path | None, thread: str) -> AboutDoc | None:
-    """Read the card's doc from ``.factory/cards/`` and return its Outcome, Done when and Notes.
+    """The card's Outcome, Done when and note from its doc in ``.factory/cards/``;
+    None when there is no checkout or no doc."""
+    # planning imports this module
+    from factory_dashboard.planning import _note
 
-    Returns ``None`` when there is no checkout or no card doc.
-    """
     if repo is None:
         return None
     try:
-        path = milestone_file(repo, "cards", full_key(repo, thread))
-        if not path.is_file():
-            return None
-        text = path.read_text(encoding="utf-8")
+        text = milestone_file(repo, "cards", full_key(repo, thread)).read_text(encoding="utf-8")
     except OSError:
         return None
     doc = milestone_doc(text)
-    note = _card_note(text)
     return AboutDoc(
-        outcome_html=_to_html(doc.get("outcome")) if doc.get("outcome") else "",
-        done_when_html=_to_html(doc.get("done_when")) if doc.get("done_when") else "",
-        note=note,
+        outcome_html=_to_html(doc.get("outcome")),
+        done_when_html=_to_html(doc.get("done_when")),
+        note=_note(repo, thread),
     )
-
-
-def _card_note(text: str) -> str:
-    """The card's ``## Notes`` section, stripped of markdown heading prefixes.
-
-    Returns ``""`` when there is no Notes section, "(none)" or the general thread.
-    """
-    found = re.search(r"^## Notes[ \t]*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
-    if not found:
-        return ""
-    note = found.group(1).strip()
-    if note == "(none)":
-        return ""
-    return re.sub(r"^(?:#{1,6} |\\(?=[>#]))", "", note, flags=re.MULTILINE)
 
 
 @dataclass(frozen=True)
@@ -451,7 +437,6 @@ class MilestoneDetail:
     tickets: list[TicketRow]
     runs: list[sqlite3.Row]
     findings: dict[str, int]
-    about: AboutDoc | None
 
 
 def get_milestone_detail(
@@ -492,7 +477,6 @@ def get_milestone_detail(
         tickets=tickets,
         runs=runs,
         findings=findings,
-        about=None,  # filled in milestone_detail from the card's doc
     )
 
 
@@ -527,8 +511,10 @@ def milestone_detail(
     review = None if project_id is None else _review(conn, project, project_id, short_key(key), now)
     card = milestone_card(conn, project, now, key)  # None for a removed one: no stage
     grew = how_it_grew(card, detail.started, detail.ended)
-    repo = _repo(conn, project)
-    about_data = read_card_doc(repo, key)
+    # from the card's doc; no checkout or no doc: the stored copy, as before F158
+    about = read_card_doc(_repo(conn, project), key) or AboutDoc(
+        _to_html(detail.outcome), _to_html(detail.done_when), ""
+    )
     return render(
         request,
         conn,
@@ -543,9 +529,7 @@ def milestone_detail(
             # the header's "growing since", on a started card's own stage (F154 D4)
             "growing_since": next((g.when for g in grew if g.current and g.when), ""),
             "thread": short_key(key),
-            "about_data": about_data,
-            "outcome_html": _to_html(detail.outcome),
-            "done_when_html": _to_html(detail.done_when),
+            "about": about,
             "signoff_html": signoff_html,
             "review": review,
         },
