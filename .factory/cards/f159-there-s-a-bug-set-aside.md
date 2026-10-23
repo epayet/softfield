@@ -1,6 +1,7 @@
 # Milestone F159: A set-aside ticket says it won't run, with a Queue it button on its page
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f159-there-s-a-bug-set-aside-start`. Report: [`.factory/reviews/f159-there-s-a-bug-set-aside.md`](../reviews/f159-there-s-a-bug-set-aside.md).
 > Planted by the owner on 2026-10-20.
 
 ## Notes
