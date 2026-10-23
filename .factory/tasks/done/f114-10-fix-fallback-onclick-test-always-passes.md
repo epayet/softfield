@@ -28,3 +28,12 @@ Seen at checkpoint 2 (after f114-09): `test_direct_notification_click_navigates_
 - each finding above no longer holds: the test fails if the fallback's `onclick` is removed or does not navigate to the notice's link
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1903
+gate_failures: []
+tokens: 1152441
+```
