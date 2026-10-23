@@ -69,7 +69,14 @@ from runner.requests import (
     owners_words,
     refused,
 )
-from runner.tasks import TaskError, milestone_key, short_key, split_frontmatter
+from runner.tasks import (
+    TaskError,
+    full_key,
+    milestone_file,
+    milestone_key,
+    short_key,
+    split_frontmatter,
+)
 
 router = APIRouter()
 
@@ -1283,6 +1290,7 @@ def thread_page(
             "thread": thread,
             "card_title": title,
             "card_meta": meta,
+            "note": _note(repo, thread),
             "reserve_lever": lever,
             "seed": seed,
             "has_thread": bool(messages),
@@ -1330,6 +1338,20 @@ def _repo(conn: sqlite3.Connection, project: str) -> Path | None:
     row = conn.execute("SELECT repo FROM projects WHERE name = ?", (project,)).fetchone()
     repo = Path(row["repo"]) if row and row["repo"] else None
     return repo if repo and repo.is_dir() else None
+
+
+def _note(repo: Path | None, thread: str) -> str:
+    """The owner's whole note: the card's doc between ``## Notes`` and the next ``## `` line.
+    "" for no checkout, no doc, no section, "(none)" or the general thread (F90 D2)."""
+    if repo is None or thread == GENERAL:
+        return ""
+    try:
+        text = milestone_file(repo, "cards", full_key(repo, thread)).read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    found = re.search(r"^## Notes[ \t]*\n(.*?)(?=^## |\Z)", text, re.MULTILINE | re.DOTALL)
+    note = found[1].strip() if found else ""
+    return "" if note == "(none)" else note
 
 
 def _adr_waits(repo: Path | None, proposals: list[dict[str, object]]) -> bool:

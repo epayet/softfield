@@ -4303,3 +4303,48 @@ def test_pulling_the_lever_posts_its_request_and_shows_it_on_its_way(page, board
     finally:
         conn.close()
     assert [tuple(r) for r in rows] == [("f24", "on", None)]
+
+
+def _doc(checkout: Path, key: str, body: str) -> None:
+    cards = checkout / ".factory" / "cards"
+    cards.mkdir(parents=True, exist_ok=True)
+    (cards / f"{key}.md").write_text(f"# Milestone {key}\n\n{body}", encoding="utf-8")
+
+
+def test_a_seed_shows_its_whole_note_under_a_cut_title(planning, checkout, serve):
+    """F90 D2: the title is cut, the doc's Notes shown whole, escaped, in #note."""
+    note = "is the planning conversation efficient atm, " + "x" * 60 + " <b>end</b>?"
+    assert len(note) > 100
+    _doc(checkout, "f9", f"## Notes\n{note}\n\n## Why\nnot this\n")
+    html = _thread(serve(), "f9")
+    section = html.split('<section id="note"', 1)[1].split("</section>", 1)[0]
+    assert "&lt;b&gt;end&lt;/b&gt;?" in section and "not this" not in section
+    assert "white-space: pre-line" in section and "<details" not in section
+    assert html.index('id="card"') < html.index('id="note"')
+
+
+def test_a_card_with_a_thread_folds_the_note(planning, checkout, db_path, serve):
+    _doc(checkout, "f7", "## Notes\nWhole note.\n")
+
+    def lead_only(conn: sqlite3.Connection) -> None:
+        f7 = metrics.planner_thread(conn, planning, "f7", NOW.isoformat())["id"]
+        metrics.add_planner_message(conn, f7, "lead", _at(timedelta(minutes=5)), "Hello.")
+
+    _write(db_path, lead_only)
+    html = _thread(serve(), "f7")
+    assert '<details id="note">' in html and "Your note" in html and "Whole note." in html
+    assert '<section id="note"' not in html
+
+
+def test_no_notes_none_or_the_general_thread_show_no_note(planning, checkout, serve):
+    client = serve()
+    _doc(checkout, "f9", "## Why\nNo notes here.\n")
+    _doc(checkout, "f6", "## Notes\n(none)\n\n## Why\nx\n")
+    _doc(checkout, "general", "## Notes\nNot a card.\n")
+    for thread in ("f9", "f6", "general"):
+        assert 'id="note"' not in _thread(client, thread)
+
+
+def test_a_repo_that_is_not_a_folder_shows_no_note(planning, db_path, serve):
+    _write(db_path, lambda conn: metrics.upsert_project(conn, PROJECT, repo="https://x/y.git"))
+    assert 'id="note"' not in _thread(serve(), "f9")

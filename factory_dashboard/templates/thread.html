@@ -31,6 +31,20 @@
       {% endfor %}
     </header>
 
+    {% if note %}
+    {# F90 D1, D2: the owner's whole note, from the card's doc; folded once a thread exists #}
+    {% if has_thread %}
+    <details id="note">
+      <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Your note</summary>
+      <p style="margin: 0; white-space: pre-line; overflow-wrap: anywhere">{{ note }}</p>
+    </details>
+    {% else %}
+    <section id="note" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 16px">
+      <p style="margin: 0; white-space: pre-line; overflow-wrap: anywhere">{{ note }}</p>
+    </section>
+    {% endif %}
+    {% endif %}
+
     {% if review %}
     {# F50 D2, D3: the review's sheet (the lead's Markdown, through _to_html), and Sign off on a
        ripe card: what was asked shows at once, on its way, and the button goes #}
