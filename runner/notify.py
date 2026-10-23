@@ -142,8 +142,17 @@ def setup(machine: Path) -> tuple[str, bool]:
     line = f'ntfy = "{NTFY}{topic}"\n'
     lines = text.splitlines(keepends=True)
     header = next((i for i, x in enumerate(lines) if x.strip() == "[notify]"), None)
-    if header is not None:  # the table without its address
-        lines.insert(header + 1, line)
+    if header is not None:  # the table without its address, or with an empty one
+        empty = None
+        for i in range(header + 1, len(lines)):
+            if lines[i].lstrip().startswith("["):  # the next table
+                break
+            if lines[i].split("=")[0].strip() == "ntfy":
+                empty = i
+        if empty is None:
+            lines.insert(header + 1, line)
+        else:  # a second key would leave the whole file unreadable
+            lines[empty] = line
         new = "".join(lines)
     else:
         before = "" if not text else "\n" if text.endswith("\n") else "\n\n"

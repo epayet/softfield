@@ -784,7 +784,12 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
                     i["subject"],
                 )
             )
-        other_notices = notices(other_needs, {}, p.name, [])
+        other_notices = notices(
+            other_needs,
+            _card_titles(conn, other_id),
+            p.name,
+            _open_proposals(conn, other_id),
+        )
         for oid, notice in other_notices.items():
             key = f"{p.name}/{oid}"
             notice["title"] = f"{p.name}: {notice['title']}"

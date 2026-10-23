@@ -312,6 +312,15 @@ def test_setup_makes_the_file_and_adds_the_address_to_a_bare_section(tmp_path, m
     assert topic != first
 
 
+def test_setup_fills_an_empty_address_and_keeps_the_file_readable(tmp_path):
+    """F142 review F4: a second ``ntfy`` key would make the whole machine file unreadable."""
+    machine = _machine(tmp_path / "factory.toml", '[notify]\nntfy = ""\n\n[other]\nntfy = "x"\n')
+    topic, written = notify.setup(machine)
+    data = tomllib.loads(machine.read_text())
+    assert written and data["notify"]["ntfy"] == f"https://ntfy.sh/{topic}"
+    assert data["other"] == {"ntfy": "x"}
+
+
 def test_notify_test_says_whether_ntfy_took_it(sent, capsys):
     assert cli.main(["notify", "test"]) == 0
     [one] = sent

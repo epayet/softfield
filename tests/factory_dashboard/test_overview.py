@@ -3443,6 +3443,31 @@ def test_data_notices_has_cross_project_items(client, db_path):
     assert "?project=other" in other_notice["link"]
 
 
+def test_another_projects_reply_is_worded_from_its_own_cards(serve_between, db_path):
+    """F142 review F1: a lead's reply on another project's card is titled with that card's
+    title and counts its open proposals, as on its own project's page."""
+    client = serve_between()
+    conn = metrics.open_db(db_path)
+    try:
+        other = metrics.upsert_project(conn, "other")
+        metrics.upsert_milestone(conn, other, "f7", title="Other's f7 card", status="in progress")
+        thread = metrics.planner_thread(conn, other, "f7", NOW.isoformat())
+        proposals = json.dumps([{"id": 1, "title": "One"}, {"id": 2, "title": "Two"}])
+        metrics.add_planner_message(
+            conn, thread["id"], "lead", NOW.isoformat(), "A reply.", proposals=proposals
+        )
+        metrics.upsert_owner_item(conn, other, "planning", "f7", text="The lead answered.")
+    finally:
+        conn.close()
+    _, notices, _ = _live_facts(client.get("/live?project=coucou").text)
+    [notice] = [n for k, n in notices.items() if k.startswith("other/")]
+    assert notice == {
+        "title": "other: The lead replied: Other's f7 card",
+        "body": "2 proposals to review",
+        "link": "/planning/f7?project=other",
+    }
+
+
 def test_data_notices_excludes_forgotten_project(client, db_path):
     """A forgotten project's items are not in data-notices."""
     conn = metrics.open_db(db_path)
@@ -3471,9 +3496,10 @@ def test_data_notices_excludes_forgotten_project(client, db_path):
         conn.close()
     html = client.get("/live?project=coucou").text
     _, notices, _ = _live_facts(html)
-    # No notices from the forgotten project
-    for key in notices:
-        assert not key.startswith("forgotten-proj/"), f"found forgotten-proj key: {key}"
+    # The page's own item is there, the forgotten project's isn't (F142 review F5)
+    assert "A forgotten item." in [n["body"] for n in notices.values()]
+    assert "Should not appear." not in [n["body"] for n in notices.values()]
+    assert not [key for key in notices if key.startswith("forgotten-proj/")]
 
 
 def test_data_notices_own_project_no_prefix(client, db_path):
@@ -3507,7 +3533,7 @@ def test_data_notices_ids_start_with_project_name(client, db_path):
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
-        metrics.upsert_owner_item(
+        own = metrics.upsert_owner_item(
             conn,
             project,
             "adr",
@@ -3516,7 +3542,7 @@ def test_data_notices_ids_start_with_project_name(client, db_path):
             created=NOW.isoformat(),
         )
         other = metrics.upsert_project(conn, "other")
-        metrics.upsert_owner_item(
+        others = metrics.upsert_owner_item(
             conn,
             other,
             "adr",
@@ -3528,7 +3554,7 @@ def test_data_notices_ids_start_with_project_name(client, db_path):
         conn.close()
     html = client.get("/live?project=coucou").text
     _, notices, _ = _live_facts(html)
-    for key in notices:
-        assert "/" in key, f"key must start with project name + slash: {key}"
-        parts = key.split("/", 1)
-        assert len(parts) == 2, f"key should have exactly one slash: {key}"
+    # each id names its own project, not just any one (F142 review F5)
+    assert {f"coucou/owner-{own}", f"other/owner-{others}"} <= set(notices)
+    assert notices[f"other/owner-{others}"]["body"] == "Other item."
+    assert all(key.startswith(("coucou/", "other/")) for key in notices)

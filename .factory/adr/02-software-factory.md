@@ -517,6 +517,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a chain of fix tickets on tests is a sign the cause is elsewhere. Here the stand-in service workers broke `notify.js` on load, and the developer hid that behind test hooks in production code; each checkpoint judged the newest test and missed the hook. Lesson in `docs/agents/lead.md` (Known range, F114): a second finding on tests a fix ticket of the same card already rewrote is the lead's to fix.
 - **Decisions affected:** none.
 
+### F142 (2026-10-23): notifications from every project, and to a closed phone through ntfy ([review](../reviews/f142-why-am-i-not-getting-notifications.md))
+
+- **Q1:** two lead tickets (the ntfy sender, protected `runner/`; the phone's steps), each merged first time on Opus (14 and 5 minutes); one developer ticket (every project's notices) merged first time in 77 minutes, then one checkpoint fix ticket, first time in 62 minutes. Review round 1: three should-fix (one fixed by the review, two to developer tickets f142-04 and f142-05) and two nits fixed by the review.
+- **Q3:** Claude $4.12 building the two lead tickets and $0.24 for the checkpoint; planning $22.82 over five planner jobs, including ADR 31; the local model 9.9M tokens in for the two developer tickets.
+- **Q5:** see the review's numbers.
+- **Anything else:** the checkpoint caught the id mismatch but not the two other slips in the same diff (words without the card's titles; one "all done" flag for every project). A worded notice's test should use a kind whose words depend on the data (a reply, not an `adr`), or it can't see missing titles.
+- **Decisions affected:** ADR 31 is now code.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
