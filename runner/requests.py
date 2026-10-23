@@ -19,7 +19,7 @@ from typing import NamedTuple
 
 import yaml
 
-from runner import loop, metrics, milestone, owner, planner
+from runner import loop, metrics, milestone, notify, owner, planner
 from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, GitError, with_trailers
 from runner.state import State
@@ -1679,9 +1679,12 @@ def _project_order(conn: sqlite3.Connection, value: str | None) -> str:
     )
 
 
-def _lapse(conn: sqlite3.Connection, project_id: int, state: State, now: datetime) -> list[str]:
+def _lapse(
+    repo: Path, conn: sqlite3.Connection, project_id: int, state: State, now: datetime
+) -> list[str]:
     """The switches on for 24 hours turned off, each with a Needs-you item that asks to turn
-    it on again (the owner, 2026-10-04)."""
+    it on again (the owner, 2026-10-04), and a notification to the phone when it opens (ADR 31
+    item 3): one that wasn't sent is a line too, starting ``notify.NOT_SENT``."""
     lines = []
     for switch in loop.lapse_switches(state, now):
         which = "the week's switch" if switch == loop.WEEK else "the 5-hour switch"
@@ -1689,6 +1692,7 @@ def _lapse(conn: sqlite3.Connection, project_id: int, state: State, now: datetim
             f"Claude's reserve: {which} went off after 24 hours."
             f" Turn “{loop.SWITCHES[switch]}” on again for 24 h?"
         )
+        was_open = (loop.RESERVE_KIND, switch) in notify.open_items(conn, project_id)
         metrics.upsert_owner_item(
             conn,
             project_id,
@@ -1699,6 +1703,10 @@ def _lapse(conn: sqlite3.Connection, project_id: int, state: State, now: datetim
             created=now.isoformat(),
         )
         lines.append(text)
+        if not was_open:
+            message = notify.item_message(loop.RESERVE_KIND, switch)
+            if (note := notify.to_owner(project_name(repo), *message)) is not None:
+                lines.append(note)
     return lines
 
 
@@ -1920,7 +1928,7 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
         project = metrics.find_project(conn, project_name(repo))
         if project is None:
             return []
-        lines = _lapse(conn, project, state, now)
+        lines = _lapse(repo, conn, project, state, now)
         if metrics.once(conn, CLEAR_OUT, now.isoformat()):
             lines += _clear_out(repo, conn, project, now)
         _settle_waits(conn, project, state, now)

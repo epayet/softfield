@@ -153,6 +153,16 @@ def machine_metrics_db() -> Path:
     return Path(data.get("metrics", {}).get("db", DEFAULT_METRICS_DB)).expanduser()
 
 
+def machine_ntfy() -> str | None:
+    """`[notify] ntfy` in the machine's file, the ntfy topic's address; never a project's:
+    the topic is the only lock on what it shows (ADR 31 item 5). None: nothing is sent."""
+    machine = machine_file()
+    data = tomllib.loads(machine.read_text(encoding="utf-8")) if machine.is_file() else {}
+    table = data.get("notify")
+    address = table.get("ntfy") if isinstance(table, dict) else None
+    return str(address) if address else None
+
+
 def project_name(repo: Path) -> str:
     """`[project] name` in the repo's ``.factory/project.toml``, else its folder's name."""
     try:

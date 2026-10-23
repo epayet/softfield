@@ -29,6 +29,7 @@ from runner import (
     look,
     messages,
     metrics,
+    notify,
     planner,
     prompts,
     ratings,
@@ -491,6 +492,12 @@ def _record[**P, T](
     except Exception as exc:
         _metrics_failed(s, exc)
         return None
+
+
+def _notify(s: Session, words: str, path: str) -> None:
+    """One notification to the owner's phone (ADR 31); one that wasn't sent is a report note."""
+    if (note := notify.to_owner(s.cfg.project_name, words, path)) is not None:
+        s.report.notes.append(note)
 
 
 def _rel(s: Session, path: Path) -> str:
@@ -2514,6 +2521,7 @@ def block(s: Session, task_path: Path, reason: str) -> None:
     s.report.notes.append(f"Blocked {task_path.stem}: {reason}")
     waiting = waiting_behind(s, target.stem)
     if s.project_id is not None:
+        was_open = _record(s, notify.open_items, s.project_id)
         _record(
             s,
             metrics.upsert_owner_item,
@@ -2524,6 +2532,8 @@ def block(s: Session, task_path: Path, reason: str) -> None:
             command="",  # an older item's rerun command goes too
             created=now().isoformat(),
         )
+        if was_open is not None and (BLOCKED_KIND, target.stem) not in was_open:
+            _notify(s, *notify.item_message(BLOCKED_KIND, target.stem))  # ADR 31 item 3
     where = f"ticket in {target.relative_to(s.repo).as_posix()}"
     s.log(console.stopped(task_path.stem, "blocked", reason, where, waiting))
     _look_at_block(s, target, reason, escalated=task_path.parent.name == "escalated")
@@ -4478,6 +4488,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         text=item,
         created=now().isoformat(),
     )
+    _notify(s, *notify.item_message(planner.PLANNING, thread))  # each reply is news
 
 
 def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:
@@ -5006,6 +5017,7 @@ def apply_owner_requests(s: Session) -> None:
         return
     for line in lines:
         s.log(f"[{RUNNER_AGENT}] the owner's request: {line}")
+    s.report.notes += [line for line in lines if line.startswith(notify.NOT_SENT)]
     if lines:
         save_state(s.state, s.state_path)
         sync_tickets(s)  # a queued ticket shows in the queue at once

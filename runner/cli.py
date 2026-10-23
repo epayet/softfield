@@ -2,9 +2,9 @@
 
 import argparse
 import os
-import socket
 import subprocess
 import sys
+import tomllib
 from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
@@ -19,6 +19,7 @@ from runner import (
     look,
     loop,
     metrics,
+    notify,
     owner,
     procs,
     report,
@@ -63,13 +64,10 @@ def _repo() -> Path:
 
 
 def _lan_address() -> str:
-    """This machine's home-network address, for `runner dashboard --lan` (f5-03): the source
-    address of a UDP socket "connected" to a public IP. A UDP connect only picks the route;
-    it sends nothing."""
+    """This machine's home-network address, for `runner dashboard --lan` (f5-03), as the
+    phone's notifications open it (``notify.lan_ip``)."""
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
-            udp.connect(("1.1.1.1", 80))
-            return str(udp.getsockname()[0])
+        return notify.lan_ip()
     except OSError as exc:
         raise RunnerError(f"no home-network address found ({exc}); give --host instead") from exc
 
@@ -206,6 +204,34 @@ def _forget(name: str, db: Path, *, ask: bool) -> int:
     return 0
 
 
+def _notify(action: str) -> int:
+    """`softfield notify setup` and `test`: the phone's notifications through ntfy (ADR 31
+    item 5), set in the machine's file, not a project's."""
+    if action == "setup":
+        machine = config.machine_file()
+        try:
+            topic, written = notify.setup(machine)
+        except (OSError, tomllib.TOMLDecodeError) as exc:
+            print(f"softfield: {machine} can't be read or written ({exc})")
+            return 1
+        print(f"{'Wrote' if written else 'Kept'} [notify] in {machine}.")
+        print(f"In the ntfy app, subscribe to the topic: {topic}")
+        return 0
+    try:
+        address = config.machine_ntfy()
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        print(f"softfield: the machine's settings can't be read ({exc})")
+        return 1
+    if address is None:
+        print("softfield: no [notify] setting yet: run `softfield notify setup` first")
+        return 1
+    if (failed := notify.send("softfield", notify.TEST, "/projects")) is not None:
+        print(f"softfield: ntfy.sh didn't take it. {failed}")
+        return 1
+    print(f"ntfy.sh took it: “softfield · {notify.TEST}” is on its way to your phone.")
+    return 0
+
+
 def _machine_command(args: argparse.Namespace) -> int:
     """The commands that need no project: `init` makes one, `service` serves them all, and
     `dashboard` outside a project opens on the first in the owner's order (ADR 30)."""
@@ -228,6 +254,8 @@ def _machine_command(args: argparse.Namespace) -> int:
         os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
     if args.command == "forget":
         return _forget(args.name, db, ask=not args.yes)
+    if args.command == "notify":
+        return _notify(args.action)
     if args.command == "dashboard" and args.action == "update":
         source = loop.softfield_repo()
         if source is None:
@@ -505,6 +533,10 @@ def main(argv: list[str] | None = None) -> int:
     forget.add_argument("--yes", action="store_true", help="don't ask to confirm")
     service = sub.add_parser("service", help="the runner and the dashboard as systemd services")
     service.add_argument("action", choices=("install",))
+    notify_cmd = sub.add_parser(
+        "notify", help="notifications to your phone through ntfy (ADR 31): set up, or test"
+    )
+    notify_cmd.add_argument("action", choices=("setup", "test"))
     args = parser.parse_args(argv)
     if getattr(args, "lan", False) and args.host:
         dashboard.error("--lan finds this machine's address itself: give --lan or --host, not both")
@@ -513,7 +545,7 @@ def main(argv: list[str] | None = None) -> int:
         return _guide()
     if args.command == "run" and not (getattr(args, "here", False) or getattr(args, "once", False)):
         return _run_projects(args, restarted)
-    if args.command in ("init", "service", "forget") or (
+    if args.command in ("init", "service", "forget", "notify") or (
         args.command == "dashboard" and (args.action == "update" or _here() is None)
     ):
         return _machine_command(args)

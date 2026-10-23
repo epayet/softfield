@@ -15,7 +15,7 @@ from pathlib import Path
 
 import yaml
 
-from runner import metrics
+from runner import metrics, notify
 from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.loop import BLOCKED_KIND, blocked_text
@@ -176,10 +176,13 @@ def _record_items(
     items: list[OwnerItem],
     conn: sqlite3.Connection,
     project: int,
-) -> None:
-    """The verdict's items open; this milestone's earlier ones a rerun cleared, resolved."""
+) -> str | None:
+    """The verdict's items open; this milestone's earlier ones a rerun cleared, resolved.
+    Those it opened, new or again, are one notification to the phone (ADR 31 item 2): why it
+    wasn't sent, if it wasn't."""
     at = _now()
     metrics.upsert_milestone(conn, project, milestone, verdict=said)
+    was_open = notify.open_items(conn, project)
     for item in items:
         metrics.upsert_owner_item(
             conn, project, item.kind, item.subject, text=item.text, command=item.command, created=at
@@ -191,6 +194,9 @@ def _record_items(
         project,
         lambda kind, subject: (kind, subject) not in current and cleared(kind, subject),
     )
+    opened = [(i.kind, i.subject) for i in items if (i.kind, i.subject) not in was_open]
+    message = notify.items_message(list(dict.fromkeys(opened)), milestone)
+    return None if message is None else notify.to_owner(project_name(repo), *message)
 
 
 def _resolve(conn: sqlite3.Connection, project: int, wanted: Callable[[str, str], bool]) -> None:
@@ -206,6 +212,21 @@ def rerun_started(repo: Path, milestone: str, db: Path | None = None) -> None:
     _write(
         repo, db, lambda conn, project: _resolve(conn, project, _cleared_by_rerun(repo, milestone))
     )
+
+
+def _recorded(
+    repo: Path, db: Path | None, milestone: str, said: str, items: list[OwnerItem]
+) -> list[str]:
+    """The verdict's items recorded; a notification that wasn't sent is a line of the
+    verdict, and so of the session's report (``record_verdict``)."""
+    notes: list[str] = []
+
+    def write(conn: sqlite3.Connection, project: int) -> None:
+        if (note := _record_items(repo, milestone, said, items, conn, project)) is not None:
+            notes.append(note)
+
+    _write(repo, db, write)
+    return ["", f"  Note: {notes[0]}"] if notes else []
 
 
 def verdict(
@@ -241,11 +262,7 @@ def verdict(
         lines = ["⚠ NEEDS YOU", *needs, ""]
         rerun = f"softfield milestone {command_arg(milestone)}"
         lines.append(f"  Next: decide the above, then rerun  {rerun}")
-        _write(
-            repo,
-            db,
-            lambda conn, project: _record_items(repo, milestone, "needs you", items, conn, project),
-        )
+        lines += _recorded(repo, db, milestone, "needs you", items)
         return 2, "\n".join(lines) + "\n"
     review = milestone_file(repo, "reviews", milestone)
     lines = ["✅ READY FOR SIGN-OFF", f"  Review: {review.relative_to(repo)} ({review_stop})"]
@@ -258,11 +275,7 @@ def verdict(
     lines += ["", f"  Then: {signoff_command}"]
     text = f"Test on your devices:\n{steps}" if steps else f"Review: {review.relative_to(repo)}"
     items.append(OwnerItem("signoff", milestone, text, signoff_command))
-    _write(
-        repo,
-        db,
-        lambda conn, project: _record_items(repo, milestone, "ready", items, conn, project),
-    )
+    lines += _recorded(repo, db, milestone, "ready", items)
     return 0, "\n".join(lines) + "\n"
 
 
