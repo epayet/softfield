@@ -1,6 +1,7 @@
 # Milestone F153: Sonnet does the easier lead tickets, Opus keeps planning and checks
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f153-i-wonder-if-sonnet-would-be-start`. Report: [`.factory/reviews/f153-i-wonder-if-sonnet-would-be.md`](../reviews/f153-i-wonder-if-sonnet-would-be.md).
 > Planted by the owner on 2026-10-20.
 
 ## Notes

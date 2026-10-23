@@ -1,5 +1,7 @@
 # Review: F153, Sonnet does the easier lead tickets, Opus keeps planning and checks
 
+- **Status:** done, signed off by the owner on 2026-10-23.
+
 ## Sign-off sheet
 
 ### 1. What changed
