@@ -33,3 +33,12 @@ The picture to build: `.factory/cards/f159-mockup/set-aside-ticket.html` (Propos
 - on the board, a set-aside bug card reads "Set aside, won't run until you queue it ›"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3883
+gate_failures: []
+tokens: 8667587
+```
