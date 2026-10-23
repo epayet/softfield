@@ -6001,7 +6001,7 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
 
     def recheck(job: ClaudeJob, repo_: Path) -> None:
         assert loop.now() > FIVE_RESETS
-        for ticket in ("m1-01-thing", "m1-02-thing", "m1-03-fix-part-is-never-read"):
+        for ticket in ("m1-01-thing", "m1-02-thing", "m1-03-fix-thing"):
             assert f"- {ticket}: `git show " in job.prompt
         assert "m1-01-thing (coucou/part1.py)" in job.prompt  # what the stand-in filed
         _checkpoint_writes(json.dumps({"findings": [new]}))(job, repo_)
@@ -6031,7 +6031,7 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     assert (found[key]["route"], found[key]["agent"]) == ("local", "copilot-auto")
     assert found[f"m1-C{checkpoint['id']}-2"]["route"] == "backlog"
     # The fix ticket was written, queued and done by a developer
-    fixed = repo / ".factory" / "tasks" / "done" / "m1-03-fix-part-is-never-read.md"
+    fixed = repo / ".factory" / "tasks" / "done" / "m1-03-fix-thing.md"
     ticket = parse_task(fixed, 150)
     assert (ticket.finding, ticket.agent, ticket.files) == (key, "developer", ("coucou/part1.py",))
     assert ticket.tests == ("tests/unit/test_thing.py",)  # those of the ticket at fault
@@ -6503,7 +6503,30 @@ def test_a_fix_ticket_belongs_to_the_milestone_at_fault(repo, status, expected):
     assert path is not None
     task = parse_task(path, 150)
     number = "08" if expected == "f3" else "13"
-    assert (task.id, task.milestone) == (f"{expected}-{number}-fix-part-is-never-read", expected)
+    assert (task.id, task.milestone) == (f"{expected}-{number}-fix-thing", expected)
+
+
+@pytest.mark.parametrize(
+    ("at_fault", "kind", "expected"),
+    [
+        ("f3-02-agent-notes", "code", "f3-08-fix-agent-notes"),
+        ("f3-02-fix-restamp-been-and-undo", "test", "f3-08-fix-restamp-been-and-undo-tests"),
+        ("f3-02-show-every-crate-on-the-belt", "code", "f3-08-fix-show-every-crate-on"),
+    ],
+)
+def test_a_fix_ticket_is_named_by_the_ticket_at_fault(repo, at_fault, kind, expected):
+    """F171 D4: f1-14-fix-the-been-test-does was named by the finding's first four words,
+    cut mid-phrase. It is named by the ticket at fault: four words at most, `-tests` on a test
+    fix."""
+    source = write_task(repo / ".factory" / "tasks" / "done", at_fault)
+    source.write_text(source.read_text().replace("milestone: 1", "milestone: f3"))
+    write_task(repo / ".factory" / "tasks" / "done", "f3-07-other")
+    finding = replace(_finding_on(at_fault), kind=kind)
+    path = loop.fix_ticket(repo, "f3", {"f3-C7-1": finding}, "copilot-auto")
+    assert path is not None
+    task = parse_task(path, 150)
+    assert (task.id, path.stem) == (expected, expected)
+    assert task.sections["Goal"].strip().endswith(": PART is never read")  # the finding, as before
 
 
 def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
@@ -6520,7 +6543,7 @@ def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
     assert path is not None
     task = parse_task(path, 150)
     assert (task.id, task.milestone, task.area, task.priority) == (
-        "bug-04-fix-part-is-never-read",
+        "bug-04-fix-thing",
         "bugs",
         "product",
         7,

@@ -3552,7 +3552,9 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
         for path in (repo / ".factory" / "tasks").glob("*/*.md")
         if (found := re.match(rf"{re.escape(prefix)}-(\d+)-", path.stem))
     ]
-    words = re.findall(r"[a-z0-9]+", first.summary.lower())[:4]
+    # Named by the ticket at fault, not the finding's first words, cut mid-phrase (F171 D4)
+    slug = re.sub(r"^[^-]+-\d+-(?:fix(?:-|$))?", "", first.ticket.lower())
+    words = re.findall(r"[a-z0-9]+", slug)[:4] + (["tests"] if tests_only else [])
     task_id = f"{prefix}-{max(numbers, default=0) + 1:02d}-fix" + "".join(f"-{w}" for w in words)
     meta: dict[str, Any] = {"id": task_id, "milestone": milestone}
     if milestone == source.milestone:  # its card and place in the queue (ADR 19)
