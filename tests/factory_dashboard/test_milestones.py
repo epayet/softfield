@@ -11,11 +11,11 @@ from tests.factory_dashboard.test_planning import _open as open_page
 from tests.layout import DISPLAY, PHONE, layout_problems
 
 
-def section(html: str, name: str) -> str:
-    """The text of the page's ``<section id="name">``, tags stripped."""
-    match = re.search(rf'<section[^>]*\bid="{name}"[^>]*>(.*?)</section>', html, re.S)
+def section(html_content: str, name: str) -> str:
+    """The text of the page's ``<section id="name">``, tags stripped and unescaped."""
+    match = re.search(rf'<section[^>]*\bid="{name}"[^>]*>(.*?)</section>', html_content, re.S)
     assert match, f"no section {name}"
-    return " ".join(re.sub(r"<[^>]+>", " ", match.group(1)).split())
+    return html.unescape(" ".join(re.sub(r"<[^>]+>", " ", match.group(1)).split()))
 
 
 def charts(html: str) -> dict[str, object]:
@@ -300,12 +300,15 @@ def test_milestone_detail_sections_in_d8_order(milestone_detail_client):
     html = milestone_detail_client.get("/milestones/f1").text
     ids = re.findall(r'<section[^>]*\bid="([a-z-]+)"', html)
     expected = [
-        "outcome",
+        "about",
+        "grew",
         "what-changed",
         "how-to-test",
+        "decisions",
         "what-next",
         "later",
         "lessons",
+        "clogged",
         "results",
         "savings",
         "tickets",
@@ -335,9 +338,9 @@ def test_milestone_detail_shows_savings_with_parts_and_net(milestone_detail_clie
 
 def test_milestone_detail_shows_outcome_and_done_when(milestone_detail_client):
     html = milestone_detail_client.get("/milestones/f1").text
-    outcome = section(html, "outcome")
-    assert "The factory now measures itself end-to-end." in outcome
-    assert "All tickets in" in outcome
+    about = section(html, "about")
+    assert "The factory now measures itself end-to-end." in about
+    assert "All tickets in" in about
 
 
 def test_milestone_detail_shows_signoff_parts_by_text(milestone_detail_client):
@@ -396,7 +399,8 @@ def test_milestone_detail_without_signoff_shows_not_written_yet(milestone_detail
     resp = milestone_detail_client.get("/milestones/f10")
     assert resp.status_code == 200
     html = resp.text
-    # f10 has no signoff, so all signoff sections should show "Not written yet"
+    # f10 has no signoff, so #review-wait replaces the seven signoff sections
+    assert 'id="review-wait"' in html
     for section_name in (
         "what-changed",
         "how-to-test",
@@ -406,8 +410,7 @@ def test_milestone_detail_without_signoff_shows_not_written_yet(milestone_detail
         "lessons",
         "clogged",
     ):
-        sec_text = section(html, section_name)
-        assert "Not written yet" in sec_text, f"{section_name} should show 'Not written yet'"
+        assert f'id="{section_name}"' not in html, f"section {section_name} should not exist"
 
 
 def test_milestone_scores_detail(milestone_detail_with_scores_client):
@@ -421,7 +424,7 @@ def test_milestone_scores_detail(milestone_detail_with_scores_client):
     assert "Owner score" in results
     assert "8.5/10" in results
     # Done when items are rendered as <li> inside the section
-    done_when = section(html, "outcome")
+    done_when = section(html, "about")
     assert "All tickets in" in done_when
     assert "<li>" in html
     # F10 has no scores, so the dash is shown
@@ -748,3 +751,271 @@ def test_a_refused_sign_off_keeps_its_word_under_the_milestones_button(serve, db
     html = serve().get("/milestones/m4").text
     assert 'id="signoff-button"' in html
     assert "The runner said: main has uncommitted changes" in section(html, "review")
+
+
+# --- the card's page "What it's about" (f158-01) -------------------------------------------------
+
+
+@pytest.fixture
+def card_doc_client(db_path, tmp_path):
+    """A project whose repo points to a temp dir with a card doc that has Outcome and Notes."""
+    from factory_dashboard.app import create_app, get_now
+
+    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir.mkdir(parents=True)
+    cards_dir.joinpath("f1-test.md").write_text(
+        "---\n"
+        "id: f1-test\n"
+        "milestone: f1\n"
+        "agent: developer\n"
+        "files: []\n"
+        "tests: []\n"
+        "priority: 1\n"
+        "area: factory\n"
+        "---\n"
+        "# Milestone F1: Test card\n"
+        "\n"
+        "> **State:** planted · **Priority:** 1 · **Area:** factory\n"
+        "\n"
+        "## Outcome\n"
+        "- The page shows this outcome\n"
+        "- And the folded note\n"
+        "\n"
+        "## Done when\n"
+        "- The outcome shows\n"
+        "- The note is folded\n"
+        "\n"
+        "## Notes\n"
+        "This is the owner's note.\n"
+        "It has two lines.\n",
+        encoding="utf-8",
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_project(conn, PROJECT, repo=str(tmp_path))
+        metrics.upsert_milestone(
+            conn,
+            pid,
+            "f1",
+            status="done",
+            outcome="The factory now measures itself end-to-end.",
+            done_when="- All tickets in",
+            signoff={"changed": "A metrics database."},
+        )
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def card_note_only_client(db_path, tmp_path):
+    """A project whose repo points to a temp dir with a card doc
+    that has only Notes (no Outcome)."""
+    from factory_dashboard.app import create_app, get_now
+
+    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir.mkdir(parents=True)
+    note_text = (
+        "milestones don't show me their descriptions, "
+        "so when i click on a milestone on the board "
+        "to see what it's about, i have no idea"
+    )
+    cards_dir.joinpath("f1-test.md").write_text(
+        "---\n"
+        "id: f1-test\n"
+        "milestone: f1\n"
+        "agent: developer\n"
+        "files: []\n"
+        "tests: []\n"
+        "priority: 1\n"
+        "area: factory\n"
+        "---\n"
+        "# Milestone F1: Test card\n"
+        "\n"
+        "> **State:** planted · **Priority:** 1 · **Area:** factory\n"
+        "\n"
+        "## Notes\n"
+        f"{note_text}\n",
+        encoding="utf-8",
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_project(conn, PROJECT, repo=str(tmp_path))
+        metrics.upsert_milestone(conn, pid, "f1", status="in progress")
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def card_nothing_client(db_path, tmp_path):
+    """A project whose repo points to a temp dir with a card doc
+    that has neither Outcome nor Notes."""
+    from factory_dashboard.app import create_app, get_now
+
+    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir.mkdir(parents=True)
+    cards_dir.joinpath("f1-test.md").write_text(
+        "---\n"
+        "id: f1-test\n"
+        "milestone: f1\n"
+        "agent: developer\n"
+        "files: []\n"
+        "tests: []\n"
+        "priority: 1\n"
+        "area: factory\n"
+        "---\n"
+        "# Milestone F1: Test card\n"
+        "\n"
+        "> **State:** planted · **Priority:** 1 · **Area:** factory\n",
+        encoding="utf-8",
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_project(conn, PROJECT, repo=str(tmp_path))
+        metrics.upsert_milestone(conn, pid, "f1", status="in progress")
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def no_repo_client(db_path):
+    """A project whose repo is a URL (not a local folder):
+    should fall back to stored outcome."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_project(conn, PROJECT, repo="https://github.com/example/coucou")
+        metrics.upsert_milestone(
+            conn,
+            pid,
+            "f1",
+            status="done",
+            outcome="The factory now measures itself end-to-end.",
+            done_when="- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`.",
+            signoff={"changed": "A metrics database."},
+        )
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def no_signoff_client(db_path):
+    """A milestone without a signoff sheet:
+    should show #review-wait."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        pid = metrics.find_project(conn, PROJECT)
+        assert pid is not None
+        metrics.upsert_milestone(
+            conn,
+            pid,
+            "f10",
+            title="F10 milestone",
+            status="in progress",
+        )
+    finally:
+        conn.close()
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_a_card_with_outcome_shows_it_in_about_and_folds_the_note(card_doc_client):
+    """A card whose doc has Outcome shows it in #about, before #grew, and its note folded."""
+    html = card_doc_client.get("/milestones/f1").text
+    about = section(html, "about")
+    assert "What it will do" in about
+    assert "The page shows this outcome" in about
+    assert "And the folded note" in about
+    assert "Your note ›" in about
+    assert "This is the owner" in about
+    assert "It has two lines" in about
+    assert "Done when" in about
+    assert "The outcome shows" in about
+    assert "The note is folded" in about
+    # The old #outcome section should not exist
+    assert 'id="outcome"' not in html
+
+
+def test_a_card_with_only_notes_shows_the_note_open(card_note_only_client):
+    """A card whose doc has only Notes (no Outcome) shows the note open and the later text."""
+    html = card_note_only_client.get("/milestones/f1").text
+    about = section(html, "about")
+    assert "Your note" in about
+    assert "milestones don't show me their descriptions" in about
+    assert "The lead writes what it will do when it plans the card." in about
+
+
+def test_a_card_with_neither_outcome_nor_note_says_nothing_written(card_nothing_client):
+    """A card with neither Outcome nor note shows
+    'Nothing written about it yet.' and its thread link."""
+    html = card_nothing_client.get("/milestones/f1").text
+    about = section(html, "about")
+    assert "Nothing written about it yet." in about
+    assert "Its planning thread" in about
+    # The href is inside a tag, so check the raw HTML
+    assert 'href="/planning/f1' in html
+
+
+def test_a_project_with_no_local_repo_shows_stored_outcome(no_repo_client):
+    """A project whose repo isn't a local folder shows the stored outcome, and the page renders."""
+    resp = no_repo_client.get("/milestones/f1")
+    assert resp.status_code == 200
+    html = resp.text
+    about = section(html, "about")
+    assert "The factory now measures itself end-to-end." in about
+
+
+def test_no_signoff_sheet_shows_review_wait(no_signoff_client):
+    """With no sign-off sheet: #review-wait, and none of the individual signoff sections."""
+    html = no_signoff_client.get("/milestones/f10").text
+    assert 'id="review-wait"' in html
+    assert "The review" in section(html, "review-wait")
+    for sid in (
+        "what-changed",
+        "how-to-test",
+        "decisions",
+        "what-next",
+        "later",
+        "lessons",
+        "clogged",
+    ):
+        assert f'id="{sid}"' not in html, f"section {sid} should not exist without signoff"
+
+
+def test_with_signoff_sheet_shows_individual_sections(milestone_detail_client):
+    """With a signoff sheet: the individual sections, no #review-wait."""
+    html = milestone_detail_client.get("/milestones/f1").text
+    for sid in (
+        "what-changed",
+        "how-to-test",
+        "decisions",
+        "what-next",
+        "later",
+        "lessons",
+        "clogged",
+    ):
+        assert f'id="{sid}"' in html, f"section {sid} should exist with signoff"
+    assert 'id="review-wait"' not in html

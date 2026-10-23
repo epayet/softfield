@@ -28,6 +28,50 @@
   <a class="card-thread" href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a>
 </header>
 
+{% if about_data %}
+<section class="about" id="about">
+  <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
+  <div class="body">
+    {% if about_data.outcome_html %}
+    <p class="label">What it will do</p>
+    {{ about_data.outcome_html }}
+    {% if about_data.done_when_html %}
+    <p class="label">Done when</p>
+    {{ about_data.done_when_html }}
+    {% endif %}
+    {% if about_data.note %}
+    <details><summary>Your note ›</summary>
+      <p class="note">{{ about_data.note }}</p></details>
+    {% endif %}
+    {% elif about_data.note %}
+    <p class="label">Your note</p>
+    <p class="note">{{ about_data.note }}</p>
+    <p class="later">The lead writes what it will do when it plans the card.</p>
+    {% else %}
+    <p class="later">Nothing written about it yet.</p>
+    <p class="later"><a href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a></p>
+    {% endif %}
+  </div>
+</section>
+{% else %}
+<section class="about" id="about">
+  <header><h2>What it's about</h2><span class="stripe" aria-hidden="true"></span></header>
+  <div class="body">
+    {% if milestone.outcome %}
+    <p class="label">What it will do</p>
+    {{ outcome_html | safe }}
+    {% if milestone.done_when %}
+    <p class="label">Done when</p>
+    {{ done_when_html | safe }}
+    {% endif %}
+    {% else %}
+    <p class="later">Nothing written about it yet.</p>
+    <p class="later"><a href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a></p>
+    {% endif %}
+  </div>
+</section>
+{% endif %}
+
 <section id="grew" class="panel">
   <h2>How it grew</h2>
   <ol class="grew">
@@ -36,21 +80,6 @@
     {% endfor %}
   </ol>
   {% if card %}<p class="sub">The outlined stage is where the card is now; the dimmed ones are still to come.</p>{% endif %}
-</section>
-
-<section id="outcome">
-  <h2>Outcome and Done when</h2>
-  {% if milestone.outcome %}
-  {{ outcome_html | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
-  {% if milestone.done_when %}
-  <h3>Done when</h3>
-  {{ done_when_html | safe }}
-  {% else %}
-  <p class="sub">Not written yet</p>
-  {% endif %}
 </section>
 
 {% if review and (review.ripe or review.signing_off) %}
@@ -72,6 +101,7 @@
 </section>
 {% endif %}
 
+{% if milestone.signoff %}
 <section id="what-changed">
   <h2>What changed</h2>
   {% if "changed" in signoff_html %}
@@ -134,6 +164,11 @@
   <p class="sub">Not written yet</p>
   {% endif %}
 </section>
+{% else %}
+<section class="panel" id="review-wait">
+  <div class="review-wait"><h2>The review</h2><span class="sub">comes when the last ticket is done: what changed, how to test it, decisions for you, what next.</span></div>
+</section>
+{% endif %}
 
 <section id="results">
   <h2>Results</h2>
