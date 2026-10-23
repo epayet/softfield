@@ -1655,3 +1655,89 @@ def test_mixed_product_factory_ideas_match_independently(db_path, tmp_path):
     assert ideas[0].card == "f168"
     assert ideas[1].state == "planted"
     assert ideas[1].card == "f169"
+
+
+def test_id_less_idea_matches_by_text_not_project_fallback(db_path, tmp_path):
+    """An idea without a ``from`` field must match its own request by text similarity,
+    not grab the first request for the target project.
+
+    Without the fix, the project-name fallback selects the newest request first,
+    which may belong to another idea, causing both ideas to match to the wrong request.
+    """
+    from factory_dashboard.milestones import review_ideas
+    from runner import metrics
+
+    factory_repo = tmp_path / "factory_repo"
+    (factory_repo / "runner").mkdir(parents=True)
+    (factory_repo / "factory_dashboard").mkdir(parents=True)
+    (factory_repo / "runner" / "loop.py").write_text("# loop", encoding="utf-8")
+    (factory_repo / "factory_dashboard" / "app.py").write_text("# app", encoding="utf-8")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "factory", repo=str(factory_repo))
+        review_pid = metrics.find_project(conn, PROJECT)
+        assert review_pid is not None
+        # Two factory ideas
+        metrics.upsert_milestone(
+            conn,
+            review_pid,
+            "f164",
+            title="Milestone f164",
+            status="in progress",
+            signoff={
+                "what_next": (
+                    "- **Factory:**\n  > First idea for the factory.\n"
+                    "- **Factory:**\n  > Second idea for the factory.\n"
+                )
+            },
+        )
+        factory_pid = metrics.find_project(conn, "factory")
+        assert factory_pid is not None
+        # Request 1 (lower ID): text matches idea1, no ``from`` field
+        metrics.add_request(
+            conn,
+            factory_pid,
+            "plant",
+            "",
+            json.dumps({"text": "First idea for the factory."}),
+            NOW.isoformat(),
+        )
+        # Request 2 (higher ID): has ``from`` for idea2, will be returned first
+        metrics.add_request(
+            conn,
+            factory_pid,
+            "plant",
+            "",
+            json.dumps({"text": "Second idea for the factory.", "from": "f164/2"}),
+            NOW.isoformat(),
+        )
+        # Mark request1 as planted (lower ID, so it's older)
+        req1 = conn.execute(
+            "SELECT id FROM owner_requests WHERE project_id = ? AND kind = 'plant'"
+            " ORDER BY id ASC LIMIT 1",
+            (factory_pid,),
+        ).fetchone()
+        if req1 and req1[0]:
+            conn.execute(
+                "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                ("2026-10-01T10:00:00+00:00", "planted .factory/cards/f164-first.md", req1[0]),
+            )
+        # Mark request2 as planted (higher ID, so it's newer)
+        last = conn.execute(
+            "SELECT max(id) FROM owner_requests WHERE project_id = ? AND kind = 'plant'",
+            (factory_pid,),
+        ).fetchone()
+        if last and last[0]:
+            conn.execute(
+                "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
+                ("2026-10-01T10:00:00+00:00", "planted .factory/cards/f164-second.md", last[0]),
+            )
+            conn.commit()
+    finally:
+        conn.close()
+    ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f164")
+    assert len(ideas) == 2
+    assert ideas[0].state == "planted"
+    assert ideas[0].card == "f164"
+    assert ideas[1].state == "planted"
+    assert ideas[1].card == "f164"

@@ -666,19 +666,35 @@ def review_ideas(conn: sqlite3.Connection, project: str, key: str) -> list[Idea]
             if v.get("from") == idea.id:
                 req, req_value = r, v
                 break
-        # Then by target project name
+        # Then by target project name (with text similarity check)
         if req is None:
             for r, v in req_list:
                 target = v.get("project") or v.get("area") or ""
                 if target == idea.project:
-                    req, req_value = r, v
-                    break
-        # Then by project_id
+                    req_text = v.get("text", "")
+                    norm_idea = re.sub(r"\s+", " ", idea.text).strip()
+                    if norm_idea.endswith("."):
+                        norm_idea = norm_idea[:-1]
+                    norm_req = re.sub(r"\s+", " ", req_text).strip()
+                    if norm_req.endswith("."):
+                        norm_req = norm_req[:-1]
+                    if norm_req.startswith(norm_idea):
+                        req, req_value = r, v
+                        break
+        # Then by project_id (with text similarity check)
         if req is None:
             for r, v in req_list:
                 if r["project_id"] == project_id:
-                    req, req_value = r, v
-                    break
+                    req_text = v.get("text", "")
+                    norm_idea = re.sub(r"\s+", " ", idea.text).strip()
+                    if norm_idea.endswith("."):
+                        norm_idea = norm_idea[:-1]
+                    norm_req = re.sub(r"\s+", " ", req_text).strip()
+                    if norm_req.endswith("."):
+                        norm_req = norm_req[:-1]
+                    if norm_req.startswith(norm_idea):
+                        req, req_value = r, v
+                        break
         if req is None:
             continue
 
