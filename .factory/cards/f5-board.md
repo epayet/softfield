@@ -1,6 +1,6 @@
 # Milestone F5: steer from the phone, and the board
 
-> **Status: planned** (2026-10-02), on [ADR 18](../adr/18-dashboard-writes.md) and [ADR 19](../adr/19-feature-board.md). The owner's priorities 2 and 3: a backlog of features, and reviewing from the dashboard. Its tickets can run beside F4's; some depend on F4 tickets by id.
+> **Status: done.** Signed off by the owner on 2026-10-23. Base: git tag `f5-board-start`. Report: [`.factory/reviews/f5-board.md`](../reviews/f5-board.md).
 > **State:** building · **Priority:** 4 · **Area:** factory
 
 ## Outcome
