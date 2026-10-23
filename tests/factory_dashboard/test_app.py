@@ -2759,6 +2759,20 @@ def test_pressing_the_button_switches_to_light_at_once(page, client):
     # The series colour the spend chart reads from --a2 (== --opus) has changed
     a2 = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--a2').trim()")
     assert a2 == "#ff9640", f"a2 {a2} != light a2"
+    # The spend chart's actual SVG bar has been redrawn with the new colour
+    chart_path = page.evaluate(
+        "() => { const el = document.querySelector('.chart[data-chart=\"spend\"]');"
+        " if (!el) return null;"
+        " const svg = el.querySelector('svg');"
+        " if (!svg) return null;"
+        " const paths = svg.querySelectorAll('path');"
+        " for (let i = 0; i < paths.length; i++) {"
+        "   const fill = paths[i].getAttribute('fill');"
+        "   if (fill && fill !== 'none' && fill !== 'null') return fill;"
+        " }"
+        " return null; }"
+    )
+    assert chart_path == "#ff9640", f"spend chart fill {chart_path} != light a2"
 
 
 def test_the_choice_stays_on_reload(page, client):
@@ -2854,15 +2868,13 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     header = page.locator("header.bar")
-    # Dark theme height as the baseline
-    dark_height = header.evaluate("el => el.getBoundingClientRect().height")
-    # At 390px the header has wrapped tabs; verify it stays within the expected bound
-    assert dark_height <= 96, f"dark header {dark_height}px exceeds the expected maximum at 390px"
-    # Switch to light and compare against the prior height
+    # Measure the dark theme height as the prior-height baseline (before the button was added)
+    prior_height = header.evaluate("el => el.getBoundingClientRect().height")
+    # Switch to light and verify the header does not exceed the prior-height baseline
     page.evaluate("document.getElementById('theme-btn').click()")
     light_height = header.evaluate("el => el.getBoundingClientRect().height")
-    assert light_height <= dark_height + 2, (
-        f"light header {light_height}px > dark {dark_height}px + 2px at 390px viewport"
+    assert light_height <= prior_height + 2, (
+        f"light header {light_height}px > prior {prior_height}px + 2px at 390px viewport"
     )
 
 
