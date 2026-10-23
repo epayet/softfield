@@ -27,3 +27,12 @@ f165-01-point-opens-its-proposal-1, should-fix: in `tests/factory_dashboard/test
 - a `plan` proposal shows no frame and no "gone" block
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1147
+gate_failures: []
+tokens: 773162
+```
