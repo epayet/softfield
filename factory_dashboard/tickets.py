@@ -122,8 +122,11 @@ def parse_ticket_body(body: str) -> ParsedBody:
         if heading == "Goal":
             goal = _parse_blocks(stripped)
         elif heading == "Done when":
-            items = [line for line in stripped.split("\n") if line.strip()]
-            done_when = [line[2:] for line in items if line.startswith("- ")] or items
+            blocks = _parse_blocks(stripped)
+            items_from_blocks = [
+                item for b in blocks if isinstance(b, ListBlock) for item in (b.items or [])
+            ]
+            done_when = items_from_blocks or [line for line in stripped.split("\n") if line.strip()]
         elif heading == "Context":
             context = _parse_blocks(stripped)
 

@@ -623,6 +623,38 @@ def test_a_set_aside_ticket_page_shows_parsed_body_as_text(db_path, later_client
     assert "<li>" in goal_section
 
 
+def test_done_when_with_wrapped_bullet_shows_full_text_on_page(db_path, later_client):
+    """A bullet in "Done when" that wraps over two lines shows the full text on the ticket page."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-93-wrap",
+            milestone_id=f1,
+            kind="developer",
+            state="later",
+            difficulty=2,
+            title="Wrapped bullet ticket.",
+            body=(
+                "---\nid: f1-93-wrap\n---\n\n"
+                "### Goal\nA goal.\n\n"
+                "### Done when\n- a bullet that wraps\n  over two lines\n- second\n"
+            ),
+        )
+    finally:
+        conn.close()
+
+    html = later_client.get("/tickets/f1-93-wrap").text
+    goal_section = section_raw(html, "goal")
+    assert "a bullet that wraps over two lines" in goal_section
+    assert "second" in goal_section
+
+
 def test_a_non_later_ticket_has_no_set_aside_panel(tickets_client):
     """A ticket in any other state has no set-aside panel."""
     html = tickets_client.get("/tickets/f1-10-ticket-a").text
