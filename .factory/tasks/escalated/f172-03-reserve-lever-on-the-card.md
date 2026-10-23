@@ -36,3 +36,12 @@ The picture to build is `.factory/cards/f172-mockup/card-reserve.html` (Proposed
 - the Overview names the marked cards once under Claude's meters, and says nothing when none is
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 2059117
+logs: .factory/var/runs/20261022-235747/f172-03-reserve-lever-on-the-card
+```
