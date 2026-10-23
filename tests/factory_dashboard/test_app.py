@@ -1219,9 +1219,9 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
     assert "?project=my%26proj%232" in link, f"expected encoded project in link, got {link}"
 
 
-def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
-    """A page on project A, then a page on project B with the same open items: no
-    second notification, because compare uses a single localStorage key."""
+def test_compare_uses_per_project_done(page, serve_between, db_path):
+    """Moving between projects' pages never notifies "All work done" again: what a browser
+    saw of all the work being done is kept per project, inside the one notify:seen key."""
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
@@ -1249,7 +1249,8 @@ def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
     assert page.evaluate("window.sw_notifications.length") == 1
 
     # Switch to the other project: load /live?project=other with the page's data-project
-    # The coucou item is already in notify:seen, so no duplicate notification.
+    # "other" has no open items (data-all-done="true") but has never been seen,
+    # so no "All work done" notification fires.
     other_live = client.get("/live?project=other").text
     page.evaluate(
         "(html) => { const el = document.querySelector('#live-needs-you'); el.innerHTML = html;"
@@ -1257,7 +1258,6 @@ def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
         other_live,
     )
     page.wait_for_timeout(6_000)  # wait for compare to run
-    # No second notification for the coucou item (already seen)
     assert page.evaluate("window.sw_notifications.length") == 1
 
     # Now switch back to coucou: load /live?project=coucou with the page's data-project
@@ -1270,6 +1270,44 @@ def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
     page.wait_for_timeout(6_000)  # wait for compare to run
     # No new notification: coucou's item was already seen
     assert page.evaluate("window.sw_notifications.length") == 1
+
+
+def test_compare_ignores_old_plain_boolean_done(page, serve_between, db_path):
+    """A stored notify:seen with done: false (the old shape), then a look with all done:
+    no notification and no error."""
+    client = serve_between(activity="check-all on main")
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector("#live-facts", state="attached", timeout=REFRESH)
+    page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
+
+    # Overwrite notify:seen with the old shape (plain boolean done)
+    page.evaluate(
+        "localStorage.setItem('notify:seen', JSON.stringify({ "
+        "ids: [], done: false, at: Date.now() }))"
+    )
+
+    # Load a page where all work is done (coucou has no open items after check-all)
+    # We need to clear the existing item first
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="done")
+    finally:
+        conn.close()
+    all_done_html = client.get("/live?project=coucou").text
+    # Make sure data-all-done is true
+    assert 'data-all-done="true"' in all_done_html
+    page.evaluate(
+        "(html) => { const el = document.querySelector('#live-needs-you'); el.innerHTML = html;"
+        " el.dispatchEvent(new Event('htmx:afterSwap', { bubbles: true })); }",
+        all_done_html,
+    )
+    page.wait_for_timeout(6_000)
+    # No notification and no error (the old shape is handled gracefully)
+    assert page.evaluate("window.sw_notifications.length") == 0
 
 
 def test_new_item_on_other_project_notifies(page, serve_between, db_path):

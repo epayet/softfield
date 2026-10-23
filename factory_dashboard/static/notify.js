@@ -5,8 +5,8 @@
 // Needs-you items (id -> text) and whether all the work is done. Once allowed,
 // after each swap this compares them with what it saw last and notifies once per
 // new item, and once when all done turns true. What it saw is kept in one key
-// in localStorage (notify:seen), so moving between projects neither notifies again
-// nor misses.
+// in localStorage (notify:seen), done tracked per project so moving between
+// projects neither notifies again nor misses.
 "use strict";
 
 (() => {
@@ -40,21 +40,30 @@
     const notices = JSON.parse(facts.dataset.notices);
     const done = facts.dataset.allDone === "true";
     const before = JSON.parse(localStorage.getItem(key) || "null");
-    localStorage.setItem(key, JSON.stringify({ ids: Object.keys(notices), done, at: Date.now() }));
+    const project = facts.dataset.project;
+    // keep done as an object by project name
+    let doneMap = before && typeof before.done === "object" && before.done !== null ? before.done : null;
+    // a stored done that is still a plain true or false (from before this change)
+    // counts as no project seen: no notification on that look
+    let oldShape = !doneMap;
+    let prevDone = doneMap ? doneMap[project] : undefined;
+    doneMap = doneMap || {};
+    doneMap[project] = done;
+    localStorage.setItem(key, JSON.stringify({ ids: Object.keys(notices), done: doneMap, at: Date.now() }));
     if (!before || Date.now() - before.at > FRESH) return; // what is already there isn't news
-    const project = "?project=" + encodeURIComponent(facts.dataset.project);
+    const qs = "?project=" + encodeURIComponent(project);
     const fresh = Object.keys(notices)
       .filter(id => !before.ids.includes(id))
       .map(id => Object.assign({ tag: id }, notices[id]));
     // all done in the same look as a sign-off (the last review's verdict) joins it, never hides it
-    if (done && !before.done) {
-      fresh.push({ tag: "all-done", title: "All work done", body: "The queue is empty and nothing runs.", link: "/" + project });
+    if (done && !oldShape && prevDone === false) {
+      fresh.push({ tag: "all-done", title: "All work done", body: "The queue is empty and nothing runs.", link: "/" + qs });
     }
     if (fresh.length === 1) {
       show(fresh[0].title, fresh[0].body, fresh[0].tag, fresh[0].link);
     } else if (fresh.length > 1) {
       const titles = fresh.map(notice => notice.title).join("\n");
-      show(fresh.length + " things need you", titles, "bundle", "/planning" + project);
+      show(fresh.length + " things need you", titles, "bundle", "/planning" + qs);
     }
   }
 
