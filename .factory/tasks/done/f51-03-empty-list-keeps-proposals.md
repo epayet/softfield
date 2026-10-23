@@ -22,3 +22,12 @@ Read `_proposals`, `_standing` and `proposal_review` in `factory_dashboard/plann
 - a later lead message with a different proposal still replaces the earlier ones, as `test_a_proposal_from_an_older_reply_is_replaced` checks
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1899
+gate_failures: []
+tokens: 1752692
+```
