@@ -26,3 +26,10 @@ Read D4 in `.factory/cards/f171-there-are-dupliacted-tickets-on-the.md`, then `f
 - the finding's sentence still opens the ticket's Goal, as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
