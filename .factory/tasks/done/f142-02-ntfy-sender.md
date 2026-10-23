@@ -39,3 +39,10 @@ Read `.factory/adr/31-notifications-to-a-closed-phone.md` (items 1–5: the word
 - `softfield notify setup` writes the section once and keeps every other line of the file; run again, it prints the same topic
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
