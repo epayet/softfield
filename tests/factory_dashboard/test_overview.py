@@ -3319,7 +3319,7 @@ def test_data_notices_has_the_ids(serve_between, db_path):
     for notice in notices.values():
         assert "?project=coucou" in notice["link"]
     # The notice keys exactly match the open items.
-    assert set(notices) == {f"owner-{planning_id}", f"owner-{signoff_id}"}
+    assert set(notices) == {f"coucou/owner-{planning_id}", f"coucou/owner-{signoff_id}"}
 
 
 def test_notices_encode_project_with_special_characters(db_path):
@@ -3493,12 +3493,13 @@ def test_data_notices_own_project_no_prefix(client, db_path):
         conn.close()
     html = client.get("/live?project=coucou").text
     _, notices, _ = _live_facts(html)
-    # Own project's notices don't have a project name prefix
-    for key, notice in notices.items():
-        if key.startswith("owner-"):
-            assert not notice["title"].startswith("coucou: "), (
-                f"own project notice should not have prefix: {notice['title']}"
-            )
+    # Find own-project notices (key starts with the page's project + "/")
+    own = {k: v for k, v in notices.items() if k.startswith("coucou/")}
+    assert own, "expected own-project notices"
+    for _key, notice in own.items():
+        assert not notice["title"].startswith("coucou: "), (
+            f"own project notice should not have prefix: {notice['title']}"
+        )
 
 
 def test_data_notices_ids_start_with_project_name(client, db_path):
@@ -3528,10 +3529,6 @@ def test_data_notices_ids_start_with_project_name(client, db_path):
     html = client.get("/live?project=coucou").text
     _, notices, _ = _live_facts(html)
     for key in notices:
-        # Each key either starts with a project name + / or is the page's own project's item
-        if "/" in key:
-            parts = key.split("/", 1)
-            assert len(parts) == 2, f"key should have exactly one slash: {key}"
-        # Own items (no slash) are from the page's project
-        if "/" not in key:
-            assert key.startswith("owner-"), f"own project key should start with 'owner-': {key}"
+        assert "/" in key, f"key must start with project name + slash: {key}"
+        parts = key.split("/", 1)
+        assert len(parts) == 2, f"key should have exactly one slash: {key}"

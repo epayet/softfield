@@ -761,16 +761,20 @@ def test_the_live_partial_carries_the_open_items_and_whether_work_is_running(ser
     notices, done = _facts(serve().get("/live").text)
     ids = _owner_item_ids(db_path)
     # only the open item: the resolved "ollama" one is not there
-    assert set(notices) == {f"owner-{ids['ADR 15']}"}
+    assert set(notices) == {f"coucou/owner-{ids['ADR 15']}"}
     assert done == "false"  # a job runs and two tickets wait
 
 
 def test_what_the_dashboard_sees_itself_has_an_id_too(serve, db_path):
     notices, done = _facts(serve(heartbeat_age=timedelta(minutes=3)).get("/live").text)
     ids = _owner_item_ids(db_path)
-    assert set(notices) == {f"owner-{ids['ADR 15']}", "runner-20261002-113500", "queue"}
-    assert notices["runner-20261002-113500"]["title"] == "The runner stopped"
-    assert notices["queue"]["title"] == "The runner is idle"
+    assert set(notices) == {
+        f"coucou/owner-{ids['ADR 15']}",
+        "coucou/runner-20261002-113500",
+        "coucou/queue",
+    }
+    assert notices["coucou/runner-20261002-113500"]["title"] == "The runner stopped"
+    assert notices["coucou/queue"]["title"] == "The runner is idle"
     assert done == "false"  # a job stopped mid-way isn't done
 
 
@@ -1217,7 +1221,7 @@ def test_bundled_link_encodes_special_characters_in_project(page, serve_between,
 
 def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
     """A page on project A, then a page on project B with the same open items: no
-    notification on B, because compare uses a single localStorage key."""
+    second notification, because compare uses a single localStorage key."""
     client = serve_between(activity="check-all on main")
     page.add_init_script(FAKE_NOTIFICATION_GRANTED)
     page.add_init_script(FAKE_SERVICE_WORKER)
@@ -1226,7 +1230,7 @@ def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
     # Wait for the first look to store in notify:seen
     page.wait_for_function("localStorage.getItem('notify:seen') !== null", timeout=REFRESH)
 
-    # Add an item on coucou (the page's project)
+    # Add an item on coucou (project A)
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1244,35 +1248,28 @@ def test_compare_uses_one_key_not_per_project(page, serve_between, db_path):
     page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
     assert page.evaluate("window.sw_notifications.length") == 1
 
-    # Switch to the other project (same database, different project)
-    conn = metrics.open_db(db_path)
-    try:
-        other = metrics.upsert_project(conn, "other")
-        metrics.upsert_owner_item(
-            conn,
-            other,
-            "adr",
-            "ADR other-new",
-            text="Item on other.",
-            created=NOW.isoformat(),
-        )
-    finally:
-        conn.close()
-    # The coucou item (owner-*) is already in notify:seen, so no notification for it.
-    # But the 'other/owner-*' key is new, so we get one notification for the other project.
-    _next_look(page, client)
-    page.wait_for_timeout(6_000)  # wait for next poll
-    # Only the other project's new item triggers a notification (coucou's was already seen)
-    assert page.evaluate("window.sw_notifications.length") == 2
-    # The new notification is from the other project
-    last = page.evaluate("window.sw_notifications[1]")
-    assert "other:" in last["title"]
+    # Switch to the other project: load /live?project=other with the page's data-project
+    # The coucou item is already in notify:seen, so no duplicate notification.
+    other_live = client.get("/live?project=other").text
+    page.evaluate(
+        "(html) => { const el = document.querySelector('#live-needs-you'); el.innerHTML = html;"
+        " el.dispatchEvent(new Event('htmx:afterSwap', { bubbles: true })); }",
+        other_live,
+    )
+    page.wait_for_timeout(6_000)  # wait for compare to run
+    # No second notification for the coucou item (already seen)
+    assert page.evaluate("window.sw_notifications.length") == 1
 
-    # Now switch back to coucou: the coucou item is in notify:seen, so no notification
-    _next_look(page, client)
-    page.wait_for_timeout(6_000)  # wait for next poll
+    # Now switch back to coucou: load /live?project=coucou with the page's data-project
+    coucou_live = client.get("/live?project=coucou").text
+    page.evaluate(
+        "(html) => { const el = document.querySelector('#live-needs-you'); el.innerHTML = html;"
+        " el.dispatchEvent(new Event('htmx:afterSwap', { bubbles: true })); }",
+        coucou_live,
+    )
+    page.wait_for_timeout(6_000)  # wait for compare to run
     # No new notification: coucou's item was already seen
-    assert page.evaluate("window.sw_notifications.length") == 2
+    assert page.evaluate("window.sw_notifications.length") == 1
 
 
 def test_new_item_on_other_project_notifies(page, serve_between, db_path):

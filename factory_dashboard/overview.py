@@ -441,7 +441,7 @@ def needs_you(
     ).fetchall()
     found = [
         Need(
-            f"owner-{i['id']}",
+            f"{project}/owner-{i['id']}",
             i["kind"],
             i["text"] or i["subject"],
             i["command"],
@@ -458,7 +458,7 @@ def needs_you(
         when = f" {ago(job.heartbeat)} ago" if job.heartbeat else ""
         found.append(
             Need(
-                f"runner-{job.run_dir}",
+                f"{project}/runner-{job.run_dir}",
                 "runner",
                 f"The runner's heartbeat stopped{when} mid-job: a crash or a closed terminal."
                 " Rerun it; it picks up where it stopped.",
@@ -469,7 +469,7 @@ def needs_you(
     if waiting and not runner_live(conn, project, now):
         n = len(waiting)
         text = f"{n} ticket{'s' if n != 1 else ''} waiting and the runner is idle."
-        found.append(Need("queue", "queue", text, _drain(waiting[0].milestone or "")))
+        found.append(Need(f"{project}/queue", "queue", text, _drain(waiting[0].milestone or "")))
     return found
 
 
