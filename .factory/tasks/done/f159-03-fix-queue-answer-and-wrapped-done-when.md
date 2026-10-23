@@ -29,3 +29,12 @@ By the lead at a checkpoint, on the merges of `.factory/tasks/done/f159-01-set-a
 - a "Done when" of `- a bullet that wraps\n  over two lines\n- second` parses to `["a bullet that wraps over two lines", "second"]`, and the ticket page shows the full text
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1327
+gate_failures: []
+tokens: 797703
+```
