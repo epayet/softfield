@@ -32,3 +32,12 @@ What is left:
 - the three existing `#about` tests pass unchanged
 - the listed `tests:` pass, and the new ones fail on main
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5803
+gate_failures: ['stopped', 'task-tests']
+tokens: 3618023
+```
