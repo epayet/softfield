@@ -1,4 +1,4 @@
-# Milestone F62: claude-opus review on overview does not say what it reviews
+# Milestone F62: A review on Now says which card it reviews
 
 > **State:** idea · **Priority:** 90 · **Area:** factory
 > Planted by the owner on 2026-10-08.
