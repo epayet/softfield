@@ -1,4 +1,4 @@
-# Milestone F81: assess the current UI state of the factory and share…
+# Milestone F81: Bring the factory theme to the older pages, the Planning room first
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-09.
