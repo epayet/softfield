@@ -1,4 +1,4 @@
-# Milestone F61: on claude usage page there is an estimation on when usage will likely run out
+# Milestone F61: Claude's meters say when the window runs out at this rate
 
 > **State:** idea · **Priority:** 90 · **Area:** factory
 > Planted by the owner on 2026-10-08.
