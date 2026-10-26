@@ -1,4 +1,4 @@
-# Milestone F80: developer rating could be more tailored to the type of…
+# Milestone F80: See how each agent does by kind of work before splitting its rating
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-09.
