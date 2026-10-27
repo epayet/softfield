@@ -1,4 +1,4 @@
-# Milestone F121: Projects not on main or not in Python
+# Milestone F121: Projects on any main branch, in any language
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-14.
