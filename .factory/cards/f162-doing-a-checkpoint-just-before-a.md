@@ -1,4 +1,4 @@
-# Milestone F162: Doing a checkpoint just before a review doesn't sound very…
+# Milestone F162: No checkpoint on merges the milestone's review is about to read
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-20.
