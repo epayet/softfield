@@ -1,4 +1,4 @@
-# Milestone F127: Shared rules stay shared across projects
+# Milestone F127: Generic developer lessons live once in Softfield, every project reads them
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-14.
