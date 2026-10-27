@@ -31,3 +31,12 @@ Read `.factory/cards/f80-developer-rating-could-be-more-tailored.md` (D1–D3), 
 - the milestone filter limits the bay as it limits Ratings over time; with no coding games the bay says so in one line
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: needs-file
+attempts: 2
+tokens: 11196656
+logs: .factory/var/runs/20261027-005355/f80-01-by-kind-of-work
+```
