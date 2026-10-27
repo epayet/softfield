@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F81 mock-up: the theme reaches the older pages</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --fail: #ec5458; --dev: #5b9cf5; --copilot: #7aa7ff;
+    --accent: var(--sonnet); --warn: var(--hazard); --warn-ink: var(--hazard); --a1: var(--copilot); --a2: var(--opus);
+    --accent-wash: #2a2416;
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    /* proposed new tokens (join dashboard.css first, D2) */
+    --tick: var(--ink-2);                 /* corner ticks: ink, never a status colour */
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1.mock { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; margin-top: 14px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card changes */
+  .why { font: 12px var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend-m { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  .version-name { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); margin: 0 0 6px; }
+  .calm-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; font: 600 12px var(--display);
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); cursor: pointer; }
+  [hidden] { display: none !important; }
+  @media (min-width: 1000px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [data-version] { display: block !important; }
+  }
+  .stack { display: grid; gap: 14px; }
+
+  /* ---- Today: copied from dashboard.css (.panel, .pill, .kv, .next-in-line, .meter, .empty) and planning.html's inline styles ---- */
+  .today .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .today .panel.needs { border-color: var(--warn); }
+  .today .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 10px;
+    display: flex; gap: 8px; align-items: baseline; }
+  .today .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: auto; }
+  .today .panel h3 { font-size: 15px; margin: 0 0 6px; }
+  .today .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 7px 1px 5px;
+    border-radius: 10px; border: 1px solid var(--rule); white-space: nowrap; }
+  .today .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--muted)); }
+  .today .pill.running { --dot: var(--a1); }
+  .today .empty { color: var(--ink-2); padding: 18px; text-align: center; border: 1px dashed var(--rule); border-radius: 6px; }
+  .today .stat b { display: block; font: 600 20px var(--mono); }
+  .today .stat span { color: var(--muted); font-size: 12.5px; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .running-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; margin-bottom: 8px; }
+  .next-in-line { display: grid; gap: 4px; border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; font-size: 14px; }
+  .next-in-line h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0; font-weight: 600; }
+  .meter { height: 10px; background: var(--grid); position: relative; }
+  .meter > span { position: absolute; inset: 0 auto 0 0; background: var(--hazard); }
+  .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg); left: 75%; }
+  .line { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  .line small { color: var(--muted); }
+
+  /* ---- Proposed: the same parts, themed (tokens only; ornament in ink and hazard, never a status colour) ---- */
+  .prop { background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; padding: 10px; margin: -10px; }
+  .prop .panel { position: relative; background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; }
+  .prop .panel::before, .prop .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .prop .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .prop .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .prop .panel.needs { border-color: var(--hazard); }
+  .prop .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .prop .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .prop .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .prop .panel.needs > h2 { background: var(--hazard); color: var(--hazard-ink); }
+  .prop .panel.needs > h2::after { background: repeating-linear-gradient(-45deg, var(--hazard-ink) 0 6px, transparent 6px 12px); opacity: .35; }
+  .prop .panel.needs > h2 .src { color: var(--hazard-ink); }
+  /* tags: square, a square lamp; colour only where it already means something */
+  .prop .pill { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--mono); text-transform: uppercase;
+    letter-spacing: .05em; padding: 2px 8px 2px 6px; border: 1px solid var(--rule); background: var(--floor); white-space: nowrap; }
+  .prop .pill::before { content: ""; width: 7px; height: 7px; background: var(--dot, var(--muted)); }
+  .prop .pill.running { --dot: var(--a1); }
+  /* readouts: the numbers on a plate, in the display face, the unit beside */
+  .readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 1px; background: var(--rule);
+    border: 1px solid var(--rule); }
+  .readout { background: var(--plate); padding: 6px 10px; display: flex; flex-direction: column; }
+  .readout b { font: 600 22px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+  .readout b small { font: 500 12px var(--mono); color: var(--muted); margin-left: 3px; }
+  .readout span { font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  /* the next in line: a numbered belt of crates */
+  .belt { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .belt li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; padding: 5px 8px 5px 0;
+    background: var(--plate); border-left: 3px solid var(--rule); font-size: 13.5px; }
+  .belt li .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; }
+  .belt li.lead { border-left-color: var(--opus); } .belt li.developer { border-left-color: var(--dev); }
+  .belt li b { font: 600 12px var(--mono); }
+  .count { font: 700 28px/1 var(--display); color: var(--fg); }
+  .count small { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-left: 6px; }
+  /* buttons: one set for every page. Go is a hazard plate with a cut corner; Plain is outlined */
+  .btn { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px;
+    border: 1px solid var(--rule); background: transparent; color: var(--ink-2); cursor: pointer; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); border: 0; clip-path: var(--notch); padding-right: 22px; }
+  .btn.plain:hover { color: var(--fg); border-color: var(--ink-2); }
+  /* the empty state: an idle crate, in ink */
+  .idle { display: flex; align-items: center; gap: 12px; padding: 10px 4px; color: var(--ink-2); }
+  .idle svg { flex: none; color: var(--muted); }
+  /* the meter: ticks every quarter under it, like a gauge */
+  .prop .meter { background: var(--floor); border: 1px solid var(--rule); height: 12px; }
+  .prop .meter > span { inset: 1px auto 1px 1px; }
+  .gauge { height: 5px; margin-top: 2px; background: linear-gradient(90deg, var(--rule) 1px, transparent 1px) 0 0 / 25% 100%; }
+  /* the desk's items (planning.html, as classes) */
+  .desk-item { display: flex; flex-direction: column; padding: 7px 9px 7px 12px; background: var(--plate);
+    border: 1px solid var(--rule); border-left: 3px solid var(--ink-2); color: var(--fg); }
+  .desk-item .words { font: 11.5px var(--mono); color: var(--muted); }
+  .group-head { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0;
+    display: flex; align-items: center; gap: 8px; }
+  .group-head::before { content: ""; width: 10px; height: 2px; background: var(--hazard); }
+
+  /* the calmer variant: no grid, no stripe in the plate, no cut corner */
+  .calm .prop { background-image: none; }
+  .calm .prop .panel > h2::after { background: none; }
+  .calm .btn.go { clip-path: none; padding-right: 16px; }
+</style>
+</head>
+<body>
+<h1 class="mock">F81: the theme reaches the older pages</h1>
+<p class="lede">The Overview's Now, Queue, allowance and savings, and one item of the Planning desk, with the values the dashboard showed on the evening of 2026-10-26 (planner job 1389 running, 51 tickets waiting, the 5-hour window at 74%, 30 things on the desk). Today is dashboard.css and planning.html as they are; Proposed is the same markup with the theme the card page's "What it's about" and the set-aside plate already use.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from templates/overview.html, _partials/needs_you.html, running.html, queue.html, allowance.html, planning.html -->
+<div data-version="today" class="today" hidden>
+  <p class="version-name">Today</p>
+  <div class="stack">
+    <section class="panel needs">
+      <h2>Needs you <span class="src">each item goes when it's done</span></h2>
+      <p style="margin:0">desk · 30 things wait for you on your desk · <a href="#">Open your desk ›</a></p>
+    </section>
+    <section class="panel">
+      <h2>Now <span class="src">refreshes every 5 s</span></h2>
+      <div class="running-head">
+        <span class="pill running">attempt 11</span>
+        <span class="mono">claude-opus</span><span>planner</span><a href="#">job 1389 ›</a>
+      </div>
+      <dl class="kv">
+        <dt>Elapsed</dt><dd class="mono">81 s</dd>
+        <dt>Live</dt><dd class="mono">read 1.1M tokens · 17 turns</dd>
+        <dt>Heartbeat</dt><dd class="mono">21 s ago</dd>
+      </dl>
+    </section>
+    <section class="panel">
+      <h3>Queue</h3>
+      <p style="margin:0">51 tickets waiting.</p>
+      <div class="next-in-line">
+        <h3>Next in line</h3>
+        <div><b class="mono">Planning: F82</b> · "Plan this card."</div>
+        <div><b class="mono">1 review F68</b> · a batch</div>
+        <div><b class="mono">2 f142-05-fix-a-look-is-not-an-answer</b> The phone's notification after a planner job says what happened · a developer</div>
+        <div><b class="mono">3 f171-04-plant-takes-the-projects-area</b> A note planted without an area takes its project's area · the lead</div>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+      <div class="line"><span>Claude 5-hour window: 74%</span><small>resets on Oct 27 03:50</small></div>
+      <div class="meter"><span style="width:74%;background:var(--good)"></span><span class="mark"></span></div>
+    </section>
+    <section class="panel">
+      <h2>Savings from delegating <span class="src">API-equivalent dollars</span></h2>
+      <div class="empty">No delegated tickets yet.</div>
+    </section>
+    <section class="panel" style="padding:0">
+      <h2 style="margin:0;padding:10px 14px;border-bottom:1px solid var(--rule)">Your desk · 30</h2>
+      <div style="padding:10px 14px;display:flex;flex-direction:column;gap:6px">
+        <h3 style="margin:0;font:600 11px var(--display);letter-spacing:.1em;text-transform:uppercase;color:var(--fail)">Blocked</h3>
+        <a href="#" style="display:flex;flex-direction:column;padding:7px 9px;background:var(--plate);border:1px solid var(--rule);color:var(--fg)">
+          <span style="font-size:14px">f69-06-fix-theme-tests-still-do-tests</span>
+          <span style="font:11.5px var(--mono);color:var(--muted)">failed: no-changes, then no-changes</span>
+        </a>
+        <p style="margin:0;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" style="font:600 13px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--hazard-ink);background:var(--hazard);border:0;padding:0 14px;min-height:44px">Try again</button>
+          <button type="button" style="font:600 13px var(--display);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);background:transparent;border:1px solid var(--rule);padding:0 14px;min-height:44px">Set aside</button>
+        </p>
+      </div>
+    </section>
+  </div>
+  <p class="legend-m">Each panel is a flat bay with a title. The card page's "What it's about", the set-aside plate and the board already wear plates, stripes and corner ticks; these don't. The desk is drawn with 80 inline styles, so no stylesheet change reaches it.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <p class="version-name">Proposed</p>
+  <label class="calm-toggle"><input type="checkbox" id="calm"> Show the calmer variant</label>
+  <div class="prop" id="prop">
+  <div class="stack">
+    <section class="panel needs new">
+      <h2>Needs you <span class="src">each item goes when it's done</span></h2>
+      <p style="margin:0">30 things wait for you on your desk · <a href="#">Open your desk ›</a></p>
+    </section>
+    <p class="why">every panel: a plate header with the stripe, corner ticks; "Needs you" is the one yellow plate</p>
+    <section class="panel">
+      <h2>Now <span class="src">refreshes every 5 s</span></h2>
+      <div class="running-head">
+        <span class="pill running new">attempt 11</span>
+        <span class="mono">claude-opus</span><span>planner</span><a href="#">job 1389 ›</a>
+      </div>
+      <div class="readouts new">
+        <div class="readout"><b>81<small>s</small></b><span>Elapsed</span></div>
+        <div class="readout"><b>1.1M<small>tokens</small></b><span>Read · 17 turns</span></div>
+        <div class="readout"><b>21<small>s ago</small></b><span>Heartbeat</span></div>
+      </div>
+    </section>
+    <p class="why">tags are square; the job's numbers are readouts on a plate</p>
+    <section class="panel">
+      <h2 class="new">Queue <span class="src">in the order the runner takes them</span></h2>
+      <p style="margin:0 0 8px"><span class="count">51<small>tickets waiting</small></span></p>
+      <ol class="belt new">
+        <li><span class="n">·</span><span><b>Planning: F82</b> · "Plan this card."</span></li>
+        <li><span class="n">1</span><span><b>Review F68</b> · a batch</span></li>
+        <li class="developer"><span class="n">2</span><span><b>f142-05-fix-a-look-is-not-an-answer</b> The phone's notification after a planner job says what happened · a developer</span></li>
+        <li class="lead"><span class="n">3</span><span><b>f171-04-plant-takes-the-projects-area</b> A note planted without an area takes its project's area · the lead</span></li>
+      </ol>
+    </section>
+    <p class="why">the Queue gets the same header as the others; next in line is a row of crates, edged in the floor's lead or developer colour (the legend below the floor already says which)</p>
+    <section class="panel">
+      <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+      <div class="line"><span>Claude 5-hour window: 74%</span><small>resets on Oct 27 03:50</small></div>
+      <div class="meter"><span style="width:74%;background:var(--good)"></span><span class="mark"></span></div>
+      <div class="gauge new"></div>
+    </section>
+    <p class="why">the meter sits in a slot, a gauge's quarter ticks under it (rules only)</p>
+    <section class="panel">
+      <h2>Savings from delegating <span class="src">API-equivalent dollars</span></h2>
+      <div class="idle new">
+        <svg width="40" height="34" viewBox="0 0 40 34" aria-hidden="true"><rect x="4" y="10" width="32" height="20" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 16h32M14 10v20M26 10v20" stroke="currentColor" stroke-width="1.5" stroke-dasharray="3 3"/><path d="M0 32h40" stroke="currentColor" stroke-width="2"/></svg>
+        <span>No delegated tickets yet.</span>
+      </div>
+    </section>
+    <p class="why">an empty panel shows an empty crate on the floor, not a rounded dashed box</p>
+    <section class="panel">
+      <h2>Your desk · 30</h2>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <h3 class="group-head new" style="color:var(--fail)">Blocked</h3>
+        <a href="#" class="desk-item new">
+          <span style="font-size:14px">f69-06-fix-theme-tests-still-do-tests</span>
+          <span class="words">failed: no-changes, then no-changes</span>
+        </a>
+        <p style="margin:0;display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn go new">Try again</button>
+          <button type="button" class="btn plain">Set aside</button>
+        </p>
+      </div>
+    </section>
+    <p class="why">the desk in classes: the same panel plate; Go buttons are a hazard plate with a cut corner, the same on every page</p>
+  </div>
+  </div>
+  <p class="legend-m"><span class="new">Dashed green</span> marks what changes. The colours that mean something (the lead's orange, a developer's blue, the reds and greens) mean the same as today; every new ornament is ink or the hazard stripe and never moves. The light theme gets the same shapes on its pale floor. Tick "calmer" for no grid, no stripe in the headers and square buttons.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+  document.getElementById("calm").addEventListener("change", (e) => document.body.classList.toggle("calm", e.target.checked));
+  document.querySelectorAll("a[href^='#']").forEach((a) => a.addEventListener("click", (e) => e.preventDefault()));
+</script>
+</body>
+</html>
