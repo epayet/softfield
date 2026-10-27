@@ -836,6 +836,28 @@ def test_next_in_line_shows_each_priority_and_sends_reordering_to_the_board(queu
     assert re.search(r'<a href="/board[^"]*">Reorder on the board ›</a>', markup)
 
 
+def test_next_in_line_says_whom_a_ticket_runs_early_for(client, db_path):
+    """F173 D7: f2-01-top (F2 at 1) waits for f1-06-second, which comes first in its place."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = conn.execute("SELECT id FROM projects WHERE name = ?", (PROJECT,)).fetchone()[0]
+        card = metrics.upsert_milestone(conn, project, "f2", priority=1)
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f2-01-top",
+            milestone_id=card,
+            state="ready",
+            depends_on=["f1-06-second"],
+        )
+    finally:
+        conn.close()
+    rows = section(client.get("/").text, "queue").split("Next in line", 1)[1]
+    assert rows.index("1 f1-06-second") < rows.index("2 f2-01-top")
+    assert re.search(r"\bf1-06-second\b[^·]*· [^·]+ · early: f2-01-top waits for it\b", rows)
+    assert re.search(r"\bf2-01-top\b[^·]*· [^·]+ · waits for f1-06-second · priority 1\b", rows)
+
+
 def _prioritise(db_path: Path, ticket: str, own: int, card: int) -> None:
     """``ticket``'s own ``priority:`` in its file, and its milestone card's priority."""
     conn = metrics.open_db(db_path)

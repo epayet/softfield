@@ -95,6 +95,7 @@ from runner.tasks import (
     blocked_ids,
     carry_footers,
     difficulty,
+    early_for,
     find_ticket,
     full_key,
     held_ids,
@@ -105,6 +106,7 @@ from runner.tasks import (
     parse_task,
     pick_next,
     preflight,
+    pulls,
     run_order,
     short_key,
     split_frontmatter,
@@ -4736,23 +4738,25 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
     share of its 5-hour window with its switch off, developer tickets go before lead ones, so
     a lead ticket parks only when nothing else can run (ADR 15 item 5, ADR 16 item 3); then the
     tickets of a card marked to use the reserve, and what they wait for (ADR 34 item 6). Each
-    by priority (f5 D6)."""
+    by priority (f5 D6), a ticket waited for in its first waiter's place, read from the whole
+    ready list (F173 D6)."""
     at = now()
     cards = _cards(s.repo, ready)
+    pulled = pulls(ready, cards)
     held = {t.id for t in ready if t.id in s.state.parked}
     due = [t for t in ready if t.id in held and _due(s.state.parked[t.id], at)]
-    if (task := pick_next(due, done, paused, cards)) is not None:
+    if (task := pick_next(due, done, paused, cards, pulled)) is not None:
         return task
     limited = bool(_limits_ahead(s, at, five_hour=False))
     free = [t for t in ready if t.id not in held and not (limited and t.agent != "developer")]
-    task = pick_next(free, done, paused, cards)
+    task = pick_next(free, done, paused, cards, pulled)
     if task is None or task.agent != "lead":
         return task
     marked = reserve_cards(s.repo, ready)
     if not _waits_for_the_owner(s, at, task, marked):
         return task
-    developers = pick_next([t for t in free if t.agent != "lead"], done, paused, cards)
-    passing = pick_next([t for t in free if t.id in marked], done, paused, cards)
+    developers = pick_next([t for t in free if t.agent != "lead"], done, paused, cards, pulled)
+    passing = pick_next([t for t in free if t.id in marked], done, paused, cards, pulled)
     return developers or passing or task
 
 
@@ -5170,7 +5174,9 @@ def _runnable_rows(
 def _dispatch_ticket(s: Session, task: Task, ready: list[Task]) -> dispatch.Ticket:
     """The ticket `_next_task` chose, as the pick sees it."""
     lead = router.lead_only(task.agent, task.files, tuple(read_protected(s.repo)))
-    return dispatch.Ticket(task.id, lead, task_priority(task, _cards(s.repo, ready)))
+    cards = _cards(s.repo, ready)
+    early = early_for(task, cards, pulls(ready, cards))
+    return dispatch.Ticket(task.id, lead, task_priority(task, cards), early_for=early)
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
@@ -5570,9 +5576,10 @@ def _dispatch_tickets(
     behind = behind or {}
     held = _held(repo, ready)
     cards = _cards(repo, ready)
+    pulled = pulls(ready, cards)
     protected = tuple(read_protected(repo))
     tickets = []
-    for task in sorted(ready, key=lambda t: run_order(t, cards)):
+    for task in sorted(ready, key=lambda t: run_order(t, cards, pulled)):
         waiting = [d for d in task.depends_on if d not in done]
         entry = parked.get(task.id)
         waits, not_before = None, None
@@ -5589,9 +5596,8 @@ def _dispatch_tickets(
         if entry is not None and entry["kind"] != "reserve":
             not_before = at if entry.get(RETRY) else _resets(entry)
         lead = router.lead_only(task.agent, task.files, protected)
-        tickets.append(
-            dispatch.Ticket(task.id, lead, task_priority(task, cards), waits, not_before)
-        )
+        priority, early = task_priority(task, cards), early_for(task, cards, pulled)
+        tickets.append(dispatch.Ticket(task.id, lead, priority, waits, not_before, early))
     return tickets
 
 

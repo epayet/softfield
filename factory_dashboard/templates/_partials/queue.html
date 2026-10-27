@@ -26,7 +26,7 @@
     {% endfor %}
     {% for t in next %}
     {% if t.ticket %}
-    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · waits for {{ waits[t.ticket] }}{% endif %} · priority {{ t.priority }}</div>
+    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · {{ waits[t.ticket] }}{% endif %} · {% if t.early_for %}early: {{ t.early_for }} waits for it{% else %}priority {{ t.priority }}{% endif %}</div>
     {% else %}
     <div class="next-row"><b class="mono">{{ t.number }} {{ t.title }}</b> · a batch{% if t.waits %} · waits for {{ t.waits | join(", ") }}{% endif %}</div>
     {% endif %}

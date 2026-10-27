@@ -350,6 +350,49 @@ def test_dry_run_picks_by_card_priority_and_prints_each(repo, capsys):
     assert "next: m3-01-first" in out
 
 
+def _on_card(repo: Path, task_id: str, place: int, deps: str = "[]", agent: str = "") -> None:
+    """A ticket of the card ``task_id`` names, that card at ``place`` on the board."""
+    key = task_id.split("-")[0]
+    _milestone_doc(repo, key, f"> **State:** ready · **Priority:** {place}")
+    path = write_task(repo / ".factory" / "tasks" / "ready", task_id, deps)
+    extra = f"agent: {agent}\n" if agent else ""
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n{extra}"))
+
+
+def test_dry_run_runs_what_a_higher_ticket_waits_for_in_its_place_and_says_so(repo, capsys):
+    """F173 D6, D7: f15-06 (at 4) waits for f63-01 (at 14), so f63-01 goes before F132 (at 5)."""
+    _on_card(repo, "f15-06-card-actions", 4, deps="[f63-01-desk-order]")
+    _on_card(repo, "f63-01-desk-order", 14)
+    _on_card(repo, "f132-01-one", 5)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    out = _dry_run(repo, capsys)
+    assert "-> f63-01-desk-order: runnable, early for f15-06-card-actions, developer ticket" in out
+    assert "   f132-01-one: runnable, priority 5, developer ticket" in out
+    assert out.index("f63-01-desk-order:") < out.index("f132-01-one:")
+    assert "next: f63-01-desk-order" in out
+
+
+def test_a_developer_ticket_a_lead_ticket_waits_for_is_pulled_in_the_developer_pick(
+    repo, monkeypatch
+):
+    """F173 D6: at the reserve, `_next_task` picks among the developers' tickets alone, with
+    the pulls of the whole ready list: f9-01 is pulled to f2-01's place, before f5-01."""
+    _on_card(repo, "f1-01-first", 1, agent="lead")
+    _on_card(repo, "f2-01-waits", 2, deps="[f9-01-pulled]", agent="lead")
+    _on_card(repo, "f9-01-pulled", 9)
+    _on_card(repo, "f5-01-other", 5)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    s = loop.open_session(_config(repo), None)
+    monkeypatch.setattr(loop, "_limits_ahead", lambda *a, **k: [])
+    monkeypatch.setattr(loop, "_waits_for_the_owner", lambda *a: True)
+    ready = load_dir(repo / ".factory" / "tasks" / "ready", 150)
+    task = loop._next_task(s, ready, set(), set())
+    assert task is not None and task.id == "f9-01-pulled"
+    loop.close_session(s)
+
+
 def test_a_signed_off_milestone_releases_the_tickets_waiting_for_it(repo, capsys):
     _waiting_milestones(repo)
     (repo / ".factory" / "cards" / "m1-first.md").write_text(

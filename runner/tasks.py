@@ -381,10 +381,51 @@ def task_priority(task: Task, cards: Mapping[str, int]) -> int:
     return cards.get(short_key(task.milestone), DEFAULT_PRIORITY)
 
 
-def run_order(task: Task, cards: Mapping[str, int]) -> tuple[int, tuple[str, int], str]:
-    """f5 D6: priority, then milestone order, then id; ``depends_on`` filters before it
-    (``pick_next``)."""
+type RunKey = tuple[int, tuple[str, int], str]  # a ticket's own place: priority, milestone, id
+
+
+def own_order(task: Task, cards: Mapping[str, int]) -> RunKey:
+    """f5 D6: priority, then milestone order, then id."""
     return task_priority(task, cards), milestone_order(task.milestone), task.id
+
+
+def pulls(ready: Iterable[Task], cards: Mapping[str, int]) -> dict[str, RunKey]:
+    """F173 D6: each ready ticket's id mapped to the place (`own_order`) of the first ready
+    ticket that waits for it through ``depends_on``, directly or through other ready ones;
+    absent when none does. Done and set-aside tickets aren't ready, so they pull nothing; a
+    cycle stops the walk. The waiter's id is the place's last part."""
+    by_id = {t.id: t for t in ready}
+    found: dict[str, RunKey] = {}
+    for waiter in sorted(by_id.values(), key=lambda t: own_order(t, cards)):
+        place, seen = own_order(waiter, cards), {waiter.id}
+        todo = list(waiter.depends_on)
+        while todo:
+            dep = todo.pop()
+            if dep in seen or dep not in by_id:
+                continue
+            seen.add(dep)
+            found.setdefault(dep, place)  # waiters come first-placed first
+            todo.extend(by_id[dep].depends_on)
+    return found
+
+
+def early_for(task: Task, cards: Mapping[str, int], pulled: Mapping[str, RunKey]) -> str | None:
+    """The ticket ``task`` runs early for (F173 D7): its first waiter, when that one's card
+    (or bug) is placed ahead of its own; else None, as for a waiter of its own card."""
+    place = pulled.get(task.id)
+    ahead = place is not None and place[:2] < own_order(task, cards)[:2]
+    return place[2] if place is not None and ahead else None
+
+
+def run_order(
+    task: Task, cards: Mapping[str, int], pulled: Mapping[str, RunKey] | None = None
+) -> tuple[RunKey, str]:
+    """f5 D6: priority, then milestone order, then id, or the place of the first ticket that
+    waits for it when that one goes first (F173 D6, ``pulled`` from `pulls`); then its own id.
+    ``depends_on`` filters before it (``pick_next``)."""
+    own = own_order(task, cards)
+    place = (pulled or {}).get(task.id)
+    return (own if place is None else min(own, place)), task.id
 
 
 def pick_next(
@@ -392,13 +433,17 @@ def pick_next(
     done: set[str],
     paused: set[str],
     cards: Mapping[str, int] | None = None,
+    pulled: Mapping[str, RunKey] | None = None,
 ) -> Task | None:
     """The runnable ticket that goes first: dependencies, pauses and holds (in ``paused``)
-    filter before the order."""
+    filter before the order. ``pulled`` is `pulls` of the whole ready list, for a pick from
+    part of it (F173 D6); by default, of ``ready``."""
+    tasks, cards = list(ready), cards or {}
+    pulled = pulls(tasks, cards) if pulled is None else pulled
     candidates = [
-        t for t in ready if t.id not in paused and all(dep in done for dep in t.depends_on)
+        t for t in tasks if t.id not in paused and all(dep in done for dep in t.depends_on)
     ]
-    return min(candidates, key=lambda t: run_order(t, cards or {}), default=None)
+    return min(candidates, key=lambda t: run_order(t, cards, pulled), default=None)
 
 
 TESTS_ONLY = (

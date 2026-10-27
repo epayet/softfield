@@ -84,6 +84,41 @@ def test_run_order_follows_the_board_not_a_feature_tickets_own_priority(tmp_path
     ]
 
 
+def test_run_order_puts_what_a_higher_ticket_waits_for_in_its_place(tmp_path):
+    """F173 D6, D7: f15-06 (F15 at 4) waits on f73-01 (F73 at 6), which waits on f63-01
+    (F63 at 14): both go before F132 (at 5), each saying whom it runs early for. A waiter of
+    its own card says nothing."""
+    db = metrics.open_db(tmp_path / "factory-metrics.sqlite")
+    project = metrics.upsert_project(db, PROJECT)
+    cards = {
+        key: metrics.upsert_milestone(db, project, key, priority=place)
+        for key, place in (("f15", 4), ("f132", 5), ("f73", 6), ("f63", 14))
+    }
+    rows = [
+        ("f15-06-card-actions", "f15", ["f73-01-set-aside-list"]),
+        ("f73-01-set-aside-list", "f73", ["f63-01-desk-order"]),
+        ("f63-01-desk-order", "f63", []),
+        ("f132-01-a", "f132", ["f132-02-b"]),
+        ("f132-02-b", "f132", []),
+    ]
+    for ticket, key, after in rows:
+        metrics.upsert_ticket(
+            db, project, ticket, milestone_id=cards[key], state="ready", depends_on=after
+        )
+    try:
+        order = run_order(db, PROJECT)
+    finally:
+        db.close()
+    assert [(u.ticket, u.early_for) for u in order] == [
+        ("f63-01-desk-order", "f15-06-card-actions"),
+        ("f73-01-set-aside-list", "f15-06-card-actions"),
+        ("f15-06-card-actions", None),
+        ("f132-02-b", None),
+        ("f132-01-a", None),
+    ]
+    assert [u.priority for u in order] == [14, 6, 4, 5, 5]  # the board's place is kept
+
+
 def test_run_order_of_an_empty_queue(db):
     assert run_order(db, PROJECT) == []
     assert run_order(db, "elsewhere") == []

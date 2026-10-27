@@ -674,6 +674,7 @@ def live_line(
             "milestone": u.milestone,
             "waits": list(u.waits),
             "priority": u.priority,
+            "early_for": u.early_for,
         }
         for u in upcoming
     ]

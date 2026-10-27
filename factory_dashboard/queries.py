@@ -26,8 +26,10 @@ from runner.tasks import (
     Task,
     TaskError,
     blocked_ids,
+    early_for,
     milestone_order,
     pick_next,
+    pulls,
     short_key,
     split_frontmatter,
 )
@@ -519,6 +521,7 @@ class Upcoming:
     milestone: str | None
     waits: tuple[str, ...]  # its dependencies not merged yet
     priority: int = DEFAULT_PRIORITY  # as the runner reads it (f6-18)
+    early_for: str | None = None  # the ticket it runs early for: that one waits for it (F173 D7)
 
     @property
     def ready_now(self) -> bool:
@@ -571,15 +574,17 @@ def in_run_order(
     """``pick_next`` applied again and again, each pick counted as merged: the tickets of
     ``ready`` in the order the runner takes them, then those it never would (waiting on a
     ticket that isn't ready, or paused behind a ``stopped`` one). ``cards`` maps a card's
-    short key to its place on the board, as the runner's pick has it."""
+    short key to its place on the board, as the runner's pick has it; a ticket waited for
+    goes in its first waiter's place, read from the whole of ``ready`` (F173 D6)."""
     cards = cards or {}
     paused = blocked_ids(ready, stopped)
+    pulled = pulls(ready, cards)
     left, merged, picked = list(ready), set(done), []
-    while (task := pick_next(left, merged, paused, cards)) is not None:
+    while (task := pick_next(left, merged, paused, cards, pulled)) is not None:
         picked.append(task)
         left.remove(task)
         merged.add(task.id)
-    return picked, sorted(left, key=lambda t: _run_order(t, cards))
+    return picked, sorted(left, key=lambda t: _run_order(t, cards, pulled))
 
 
 def run_order(
@@ -614,6 +619,7 @@ def run_order(
         if t.milestone != BUGS and t.priority is not None
     }
     picked, left = in_run_order(tasks, done, stopped, cards)
+    pulled = pulls(tasks, cards)
     return [
         Upcoming(
             ticket=t.id,
@@ -622,6 +628,7 @@ def run_order(
             milestone=ready[t.id]["milestone"],
             waits=tuple(d for d in t.depends_on if d not in done),
             priority=_task_priority(t, cards),
+            early_for=early_for(t, cards, pulled),
         )
         for t in [*picked, *left]
     ]

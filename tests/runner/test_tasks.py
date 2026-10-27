@@ -14,6 +14,7 @@ from runner.tasks import (
     append_footer,
     blocked_ids,
     command_arg,
+    early_for,
     full_key,
     held_ids,
     load_dir,
@@ -26,6 +27,7 @@ from runner.tasks import (
     parse_task,
     pick_next,
     preflight,
+    pulls,
     short_key,
     task_ids,
     task_priority,
@@ -594,6 +596,113 @@ def test_dependencies_and_pauses_still_come_before_priority(tmp_path):
     assert picked is not None and picked.id == "f1-01-c"
     picked = pick_next([first, other], done=set(), paused={"f2-01-a"}, cards=cards)
     assert picked is not None and picked.id == "f1-01-c"
+
+
+CASE_CARDS = {"f15": 4, "f132": 5, "f73": 6, "f42": 6, "f26": 7, "f63": 14}
+
+
+def _case(directory: Path) -> list[Task]:
+    """F173 D6, the line on 2026-10-26: F15 (at 4) waits on a chain of F73, F42, F26 and F63
+    tickets, while F132's (at 5) are free to run."""
+    return [
+        _in(directory, "f15-06-card-actions", "f15", deps="[f73-02-set-aside-button]"),
+        _in(
+            directory,
+            "f73-02-set-aside-button",
+            "f73",
+            deps="[f73-01-set-aside-list, f42-01-review-page-room]",
+        ),
+        _in(directory, "f73-01-set-aside-list", "f73", deps="[f26-02-group-counts]"),
+        _in(directory, "f42-01-review-page-room", "f42"),
+        _in(directory, "f26-02-group-counts", "f26", deps="[f63-01-desk-order]"),
+        _in(directory, "f63-01-desk-order", "f63"),
+        _in(directory, "f132-01-one", "f132"),
+        _in(directory, "f132-02-two", "f132"),
+    ]
+
+
+def _picks(ready: list[Task], cards: dict[str, int]) -> list[str]:
+    """``pick_next`` again and again, each pick counted as merged."""
+    left, done, order = list(ready), set[str](), []
+    while (task := pick_next(left, done, set(), cards, pulls(ready, cards))) is not None:
+        order.append(task.id)
+        left.remove(task)
+        done.add(task.id)
+    return order
+
+
+def test_what_a_higher_ticket_waits_for_runs_in_its_place(tmp_path):
+    """F173 D6: F15's chain runs before F132's, the top card's ticket as soon as it can."""
+    assert _picks(_case(tmp_path), CASE_CARDS) == [
+        "f42-01-review-page-room",
+        "f63-01-desk-order",
+        "f26-02-group-counts",
+        "f73-01-set-aside-list",
+        "f73-02-set-aside-button",
+        "f15-06-card-actions",
+        "f132-01-one",
+        "f132-02-two",
+    ]
+
+
+def test_pulls_name_the_first_waiter_and_early_for_only_when_it_is_ahead(tmp_path):
+    ready = _case(tmp_path)
+    by_id = {t.id: t for t in ready}
+    pulled = pulls(ready, CASE_CARDS)
+    assert pulled["f63-01-desk-order"] == (4, ("f", 15), "f15-06-card-actions")
+    assert "f15-06-card-actions" not in pulled and "f132-01-one" not in pulled
+    assert early_for(by_id["f63-01-desk-order"], CASE_CARDS, pulled) == "f15-06-card-actions"
+    assert early_for(by_id["f132-01-one"], CASE_CARDS, pulled) is None
+    behind = {**CASE_CARDS, "f15": 20}  # F15 behind: F73 pulls its chain, f42-01 keeps its own
+    assert (
+        early_for(by_id["f63-01-desk-order"], behind, pulls(ready, behind))
+        == "f73-01-set-aside-list"
+    )
+    assert early_for(by_id["f42-01-review-page-room"], behind, pulls(ready, behind)) is None
+    assert _picks(ready, behind)[:2] == ["f132-01-one", "f132-02-two"]
+
+
+def test_a_ticket_nothing_ready_waits_for_keeps_its_cards_place(tmp_path):
+    """A done or set-aside waiter isn't in the ready list, so it pulls nothing."""
+    ready = [t for t in _case(tmp_path) if t.id != "f15-06-card-actions"]
+    ready = [t for t in ready if not t.id.startswith("f73-")]
+    assert pulls(ready, CASE_CARDS) == {"f63-01-desk-order": (7, ("f", 26), "f26-02-group-counts")}
+    assert _picks(ready, CASE_CARDS)[:3] == [
+        "f132-01-one",
+        "f132-02-two",
+        "f42-01-review-page-room",
+    ]
+
+
+def test_a_cycle_in_depends_on_doesnt_hang(tmp_path):
+    ready = [
+        _in(tmp_path, "f1-01-a", "f1", deps="[f1-02-b]"),
+        _in(tmp_path, "f1-02-b", "f1", deps="[f1-01-a]"),
+        _in(tmp_path, "f2-01-c", "f2"),
+    ]
+    assert set(pulls(ready, {"f1": 0, "f2": 1})) == {"f1-01-a", "f1-02-b"}
+    assert _picks(ready, {"f1": 0, "f2": 1}) == ["f2-01-c"]
+
+
+def test_a_pulled_chain_goes_before_another_card_at_its_waiters_place(tmp_path):
+    """Ties: the waiter's key (priority, milestone order, id), then the ticket's own id."""
+    ready = [
+        _in(tmp_path, "f15-06-card-actions", "f15", deps="[f73-01-a]"),
+        _in(tmp_path, "f73-01-a", "f73"),
+        _in(tmp_path, "f171-01-b", "f171"),
+    ]
+    cards = {"f15": 4, "f171": 4, "f73": 6}
+    assert _picks(ready, cards) == ["f73-01-a", "f15-06-card-actions", "f171-01-b"]
+
+
+def test_pick_next_reads_the_pulls_it_is_given_for_a_subset(tmp_path):
+    """`_next_task`'s developer pick: a lead ticket out of the subset still pulls."""
+    ready = _case(tmp_path)
+    subset = [t for t in ready if t.id in {"f63-01-desk-order", "f132-01-one"}]
+    alone = pick_next(subset, set(), set(), CASE_CARDS)
+    assert alone is not None and alone.id == "f132-01-one"
+    picked = pick_next(subset, set(), set(), CASE_CARDS, pulls(ready, CASE_CARDS))
+    assert picked is not None and picked.id == "f63-01-desk-order"
 
 
 def _created_before(task: Task, queued: dict[str, Task]) -> set[str]:

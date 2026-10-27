@@ -5,7 +5,8 @@ callers read the metrics database, ``.factory/tasks/`` and ``state.json``.
 
 - First by kind: planner, escalation, direction, checkpoint, review, then tickets: a parked
   ticket whose reset has passed, then lead tickets, then developer tickets, each in the run
-  order the caller gives (`pick_next`'s: priority, milestone, id). Queued jobs of one kind
+  order the caller gives (`pick_next`'s: priority, milestone, id, or the place of the ticket
+  that waits for it). Queued jobs of one kind
   go by age.
 - A job that can't run now is skipped with its reason, and the next one is taken: a queued
   row before its ``not_before``, a ticket that waits (a dependency, a pause, a sign-off), or
@@ -71,6 +72,7 @@ class Ticket:
     priority: int
     waits: str | None = None  # a dependency, a pause, a sign-off: never picked
     not_before: datetime | None = None  # parked for a Claude limit until then
+    early_for: str | None = None  # the ticket it runs early for: that one waits for it (F173 D7)
 
 
 @dataclass(frozen=True)
@@ -151,7 +153,8 @@ def _queued_line(q: Queued, windows: Windows, now: datetime) -> Line:
 
 def _ticket_line(t: Ticket, windows: Windows, now: datetime) -> Line:
     who = "lead" if t.lead else "developer"
-    reason = f"priority {t.priority}, {who} ticket"
+    place = f"early for {t.early_for}" if t.early_for else f"priority {t.priority}"
+    reason = f"{place}, {who} ticket"
     if t.not_before is not None and t.not_before <= now:
         reason += ", its reset has passed"
     job = Pick(TICKET, t.id, reason)
