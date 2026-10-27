@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F59 mock-up: the weekly report page</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405;
+    --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62; --oss: #4fd1a5; --copilot: #7aa7ff;
+    --factory: #f2b10a; --product: #4fd1a5; --good: #5fd17a; --fail: #ec5458;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.frame { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { display: block; font: 400 12px var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 820px; }
+  .legend .new { padding: 0 4px; }
+  [hidden] { display: none !important; }
+  .views { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .wide { flex: 1 1 760px; min-width: 0; max-width: 1040px; }
+  .phone { flex: 0 0 390px; max-width: 100%; }
+
+  /* ---- the bar and tabs as drawn (dashboard.css) ---- */
+  .bar { background: var(--floor); border-bottom: 1px solid var(--rule); padding: 10px 12px 8px; }
+  .bar .brand { font: 700 18px var(--display); letter-spacing: .04em; }
+  .stripe { height: 6px; margin: 8px 0; background: repeating-linear-gradient(135deg, var(--hazard) 0 8px, transparent 8px 16px); opacity: .8; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 2px; }
+  .tabs span { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 6px 9px;
+    background: var(--bay); color: var(--ink-2); border: 1px solid var(--rule); }
+  .tabs span.on { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+
+  /* ---- the panel as drawn ---- */
+  .page { padding: 12px; display: grid; gap: 12px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; position: relative; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th, td { padding: 4px 6px; border-bottom: 1px solid var(--grid); text-align: left; white-space: nowrap; }
+  th { font: 600 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .scroll { overflow-x: auto; }
+
+  /* ---- proposed: plate headers with corner ticks, ink and rules only ---- */
+  .plate-h { display: flex; align-items: baseline; gap: 8px; margin: -12px -14px 10px; padding: 7px 14px;
+    border-bottom: 1px solid var(--rule); background: var(--plate); }
+  .plate-h h2 { margin: 0; }
+  .ticks::before, .ticks::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--ink-2); }
+  .ticks::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .ticks::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .tag { font: 400 11px var(--mono); color: var(--muted); letter-spacing: .04em; }
+
+  .head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .head h1 { font-size: 18px; margin: 0; }
+  .seg { display: inline-flex; border: 1px solid var(--rule); }
+  .seg span { font: 600 12px var(--display); letter-spacing: .05em; text-transform: uppercase; padding: 6px 10px; color: var(--ink-2); background: var(--bay); }
+  .seg span.on { background: var(--plate); color: var(--fg); box-shadow: inset 0 -2px 0 var(--hazard); }
+  .weeks { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+  .week { flex: none; border: 1px solid var(--rule); background: var(--plate); padding: 5px 9px; font: 400 12px var(--mono); color: var(--ink-2); }
+  .week b { display: block; font: 600 12px var(--display); letter-spacing: .04em; color: var(--fg); text-transform: uppercase; }
+  .week.on { border-color: var(--hazard); box-shadow: inset 0 0 0 1px var(--hazard); }
+  .week.live { border-style: dashed; }
+
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .tile { background: var(--plate); border: 1px solid var(--rule); padding: 8px 10px; position: relative; }
+  .tile .k { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .tile .v { font: 700 24px/1.15 var(--display); letter-spacing: .02em; }
+  .tile .d { font: 400 12px var(--mono); color: var(--ink-2); }
+
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
+  .phone .grid2 { grid-template-columns: 1fr; }
+  svg.chart { width: 100%; height: auto; display: block; }
+  svg.chart text { font: 400 10px var(--mono); fill: var(--muted); }
+  svg.chart text.val { fill: var(--ink-2); }
+  .key { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 12px var(--mono); color: var(--ink-2); margin: 6px 0 0; }
+  .key i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+
+  .read p { margin: 0 0 8px; max-width: 72ch; }
+  .read h4 { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 12px 0 6px; }
+  .idea { border: 1px solid var(--rule); border-left: 3px solid var(--factory); background: var(--plate); padding: 8px 10px; margin: 6px 0 10px; position: relative; }
+  .idea q { display: block; quotes: none; }
+  .idea .btns { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .idea button { font: 600 12px var(--display); letter-spacing: .05em; text-transform: uppercase; padding: 6px 10px; border: 1px solid var(--rule);
+    background: var(--bay); color: var(--fg); cursor: default; }
+  .idea button.go { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+</style>
+</head>
+<body>
+<h1>F59: a Reports tab, one report a week</h1>
+<p class="lede">Every number below is real, read from the metrics database on 26 Oct: the week of 19 Oct (Mon) to 25 Oct (Sun), and the three weeks before it. The written read and its ideas are an example of what the weekly job would write from those numbers. The savings tile is the only made-up value.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<!-- Today: there is no report page; the nearest is Agents, copied from factory_dashboard/templates/agents.html (its Efficiency table, all time, one project) -->
+<div data-version="today" hidden>
+  <h3 class="frame">Agents today (the nearest page)</h3>
+  <div class="views"><div class="wide">
+    <div class="bar"><span class="brand">SoftField</span><div class="stripe"></div>
+      <div class="tabs"><span>Projects</span><span>Overview</span><span>Planning</span><span>Board</span><span>Tickets</span><span>Jobs</span><span>Runs</span><span>Timeline</span><span class="on">Agents</span><span>Bench</span></div></div>
+    <div class="page">
+      <section class="panel"><h2>Efficiency <span class="src">softfield, since 30 Sep</span></h2>
+        <div class="scroll"><table>
+          <tr><th>Agent</th><th class="num">Jobs</th><th class="num">Merged</th><th class="num">Attempts</th><th class="num">First %</th><th class="num">Att/merge</th><th class="num">Min/merge</th><th class="num">Tok/merge</th><th class="num">Esc %</th><th class="num">$</th></tr>
+          <tr><td class="mono">claude-opus</td><td class="num">507</td><td class="num">165</td><td class="num">0</td><td class="num">–</td><td class="num">0.0</td><td class="num">0.0</td><td class="num">5112819</td><td class="num">–</td><td class="num">$786.28</td></tr>
+          <tr><td class="mono">claude-sonnet</td><td class="num">65</td><td class="num">3</td><td class="num">3</td><td class="num">100%</td><td class="num">1.0</td><td class="num">6.3</td><td class="num">5324538</td><td class="num">0%</td><td class="num">$14.15</td></tr>
+          <tr><td class="mono">local-qwen3.6-35b-a3b</td><td class="num">390</td><td class="num">151</td><td class="num">190</td><td class="num">49%</td><td class="num">2.6</td><td class="num">82.7</td><td class="num">4385755</td><td class="num">23%</td><td class="num">$0.00</td></tr>
+          <tr><td class="mono">ollama-gpt-oss-120b</td><td class="num">44</td><td class="num">7</td><td class="num">13</td><td class="num">31%</td><td class="num">4.0</td><td class="num">26.9</td><td class="num">292613</td><td class="num">54%</td><td class="num">$0.00</td></tr>
+          <tr><td class="mono">claude-haiku</td><td class="num">100</td><td class="num">0</td><td class="num">0</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">–</td><td class="num">$0.57</td></tr>
+        </table></div>
+      </section>
+    </div>
+  </div></div>
+  <p class="legend">Totals since the start, one project at a time, abbreviated headings, no weeks and no trend. Nothing says what changed, whether it is good, or what to do next. No page holds a report to come back to.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <div class="views">
+    <div class="wide"><h3 class="frame">Wide screen · the whole factory</h3><div data-slot="whole"></div></div>
+    <div class="phone"><h3 class="frame">Phone · one project</h3><div data-slot="travel"></div></div>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new: the whole page is new, so only its parts are marked with notes. The numbers come from the database whenever the page opens, so every week since 30 Sep shows at once; only the written read waits for the weekly job, which runs once Claude's seven-day allowance has come back. The week strip scrolls sideways on a phone; This week's dashed plate is the week still running, numbers only.</p>
+</div>
+
+<template id="report">
+  <div class="bar"><span class="brand">SoftField</span><div class="stripe"></div>
+    <div class="tabs"><span>Projects</span><span>Overview</span><span>Planning</span><span>Board</span><span>Tickets</span><span>Jobs</span><span>Runs</span><span>Timeline</span><span class="on new">Reports</span><span>Agents</span><span>Bench</span></div></div>
+  <div class="page">
+    <section class="panel ticks">
+      <div class="head">
+        <h1>Week of 19 Oct</h1>
+        <div class="seg new" data-scope></div>
+      </div>
+      <span class="note">Whole factory, or one project</span>
+      <div class="weeks new" style="margin-top:10px">
+        <div class="week live"><b>This week</b>from 26 Oct</div>
+        <div class="week on"><b>19 Oct</b>read written</div>
+        <div class="week"><b>12 Oct</b>numbers only</div>
+        <div class="week"><b>5 Oct</b>numbers only</div>
+        <div class="week"><b>28 Sep</b>numbers only</div>
+      </div>
+      <span class="note">Every past week; the newest is open</span>
+    </section>
+
+    <section class="panel ticks new">
+      <div class="plate-h"><h2>The week in numbers</h2><span class="tag" data-sub></span></div>
+      <div class="tiles" data-tiles></div>
+      <span class="note">Each tile says what it was the week before</span>
+    </section>
+
+    <section class="panel ticks new">
+      <div class="plate-h"><h2>The lead's read</h2><span class="tag">written 26 Oct 17:20 · Opus · $2.90</span></div>
+      <div class="read" data-read></div>
+      <span class="note">Written once a week; ideas are plates you can plant (F164, Plant a review's ideas straight from the review)</span>
+    </section>
+
+    <div class="grid2">
+      <section class="panel ticks new">
+        <div class="plate-h"><h2>Where Claude's dollars went</h2><span class="tag">this week, by kind of job</span></div>
+        <div data-chart="roles"></div>
+      </section>
+      <section class="panel ticks new">
+        <div class="plate-h"><h2>How helpful the local developer is</h2><span class="tag">attempts that passed, by week</span></div>
+        <div data-chart="pass"></div>
+      </section>
+      <section class="panel ticks new">
+        <div class="plate-h"><h2>Hours worked, by agent</h2><span class="tag">by week</span></div>
+        <div data-chart="hours"></div>
+      </section>
+      <section class="panel ticks new">
+        <div class="plate-h"><h2>Claude's dollars and milestones done</h2><span class="tag">by week</span></div>
+        <div data-chart="spend"></div>
+      </section>
+    </div>
+
+    <section class="panel ticks new">
+      <div class="plate-h"><h2>Who did what</h2><span class="tag">this week</span></div>
+      <div class="scroll"><table data-who></table></div>
+    </section>
+  </div>
+</template>
+
+<script>
+  // Real values, metrics database, 26 Oct; weeks start on Monday
+  const WEEKS = ["28 Sep", "5 Oct", "12 Oct", "19 Oct"];
+  const DATA = {
+    whole: {
+      label: "Whole factory", scope: 0,
+      tiles: [
+        ["Milestones done", "22", "21 the week before"],
+        ["Tickets merged", "122", "49 the week before"],
+        ["Claude's dollars", "$305", "$178 the week before"],
+        ["Local developer passed", "77%", "80 of 104 attempts · 36% before"],
+        ["Timeouts", "4", "14 the week before"],
+        ["Saved by delegating", "$190", "example value"],
+      ],
+      roles: [["Planning replies", 149.8], ["Lead tickets", 77.2], ["Reviews", 58.4], ["Escalations", 8.2], ["Checkpoints", 7.1], ["Directions", 4.5]],
+      pass: [39, 35, 36, 77],
+      hoursLocal: [58.3, 64.9, 70.9, 51.8], hoursClaude: [19.6, 17.5, 19.1, 25.7],
+      spend: [229.8, 219.0, 177.8, 305.3], done: [7, 7, 21, 22],
+      who: [["qwen3.6-35b-a3b", "developer", 104, 80, "46.2 h", "$0"], ["qwen3.6-35b-a3b", "last attempt", 7, 4, "5.5 h", "$0"],
+            ["Opus", "lead ticket", 43, 41, "11.5 h", "$77.0"], ["Opus", "escalation", 7, 7, "1.7 h", "$8.2"],
+            ["Opus", "direction", 7, 7, "0.2 h", "$4.5"], ["Sonnet", "lead ticket", 1, 1, "0.1 h", "$0.3"]],
+      read: [
+        ["p", "A big week: 122 tickets merged and 22 milestones done, on both projects. The local developer passed 80 of its 104 attempts (77%), twice its rate of the three weeks before, and timeouts fell from 14 to 4."],
+        ["p", "Planning cost more than building: planner replies took $149.80 of Claude's $305 (49%), more than lead tickets and reviews together ($135.60). 58 replies, $2.58 each."],
+        ["h", "Ideas for the factory"],
+        ["idea", "Planner replies cost half of Claude's week: find what makes one cost $2.58 (the thread's whole history re-read each time?) and cut it, keeping planning on Opus."],
+        ["p", "Travel companion's tickets suit the local developer best: 53 of 60 attempts passed (88%), against 27 of 44 (61%) on Softfield, whose tickets touch bigger files."],
+        ["idea", "Write Softfield's developer tickets smaller, one file where possible, like Travel companion's, and compare the pass rate in two weeks."],
+      ],
+    },
+    travel: {
+      label: "travel-companion", scope: 2,
+      tiles: [
+        ["Milestones done", "8", "its first full week"],
+        ["Tickets merged", "69", "53 by the local developer"],
+        ["Claude's dollars", "$115", "$22 the week before"],
+        ["Local developer passed", "88%", "53 of 60 attempts"],
+      ],
+      roles: [["Planning replies", 58.2], ["Lead tickets", 27.1], ["Reviews", 21.5], ["Escalations, directions and checkpoints", 8.5]],
+      pass: [null, null, null, 88],
+      hoursLocal: [0, 0, 0, 17.0], hoursClaude: [0, 0, 0.4, 3.2],
+      spend: [0, 0, 21.6, 115.4], done: [0, 0, 0, 8],
+      who: [["qwen3.6-35b-a3b", "developer", 60, 53, "17.0 h", "$0"], ["Opus", "lead ticket", 16, 16, "–", "$27.1"]],
+      read: [
+        ["p", "Travel companion's first full week: 8 milestones, 69 tickets, and the local developer passed 53 of 60 attempts (88%)."],
+      ],
+    },
+  };
+  const NS = "http://www.w3.org/2000/svg";
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  function el(tag, attrs, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+  function svg(w, h) { return el("svg", { viewBox: `0 0 ${w} ${h}`, class: "chart", role: "img" }); }
+
+  function bars(rows) { // horizontal, one colour: it is all Claude
+    const w = 360, rowH = 24, h = rows.length * rowH + 4, max = Math.max(...rows.map((r) => r[1]));
+    const s = svg(w, h);
+    rows.forEach(([label, v], i) => {
+      const y = i * rowH + 2, bw = (v / max) * 170;
+      s.append(el("text", { x: 0, y: y + 15 }, label.length > 26 ? label.slice(0, 25) + "…" : label));
+      s.append(el("rect", { x: 150, y: y + 4, width: bw, height: 14, fill: css("--opus") }));
+      s.append(el("text", { x: 154 + bw, y: y + 15, class: "val" }, "$" + v.toFixed(2)));
+    });
+    return s;
+  }
+  function axis(s, w, h, pad) {
+    s.append(el("line", { x1: pad, y1: h - 18, x2: w, y2: h - 18, stroke: css("--rule") }));
+    WEEKS.forEach((wk, i) => s.append(el("text", { x: pad + 10 + i * ((w - pad - 20) / 3) - 14, y: h - 4 }, wk)));
+  }
+  const xAt = (i, w, pad) => pad + 10 + i * ((w - pad - 20) / 3);
+  function line(values) {
+    const w = 360, h = 140, pad = 30, s = svg(w, h);
+    [0, 50, 100].forEach((p) => { const y = h - 18 - p; s.append(el("line", { x1: pad, y1: y, x2: w, y2: y, stroke: css("--grid") })); s.append(el("text", { x: 0, y: y + 3 }, p + "%")); });
+    axis(s, w, h, pad);
+    const pts = values.map((v, i) => v == null ? null : [xAt(i, w, pad), h - 18 - v]).filter(Boolean);
+    s.append(el("polyline", { points: pts.map((p) => p.join(",")).join(" "), fill: "none", stroke: css("--qwen"), "stroke-width": 2 }));
+    values.forEach((v, i) => { if (v == null) return; const x = xAt(i, w, pad), y = h - 18 - v; s.append(el("circle", { cx: x, cy: y, r: 3.5, fill: css("--qwen") })); s.append(el("text", { x: x - 8, y: y - 8, class: "val" }, v + "%")); });
+    return s;
+  }
+  function stacked(a, b, ca, cb) {
+    const w = 360, h = 150, pad = 30, s = svg(w, h), max = Math.max(...a.map((v, i) => v + b[i])) || 1, scale = 110 / max;
+    axis(s, w, h, pad);
+    a.forEach((v, i) => {
+      const x = xAt(i, w, pad) - 14, ha = v * scale, hb = b[i] * scale, base = h - 18;
+      s.append(el("rect", { x, y: base - ha, width: 28, height: ha, fill: ca }));
+      s.append(el("rect", { x, y: base - ha - hb, width: 28, height: hb, fill: cb }));
+      s.append(el("text", { x: x - 2, y: base - ha - hb - 4, class: "val" }, Math.round(v + b[i]) + " h"));
+    });
+    return s;
+  }
+  function spend(dollars, done) {
+    const w = 360, h = 150, pad = 30, s = svg(w, h), max = Math.max(...dollars) || 1;
+    axis(s, w, h, pad);
+    dollars.forEach((v, i) => {
+      const x = xAt(i, w, pad) - 14, hh = (v / max) * 100, base = h - 18;
+      s.append(el("rect", { x, y: base - hh, width: 28, height: hh, fill: css("--opus") }));
+      s.append(el("text", { x: x - 4, y: base - hh - 16, class: "val" }, "$" + Math.round(v)));
+      s.append(el("text", { x: x + 2, y: base - hh - 4 }, done[i] + " done"));
+    });
+    return s;
+  }
+  function key(items) { const k = document.createElement("div"); k.className = "key"; items.forEach(([c, t]) => { const s = document.createElement("span"); s.innerHTML = `<i style="background:${css(c)}"></i>${t}`; k.append(s); }); return k; }
+
+  function fill(slot, d) {
+    const root = document.querySelector(`[data-slot="${slot}"]`);
+    root.append(document.getElementById("report").content.cloneNode(true));
+    root.querySelector("[data-scope]").innerHTML = ["Whole factory", "softfield", "travel-companion"].map((n, i) => `<span class="${i === d.scope ? "on" : ""}">${n}</span>`).join("");
+    root.querySelector("[data-sub]").textContent = `${d.label} · 19 to 25 Oct`;
+    root.querySelector("[data-tiles]").innerHTML = d.tiles.map(([k, v, x]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${x}</div></div>`).join("");
+    root.querySelector("[data-read]").innerHTML = d.read.map(([kind, t]) =>
+      kind === "h" ? `<h4>${t}</h4>` : kind === "idea"
+        ? `<div class="idea ticks"><q>${t}</q><div class="btns"><button type="button" class="go">Plant</button><button type="button">Plant and ask the lead</button></div></div>`
+        : `<p>${t}</p>`).join("");
+    root.querySelector('[data-chart="roles"]').append(bars(d.roles));
+    const pass = root.querySelector('[data-chart="pass"]'); pass.append(line(d.pass)); pass.append(key([["--qwen", "qwen3.6-35b-a3b, developer attempts"]]));
+    const hours = root.querySelector('[data-chart="hours"]'); hours.append(stacked(d.hoursLocal, d.hoursClaude, css("--qwen"), css("--opus"))); hours.append(key([["--qwen", "local and cloud workers"], ["--opus", "Claude"]]));
+    const sp = root.querySelector('[data-chart="spend"]'); sp.append(spend(d.spend, d.done)); sp.append(key([["--opus", "Claude's dollars (API-equivalent)"]]));
+    root.querySelector("[data-who]").innerHTML = `<tr><th>Agent</th><th>Job</th><th class="num">Jobs</th><th class="num">Passed</th><th class="num">Time</th><th class="num">Dollars</th></tr>` +
+      d.who.map((r) => `<tr><td class="mono">${r[0]}</td><td>${r[1]}</td><td class="num">${r[2]}</td><td class="num">${r[3]}</td><td class="num">${r[4]}</td><td class="num">${r[5]}</td></tr>`).join("");
+  }
+  fill("whole", DATA.whole);
+  fill("travel", DATA.travel);
+
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
