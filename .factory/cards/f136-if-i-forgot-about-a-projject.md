@@ -1,4 +1,4 @@
-# Milestone F136: if i forgot about a projject with softfield forget, and i…
+# Milestone F136: softfield init asks what to do with a forgotten project of the same name
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
