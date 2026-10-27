@@ -1,4 +1,4 @@
-# Milestone F137: the docs/agents/developer.md setup in init looks very…
+# Milestone F137: The developers' notes move to .factory/developer.md in every project
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
