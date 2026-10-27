@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F80 mock-up: the Agents page, by kind of work</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a;
+    --opus: #ff9640; --qwen: #8ccf62; --oss: #4fd1a5; --nemo: #c3e06a;
+    --good-ink: #5fd17a; --critical-ink: #ef6b6b; --accent-wash: #2a2416;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--hazard); outline-offset: 3px; }   /* what this card adds */
+  .note { font: 400 12px var(--mono); color: var(--hazard); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 1100px) { .versions.both { grid-template-columns: 1fr 1fr; } .switch { display: none; } .versions.both > [data-version] { display: block !important; } }
+
+  /* ---- the page as drawn (dashboard.css) ---- */
+  .page { display: grid; gap: 14px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--fg);
+    margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: auto; }
+  .sub { color: var(--ink-2); margin: 2px 0 0; font-size: 13.5px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; font: 600 11.5px var(--display); color: var(--muted); text-transform: uppercase;
+    letter-spacing: .08em; padding: 4px 8px; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--accent-wash); }
+  tr.model td { color: var(--ink-2); }
+
+  /* ---- proposed: the By kind of work bay ---- */
+  .bay-kind h2::before { content: ""; width: 10px; height: 14px; align-self: center;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 3px, transparent 3px 6px); }
+  .bay-kind { position: relative; }
+  .bay-kind::after { content: ""; position: absolute; top: -1px; right: -1px; width: 12px; height: 12px;
+    border-top: 2px solid var(--fg); border-right: 2px solid var(--fg); }   /* a corner tick */
+  td.agent-cell { border-left: 3px solid var(--who, var(--rule)); }
+  .kind { font: 500 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+  .gauge { position: relative; width: 140px; height: 12px; background: var(--plate); border: 1px solid var(--rule); }
+  .gauge .fill { position: absolute; inset: 0 auto 0 0; background: var(--who, var(--muted)); opacity: .85; }
+  .gauge .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg); }
+  .gap { font: 600 12.5px var(--mono); white-space: nowrap; }
+  .gap.up { color: var(--good-ink); } .gap.down { color: var(--critical-ink); } .gap.even { color: var(--ink-2); }
+  tr.few td { color: var(--muted); }
+  tr.few .gauge { opacity: .35; }
+  .key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+  .key .gauge { width: 40px; display: inline-block; vertical-align: middle; margin-right: 6px; }
+</style>
+</head>
+<body>
+<h1>F80: the Agents page, by kind of work</h1>
+<p class="lede">The Agents page of softfield. Every number is real, from the metrics database on 2026-10-26: each coding game in <span class="mono">rating_changes</span> (merged at the first attempt, merged later, not merged) and the rating the agent had just before it. The other panels are cut short.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions both">
+
+<!-- Today: copied from factory_dashboard/templates/agents.html -->
+<div data-version="today" hidden>
+  <h3>Today</h3>
+  <div class="page">
+    <section class="panel">
+      <h2>Efficiency</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Agent</th><th class="num">Jobs</th><th class="num">Merged</th><th class="num">Attempts</th><th class="num">First %</th><th class="num">Att/merge</th><th class="num">Esc %</th><th>Failed gate</th><th class="num">$</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">claude-opus</td><td class="num">511</td><td class="num">165</td><td class="num">0</td><td class="num">–</td><td class="num">0.0</td><td class="num">–</td><td>–</td><td class="num">$792.52</td></tr>
+          <tr><td class="mono">claude-sonnet</td><td class="num">65</td><td class="num">3</td><td class="num">3</td><td class="num">100%</td><td class="num">1.0</td><td class="num">0%</td><td>–</td><td class="num">$14.15</td></tr>
+          <tr><td class="mono">local-qwen3.6-35b-a3b</td><td class="num">390</td><td class="num">151</td><td class="num">190</td><td class="num">49%</td><td class="num">2.6</td><td class="num">23%</td><td>stopped</td><td class="num">$0.00</td></tr>
+          <tr><td class="mono">ollama-gpt-oss-120b</td><td class="num">44</td><td class="num">7</td><td class="num">13</td><td class="num">31%</td><td class="num">4.0</td><td class="num">54%</td><td>no-changes</td><td class="num">$0.00</td></tr>
+        </tbody>
+      </table></div>
+    </section>
+    <section class="panel"><h2>Who did what</h2><p class="sub">…</p></section>
+    <section class="panel"><h2>Eligibility</h2><p class="sub">…</p></section>
+    <section class="panel"><h2>Ratings over time</h2><p class="sub">One line per agent: coding and reviewing move the same rating.</p></section>
+  </div>
+  <p class="legend">One rating per agent, over every kind of work and every project. Nothing says whether an agent does better on pages or on Python than its rating says.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>Proposed</h3>
+  <div class="page">
+    <section class="panel">
+      <h2>Efficiency</h2>
+      <p class="sub">… unchanged …</p>
+    </section>
+
+    <section class="panel bay-kind new" id="by-kind">
+      <h2>By kind of work <span class="src">coding, against the rating</span></h2>
+      <p class="sub">How each agent did on each kind of ticket, beside what its rating expected then. A ticket with a template, CSS or JavaScript file is a page.</p>
+      <div class="scroll"><table>
+        <thead><tr><th>Agent</th><th>Kind</th><th class="num">Tickets</th><th>Score · expected</th><th class="num">Score</th><th class="num">Expected</th><th>Against its rating</th></tr></thead>
+        <tbody>
+          <tr style="--who: var(--opus)"><td class="mono agent-cell">claude-opus</td><td class="kind">Pages</td><td class="num">53</td>
+            <td><div class="gauge"><span class="fill" style="width:97%"></span><span class="mark" style="left:92%"></span></div></td>
+            <td class="num">97%</td><td class="num">92%</td><td class="gap up">+5 better</td></tr>
+          <tr style="--who: var(--opus)"><td class="mono agent-cell"></td><td class="kind">Code, no pages</td><td class="num">95</td>
+            <td><div class="gauge"><span class="fill" style="width:95%"></span><span class="mark" style="left:92%"></span></div></td>
+            <td class="num">95%</td><td class="num">92%</td><td class="gap even">+3 as rated</td></tr>
+          <tr style="--who: var(--sonnet)"><td class="mono agent-cell">claude-sonnet</td><td class="kind">Pages</td><td class="num">4</td>
+            <td><div class="gauge"><span class="fill" style="width:75%"></span><span class="mark" style="left:79%"></span></div></td>
+            <td class="num">75%</td><td class="num">79%</td><td class="gap even">−4 as rated</td></tr>
+          <tr style="--who: var(--qwen)"><td class="mono agent-cell">local-qwen3.6-35b-a3b</td><td class="kind">Pages</td><td class="num">109</td>
+            <td><div class="gauge"><span class="fill" style="width:58%"></span><span class="mark" style="left:57%"></span></div></td>
+            <td class="num">58%</td><td class="num">57%</td><td class="gap even">+1 as rated</td></tr>
+          <tr style="--who: var(--qwen)"><td class="mono agent-cell"></td><td class="kind">Code, no pages</td><td class="num">58</td>
+            <td><div class="gauge"><span class="fill" style="width:76%"></span><span class="mark" style="left:68%"></span></div></td>
+            <td class="num">76%</td><td class="num">68%</td><td class="gap up">+8 better</td></tr>
+          <tr style="--who: var(--oss)"><td class="mono agent-cell">ollama-gpt-oss-120b</td><td class="kind">Pages</td><td class="num">10</td>
+            <td><div class="gauge"><span class="fill" style="width:45%"></span><span class="mark" style="left:65%"></span></div></td>
+            <td class="num">45%</td><td class="num">65%</td><td class="gap down">−20 worse</td></tr>
+          <tr style="--who: var(--oss)"><td class="mono agent-cell"></td><td class="kind">Code, no pages</td><td class="num">3</td>
+            <td><div class="gauge"><span class="fill" style="width:33%"></span><span class="mark" style="left:60%"></span></div></td>
+            <td class="num">33%</td><td class="num">60%</td><td class="gap down">−27 worse</td></tr>
+          <tr class="few" style="--who: var(--nemo)"><td class="mono agent-cell">ollama-nemotron-3-super</td><td class="kind">Pages</td><td class="num">1</td>
+            <td><div class="gauge"><span class="fill" style="width:0%"></span><span class="mark" style="left:84%"></span></div></td>
+            <td class="num">0%</td><td class="num">84%</td><td>too few to say</td></tr>
+        </tbody>
+      </table></div>
+      <div class="key">
+        <span><span class="gauge"><span class="fill" style="width:70%; --who: var(--muted)"></span></span>score: merged at the first attempt counts 1, merged later ½, not merged 0</span>
+        <span><span class="gauge"><span class="mark" style="left:50%"></span></span>expected: what its rating said, against each ticket's difficulty</span>
+        <span>"as rated" is within 5 points; under 3 tickets is too few to say</span>
+      </div>
+      <p class="note">▲ new bay, after Efficiency. The milestone filter applies, like the other panels.</p>
+    </section>
+
+    <section class="panel"><h2>Who did what</h2><p class="sub">…</p></section>
+    <section class="panel"><h2>Eligibility</h2><p class="sub">…</p></section>
+    <section class="panel"><h2>Ratings over time</h2><p class="sub">… unchanged …</p></section>
+  </div>
+  <p class="legend"><span class="new">Dashed yellow</span> marks what is new. Each agent's rows carry its own colour on the left edge and in the bar; green and red words say better or worse than rated. On travel-companion's Agents page the same bay would read: local-qwen3.6-35b-a3b, Pages, 48 tickets, 94% against 73% expected, +21 better.</p>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
