@@ -1,4 +1,4 @@
-# Milestone F144: A review should open the real page with `softfield look…
+# Milestone F144: A review reads the real page and real data before the tests
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-16.
