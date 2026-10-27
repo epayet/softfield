@@ -1,6 +1,6 @@
 # Milestone F142: Phone notifications: every project, and with the dashboard closed
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory · **Reserve:** yes
 > Planted by the owner on 2026-10-16.
 
 ## Notes
