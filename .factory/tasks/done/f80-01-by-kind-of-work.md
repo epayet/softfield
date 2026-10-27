@@ -40,3 +40,9 @@ attempts: 2
 tokens: 11196656
 logs: .factory/var/runs/20261027-005355/f80-01-by-kind-of-work
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
