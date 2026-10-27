@@ -26,6 +26,8 @@ TOPIC_LENGTH = 24
 NTFY = "https://ntfy.sh/"
 
 REPLY = "The lead answered you"
+LOOK = "The lead looked at a blocked ticket"
+FAILED = "The lead couldn't answer you"
 SIGNOFF = "A card is ready for your sign-off"
 REVIEW_STOP = "A review stopped"
 DECISION = "A ticket needs your decision"
@@ -59,6 +61,13 @@ def item_message(kind: str, subject: str) -> tuple[str, str]:
     """An owner item's words and the page it opens: its card's thread or the Overview."""
     words, on_card = _KINDS.get(kind, (OTHER, False))
     return words, thread_page(subject) if on_card else OVERVIEW
+
+
+def planner_message(thread: str, *, looked: bool, ok: bool) -> tuple[str, str]:
+    """What a planner job's end says, opening the card's thread: a reply, the runner's own
+    look at a blocked ticket, or a job that failed."""
+    words = REPLY if ok and not looked else LOOK if ok else FAILED
+    return words, thread_page(thread)
 
 
 def items_message(items: list[tuple[str, str]], card: str) -> tuple[str, str] | None:

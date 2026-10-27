@@ -4492,7 +4492,8 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         text=item,
         created=now().isoformat(),
     )
-    _notify(s, *notify.item_message(planner.PLANNING, thread))  # each reply is news
+    # each reply is news, said as what happened
+    _notify(s, *notify.planner_message(thread, looked=looked is not None, ok=result.ok))
 
 
 def run_queued(s: Session, row: dispatch.Queued, *, escalate: bool) -> None:

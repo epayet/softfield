@@ -15,8 +15,15 @@ from runner import claude, cli, metrics, notify, owner
 from runner.agents import JobResult
 from runner.state import State
 from runner.tasks import append_footer
-from tests.runner.conftest import write_task
-from tests.runner.test_loop import _plan_message, _run, fake_model  # noqa: F401 - a fixture
+from tests.runner.conftest import git, write_task
+from tests.runner.test_loop import (  # noqa: F401 - fake_model is a fixture
+    _blocks_then_looks,
+    _lead_task,
+    _passes,
+    _plan_message,
+    _run,
+    fake_model,
+)
 from tests.runner.test_owner import _db, _review
 from tests.runner.test_requests import NOW, _apply, _ask
 
@@ -76,6 +83,52 @@ def test_a_leads_reply_on_a_card_sends_that_the_lead_answered(repo, sent, monkey
         "Click": f"{HOME}/planning/f7?project={repo.name}",
     }
     assert not [n for n in report.notes if n.startswith(notify.NOT_SENT)]
+
+
+@pytest.mark.usefixtures("fake_model")
+@pytest.mark.usefixtures("fake_model")
+def test_a_look_at_a_blocked_ticket_sends_the_block_then_the_look(repo, sent, monkeypatch):
+    _lead_task(repo, "m1-01-lead")
+    _blocks_then_looks(monkeypatch, [])
+    _passes(monkeypatch, ok=False)
+    _run(repo)
+    assert [(s["body"], s["Click"]) for s in sent] == [
+        (f"{repo.name} · A ticket needs your decision", f"{HOME}/?project={repo.name}"),
+        (
+            f"{repo.name} · The lead looked at a blocked ticket",
+            f"{HOME}/planning/m1?project={repo.name}",
+        ),
+    ]
+
+
+@pytest.mark.usefixtures("fake_model")
+def test_a_planner_job_that_fails_sends_that_the_lead_couldnt_answer(repo, sent, monkeypatch):
+    _plan_message(repo, "f7", "When will the secret board be done?")
+    monkeypatch.setattr(
+        claude,
+        "run_claude",
+        lambda *a, **k: JobResult(ok=False, text="it broke", duration_s=1.0, session_id="s"),
+    )
+    _run(repo)
+    [one] = sent
+    assert one["body"] == f"{repo.name} · The lead couldn't answer you"
+    assert one["Click"] == f"{HOME}/planning/f7?project={repo.name}"
+
+
+@pytest.mark.usefixtures("fake_model")
+def test_a_ticket_blocked_again_while_its_item_is_open_sends_no_second_decision(
+    repo, sent, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _blocks_then_looks(monkeypatch, [])
+    _passes(monkeypatch, ok=False)
+    _run(repo)
+    blocked = repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md"
+    git(repo, "mv", str(blocked), str(repo / ".factory" / "tasks" / "ready" / blocked.name))
+    git(repo, "commit", "-q", "-m", "requeue")
+    _run(repo)
+    bodies = [s["body"] for s in sent]
+    assert bodies.count(f"{repo.name} · A ticket needs your decision") == 1
 
 
 @pytest.mark.usefixtures("fake_model")
