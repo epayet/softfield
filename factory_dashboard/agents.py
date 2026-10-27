@@ -13,8 +13,27 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Project, render
 from factory_dashboard.eligibility import eligibility_rows
 from factory_dashboard.queries import dollars
+from runner.ratings import MERGED_FIRST, MERGED_LATER, NOT_MERGED
+from runner.ratings import expected as rating_expected
 
 router = APIRouter()
+
+# F80 D1-D3: a ticket's kind by its files' suffixes, a coding game's score, the gap's words.
+_PAGES_SUFFIXES = (".html", ".css", ".js")
+_PAGES = "Pages"
+_CODE_NO_PAGES = "Code, no pages"
+_SCORES = {MERGED_FIRST: 1.0, MERGED_LATER: 0.5, NOT_MERGED: 0.0}
+_AS_RATED_POINTS = 5
+_MIN_TICKETS = 3
+# Each agent's colour token, as in the top of dashboard.css.
+_AGENT_TOKENS = {
+    "claude-opus": "--opus",
+    "claude-sonnet": "--sonnet",
+    "local-qwen3.6-35b-a3b": "--qwen",
+    "ollama-gpt-oss-120b": "--oss",
+    "ollama-nemotron-3-super": "--nemo",
+    "copilot-auto": "--copilot",
+}
 
 ROLES: tuple[str, ...] = (
     "developer",
@@ -209,6 +228,83 @@ def agents_roles(
     return agent_names, ROLES, dict(counts)
 
 
+def work_kind(files: list[str] | None) -> str:
+    """The kind of a ticket from its ``files:`` (D1).
+
+    **Pages** when any file ends in ``.html``, ``.css`` or ``.js``;
+    else **Code, no pages**.
+    """
+    if any(f.endswith(_PAGES_SUFFIXES) for f in files or ()):
+        return _PAGES
+    return _CODE_NO_PAGES
+
+
+def _gap_words(tickets: int, gap: int) -> str:
+    """D3: the gap in points, in words; under 3 tickets there is nothing to say."""
+    if tickets < _MIN_TICKETS:
+        return "too few to say"
+    if gap > _AS_RATED_POINTS:
+        return "better"
+    if gap < -_AS_RATED_POINTS:
+        return "worse"
+    return "as rated"
+
+
+def by_kind_data(
+    conn: sqlite3.Connection,
+    project: str,
+    milestone: str | None = None,
+) -> dict[str, list[dict[str, object]]]:
+    """By kind of work (F80 D2): one row per agent and kind with its coding games' count, average
+    score and average expected, in whole percent, and the gap's words. Bench games and finding
+    penalties carry other results and are left out; so is a game whose ticket has no difficulty."""
+    base_cond = "p.name = ?"
+    base_params: list[str] = [project]
+    if milestone:
+        base_cond += " AND m.key = ?"
+        base_params.append(milestone)
+    rows = conn.execute(
+        (
+            "SELECT rc.agent, rc.before, rc.result, t.files,"  # noqa: S608
+            " COALESCE(t.difficulty_corrected, t.difficulty) AS difficulty"
+            " FROM rating_changes rc"
+            " JOIN tickets t ON t.id = rc.ticket_id"
+            " JOIN projects p ON p.id = t.project_id"
+            " LEFT JOIN milestones m ON m.id = t.milestone_id"
+            " WHERE " + base_cond + " AND rc.skill = 'coding'"
+            " AND rc.result IN (?, ?, ?)"
+            " AND COALESCE(t.difficulty_corrected, t.difficulty) IS NOT NULL"
+        ),
+        [*base_params, *_SCORES],
+    ).fetchall()
+
+    groups: dict[tuple[str, str], list[sqlite3.Row]] = defaultdict(list)
+    for r in rows:
+        kind = work_kind(json.loads(r["files"]) if r["files"] else None)
+        groups[(r["agent"], kind)].append(r)
+
+    out: list[dict[str, object]] = []
+    for (agent, kind), games in sorted(groups.items()):
+        score = round(100 * sum(_SCORES[g["result"]] for g in games) / len(games))
+        expected = round(
+            100 * sum(rating_expected(g["before"], g["difficulty"]) for g in games) / len(games)
+        )
+        out.append(
+            {
+                "agent": agent,
+                "kind": kind,
+                "tickets": len(games),
+                "score": score,
+                "expected": expected,
+                "gap": score - expected,
+                "gap_words": _gap_words(len(games), score - expected),
+                "agent_token": _AGENT_TOKENS.get(agent, "--muted"),
+                "few": len(games) < _MIN_TICKETS,
+            }
+        )
+    return {"rows": out}
+
+
 def rating_data(
     conn: sqlite3.Connection,
     project: str,
@@ -247,6 +343,7 @@ def agents_page(
     eff = efficiency(conn, project, milestone)
     agent_names, roles, counts = agents_roles(conn, project, milestone)
     ratings = rating_data(conn, project, milestone)
+    by_kind = by_kind_data(conn, project, milestone)
     return render(
         request,
         conn,
@@ -259,6 +356,7 @@ def agents_page(
             "roles": roles,
             "counts": counts,
             "ratings": ratings,
+            "by_kind": by_kind,
             "eligible": eligibility_rows(conn, project),
             "milestone": milestone,
         },

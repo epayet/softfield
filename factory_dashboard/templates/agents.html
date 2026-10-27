@@ -39,6 +39,41 @@
   </table></div>
 </section>
 
+<section id="by-kind" class="panel bay-kind">
+  <h2>By kind of work <span class="src">coding, against the rating</span></h2>
+  <p class="sub">How each agent did on each kind of ticket, beside what its rating expected then. A ticket with a template, CSS or JavaScript file is a page.</p>
+  {% if by_kind.rows %}
+  <div class="scroll"><table>
+    <thead><tr><th>Agent</th><th>Kind</th><th class="num">Tickets</th><th>Score · expected</th><th class="num">Score</th><th class="num">Expected</th><th>Against its rating</th></tr></thead>
+    <tbody>
+    {% for r in by_kind.rows %}
+    <tr{% if r.few %} class="few"{% endif %} style="--who: var({{ r.agent_token }})">
+      <td class="mono agent-cell">{{ r.agent }}</td>
+      <td class="kind">{{ r.kind }}</td>
+      <td class="num">{{ r.tickets }}</td>
+      <td>
+        <div class="gauge">
+          <span class="fill" style="width:{{ r.score }}%"></span>
+          <span class="mark" style="left:{{ r.expected }}%"></span>
+        </div>
+      </td>
+      <td class="num">{{ r.score }}%</td>
+      <td class="num">{{ r.expected }}%</td>
+      <td>{% if r.few %}too few to say{% elif r.gap_words == "better" %}<span class="gap up">+{{ r.gap }} better</span>{% elif r.gap_words == "worse" %}<span class="gap down">{{ r.gap }} worse</span>{% else %}<span class="gap even">{{ r.gap }} as rated</span>{% endif %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  <div class="key">
+    <span><span class="gauge"><span class="fill" style="width:70%; --who: var(--muted)"></span></span>score: merged at the first attempt counts 1, merged later ½, not merged 0</span>
+    <span><span class="gauge"><span class="mark" style="left:50%"></span></span>expected: what its rating said, against each ticket's difficulty</span>
+    <span>"as rated" is within 5 points; under 3 tickets is too few to say</span>
+  </div>
+  {% else %}
+  <p class="sub">No coding games to show.</p>
+  {% endif %}
+</section>
+
 <section id="roles" class="panel">
   <h2>Who did what</h2>
   <div class="scroll"><table>

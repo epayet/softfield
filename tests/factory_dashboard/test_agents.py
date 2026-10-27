@@ -201,3 +201,622 @@ def test_rating_chart_has_one_series_per_agent(rating_client):
     unique_agents = len(set(data["agents"]))  # type: ignore[index]
     assert unique_agents == 1
     assert LOCAL in data["agents"]  # type: ignore[index]
+
+
+def test_work_kind_returns_pages_when_any_page_file():
+    from factory_dashboard.agents import work_kind
+
+    assert work_kind(["a.html"]) == "Pages"
+    assert work_kind(["a.css"]) == "Pages"
+    assert work_kind(["a.js"]) == "Pages"
+    assert work_kind(["a.py", "b.html"]) == "Pages"
+    assert work_kind(["templates/x.html", "a.py"]) == "Pages"
+
+
+def test_work_kind_returns_code_no_pages_when_no_page_files():
+    from factory_dashboard.agents import work_kind
+
+    assert work_kind(["a.py"]) == "Code, no pages"
+    assert work_kind(["a.md"]) == "Code, no pages"
+    assert work_kind(["a.py", "b.md"]) == "Code, no pages"
+
+
+def test_work_kind_returns_code_no_pages_when_none():
+    from factory_dashboard.agents import work_kind
+
+    assert work_kind(None) == "Code, no pages"
+    assert work_kind([]) == "Code, no pages"
+
+
+def test_by_kind_bay_section_exists_on_page(serve):
+    """The by-kind bay section appears on the Agents page."""
+    html = serve(live=False).get("/agents").text
+    assert 'id="by-kind"' in html
+
+
+def test_by_kind_data_with_merged_first_attempt_is_one(serve, db_path):
+    """A ticket merged at the first attempt scores 1.0."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-99-pages",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["a.html", "b.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        5.0,
+        5.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket,
+        result="merged at the first attempt",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 1
+    assert rows[0]["tickets"] == 1
+    assert rows[0]["score"] == 100  # 1.0 * 100
+    assert rows[0]["few"] is True
+    conn.close()
+
+
+def test_by_kind_data_merged_later_scores_half(serve, db_path):
+    """Merged later scores 0.5."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-98-code",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["a.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        5.0,
+        5.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket,
+        result="merged later",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 1
+    assert rows[0]["score"] == 50  # 0.5 * 100
+    conn.close()
+
+
+def test_by_kind_data_not_merged_scores_zero(serve, db_path):
+    """Not merged scores 0."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-97-not",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["a.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        5.0,
+        4.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket,
+        result="not merged",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 1
+    assert rows[0]["score"] == 0
+    conn.close()
+
+
+def test_by_kind_data_excludes_bench_games(serve, db_path):
+    """Bench games (result starting 'bench ') are not counted."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-96-bench",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["a.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        5.0,
+        5.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket,
+        result="bench passed at the first attempt",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 0
+    conn.close()
+
+
+def test_by_kind_data_excludes_finding_penalties(serve, db_path):
+    """Finding penalties (result starting 'finding ') are not counted."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-95-finding",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["a.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        5.0,
+        4.75,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket,
+        result="finding F1",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 0
+    conn.close()
+
+
+def test_by_kind_gap_words_better_when_above_plus_5(serve, db_path):
+    """Gap above +5 reads 'better'."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    # Need 3+ tickets to avoid "too few to say"
+    for i in range(3):
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            f"f1-94-good-{i}",
+            milestone_id=f1,
+            kind="developer",
+            state="done",
+            difficulty=3,
+            files=["a.html"],
+        )
+        metrics.add_rating_change(
+            conn,
+            LOCAL,
+            "coding",
+            3.0,
+            3.5,
+            at=f"2026-09-30T{12 + i}:00:00+02:00",
+            ticket_id=ticket,
+            result="merged at the first attempt",
+        )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 1
+    # Score=100, expected≈50, gap≈50 → "better"
+    assert rows[0]["gap_words"] == "better"
+    conn.close()
+
+
+def test_by_kind_gap_words_worse_when_below_minus_5(serve, db_path):
+    """Gap below −5 reads 'worse'."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    # Need 3+ tickets to avoid "too few to say"
+    for i in range(3):
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            f"f1-93-bad-{i}",
+            milestone_id=f1,
+            kind="developer",
+            state="done",
+            difficulty=7,
+            files=["a.py"],
+        )
+        # Rating 7, difficulty 7 → expected ≈ 0.5, result 0 → gap ≈ −0.5 = −50 points
+        metrics.add_rating_change(
+            conn,
+            LOCAL,
+            "coding",
+            7.0,
+            6.5,
+            at=f"2026-09-30T{12 + i}:00:00+02:00",
+            ticket_id=ticket,
+            result="not merged",
+        )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 1
+    assert rows[0]["gap_words"] == "worse"
+    conn.close()
+
+
+def test_by_kind_gap_words_as_rated_when_within_5(serve, db_path):
+    """Gap within ±5 reads 'as rated'."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    # Need 3+ tickets to avoid "too few to say"
+    for i in range(3):
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            f"f1-92-rated-{i}",
+            milestone_id=f1,
+            kind="developer",
+            state="done",
+            difficulty=5,
+            files=["a.py"],
+        )
+        # Rating 5, difficulty 5 → expected ≈ 0.5, result 0.5 → gap ≈ 0
+        metrics.add_rating_change(
+            conn,
+            LOCAL,
+            "coding",
+            5.0,
+            5.5,
+            at=f"2026-09-30T{12 + i}:00:00+02:00",
+            ticket_id=ticket,
+            result="merged later",
+        )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 1
+    assert rows[0]["gap_words"] == "as rated"
+    conn.close()
+
+
+def test_by_kind_gap_words_too_few_when_under_3_tickets(serve, db_path):
+    """Fewer than 3 tickets says 'too few to say'."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-91-few",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=3,
+        files=["a.html"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        3.0,
+        3.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket,
+        result="merged at the first attempt",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = data["rows"]
+    assert len(rows) == 1
+    assert rows[0]["few"] is True
+    assert rows[0]["gap_words"] == "too few to say"
+    conn.close()
+
+
+def test_by_kind_milestone_filter_limits_bay(serve, db_path):
+    """The milestone filter limits the bay like it limits Ratings."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    m4 = metrics.upsert_milestone(conn, project, "m4")
+    # Ticket in f1
+    ticket_f1 = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-90-f1",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["a.html"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        4.0,
+        4.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket_f1,
+        result="merged at the first attempt",
+    )
+    # Ticket in m4
+    ticket_m4 = metrics.upsert_ticket(
+        conn,
+        project,
+        "m4-99-m4",
+        milestone_id=m4,
+        kind="developer",
+        state="done",
+        difficulty=2,
+        files=["b.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        4.0,
+        4.5,
+        at="2026-09-20T12:00:00+02:00",
+        ticket_id=ticket_m4,
+        result="merged at the first attempt",
+    )
+    # With milestone=f1, only the f1 ticket should appear
+    data_f1 = by_kind_data(conn, "coucou", milestone="f1")
+    f1_rows = [r for r in data_f1["rows"] if r["agent"] == LOCAL]
+    assert len(f1_rows) == 1
+    assert f1_rows[0]["tickets"] == 1
+    # With no milestone, both should appear
+    data_all = by_kind_data(conn, "coucou")
+    all_rows = [r for r in data_all["rows"] if r["agent"] == LOCAL]
+    assert len(all_rows) == 2
+    conn.close()
+
+
+def test_by_kind_no_coding_games_says_so(serve):
+    """With no coding games the bay says so."""
+    html = serve(live=False).get("/agents").text
+    assert "No coding games to show" in html
+
+
+def test_by_kind_separates_pages_and_code(serve, db_path):
+    """Pages and Code, no pages are separate rows for the same agent."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    # Pages ticket
+    ticket_pages = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-89-pages",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["a.html"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        4.0,
+        4.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket_pages,
+        result="merged at the first attempt",
+    )
+    # Code ticket
+    ticket_code = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-88-code",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        files=["b.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        4.0,
+        4.5,
+        at="2026-09-30T13:00:00+02:00",
+        ticket_id=ticket_code,
+        result="merged at the first attempt",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = [r for r in data["rows"] if r["agent"] == LOCAL]
+    kinds = {r["kind"] for r in rows}
+    assert "Pages" in kinds
+    assert "Code, no pages" in kinds
+    conn.close()
+
+
+def test_by_kind_expected_uses_difficulty_corrected_when_set(serve, db_path):
+    """Expected uses difficulty_corrected when set, else difficulty."""
+    from factory_dashboard.agents import by_kind_data
+    from runner import metrics
+    from runner.ratings import expected as rating_expected
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    # Ticket with difficulty_corrected
+    ticket_corrected = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-87-corrected",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=5,
+        difficulty_corrected=3,
+        files=["a.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        4.0,
+        4.5,
+        at="2026-09-30T12:00:00+02:00",
+        ticket_id=ticket_corrected,
+        result="merged at the first attempt",
+    )
+    # Ticket without difficulty_corrected
+    ticket_no_corrected = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-86-no-corrected",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=6,
+        files=["b.py"],
+    )
+    metrics.add_rating_change(
+        conn,
+        LOCAL,
+        "coding",
+        4.0,
+        4.5,
+        at="2026-09-30T13:00:00+02:00",
+        ticket_id=ticket_no_corrected,
+        result="merged at the first attempt",
+    )
+    data = by_kind_data(conn, "coucou")
+    rows = [r for r in data["rows"] if r["agent"] == LOCAL]
+    assert len(rows) == 1
+    # Both tickets are Code, no pages, so their expected is averaged
+    # difficulty_corrected=3 for first, difficulty=6 for second
+    exp1 = rating_expected(4.0, 3)
+    exp2 = rating_expected(4.0, 6)
+    expected_avg = round((exp1 + exp2) / 2 * 100)
+    assert data["rows"][0]["expected"] == expected_avg
+    conn.close()
+
+
+def _seed_page_games(db_path, games, files=("factory_dashboard/templates/x.html",)):
+    """Coding games of LOCAL on page tickets: ``(result, before, difficulty)`` each."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    project = metrics.upsert_project(conn, "coucou")
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    for i, (result, before, difficulty) in enumerate(games):
+        ticket = metrics.upsert_ticket(
+            conn,
+            project,
+            f"f80-9{i}-page",
+            milestone_id=f1,
+            kind="developer",
+            state="done",
+            difficulty=difficulty,
+            files=list(files),
+        )
+        metrics.add_rating_change(
+            conn,
+            LOCAL,
+            "coding",
+            before,
+            before,
+            at=f"2026-09-30T1{i}:00:00+02:00",
+            ticket_id=ticket,
+            result=result,
+        )
+    return conn
+
+
+def test_by_kind_pages_row_averages_three_games(db_path):
+    """Merged first (1), merged later (0.5) and not merged (0): 3 tickets, 50%, and expected the
+    average of each game's own ``expected(before, difficulty)``."""
+    from factory_dashboard.agents import by_kind_data
+    from runner.ratings import expected
+
+    games = [
+        ("merged at the first attempt", 4.0, 3),
+        ("merged later", 5.0, 6),
+        ("not merged", 3.0, 4),
+    ]
+    conn = _seed_page_games(db_path, games)
+    (row,) = by_kind_data(conn, "coucou")["rows"]
+    conn.close()
+    assert (row["kind"], row["tickets"], row["score"]) == ("Pages", 3, 50)
+    assert row["expected"] == round(100 * sum(expected(b, d) for _, b, d in games) / 3)
+    assert row["few"] is False
+
+
+def test_by_kind_skips_a_game_whose_ticket_has_no_difficulty(db_path):
+    from factory_dashboard.agents import by_kind_data
+
+    conn = _seed_page_games(
+        db_path, [("merged at the first attempt", 4.0, 3), ("not merged", 4.0, None)]
+    )
+    (row,) = by_kind_data(conn, "coucou")["rows"]
+    conn.close()
+    assert (row["tickets"], row["score"]) == (1, 100)
+
+
+def test_by_kind_bay_shows_each_row_on_the_page(serve, db_path):
+    """The page draws the row's agent, kind, count, score and words, not the empty line."""
+    conn = _seed_page_games(db_path, [("merged at the first attempt", 3.0, 3)] * 3)
+    conn.close()
+    html = serve(live=False).get("/agents").text
+    bay = section(html, "by-kind")
+    assert f"{LOCAL} Pages 3 100% 50% +50 better" in bay
+    assert "No coding games to show" not in bay
+    assert "var(--qwen)" in section_raw(html, "by-kind")

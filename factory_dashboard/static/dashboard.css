@@ -269,6 +269,26 @@ tbody tr:hover { background: var(--accent-wash); }
 .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono); color: var(--ink-2); margin-top: 8px; }
 .legend .mini { display: inline-flex; vertical-align: middle; transform: scale(.7); transform-origin: left center; margin-right: -12px; }
 
+/* F80: the By kind of work bay */
+.bay-kind { position: relative; }
+.bay-kind h2::before { content: ""; width: 10px; height: 14px; align-self: center;
+  background: repeating-linear-gradient(135deg, var(--hazard) 0 3px, transparent 3px 6px); }
+.bay-kind::after { content: ""; position: absolute; top: -1px; right: -1px; width: 12px; height: 12px;
+  border-top: 2px solid var(--fg); border-right: 2px solid var(--fg); }
+td.agent-cell { border-left: 3px solid var(--who, var(--rule)); }
+.kind { font: 500 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); white-space: nowrap; }
+.gauge { position: relative; width: 140px; height: 12px; background: var(--plate); border: 1px solid var(--rule); }
+.gauge .fill { position: absolute; inset: 0 auto 0 0; background: var(--who, var(--muted)); opacity: .85; }
+.gauge .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg); }
+.gauge .mark::after { content: ""; position: absolute; top: -2px; left: -2px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--fg); }
+.gap { font: 600 12.5px var(--mono); white-space: nowrap; }
+.gap.up { color: var(--good-ink); } .gap.down { color: var(--critical-ink); } .gap.even { color: var(--ink-2); }
+tr.few td { color: var(--muted); }
+tr.few .gauge { opacity: .35; }
+.key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
+.key .gauge { width: 40px; display: inline-block; vertical-align: middle; margin-right: 6px; }
+
 @media (max-width: 560px) { .steps li { grid-template-columns: 1fr; gap: 2px; } }
 @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2s ease-in-out infinite; } }
 @keyframes pulse { 50% { opacity: .45; } }
