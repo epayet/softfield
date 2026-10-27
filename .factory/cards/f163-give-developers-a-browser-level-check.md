@@ -1,4 +1,4 @@
-# Milestone F163: Give developers a browser-level check for htmx parts:…
+# Milestone F163: A browser check for htmx parts: swap, then post again
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-21.
