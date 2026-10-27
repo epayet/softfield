@@ -24,6 +24,9 @@ The owner asked whether archiving F156 (merged into F135) also archived F135. An
 ### From F99: When a proposal has bundled things like both a mock-up and… (merged by the lead on 2026-10-20)
 When a proposal has bundled things like both a mock-up and and a plan. Bundle them in tbr planning list too. Right now it looks like I have 2 things to look into but one approval approves both. Like the current both f54
 
+### From F176: Conversations and proposals can be better bundled… (merged by the lead on 2026-10-27)
+Conversations and proposals can be better bundled together. I find myself opening the conversations first and if I'm happy with the latest discussion I look at the adr and proposals. In planning page I have to jump between them. I believe there is a conversation and plan about building proposals better, I wonder if we can go a step beyond and bundle the conversation with it tol (unless that was already the plan)
+
 ## Outcome
 The desk, the Planning tab's count and the Overview's "Needs you" count only what the owner can do now (the owner, 2026-10-08):
 - A card's proposals (an ADR, a plan, mock-ups, merges) are **one** desk item, since one or two presses settle them all (F99). Before the ADR is accepted, the item says so; the plan isn't a second thing to do.
