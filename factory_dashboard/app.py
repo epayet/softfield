@@ -125,7 +125,7 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
 
     @app.get("/version", response_class=HTMLResponse)
     def version(seen: str = "") -> str:
-        """The page's poller: itself again while ``seen`` is current, else a bar to refresh."""
+        """The page's poller: itself again while ``seen`` is current, else the tag to reload."""
         if seen == code_version():
             return VERSION_POLL.format(version=seen)
         return NEW_VERSION
@@ -137,8 +137,12 @@ def create_app(db: Path, project: str, host: str = HOST) -> FastAPI:
 VERSION_POLL = (
     '<span hx-get="/version?seen={version}" hx-trigger="every 10s" hx-swap="outerHTML"></span>'
 )
+# What replaces it then (f38): a tag hung on the top bar's hazard stripe, out of the flow so
+# nothing on the page moves; ``href=""`` reloads the page it is on.
 NEW_VERSION = (
-    '<p class="new-version" role="status">New version of the dashboard: <a href="">refresh</a></p>'
+    '<a class="version-tag" href="" role="status"'
+    ' title="A new version of the dashboard is ready: tap to load it">'
+    '<span class="arrow" aria-hidden="true">↻</span>New version</a>'
 )
 
 

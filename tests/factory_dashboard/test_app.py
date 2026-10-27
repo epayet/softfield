@@ -734,9 +734,104 @@ def test_a_page_says_when_a_new_version_is_available(client, tmp_path, monkeypat
     html = client.get("/").text
     version = re.search(r"/version\?seen=(\w+)", html)
     assert version is not None
-    assert "New version" not in client.get(f"/version?seen={version[1]}").text
+    assert client.get(f"/version?seen={version[1]}").text == app_module.VERSION_POLL.format(
+        version=version[1]
+    )
     monkeypatch.setattr(app_module, "code_version", lambda: "changed")
-    assert "New version" in client.get(f"/version?seen={version[1]}").text
+    tag = client.get(f"/version?seen={version[1]}").text
+    # a link to the page itself (href=""), the words, and nothing of the old bar
+    assert re.fullmatch(r'<a class="version-tag" href="" role="status"[^>]*>.*New version</a>', tag)
+    assert "hx-get" not in tag
+
+
+def test_the_version_poller_sits_on_the_hazard_stripe_not_in_main(client):
+    # f38: the tag replaces the poller where it is; in <main> it pushed the page down
+    html = client.get("/").text
+    header = html[html.index('<header class="bar">') : html.index("</header>")]
+    main = html[html.index("<main>") : html.index("</main>")]
+    stripe = re.search(r'<div class="bar-stripe">.*?</div>(.*?)</div>', header, re.S)
+    assert stripe and 'hx-get="/version?seen=' in stripe[1]
+    assert "/version" not in main
+
+
+def test_the_old_new_version_bar_is_gone_from_the_stylesheet():
+    assert ".new-version" not in (STATIC / "dashboard.css").read_text()
+
+
+def _open_on_version_poll(page, client, size: dict[str, int], loads: list[str]) -> None:
+    """Open ``/`` at ``size``, counting each load of the page in ``loads``."""
+    page.set_viewport_size(size)
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            if path == "/":
+                loads.append(url)
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_function("window.htmx && document.querySelector(\"span[hx-get^='/version']\")")
+
+
+# htmx's own swap of the poller, as its 10 s poll does it (with an old ``seen``: the tag comes back)
+SWAP_IN_THE_TAG = """() => htmx.ajax('GET', '/version?seen=old',
+  {target: document.querySelector("span[hx-get^='/version']"), swap: 'outerHTML'})"""
+
+
+@pytest.mark.parametrize("size", [{"width": 1024, "height": 768}, PHONE], ids=["wide", "phone"])
+def test_the_new_version_tag_moves_nothing_on_the_page(page, client, size):
+    loads: list[str] = []
+    _open_on_version_poll(page, client, size, loads)
+    boxes = """() => ['header.bar', 'main', '.bar-top', 'nav.tabs'].map(s => {
+      const b = document.querySelector(s).getBoundingClientRect();
+      return [s, b.top, b.height, b.width];
+    })"""
+    before = page.evaluate(boxes)
+    page.evaluate(SWAP_IN_THE_TAG)
+    tag = page.locator("header.bar .bar-stripe a.version-tag")
+    tag.wait_for()
+    assert page.evaluate(boxes) == before
+    # on the stripe's right end, a 24 px plate with a 44 px tap, and the page stays as it was
+    stripe = page.locator(".bar-stripe").bounding_box()
+    box = tag.bounding_box()
+    assert stripe and box
+    assert abs(box["x"] + box["width"] - (stripe["x"] + stripe["width"])) < 1
+    assert box["y"] < stripe["y"] < box["y"] + box["height"]
+    assert box["height"] >= 44
+    plate = tag.evaluate("el => parseFloat(getComputedStyle(el, '::before').height)")
+    assert plate == 24
+    hit = page.evaluate(
+        "([x, y]) => document.elementFromPoint(x, y).closest('.version-tag') !== null",
+        [box["x"] + box["width"] - 4, box["y"] + 2],
+    )
+    assert hit, "the tap above the plate misses the tag"
+    assert len(loads) == 1  # a visible page only shows the tag
+
+
+def test_a_hidden_page_loads_the_new_version_unless_something_would_be_lost(page, client):
+    loads: list[str] = []
+    _open_on_version_poll(page, client, DISPLAY, loads)
+    page.evaluate(
+        """() => {
+          Object.defineProperty(document, 'visibilityState', {get: () => 'hidden'});
+          const draft = document.createElement('textarea');
+          draft.id = 'draft';
+          draft.value = 'unsent words';
+          document.querySelector('main').append(draft);
+        }"""
+    )
+    page.evaluate(SWAP_IN_THE_TAG)
+    page.locator("a.version-tag").wait_for()
+    page.wait_for_timeout(300)
+    assert len(loads) == 1, "reloaded over unsent text"
+    page.evaluate("() => document.getElementById('draft').remove()")
+    page.evaluate("() => document.dispatchEvent(new Event('visibilitychange'))")
+    page.wait_for_function("!document.querySelector('a.version-tag')")
+    assert len(loads) == 2
 
 
 # --- notifications (f5-12, ADR 18 item 4) ---------------------------------------------------

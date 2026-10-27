@@ -441,9 +441,19 @@ tbody tr:hover { background: var(--accent-wash); }
   .dock { position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -6px 16px rgba(0,0,0,.25); }
 }
 
-/* "New version of the dashboard: refresh" (app.py's /version poller) */
-.new-version { margin: 0 0 12px; padding: 8px 12px; border: 1px solid var(--accent);
-  border-radius: 4px; background: var(--accent-wash); color: var(--ink); }
+/* "New version" (app.py's /version poller): a tag hung on the right of the hazard stripe, out of
+   the flow, so nothing on the page moves (f38) */
+.bar-stripe { position: relative; }
+/* The link is the 44 px tap; its plate, 24 px with a cut corner, is drawn behind it (a clip-path
+   on the link itself would clip the tap to the plate too). */
+.version-tag { position: absolute; right: 0; top: -19px; z-index: 1; isolation: isolate;
+  display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 12px 0 10px;
+  font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase;
+  color: var(--hazard-ink); text-decoration: none; cursor: pointer; }
+.version-tag::before { content: ""; position: absolute; inset: 10px 0; z-index: -1; box-sizing: border-box;
+  background: var(--hazard); border: 1px solid var(--hazard-ink);
+  clip-path: polygon(8px 0, 100% 0, 100% 100%, 0 100%, 0 8px); }
+.version-tag .arrow { font: 600 14px var(--mono); }
 
 /* Notification permission bar (f12-01, ADR 26 item 2): under the top bar, every page */
 #notify-bar { margin: 0; padding: 10px 16px; border-bottom: 1px solid var(--rule);

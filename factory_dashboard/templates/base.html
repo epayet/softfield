@@ -51,6 +51,14 @@
     }
     return true;
   };
+  // A new version (f38): a page nobody is looking at loads it by itself, unless something would
+  // be lost (liveIdle); a visible page only shows the tag. htmx:load fires on the swapped-in tag.
+  const loadNewVersion = () => {
+    if (document.visibilityState === "hidden" && document.querySelector(".version-tag")
+        && window.liveIdle()) location.reload();
+  };
+  document.addEventListener("htmx:load", loadNewVersion);
+  document.addEventListener("visibilitychange", loadNewVersion);
   // Scroll the active tab into view on phone (f3-30)
   document.addEventListener("DOMContentLoaded", () => {
     const tab = document.querySelector("nav.tabs a[aria-current='page']");
@@ -149,7 +157,8 @@
     </form>
     <button id="theme-btn" class="theme-btn" title="Switch to the light theme">Light</button>
   </div>
-  <div class="hazard" aria-hidden="true"></div>
+  {# The version poller sits on the stripe (f38): its "New version" tag hangs over it, so nothing moves #}
+  <div class="bar-stripe"><div class="hazard" aria-hidden="true"></div>{{ version_poll | safe }}</div>
   <nav class="tabs" aria-label="Pages">
     {# Board replaced Milestones (the owner, 2026-10-06): it links to the list, and a milestone's page lights it (f5-17) #}
     {% for path, label in [("/projects", "Projects"), ("/", "Overview"), ("/planning", "Planning"), ("/board", "Board"), ("/tickets", "Tickets"), ("/jobs", "Jobs"), ("/runs", "Runs"), ("/timeline", "Timeline"), ("/agents", "Agents"), ("/bench", "Bench")] %}
@@ -164,7 +173,6 @@
 {# Notification permission bar (f12-01, ADR 26 item 2): hidden until notify.js shows it #}
 <div id="notify-bar" hidden><div role="body"></div><div role="actions"><button data-action="yes">Yes</button><button data-action="no">No thanks</button><button data-action="got-it" hidden>Got it</button></div></div>
 <main>
-  {{ version_poll | safe }}
   <nav class="crumbs" aria-label="Breadcrumbs">
     {# project › milestone › ticket › job (D8): a page adds its own after the project #}
     <a href="/projects/{{ project | urlencode }}{{ q }}">{{ project }}</a>

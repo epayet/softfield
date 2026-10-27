@@ -28,6 +28,7 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 
 - **Goal:** one sentence.
 - **Context:** the files to read (full paths) and the worked example to follow. Paste only facts no file holds: a decision from the milestone's Decisions section, an API the lead hasn't built yet. Put the one constraint that matters in **bold** (security, "admin-only: no gettext").
+  A planted card is the owner's and can go any day: don't name one as a ticket's example or reference unless the ticket is about it. bug-03 named F113 as a seed card's shape; the owner removed F113, every ready ticket's gates went red on `test_tasks.py`, and f38-01's developer spent two attempts on it (2026-10-26). When the owner removes or merges a card, grep `.factory/tasks/` for its path.
 - **Done when:** acceptance criteria as bullets, including the edges ("a 280-character note", "just after midnight"). Whatever isn't written there, the developer won't test, and whatever isn't tested, it won't do. Before queueing a plan, read each of the milestone's own "Done when" lines against the tickets' and name the ticket that carries it: F14's "the dashboard shows that result" reached the plant's ticket and not the message's (2026-10-14).
 - **No stubs, no reference implementation.** A spec error now shows up as a failed attempt or a `BLOCKED.md`, and a short escalation fixes it.
 - **Security and protected work stay test-first:** the lead writes those tests on main, checks each fails for the right reason, and tests every security rule.
