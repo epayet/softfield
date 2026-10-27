@@ -1,4 +1,4 @@
-# Milestone F175: if i leave the factory running for a long time, the disk…
+# Milestone F175: The factory cleans up its temp files, so the disk stops filling
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-26.
