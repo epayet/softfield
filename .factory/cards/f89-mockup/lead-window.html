@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F89 mock-up: the lead's window says when it was read</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2; --ink: var(--fg); --surface: var(--bay);
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --good: #5fd17a; --good-ink: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [hidden] { display: block !important; }
+  }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card adds */
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  .legend .new { padding: 0 4px; }
+  [hidden] { display: none !important; }
+
+  /* ---- the tile as drawn (planning.html's #lead-window, dashboard.css's .meter) ---- */
+  .meter { height: 10px; background: var(--grid); position: relative; }
+  .meter > span { position: absolute; inset: 0 auto 0 0; max-width: 100%; }
+  .meter > .under-mark { background: var(--good); }
+  .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
+    outline: 1px solid var(--surface); z-index: 1; }
+  #lead-window { background: var(--bay); padding: 10px 14px; display: flex; flex-direction: column; gap: 5px; border: 1px solid var(--rule); }
+  #lead-window h2 { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--opus); }
+  #lead-window p { margin: 0; font: 11.5px var(--mono); color: var(--muted); }
+
+  /* ---- proposed: the reading's time on the plate header, right-aligned like a gauge's stamp ---- */
+  .head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .stamp { font: 11px var(--mono); color: var(--ink-2); white-space: nowrap; }
+</style>
+</head>
+<body>
+<h1>F89: the lead's window says when it was read</h1>
+<p class="lede">The planning room's tile, on today's reading: Claude's windows were last read at 03:59, when the lead's last reply ended (5-hour 18%, resets 08:50; week 10%, resets Mon 2 Nov 16:00). The reset words come from F32's ticket, which lands before this one.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/planning.html, #lead-window -->
+<div data-version="today" hidden>
+  <h3>Today</h3>
+  <div id="lead-window" class="phone">
+    <h2>The lead's window</h2>
+    <div class="meter"><span class="under-mark" style="width: 18%"></span><span class="mark" style="left: 75%"></span></div>
+    <p>5-hour window 18% · planning may go past the 75% line, the factory stops there</p>
+    <div class="meter"><span class="under-mark" style="width: 10%"></span><span class="mark" style="left: 70%"></span></div>
+    <p>week 10%</p>
+  </div>
+  <p class="legend">Nothing says how old 18% is: the page refreshed a minute ago, the number did not.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>Proposed</h3>
+  <div id="lead-window" class="phone">
+    <div class="head"><h2>The lead's window</h2> <span class="stamp new">read at 03:59</span></div>
+    <div class="meter"><span class="under-mark" style="width: 18%"></span><span class="mark" style="left: 75%"></span></div>
+    <p>5-hour window 18% · resets at 08:50 · planning may go past the 75% line, the factory stops there</p>
+    <div class="meter"><span class="under-mark" style="width: 10%"></span><span class="mark" style="left: 70%"></span></div>
+    <p>week 10% · resets on Nov 2 16:00</p>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new: when Claude's windows were last read. Both rows come from the same reading, so it is said once. A reading from another day shows the day too ("read on Oct 26 22:10"). The Overview's allowance panel gets the same stamp beside its Claude rows.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
