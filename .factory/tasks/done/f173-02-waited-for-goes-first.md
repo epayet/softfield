@@ -33,3 +33,10 @@ Read D6 and D7 in `.factory/cards/f173-dragging-a-card-on-the-board.md`, then `t
 - the dashboard's `run_order` lists the same order, and Next in line reads "early: <waiter id> waits for it" for a pulled ticket; the dry run's reason names it too
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
