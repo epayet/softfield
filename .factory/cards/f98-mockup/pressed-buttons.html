@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F98 mock-up: a pressed button shows it is sending</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --fail: #ec5458;
+    /* new token (F98 D1): the belt that crawls under a button while its press is on its way */
+    --sending-belt: repeating-linear-gradient(135deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: block; }
+  .versions > div > h2 { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 18px 0 0; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .versions > [data-version] { display: block !important; }
+  }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card changes */
+  .note { display: block; font: 11.5px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from planning.html's Plant box and thread.html's Remove seed (inline styles there) ---- */
+  .plant { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .plant h2 { margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .plant label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+  .plant textarea { font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .btn { position: relative; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 0 14px; min-height: 44px; }
+  .btn.solid { color: var(--hazard-ink); background: var(--hazard); border: 0; }
+  .btn.line { color: var(--hazard); background: transparent; border: 1px solid var(--hazard); }
+  .status { font-size: 12.5px; color: var(--muted); }
+  .seed { background: var(--bay); border: 1px solid var(--rule); padding: 10px 14px; }
+  .seed summary { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; }
+
+  /* ---- proposed (F98 D1): the pressed button on its way ---- */
+  .btn.sending { color: var(--hazard); background: var(--plate); border: 1px dashed var(--hazard); cursor: progress; padding-bottom: 4px; }
+  .btn.sending::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 4px;
+    background: var(--sending-belt); background-size: 17px 4px; animation: belt .6s linear infinite; }
+  @keyframes belt { to { background-position: 17px 0; } }
+  @media (prefers-reduced-motion: reduce) { .btn.sending::after { animation: none; } }
+  .btn:disabled:not(.sending) { opacity: .4; cursor: not-allowed; }
+  textarea[readonly] { color: var(--ink-2); border-style: dashed; }
+  .status.way { color: var(--hazard); }
+  .status.fail { color: var(--fail); }
+</style>
+</head>
+<body>
+<h1>F98: a pressed button shows it is sending</h1>
+<p class="lede">The Plant box on Planning and Remove seed on a card's thread, on a slow connection, in the second after the press. The note is the owner's own F98 note; F98 is a seed card today. The same holds for every button that asks the runner something: Save, Cancel it, Dismiss, Send, Send back, Approve plan, Accept ADR, Reject, Queue it.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/planning.html (#plant) and thread.html (#remove-seed) -->
+<div data-version="today" hidden>
+  <h2>Today</h2>
+  <h3>Plant, one second after the press</h3>
+  <form class="plant phone" onsubmit="return false">
+    <h2>Plant an idea</h2>
+    <label>What's on your mind? As rough as you like: the lead names the card
+      <textarea rows="4">If I have slow internet and I click plant it looks like nothing is happening. I had an issue where I planted the same thing multiple times. Add some kind of loading state to the button to be clear</textarea>
+    </label>
+    <div class="row">
+      <button type="button" class="btn solid">Plant</button>
+      <button type="button" class="btn line">Plant and ask the lead</button>
+      <span class="status">Plant: a seed card that waits for you; write on its thread to send it to the lead. Plant and ask the lead: the lead answers it on its thread.</span>
+    </div>
+  </form>
+  <p class="legend">Nothing moves until the answer comes back. Both buttons still work, so a second press plants the note again.</p>
+
+  <h3>Remove seed, one second after the press</h3>
+  <details class="seed phone" open>
+    <summary>Remove seed</summary>
+    <div class="row"><span>Remove F98? Its notes go too.</span>
+      <button type="button" class="btn solid">Remove</button>
+      <span class="status"></span></div>
+  </details>
+  <p class="legend">Same: no sign the press was taken.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h2>Proposed</h2>
+  <h3>Plant, one second after the press</h3>
+  <form class="plant phone" onsubmit="return false">
+    <h2>Plant an idea</h2>
+    <label>What's on your mind? As rough as you like: the lead names the card
+      <textarea rows="4" readonly class="new">If I have slow internet and I click plant it looks like nothing is happening. I had an issue where I planted the same thing multiple times. Add some kind of loading state to the button to be clear</textarea>
+    </label>
+    <div class="row">
+      <button type="button" class="btn sending new" disabled>Planting…</button>
+      <button type="button" class="btn line new" disabled>Plant and ask the lead</button>
+      <span class="status way new">Sending to the factory…</span>
+    </div>
+    <span class="note">the pressed button: dashed edge, its word, a belt crawling under it · the other button and the box wait</span>
+  </form>
+
+  <h3>Plant, when the answer never came</h3>
+  <form class="plant phone" onsubmit="return false">
+    <h2>Plant an idea</h2>
+    <label>What's on your mind? As rough as you like: the lead names the card
+      <textarea rows="4">If I have slow internet and I click plant it looks like nothing is happening. I had an issue where I planted the same thing multiple times. Add some kind of loading state to the button to be clear</textarea>
+    </label>
+    <div class="row">
+      <button type="button" class="btn solid">Plant</button>
+      <button type="button" class="btn line">Plant and ask the lead</button>
+      <span class="status fail new">Didn't hear back from the factory. Your note is still here: press again, it won't be planted twice.</span>
+    </div>
+    <span class="note">after 30 s or a lost connection · the note is kept · the factory takes the same press once</span>
+  </form>
+
+  <h3>Remove seed, one second after the press</h3>
+  <details class="seed phone" open>
+    <summary>Remove seed</summary>
+    <div class="row"><span>Remove F98? Its notes go too.</span>
+      <button type="button" class="btn sending new" disabled>Removing…</button>
+      <span class="status way new">Sending to the factory…</span></div>
+    <span class="note">every button that asks the runner does the same, with its own word</span>
+  </details>
+  <p class="legend"><span class="new">Dashed green</span> marks what changes. Once the answer comes, each page goes on as today: the note shows in Coming, the seed shows as on its way.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
