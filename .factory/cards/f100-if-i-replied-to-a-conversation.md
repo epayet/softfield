@@ -1,4 +1,4 @@
-# Milestone F100: If I replied to a conversation and it has related plans.…
+# Milestone F100: Proposals show "being revised" while your reply waits for the lead
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-10.
