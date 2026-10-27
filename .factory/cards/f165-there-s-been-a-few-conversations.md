@@ -8,6 +8,14 @@ there's been a few conversations where it says 'on the mockup you can see...' bu
 
 The owner, 2026-10-21, on the first plan: "I don't really want inline links, I just want to make sure the global links work. There's been times where mockups were mentioned but no link anywhere."
 
+### From F141: this seems like a bug: [11:37:41] ▶ [claude-opus] planner… (merged by the lead on 2026-10-27)
+this seems like a bug: [11:37:41] ▶ [claude-opus] planner f135#523
+[11:37:59] ■ [claude-opus] planner f135#523 done · 0 min · $2.29
+[11:37:59]   ↳ [claude-opus] I can't approve it for you: only your Approve on this page queues work. My last reply sent an empty list, and that took the plan's button away. That was my mistake. The plan is listed again below with no changes, so its Approve button is back. I also noted F101 in the card's facts.
+
+What was said on F141's thread:
+The owner pasted F135's log, where the lead admitted its empty list had taken the plan's Approve button away. On this thread they only asked to plan the card. The lead found that the bug was f51-03's (an empty list stored as '[]' hid the earlier proposals), which is merged on main. Nothing is still open.
+
 ## What we know (2026-10-21)
 The "global links" are the thread's "Proposals from this card" list and the tabs on a proposal's review page. Both read only the thread's latest list of proposals. A mock-up has no link anywhere, or a link that shows nothing, in four ways:
 - **Drawn, never listed.** The lead drew the file but listed only the plan (F152's first reply, 2026-10-20). Fixed by f152-02-every-mockup-is-listed (ready, priority 5): the runner lists any mock-up the job added or changed that the reply didn't name.
