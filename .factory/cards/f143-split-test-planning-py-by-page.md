@@ -1,4 +1,4 @@
-# Milestone F143: Split test_planning.py by page (desk, thread, proposals,…
+# Milestone F143: Split the planning room's code and tests by page, so developers can take them
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-16.
