@@ -25,3 +25,9 @@ project"); check what still reads `area` (the board's colours, plants' `area`, m
 **Area:**). Card keys, ticket ids and commit trailers are then unique on the machine.
 
 The owner: leave test-factory-hello as it is (m1).
+
+### From F155: We don't need the product vs factory on the board. But in… (merged by the lead on 2026-10-27)
+We don't need the product vs factory on the board. But in the reports it's helpful
+
+What was said on F155's thread:
+The owner planted: no product vs factory split on the board, but it helps in the reports. Later message: remove the whole 'for Mum' thing and the area splits and filters on the board. Nothing was answered on F155. Still open: whether the board keeps a Bugs filter or loses every filter.
