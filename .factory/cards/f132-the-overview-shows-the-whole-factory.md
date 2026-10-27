@@ -33,6 +33,13 @@ projects running.
 ### From F160: the top bar on what's running atm is a bit buggy depending… (merged by the lead on 2026-10-20)
 the top bar on what's running atm is a bit buggy depending on what project i'm looking at, it should the same regardless of current project viewed. similalrly, the overview should be the same across all projects, as there is one factory and runner for all projects. right now a developer ticket is working on softfield but top bar says Running: travel-companion · picking the next ticket.
 
+### From F92: Claude per milestone on overview is not super useful… (merged by the lead on 2026-10-27)
+Claude per milestone on overview is not super useful especially on mobile. 
+Savings from delegating so far on M4, why is this stuck on M4?
+
+What was said on F92's thread:
+The owner said that Claude per milestone on the Overview isn't very useful, especially on a phone, and asked why the savings panel was stuck on M4. Answered: the panel follows the newest card not done yet, and F132's D8 (ticket f132-04) moves both panels to the project's page. Still open: whether the Claude-per-milestone chart needs a phone-friendly form once it is on the project page.
+
 ## What happens today (from the code and the database, 2026-10-20)
 - **Why the bar named travel-companion.** One runner serves every project, but each project keeps its own run row (ADR 30, "One pick per project"): at 14:08 runs 342 (travel-companion), 344 (coucou) and 346 (softfield) all beat, and the two idle ones say "picking the next ticket" for as long as they wait their turn. `factory_wide_status` (`factory_dashboard/app.py`) ranks any "Running: …" the same, a real job or that between-jobs line, and keeps the first project in the owner's order: travel-companion (order 1). travel-companion has 9 ready tickets, so it isn't "Idle: nothing to do"; all 9 wait for m1-06-replan, parked for Claude's 5-hour window. The f17 review saw this and parked it in `docs/backlog.md` as "only one runner runs today"; since ADR 30 three do, in one process.
 - **The bar is already the same on every page**: `factory_wide_status` ignores the project picked. It was wrong everywhere, not per page.
