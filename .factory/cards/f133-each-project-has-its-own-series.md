@@ -1,4 +1,4 @@
-# Milestone F133: Each project has its own series letter (H1, not another M1)
+# Milestone F133: Each project gets its own card letter, and the factory/product area goes
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
