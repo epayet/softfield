@@ -1,4 +1,4 @@
-# Milestone F85: when i sign off a task, i want, whenever relevant i would…
+# Milestone F85: Real before and after pictures of the changed pages when you sign a card off
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-09.
