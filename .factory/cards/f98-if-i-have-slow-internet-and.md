@@ -1,4 +1,4 @@
-# Milestone F98: If I have slow internet and I click plant it looks like…
+# Milestone F98: A pressed button shows it is sending, and the same press is taken once
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-10.
