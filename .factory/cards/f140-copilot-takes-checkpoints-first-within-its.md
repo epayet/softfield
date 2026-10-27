@@ -1,4 +1,4 @@
-# Milestone F140: Copilot takes checkpoints first, within its pace From the…
+# Milestone F140: Copilot does the checkpoints first, within its monthly pace
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
