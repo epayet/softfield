@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F100 mock-up: proposals being revised while your message is on its way</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a;
+    --qwen: #8ccf62; --a7: #9085e9; --good-ink: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  a { color: var(--fg); text-decoration: none; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 10px; }
+  .switch { display: inline-flex; margin: 0 0 14px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 18px; }
+  .version > .tag { display: inline-block; font: 600 12px var(--display); letter-spacing: .12em; text-transform: uppercase;
+    padding: 3px 10px; margin-bottom: 8px; border: 1px solid var(--rule); color: var(--muted); background: var(--bay); }
+  .version.proposed > .tag { color: var(--hazard-ink); background: repeating-linear-gradient(135deg, var(--hazard) 0 8px, #d89c06 8px 16px); border-color: var(--hazard); }
+  /* phone: one at a time; wide: side by side, no switch */
+  @media (max-width: 899px) { [data-version][hidden] { display: none !important; } }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    [data-version][hidden] { display: block !important; }
+  }
+  h3.where { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+
+  /* ---- copied from templates/planning.html (the desk) ---- */
+  .desk { background: var(--bay); border: 1px solid var(--rule); }
+  .desk > h2 { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .coming > h2 { color: var(--hazard); }
+  .group { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px; }
+  .group h3 { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+  .item { display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box; }
+  .item .t { font-size: 14px; }
+  .item .w { font: 11.5px var(--mono); color: var(--muted); }
+  .item.way { border: 1px dashed var(--hazard); }
+  .item.way .w { color: var(--hazard); }
+
+  /* ---- copied from templates/thread.html (Proposals from this card) ---- */
+  .aside h2 { margin: 0 0 8px; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .proposal { background: var(--bay); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box; margin-bottom: 10px; }
+  .proposal .k { font: 600 11px var(--mono); color: var(--muted); }
+  .proposal b { font-size: 15px; }
+  .proposal.way { border-style: dashed; border-color: var(--hazard); }
+  .proposal.way .state { color: var(--hazard); }
+  .aside .foot { margin: 0; font-size: 12.5px; color: var(--muted); }
+
+  /* ---- copied from templates/proposal.html (#actions) ---- */
+  .actions { display: flex; flex-direction: column; gap: 8px; background: var(--bay); border: 1px solid var(--rule); padding: 10px 12px; }
+  .actions .row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .btn { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 0 14px; min-height: 44px; border: 0; }
+  .btn.go { color: var(--hazard-ink); background: var(--hazard); }
+  .btn.no { color: var(--muted); background: transparent; border: 1px solid var(--rule); }
+  .revising { margin: 0; padding: 8px 10px; border: 1px dashed var(--hazard); font-size: 13.5px; color: var(--ink-2); }
+  .revising b { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); display: block; }
+
+  /* ---- the marks: what this card changes ---- */
+  .mark { position: relative; outline: 2px solid var(--a7); outline-offset: 3px; }
+  .note { display: block; margin: 6px 0 4px; font: 11.5px var(--mono); color: var(--a7); }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  .legend .sw { display: inline-block; width: 14px; height: 10px; outline: 2px solid var(--a7); margin-right: 4px; }
+</style>
+</head>
+<body>
+<h1>F100: proposals being revised</h1>
+<p class="lede">You wrote on "Real before and after pictures of the changed pages when you sign a card off" (F85) and the lead hasn't replied yet. Its two proposals are the live ones; "the lead is writing its reply now" is what the desk says today. Today is the desk as it is now; Proposed assumes F74, one box per conversation, has landed (it is ready, ahead of this card).</p>
+
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- ================= TODAY ================= -->
+<div class="version" data-version="today" hidden>
+  <span class="tag">Today</span>
+
+  <h3 class="where">/planning · the desk</h3>
+  <section class="desk coming">
+    <h2>Coming · 1</h2>
+    <div class="group">
+      <a class="item" href="#"><span class="t">Real before and after pictures of the changed pages when you sign a card off</span><span class="w">waiting for the lead · the lead is writing its reply now</span></a>
+    </div>
+  </section>
+  <div style="height: 10px"></div>
+  <section class="desk">
+    <h2>Your desk · 5</h2>
+    <div class="group">
+      <h3 style="color: var(--hazard)">Your answers wanted</h3>
+      <a class="item" href="#"><span class="t">Real before and after pictures of the changed pages when you sign a card off</span><span class="w">the lead replied 16 min ago</span></a>
+      <a class="item" href="#"><span class="t">Text boxes grow with what you type, the Plant box first</span><span class="w">the lead replied 4.6 h ago</span></a>
+    </div>
+    <div class="group">
+      <h3 style="color: var(--opus)">Proposals to review</h3>
+      <a class="item" href="#"><span class="t">F82, Text boxes grow with what you type</span><span class="w">4 key points</span></a>
+      <a class="item" href="#"><span class="t">F85: real before and after pictures at sign-off</span><span class="w">6 key points</span></a>
+      <a class="item" href="#"><span class="t">Before and after on a ripe card's page</span><span class="w">3 key points</span></a>
+    </div>
+  </section>
+
+  <h3 class="where">/planning/f85 · Proposals from this card</h3>
+  <aside class="aside">
+    <h2>Proposals from this card</h2>
+    <a class="proposal" href="#" style="border-top: 3px solid var(--opus)"><span class="k">PLAN · <span class="state">open</span></span><b>F85: real before and after pictures at sign-off</b></a>
+    <a class="proposal" href="#" style="border-top: 3px solid var(--qwen)"><span class="k">MOCKUP · <span class="state">open</span></span><b>Before and after on a ripe card's page</b></a>
+    <p class="foot">Nothing becomes a ticket until you approve it.</p>
+  </aside>
+
+  <h3 class="where">/planning/f85/proposals/… · the buttons</h3>
+  <div class="actions">
+    <div class="row"><button class="btn go" type="button">Approve plan</button><button class="btn no" type="button">Reject</button></div>
+  </div>
+  <p class="legend">Both proposals look like they wait for you, and the Planning tab counts them, while you are still talking it through.</p>
+</div>
+
+<!-- ================= PROPOSED ================= -->
+<div class="version proposed" data-version="proposed">
+  <span class="tag">Proposed</span>
+
+  <h3 class="where">/planning · the desk</h3>
+  <section class="desk">
+    <h2>Your desk · <span class="mark">2</span></h2>
+    <span class="note">the count drops by the thread and its 2 proposals: they wait for the lead now, not for you</span>
+    <div class="group">
+      <h3 style="color: var(--hazard)">Your answers wanted</h3>
+      <a class="item way" href="#"><span class="t">Real before and after pictures of the changed pages when you sign a card off</span><span class="w">waiting for the lead · the lead is writing its reply now</span></a>
+      <a class="item" href="#"><span class="t">Text boxes grow with what you type, the Plant box first</span><span class="w">the lead replied 4.6 h ago</span></a>
+    </div>
+    <div class="group">
+      <h3 style="color: var(--opus)">Proposals to review</h3>
+      <a class="item" href="#"><span class="t">F82, Text boxes grow with what you type</span><span class="w">4 key points</span></a>
+      <div class="mark">
+        <a class="item way" href="#"><span class="t">F85: real before and after pictures at sign-off</span><span class="w">being revised · the lead is writing its reply now</span></a>
+        <div style="height: 6px"></div>
+        <a class="item way" href="#"><span class="t">Before and after on a ripe card's page</span><span class="w">being revised · the lead is writing its reply now</span></a>
+      </div>
+      <span class="note">dashed orange from the moment you send, as the thread's box above; solid again once the lead's reply is stored (or gone, when the reply replaces them)</span>
+    </div>
+  </section>
+  <p class="legend" style="margin-top: 6px">The thread's dashed box in "Your answers wanted" and Coming gone are F74's change, shown here for the full picture.</p>
+
+  <h3 class="where">/planning/f85 · Proposals from this card</h3>
+  <aside class="aside mark">
+    <h2>Proposals from this card</h2>
+    <a class="proposal way" href="#" style="border-top: 3px solid var(--opus)"><span class="k">PLAN · <span class="state">being revised</span></span><b>F85: real before and after pictures at sign-off</b></a>
+    <a class="proposal way" href="#" style="border-top: 3px solid var(--qwen)"><span class="k">MOCKUP · <span class="state">being revised</span></span><b>Before and after on a ripe card's page</b></a>
+    <p class="foot">The lead is revising these after your message. Nothing becomes a ticket until you approve it.</p>
+  </aside>
+  <span class="note">turns dashed the moment you press Send, with the conversation, not at the next refresh</span>
+
+  <h3 class="where">/planning/f85/proposals/… · the buttons</h3>
+  <div class="actions mark">
+    <p class="revising"><b>Being revised</b>Your message on the thread is on its way to the lead, who may change this draft. You can still approve or reject it as it stands.</p>
+    <div class="row"><button class="btn go" type="button">Approve plan</button><button class="btn no" type="button">Reject</button></div>
+  </div>
+  <span class="note">the buttons stay: you may approve the ADR while still discussing the plan</span>
+  <p class="legend"><span class="sw"></span>A violet outline marks what this card changes.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
