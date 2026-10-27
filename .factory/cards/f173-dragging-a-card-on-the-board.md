@@ -1,6 +1,6 @@
 # Milestone F173: The board's order is the order the work runs in
 
-> **State:** ready · **Priority:** 0 · **Area:** factory
+> **State:** ready · **Priority:** 0 · **Area:** factory · **Reserve:** yes
 > Planted by the owner on 2026-10-22.
 
 ## Notes
