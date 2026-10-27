@@ -1,4 +1,4 @@
-# Milestone F97: Given that the planning board has notification number that…
+# Milestone F97: Needs you steps aside: Now first, a box of desk counts at the bottom
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-10.
