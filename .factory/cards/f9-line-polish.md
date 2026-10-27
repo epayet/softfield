@@ -48,3 +48,6 @@
 ## Notes
 ### From F64: I like to see the list of tickers that got done while I… (merged by the lead on 2026-10-09)
 I like to see the list of tickers that got done while I was away. Now I also want to see how long each task take, what time it got done, number of attempts. Like a mini report. It also.says who merged it, what does that mean?
+
+### From F116: I want to be able to visualise when the claude pacing… (merged by the lead on 2026-10-27)
+I want to be able to visualise when the claude pacing happens somehow
