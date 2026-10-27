@@ -27,3 +27,10 @@ Read `run_planner` and `block` in `runner/loop.py` (each ends with a call to `_n
 - a ticket blocked again while its item is still open sends nothing
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
