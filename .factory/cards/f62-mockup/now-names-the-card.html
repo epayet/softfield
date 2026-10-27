@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F62 mock-up: a review on Now says what it reviews</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --copilot: #7aa7ff;
+    --opus: #ff9640;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [hidden] { display: block !important; }
+  }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card adds */
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  .legend .new { padding: 0 4px; }
+  [hidden] { display: none !important; }
+  h2.version { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 16px 0 0; color: var(--hazard); }
+
+  /* ---- as drawn today (dashboard.css) ---- */
+  .bar { display: flex; align-items: center; gap: 8px; background: var(--bay); border: 1px solid var(--rule); padding: 6px 10px; font-size: 13.5px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--opus); }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 7px 1px 5px;
+    border-radius: 10px; border: 1px solid var(--rule); white-space: nowrap; color: var(--fg); }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--copilot); }
+  .agent { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; min-width: 0; }
+  .running-card { display: grid; gap: 8px; }
+  .running-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .next-in-line { display: grid; gap: 4px; border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
+  .next-in-line h3 { font-size: 12px; margin: 0; }
+
+  /* ---- proposed: the card's plate, after F132's project plate (D3): mono, ink-2, a rule border,
+     two corner ticks, no status colour ---- */
+  .card-plate { position: relative; display: inline-block; font: 600 12px var(--mono); color: var(--ink-2);
+    border: 1px solid var(--rule); background: var(--plate); padding: 0 6px; letter-spacing: .04em; }
+  .card-plate::before, .card-plate::after { content: ""; position: absolute; width: 5px; height: 5px; border-color: var(--ink-2); border-style: solid; }
+  .card-plate::before { top: -2px; left: -2px; border-width: 1px 0 0 1px; }
+  .card-plate::after { bottom: -2px; right: -2px; border-width: 0 1px 1px 0; }
+  .card-plate a { color: inherit; }
+  .running-title { font-weight: 500; }
+  .doing { color: var(--ink-2); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<h1>F62: a review on Now says what it reviews</h1>
+<p class="lede">The Overview while the lead reviews F158 (job 1353, 23 Oct, 15:20–15:49: real job, card and title) with F68's review next in line (real, from the Overview on 26 Oct). Elapsed and heartbeat are examples.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/_partials/running.html, queue.html and app.py's status words -->
+<div data-version="today" hidden>
+  <h2 class="version">Today</h2>
+  <h3>Top bar</h3>
+  <div class="bar phone"><i class="dot"></i><span>Running: softfield · review, job 1353</span> ⏸</div>
+  <h3>Now, on a phone</h3>
+  <section class="panel phone">
+    <h2>Now <span class="src">refreshes every 5 s</span></h2>
+    <div class="running-card">
+      <div class="running-head">
+        <span class="pill">attempt 1</span>
+        <span class="agent">claude-opus</span>
+        <span>review</span>
+        <a href="#">job 1353 ›</a>
+      </div>
+      <dl class="kv">
+        <dt>Elapsed</dt><dd class="mono">12 min</dd>
+        <dt>Live</dt><dd class="mono">read 1.2M tokens · 41 turns</dd>
+        <dt>Heartbeat</dt><dd class="mono">4 s ago</dd>
+      </dl>
+    </div>
+    <div class="next-in-line">
+      <h3>Next in line</h3>
+      <div><b class="mono">1 review F68</b> · a batch</div>
+    </div>
+  </section>
+  <p class="legend">Nothing says which card is being reviewed, or what a review is for; "a batch" says nothing either.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h2 class="version">Proposed</h2>
+  <h3>Top bar</h3>
+  <div class="bar phone"><i class="dot"></i><span>Running: softfield · <span class="new">review F158</span></span> ⏸</div>
+  <h3>Now, on a phone</h3>
+  <section class="panel phone">
+    <h2>Now <span class="src">refreshes every 5 s</span></h2>
+    <div class="running-card">
+      <div class="running-head">
+        <span class="pill">attempt 1</span>
+        <span class="card-plate new"><a href="#">F158</a></span>
+        <span class="agent">claude-opus</span>
+        <span>review</span>
+        <a href="#">job 1353 ›</a>
+      </div>
+      <div class="running-title new">A card's page says what it's about: its Outcome, else your note</div>
+      <div class="doing new">The lead reads what F158 built, before it's yours to sign off</div>
+      <dl class="kv">
+        <dt>Elapsed</dt><dd class="mono">12 min</dd>
+        <dt>Live</dt><dd class="mono">read 1.2M tokens · 41 turns</dd>
+        <dt>Heartbeat</dt><dd class="mono">4 s ago</dd>
+      </dl>
+    </div>
+    <div class="next-in-line">
+      <h3>Next in line</h3>
+      <div><b class="mono">1 review <span class="card-plate new"><a href="#">F68</a></span></b> <span class="new">I want the factory to be renamed SoftField. That should be… · the lead reads what it built</span></div>
+    </div>
+  </section>
+  <h3>Calmer variant: no plate, the key as a plain link</h3>
+  <section class="panel phone">
+    <div class="running-card">
+      <div class="running-head">
+        <span class="pill">attempt 1</span>
+        <a class="mono new" href="#">F158</a>
+        <span class="agent">claude-opus</span>
+        <span>review</span>
+        <a href="#">job 1353 ›</a>
+      </div>
+      <div class="running-title new">A card's page says what it's about: its Outcome, else your note</div>
+      <div class="doing new">The lead reads what F158 built, before it's yours to sign off</div>
+    </div>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what changes. A job with no ticket (a review, a planner reply, a checkpoint) shows its card's key, linked to the card's page, the card's title, and one line on what the job does. A planner reply reads "The lead answers you on F62's thread"; a checkpoint "Claude re-checks F51's merged tickets". The Projects page, the Planning room's running line and the Jobs list name the card the same way.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
