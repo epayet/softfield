@@ -29,3 +29,12 @@ Read `VERSION_POLL`, `NEW_VERSION` and the `/version` route in `factory_dashboar
 - `.new-version` no longer appears in `dashboard.css`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: BLOCKED: needs-file
+attempts: 2
+tokens: 6574424
+logs: .factory/var/runs/20261026-225212/f38-01-new-version-tag
+```
