@@ -1,4 +1,4 @@
-# Milestone F134: softfield init on a repo with its own AGENTS.md and CLAUDE.md
+# Milestone F134: softfield init fits a repo that already has its own AGENTS.md and CLAUDE.md
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
