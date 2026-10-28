@@ -204,7 +204,7 @@ def test_a_done_plant_does_not_show_in_coming(planning, db_path, serve):
     )
     client = serve()
     html = _page(client)
-    assert "desk-coming" not in html
+    assert '<section id="desk-coming"' not in html
 
 
 @pytest.mark.parametrize("value", ["not JSON", '["a list"]'])
@@ -354,7 +354,7 @@ def test_after_the_request_is_done_and_the_lead_replies_the_thread_leaves_coming
         metrics.add_planner_message(conn, thread, "lead", _at(timedelta(minutes=1)), "It passes.")
 
     _write(db_path, answered)
-    assert "desk-coming" not in _page(client)
+    assert '<section id="desk-coming"' not in _page(client)
 
 
 def test_a_first_message_on_a_card_with_no_thread_shows_in_coming(planning, db_path, serve):
@@ -390,7 +390,7 @@ def test_after_the_leads_reply_the_thread_moves_to_answers_wanted(planning, db_p
 
     # The Coming section should no longer have f6
     html = _page(client)
-    assert "desk-coming" not in html
+    assert '<section id="desk-coming"' not in html
 
     # The thread should now be in "Your answers wanted"
     groups = _groups(html)
@@ -422,7 +422,7 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
     html = _page(client)
     # The desk groups are still the same four (Coming is separate)
     groups = _groups(html)
-    assert list(groups) == ["answers", "proposals", "ripe", "seeds"]
+    assert list(groups) == ["ripe", "proposals", "answers", "seeds"]
     # The Planning tab count is unchanged
     planning_tab = re.search(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html

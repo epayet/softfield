@@ -615,7 +615,7 @@ def test_a_ripe_cards_page_shows_its_sheet_and_signs_off(planning, db_path, db, 
         "subject": "m4",
     }
     assert html.index('id="review"') < html.index('id="conversation"')
-    [item] = desk(db, PROJECT, NOW)[4].items
+    [item] = desk(db, PROJECT, NOW)[1].items
     assert item.words == "reviewed · waits for your sign-off"
 
 

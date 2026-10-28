@@ -67,7 +67,7 @@ def test_each_group_shows_its_items_in_order(planning, serve):
     """A reply unanswered, the open proposals and a ripe card, each in its group, and the
     groups in D6's order; the thread the owner answered last is not among the answers."""
     groups = _groups(_page(serve()))
-    assert list(groups) == ["answers", "proposals", "ripe", "seeds"]
+    assert list(groups) == ["ripe", "proposals", "answers", "seeds"]
     assert _items(groups["answers"]) == [("/planning/general", "General")]
     assert "the lead replied 60 min ago" in groups["answers"]
     assert _items(groups["proposals"]) == [
@@ -84,25 +84,25 @@ def test_desk_returns_the_five_groups_in_order_empty_ones_too(db_path, db):
     groups = desk(db, PROJECT, NOW)
     assert [g.name for g in groups] == [
         "Didn't go through",
-        "Blocked tickets",
-        "Your answers wanted",
+        "To sign off",
         "Proposals to review",
-        "Finished, to talk through",
+        "Your answers wanted",
         "Seeds, not asked about yet",
+        "Blocked tickets",
     ]
     assert [[i.title for i in g.items] for g in groups] == [
         [],
-        [],
-        [],
-        [],
         ["The factory measures itself", "The web app"],
         [],
+        [],
+        [],
+        [],
     ]
-    assert desk(db, "nowhere", NOW)[4].items == []
+    assert desk(db, "nowhere", NOW)[5].items == []
 
 
 def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
-    seeds = desk(db, PROJECT, NOW)[5].items
+    seeds = desk(db, PROJECT, NOW)[4].items
     assert [s.title for s in seeds] == ["Parallel developers"]
 
 
@@ -142,7 +142,7 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
             ),
         ),
     )
-    (item,) = desk(db, PROJECT, NOW)[3].items  # the card's parts are one item (F51 D1)
+    (item,) = desk(db, PROJECT, NOW)[2].items  # the card's parts are one item (F51 D1)
     names = {"adr-20": "ADR 20", "plan": "plan"}
     assert [name for name, way in item.parts if not way] == [names[p] for p in still_open]
     # a pending one stays, dashed and on its way (the owner, 2026-10-08)
@@ -159,7 +159,7 @@ def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
             conn, planning, "approve_plan", "f6", None, _at(timedelta(hours=3))
         ),
     )
-    (item,) = desk(db, PROJECT, NOW)[3].items  # F51 D1: the card's two proposals are one item
+    (item,) = desk(db, PROJECT, NOW)[2].items  # F51 D1: the card's two proposals are one item
     assert item.parts == (("ADR 20", False), ("plan", False))
 
 
@@ -681,7 +681,7 @@ def test_an_archive_on_its_way_shows_dashed_and_counts_no_more(planning, db_path
             conn, planning, "archive", "general", "on", NOW.isoformat()
         ),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link == "/planning/general"]
+    [item] = [i for i in desk(db, PROJECT, NOW)[3].items if i.link == "/planning/general"]
     assert item.on_its_way and item.words == "archiving at the runner's next pick"
     assert top_bar(db, PROJECT, NOW)["planning_count"] == before - 1
     html = _page(serve())
@@ -698,7 +698,7 @@ def test_a_sign_off_on_its_way_shows_on_the_desk(planning, db_path, db):
         db_path,
         lambda conn: metrics.add_request(conn, planning, "signoff", "m4", None, NOW.isoformat()),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[4].items if i.link == "/planning/m4"]
+    [item] = [i for i in desk(db, PROJECT, NOW)[1].items if i.link == "/planning/m4"]
     assert item.on_its_way and item.words == "signing off at the runner's next pick"
 
 
@@ -711,16 +711,15 @@ def _trail(html: str) -> dict[str, str]:
 
 
 def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
-    """F35: from the general thread, Next is F6's ADR; from there Previous is back and Next is
-    the next item (F6's ADR and plan are one item, F51 D1); a page already done with leads to
-    the first one left."""
+    """F35: from the general thread, Next is F9 (seeds come after answers); from there Previous is
+    back and Next is the ripe card; a page already done with leads to the first one left."""
     client = serve()
     first = _trail(_thread(client, "general"))
-    assert first["next"] == "/planning/f6/proposals/adr-20" and "previous" not in first
-    assert "1 of " in first["words"] and "waiting for you" in first["words"]
+    assert first["next"] == "/planning/f9" and first["previous"] == "/planning/f6/proposals/adr-20"
+    assert "3 of " in first["words"] and "waiting for you" in first["words"]
     middle = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
-    assert middle["previous"] == "/planning/general"
-    assert middle["next"] == "/planning/m4"  # past F6's plan: it is the ADR's item
+    assert middle["previous"] == "/planning/m4"
+    assert middle["next"] == "/planning/general"
     _write(
         db_path,
         lambda conn: metrics.add_request(
@@ -728,7 +727,7 @@ def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
         ),
     )
     done = _trail(_thread(client, "general"))  # archived: no longer waiting
-    assert done["next"] == "/planning/f6/proposals/adr-20" and "previous" not in done
+    assert done["next"] == "/planning/m4" and "previous" not in done
 
 
 # --- a waiting plant is edited or cancelled from Coming (F14) --------------------------------
@@ -765,9 +764,10 @@ def test_desk_coming_poll_wrapper_when_items_exist(planning, db_path, serve):
 
 
 def test_desk_coming_poll_wrapper_absent_when_no_items(planning, serve):
-    """With no waiting plant, the string desk-coming is nowhere in the page."""
+    """With no waiting plant, the #desk-coming section is not rendered
+    (only the poll wrapper exists)."""
     html = _page(serve())
-    assert "desk-coming" not in html
+    assert '<section id="desk-coming"' not in html
 
 
 # --- the desk and an open thread refresh by themselves (F19 review) ---------------------------
@@ -829,7 +829,7 @@ def test_two_blocked_tickets_appear_second_on_the_desk_with_their_ids_and_reason
     assert len(items) == 2
     assert items[0] == ("/tickets/f1-01", "f1-01")
     assert items[1] == ("/tickets/f1-02", "f1-02")
-    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
     assert (blocked_group.key, blocked_group.name, blocked_group.color) == (
         "blocked",
         "Blocked tickets",
@@ -863,7 +863,7 @@ def test_a_resolved_blocked_ticket_does_not_show_on_the_desk(planning, db_path, 
     groups = _groups(html)
     blocked_markup = groups.get("blocked", "")
     assert "f1-03" not in blocked_markup
-    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
     assert blocked_group.items == []
 
 
@@ -873,7 +873,7 @@ def test_no_open_blocked_tickets_means_empty_group_and_no_heading(planning, db_p
     groups = _groups(html)
     blocked_markup = groups.get("blocked", "")
     assert "Blocked tickets" not in blocked_markup
-    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
     assert blocked_group.items == []
 
 
@@ -968,7 +968,7 @@ def test_a_blocked_ticket_asked_for_is_on_its_way_and_leaves_the_count(
     assert f"try-again-{SECOND}" not in html and f"set-aside-{SECOND}" not in html
     first = _blocked_item(html, FIRST)
     assert f'id="try-again-{FIRST}"' in first and f'id="set-aside-{FIRST}"' in first
-    [_, group, *_] = desk(db, PROJECT, NOW)
+    group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
     assert [(i.title, i.on_its_way, i.words) for i in group.items] == [
         (FIRST, False, "waiting on f12-03"),
         (SECOND, True, ON_ITS_WAY[kind]),
@@ -983,7 +983,7 @@ LOOK = "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board."
 
 def _blocked_words(db, project_id):
     """Return the blocked group's items' words."""
-    [_, blocked_group, *_] = desk(db, PROJECT, NOW)
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
     return [i.words for i in blocked_group.items]
 
 

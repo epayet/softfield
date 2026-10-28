@@ -44,28 +44,9 @@
   </div>
 </section>
 
-<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
-  <div id="plant-row">
-  <form id="plant" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
-    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1", again: this.elements.again.value || undefined})}'
-    style="flex: 1 1 280px; min-width: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
-    <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Plant an idea</h2>
-    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">What's on your mind? As rough as you like: the lead names the card
-      <textarea name="text" rows="4" required placeholder="The pause button did nothing the first time…" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
-    </label>
-    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-      <input type="hidden" name="ask" value="">
-      {# F48 D2: the refused note Try again put in the box; the send names it, once #}
-      <input type="hidden" name="again" value="">
-      <button type="submit" id="plant-only" class="btn go" onclick="this.form.elements.ask.value = ''">Plant</button>
-      <button type="submit" id="plant-ask" class="btn plain" onclick="this.form.elements.ask.value = '1'">Plant and ask the lead</button>
-      <span id="plant-status" style="font-size: 12.5px; color: var(--muted)">Plant: a seed card that waits for you; write on its thread to send it to the lead. Plant and ask the lead: the lead answers it on its thread.</span>
-    </div>
-  </form>
-
-  {% if coming.items %}
-  <div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
-  <section id="desk-coming" class="desk-coming" aria-label="Coming" style="flex: 999 1 420px; min-width: 0; background: var(--bay)">
+<div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
+{% if coming.items %}
+<section id="desk-coming" class="desk-coming" aria-label="Coming" style="background: var(--bay)">
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">Coming · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
     <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
@@ -130,8 +111,27 @@
     </div>
     {% endfor %}
   </section>
-  </div>
   {% endif %}
+  </div>
+
+<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
+  <div id="plant-row">
+  <form id="plant" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
+    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1", again: this.elements.again.value || undefined})}'
+    style="flex: 1 1 280px; min-width: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+    <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Plant an idea</h2>
+    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">What's on your mind? As rough as you like: the lead names the card
+      <textarea name="text" rows="4" required placeholder="The pause button did nothing the first time…" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
+    </label>
+    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+      <input type="hidden" name="ask" value="">
+      {# F48 D2: the refused note Try again put in the box; the send names it, once #}
+      <input type="hidden" name="again" value="">
+      <button type="submit" id="plant-only" class="btn go" onclick="this.form.elements.ask.value = ''">Plant</button>
+      <button type="submit" id="plant-ask" class="btn plain" onclick="this.form.elements.ask.value = '1'">Plant and ask the lead</button>
+      <span id="plant-status" style="font-size: 12.5px; color: var(--muted)">Plant: a seed card that waits for you; write on its thread to send it to the lead. Plant and ask the lead: the lead answers it on its thread.</span>
+    </div>
+  </form>
   </div>
 
   <div id="live-desk" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">

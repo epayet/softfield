@@ -2,7 +2,7 @@
 
 - Two tiles: the factory now, with when the next reply is expected (planner jobs go first, so a
   pending message is answered once the running job is done, D1), and the lead's 5-hour window.
-- ``desk(conn, project)``: what waits for the owner, in five groups (D6, and F31 D9's "Didn't go
+- ``desk(conn, project)``: what waits for the owner, in six groups (D6, and F31 D9's "Didn't go
   through" first); the Overview's Needs you and the top bar's count reuse its items' words and
   links (f6-09).
 - "Plant an idea": a ``plant`` request through ``POST /requests``, the dashboard's only write.
@@ -339,31 +339,32 @@ def desk_trail(
 
 def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
     """What waits for the owner (D6), in six groups in this order, empty ones included: what
-    didn't go through first (F31 D9)."""
+    didn't go through first (F31 D9), then sign-offs, proposals, conversations, seeds, and
+    blocked tickets."""
     project_id = metrics.find_project(conn, project)
     if project_id is None:
         refusals: list[DeskItem] = []
-        answers: list[DeskItem] = []
-        proposals: list[DeskItem] = []
         ripe: list[DeskItem] = []
+        proposals: list[DeskItem] = []
+        answers: list[DeskItem] = []
         seeds: list[DeskItem] = []
         blocked: list[DeskItem] = []
     else:
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
-        answers = _acted_on(conn, project_id, _answers_wanted(conn, project_id, titles, now))
         repo = _repo(conn, project)
-        proposals = _open_proposals(conn, project_id, _known_cards(repo), repo)
         ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
+        proposals = _open_proposals(conn, project_id, _known_cards(repo), repo)
+        answers = _acted_on(conn, project_id, _answers_wanted(conn, project_id, titles, now))
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
     return [
         DeskGroup("refused", "Didn't go through", "--hazard", refusals),
-        DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),
-        DeskGroup("answers", "Your answers wanted", "--hazard", answers),
+        DeskGroup("ripe", "To sign off", "--qwen", ripe),
         DeskGroup("proposals", "Proposals to review", "--opus", proposals),
-        DeskGroup("ripe", "Finished, to talk through", "--qwen", ripe),
+        DeskGroup("answers", "Your answers wanted", "--hazard", answers),
         DeskGroup("seeds", "Seeds, not asked about yet", "--ink-2", seeds),
+        DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),
     ]
 
 
