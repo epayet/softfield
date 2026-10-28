@@ -33,3 +33,12 @@ Findings from the checkpoint after f81-02 and f81-03 (their tests read the CSS t
 - every `<button>` and button-like link on the Planning room and review pages is `.btn go` or `.btn plain`, with no inline style
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 4559
+gate_failures: ['stopped', 'stopped']
+tokens: 1924174
+```
