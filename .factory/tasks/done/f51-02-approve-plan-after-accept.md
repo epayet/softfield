@@ -30,3 +30,10 @@ Read `_adr_waits` and `proposal_review` in `factory_dashboard/planning.py`, the 
 - `approve_plan` alone while the branch's ADR is Proposed: refused, main unchanged, the reason names the ADR
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
