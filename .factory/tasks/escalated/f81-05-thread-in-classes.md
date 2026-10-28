@@ -28,3 +28,12 @@ Card doc `.factory/cards/f81-assess-the-current-ui-state-of.md` D6; the look is 
 - a thread and a proposal show plate headers, in both themes, on a phone too, and the phone's one-point-at-a-time deck works as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 11619392
+logs: .factory/var/runs/20261028-134139/f81-05-thread-in-classes
+```
