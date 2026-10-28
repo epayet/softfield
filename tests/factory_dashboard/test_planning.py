@@ -83,7 +83,7 @@ def test_each_group_shows_its_items_in_order(planning, serve):
     assert _items(groups["answers"]) == [("/planning/general", "General")]
     assert "the lead replied 60 min ago" in groups["answers"]
     assert _items(groups["proposals"]) == [
-        ("/planning/f6/proposals/adr-20", "F6: F6 plan: 7 tickets"),
+        ("/planning/f6/proposals/adr-20", "F6 plan: 7 tickets"),
     ]
     assert "2 key points" in groups["proposals"]
     assert _items(groups["ripe"]) == [("/planning/m4", "The web app")]
@@ -1199,7 +1199,7 @@ def test_a_cards_proposals_are_one_desk_item_counted_while_a_part_waits(
     and counts until every part is on its way."""
     _f6_adr_plan_merge(db_path, planning, checkout)
     (item,) = _proposals(db)
-    assert item.title == "F6: F6 plan: 7 tickets"
+    assert item.title == "F6 plan: 7 tickets"  # the plan's title names its card already
     assert item.parts == (("ADR 20", False), ("plan", False), ("merge F9", False))
     assert item.words == "5 key points · accept the ADR first"
     assert item.link == "/planning/f6/proposals/adr-20"
@@ -1226,8 +1226,8 @@ def test_a_plan_and_its_mockup_are_one_item_and_the_general_seeds_stay_two(plann
     _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN, _REVIEW_MOCKUP))
     _write(db_path, lambda conn: _review(conn, planning, "general", *seeds))
     items = _proposals(db)
-    assert [i.parts for i in items if i.link.startswith("/planning/f7/")] == [
-        (("plan", False), ("mock-up", False))
+    assert [(i.title, i.parts) for i in items if i.link.startswith("/planning/f7/")] == [
+        ("F7: F6 plan: 7 tickets", (("plan", False), ("mock-up", False)))  # F7's, named so
     ]
     assert len([i for i in items if i.link.startswith("/planning/general/")]) == 2
 
@@ -2579,17 +2579,6 @@ def test_a_lead_message_with_empty_proposals_keeps_earlier_on_thread_and_review(
     assert 'id="approve-merge"' in review_html
 
 
-def test_a_later_lead_message_with_a_different_proposal_still_replaces(planning, db_path, serve):
-    """A later lead message with a different proposal still replaces the earlier ones, as
-    ``test_a_proposal_from_an_older_reply_is_replaced`` checks."""
-    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
-    newer = {**_REVIEW_MERGE, "id": "new-proposal"}
-    _write(db_path, lambda conn: _review(conn, planning, "f9", newer))
-    html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
-    assert "Replaced by a newer reply" in _text(html)
-    assert 'id="approve-merge"' not in html
-
-
 def test_the_threads_cards_say_the_same_word(planning, db_path, serve):
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
     _finished(db_path, planning, "reject", "f9/merge-f9", None, "rejected merge-f9")
@@ -2688,7 +2677,7 @@ def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
     assert "1 of " in first["words"] and "waiting for you" in first["words"]
     middle = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
     assert middle["previous"] == "/planning/general"
-    assert middle["next"] != "/planning/f6/proposals/plan"
+    assert middle["next"] == "/planning/m4"  # past F6's plan: it is the ADR's item
     _write(
         db_path,
         lambda conn: metrics.add_request(

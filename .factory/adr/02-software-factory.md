@@ -574,6 +574,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the third time (F30, F172, F84) a plan routed a ticket touching `test_planning.py` and several functions of one page to the developer after the Known range said it was the lead's: a rule only in `docs/agents/lead.md` doesn't reach the planner's routing. F143 rewrites the rule after splitting the file; the rule it ends on wants a pre-flight check, not another line.
 - **Decisions affected:** none.
 
+### F51 (2026-10-28): the desk counts only what waits on you ([review](../reviews/f51-when-a-plan-depends-on-an.md))
+
+- **Q1:** two developer tickets (f51-03, difficulty 2, and its checkpoint fix f51-04), both first time by Qwen; two lead tickets (f51-01, f51-02, difficulty 4, one in protected runner code), both first time by Sonnet. One Copilot checkpoint finding, confirmed. Review round 1: two should-fix (the runner's guard reached past D3 to ADRs already on main; the desk doubled the card's name in every bundle title) and two nits (a weakened test, a duplicate test), all fixed by the review.
+- **Q3:** Opus $19.89 for five planner replies (three cards merged into the plan, then F176's replan, still open) against Sonnet $1.15 for the lead tickets; Qwen about 32 minutes of model.
+- **Q5:** see the review's numbers.
+- **Anything else:** Sonnet's lead work was right in substance and loose at the edges: tests pinned the doubled titles a look at real data shows, an old assertion was weakened to `!=`, a guard was wider than its decision. The planning cost seventeen times the build.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

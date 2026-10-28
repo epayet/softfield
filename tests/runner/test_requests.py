@@ -986,6 +986,21 @@ def test_a_plan_whose_adr_is_still_proposed_is_refused_and_main_is_unchanged(rep
     assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"
 
 
+def test_a_plan_may_edit_an_adr_main_already_holds_as_proposed(repo):
+    """F51 D3 holds for an ADR the branch drafted, not one on main the owner reviews later."""
+    _card(repo)
+    adr = repo / ".factory" / "adr" / "23-parallel-planners.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "ADR 23, for later")
+    _plan(repo, {str(adr.relative_to(repo)): ADR + "\nA note from F7's plan.\n"})
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
+    assert "A note from F7's plan." in adr.read_text()
+
+
 def test_accept_then_approve_in_one_pick_accepts_the_adr_and_merges_the_plan(repo):
     _card(repo)
     relies = "Build on `.factory/adr/23-parallel-planners.md`."

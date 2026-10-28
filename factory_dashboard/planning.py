@@ -344,9 +344,13 @@ def _bundle(
     todo = next((p for p, state in parts if state == OPEN), None)
     on_its_way = todo is None
     shown = parts[0][0] if todo is None else todo
+    title = str(leading.get("title") or leading["id"])
+    name = thread_name(card)
+    if not re.match(rf"{re.escape(name)}\b", title, re.IGNORECASE):  # "F82: …" names it already
+        title = f"{name}: {title}"
     return DeskItem(
         "proposals",
-        f"{thread_name(card)}: {leading.get('title') or leading['id']}",
+        title,
         _NEXT_PICK if on_its_way else words or str(shown.get("kind") or ""),
         f"/planning/{card}/proposals/{shown['id']}",
         on_its_way=on_its_way,

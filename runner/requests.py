@@ -431,8 +431,8 @@ def _proposed(repo: Path, number: int) -> bool:
 
 
 def _proposed_adrs(repo: Path, changes: list[tuple[str, str]]) -> list[int]:
-    """The numbers of the ADRs a branch adds or changes that are still Proposed on the merged
-    tree: a failed accept must not let their plan merge."""
+    """The numbers of the ADRs in ``changes`` (the ones a branch drafted, new to main) that are
+    still Proposed on the merged tree: a failed accept must not let their plan merge (F51 D3)."""
     found = []
     for mode, path in changes:
         name = re.fullmatch(r"\.factory/adr/(\d+)-[^/]+\.md", path)
@@ -758,12 +758,15 @@ def _approve_plan(
     changed: list[str] = []
     aside: list[str] = []
     brought: dict[str, str] = {}
+    drafted: list[tuple[str, str]] = []
     if planned and branch is not None:
         changes = _drafts(git, branch)
         if (refused := _outside(branch, changes, thread, replan, running)) is not None:
             return refused
         if (refused := _owners_marks(git, branch, changes)) is not None:
             return refused
+        # an ADR already on main may stay Proposed: only a drafted one waits for its accept
+        drafted = [(mode, path) for mode, path in changes if not (repo / path).exists()]
         added, changed, aside = _ready_changes(repo, changes)
         if replan:
             brought = _brought_back(repo, changes, thread)
@@ -792,7 +795,7 @@ def _approve_plan(
             if problems := ticket_problems(repo, checked):
                 _undo(git)
                 return "not approved: " + "; ".join(problems)
-            if waiting := _proposed_adrs(repo, changes):
+            if waiting := _proposed_adrs(repo, drafted):
                 _undo(git)
                 return "not approved: " + "; ".join(
                     f"relies on ADR {n}, still Proposed: accept it first" for n in waiting
