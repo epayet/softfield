@@ -1,6 +1,7 @@
 # Milestone F142: Phone notifications: every project, and with the dashboard closed
 
-> **State:** ready · **Priority:** 1 · **Area:** factory · **Reserve:** yes
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-28. Base: git tag `f142-why-am-i-not-getting-notifications-start`. Report: [`.factory/reviews/f142-why-am-i-not-getting-notifications.md`](../reviews/f142-why-am-i-not-getting-notifications.md).
 > Planted by the owner on 2026-10-16.
 
 ## Notes

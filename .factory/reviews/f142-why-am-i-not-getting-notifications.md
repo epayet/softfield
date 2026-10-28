@@ -1,6 +1,6 @@
 # Review: F142, phone notifications from every project, and with the dashboard closed
 
-- **Status:** review round 2 done (2026-10-28): both fix tickets merged and resolved; ready for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-28.
 
 ## Sign-off sheet
 
