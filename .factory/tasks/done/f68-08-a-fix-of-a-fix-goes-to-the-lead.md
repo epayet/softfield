@@ -28,3 +28,10 @@ Read `fix_ticket` in `runner/loop.py` (the stand-in checkpoints' fix tickets), `
 - the F114 line in `docs/agents/lead.md` says the check now holds it
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
