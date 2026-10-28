@@ -34,3 +34,10 @@ The picture to build: `.factory/cards/f51-mockup/desk-bundles.html` (Proposed). 
 - a thread whose last message is the lead's, with an open `plan_message` request: not in "Your answers wanted", in Coming; the count drops by one
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
