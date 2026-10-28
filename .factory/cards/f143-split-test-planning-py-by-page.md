@@ -1,6 +1,6 @@
 # Milestone F143: Split the planning room's code and tests by page, so developers can take them
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory
 > Planted by the owner on 2026-10-16.
 
 ## Notes

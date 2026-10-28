@@ -5,7 +5,7 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 20
+priority: 3
 files:
   - runner/loop.py
   - runner/dispatch.py

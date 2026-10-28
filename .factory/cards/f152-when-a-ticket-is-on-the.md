@@ -1,6 +1,6 @@
 # Milestone F152: A done card says where its review is, and set aside says it won't run
 
-> **State:** ready · **Priority:** 9 · **Area:** factory
+> **State:** ready · **Priority:** 12 · **Area:** factory
 > Planted by the owner on 2026-10-20.
 
 ## Notes

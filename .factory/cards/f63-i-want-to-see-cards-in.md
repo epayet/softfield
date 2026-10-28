@@ -1,6 +1,6 @@
 # Milestone F63: I want to see cards in planning by order of importance.…
 
-> **State:** ready · **Priority:** 14 · **Area:** factory
+> **State:** ready · **Priority:** 5 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

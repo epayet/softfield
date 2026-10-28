@@ -5,7 +5,7 @@ difficulty: 4
 depends_on: []
 agent: lead
 area: factory
-priority: 20
+priority: 3
 finding: f104-mockups-act-like-i-can-interact-F2
 files:
   - runner/milestone.py

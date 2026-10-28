@@ -1,6 +1,6 @@
 # Milestone F84: Coming says which reply the lead is writing, and when each other one comes
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes
