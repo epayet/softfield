@@ -5,6 +5,7 @@ difficulty: 3
 depends_on: [f170-02-fix-after-try-again]
 files:
   - factory_dashboard/planning.py
+  - factory_dashboard/coming.py
   - factory_dashboard/templates/planning.html
 tests:
   - tests/factory_dashboard/test_planning.py
@@ -15,7 +16,7 @@ A blocked ticket on the desk shows the lead's fix inside its item, with "Approve
 
 ### Context
 Read `.factory/cards/f170-there-s-a-blocked-ticket-that.md` (D3) and the mock-up to build, `.factory/cards/f170-mockup/blocked-on-the-desk.html` (Proposed: both items).
-- In `factory_dashboard/planning.py`: `DeskItem` and `_blocked`. `_blocked` already finds the runner's look on the card's thread and whether the lead replied after it. Add the fix's facts to the blocked item: the card's key (`f152`), the title of the lead's first point in that reply (`points`, a JSON list, of the `planner_messages` row), and the `replan` proposal of the thread's latest proposals (`metrics.latest_proposals`): its title and how many key points. No replan in the reply: the item says the lead's fix waits on the thread, as today.
+- In `factory_dashboard/coming.py`: `DeskItem`; in `factory_dashboard/planning.py`: `_blocked`. `_blocked` already finds the runner's look on the card's thread and whether the lead replied after it. Add the fix's facts to the blocked item: the card's key (`f152`), the title of the lead's first point in that reply (`points`, a JSON list, of the `planner_messages` row), and the `replan` proposal of the thread's latest proposals (`metrics.latest_proposals`): its title and how many key points. No replan in the reply: the item says the lead's fix waits on the thread, as today.
 - The words under the ticket keep the runner's reason and "· N tickets wait behind it", without "its work is on task/…" and without today's "· the lead's fix waits on F152's thread" or "· the lead is looking at it": the plate says those now. Change the two tests that assert today's words (`test_runner_message_only_says_lead_is_looking`, `test_runner_message_then_lead_says_waits_on_thread`).
 - In `factory_dashboard/templates/planning.html`, the `blocked` group's `article.blocked-ticket`: the "The lead's fix" plate under the link, as the mock-up draws it (its stripe and corner tick use `--hazard`, `--hazard-ink` and `--ink-2` only); "read it on F152's thread ›" links to `/planning/f152`.
 - "Approve the lead's fix" posts what the Approve plan button of `factory_dashboard/templates/proposal.html` posts (`approve_plan`, the card's key as `subject`) and shows the item on its way with `blockedOnItsWay(this, 'Approving the lead's fix at the runner's next pick')`. "Try again as it is" posts today's `queue` request, with the caveat line under the buttons.

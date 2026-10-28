@@ -3248,8 +3248,8 @@ def test_other_kinds_say_what_and_where(db_path):
     """Items of kind ``adr``, ``blocked``, ``escalated``, ``reserve`` and ``five-hour``,
     the stopped runner and the idle queue: the title D1's table gives, the item's text as
     the body, link ``/``."""
+    from factory_dashboard.coming import _card_titles
     from factory_dashboard.overview import Need, notices
-    from factory_dashboard.planning import _card_titles
 
     conn = metrics.open_db(db_path)
     try:
@@ -3346,8 +3346,8 @@ def test_data_notices_has_the_ids(serve_between, db_path):
 
 def test_notices_encode_project_with_special_characters(db_path):
     """f114-03: notice links URL-encode the project so names with & or # are not truncated."""
+    from factory_dashboard.coming import _card_titles
     from factory_dashboard.overview import Need, notices
-    from factory_dashboard.planning import _card_titles
 
     conn = metrics.open_db(db_path)
     try:
@@ -3382,8 +3382,8 @@ def test_notices_encode_project_with_special_characters(db_path):
 
 def test_planning_notice_falls_back_to_card_key_when_no_title(serve_between, db_path):
     """A card without a title in the database uses its key as the notice title."""
+    from factory_dashboard.coming import _card_titles
     from factory_dashboard.overview import Need, notices
-    from factory_dashboard.planning import _card_titles
 
     conn = metrics.open_db(db_path)
     try:
@@ -3407,8 +3407,8 @@ def test_planning_notice_falls_back_to_card_key_when_no_title(serve_between, db_
 
 def test_signoff_notice_uses_short_key_for_full_milestone_key(serve_between, db_path):
     """f114-04: a signoff notice for a full milestone key uses short_key to produce the link."""
+    from factory_dashboard.coming import _card_titles
     from factory_dashboard.overview import Need, notices
-    from factory_dashboard.planning import _card_titles
 
     conn = metrics.open_db(db_path)
     try:

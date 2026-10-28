@@ -18,6 +18,19 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.board import RESERVABLE, milestone_cards
+from factory_dashboard.coming import (
+    _MAX_REQUEST_ID,
+    GENERAL,
+    _edit_words,
+    _edited,
+    _held,
+    _message_thread,
+    _next_reply,
+    _retried,
+    _when,
+    _writing,
+    reply_line,
+)
 from factory_dashboard.line import live_line
 from factory_dashboard.merges import (
     _gone_merge,
@@ -28,22 +41,7 @@ from factory_dashboard.merges import (
 )
 from factory_dashboard.milestones import _to_html
 from factory_dashboard.overview import Change, open_changes, running_jobs
-from factory_dashboard.planning import (
-    _MAX_REQUEST_ID,
-    GENERAL,
-    _edit_words,
-    _edited,
-    _held,
-    _message_thread,
-    _next_reply,
-    _open_proposals,
-    _repo,
-    _retried,
-    _when,
-    _writing,
-    desk_trail,
-    reply_line,
-)
+from factory_dashboard.planning import _open_proposals, _repo, desk_trail
 from runner import metrics
 from runner.planner import (
     APPROVED,

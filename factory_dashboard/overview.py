@@ -25,7 +25,7 @@ from runner.state import load_state
 from runner.tasks import milestone_order
 
 if TYPE_CHECKING:
-    from factory_dashboard.planning import DeskItem  # planning.py imports from here
+    from factory_dashboard.coming import DeskItem  # coming.py imports from here
 
 router = APIRouter()
 
@@ -731,9 +731,9 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
     the run order)."""
     from factory_dashboard.board import reserve_marked  # board.py imports from here
+    from factory_dashboard.coming import _card_titles  # coming.py imports from overview
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
     from factory_dashboard.planning import (  # planning.py imports from overview at module level
-        _card_titles,
         _open_proposals,
         desk,
         waiting_for_you,
