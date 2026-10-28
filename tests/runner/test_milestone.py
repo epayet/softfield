@@ -732,6 +732,59 @@ def test_a_replanned_milestones_review_diffs_from_its_first_merge(repo, monkeypa
     assert git(repo, "rev-parse", "f9-start^{commit}").strip() == before
 
 
+def test_a_ticket_built_in_a_terminal_session_starts_the_review_at_its_commit(repo, monkeypatch):
+    """bug-01 (F104): no `Task:` trailer, the card's doc planted long before; the commit whose
+    subject names the ticket (by its short id) is where the review starts."""
+    (repo / ".factory" / "cards").mkdir(parents=True)
+    (repo / ".factory" / "cards" / "f9.md").write_text(MILESTONE_DOC)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "plan f9, long ago")
+    (repo / "other.txt").write_text("another milestone's work")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f8-01-x: other work\n\nTask: f8-01-x")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "runner: f9-01-a is next")
+    before = git(repo, "rev-parse", "HEAD").strip()
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "f10-02, f9-01: built by hand")
+    monkeypatch.setattr(milestone, "review_milestone", lambda cfg, key, base, **kw: "clean")
+    milestone.run_due_review(_config(repo), "f9")
+    assert git(repo, "rev-parse", "f9-start^{commit}").strip() == before
+
+
+def _scope_repo(repo):
+    milestone_ticket(repo, "done", "f9-01-a", "f9")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "plan")
+    git(repo, "tag", "f9-start")
+    return open_session(_config(repo), None)
+
+
+def test_round_one_reads_the_diff_when_only_its_own_commits_are_in_range(repo):
+    s = _scope_repo(repo)
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f9-01-a: the work\n\nTask: f9-01-a")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "runner: f9-01-a done")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "review f8 round 1 (by Claude)")
+    assert milestone._first_scope(s, "f9", "f9-start") == (
+        "Review the whole milestone diff: `git diff f9-start..main`."
+    )
+
+
+def test_round_one_lists_its_commits_when_others_work_is_in_range(repo):
+    s = _scope_repo(repo)
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f8-01-x: other\n\nTask: f8-01-x")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f9-01-a: the work\n\nTask: f9-01-a")
+    mine = git(repo, "rev-parse", "HEAD").strip()[:9]
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f12-03, f9-01: by hand")
+    both = git(repo, "rev-parse", "HEAD").strip()[:9]
+    git(repo, "commit", "-q", "--allow-empty", "-m", "runner: session report")
+    scope = milestone._first_scope(s, "f9", "f9-start")
+    assert "`git diff" not in scope
+    assert f"- f9-01-a: `git show {mine}`" in scope
+    assert f"`git show {both}`" in scope and "only f9-01-a is this milestone's" in scope
+    assert "f8-01-x" not in scope
+
+
 # --- a review Claude can't take now (F53 D1) ------------------------------------------------
 
 

@@ -91,6 +91,7 @@ What developers pass at the first attempt, from results. Update it at each miles
 ## Your own work
 - Everything in `.factory/protected-paths.txt`, test-first. Keep that list current as security-relevant files appear; it's protected itself.
 - Changes to protected paths get isolation tests in the same commit.
+- **A commit that builds a ticket names the ticket's id in its subject** (bug-01): in a terminal session there is no `Task:` trailer, and the milestone's review finds its work by that id.
 - Every commit goes through the pre-commit hook, `softfield check-all` (`git config core.hooksPath .factory/hooks`; docs- and tasks-only commits skip it). Developers' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did). Never pipe a check through `| tail`: it hides the exit code.
 
 - **A terminal session beside a running runner works in its own worktree** (2026-10-08): the runner checks task and plan branches out in the main folder, so a lead's commits there land on whatever it has checked out. That day ten of them went onto a developer's `task/` branch, and its gates then failed on a protected path the lead had changed. Work in `git worktree add ../<repo>-lead -b lead/<topic> main`, and merge into main only while the runner is stopped (or paused on main), checking `git branch --show-current` first.

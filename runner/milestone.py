@@ -536,17 +536,54 @@ def _done_tickets(repo: Path, milestone: str) -> list[str]:
     return found
 
 
+_TICKET_ID = re.compile(r"\b(?:f\d+|bug|m\d+)-\d+\b")
+_REVIEW_SUBJECT = re.compile(r"review \S+ round \d+ \(by Claude\)")
+
+
+def _short_id(ticket: str) -> str:
+    """``f104-01`` for ``f104-01-mockups``: how a commit subject names a ticket."""
+    found = re.match(r"[a-z]+\d*-\d+", ticket)
+    return found[0] if found else ticket
+
+
+def _named_in(subject: str, tickets: list[str]) -> list[str]:
+    """The tickets a commit subject names, by id or short id."""
+    return [t for t in tickets if re.search(rf"(?<![\w-]){re.escape(_short_id(t))}(?!\d)", subject)]
+
+
+def _is_runner_commit(subject: str) -> bool:
+    return subject.startswith("runner:") or bool(_REVIEW_SUBJECT.fullmatch(subject))
+
+
+def _commits(git: Git, spec: str, *extra: str) -> list[tuple[str, str, str]]:
+    """``(sha, subject, body)`` of the commits in ``spec``, oldest first."""
+    log = git.run("log", "--reverse", "--format=%H%x1f%s%x1f%b%x1e", *extra, spec)
+    out = []
+    for entry in log.split("\x1e"):
+        sha, _, rest = entry.strip().partition("\x1f")
+        subject, _, body = rest.partition("\x1f")
+        if sha:
+            out.append((sha, subject, body))
+    return out
+
+
 def _plan_commit(git: Git, repo: Path, milestone: str) -> str:
     """Where the milestone's work starts: the parent of its first ticket's merge (a `Task:`
-    trailer), else the commit that added its doc, else HEAD (where `run_milestone` tags). A
-    replanned milestone's doc can be far older than its work: F3's dated from F1, and its
-    review read all of F2 and F4 (f3-F5)."""
+    trailer), else of the first commit whose subject names one of its tickets (built in a
+    terminal session, bug-01), else the commit that added its doc, else HEAD (where
+    `run_milestone` tags). A replanned milestone's doc can be far older than its work: F3's
+    dated from F1, and its review read all of F2 and F4 (f3-F5)."""
     tickets = _done_tickets(repo, milestone)
     if tickets:
         trailer = "^Task: (" + "|".join(re.escape(t) for t in tickets) + ")$"
         merges = git.run("log", "-E", f"--grep={trailer}", "--format=%H").split()
         if merges and git.run("rev-list", "--parents", "-n", "1", merges[-1]).split()[1:]:
             return f"{merges[-1]}^"
+        for sha, subject, _ in _commits(git, "HEAD"):
+            if not _is_runner_commit(subject) and _named_in(subject, tickets):
+                if git.run("rev-list", "--parents", "-n", "1", sha).split()[1:]:
+                    return f"{sha}^"
+                break
     doc = milestone_file(repo, "cards", milestone)
     if not doc.is_file():
         return "HEAD"
@@ -602,6 +639,41 @@ def _fix_scope(s: Session, milestone: str, since: str) -> str:
     )
 
 
+def _first_scope(s: Session, milestone: str, base: str) -> str:
+    """What round 1 reads: the whole diff from ``base``, or, when commits of other work sit in
+    the range (another milestone's merge, a terminal session's commit), this milestone's own
+    commits one by one. The runner's own commits count for neither."""
+    mine = _done_tickets(s.repo, milestone)
+    own = []
+    others = False
+    for sha, subject, body in _commits(s.git, f"{base}..{MAIN}"):
+        if _is_runner_commit(subject):
+            continue
+        task = parse_trailers(body).get("Task")
+        named = _named_in(subject, mine)
+        tickets = [task] if task in mine else named
+        if not tickets:
+            others = True
+            continue
+        mixed = any(t not in {_short_id(m) for m in mine} for t in _TICKET_ID.findall(subject))
+        own.append((sha, tickets, mixed))
+    if not others:
+        return f"Review the whole milestone diff: `git diff {base}..{MAIN}`."
+    lines = []
+    for sha, tickets, mixed in own:
+        line = f"- {', '.join(tickets)}: `git show {sha[:9]}`"
+        if mixed:
+            line += (
+                f" (holds other tickets' work too: only {', '.join(tickets)} is this milestone's)"
+            )
+        lines.append(line)
+    return (
+        "Review this milestone's own commits: other work was committed in the same range, so"
+        " the range's diff is not the milestone's. Read only these, and leave the other commits"
+        " out. The milestone's commits:\n" + ("\n".join(lines) or "none")
+    )
+
+
 PARKED = "parked"  # no stop: the review waits in the queue for Claude (F53 D1)
 
 
@@ -641,9 +713,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
             break
         out = s.run_dir / f"review-{milestone}-r{round_no}.json"
         scope = (
-            f"Review the whole milestone diff: `git diff {base}..{MAIN}`."
-            if round_no == 1
-            else _fix_scope(s, milestone, since)
+            _first_scope(s, milestone, base) if round_no == 1 else _fix_scope(s, milestone, since)
         )
         job = JobSpec(
             role="review",
