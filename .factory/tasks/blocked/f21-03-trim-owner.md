@@ -33,3 +33,9 @@ Read `.factory/cards/f21-lead-briefs.md` (D3) and `docs/agents/owner.md`.
 result: blocked
 reason: the lead ticket changed nothing
 ```
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the lead ticket changed nothing
+```
