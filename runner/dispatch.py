@@ -3,7 +3,9 @@
 Pure: the queued jobs, the ready tickets, Claude's windows and the time are parameters; the
 callers read the metrics database, ``.factory/tasks/`` and ``state.json``.
 
-- First by kind: planner, escalation, direction, checkpoint, review, then tickets: a parked
+- A ticket whose finished attempt waits only for its gates (a regate) goes right after the
+  planner's jobs: its gates need no model, and main moving on would throw its work away.
+- Then by kind: planner, escalation, direction, checkpoint, review, then tickets: a parked
   ticket whose reset has passed, then lead tickets, then developer tickets, each in the run
   order the caller gives (`pick_next`'s: priority, milestone, id, or the place of the ticket
   that waits for it). Queued jobs of one kind
@@ -73,6 +75,7 @@ class Ticket:
     waits: str | None = None  # a dependency, a pause, a sign-off: never picked
     not_before: datetime | None = None  # parked for a Claude limit until then
     early_for: str | None = None  # the ticket it runs early for: that one waits for it (F173 D7)
+    regate: bool = False  # its attempt finished and only its gates wait (`state.regate`)
 
 
 @dataclass(frozen=True)
@@ -124,9 +127,12 @@ def plan(
     pauses the factory (ADR 22 item 5), every one waits for them but a planner job, which
     keeps its own wait (its ⚑, f6-14)."""
     rows = sorted(queued, key=lambda q: (_rank(q.kind), _at(q.created), q.id or 0))
-    lines = [_queued_line(q, windows, now) for q in rows if q.kind in KINDS]
     ordered = sorted(tickets, key=lambda t: _ticket_rank(t, now))  # stable: the run order
-    lines += [_ticket_line(t, windows, now) for t in ordered]
+    regate = [_ticket_line(t, windows, now) for t in ordered if t.regate]
+    lines = [_queued_line(q, windows, now) for q in rows if q.kind == PLANNER]
+    lines += regate  # after the planner's jobs, before every other job (bug-04)
+    lines += [_queued_line(q, windows, now) for q in rows if q.kind in KINDS and q.kind != PLANNER]
+    lines += [_ticket_line(t, windows, now) for t in ordered if not t.regate]
     unknown = [q for q in rows if q.kind not in KINDS]
     lines += [Line(Pick(q.kind, q.subject, q.reason), UNKNOWN_KIND) for q in unknown]
     if not paused:
@@ -139,6 +145,8 @@ def _rank(kind: str) -> int:
 
 
 def _ticket_rank(t: Ticket, now: datetime) -> int:
+    if t.regate:
+        return -1  # its gates run before anything else but the planner's jobs (`_next_task`)
     if t.not_before is not None and t.not_before <= now and t.waits is None:
         return 0  # parked, and its reset has passed: it goes first (`_next_task`)
     return 1 if t.lead else 2
@@ -154,12 +162,15 @@ def _queued_line(q: Queued, windows: Windows, now: datetime) -> Line:
 def _ticket_line(t: Ticket, windows: Windows, now: datetime) -> Line:
     who = "lead" if t.lead else "developer"
     place = f"early for {t.early_for}" if t.early_for else f"priority {t.priority}"
-    reason = f"{place}, {who} ticket"
+    reason = "its gates wait" if t.regate else place
+    reason += f", {who} ticket"
     if t.not_before is not None and t.not_before <= now:
         reason += ", its reset has passed"
     job = Pick(TICKET, t.id, reason)
     if t.waits is not None:
         return Line(job, t.waits)
+    if t.regate:
+        return Line(job, None)  # its gates need no Claude: no limit or reserve holds them
     if t.not_before is not None and t.not_before > now:
         return Line(job, f"waits until {_when(t.not_before, now)}")
     if not t.lead:

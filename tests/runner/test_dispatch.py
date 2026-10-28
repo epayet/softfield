@@ -1,5 +1,6 @@
 """The picker (ADR 22 item 2, f8 D2): which job runs next and why. It is pure, so no repo."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from runner import allowance
@@ -190,6 +191,31 @@ def test_while_the_owner_pauses_every_line_waits_and_nothing_is_picked():
         assert [line.waits for line in lines] == ["paused by you"] * 6
         assert pick(queued, tickets, windows, NOW, paused=True) is None
     assert pick(queued, tickets, OPEN, NOW, paused=False) is not None
+
+
+def test_a_ticket_waiting_for_its_gates_goes_right_after_the_planner_jobs():
+    """bug-04: its gates take about 5 minutes and no model, and main moving on throws its
+    finished work away."""
+    queued = [_row("review", "f7"), _row("escalation", "f8-04"), _row("planner", "f9")]
+    tickets = [_lead("f8-02", 1), _dev("f8-07", 5, regate=True)]
+    lines = plan(queued, tickets, OPEN, NOW)
+    assert _order(lines) == [
+        ("planner", "f9"),
+        ("ticket", "f8-07"),
+        ("escalation", "f8-04"),
+        ("review", "f7"),
+        ("ticket", "f8-02"),
+    ]
+    assert lines[1].pick.reason == "its gates wait, developer ticket"
+    assert pick(queued[:2], tickets, OPEN, NOW) == lines[1].pick
+
+
+def test_a_regate_ticket_never_waits_for_claude_but_waits_for_what_holds_it():
+    limited = Windows(limited_until=NOW + timedelta(hours=2))
+    held = _lead("f8-02", 1, regate=True)
+    assert pick([], [held], limited, NOW) == Pick("ticket", "f8-02", "its gates wait, lead ticket")
+    assert pick([], [replace(held, waits="paused")], limited, NOW) is None
+    assert pick([], [held], OPEN, NOW, paused=True) is None
 
 
 def test_while_the_owner_pauses_a_planner_job_still_goes_and_keeps_its_own_wait():

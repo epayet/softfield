@@ -393,6 +393,50 @@ def test_a_developer_ticket_a_lead_ticket_waits_for_is_pulled_in_the_developer_p
     loop.close_session(s)
 
 
+def _regate_session(repo: Path, monkeypatch, *, limited: bool = False, **tickets: str):
+    """A session with f9-01 (a developer's) waiting only for its gates, f1-01 (better place) and
+    f2-01 (lead) ready too. ``tickets`` overrides f9-01's ``deps``."""
+    _on_card(repo, "f1-01-first", 1)
+    _on_card(repo, "f2-01-lead", 2, agent="lead")
+    _on_card(repo, "f9-01-gates", 9, **tickets)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    s = loop.open_session(_config(repo), None)
+    s.state.regate["f9-01-gates"] = {"attempt": 1, "agent": "local"}
+    monkeypatch.setattr(loop, "_limits_ahead", lambda *a, **k: [object()] if limited else [])
+    monkeypatch.setattr(loop, "_waits_for_the_owner", lambda *a: limited)
+    return s, load_dir(repo / ".factory" / "tasks" / "ready", 150)
+
+
+def test_a_ticket_waiting_only_for_its_gates_is_picked_before_better_tickets(repo, monkeypatch):
+    """bug-04: f19-01's finished attempt waited five hours behind five tickets, main moved, and
+    its work was thrown away."""
+    s, ready = _regate_session(repo, monkeypatch)
+    task = loop._next_task(s, ready, set(), set())
+    assert task is not None and task.id == "f9-01-gates"
+    assert loop._dispatch_ticket(s, task, ready).regate
+    other = next(t for t in ready if t.id == "f1-01-first")
+    assert not loop._dispatch_ticket(s, other, ready).regate
+    loop.close_session(s)
+
+
+def test_a_regate_ticket_is_picked_while_claude_is_limited_or_at_its_reserve(repo, monkeypatch):
+    s, ready = _regate_session(repo, monkeypatch, limited=True)
+    task = loop._next_task(s, ready, set(), set())
+    assert task is not None and task.id == "f9-01-gates"
+    loop.close_session(s)
+
+
+def test_a_regate_ticket_that_waits_waits_as_today(repo, monkeypatch):
+    s, ready = _regate_session(repo, monkeypatch, deps="[f8-01-missing]")
+    task = loop._next_task(s, ready, set(), set())
+    assert task is not None and task.id == "f1-01-first"
+    s.state.regate["f9-01-gates"] = {"attempt": 1, "agent": "local"}
+    task = loop._next_task(s, ready, {"f8-01-missing"}, {"f9-01-gates"})  # paused
+    assert task is not None and task.id == "f1-01-first"
+    loop.close_session(s)
+
+
 def test_a_signed_off_milestone_releases_the_tickets_waiting_for_it(repo, capsys):
     _waiting_milestones(repo)
     (repo / ".factory" / "cards" / "m1-first.md").write_text(

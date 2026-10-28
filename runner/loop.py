@@ -4348,7 +4348,9 @@ def work_stands(
             # a dependency in the block's words: "waits for <id>"
             ticket.waits and ticket.waits.replace("waiting on ", "waits for ", 1),
         )
-        for ticket in _dispatch_tickets(cfg.repo, ready, done, paused, state.parked, now(), behind)
+        for ticket in _dispatch_tickets(
+            cfg.repo, ready, done, paused, state.parked, now(), behind, state.regate.keys()
+        )
     ]
     return planner.where_it_stands(state.in_flight, listed, _all_cards(cfg.repo), minutes)
 
@@ -4769,7 +4771,9 @@ def _waits_for_the_owner(s: Session, at: datetime, task: Task, marked: set[str])
 
 
 def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) -> Task | None:
-    """Parked tickets whose reset has passed go first; while Claude is limited, only work that
+    """A ticket waiting only for its gates (`state.regate`) goes first, whatever Claude's state:
+    its gates run before main moves on and its work is thrown away. Then parked tickets whose
+    reset has passed; while Claude is limited, only work that
     needs no Claude: developer tickets, which local takes. At Claude's reserve or the owner's
     share of its 5-hour window with its switch off, developer tickets go before lead ones, so
     a lead ticket parks only when nothing else can run (ADR 15 item 5, ADR 16 item 3); then the
@@ -4779,6 +4783,9 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
     at = now()
     cards = _cards(s.repo, ready)
     pulled = pulls(ready, cards)
+    gates_wait = [t for t in ready if t.id in s.state.regate]  # no Claude needed (bug-04)
+    if (task := pick_next(gates_wait, done, paused, cards, pulled)) is not None:
+        return task
     held = {t.id for t in ready if t.id in s.state.parked}
     due = [t for t in ready if t.id in held and _due(s.state.parked[t.id], at)]
     if (task := pick_next(due, done, paused, cards, pulled)) is not None:
@@ -5212,7 +5219,10 @@ def _dispatch_ticket(s: Session, task: Task, ready: list[Task]) -> dispatch.Tick
     lead = router.lead_only(task.agent, task.files, tuple(read_protected(s.repo)))
     cards = _cards(s.repo, ready)
     early = early_for(task, cards, pulls(ready, cards))
-    return dispatch.Ticket(task.id, lead, task_priority(task, cards), early_for=early)
+    regate = task.id in s.state.regate
+    return dispatch.Ticket(
+        task.id, lead, task_priority(task, cards), early_for=early, regate=regate
+    )
 
 
 def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> SessionReport | None:
@@ -5553,7 +5563,9 @@ def dry_run_plan(cfg: Config) -> None:
     behind = {
         q.subject: f"waits for its {q.kind}" for q in queued if q.kind in (DIRECTION, ESCALATION)
     }
-    tickets = _dispatch_tickets(cfg.repo, ready, done, paused, state.parked, at, behind)
+    tickets = _dispatch_tickets(
+        cfg.repo, ready, done, paused, state.parked, at, behind, state.regate.keys()
+    )
     windows = dispatch.Windows(
         _kept_back(cfg, _windows_from(readings, at)),
         _limited_until(state.parked, at),
@@ -5605,6 +5617,7 @@ def _dispatch_tickets(
     parked: Mapping[str, dict[str, Any]],
     at: datetime,
     behind: Mapping[str, str] | None = None,
+    regate: Collection[str] = (),
 ) -> list[dispatch.Ticket]:
     """The ready tickets in run order (f5 D6), each with what it waits for, as `_next_task`
     sees them: a ticket parked at the reserve waits for the owner, one parked for a limit
@@ -5633,7 +5646,8 @@ def _dispatch_tickets(
             not_before = at if entry.get(RETRY) else _resets(entry)
         lead = router.lead_only(task.agent, task.files, protected)
         priority, early = task_priority(task, cards), early_for(task, cards, pulled)
-        tickets.append(dispatch.Ticket(task.id, lead, priority, waits, not_before, early))
+        gates = task.id in regate
+        tickets.append(dispatch.Ticket(task.id, lead, priority, waits, not_before, early, gates))
     return tickets
 
 
