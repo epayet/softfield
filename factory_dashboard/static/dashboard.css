@@ -48,6 +48,10 @@
   --body: "Barlow", "Segoe UI", system-ui, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
   --sans: var(--body);
+  /* plate ornament: ink ticks, hazard stripe, corner cut */
+  --tick: var(--ink-2);
+  --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+  --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
 }
 /* Light when the owner chooses (:root[data-theme="light"]): a pale floor, the same hazard yellow
    and orange, ink at 4.5:1 or better on every plate; the other agent colours darkened to show */
@@ -67,7 +71,12 @@
 }
 
 * { box-sizing: border-box; }
-body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--body); margin: 0; }
+body {
+  background-color: var(--bg);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 32px 32px;
+  color: var(--ink); font: 15px/1.5 var(--body); margin: 0; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -144,12 +153,22 @@ main { max-width: 1240px; margin: 0 auto; padding: 14px 16px 48px; }
 .page { display: grid; gap: 14px; }
 .row, .cols { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); align-items: start; }
 #plant-row { display: contents; }
-.panel { background: var(--surface); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+.panel { background: var(--surface); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0;
+  position: relative; }
 .panel.needs { border-color: var(--warn); }
-.panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; color: var(--ink);
-  margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; }
-.panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted);
-  margin-left: auto; }
+.panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+.panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+.panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+/* remove top padding only when the plate header is first */
+.panel:has(> h2:first-child) { padding-top: 0; }
+.panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+  background: var(--plate); border-bottom: 1px solid var(--rule);
+  font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+.panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+.panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+.panel.needs > h2 { background: var(--hazard); color: var(--hazard-ink); }
+.panel.needs > h2::after { background: repeating-linear-gradient(-45deg, var(--hazard-ink) 0 6px, transparent 6px 12px); opacity: .35; }
+.panel.needs > h2 .src { color: var(--hazard-ink); }
 .panel > p { margin: 0 0 8px; }
 .panel > p:last-child { margin-bottom: 0; }
 h1 { font: 700 20px/1.2 var(--display); letter-spacing: .03em; margin: 0; text-wrap: balance; }
@@ -795,7 +814,7 @@ body.has-order-bar main { padding-bottom: 120px; }
   border-bottom: 1px solid var(--rule); padding-left: 26px; }
 .aside .plate b { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; }
 .aside .plate span { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
-.aside::before, .aside::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--ink-2); }
+.aside::before, .aside::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--tick); }
 .aside::before { left: -1px; bottom: -1px; border-width: 0 0 2px 2px; }
 .aside::after { right: -1px; bottom: -1px; border-width: 0 2px 2px 0; }
 .aside .say { font-size: 15px; margin: 0 0 6px; }
@@ -840,13 +859,13 @@ body.has-order-bar main { padding-bottom: 120px; }
 
 /* "What it's about" section on the card's page (f158-01) */
 .about { background: var(--bay); border: 1px solid var(--rule); position: relative; }
-.about::before, .about::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--ink-2); }
+.about::before, .about::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
 .about::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
 .about::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
 .about > header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--plate);
   border-bottom: 1px solid var(--rule); }
 .about > header h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; margin: 0; }
-.about > header .stripe { flex: 1; height: 8px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px); opacity: .55; }
+.about > header .stripe { flex: 1; height: 8px; background: var(--stripe); opacity: .55; }
 .about > header .src { font: 11px var(--mono); color: var(--muted); }
 .about .body { padding: 10px 14px 12px; }
 .about .label { font: 600 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 10px 0 4px; }

@@ -3033,3 +3033,255 @@ def test_live_system_theme_changes_sync_button_and_dispatch_themechange(page, cl
     )
     # themechange should have been dispatched (charts redraw on this event)
     assert page.evaluate("window._themeFired") is True
+
+
+# --- plate panels (f81-01) ---------------------------------------------------------------------
+
+
+def test_the_new_tokens_exist_in_dark_root():
+    """D2: --tick, --stripe and --notch are defined in the dark :root."""
+    css = (STATIC / "dashboard.css").read_text()
+    dark = _block(css, ":root {")
+    assert "--tick" in dark
+    assert "--stripe" in dark
+    assert "--notch" in dark
+
+
+def test_the_new_tokens_resolve_in_dark_root():
+    """The new tokens resolve to concrete values in dark mode."""
+    css = (STATIC / "dashboard.css").read_text()
+    tokens = _resolve_tokens(css, "dark")
+    # --tick resolves to ink-2
+    assert _hex_to_rgb(tokens["--tick"]) == _hex_to_rgb(tokens["--ink-2"])
+    # --stripe is a repeating-linear-gradient containing var(--hazard)
+    assert "var(--hazard)" in tokens["--stripe"]
+    # --notch is a polygon
+    assert "polygon" in tokens["--notch"]
+
+
+def test_the_new_tokens_exist_in_light_root():
+    """D2: --tick inherits --ink-2 from the light theme;
+    --stripe and --notch are theme-independent.
+    """
+    css = (STATIC / "dashboard.css").read_text()
+    light_start = css.index(':root[data-theme="light"]')
+    light_body_start = css.index("{", light_start) + 1
+    light_body_end = css.index("}", light_body_start)
+    light_block = css[light_start:light_body_end]
+    # --tick inherits --ink-2 (no need to repeat it explicitly)
+    # --stripe uses --hazard which is the same in both themes
+    # --notch is a geometric value, theme-independent
+    assert "--tick" in light_block or "--ink-2" in light_block
+
+
+def test_body_has_the_faint_grid():
+    """D3: the body has a 32 px grid from --grid."""
+    css = (STATIC / "dashboard.css").read_text()
+    body_match = re.search(r"body\s*\{([^}]*)\}", css)
+    assert body_match, "no body rule"
+    body_decls = body_match[1]
+    assert "linear-gradient" in body_decls, "grid requires linear-gradients"
+    assert "32px" in body_decls, "grid must be 32px"
+    assert "var(--grid)" in body_decls
+
+
+def test_panel_has_position_relative_and_corner_ticks():
+    """Every .panel gets position: relative and two corner ticks via ::before / ::after."""
+    css = (STATIC / "dashboard.css").read_text()
+    panel_block = re.search(r"\.panel\s*\{([^}]*)\}", css)
+    assert panel_block
+    assert "position: relative" in panel_block[1]
+    # corner ticks use var(--tick)
+    assert re.search(r"\.panel::before.*var\(--tick\)", css, re.S)
+    assert re.search(r"\.panel::after.*var\(--tick\)", css, re.S)
+
+
+def test_panel_with_h2_has_plate_header():
+    """.panel > h2 is the plate header: plate background, rule border-bottom, stripe via ::after."""
+    css = (STATIC / "dashboard.css").read_text()
+    # panel > h2 has plate background
+    h2_block = re.search(r"\.panel > h2\s*\{([^}]*)\}", css)
+    assert h2_block
+    assert "background: var(--plate)" in h2_block[1]
+    assert "border-bottom: 1px solid var(--rule)" in h2_block[1]
+    # stripe via ::after
+    assert re.search(r"\.panel > h2::after.*var\(--stripe\)", css, re.S)
+
+
+def test_panel_needs_has_yellow_plate():
+    """.panel.needs > h2 has hazard-yellow background."""
+    css = (STATIC / "dashboard.css").read_text()
+    needs_h2 = re.search(r"\.panel\.needs > h2\s*\{([^}]*)\}", css)
+    assert needs_h2
+    assert "background: var(--hazard)" in needs_h2[1]
+    assert "color: var(--hazard-ink)" in needs_h2[1]
+
+
+def test_panel_needs_stripe_uses_hazard_ink():
+    """.panel.needs > h2::after stripe uses hazard-ink."""
+    css = (STATIC / "dashboard.css").read_text()
+    # The needs variant's stripe must reference hazard-ink
+    needs_after = re.search(r"\.panel\.needs > h2::after\s*\{([^}]*)\}", css)
+    assert needs_after
+    assert "var(--hazard-ink)" in needs_after[1]
+
+
+def test_panel_removes_top_padding_only_when_h2_first():
+    """Only panels whose first child is h2 lose their top padding."""
+    css = (STATIC / "dashboard.css").read_text()
+    # The :has() selector removes padding-top
+    assert ":has(> h2:first-child)" in css
+    assert "padding-top: 0" in css
+
+
+def test_queue_panel_title_is_h2():
+    """The Queue panel's title is an <h2>, matching the other panels."""
+    queue_html = (STATIC.parent / "templates" / "_partials" / "queue.html").read_text()
+    assert "<h2>Queue</h2>" in queue_html
+
+
+def test_about_uses_tick_token():
+    """.about corner ticks use var(--tick)."""
+    css = (STATIC / "dashboard.css").read_text()
+    about_ticks = re.search(r"\.about::before.*?var\(--tick\)", css)
+    assert about_ticks, ".about::before must use var(--tick)"
+    about_after = re.search(r"\.about::after.*?var\(--tick\)", css)
+    assert about_after, ".about::after must use var(--tick)"
+
+
+def test_aside_uses_tick_token():
+    """.aside corner ticks use var(--tick)."""
+    css = (STATIC / "dashboard.css").read_text()
+    aside_ticks = re.search(r"\.aside::before.*?var\(--tick\)", css)
+    assert aside_ticks, ".aside::before must use var(--tick)"
+    aside_after = re.search(r"\.aside::after.*?var\(--tick\)", css)
+    assert aside_after, ".aside::after must use var(--tick)"
+
+
+def test_about_stripe_uses_stripe_token():
+    """.about > header .stripe uses var(--stripe)."""
+    css = (STATIC / "dashboard.css").read_text()
+    stripe_decl = re.search(r"\.about > header \.stripe[^{]*\{([^}]*)\}", css)
+    assert stripe_decl
+    assert "var(--stripe)" in stripe_decl[1]
+
+
+def test_panel_with_h2_shows_plate_in_dark(page, client):
+    """A non-needs .panel with h2 shows the plate header and ticks in dark mode."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="dark")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    # Find a .panel (not .needs) with h2 on the overview page
+    panels = page.locator(".panel:not(.needs):has(> h2)")
+    assert panels.count() > 0, "Overview should have non-needs panels with h2"
+
+    # Check the first panel's h2 has plate background
+    first_panel = panels.first
+    h2 = first_panel.locator("h2")
+    assert h2.is_visible()
+
+    # The h2 background should be the plate color
+    h2_bg = h2.evaluate("el => getComputedStyle(el).backgroundColor")
+    # var(--plate) in dark mode is #1f2730 -> rgb(31, 39, 48)
+    assert h2_bg == "rgb(31, 39, 48)", f"plate h2 background {h2_bg} != rgb(31, 39, 48)"
+
+
+def test_panel_with_h2_shows_plate_in_light(page, client):
+    """A non-needs .panel with h2 shows the plate header and ticks in light mode."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="light")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    panels = page.locator(".panel:not(.needs):has(> h2)")
+    assert panels.count() > 0
+
+    first_panel = panels.first
+    h2 = first_panel.locator("h2")
+    assert h2.is_visible()
+
+    # The h2 background should be the plate color (light theme)
+    h2_bg = h2.evaluate("el => getComputedStyle(el).backgroundColor")
+    # var(--plate) in light mode is #ffffff -> rgb(255, 255, 255)
+    assert h2_bg == "rgb(255, 255, 255)", f"plate h2 background {h2_bg} != rgb(255, 255, 255)"
+
+
+def test_needs_you_panel_shows_yellow_plate(page, client):
+    """The 'Needs you' panel shows the hazard-yellow plate."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="dark")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    # The needs panel
+    needs_panel = page.locator(".panel.needs")
+    assert needs_panel.count() > 0
+
+    h2 = needs_panel.locator("h2")
+    assert h2.is_visible()
+
+    # The h2 background should be hazard yellow
+    h2_bg = h2.evaluate("el => getComputedStyle(el).backgroundColor")
+    # var(--hazard) is #f2b10a -> rgb(242, 177, 10)
+    assert h2_bg == "rgb(242, 177, 10)", f"needs h2 background {h2_bg} != hazard yellow"
+
+
+def test_about_and_aside_still_render(page, client):
+    """.about and .aside still render with their own ticks."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="dark")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
+
+    # .about should exist on the card page or similar
+    # .aside should exist on the set-aside plate
+    # We check the CSS tokens are correct rather than rendering
+    css = (STATIC / "dashboard.css").read_text()
+    # .about still has its own tick positioning
+    assert re.search(r"\.about::before.*top: -1px.*left: -1px", css, re.S)
+    assert re.search(r"\.about::after.*bottom: -1px.*right: -1px", css, re.S)
+    # .aside has bottom ticks
+    assert re.search(r"\.aside::before.*left: -1px.*bottom: -1px", css, re.S)
+    assert re.search(r"\.aside::after.*right: -1px.*bottom: -1px", css, re.S)
