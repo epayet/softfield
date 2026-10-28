@@ -1,6 +1,5 @@
 ---
 id: f65-03-round-on-page
-agent: lead
 milestone: f65-what-happens-if-i-comment-on
 difficulty: 4
 depends_on: [f65-01-review-rounds]

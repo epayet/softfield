@@ -30,3 +30,26 @@ Split test_planning.py by page (desk, thread, proposals, plant), so the local de
 - **D4: imports run one way:** `thread.py` and `proposal.py` may import `planning.py`, `coming.py` and `merges.py`; `planning.py` imports `coming.py`; `coming.py` and `merges.py` import neither page. Other modules' imports (`app.py`, `milestones.py`, `projects.py`, `board.py`, `overview.py`, `tests/factory_dashboard/test_overview.py`) point at the new homes; the routers are each included in `app.py`.
 - **D5: each move points the tickets it breaks.** A ticket in `.factory/tasks/ready/` or `.factory/tasks/later/` that names a moved `def`, `class` or test beside its old path names the new path, in `files:`, `tests:` and Context, in the same commit. The same for the worked examples in `docs/agents/developer.md`.
 - **D6: the routing rule after the split** (f143-05): a planning-page ticket goes to the developer when it touches one page's module, its test file and its template (and the CSS); one that spans two pages' modules, or a protected path, stays the lead's.
+
+## Replan (f143-05, 2026-10-28)
+The rule is rewritten in `docs/agents/lead.md` (F14's and F172's entries) and `docs/task-writing.md` (the finding rule). Ready tickets with `agent: lead` that touched the planning room, one line each:
+- **Re-routed to the developer** (`agent: lead` removed; one page's module, its test file and its template, difficulty 4 or less, not protected):
+  - `f63-01-desk-order`: `planning.py`, `planning.html`, `test_planning.py`; its card (F63) already calls it a developer ticket.
+  - `f26-02-group-counts`: `planning.html` and `test_planning.py` only.
+  - `f73-01-set-aside-list`: `planning.py`, `planning.html`, `test_planning.py`; difficulty 4, follows `archived` as its example.
+  - `f108-01-desk-says-when`: `planning.py` and `test_planning.py` only; difficulty 2.
+  - `f32-01-lead-window-resets`: `planning.html` and `test_planning.py` only; it was the lead's for F14's rule alone (its stop was a red main).
+  - `f65-03-round-on-page`: `thread.py`, `thread.html`, `test_thread.py`; its card (F65) already calls it a developer ticket.
+  - `f73-02-set-aside-button`: `proposal.py`, `proposal.html`, `test_proposal.py`; its Context named `planning.py` for the page function, which is `proposal_review` in `proposal.py` since f143-01: fixed.
+  - `f42-01-review-page-room`: `proposal.html`, the CSS and the review page's tests; its phone test is `test_on_a_phone_one_point_shows_at_a_time` in `tests/factory_dashboard/test_thread.py` now, so Context and `tests:` name that file instead of `test_planning.py`.
+- **Left with the lead, fits D6's lead side or has another reason:**
+  - `f33-02-now-estimate`: spans `overview.py` and `coming.py` (moves `_typical` between them). Its `tests:` named `test_planning.py` for the next-reply estimate, which is in `test_coming.py`: fixed.
+  - `f74-01-one-box-per-conversation`: spans `planning.py` and `coming.py`.
+  - `f75-01-archiving-on-approval`: spans four page modules.
+  - `f100-01-proposals-being-revised`: spans `planning.py`, `thread.py` and the proposal page's template.
+  - `f112-01-replan-in-plain-words`: spans `proposal.py`, `thread.py` and `planning.py`.
+  - `f164-03-idea-plates-with-plant`: spans `thread.py` and `milestones.py`.
+  - `f67-02-key-points-by-kind`: one page's files, but difficulty 5.
+  - `f71-03-browser-tests-on-a-fake-clock`: tests only across four test files, difficulty 5.
+  - `f152-02-every-mockup-is-listed`: `runner/` (protected), not a dashboard ticket; its `_MOCKUP_RE` pointer to `planning.py` is still right.
+- **Checked against the moved code:** the `def` names in these tickets' Contexts (`_answers_wanted`, `_open_proposals` in `planning.py`; `_acted_on`, `_held`, `_next_reply`, `_typical` in `coming.py`; `_review`, `_proposals`, `_standing` in `thread.py`; `proposal_review`, `_plan_changes`, `mockup_file` in `proposal.py`) sit where the tickets say, except the two fixed above. `f81-04-desk-in-classes` and `f89-02-meters-say-when-read` already go to the developer.

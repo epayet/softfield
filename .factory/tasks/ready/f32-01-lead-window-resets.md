@@ -1,6 +1,5 @@
 ---
 id: f32-01-lead-window-resets
-agent: lead
 milestone: f32-the-5-hour-lead-s-window
 depends_on: [f9-28-allowance-live, f12-03-remove-review-probe]
 difficulty: 2

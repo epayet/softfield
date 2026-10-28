@@ -1,6 +1,5 @@
 ---
 id: f42-01-review-page-room
-agent: lead
 milestone: f42-the-space-for-me-to-scroll
 difficulty: 3
 depends_on: [f12-03-remove-review-probe]
@@ -9,14 +8,14 @@ files:
   - factory_dashboard/static/dashboard.css
 tests:
   - tests/factory_dashboard/test_proposal.py
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_thread.py
 ---
 
 ### Goal
 The review page gives its room to what the owner reads: a mock-up opens full screen, and on a phone the dock "Your review" is one row.
 
 ### Context
-Read `factory_dashboard/templates/proposal.html` (the `#mockup` iframe and the `.dock` section), the planning-room phone rules in `factory_dashboard/static/dashboard.css` (`.deck-nav`, `.dock-host`, `.dock`), `def mockup_file` in `factory_dashboard/proposal.py`, `test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else` in `tests/factory_dashboard/test_proposal.py` and `test_on_a_phone_one_point_shows_at_a_time` in `tests/factory_dashboard/test_planning.py`. Why: `.factory/cards/f42-the-space-for-me-to-scroll.md`.
+Read `factory_dashboard/templates/proposal.html` (the `#mockup` iframe and the `.dock` section), the planning-room phone rules in `factory_dashboard/static/dashboard.css` (`.deck-nav`, `.dock-host`, `.dock`), `def mockup_file` in `factory_dashboard/proposal.py`, `test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else` in `tests/factory_dashboard/test_proposal.py` and `test_on_a_phone_one_point_shows_at_a_time` in `tests/factory_dashboard/test_thread.py`. Why: `.factory/cards/f42-the-space-for-me-to-scroll.md`.
 - **The mock-up:** a link "Open the mock-up" to the same URL as the iframe's `src`, `target="_blank"` with `rel="noopener"`, at least 44 px tall. Opened on its own, the route's CSP (`sandbox allow-scripts`) already keeps it in an origin of its own: change nothing in `factory_dashboard/proposal.py`.
   - under 640 px the iframe is not shown, only the link;
   - from 640 px the iframe stays, `height: max(480px, calc(100dvh - 220px))`, with the link above it.

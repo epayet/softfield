@@ -1,6 +1,5 @@
 ---
 id: f108-01-desk-says-when
-agent: lead
 milestone: f108-in-your-answers-wanted-i-see
 difficulty: 2
 depends_on: [f75-01-archiving-on-approval, f51-01-desk-counts-what-waits-on-you]

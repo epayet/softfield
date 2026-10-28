@@ -10,7 +10,7 @@ files:
   - factory_dashboard/templates/_partials/running.html
 tests:
   - tests/factory_dashboard/test_overview.py
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_coming.py
 ---
 
 ### Goal
