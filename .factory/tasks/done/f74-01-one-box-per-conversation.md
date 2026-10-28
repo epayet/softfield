@@ -34,3 +34,10 @@ Read `.factory/cards/f74-when-i-reply-to-a-your.md` (Why it happens, D1–D5), t
 - the Planning tab's count and the Overview's Needs you don't change when a message is sent
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
