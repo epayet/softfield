@@ -2851,12 +2851,19 @@ def test_pressing_the_button_switches_to_light_at_once(page, client):
     fg = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--fg').trim()")
     assert floor == "#eceee9", f"floor {floor} != light floor"
     assert fg == "#16191d", f"fg {fg} != light fg"
-    # The series colour the spend chart reads from --a2 (== --opus) has changed
-    a2 = page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--a2').trim()")
-    assert a2 == "#ff9640", f"a2 {a2} != light a2"
-    # The spend chart's actual SVG bar has been redrawn with the new colour
-    chart_path = page.evaluate(
-        "() => { const el = document.querySelector('.chart[data-chart=\"spend\"]');"
+    # The series colour the milestone-esc chart reads from --a1 (== --copilot) has changed
+    copilot = page.evaluate(
+        "getComputedStyle(document.documentElement).getPropertyValue('--copilot').trim()"
+    )
+    assert copilot == "#3f6fd6", f"copilot {copilot} != light copilot"
+    # Navigate to milestones so the milestone-esc chart (which reads --copilot) is drawn
+    page.goto(ORIGIN + "/milestones")
+    page.wait_for_selector(
+        '.chart[data-chart="milestone-esc"] svg', state="visible", timeout=REFRESH
+    )
+    # The first series in the milestone-esc chart's SVG has been redrawn with the new colour
+    chart_first = page.evaluate(
+        "() => { const el = document.querySelector('.chart[data-chart=\"milestone-esc\"]');"
         " if (!el) return null;"
         " const svg = el.querySelector('svg');"
         " if (!svg) return null;"
@@ -2867,7 +2874,7 @@ def test_pressing_the_button_switches_to_light_at_once(page, client):
         " }"
         " return null; }"
     )
-    assert chart_path == "#ff9640", f"spend chart fill {chart_path} != light a2"
+    assert chart_first == "#3f6fd6", f"milestone-esc fill {chart_first} != light copilot"
 
 
 def test_the_choice_stays_on_reload(page, client):
@@ -2963,13 +2970,13 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     header = page.locator("header.bar")
-    # Measure the dark theme height as the prior-height baseline (before the button was added)
+    # Measure the dark theme height as the actual prior-height requirement
     prior_height = header.evaluate("el => el.getBoundingClientRect().height")
-    # Switch to light and verify the header does not exceed the prior-height baseline
+    # Switch to light and verify the header height is unchanged
     page.evaluate("document.getElementById('theme-btn').click()")
     light_height = header.evaluate("el => el.getBoundingClientRect().height")
-    assert light_height <= prior_height + 2, (
-        f"light header {light_height}px > prior {prior_height}px + 2px at 390px viewport"
+    assert light_height == prior_height, (
+        f"light header {light_height}px != dark {prior_height}px at 390px viewport"
     )
 
 
