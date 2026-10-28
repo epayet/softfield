@@ -30,3 +30,12 @@ Read `.factory/cards/f81-assess-the-current-ui-state-of.md` (D1–D3) and build 
 - `.about` and `.aside` look as before, on the new tokens
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2707
+gate_failures: ['all-tests', 'protected-paths']
+tokens: 2912184
+```
