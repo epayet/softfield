@@ -5,14 +5,14 @@ difficulty: 4
 depends_on: [f164-02-review-ideas-and-their-state, f164-02b-fix-review-ideas-lookup, f164-06-fix-f164-05-test-tells-ideas-apart]
 agent: lead
 files:
-  - factory_dashboard/planning.py
+  - factory_dashboard/thread.py
   - factory_dashboard/milestones.py
   - factory_dashboard/templates/thread.html
   - factory_dashboard/templates/milestone.html
   - factory_dashboard/templates/_partials/idea.html
   - factory_dashboard/static/dashboard.css
 tests:
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_thread.py
   - tests/factory_dashboard/test_milestones.py
 ---
 
@@ -22,7 +22,7 @@ Each idea of a review shows as a plate with Plant and Plant and ask the lead, on
 ### Context
 Read `.factory/cards/f164-i-like-reading-the-milestone-reviews.md` (D4, D5) and build the mock-up's Proposed, `.factory/cards/f164-mockup/review-ideas.html`.
 - The ideas come from `review_ideas` in `factory_dashboard/milestones.py` (f164-02).
-- Thread: `_review` in `factory_dashboard/planning.py` and the `#review` section of `factory_dashboard/templates/thread.html`: "Ideas from this review · N" after the sections, before "The whole review".
+- Thread: `_review` in `factory_dashboard/thread.py` and the `#review` section of `factory_dashboard/templates/thread.html`: "Ideas from this review · N" after the sections, before "The whole review".
 - Milestone page: `_to_html` in `factory_dashboard/milestones.py` renders the sheet; each quoted line is drawn in place by the new partial `factory_dashboard/templates/_partials/idea.html`, which both pages use.
 - The buttons post as the Plant box in `factory_dashboard/templates/planning.html` does, value `{text, ask, area, from}` (D4), to the idea's project; the on-its-way swap follows Sign off's `hx-on::before-request` in `factory_dashboard/templates/thread.html`.
 - Styles in `factory_dashboard/static/dashboard.css` from the existing tokens only (`--factory`, `--product`, `--hazard`, `--rule`, `--plate`).

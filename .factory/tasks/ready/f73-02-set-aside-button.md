@@ -6,16 +6,16 @@ difficulty: 4
 depends_on: [f73-01-set-aside-list, f42-01-review-page-room]
 files:
   - factory_dashboard/templates/proposal.html
-  - factory_dashboard/planning.py
+  - factory_dashboard/proposal.py
 tests:
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_proposal.py
 ---
 
 ### Goal
 Every proposal's review page has a "Set aside" button that takes the conversation off the desk with its drafts kept, and a proposal that has waited says how old its draft is.
 
 ### Context
-Read `.factory/cards/f73-i-want-to-be-able-to.md` (D2, D4, D5). In `factory_dashboard/templates/proposal.html`: `#actions` and its `.action-buttons` block with `#send-back` and `#primary`; the review page is the route `/planning/{thread}/proposals/{id}` in `factory_dashboard/planning.py`. In `factory_dashboard/templates/thread.html`: the `#archive-button`, the example to copy (it posts the `archive` request, shows on its way and goes). Follow `test_archive_posts_once_and_the_button_goes` and `test_an_archive_on_its_way_shows_at_once_and_its_button_goes` in `tests/factory_dashboard/test_planning.py`.
+Read `.factory/cards/f73-i-want-to-be-able-to.md` (D2, D4, D5). In `factory_dashboard/templates/proposal.html`: `#actions` and its `.action-buttons` block with `#send-back` and `#primary`; the review page is the route `/planning/{thread}/proposals/{id}` in `factory_dashboard/proposal.py`. In `factory_dashboard/templates/thread.html`: the `#archive-button`, the example to copy (it posts the `archive` request, shows on its way and goes). Follow `test_archive_posts_once_and_the_button_goes` and `test_an_archive_on_its_way_shows_at_once_and_its_button_goes` in `tests/factory_dashboard/test_thread.py`.
 - The button, `#set-aside-button`, under `#primary`, in the quiet style of the thread's Archive button (not the yellow of Approve), at least 44 px tall. It posts the same request as Archive: kind `archive`, subject the thread, value `on`. Nothing changes in `factory_dashboard/requests.py` or the runner.
 - Beside it, one line: "It leaves your desk with its drafts kept. Planning lists it under Set aside; a message from you opens it again."
 - It sets the whole conversation aside, not one proposal: the drafts of a reply live together on the card's branch.

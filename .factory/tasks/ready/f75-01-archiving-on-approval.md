@@ -6,17 +6,19 @@ difficulty: 3
 depends_on: [f74-01-one-box-per-conversation, f22-01-archive-at-the-bottom]
 files:
   - factory_dashboard/planning.py
+  - factory_dashboard/thread.py
   - factory_dashboard/merges.py
   - factory_dashboard/templates/thread.html
 tests:
   - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_thread.py
 ---
 
 ### Goal
 A thread whose last open proposal the owner just approved or rejected shows at once as archiving (dashed orange, "archiving at the runner's next pick"), on the desk and on its page, as a manual Archive does.
 
 ### Context
-Read `.factory/cards/f75-i-believe-right-now-when-a.md` (Why it happens, D1–D4), then `_close_if_settled`, `_settled` and `_latest` in `runner/requests.py` (the runner's rule), `_gone_merge` in `factory_dashboard/merges.py`, and `_open_proposals`, `_acted_on` and `thread_page` in `factory_dashboard/planning.py`.
+Read `.factory/cards/f75-i-believe-right-now-when-a.md` (Why it happens, D1–D4), then `_close_if_settled`, `_settled` and `_latest` in `runner/requests.py` (the runner's rule), `_gone_merge` in `factory_dashboard/merges.py`, and `_open_proposals` and `_acted_on` in `factory_dashboard/planning.py`, and `thread_page` in `factory_dashboard/thread.py`.
 - Add one helper in `factory_dashboard/planning.py`, say `_closing(conn, project_id, card, known) -> bool`: the latest lead message of the thread that lists proposals, the owner's requests since it, then D1: every proposal is `APPROVED`, `REJECTED`, `ON_ITS_WAY` (from `proposal_state`) or `_gone_merge`, and at least one is `ON_ITS_WAY`. An archived thread, or one with no proposals, is never closing.
 - D2: a pending `reject` whose subject is `<card>/<id>` of a proposal whose kind is in `DRAFTED` (`runner/planner.py`) makes every `DRAFTED` proposal of that set count as on its way.
 - `_acted_on` also dashes a thread's own item (not its `/proposals/` items, which are already dashed) when `_closing` holds, with the words "archiving at the runner's next pick".

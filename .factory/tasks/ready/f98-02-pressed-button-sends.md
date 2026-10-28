@@ -13,13 +13,14 @@ files:
   - factory_dashboard/templates/tickets.html
 tests:
   - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_thread.py
 ---
 
 ### Goal
 Every dashboard button that asks the runner shows, from the press until the answer, that it is sending and can't be pressed again; when no answer comes it comes back and says to press again.
 
 ### Context
-The picture to build: `.factory/cards/f98-mockup/pressed-buttons.html` (Proposed). The rule: D1 in `.factory/cards/f98-if-i-have-slow-internet-and.md`. Read the `htmx:beforeRequest` listener for Pause and Resume in `factory_dashboard/templates/base.html` (the example to follow: one listener on the document, failure listeners on the element), the tokens at the top of `factory_dashboard/static/dashboard.css` and `.lever.on-its-way`, and the Plant box and its `htmx:afterRequest` listener in `factory_dashboard/templates/planning.html`. For browser tests that hold or fail `/requests`, follow the ones in `tests/factory_dashboard/test_planning.py` that call `page.route("**/requests", …)`.
+The picture to build: `.factory/cards/f98-mockup/pressed-buttons.html` (Proposed). The rule: D1 in `.factory/cards/f98-if-i-have-slow-internet-and.md`. Read the `htmx:beforeRequest` listener for Pause and Resume in `factory_dashboard/templates/base.html` (the example to follow: one listener on the document, failure listeners on the element), the tokens at the top of `factory_dashboard/static/dashboard.css` and `.lever.on-its-way`, and the Plant box and its `htmx:afterRequest` listener in `factory_dashboard/templates/planning.html`. For browser tests that hold or fail `/requests`, follow the ones in `tests/factory_dashboard/test_planning.py` and `tests/factory_dashboard/test_thread.py` that call `page.route("**/requests", …)`.
 - One listener pair in `base.html`, for POSTs to `/requests` only. Add `--sending-belt` to the tokens in both themes and a `.sending` rule beside `.lever.on-its-way`, with the belt still under `prefers-reduced-motion`.
 - Words, as `data-sending` on the buttons: Plant and Plant and ask the lead "Planting…", Save "Saving…", Cancel it "Cancelling…", Dismiss "Dismissing…", Remove (Remove seed) "Removing…", Send and Send to the lead "Sending…", Send back "Sending back…", Accept ADR "Accepting…", Approve plan and Approve merge "Approving…", Plant it "Planting…", Queue and Queue it "Queuing…".
 - No answer within 30 s counts as a failure: set it on the request (`htmx.config.timeout` or the `timeout` event), not globally for the live polls. Failure words, in `--fail`, in the request's `hx-target`: "Didn't hear back from the factory. Your note is still here: press again, it won't be planted twice." where the form has a text box, else "Didn't hear back from the factory: press again."

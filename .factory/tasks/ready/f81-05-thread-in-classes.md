@@ -9,7 +9,8 @@ files:
   - factory_dashboard/templates/thread.html
   - factory_dashboard/templates/proposal.html
 tests:
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_thread.py
+  - tests/factory_dashboard/test_proposal.py
 ---
 
 ### Goal
@@ -20,7 +21,7 @@ Card doc `.factory/cards/f81-assess-the-current-ui-state-of.md` D6; the look is 
 - `factory_dashboard/templates/thread.html` has about 81 `style=` attributes, `proposal.html` about 52. Move each into a class in `factory_dashboard/static/dashboard.css`, in a block headed by a comment naming the page; reuse `.panel`, `.btn`, the existing `#actions` and `.deck`/`.dock` rules and `.desk-item` (f81-04, if it is on main; else add it).
 - An agent's or a status colour set per item from the template stays as a custom property (`style="--c: …"`), coloured by the class.
 - Keep every id, `hx-*` attribute, `name`, script hook (`factory_dashboard/static/deck.js` reads `.deck`, `.deck-nav`, `.dock`, `.dock-host`) and word.
-- Tests in `tests/factory_dashboard/test_planning.py` that read an inline style read the class instead.
+- Tests in `tests/factory_dashboard/test_thread.py` and `tests/factory_dashboard/test_proposal.py` that read an inline style read the class instead.
 
 ### Done when
 - `thread.html` and `proposal.html` have no `style=` but computed widths, positions and `--c`

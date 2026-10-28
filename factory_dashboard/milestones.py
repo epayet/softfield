@@ -60,8 +60,8 @@ class Idea:
 def read_card_doc(repo: Path | None, thread: str) -> AboutDoc | None:
     """The card's Outcome, Done when and note from its doc in ``.factory/cards/``;
     None when there is no checkout or no doc."""
-    # planning imports this module
-    from factory_dashboard.planning import _note
+    # thread imports this module
+    from factory_dashboard.thread import _note
 
     if repo is None:
         return None
@@ -522,8 +522,9 @@ def milestone_detail(
         ):
             if k in detail.signoff:
                 signoff_html[k] = _to_html(detail.signoff[k])
-    # the planning page's Sign off, by the same rule (F50 D1); planning imports this module
-    from factory_dashboard.planning import _repo, _review
+    # the thread page's Sign off, by the same rule (F50 D1); they import this module
+    from factory_dashboard.planning import _repo
+    from factory_dashboard.thread import _review
 
     project_id = metrics.find_project(conn, project)
     review = None if project_id is None else _review(conn, project, project_id, short_key(key), now)

@@ -14,16 +14,13 @@ from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.merges import _known_cards, _merge_words
 from factory_dashboard.planning import (
     _ADR_NUMBER,
-    _KIND_COLOR,
     _MOCKUP_RE,
     _adr_waits,
-    _has_proposals,
-    _proposals,
     _repo,
     _resolve_mockup_path,
-    _standing,
     desk_trail,
 )
+from factory_dashboard.thread import _KIND_COLOR, _has_proposals, _proposals, _standing
 from runner import metrics
 from runner.planner import draft, plan_changes
 from runner.tasks import split_frontmatter

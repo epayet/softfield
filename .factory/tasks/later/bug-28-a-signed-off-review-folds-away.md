@@ -9,16 +9,16 @@ priority: 55
 finding: f30-on-conversations-i-want-to-the-F3
 files:
   - factory_dashboard/templates/thread.html
-  - factory_dashboard/planning.py
+  - factory_dashboard/thread.py
 tests:
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_thread.py
 ---
 
 ### Goal
 On a signed-off card's thread, the review's sheet is folded into a closed "The review · signed off <date>", so the lead's latest answer is the first thing on a phone.
 
 ### Context
-Read `#review` in `factory_dashboard/templates/thread.html` (lines 34–59) and where `factory_dashboard/planning.py` builds `review` for it. Lead ticket: its tests are in `tests/factory_dashboard/test_planning.py`. This also answers f50-F4 (a signed-off sheet carries no word that it is).
+Read `#review` in `factory_dashboard/templates/thread.html` (lines 34–59) and where `factory_dashboard/thread.py` builds `review` for it. Lead ticket: its tests are in `tests/factory_dashboard/test_thread.py`. This also answers f50-F4 (a signed-off sheet carries no word that it is).
 - Today the sheet sits above `#conversation`, so on a phone the latest answer is below the fold (F95's page: a screen of sheet first), against F30's "no scrolling to reach it".
 - Once the card is signed off, draw `#review` as a closed `<details>` whose summary is "The review · signed off <date>", the date from `milestones.ended`. While it waits for the sign-off (ripe, or signing off), it stays open as today, with its button.
 

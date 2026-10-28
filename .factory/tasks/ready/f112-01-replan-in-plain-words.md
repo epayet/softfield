@@ -6,6 +6,8 @@ difficulty: 3
 depends_on: []
 files:
   - factory_dashboard/proposal.py
+  - factory_dashboard/thread.py
+  - factory_dashboard/planning.py
   - factory_dashboard/templates/thread.html
   - factory_dashboard/templates/proposal.html
   - factory_dashboard/templates/_partials/queue.html
@@ -18,7 +20,7 @@ tests:
 The dashboard says "Change to queued tickets" for a replan proposal and "plan check" for the lead's replan ticket, so the bare word "replan" is on no page.
 
 ### Context
-Read `.factory/cards/f112-plain-words-for-replan.md` (D1, D2). In `factory_dashboard/planning.py`: `_KIND_COLOR`, the `Proposal` dataclass and where a `Proposal` is made; `_open_proposals`, whose item's words fall back to the proposal's kind; `_plan_changes`, which lists what approving a replan changes, each with its `word` ("added", "changed", "set aside" or "removed"). In `factory_dashboard/templates/thread.html`: the line `{{ prop.kind | upper }} · …` of a proposal's box. In `factory_dashboard/templates/proposal.html`: the line "Approving this replan applies the ticket changes at once…". In `factory_dashboard/templates/_partials/queue.html`: the `{% for t in next %}` row of a ticket. The tests to follow: `test_a_replan_shows_what_approving_changes_with_each_text` in `tests/factory_dashboard/test_planning.py` and `test_next_in_line_names_a_due_review_first` in `tests/factory_dashboard/test_overview.py`.
+Read `.factory/cards/f112-plain-words-for-replan.md` (D1, D2). In `factory_dashboard/thread.py`: `_KIND_COLOR`, the `Proposal` dataclass and where a `Proposal` is made; in `factory_dashboard/planning.py`: `_open_proposals`, whose item's words fall back to the proposal's kind; in `factory_dashboard/proposal.py`: `_plan_changes`, which lists what approving a replan changes, each with its `word` ("added", "changed", "set aside" or "removed"). In `factory_dashboard/templates/thread.html`: the line `{{ prop.kind | upper }} · …` of a proposal's box. In `factory_dashboard/templates/proposal.html`: the line "Approving this replan applies the ticket changes at once…". In `factory_dashboard/templates/_partials/queue.html`: the `{% for t in next %}` row of a ticket. The tests to follow: `test_a_replan_shows_what_approving_changes_with_each_text` in `tests/factory_dashboard/test_proposal.py` and `test_next_in_line_names_a_due_review_first` in `tests/factory_dashboard/test_overview.py`.
 - **A kind's words:** beside `_KIND_COLOR`, a dict of the words each kind shows: `adr` "ADR", `mockup` "Mock-up", `plan` "Plan", `seed` "Seed", `merge` "Merge", `replan` "Change to queued tickets". `Proposal` gets a field holding them, and the templates show that field where they showed the kind.
 - **The desk:** where an open proposal's item fell back to its kind for its words, it uses the same words.
 - **The review page of a replan:** the sentence becomes "Approving this applies the ticket changes at once, even while paused, and resumes the line." Above "What approving changes", one line counts them from `_plan_changes`, in this order and leaving out a zero: "2 changed, 1 added, 1 set aside".

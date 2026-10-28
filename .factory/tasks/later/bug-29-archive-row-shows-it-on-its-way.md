@@ -10,14 +10,14 @@ finding: f50-the-data-safety-review-it-asks-F6
 files:
   - factory_dashboard/templates/thread.html
 tests:
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_thread.py
 ---
 
 ### Goal
 On a card's thread, Archive and Remove seed show the dashed "on its way" pill the moment they are pressed, in one row at the bottom of the page.
 
 ### Context
-Read `#remove-seed` and `#archive` in `factory_dashboard/templates/thread.html` (lines 254–283), and Sign off's `hx-on::before-request` with its `#signing-off-shape` template (lines 44–56), the worked example. Lead ticket: its tests are in `tests/factory_dashboard/test_planning.py`.
+Read `#remove-seed` and `#archive` in `factory_dashboard/templates/thread.html` (lines 254–283), and Sign off's `hx-on::before-request` with its `#signing-off-shape` template (lines 44–56), the worked example. Lead ticket: its tests are in `tests/factory_dashboard/test_thread.py`.
 - Today pressing Archive removes the button and leaves a grey status; Remove seed shows nothing until a reload. The owner asked on 2026-10-07 that a request show at once, on its way (f50-F6).
 - The two are stacked blocks after `#conversation`, and `#archive` keeps a `margin-top: 6px` from when it sat in the header (f22-F2): put both in one wrapping row, without the margin.
 
