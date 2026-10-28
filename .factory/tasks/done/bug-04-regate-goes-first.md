@@ -35,3 +35,10 @@ Since `3671441`, `_recover` in `runner/loop.py` records an attempt that was stop
 - with nothing in `state.regate`, the order is unchanged (the existing order tests keep every assertion)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
