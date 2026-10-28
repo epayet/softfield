@@ -62,7 +62,6 @@ from runner.tasks import (
 
 router = APIRouter()
 
-# A request's result when it worked (D1's table); any other result is a refusal.
 _ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
 _NEXT_PICK = "on its way · the runner applies it at its next pick"
 
