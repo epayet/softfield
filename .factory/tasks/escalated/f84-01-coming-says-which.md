@@ -31,3 +31,12 @@ Read `.factory/cards/f84-when-the-planner-is-replying-to.md` ("What happens toda
 - a reply held for a Claude limit, and a plant with no queue row yet, read as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 1091417
+logs: .factory/var/runs/20261027-005355/f84-01-coming-says-which
+```
