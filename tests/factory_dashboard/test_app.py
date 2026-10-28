@@ -3411,3 +3411,90 @@ def test_about_and_aside_still_render(page, client):
     # .aside has bottom ticks
     assert re.search(r"\.aside::before.*left: -1px.*bottom: -1px", css, re.S)
     assert re.search(r"\.aside::after.*right: -1px.*bottom: -1px", css, re.S)
+
+
+# --- square parts (f81-02) ---------------------------------------------------------------------
+
+
+def test_no_border_radius_except_top_bar_status_dot():
+    """No border-radius in dashboard.css except the top bar's status dot (f81-02)."""
+    css = (STATIC / "dashboard.css").read_text()
+    # Find all rules with border-radius
+    rules_with_radius = re.findall(r"([^{}]*?)\{([^}]*)\}", css)
+    for selector, body in rules_with_radius:
+        if "border-radius" not in body:
+            continue
+        # border-radius: 0 is removing radius, not adding it
+        if re.search(r"border-radius:\s*0\b", body):
+            continue
+        # The top bar's status dot is allowed
+        if ".factory-status .dot" in selector and "border-radius" in body:
+            continue
+        # The gauge mark dot is allowed (it's a light, not an ornament)
+        if ".gauge .mark::after" in selector and "border-radius" in body:
+            continue
+        pytest.fail(f"border-radius found in {selector}: {body}")
+
+
+def test_idle_crate_svg_exists():
+    """The idle crate SVG exists at the expected path."""
+    svg_path = STATIC.parent / "templates" / "_partials" / "idle_crate.svg"
+    assert svg_path.exists(), "idle_crate.svg not found"
+    svg = svg_path.read_text()
+    assert "<svg" in svg
+    assert 'viewBox="0 0 40 34"' in svg
+    assert 'stroke="currentColor"' in svg
+
+
+def test_idle_crate_svg_draws_a_crate():
+    """The idle crate SVG draws a crate on a floor line."""
+    svg_path = STATIC.parent / "templates" / "_partials" / "idle_crate.svg"
+    svg = svg_path.read_text()
+    # Crate body (rect)
+    assert "<rect" in svg
+    # Crate internal lines (dashed)
+    assert "stroke-dasharray" in svg
+    # Floor line
+    assert "<path" in svg and "M0 32h40" in svg
+
+
+def test_pill_is_square_with_square_lamp():
+    """Tags are square with a square lamp, colours as before (f81-02)."""
+    css = (STATIC / "dashboard.css").read_text()
+    # .pill has no border-radius
+    pill_block = re.search(r"\.pill\s*\{([^}]*)\}", css)
+    assert pill_block
+    assert "border-radius" not in pill_block[1], ".pill must not have border-radius"
+    # .pill uses mono font, uppercase
+    assert "var(--mono)" in pill_block[1]
+    assert "text-transform: uppercase" in pill_block[1]
+    # The lamp (::before) is a square (no border-radius)
+    pill_dot = re.search(r"\.pill::before\s*\{([^}]*)\}", css)
+    assert pill_dot
+    assert "border-radius" not in pill_dot[1], ".pill::before must be square"
+    # The dot keeps its colours (good, warn, running)
+    assert "--dot: var(--good)" in css
+    assert "--dot: var(--warn)" in css
+    assert "--dot: var(--a1)" in css
+
+
+def test_meter_has_slot_styling():
+    """The meter sits in a slot with border and floor background."""
+    css = (STATIC / "dashboard.css").read_text()
+    meter_block = re.search(r"\.meter\s*\{([^}]*)\}", css)
+    assert meter_block
+    assert "border: 1px solid var(--rule)" in meter_block[1]
+    assert "background: var(--floor)" in meter_block[1]
+    # The fill is inset
+    meter_span = re.search(r"\.meter > span\s*\{([^}]*)\}", css)
+    assert meter_span
+    assert "inset: 1px" in meter_span[1]
+
+
+def test_gauge_has_quarter_ticks():
+    """The gauge has quarter ticks under the meter."""
+    css = (STATIC / "dashboard.css").read_text()
+    gauge_block = re.search(r"\.gauge\s*\{([^}]*)\}", css)
+    assert gauge_block
+    assert "background-image" in gauge_block[1] or "linear-gradient" in gauge_block[1]
+    assert "25%" in gauge_block[1], "quarter ticks use 25% spacing"
