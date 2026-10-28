@@ -59,6 +59,15 @@
   };
   document.addEventListener("htmx:load", loadNewVersion);
   document.addEventListener("visibilitychange", loadNewVersion);
+  // A phone suspends a hidden page's polls (f38 review): coming back, ask at once and load a new
+  // version before anything is read, unless something would be lost; else the poll shows the tag.
+  document.addEventListener("visibilitychange", () => {
+    const poller = document.querySelector("span[hx-get^='/version']");
+    if (document.visibilityState !== "visible" || !poller) return;
+    fetch(poller.getAttribute("hx-get")).then((r) => r.text()).then((html) => {
+      if (html.includes("version-tag") && window.liveIdle()) location.reload();
+    }).catch(() => {});
+  });
   // Scroll the active tab into view on phone (f3-30)
   document.addEventListener("DOMContentLoaded", () => {
     const tab = document.querySelector("nav.tabs a[aria-current='page']");

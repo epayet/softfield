@@ -834,6 +834,35 @@ def test_a_hidden_page_loads_the_new_version_unless_something_would_be_lost(page
     assert len(loads) == 2
 
 
+def test_a_page_coming_back_loads_the_new_version_at_once(page, client, monkeypatch):
+    # f38 review: a locked phone runs no poll, so coming back must not wait 10 s for the tag
+    loads: list[str] = []
+    _open_on_version_poll(page, client, PHONE, loads)
+    monkeypatch.setattr(app_module, "code_version", lambda: "changed")
+    page.evaluate(
+        """() => {
+          const draft = document.createElement('textarea');
+          draft.id = 'draft';
+          draft.value = 'unsent words';
+          document.querySelector('main').append(draft);
+          document.dispatchEvent(new Event('visibilitychange'));
+        }"""
+    )
+    page.wait_for_timeout(300)
+    assert len(loads) == 1, "reloaded over unsent text"
+    page.evaluate(
+        """() => {
+          document.getElementById('draft').remove();
+          document.dispatchEvent(new Event('visibilitychange'));
+        }"""
+    )
+    for _ in range(20):
+        if len(loads) == 2:
+            break
+        page.wait_for_timeout(100)
+    assert len(loads) == 2
+
+
 # --- notifications (f5-12, ADR 18 item 4) ---------------------------------------------------
 
 
