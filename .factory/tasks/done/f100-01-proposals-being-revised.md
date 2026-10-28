@@ -36,3 +36,10 @@ Read `.factory/cards/f100-if-i-replied-to-a-conversation.md` (Why it happens, D1
 - a message cancelled before the pick (F14) leaves the proposals solid
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
