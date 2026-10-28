@@ -1,5 +1,7 @@
 # Review: F173, the board's order is the order the work runs in
 
+- **Status:** done, signed off by the owner on 2026-10-28.
+
 ## Sign-off sheet
 
 ### 1. What changed

@@ -1,6 +1,7 @@
 # Milestone F173: The board's order is the order the work runs in
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Reserve:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-28. Base: git tag `f173-dragging-a-card-on-the-board-start`. Report: [`.factory/reviews/f173-dragging-a-card-on-the-board.md`](../reviews/f173-dragging-a-card-on-the-board.md).
 > Planted by the owner on 2026-10-22.
 
 ## Notes
