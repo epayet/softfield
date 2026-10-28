@@ -40,3 +40,12 @@ Build the buttons of the Proposed side of `.factory/cards/f81-mockup/theme-pass.
 - every button keeps its id, request and words
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 7011
+gate_failures: ['stopped', 'stopped']
+tokens: 5276416
+```
