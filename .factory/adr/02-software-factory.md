@@ -549,6 +549,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the third card running (F114, F68, F69) where a test finding became a chain of developer tickets that never fully closed it; all three ran before f68-08. Again the checkpoints missed edge bugs in the feature diff (a selector that lost its theme scope, a stored choice the system could override, a 22 px tap target) while judging the newest test. A mechanical media-query-to-attribute rewrite needs each comma-separated selector rescoped; now a test.
 - **Decisions affected:** none.
 
+### F80 (2026-10-28): the Agents page shows each agent's score by kind of work ([review](../reviews/f80-developer-rating-could-be-more-tailored.md))
+
+- **Q1:** one developer ticket (difficulty 4). Qwen's attempt 1 was right and failed only `all-tests`, on a test main itself failed. Attempt 2 blocked `needs-file`, as developer rule 11 says. The ticket waited about 16 hours parked for Claude, then an Opus escalation finished it on the branch in 6 minutes. No checkpoint. Review round 1: two nits fixed by the review, one should-fix to a lead ticket (f80-02: a red main spares the developer's attempts).
+- **Q3:** Qwen about 1.4 hours of model (11.2M tokens in) on work that was mostly right; Claude $1.56 for the escalation. The plan's cost is in the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** F106's main-red guard holds lead tickets only, so a developer still burns its attempts on a red main, and its rating records two "not merged" games for code that merged. The new bay already shows the Known range's split: Qwen does better than rated on code without pages (+6 over 60 tickets) and as rated on pages (−2 over 114).
+- **Decisions affected:** none. A rating per kind stays deferred, as the card's Later says.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -25,15 +25,20 @@ _CODE_NO_PAGES = "Code, no pages"
 _SCORES = {MERGED_FIRST: 1.0, MERGED_LATER: 0.5, NOT_MERGED: 0.0}
 _AS_RATED_POINTS = 5
 _MIN_TICKETS = 3
-# Each agent's colour token, as in the top of dashboard.css.
+# Each agent's colour token, as in the top of dashboard.css, by its id's prefix so a model's
+# next version (local-qwen3.7…, ollama-nemotron-3-ultra) keeps its family's colour.
 _AGENT_TOKENS = {
     "claude-opus": "--opus",
     "claude-sonnet": "--sonnet",
-    "local-qwen3.6-35b-a3b": "--qwen",
-    "ollama-gpt-oss-120b": "--oss",
-    "ollama-nemotron-3-super": "--nemo",
-    "copilot-auto": "--copilot",
+    "local-qwen": "--qwen",
+    "ollama-gpt-oss": "--oss",
+    "ollama-nemotron": "--nemo",
+    "copilot-": "--copilot",
 }
+
+
+def _agent_token(agent: str) -> str:
+    return next((t for p, t in _AGENT_TOKENS.items() if agent.startswith(p)), "--muted")
 
 ROLES: tuple[str, ...] = (
     "developer",
@@ -298,7 +303,7 @@ def by_kind_data(
                 "expected": expected,
                 "gap": score - expected,
                 "gap_words": _gap_words(len(games), score - expected),
-                "agent_token": _AGENT_TOKENS.get(agent, "--muted"),
+                "agent_token": _agent_token(agent),
                 "few": len(games) < _MIN_TICKETS,
             }
         )

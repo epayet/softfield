@@ -59,7 +59,7 @@
       </td>
       <td class="num">{{ r.score }}%</td>
       <td class="num">{{ r.expected }}%</td>
-      <td>{% if r.few %}too few to say{% elif r.gap_words == "better" %}<span class="gap up">+{{ r.gap }} better</span>{% elif r.gap_words == "worse" %}<span class="gap down">{{ r.gap }} worse</span>{% else %}<span class="gap even">{{ r.gap }} as rated</span>{% endif %}</td>
+      <td>{% if r.few %}too few to say{% elif r.gap_words == "better" %}<span class="gap up">+{{ r.gap }} better</span>{% elif r.gap_words == "worse" %}<span class="gap down">{{ r.gap }} worse</span>{% else %}<span class="gap even">{{ "%+d" % r.gap if r.gap else 0 }} as rated</span>{% endif %}</td>
     </tr>
     {% endfor %}
     </tbody>

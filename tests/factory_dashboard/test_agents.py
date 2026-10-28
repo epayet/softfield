@@ -820,3 +820,20 @@ def test_by_kind_bay_shows_each_row_on_the_page(serve, db_path):
     assert f"{LOCAL} Pages 3 100% 50% +50 better" in bay
     assert "No coding games to show" not in bay
     assert "var(--qwen)" in section_raw(html, "by-kind")
+
+
+def test_by_kind_as_rated_gap_carries_its_sign(serve, db_path):
+    """A gap within 5 points is signed like "+50 better": score 50, expected 46, "+4 as rated"."""
+    conn = _seed_page_games(db_path, [("merged later", 2.7, 3)] * 3)
+    conn.close()
+    bay = section(serve(live=False).get("/agents").text, "by-kind")
+    assert f"{LOCAL} Pages 3 50% 46% +4 as rated" in bay
+
+
+def test_an_agents_next_version_keeps_its_familys_colour():
+    from factory_dashboard.agents import _agent_token
+
+    assert _agent_token("local-qwen3.7-35b-a3b") == "--qwen"
+    assert _agent_token("ollama-nemotron-3-ultra") == "--nemo"
+    assert _agent_token("claude-opus") == "--opus"
+    assert _agent_token("ollama-gemma4-31b") == "--muted"
