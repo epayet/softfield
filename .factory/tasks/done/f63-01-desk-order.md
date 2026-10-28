@@ -28,3 +28,12 @@ Read `.factory/cards/f63-i-want-to-see-cards-in.md` (Outcome, D1–D5), `factory
 - `id="archived"` is still last
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3506
+gate_failures: []
+tokens: 6804354
+```
