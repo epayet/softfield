@@ -302,11 +302,16 @@ def test_a_plan_and_its_mockup_are_one_item_and_the_general_seeds_stay_two(plann
 
 
 def test_a_thread_with_an_open_plan_message_is_not_an_answer_wanted(planning, db_path, db):
-    """F51 D4: the owner answered; the lead's reply is Coming, not on the desk."""
+    """F51 D4, F74: the owner answered; the lead's reply is on its way, so the thread's one box
+    is dashed and no longer waits for them."""
     _lead_says(db_path, planning, "f7", "Which one?")
-    assert "/planning/f7" in [i.link for i in _group(db, "answers")]
+
+    def f7() -> list[tuple[str, bool]]:
+        return [(i.link, i.on_its_way) for i in _group(db, "answers") if i.link == "/planning/f7"]
+
+    assert f7() == [("/planning/f7", False)]
     _finished(db_path, planning, "plan_message", "f7", "The first.", None)
-    assert "/planning/f7" not in [i.link for i in _group(db, "answers")]
+    assert f7() == [("/planning/f7", True)]
 
 
 def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):

@@ -46,8 +46,8 @@
 
 <div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
 {% if coming.items %}
-<section id="desk-coming" class="desk-coming" aria-label="Coming" style="margin-top: 14px; background: var(--bay)">
-    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">Coming · {{ coming.items | length }}</h2>
+<section id="desk-coming" class="desk-coming" aria-label="{{ coming.name }}" style="margin-top: 14px; background: var(--bay)">
+    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">{{ coming.name }} · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
     <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
       {% if item.link %}
@@ -183,14 +183,21 @@
       </article>
       {% else %}
       {# the owner acted on it: on its way, dashed orange, until the runner's next pick #}
-      <a href="{{ item.link }}{{ q }}"{% if item.on_its_way %} class="on-its-way-item"{% endif %} style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px {% if item.on_its_way %}dashed var(--hazard){% else %}solid var(--rule){% endif %}; color: var(--fg); min-height: 44px; box-sizing: border-box">
+      {# F84 D5, kept by F74: a thread waiting for the lead shows its place; the one reply being written, in the planner's colour #}
+      {% set writing = item.place is not none and item.place.place == 0 %}
+      <a href="{{ item.link }}{{ q }}"{% if item.on_its_way %} class="on-its-way-item{% if writing %} writing{% endif %}"{% endif %} style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px {% if item.on_its_way %}dashed var(--hazard){% else %}solid var(--rule){% endif %}; color: var(--fg); min-height: 44px; box-sizing: border-box">
+        {% if writing %}<span class="writing-label">Writing now</span>{% endif %}
         <span style="font-size: 14px">{{ item.title }}</span>
         {% if item.parts | length > 1 %}
         <span class="parts" style="display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px">
           {% for name, way in item.parts %}<span class="part{% if way %} on-its-way{% endif %}" style="font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; background: var(--bay); {% if way %}color: var(--hazard); border: 1px dashed var(--hazard){% else %}color: var(--ink-2); border: 1px solid var(--rule){% endif %}">{% if not loop.first %}<span style="color: var(--muted)">→ </span>{% endif %}{{ name }}{% if way %} · on its way{% endif %}</span>{% endfor %}
         </span>
         {% endif %}
-        {% if item.words %}<span style="font: 11.5px var(--mono); color: {% if item.on_its_way %}var(--hazard){% else %}var(--muted){% endif %}">{{ item.words }}</span>{% endif %}
+        {% if item.words %}<span style="font: 11.5px var(--mono); color: {% if writing %}var(--opus-ink){% elif item.on_its_way %}var(--hazard){% else %}var(--muted){% endif %}">{{ item.words }}</span>{% endif %}
+        {% if writing and item.place.typical %}
+        <span class="writing-bar" title="time spent against a typical reply"><span style="width: {{ [100, (item.place.elapsed / item.place.typical * 100) | int] | min }}%"></span></span>
+        <span style="font: 10.5px var(--mono); color: var(--muted)">{{ item.place.elapsed | ago }} of about {{ item.place.typical | ago }} (a reply's usual length)</span>
+        {% endif %}
       </a>
       {% endif %}
       {% endfor %}

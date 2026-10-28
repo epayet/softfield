@@ -10,7 +10,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
 from factory_dashboard.app import ago
-from factory_dashboard.overview import CANCELLING, Running, open_changes, running_jobs
+from factory_dashboard.overview import CANCELLING, Running, open_changes
 from runner import metrics
 from runner.planner import (
     PLANNER,
@@ -248,7 +248,8 @@ def _taken_plant(conn: sqlite3.Connection, project_id: int, subject: str) -> sql
 
 
 def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
-    """What is on its way: pending plants and threads waiting for the lead's reply."""
+    """What is on its way: pending plants. A thread waiting for the lead's reply keeps its box
+    in Your answers wanted (F74)."""
     project_id = metrics.find_project(conn, project)
     items: list[DeskItem] = []
 
@@ -304,57 +305,7 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
                 )
             )
 
-    # Threads waiting for the lead: the owner's message (or the runner's look at a blocked
-    # ticket, ADR 29) is the latest and a planner row about it is open, or an open plan_message
-    # request names it whatever is stored (the runner stores that message, and makes the
-    # thread, only at its next pick). Each shows once.
-    if project_id is not None:
-        planned = {
-            str(r["subject"] or "").split("#")[0]
-            for r in metrics.open_jobs(conn, project_id)
-            if r["kind"] == PLANNER
-        }
-        owners_last = conn.execute(
-            "SELECT t.card FROM planner_threads t"
-            " JOIN planner_messages m ON m.id = ("
-            "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
-            " WHERE t.project_id = ? AND m.author IN ('owner', 'runner') ORDER BY t.id",
-            (project_id,),
-        ).fetchall()
-        asked = conn.execute(
-            "SELECT id, subject FROM owner_requests"
-            " WHERE project_id = ? AND kind = 'plan_message' AND done IS NULL ORDER BY id",
-            (project_id,),
-        ).fetchall()
-        # F14: a message the owner cancelled waits for no reply, as on its thread
-        cancelled = {subject for subject, change in changes.items() if change.cancel}
-        cards = [r["card"] for r in owners_last if r["card"] in planned]
-        cards += [
-            str(r["subject"]) for r in asked if r["subject"] and str(r["id"]) not in cancelled
-        ]
-        # F84 D4: in the lead's order, the reply being written first, then the plants, then
-        # the messages the runner hasn't placed, then those held for a Claude limit
-        placed: list[DeskItem] = []
-        rest: list[DeskItem] = []
-        later: list[DeskItem] = []
-        if cards:
-            titles = _card_titles(conn, project_id)
-            jobs = [j for j in running_jobs(conn, project, now) if j.live]
-            places = reply_line(conn, project, now, jobs)
-            writing = _writing(places)
-        for card in dict.fromkeys(cards):
-            held = _held(conn, project_id, now, card)
-            place = places.get(card) if held is None else None
-            reply = _next_reply(conn, project, jobs, True, held, writing)
-            said = place.words if place is not None else f"waiting for the lead · {reply}"
-            item = DeskItem(
-                "coming", _thread_title(card, titles), said, f"/planning/{card}", place=place
-            )
-            (placed if place is not None else rest if held is None else later).append(item)
-        placed.sort(key=lambda item: item.place.place if item.place else 0)
-        items = placed + items + rest + later
-
-    return DeskGroup("coming", "Coming", "--hazard", items)
+    return DeskGroup("coming", "Coming seeds", "--hazard", items)
 
 
 def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) -> list[DeskItem]:

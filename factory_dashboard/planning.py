@@ -41,6 +41,7 @@ from factory_dashboard.merges import (
 )
 from factory_dashboard.overview import (
     agent_allowances,
+    open_changes,
     running_jobs,
 )
 from runner import metrics
@@ -66,37 +67,83 @@ _ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
 _NEXT_PICK = "on its way · the runner applies it at its next pick"
 
 
-def _answers_wanted(
-    conn: sqlite3.Connection, project_id: int, titles: dict[str, str], now: datetime
-) -> list[DeskItem]:
-    """Threads whose last message is the lead's: a reply the owner hasn't answered. An
-    archived thread waits for nothing."""
+def _asked(conn: sqlite3.Connection, project_id: int) -> list[str]:
+    """The cards an open ``plan_message`` request names, the runner not yet having stored the
+    message; a message the owner cancelled (F14) waits for no reply."""
+    cancelled = {s for s, change in open_changes(conn, project_id).items() if change.cancel}
     rows = conn.execute(
-        "SELECT t.card, m.at FROM planner_threads t"
-        " JOIN planner_messages m ON m.id = ("
-        "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
-        " WHERE t.project_id = ? AND m.author = 'lead' AND t.archived IS NULL ORDER BY m.id",
+        "SELECT id, subject FROM owner_requests"
+        " WHERE project_id = ? AND kind = 'plan_message' AND done IS NULL ORDER BY id",
         (project_id,),
     ).fetchall()
-    # a thread the owner answered, whose reply isn't written yet, waits for nothing (F51 D4)
-    answered = {
-        r["subject"]
-        for r in conn.execute(
-            "SELECT subject FROM owner_requests"
-            " WHERE project_id = ? AND kind = 'plan_message' AND done IS NULL",
-            (project_id,),
-        ).fetchall()
+    return [str(r["subject"]) for r in rows if r["subject"] and str(r["id"]) not in cancelled]
+
+
+def _answers_wanted(
+    conn: sqlite3.Connection,
+    project_id: int,
+    project: str,
+    titles: dict[str, str],
+    now: datetime,
+) -> list[DeskItem]:
+    """One box per conversation (F74): threads whose last message is the lead's, a reply the
+    owner hasn't answered (an archived thread waits for nothing), then the threads the lead owes
+    a reply, dashed and on their way: an open ``plan_message`` request names the card, or the
+    owner's (or the runner's, ADR 29) message is the latest and a planner job about it is open.
+    Those are listed whatever is stored: archived, or no thread yet."""
+    asked = _asked(conn, project_id)
+    planned = {
+        str(r["subject"] or "").split("#")[0]
+        for r in metrics.open_jobs(conn, project_id)
+        if r["kind"] == PLANNER
     }
-    rows = [r for r in rows if r["card"] not in answered]
-    return [
+    last = conn.execute(
+        "SELECT t.card, m.at, m.author, t.archived FROM planner_threads t"
+        " JOIN planner_messages m ON m.id = ("
+        "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
+        " WHERE t.project_id = ? ORDER BY t.id",
+        (project_id,),
+    ).fetchall()
+    waiting = dict.fromkeys(
+        [r["card"] for r in last if r["author"] in ("owner", "runner") and r["card"] in planned]
+        + asked
+    )
+    items = [
         DeskItem(
             "answers",
             _thread_title(r["card"], titles),
             f"the lead replied {ago(now - _when(r['at']))} ago",
             f"/planning/{r['card']}",
         )
-        for r in rows
+        for r in last
+        if r["author"] == "lead" and r["archived"] is None and r["card"] not in waiting
     ]
+    if not waiting:
+        return items
+    # F84 D4: in the lead's order, the reply being written first, then the plants, then
+    # the messages the runner hasn't placed, then those held for a Claude limit
+    jobs = [j for j in running_jobs(conn, project, now) if j.live]
+    places = reply_line(conn, project, now, jobs)
+    writing = _writing(places)
+    placed: list[DeskItem] = []
+    rest: list[DeskItem] = []
+    later: list[DeskItem] = []
+    for card in waiting:
+        held = _held(conn, project_id, now, card)
+        place = places.get(card) if held is None else None
+        reply = _next_reply(conn, project, jobs, True, held, writing)
+        said = place.words if place is not None else f"waiting for the lead · {reply}"
+        item = DeskItem(
+            "answers",
+            _thread_title(card, titles),
+            said,
+            f"/planning/{card}",
+            on_its_way=True,
+            place=place,
+        )
+        (placed if place is not None else rest if held is None else later).append(item)
+    placed.sort(key=lambda item: item.place.place if item.place else 0)
+    return items + placed + rest + later
 
 
 def _part_name(proposal: dict[str, object]) -> str:
@@ -214,13 +261,13 @@ def _ripe(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskIte
 
 
 def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
-    """Idea cards no thread is about yet."""
+    """Idea cards no thread is about yet, and no message on its way (F74 D4)."""
     threads = {
         r["card"]
         for r in conn.execute(
             "SELECT card FROM planner_threads WHERE project_id = ?", (project_id,)
         ).fetchall()
-    }
+    } | set(_asked(conn, project_id))
     rows = conn.execute(
         "SELECT key, title FROM milestones WHERE project_id = ? AND state = 'idea' ORDER BY id",
         (project_id,),
@@ -355,7 +402,9 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         repo = _repo(conn, project)
         ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
         proposals = _open_proposals(conn, project_id, _known_cards(repo), repo)
-        answers = _acted_on(conn, project_id, _answers_wanted(conn, project_id, titles, now))
+        answers = _acted_on(
+            conn, project_id, _answers_wanted(conn, project_id, project, titles, now)
+        )
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
     return [

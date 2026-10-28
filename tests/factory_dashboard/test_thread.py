@@ -30,11 +30,9 @@ from tests.factory_dashboard.test_planning import (
     ORIGIN,
     _archive,
     _asked_changes,
-    _coming_items,
     _finished,
     _group,
     _groups,
-    _items,
     _lead_says,
     _open,
     _page,
@@ -917,20 +915,26 @@ def test_a_cancel_on_its_way_strikes_the_message_and_the_send_form_comes_back(
     assert '<p id="waiting"' in html and 'id="reply"' not in html
 
 
-def test_a_cancelled_message_no_longer_puts_its_thread_in_coming(planning, db_path, serve):
+def _dashed_links(html: str) -> list[str]:
+    """The links of the dashed (on its way) boxes in "Your answers wanted"."""
+    return re.findall(
+        r'<a href="([^"?]+)[^"]*" class="on-its-way-item', _groups(html).get("answers", "")
+    )
+
+
+def test_a_cancelled_message_no_longer_puts_its_thread_in_answers_wanted(planning, db_path, serve):
     """The desk says what the thread says: a message with a cancel on its way waits for no
     reply; an edited one still does, and so does a second message nobody cancelled."""
     said = _finished(db_path, planning, "plan_message", "general", MESSAGE, None)
-    waiting = ("/planning/general", "General")
     client = serve()
-    assert waiting in _coming_items(_page(client))
+    assert _dashed_links(_page(client)) == ["/planning/general"]
     edit = _finished(db_path, planning, "change", str(said), COMMENTED, None)
-    assert waiting in _coming_items(_page(client))
+    assert _dashed_links(_page(client)) == ["/planning/general"]
     _write(db_path, lambda conn: metrics.finish_request(conn, edit, NOW.isoformat(), "changed"))
     _finished(db_path, planning, "change", str(said), '{"cancel": true}', None)
-    assert 'id="desk-coming"' not in _page(client)  # nothing else was coming
+    assert _dashed_links(_page(client)) == []  # nothing else was coming
     _finished(db_path, planning, "plan_message", "general", MESSAGE, None)
-    assert waiting in _coming_items(_page(client))
+    assert _dashed_links(_page(client)) == ["/planning/general"]
 
 
 def test_edit_then_save_posts_a_change_and_the_message_shows_it_at_once(
@@ -1057,8 +1061,8 @@ def test_the_runners_look_shows_as_the_runners_and_waits_for_the_lead(planning, 
     assert 'id="waiting"' in page  # the lead's reply is next
     html = _page(client)
     assert not _refused_items(html)
-    assert "/planning/f9" not in dict(_items(_groups(html).get("answers", "")))
-    assert ("/planning/f9", "Parallel developers") in _coming_items(html)
+    assert _dashed_links(html) == ["/planning/f9"]  # one dashed box, nothing asks for the owner
+    assert 'id="desk-coming"' not in html.replace('id="live-desk-coming"', "")
 
 
 # --- a card's reserve lever (F172 D6) -----------------------------------------------------

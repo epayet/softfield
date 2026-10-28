@@ -1273,11 +1273,14 @@ def _line(
 
 
 def _boxes(html: str) -> list[tuple[str, str, bool]]:
-    """Coming's thread boxes, in order: (thread, text, drawn as the one being written)."""
+    """The thread boxes waiting for the lead, in order, from "Your answers wanted": (thread,
+    text, drawn as the one being written)."""
     return [
         (thread, _text(body), "writing" in attrs)
         for thread, attrs, body in re.findall(
-            r'<a href="/planning/([^"?]+)"([^>]*)>(.*?)</a>', _coming(html), re.S
+            r'<a href="/planning/([^"?]+)[^"]*"( class="on-its-way-item[^>]*)>(.*?)</a>',
+            _groups(html)["answers"],
+            re.S,
         )
     ]
 

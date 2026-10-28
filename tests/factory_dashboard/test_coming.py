@@ -74,7 +74,7 @@ def test_a_plant_shows_the_idea_in_coming_at_once(page, planning, db_path, serve
     page.click("#plant-only")
     page.wait_for_selector("#desk-coming", timeout=2000)  # F63: the poll would take ~5 s
     pick = "planting at the runner's next pick"
-    assert _coming_lines(page) == ["COMING · 1", "A note about the frame", pick]
+    assert _coming_lines(page) == ["COMING SEEDS · 1", "A note about the frame", pick]
     assert page.input_value('#plant textarea[name="text"]') == ""
     assert page.locator("#plant-row").count() == 1
     assert page.locator("#plant").count() == 1
@@ -88,7 +88,7 @@ def _coming_lines(page) -> list[str]:
 
 def test_a_second_plant_adds_a_second_row(page, planning, db_path, serve):
     """Two plants from the same page, no reload: the form drawn again after the first still
-    posts, and Coming holds the two notes in order under "Coming · 2", once each."""
+    posts, and Coming holds the two notes in order under "Coming seeds · 2", once each."""
     _open(page, serve())
     page.fill('#plant textarea[name="text"]', "First note")
     page.click("#plant-only")
@@ -97,7 +97,7 @@ def test_a_second_plant_adds_a_second_row(page, planning, db_path, serve):
     page.click("#plant-ask")
     page.wait_for_selector("#desk-coming >> text=Second note")
     pick = "planting at the runner's next pick"
-    assert _coming_lines(page) == ["COMING · 2", "First note", pick, "Second note", pick]
+    assert _coming_lines(page) == ["COMING SEEDS · 2", "First note", pick, "Second note", pick]
     assert page.url.endswith("/planning")  # still the same page: no form went out as a GET
     assert _values(db_path, "plant") == [
         {"text": "First note", "ask": False},
@@ -126,7 +126,7 @@ def test_a_failed_post_leaves_textarea_and_coming_as_they_were(page, planning, d
     )
     _open(page, serve())
     before = _coming_lines(page)
-    assert before == ["COMING · 1", "Existing note", "planting at the runner's next pick"]
+    assert before == ["COMING SEEDS · 1", "Existing note", "planting at the runner's next pick"]
     fetched: list[str] = []
 
     def refuse(route) -> None:
@@ -222,9 +222,40 @@ def test_a_plant_the_runner_will_refuse_still_shows(planning, db_path, serve, va
     assert "Plant: Your idea" in _text(response.text)
 
 
-def test_a_thread_with_open_plan_message_request_shows_in_coming(planning, db_path, serve):
-    """A thread whose last stored message is the lead's: an open plan_message request puts it in
-    Coming with its link and "waiting for the lead"."""
+def _answers(html: str) -> str:
+    """The "Your answers wanted" group's markup."""
+    return _groups(html).get("answers", "")
+
+
+def _dashed(html: str, link: str) -> int:
+    """How many dashed (on its way) items in "Your answers wanted" link to ``link``."""
+    found = re.findall(r'<a href="([^"?]+)[^"]*" class="on-its-way-item"', _answers(html))
+    return found.count(link)
+
+
+def test_a_thread_with_open_plan_message_request_shows_in_answers_wanted(planning, db_path, serve):
+    """A thread whose last stored message is the lead's: an open plan_message request makes its
+    one box dashed, "waiting for the lead", and nothing shows in Coming seeds."""
+    _write(db_path, lambda conn: _seven_points(conn, planning))
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, subject, created)"
+            " VALUES (?, 'plan_message', 'f6', ?)",
+            (planning, _at(timedelta(minutes=5))),
+        ),
+    )
+    html = _page(serve())
+    assert '<section id="desk-coming"' not in html
+    assert [i for i in _items(_answers(html)) if i[0] == "/planning/f6"] == [
+        ("/planning/f6", "The planning room")
+    ]
+    assert _dashed(html, "/planning/f6") == 1
+    assert "waiting for the lead" in _text(_answers(html))
+
+
+def test_a_general_message_request_is_a_dashed_answers_item(planning, db_path, serve):
+    """The general thread has no stored message: an open request still makes its dashed box."""
     _write(
         db_path,
         lambda conn: conn.execute(
@@ -237,15 +268,14 @@ def test_a_thread_with_open_plan_message_request_shows_in_coming(planning, db_pa
             ),
         ),
     )
-    client = serve()
-    html = _page(client)
-    assert "desk-coming" in html
-    assert ("/planning/general", "General") in _coming_items(html)
-    assert "waiting for the lead" in _coming_text(html)
+    html = _page(serve())
+    assert '<section id="desk-coming"' not in html
+    assert _dashed(html, "/planning/general") == 1
+    assert "waiting for the lead" in _text(_answers(html))
 
 
-def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve):
-    """F6's last message is the owner's; an open planner row about F6 puts it in Coming."""
+def test_a_thread_with_open_planner_row_shows_in_answers_wanted(planning, db_path, serve):
+    """F6's last message is the owner's; an open planner row about F6 keeps its dashed box."""
     _write(
         db_path,
         lambda conn: metrics.queue_job(
@@ -254,9 +284,9 @@ def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve
     )
     client = serve()
     html = _page(client)
-    assert "desk-coming" in html
-    assert ("/planning/f6", "The planning room") in _coming_items(html)
-    assert "next, after f1-04-live · any minute now" in _coming_text(html)
+    assert '<section id="desk-coming"' not in html
+    assert _dashed(html, "/planning/f6") == 1
+    assert "next, after f1-04-live · any minute now" in _text(_answers(html))
 
 
 @pytest.mark.parametrize(
@@ -283,7 +313,7 @@ def test_a_reply_parked_for_a_limit_says_which_and_until_when(
     )
     words = f"waits for Claude's {which} limit, until {until.astimezone():%a %H:%M}"
     client = serve()
-    assert f"waiting for the lead · {words}" in _coming_text(_page(client))
+    assert f"waiting for the lead · {words}" in _text(_answers(_page(client)))
     assert f"Next for the lead · {words}" in _text(_thread(client, "f6"))
     assert f"Your next reply: {words}." in _text(_page(client))
 
@@ -299,11 +329,11 @@ def test_coming_skips_a_job_whose_run_has_stopped_beating(planning, db_path, ser
     )
     html = _page(serve(heartbeat_age=timedelta(hours=2)))
     assert "Your next reply: at the factory's next pick." in _tile(html, "factory-now")
-    assert "waiting for the lead · at the factory's next pick" in _coming_text(html)
+    assert "waiting for the lead · at the factory's next pick" in _text(_answers(html))
 
 
 def test_a_thread_with_both_open_request_and_planner_row_shows_once(planning, db_path, serve):
-    """A thread with both an open request and an open planner row shows once in Coming."""
+    """A thread with both an open request and an open planner row shows once, dashed."""
     _write(
         db_path,
         lambda conn: conn.execute(
@@ -324,17 +354,19 @@ def test_a_thread_with_both_open_request_and_planner_row_shows_once(planning, db
     )
     client = serve()
     html = _page(client)
-    assert "desk-coming" in html
-    items = _coming_items(html)
-    general_items = [i for i in items if i[0] == "/planning/general"]
-    assert len(general_items) == 1
+    assert '<section id="desk-coming"' not in html
+    assert _dashed(html, "/planning/general") == 1
+    assert [i for i in _items(_answers(html)) if i[0] == "/planning/general"] == [
+        ("/planning/general", "General")
+    ]
 
 
-def test_after_the_request_is_done_and_the_lead_replies_the_thread_leaves_coming(
+def test_after_the_request_is_done_and_the_lead_replies_the_box_goes_solid(
     planning, db_path, serve
 ):
-    """The general thread's last stored message is the lead's: the owner's open message puts it
-    in Coming; once the runner has stored it and the lead's reply, it leaves."""
+    """The owner's open message makes the general thread's box dashed; once the runner has
+    stored it, an open planner job keeps it dashed; once the lead's reply is stored, it is solid
+    and counts."""
     _write(
         db_path,
         lambda conn: metrics.add_request(
@@ -342,24 +374,42 @@ def test_after_the_request_is_done_and_the_lead_replies_the_thread_leaves_coming
         ),
     )
     client = serve()
-    assert ("/planning/general", "General") in _coming_items(_page(client))
+    before = _count(_page(client))
+    assert _dashed(_page(client), "/planning/general") == 1
 
-    def answered(conn: sqlite3.Connection) -> None:
+    def picked(conn: sqlite3.Connection) -> None:
         conn.execute(
             "UPDATE owner_requests SET done = ? WHERE kind = 'plan_message'",
             (_at(timedelta(minutes=4)),),
         )
         thread = metrics.planner_thread(conn, planning, "general", _at(timedelta(minutes=4)))["id"]
         metrics.add_planner_message(conn, thread, "owner", _at(timedelta(minutes=4)), "And test 1?")
+        metrics.queue_job(
+            conn, planning, "planner", "general#1", "a message", _at(timedelta(minutes=4))
+        )
+
+    _write(db_path, picked)
+    html = _page(client)
+    assert _dashed(html, "/planning/general") == 1
+    assert _count(html) == before
+
+    def replied(conn: sqlite3.Connection) -> None:
+        thread = metrics.planner_thread(conn, planning, "general", _at(timedelta(minutes=4)))["id"]
         metrics.add_planner_message(conn, thread, "lead", _at(timedelta(minutes=1)), "It passes.")
 
-    _write(db_path, answered)
-    assert '<section id="desk-coming"' not in _page(client)
+    _write(db_path, replied)
+    html = _page(client)
+    assert '<section id="desk-coming"' not in html
+    assert _dashed(html, "/planning/general") == 0
+    assert ("/planning/general", "General") in _items(_answers(html))
+    assert _count(html) == before + 1
 
 
-def test_a_first_message_on_a_card_with_no_thread_shows_in_coming(planning, db_path, serve):
+def test_a_first_message_on_a_card_with_no_thread_is_a_dashed_answers_item(
+    planning, db_path, serve
+):
     """F9 is an idea card nobody has talked about: the runner makes its thread at its next pick,
-    but the owner's message shows in Coming at once."""
+    but the owner's message shows at once as a dashed box, and F9 leaves the seeds."""
     _write(
         db_path,
         lambda conn: metrics.add_request(
@@ -367,13 +417,38 @@ def test_a_first_message_on_a_card_with_no_thread_shows_in_coming(planning, db_p
         ),
     )
     html = _page(serve())
-    assert _coming_items(html) == [("/planning/f9", "Parallel developers")]
-    assert "waiting for the lead" in _coming_text(html)
+    assert '<section id="desk-coming"' not in html
+    assert _dashed(html, "/planning/f9") == 1
+    assert ("/planning/f9", "Parallel developers") in _items(_answers(html))
+    assert "waiting for the lead" in _text(_answers(html))
+    assert "/planning/f9" not in _groups(html).get("seeds", "")
 
 
-def test_after_the_leads_reply_the_thread_moves_to_answers_wanted(planning, db_path, serve):
-    """Once the lead's reply is stored, the thread moves to "Your answers wanted"."""
-    # First verify the thread is in Coming with an open planner row
+def test_an_open_plant_request_is_all_coming_seeds_holds(planning, db_path, serve):
+    """Coming's heading reads "Coming seeds" and holds the plant, nothing about a thread."""
+    _write(
+        db_path,
+        lambda conn: conn.execute(
+            "INSERT INTO owner_requests (project_id, kind, value, created)"
+            " VALUES (?, 'plant', ?, ?)",
+            (planning, json.dumps({"text": "A new idea"}), _at(timedelta(minutes=10))),
+        ),
+    )
+    _write(
+        db_path,
+        lambda conn: metrics.queue_job(
+            conn, planning, "planner", "f6#2", "a message", _at(timedelta(minutes=5))
+        ),
+    )
+    html = _page(serve())
+    assert "Coming seeds · 1" in _coming(html)
+    assert "A new idea" in _coming(html)
+    assert "/planning/f6" not in _coming(html)
+
+
+def test_after_the_leads_reply_the_box_goes_solid(planning, db_path, serve):
+    """Once the lead's reply is stored, the thread's box in "Your answers wanted" is solid."""
+    # First verify the box is dashed with an open planner row
     _write(
         db_path,
         lambda conn: metrics.queue_job(
@@ -382,19 +457,15 @@ def test_after_the_leads_reply_the_thread_moves_to_answers_wanted(planning, db_p
     )
     client = serve()
     html = _page(client)
-    assert "desk-coming" in html
-    assert ("/planning/f6", "The planning room") in _coming_items(html)
+    assert _dashed(html, "/planning/f6") == 1
 
     # Now the lead replies: add a lead message to f6
     _write(db_path, lambda conn: _seven_points(conn, planning))
 
-    # The Coming section should no longer have f6
     html = _page(client)
     assert '<section id="desk-coming"' not in html
-
-    # The thread should now be in "Your answers wanted"
-    groups = _groups(html)
-    assert ("/planning/f6", "The planning room") in _items(groups["answers"])
+    assert _dashed(html, "/planning/f6") == 0
+    assert ("/planning/f6", "The planning room") in _items(_groups(html)["answers"])
 
 
 def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
@@ -420,9 +491,10 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
         ),
     )
     html = _page(client)
-    # The desk groups are still the same four (Coming is separate)
+    # The dashed box is the only new item, and it doesn't count
     groups = _groups(html)
     assert list(groups) == ["ripe", "proposals", "answers", "seeds"]
+    assert _dashed(html, "/planning/f6") == 1
     # The Planning tab count is unchanged
     planning_tab = re.search(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
@@ -433,7 +505,7 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
 
 
 def test_coming_heading_shows_the_item_count(planning, db_path, serve):
-    """With two Coming items, the heading reads "Coming · 2"."""
+    """With a plant and a thread on its way, the heading counts the plant only."""
     _write(
         db_path,
         lambda conn: conn.execute(
@@ -453,7 +525,7 @@ def test_coming_heading_shows_the_item_count(planning, db_path, serve):
         ),
     )
     html = _page(serve())
-    assert "Coming · 2" in _coming(html)
+    assert "Coming seeds · 1" in _coming(html)
 
 
 def _count(html: str) -> int:
@@ -833,7 +905,7 @@ def test_a_change_that_came_too_late_keeps_a_row_for_the_runners_word(planning, 
     _finished(db_path, planning, "change", "no such request", '{"cancel": true}', None)
     client = serve()
     html = _page(client)
-    assert "Coming · 1" in _coming(html)
+    assert "Coming seeds · 1" in _coming(html)
     tag, row = _waiting(html, ducks)
     assert tag == "div" and "line-through" not in row and "<button" not in row
     assert _text(row) == f"Rubber ducks your change came too late: the runner had taken it {ASKED}"
@@ -855,7 +927,7 @@ def test_save_posts_a_change_and_the_row_shows_it_at_once(page, planning, db_pat
     ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
     page.set_viewport_size(PHONE)
     _open(page, serve())
-    assert _coming_lines(page) == ["COMING · 2", "Calm colours", PICK, "Rubber ducks", PICK]
+    assert _coming_lines(page) == ["COMING SEEDS · 2", "Calm colours", PICK, "Rubber ducks", PICK]
     assert not page.locator(f"#save-{note}").is_visible()
     page.click(f"#waiting-{note} summary")
     assert page.url.endswith("/planning")
@@ -868,14 +940,14 @@ def test_save_posts_a_change_and_the_row_shows_it_at_once(page, planning, db_pat
     page.click(f"#save-{note}")
     page.wait_for_selector(f"div#waiting-{note}")
     changed = ["Calmer colours", f"changed · {PICK}", ASKED]
-    assert _coming_lines(page) == ["COMING · 2", *changed, "Rubber ducks", PICK]
+    assert _coming_lines(page) == ["COMING SEEDS · 2", *changed, "Rubber ducks", PICK]
     assert page.locator(f"#waiting-{note} summary, #save-{note}, #cancel-{note}").count() == 0
     assert page.locator(f"details#waiting-{ducks}").count() == 1
     assert page.input_value('#plant textarea[name="text"]') == "Half a new note"
     assert _asked_changes(db_path) == [(str(note), {"text": "Calmer colours"})]
     assert _values(db_path, "plant") == [json.loads(NOTE), json.loads(DUCKS)]  # never edited
     page.reload()
-    assert _coming_lines(page) == ["COMING · 2", *changed, "Rubber ducks", PICK]
+    assert _coming_lines(page) == ["COMING SEEDS · 2", *changed, "Rubber ducks", PICK]
 
 
 def test_save_on_an_older_plant_posts_its_title_and_thoughts(page, planning, db_path, serve):
@@ -888,7 +960,12 @@ def test_save_on_an_older_plant_posts_its_title_and_thoughts(page, planning, db_
     page.fill(f'#edit-{ducks} input[name="title"]', 'Rubber "duck" keys')
     page.click(f"#save-{ducks}")
     page.wait_for_selector(f"div#waiting-{ducks}")
-    assert _coming_lines(page) == ["COMING · 1", 'Rubber "duck" keys', f"changed · {PICK}", ASKED]
+    assert _coming_lines(page) == [
+        "COMING SEEDS · 1",
+        'Rubber "duck" keys',
+        f"changed · {PICK}",
+        ASKED,
+    ]
     words = {"title": 'Rubber "duck" keys', "thoughts": thoughts}
     assert _asked_changes(db_path) == [(str(ducks), words)]
 
@@ -902,7 +979,7 @@ def test_cancel_it_posts_a_cancel_and_the_row_is_struck_through_at_once(
     page.click(f"#cancel-{ducks}")
     page.wait_for_selector(f"div#waiting-{ducks}")
     cancelling = "cancelling at the runner's next pick"
-    assert _coming_lines(page) == ["COMING · 1", "Rubber ducks", cancelling, ASKED]
+    assert _coming_lines(page) == ["COMING SEEDS · 1", "Rubber ducks", cancelling, ASKED]
     struck = page.locator(f"#waiting-{ducks} span").first
     assert struck.inner_text() == "Rubber ducks"
     assert "line-through" in struck.evaluate("e => getComputedStyle(e).textDecorationLine")
