@@ -56,6 +56,7 @@ from runner.planner import (
     proposal_requests,
     proposal_state,
     thread_key,
+    thread_name,
 )
 from runner.requests import (
     CHANGE,
@@ -118,6 +119,8 @@ class DeskItem:
     # longer counts as waiting for them (the owner, 2026-10-08)
     on_its_way: bool = field(default=False, kw_only=True)
     place: Place | None = field(default=None, kw_only=True)  # a waiting thread's (F84)
+    # a card's open proposals as one item (F51 D1): each part's name, and whether it is on its way
+    parts: tuple[tuple[str, bool], ...] = field(default=(), kw_only=True)
 
 
 @dataclass(frozen=True)
@@ -181,6 +184,16 @@ def _answers_wanted(
         " WHERE t.project_id = ? AND m.author = 'lead' AND t.archived IS NULL ORDER BY m.id",
         (project_id,),
     ).fetchall()
+    # a thread the owner answered, whose reply isn't written yet, waits for nothing (F51 D4)
+    answered = {
+        r["subject"]
+        for r in conn.execute(
+            "SELECT subject FROM owner_requests"
+            " WHERE project_id = ? AND kind = 'plan_message' AND done IS NULL",
+            (project_id,),
+        ).fetchall()
+    }
+    rows = [r for r in rows if r["card"] not in answered]
     return [
         DeskItem(
             "answers",
@@ -298,11 +311,57 @@ def _text_with_links(text: str, q: str = "") -> str:
     )
 
 
+def _part_name(proposal: dict[str, object]) -> str:
+    """A proposal's short name on a card's desk item: ``ADR 27``, ``plan``, ``merge F34``."""
+    kind = str(proposal.get("kind") or "proposal")
+    if kind == "adr":
+        number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
+        return f"ADR {int(number[1])}" if number else "ADR"
+    if kind == MERGE:
+        try:
+            return f"merge {thread_name(merge_cards(proposal)[0])}"
+        except PlannerError:
+            return "merge"
+    return "mock-up" if kind == "mockup" else kind
+
+
+def _bundle(
+    card: str,
+    parts: list[tuple[dict[str, object], str]],
+    repo: Path | None,
+) -> DeskItem:
+    """A card's open proposals as one desk item (F51 D1): the plan's title, the parts in the
+    order they are settled (ADR first), the link to the first still to do."""
+    parts = sorted(parts, key=lambda p: p[0].get("kind") != "adr")  # stable: ADR first
+    leading = next((p for p, _ in parts if p.get("kind") in ("plan", "replan")), parts[0][0])
+    total = sum(len(points) for p, _ in parts if isinstance(points := p.get("key_points"), list))
+    words = f"{total} key points" if total else ""
+    if len(parts) == 1 and (merged := _merge_words(parts[0][0])):  # a merge alone says what joins
+        words = f"{merged} · {words}" if words else merged
+    adr_open = any(p.get("kind") == "adr" and state == OPEN for p, state in parts)
+    if repo is not None and adr_open and _adr_waits(repo, [p for p, _ in parts]):
+        words = f"{words} · accept the ADR first" if words else "accept the ADR first"
+    todo = next((p for p, state in parts if state == OPEN), None)
+    on_its_way = todo is None
+    shown = parts[0][0] if todo is None else todo
+    return DeskItem(
+        "proposals",
+        f"{thread_name(card)}: {leading.get('title') or leading['id']}",
+        _NEXT_PICK if on_its_way else words or str(shown.get("kind") or ""),
+        f"/planning/{card}/proposals/{shown['id']}",
+        on_its_way=on_its_way,
+        parts=tuple((_part_name(p), state == ON_ITS_WAY) for p, state in parts),
+    )
+
+
 def _open_proposals(
-    conn: sqlite3.Connection, project_id: int, known: set[str] | None = None
+    conn: sqlite3.Connection,
+    project_id: int,
+    known: set[str] | None = None,
+    repo: Path | None = None,
 ) -> list[DeskItem]:
     """The proposals in each thread's latest lead message that lists some, still open, on
-    threads not archived."""
+    threads not archived. A card's make one item (F51 D1); the general thread's, one each."""
     rows = conn.execute(
         "SELECT t.card, m.at, m.proposals FROM planner_threads t"
         " JOIN planner_messages m ON m.id = ("
@@ -318,6 +377,7 @@ def _open_proposals(
     for row in rows:
         since = _when(row["at"])
         later = [r for r in requests if _when(r["created"]) > since]
+        card_parts: list[tuple[dict[str, object], str]] = []
         for proposal in json.loads(row["proposals"]):
             if not isinstance(proposal, dict) or not proposal.get("id"):
                 continue
@@ -325,6 +385,9 @@ def _open_proposals(
                 continue
             state = proposal_state(proposal, row["card"], later)
             if state not in (OPEN, ON_ITS_WAY):
+                continue
+            if row["card"] != GENERAL:
+                card_parts.append((proposal, state))
                 continue
             points = proposal.get("key_points")
             words = f"{len(points)} key points" if isinstance(points, list) and points else ""
@@ -339,6 +402,8 @@ def _open_proposals(
                     on_its_way=state == ON_ITS_WAY,
                 )
             )
+        if card_parts:
+            items.append(_bundle(row["card"], card_parts, repo))
     return items
 
 
@@ -835,7 +900,8 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
         answers = _acted_on(conn, project_id, _answers_wanted(conn, project_id, titles, now))
-        proposals = _open_proposals(conn, project_id, _known_cards(_repo(conn, project)))
+        repo = _repo(conn, project)
+        proposals = _open_proposals(conn, project_id, _known_cards(repo), repo)
         ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
         seeds = _acted_on(conn, project_id, _seeds(conn, project_id))
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))

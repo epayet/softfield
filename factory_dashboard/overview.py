@@ -511,7 +511,7 @@ def notices(
                 continue
             # Count open proposals for this card (not on their way).
             count = sum(
-                1
+                sum(1 for _, way in p.parts if not way) or 1  # a card's are one item (F51)
                 for p in proposals
                 if p.link.startswith(f"/planning/{card}/proposals/") and not p.on_its_way
             )

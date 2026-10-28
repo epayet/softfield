@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from factory_dashboard.planning import desk
+from factory_dashboard.planning import desk, waiting_for_you
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     LOCAL,
@@ -83,8 +83,7 @@ def test_each_group_shows_its_items_in_order(planning, serve):
     assert _items(groups["answers"]) == [("/planning/general", "General")]
     assert "the lead replied 60 min ago" in groups["answers"]
     assert _items(groups["proposals"]) == [
-        ("/planning/f6/proposals/adr-20", "ADR 20: the planning room"),
-        ("/planning/f6/proposals/plan", "F6 plan: 7 tickets"),
+        ("/planning/f6/proposals/adr-20", "F6: F6 plan: 7 tickets"),
     ]
     assert "2 key points" in groups["proposals"]
     assert _items(groups["ripe"]) == [("/planning/m4", "The web app")]
@@ -155,10 +154,11 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
             ),
         ),
     )
-    proposals = desk(db, PROJECT, NOW)[3].items
-    assert [p.link.rsplit("/", 1)[1] for p in proposals if not p.on_its_way] == still_open
+    (item,) = desk(db, PROJECT, NOW)[3].items  # the card's parts are one item (F51 D1)
+    names = {"adr-20": "ADR 20", "plan": "plan"}
+    assert [name for name, way in item.parts if not way] == [names[p] for p in still_open]
     # a pending one stays, dashed and on its way (the owner, 2026-10-08)
-    assert [p.link.rsplit("/", 1)[1] for p in proposals if p.on_its_way] == (
+    assert [name for name, way in item.parts if way] == (
         ["plan"] if kind == "approve_plan" and subject == "f6" and done is None else []
     )
 
@@ -171,7 +171,8 @@ def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
             conn, planning, "approve_plan", "f6", None, _at(timedelta(hours=3))
         ),
     )
-    assert len(desk(db, PROJECT, NOW)[3].items) == 2
+    (item,) = desk(db, PROJECT, NOW)[3].items  # F51 D1: the card's two proposals are one item
+    assert item.parts == (("ADR 20", False), ("plan", False))
 
 
 def test_the_factory_tile_names_the_running_ticket(planning, serve):
@@ -1147,6 +1148,75 @@ def test_reject_posts_a_reject_and_says_what_it_takes(
         "project": PROJECT,
         "subject": f"{thread}/{proposal}",
     }
+
+
+def _f6_adr_plan_merge(db_path: Path, planning: int, checkout: Path) -> None:
+    """F6's thread lists an ADR (Proposed on main), a plan and a merge into it."""
+    adr = checkout / ".factory" / "adr" / "20-planning-room.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
+    for key in ("f6", "f9"):  # a merge whose cards left main asks nothing
+        (checkout / ".factory" / "cards").mkdir(exist_ok=True)
+        (checkout / ".factory" / "cards" / f"{key}-x.md").write_text(f"# Milestone {key}: x\n")
+    merge = {**_REVIEW_MERGE, "into": "f6"}
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN, merge, _REVIEW_ADR))
+
+
+def _proposals(db: sqlite3.Connection) -> list[Any]:
+    return desk(db, PROJECT, NOW)[3].items
+
+
+def _counted(db: sqlite3.Connection) -> int:
+    """How many of the proposals the desk counts as waiting for the owner."""
+    return len([i for i in waiting_for_you(desk(db, PROJECT, NOW)) if i.group == "proposals"])
+
+
+def test_a_cards_proposals_are_one_desk_item_counted_while_a_part_waits(
+    planning, db_path, db, checkout
+):
+    """F51 D1: ADR first, then plan and merge; the item links to the first part still to do,
+    and counts until every part is on its way."""
+    _f6_adr_plan_merge(db_path, planning, checkout)
+    (item,) = _proposals(db)
+    assert item.title == "F6: F6 plan: 7 tickets"
+    assert item.parts == (("ADR 20", False), ("plan", False), ("merge F9", False))
+    assert item.words == "5 key points · accept the ADR first"
+    assert item.link == "/planning/f6/proposals/adr-20"
+    assert not item.on_its_way
+    assert _counted(db) == 1
+
+    _finished(db_path, planning, "accept_adr", "f6", "20", None)
+    (item,) = _proposals(db)
+    assert item.parts[0] == ("ADR 20", True)
+    assert item.words == "5 key points"
+    assert item.link == "/planning/f6/proposals/plan"
+    assert not item.on_its_way
+    assert _counted(db) == 1
+
+    _finished(db_path, planning, "approve_plan", "f6", None, None)
+    (item,) = _proposals(db)
+    assert item.on_its_way
+    assert all(way for _, way in item.parts)
+    assert _counted(db) == 0
+
+
+def test_a_plan_and_its_mockup_are_one_item_and_the_general_seeds_stay_two(planning, db_path, db):
+    seeds = [{**_REVIEW_SEED, "id": "seed-1"}, {**_REVIEW_SEED, "id": "seed-2"}]
+    _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN, _REVIEW_MOCKUP))
+    _write(db_path, lambda conn: _review(conn, planning, "general", *seeds))
+    items = _proposals(db)
+    assert [i.parts for i in items if i.link.startswith("/planning/f7/")] == [
+        (("plan", False), ("mock-up", False))
+    ]
+    assert len([i for i in items if i.link.startswith("/planning/general/")]) == 2
+
+
+def test_a_thread_with_an_open_plan_message_is_not_an_answer_wanted(planning, db_path, db):
+    """F51 D4: the owner answered; the lead's reply is Coming, not on the desk."""
+    _lead_says(db_path, planning, "f7", "Which one?")
+    assert "/planning/f7" in [i.link for i in desk(db, PROJECT, NOW)[2].items]
+    _finished(db_path, planning, "plan_message", "f7", "The first.", None)
+    assert "/planning/f7" not in [i.link for i in desk(db, PROJECT, NOW)[2].items]
 
 
 def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
@@ -2589,14 +2659,15 @@ def _trail(html: str) -> dict[str, str]:
 
 def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
     """F35: from the general thread, Next is F6's ADR; from there Previous is back and Next is
-    F6's plan; a page already done with leads to the first one left."""
+    the next item (F6's ADR and plan are one item, F51 D1); a page already done with leads to
+    the first one left."""
     client = serve()
     first = _trail(_thread(client, "general"))
     assert first["next"] == "/planning/f6/proposals/adr-20" and "previous" not in first
     assert "1 of " in first["words"] and "waiting for you" in first["words"]
     middle = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
     assert middle["previous"] == "/planning/general"
-    assert middle["next"] == "/planning/f6/proposals/plan"
+    assert middle["next"] != "/planning/f6/proposals/plan"
     _write(
         db_path,
         lambda conn: metrics.add_request(

@@ -183,6 +183,11 @@
       {# the owner acted on it: on its way, dashed orange, until the runner's next pick #}
       <a href="{{ item.link }}{{ q }}"{% if item.on_its_way %} class="on-its-way-item"{% endif %} style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px {% if item.on_its_way %}dashed var(--hazard){% else %}solid var(--rule){% endif %}; color: var(--fg); min-height: 44px; box-sizing: border-box">
         <span style="font-size: 14px">{{ item.title }}</span>
+        {% if item.parts | length > 1 %}
+        <span class="parts" style="display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px">
+          {% for name, way in item.parts %}<span class="part{% if way %} on-its-way{% endif %}" style="font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; background: var(--bay); {% if way %}color: var(--hazard); border: 1px dashed var(--hazard){% else %}color: var(--ink-2); border: 1px solid var(--rule){% endif %}">{% if not loop.first %}<span style="color: var(--muted)">→ </span>{% endif %}{{ name }}{% if way %} · on its way{% endif %}</span>{% endfor %}
+        </span>
+        {% endif %}
         {% if item.words %}<span style="font: 11.5px var(--mono); color: {% if item.on_its_way %}var(--hazard){% else %}var(--muted){% endif %}">{{ item.words }}</span>{% endif %}
       </a>
       {% endif %}
