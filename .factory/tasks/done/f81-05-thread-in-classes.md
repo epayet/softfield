@@ -37,3 +37,9 @@ attempts: 3
 tokens: 11619392
 logs: .factory/var/runs/20261028-134139/f81-05-thread-in-classes
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
