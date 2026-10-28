@@ -109,26 +109,9 @@ def test_no_page_or_stylesheet_names_a_third_party_host(client):
         assert _third_party_problems(text) == [], path
 
 
-def test_a_page_that_names_cdn_example_com_after_the_top_bar_fails():
+def test_a_page_that_names_cdn_example_com_after_the_top_bar_fails(client):
     """f69: a page that names https://cdn.example.com/x.js after the top bar makes the
     third-party host test fail (regression for the exact-namespace exemption)."""
-    import tempfile
-
-    from fastapi.testclient import TestClient
-
-    from factory_dashboard.app import create_app
-
-    with tempfile.NamedTemporaryFile(suffix=".sqlite", delete=False) as f:
-        db_path = Path(f.name)
-    try:
-        from runner import cli as runner_cli
-
-        runner_cli.main(["backfill", "--db", str(db_path)])
-    finally:
-        pass
-
-    app = create_app(db_path, "coucou")
-    client = TestClient(app, base_url="http://127.0.0.1")
     html = client.get("/").text
     header_close = html.lower().rfind("</header>")
     assert header_close != -1, "no </header> found"
@@ -330,7 +313,7 @@ def test_the_top_bar_has_the_mockups_title_hazard_stripe_and_tab_segment(client)
 def test_the_brand_shows_logo_and_softfield_name(client):
     """f68: the top bar shows the logo SVG and "SoftField" (Soft in warn-ink, Field in good)."""
     html = client.get("/").text
-    assert re.search(r'<a class="brand"[^>]*href="\?project=', html)
+    assert re.search(r'<a class="brand"[^>]*href="/\?project=', html)
     assert re.search(r'<svg[^>]*aria-hidden="true"', html)
     assert re.search(r'class="brand-soft">Soft</span>', html)
     assert re.search(r'class="brand-field">Field</span>', html)
@@ -347,11 +330,23 @@ def test_the_page_links_the_favicon(client):
 
 
 def test_the_brand_link_keeps_the_chosen_project(client):
-    """f68: clicking the brand goes to the Overview for the same project."""
-    html = client.get("/planning?project=other").text
-    brand = re.search(r'<a class="brand"[^>]*href="([^"]*)"', html)
-    assert brand
-    assert "?project=other" in brand[1]
+    """f68: clicking the brand goes to the Overview for the same project, from any page: a bare
+    ``?project=`` would reload the page it is on (the review, f68-F1)."""
+    for path in ("/planning", "/board", "/projects/other"):
+        html = client.get(f"{path}?project=other").text
+        brand = re.search(r'<a class="brand"[^>]*href="([^"]*)"', html)
+        assert brand, path
+        assert brand[1] == "/?project=other", path
+
+
+def test_every_page_title_says_softfield_once(client):
+    """f68: every page's title ends "· SoftField", once (the review, f68-F2: Projects and a
+    project's page said it twice)."""
+    for path in [*PAGES, f"/projects/{PROJECT}"]:
+        title = re.search(r"<title>(.*?)</title>", client.get(path).text, re.S)
+        assert title, path
+        assert title[1].endswith(" · SoftField"), (path, title[1])
+        assert title[1].count("SoftField") == 1, (path, title[1])
 
 
 @pytest.mark.parametrize("scheme", ["dark", "light"])
@@ -497,9 +492,23 @@ def test_phone_brand_name_does_not_wrap(page, client):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     page.wait_for_selector(".brand", state="visible", timeout=REFRESH)
-    brand = page.locator(".brand")
-    height = brand.evaluate("el => el.getBoundingClientRect().height")
-    assert height >= 44, f"brand height {height}px < 44px"
+    page.evaluate("() => document.fonts.ready")
+    # a select is as wide as its longest name: the owner's list has longer ones than the fixture's
+    page.evaluate(
+        """() => document.querySelector('.filters select')
+            .add(new Option('travel-companion', 'travel-companion'))"""
+    )
+    soft, field = page.locator(".brand-soft"), page.locator(".brand-field")
+    soft_box, field_box = soft.bounding_box(), field.bounding_box()
+    assert soft_box and field_box
+    assert field_box["y"] == pytest.approx(soft_box["y"], abs=2), "Field wrapped below Soft"
+    assert field_box["x"] > soft_box["x"]
+    # squeezed by the row, the name was cut to "SoftFi" (the review, f68-F3)
+    brand = page.locator(".brand").bounding_box()
+    assert brand
+    assert field_box["x"] + field_box["width"] <= brand["x"] + brand["width"] + 1
+    assert brand["height"] >= 44
+    assert layout_problems(page) == []
 
 
 def test_no_page_shows_software_factory(client):

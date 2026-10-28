@@ -533,6 +533,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** ADR 32's trial counts a step-up as Sonnet failing; here the failure was the gate's. Read the step-up job's log before counting it against Sonnet. The ticket named `.factory/milestones/`, the cards' old folder; the lead used `cards/`.
 - **Decisions affected:** none.
 
+### F68 (2026-10-28): the dashboard is called SoftField ([review](../reviews/f68-i-want-the-factory-to-be.md))
+
+- **Q1:** one developer ticket (difficulty 3), merged on the second attempt in 101 minutes; then six fix tickets from checkpoints (four by Copilot standing in for Claude), five of them on one regression test over a week (f68-03 to f68-07), all first time but one. Review round 1: one blocking (the logo's link never reached the Overview from another page), two should-fix (doubled titles; the name cut to "SoftFi" on a phone) and two nits, all fixed by the review; one should-fix to a lead ticket (f68-08).
+- **Q3:** Qwen only for the building, about 7.2 hours of model for some 40 lines of product: 1.7 on the feature, 1.6 on f68-02, 3.9 on the regression-test chain. Claude's share is in the review's numbers.
+- **Q5:** see the review's numbers.
+- **Anything else:** six checkpoints read the brand's tests closely and none clicked the link: the blocking bug was in f68-01's three-line template diff, and its test asserted the wrong href. A checkpoint on a UI ticket should check each Done when against the code, not only the tests' strength. And F114's "fix of a fix is the lead's" rule, written the day f68-07 was filed, didn't reach the checkpoints; f68-08 makes it a check.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
