@@ -116,6 +116,22 @@
     button.addEventListener("htmx:responseError", failed);
     button.addEventListener("htmx:sendError", failed);
   });
+  // Text areas grow with what is typed (f82-01): set height to auto, then to scrollHeight.
+  // Focus covers values set by a script, which fire no input event.
+  document.addEventListener("input", (event) => {
+    const ta = event.target instanceof Element && event.target.closest("textarea");
+    if (!ta) return;
+    ta.style.height = "auto";
+    const cs = getComputedStyle(ta);
+    ta.style.height = (ta.scrollHeight + parseInt(cs.borderTopWidth) + parseInt(cs.borderBottomWidth)) + "px";
+  });
+  document.addEventListener("focusin", (event) => {
+    const ta = event.target instanceof Element && event.target.tagName === "TEXTAREA";
+    if (!ta) return;
+    ta.style.height = "auto";
+    const cs = getComputedStyle(ta);
+    ta.style.height = (ta.scrollHeight + parseInt(cs.borderTopWidth) + parseInt(cs.borderBottomWidth)) + "px";
+  });
   // The dot is a button (f17): on a phone, where the words are hidden, a tap shows them until
   // another tap. The mark is on the row, which the polls don't swap (htmx settles the bar's
   // own classes back to the server's).

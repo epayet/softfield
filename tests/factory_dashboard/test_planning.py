@@ -4439,3 +4439,102 @@ def test_a_plan_proposal_shows_no_frame_and_no_gone_block(planning, db_path, ser
     html = _review_page(serve(), "/planning/f6/proposals/plan")
     assert 'id="mockup"' not in html
     assert re.search(r'<div class="gone">', html) is None
+
+
+# --- text boxes grow with what is typed (f82-01) ------------------------------------------------
+
+
+def test_the_plant_box_grows_as_you_type_and_has_no_scrollbar_until_60_vh(page, planning, serve):
+    """Typing ten lines makes the Plant box taller than at load, with no scrollbar inside
+    (scrollHeight equals clientHeight)."""
+    _open(page, serve())
+    initial_height = page.locator('#plant textarea[name="text"]').evaluate("el => el.offsetHeight")
+    # Type ten lines
+    for i in range(10):
+        page.type('#plant textarea[name="text"]', f"Line {i + 1}\n")
+    page.wait_for_timeout(100)
+    textarea = page.locator('#plant textarea[name="text"]')
+    assert textarea.evaluate("el => el.offsetHeight") > initial_height
+    # scrollHeight may be 1-2px larger than clientHeight due to border calculations;
+    # what matters is that there is no scrollbar (scrollHeight ≈ clientHeight)
+    assert (
+        abs(textarea.evaluate("el => el.scrollHeight") - textarea.evaluate("el => el.clientHeight"))
+        <= 2
+    )
+
+
+def test_the_plant_box_stops_at_60_vh_and_scrolls_inside(page, planning, serve):
+    """Typing far past 60% of the window's height stops the box at about that height,
+    and it scrolls inside (scrollHeight greater than clientHeight)."""
+    page.set_viewport_size({"width": 1024, "height": 800})
+    _open(page, serve())
+    # Type enough lines to exceed 60vh
+    for i in range(100):
+        page.type('#plant textarea[name="text"]', f"Line {i + 1}\n")
+    page.wait_for_timeout(100)
+    textarea = page.locator('#plant textarea[name="text"]')
+    max_height = page.evaluate("() => window.innerHeight * 0.6")
+    actual_height = textarea.evaluate("el => el.offsetHeight")
+    assert abs(actual_height - max_height) < 10
+    assert textarea.evaluate("el => el.scrollHeight") > textarea.evaluate("el => el.clientHeight")
+
+
+def test_emptying_the_plant_box_brings_it_back_to_four_row_height(page, planning, serve):
+    """Emptying the box brings it back to its four-row height, never below."""
+    _open(page, serve())
+    textarea = page.locator('#plant textarea[name="text"]')
+    # Measure the initial height right after page opens
+    initial_height = textarea.evaluate("el => el.offsetHeight")
+    # Type some text to grow it
+    for i in range(10):
+        page.type('#plant textarea[name="text"]', f"Line {i + 1}\n")
+    page.wait_for_timeout(100)
+    grown_height = textarea.evaluate("el => el.offsetHeight")
+    # Empty the box
+    page.fill('#plant textarea[name="text"]', "")
+    page.wait_for_timeout(100)
+    empty_height = textarea.evaluate("el => el.offsetHeight")
+    assert empty_height < grown_height
+    # The box returns to its initial height, never below
+    assert empty_height >= initial_height
+
+
+def test_after_a_plant_is_sent_the_fresh_box_is_at_four_row_height(page, planning, serve):
+    """After a plant is sent, the fresh Plant box is back at its four-row height."""
+    _open(page, serve())
+    textarea = page.locator('#plant textarea[name="text"]')
+    # Measure the initial height right after page opens
+    initial_height = textarea.evaluate("el => el.offsetHeight")
+    # Type several lines to grow the box (page.type fires input events)
+    for i in range(10):
+        page.type('#plant textarea[name="text"]', f"Line {i + 1}\n")
+    page.wait_for_timeout(100)
+    page.click("#plant-only")
+    page.wait_for_selector("#desk-coming")
+    page.wait_for_selector("#plant textarea")
+    assert page.input_value('#plant textarea[name="text"]') == ""
+    fresh_height = textarea.evaluate("el => el.offsetHeight")
+    assert fresh_height >= initial_height
+
+
+def test_a_key_point_comment_box_grows_the_same_way(page, planning, db_path, serve):
+    """A key point's comment box on a card's thread grows the same way (the rule is
+    page-wide, not the Plant box's)."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR))
+    _open(page, serve(), "/planning/f6/proposals/adr-20")
+    # Open the first point's comment box
+    page.click('.key-point[data-point="1"] .change-btn')
+    page.wait_for_timeout(100)
+    textarea = page.locator('.key-point[data-point="1"] textarea.comment')
+    initial = textarea.evaluate("el => el.offsetHeight")
+    # Type to grow it
+    for i in range(10):
+        page.type('.key-point[data-point="1"] textarea.comment', f"Comment line {i + 1}\n")
+    page.wait_for_timeout(100)
+    grown = textarea.evaluate("el => el.offsetHeight")
+    assert grown > initial
+    # scrollHeight may be 1-2px larger than clientHeight due to border calculations
+    assert (
+        abs(textarea.evaluate("el => el.scrollHeight") - textarea.evaluate("el => el.clientHeight"))
+        <= 2
+    )

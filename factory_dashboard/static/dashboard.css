@@ -879,3 +879,6 @@ body.has-order-bar main { padding-bottom: 120px; }
 .about .later { color: var(--muted); font-size: 13.5px; margin: 8px 0 0; }
 .review-wait { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .review-wait h2 { margin: 0 !important; }
+
+/* Text areas grow with what is typed, up to 60 vh, then scroll inside (f82-01) */
+textarea { max-height: 60vh; overflow-y: auto; }
