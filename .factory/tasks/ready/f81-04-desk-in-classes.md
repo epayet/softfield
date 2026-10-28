@@ -3,7 +3,7 @@ id: f81-04-desk-in-classes
 milestone: f81-assess-the-current-ui-state-of
 agent: developer
 difficulty: 4
-depends_on: [f81-03-one-button-set]
+depends_on: [f81-03-one-button-set, f81-08-wire-square-parts]
 files:
   - factory_dashboard/static/dashboard.css
   - factory_dashboard/templates/planning.html
