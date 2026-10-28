@@ -22,10 +22,17 @@ Every button on the factory's pages is one of two: Go, a hazard-yellow plate wit
 
 ### Context
 Build the buttons of the Proposed side of `.factory/cards/f81-mockup/theme-pass.html` (`.btn`, `.btn.go`, `.btn.plain`); card doc `.factory/cards/f81-assess-the-current-ui-state-of.md` D5.
-- Add `.btn`, `.btn.go` and `.btn.plain` to `factory_dashboard/static/dashboard.css`; the cut corner is `clip-path: var(--notch)` (the token f81-01 added). At least 44 px high.
-- In `factory_dashboard/templates/planning.html`, `thread.html` and `proposal.html`, every `<button>` and button-like `<a>` with an inline `style=` becomes `class="btn go"` (the hazard-filled ones) or `class="btn plain"` (the outlined ones), keeping its id, `hx-*`, `onclick` and words.
-- The existing go-buttons become `.btn.go` too: `.aside .go` (`ticket.html`), `.order-bar .go` (`board.html`; `factory_dashboard/static/board.js` reads only its id or class `go`: keep `go`), `.projects-page .send-order` (`projects.html`).
-- Tests in `tests/factory_dashboard/test_planning.py` that read a button's inline style read its class instead.
+- Add `.btn`, `.btn.go` and `.btn.plain` to `factory_dashboard/static/dashboard.css`; the cut corner is `clip-path: var(--notch)` (the token f81-01 added). At least 44 px high. Add `.btn.go:disabled` (muted, transparent, dashed rule border) for the Approve plan button that waits on an ADR.
+- The buttons to change, all with an inline `style=` today (some span 2–3 lines, the `style=` on the last):
+  - `planning.html`: `#plant-only` (go), `#plant-ask` (plain), `save-…` (go), `cancel-…` (plain), the `again-…` link and the `again-…` button (go), `dismiss-…` (plain), `try-again-…` (go), `set-aside-…` (plain).
+  - `thread.html`: Sign off (go), `edit-…` (go), `save-…` (go), `cancel-…` (plain), Send (go), Remove (go), Archive/Unarchive (plain).
+  - `proposal.html`: `.change-btn` Comment… (plain; keep its class too), and `#send-back`, `#accept-adr`, `#approve-plan`, `#approve-merge`, `#plant` (go), which share the `{% set button = … %}` string: drop that string. `#reject-button` is plain. These sit full width in `.action-buttons`: give that width in the CSS, not inline.
+  - Plain `<a>` links (cards, merged-into, the back link) are not buttons: leave them.
+- Keep each button's id, `hx-*`, `onclick`, `hidden`, `disabled` and words.
+- The existing go-buttons become `.btn.go` too: `.aside .go` (`ticket.html`), `.order-bar .go` (`board.html`; `factory_dashboard/static/board.js` reads only its id or class `go`: keep `go`), `.projects-page .send-order` (`projects.html`; its script reads `.send-order`: keep that class).
+- No existing test reads a button's inline style: the new tests are your own. Put them at the end of the files, don't read the whole files:
+  - `tests/factory_dashboard/test_app.py`: after the "plate panels (f81-01)" section, a "one button set (f81-03)" section that reads `dashboard.css` the same way (`.btn.go` has `clip-path: var(--notch)`, `.btn` a 44 px min-height).
+  - `tests/factory_dashboard/test_planning.py`: render `/planning` with the `planning` and `serve` fixtures (as `test_each_group_shows_its_items_in_order` does) and check `#plant-only` carries `btn go`, `#plant-ask` `btn plain`, and no `<button` tag in the page has `style=`.
 
 ### Done when
 - no `<button>` in the three planning templates has a `style=`
