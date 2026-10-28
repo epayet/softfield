@@ -3521,9 +3521,9 @@ def test_meter_has_slot_styling():
 
 
 def test_gauge_has_quarter_ticks():
-    """The gauge has quarter ticks under the meter."""
+    """The meter-ticks rule has quarter ticks under the meter."""
     css = (STATIC / "dashboard.css").read_text()
-    gauge_block = re.search(r"\.gauge\s*\{([^}]*)\}", css)
+    gauge_block = re.search(r"\.meter-ticks\s*\{([^}]*)\}", css)
     assert gauge_block
     assert "background-image" in gauge_block[1] or "linear-gradient" in gauge_block[1]
     assert "25%" in gauge_block[1], "quarter ticks use 25% spacing"

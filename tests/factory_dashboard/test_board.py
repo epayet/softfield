@@ -1009,7 +1009,7 @@ def test_a_tap_on_a_plot_shows_its_stage_alone_on_a_phone(page, board_client):
     open_page(page, board_client, "/board?q=duck")
     page.locator(".plot.at-ripe").click()
     assert _shown(page) == ["ripe"]
-    assert page.locator("#stage-ripe .none").is_visible()
+    assert page.locator("#stage-ripe .empty").is_visible()
 
 
 def test_the_address_names_the_stage_shown_on_a_phone(page, board_client):

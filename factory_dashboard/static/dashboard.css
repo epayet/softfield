@@ -204,8 +204,8 @@ tbody tr:hover { background: var(--accent-wash); }
 .meter > span { position: absolute; inset: 1px auto 1px 1px; max-width: 100%; background: var(--c, var(--a2)); }
 .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
   outline: 1px solid var(--surface); z-index: 1; }
-/* Gauge: quarter ticks under the meter (CSS only) */
-.gauge { height: 5px; margin-top: 2px; background: var(--plate); border: 1px solid var(--rule);
+/* Meter ticks: quarter marks under the meter (CSS only) */
+.meter-ticks { height: 5px; margin-top: 2px; background: var(--plate); border: 1px solid var(--rule);
   background-image: linear-gradient(90deg, var(--rule) 1px, transparent 1px);
   background-size: 25% 100%; background-position: 0 0; background-repeat: repeat-x; }
 /* F84 D5: the one reply the lead is writing, in the planner's colour (a status, so the agent's
@@ -741,7 +741,7 @@ body.has-order-bar main { padding-bottom: 120px; }
 .order-bar p { margin: 0; flex: 1 1 200px; min-width: 0; font-size: 13.5px; }
 .order-bar button, .order-sheet button { min-height: 44px; padding: 0 14px;
   font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; }
-.order-bar .go { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+.order-bar .go { border-color: var(--hazard); }
 .order-sheet { width: 100%; max-width: 520px; margin: auto auto 0; padding: 12px 16px
   calc(14px + env(safe-area-inset-bottom, 0px)); background: var(--bay); color: var(--fg);
   border: 1px solid var(--rule); }
@@ -839,7 +839,7 @@ body.has-order-bar main { padding-bottom: 120px; }
 .aside .say { font-size: 15px; margin: 0 0 6px; }
 .aside .then { color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px; }
 .aside .go { font: 700 14px var(--display); letter-spacing: .08em; text-transform: uppercase; min-height: 44px; padding: 0 20px;
-  background: var(--hazard); color: var(--hazard-ink); border: 0; cursor: pointer; }
+  border: 0; cursor: pointer; }
 .aside .way { display: none; border: 1px dashed var(--hazard); padding: 8px 10px; font: 600 12px/1.4 var(--mono); color: var(--hazard); }
 .aside.sent .go { display: none; } .aside.sent .way { display: block; }
 /* Parsed ticket body: headings and list */
@@ -868,7 +868,7 @@ body.has-order-bar main { padding-bottom: 120px; }
 .projects-page .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display);
   letter-spacing: .04em; text-transform: uppercase; }
 .projects-page .send-order { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase;
-  background: var(--hazard); color: var(--hazard-ink); border: 0; padding: 10px 16px; margin-top: 10px; }
+  border: 0; padding: 10px 16px; margin-top: 10px; }
 .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
 .projects-page .on-its-way { color: var(--opus); font-size: 13px; margin-left: 10px; }
 

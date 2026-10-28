@@ -30,6 +30,7 @@
       <span class="{{ 'past-mark' if window and window.mark is not none and value >= window.mark else 'under-mark' }}" style="width: {{ '%.0f' | format(value * 100) }}%"></span>
       <span class="mark" title="the factory stops here; the rest is yours" style="left: {{ '%.0f' | format(((window.mark if window else none) or 0.75) * 100) }}%"></span>
     </div>
+    <div class="meter-ticks"></div>
     <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">5-hour window {{ window.percent if window and window.percent else "–" }} · planning may go past the 75% line, the factory stops there</p>
     {% set wvalue = (week.value or 0) if week else 0 %}
     <div class="meter">
@@ -38,6 +39,7 @@
       <span class="mark" title="{{ week.mark_label }}" style="left: {{ '%.0f' | format(week.mark * 100) }}%"></span>
       {% endif %}
     </div>
+    <div class="meter-ticks"></div>
     <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">week {{ week.percent if week and week.percent else "–" }}</p>
   </div>
 </section>
@@ -149,7 +151,7 @@
           <span style="font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere">The runner said: {{ item.words }}</span>
           <div style="display: flex; gap: 8px; flex-wrap: wrap">
             {% if item.again %}
-            <a id="again-{{ item.id }}" href="{{ item.again }}{{ q }}&amp;again={{ item.id }}#reply" style="display: inline-flex; align-items: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); padding: 0 14px; min-height: 44px">Try again</a>
+            <a id="again-{{ item.id }}" href="{{ item.again }}{{ q }}&amp;again={{ item.id }}#reply" class="btn go">Try again</a>
             {% elif item.note %}
             <button type="button" id="again-{{ item.id }}" class="btn go" data-note="{{ item.note }}"
               onclick="const f = document.getElementById('plant'); f.elements.text.value = this.dataset.note; f.elements.again.value = '{{ item.id }}'; f.scrollIntoView(); f.elements.text.focus()">Try again</button>
@@ -194,7 +196,7 @@
       {% endfor %}
     </div>
     {% else %}
-    <p style="margin: 0; padding: 10px 14px; color: var(--muted)">Nothing waits for you.</p>
+    <div class="empty">{% include "_partials/idle_crate.svg" %}<span>Nothing waits for you.</span></div>
     {% endfor %}
   </section>
   </div>

@@ -16,6 +16,7 @@
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
   <span class="meter"><span style="width: {{ (100 * c.done / c.total) | round | int }}%"></span></span>
+  <span class="meter-ticks"></span>
   <span class="card-count">{{ c.done }} of {{ c.total }} ticket{{ "" if c.total == 1 else "s" }}{% if c.set_aside %} · {{ c.set_aside }} set aside, won't run{% endif %}</span>
   {% endif %}
   {% if c.note %}<span class="{{ 'card-action' if c.bug and c.stage == 'seed' else 'card-note' }}">{{ c.note }}</span>{% endif %}
@@ -83,7 +84,7 @@
         {% for c in cards %}
         <div class="slot" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}</div>
         {% else %}
-        <p class="none">Nothing here.</p>
+        <div class="empty">{% include "_partials/idle_crate.svg" %}<span>Nothing here.</span></div>
         {% endfor %}
         {% if more %}<a class="more" href="/milestones{{ q }}">{{ more }} more harvested ›</a>{% endif %}
       </div>
@@ -108,7 +109,7 @@
 {# The moves held until sent (F15 D3), and a card's ⋯ menu (F15 D1); board.js shows them #}
 <div id="order-bar" class="order-bar" role="region" aria-label="Moves not sent" hidden>
   <p role="status"></p>
-  <button type="button" data-order="cancel">Cancel</button>
+  <button type="button" class="btn plain" data-order="cancel">Cancel</button>
   <button type="button" class="go btn" data-order="send">Send new order</button>
 </div>
 <dialog id="order-sheet" class="order-sheet" aria-labelledby="order-sheet-title">
