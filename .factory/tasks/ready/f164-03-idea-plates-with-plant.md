@@ -2,7 +2,7 @@
 id: f164-03-idea-plates-with-plant
 milestone: f164-i-like-reading-the-milestone-reviews
 difficulty: 4
-depends_on: [f164-02-review-ideas-and-their-state, f164-02b-fix-review-ideas-lookup]
+depends_on: [f164-02-review-ideas-and-their-state, f164-02b-fix-review-ideas-lookup, f164-06-fix-f164-05-test-tells-ideas-apart]
 agent: lead
 files:
   - factory_dashboard/planning.py
