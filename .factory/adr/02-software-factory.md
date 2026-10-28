@@ -565,6 +565,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a copy-pasted handler with one changed line (`tagName ===` for `closest`) made the variable a boolean. The ticket's Done when named the focus path only in its Context, so no test pressed it, and the checkpoint judged the tests it saw. A Done when line for each path the plan names would have caught it.
 - **Decisions affected:** none.
 
+### F84 (2026-10-28): Coming says which reply the lead is writing ([review](../reviews/f84-when-the-planner-is-replying-to.md))
+
+- **Q1:** one developer ticket (difficulty 3) that Qwen failed three times (33 min failed, 78 min timeout, 20 min with no edit under an Opus direction), then about 16 hours parked before the direction. An Opus escalation built it in 43 minutes, about 120 lines and 7 tests. No checkpoint (lead work). Review round 1: two should-fix (Coming put a held reply before a message not yet picked up, against D4; the new "Writing now" words were hard to read in the light theme), both fixed by the review, and one nit to the backlog.
+- **Q3:** Claude $1.51 for the plan, $0.64 for the direction, $3.79 for the escalation; Qwen about 2.2 hours of model with nothing merged.
+- **Q5:** see the review's numbers.
+- **Anything else:** the third time (F30, F172, F84) a plan routed a ticket touching `test_planning.py` and several functions of one page to the developer after the Known range said it was the lead's: a rule only in `docs/agents/lead.md` doesn't reach the planner's routing. F143 rewrites the rule after splitting the file; the rule it ends on wants a pre-flight check, not another line.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

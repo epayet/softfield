@@ -160,7 +160,7 @@
     <div id="conversation">
     <i id="conversation-stamp" hidden data-stamp="{{ next_reply }}|{{ earlier | length }}|{{ merged_on | length }}{% for m in messages %}|{{ m.author }} {{ m.at }} {{ m.waiting }} {{ m.change.id if m.change }}{% endfor %}"></i>
     {% if next_reply %}
-    <p id="waiting"{% if writing_now %} class="writing"{% endif %} style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var({{ '--opus' if writing_now else '--muted' }})">Next for the lead · {{ next_reply }}</p>
+    <p id="waiting"{% if writing_now %} class="writing"{% endif %} style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var({{ '--opus-ink' if writing_now else '--muted' }})">Next for the lead · {{ next_reply }}</p>
     {% endif %}
     {% for msg in messages %}{{ draw(msg) }}{% endfor %}
 

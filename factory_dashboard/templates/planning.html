@@ -73,7 +73,7 @@
         {# F84 D5: the one reply being written, in the planner's colour #}
         {% if writing %}<span class="writing-label">Writing now</span>{% endif %}
         <span style="font-size: 14px">{{ item.title }}</span>
-        {% if item.words %}<span style="font: 11.5px var(--mono); color: var({{ '--opus' if writing else '--muted' }})">{{ item.words }}</span>{% endif %}
+        {% if item.words %}<span style="font: 11.5px var(--mono); color: var({{ '--opus-ink' if writing else '--muted' }})">{{ item.words }}</span>{% endif %}
         {% if writing and item.place.typical %}
         <span class="writing-bar" title="time spent against a typical reply"><span style="width: {{ [100, (item.place.elapsed / item.place.typical * 100) | int] | min }}%"></span></span>
         <span style="font: 10.5px var(--mono); color: var(--muted)">{{ item.place.elapsed | ago }} of about {{ item.place.typical | ago }} (a reply's usual length)</span>

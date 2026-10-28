@@ -32,6 +32,7 @@
   --fail: #ec5458; --clog: #ec5458;
   --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62; --oss: #4fd1a5; --nemo: #c3e06a;
   --copilot: #7aa7ff;
+  --opus-ink: var(--opus);    /* Opus's colour as text: darkened in the light theme */
   --factory: #f2b10a; --product: #4fd1a5;     /* the board's areas: the factory, Mum's product */
   --good: #5fd17a; --dev: #5b9cf5; --a7: #9085e9;
   --good-ink: #5fd17a; --critical-ink: #ef6b6b;
@@ -61,7 +62,7 @@
   --grid: #dcdfd9; --rule: #c3c8c0;
   --fg: #16191d; --ink-2: #3f4650; --muted: #5b636d;
   --fail: #c9363b; --clog: #c9363b;
-  --sonnet: #b8691f; --qwen: #4c9a26; --oss: #18977a; --nemo: #7d9a1d; --copilot: #3f6fd6;
+  --opus-ink: #b25a14; --sonnet: #b8691f; --qwen: #4c9a26; --oss: #18977a; --nemo: #7d9a1d; --copilot: #3f6fd6;
   --product: #18977a;
   --good: #2c9a46; --dev: #3a6fd8; --a7: #4a3aa7;
   --good-ink: #0a6e0a; --critical-ink: #b02d2d;
@@ -206,11 +207,11 @@ tbody tr:hover { background: var(--accent-wash); }
    colour); the rows carry an inline border, hence the !important */
 .writing { border-left: 3px solid var(--opus) !important; }
 .writing-label { align-self: flex-start; font: 600 10.5px var(--display); letter-spacing: .12em;
-  text-transform: uppercase; color: var(--floor); background: var(--opus); padding: 1px 7px;
+  text-transform: uppercase; color: var(--hazard-ink); background: var(--opus); padding: 1px 7px;
   margin-bottom: 4px; clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
 .writing-bar { display: block; height: 3px; background: var(--grid); margin-top: 5px; }
 .writing-bar > span { display: block; height: 100%; background: var(--opus); }
-.writing-now .key { font: 600 12.5px var(--mono); color: var(--opus); }
+.writing-now .key { font: 600 12.5px var(--mono); color: var(--opus-ink); }
 /* The reserve lever (f8-14): a factory lever on the meter's own line */
 .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
   border: 1px solid transparent; background: none; color: var(--ink-2); cursor: pointer;

@@ -4679,6 +4679,9 @@ def test_each_thread_page_says_its_place_or_that_it_is_being_written(planning, d
     writing = "Next for the lead · the lead is writing this reply · 2 min in, about 4 min left"
     assert writing in _text(f84)
     assert '<p id="waiting" class="writing"' in f84
+    # the words in Opus's ink, darkened in the light theme to read on a pale bay
+    assert "color: var(--opus-ink)" in f84
+    assert "color: var(--opus-ink)" not in f86
 
 
 def test_the_tile_names_the_reply_being_written_and_the_line_after_it(planning, db_path, serve):
@@ -4694,7 +4697,8 @@ def test_the_tile_names_the_reply_being_written_and_the_line_after_it(planning, 
 
 def test_a_held_reply_and_a_message_with_no_row_read_as_today(planning, db_path, serve):
     """f85's row is parked for a Claude limit, and f87's message has no row yet: neither has a
-    place; the held one says until when, the other after the reply being written."""
+    place; the held one says until when and comes last (D4), the other after the reply being
+    written."""
     client = _line(serve, db_path, planning)
     until = NOW + timedelta(hours=2)
 
@@ -4709,6 +4713,6 @@ def test_a_held_reply_and_a_message_with_no_row_read_as_today(planning, db_path,
     held = f"waits for Claude's 5-hour limit, until {until.astimezone():%a %H:%M}"
     assert [b[:2] for b in _boxes(_page(client))][1:] == [
         ("f86", "f86 next, after F84's reply · about 4 min"),
-        ("f85", f"f85 waiting for the lead · {held}"),
         ("f87", "f87 waiting for the lead · after F84's reply, ~4 min"),
+        ("f85", f"f85 waiting for the lead · {held}"),
     ]

@@ -724,9 +724,10 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
             str(r["subject"]) for r in asked if r["subject"] and str(r["id"]) not in cancelled
         ]
         # F84 D4: in the lead's order, the reply being written first, then the plants, then
-        # the threads the runner hasn't placed (held, or a message it hasn't picked up)
+        # the messages the runner hasn't placed, then those held for a Claude limit
         placed: list[DeskItem] = []
         rest: list[DeskItem] = []
+        later: list[DeskItem] = []
         if cards:
             titles = _card_titles(conn, project_id)
             jobs = [j for j in running_jobs(conn, project, now) if j.live]
@@ -740,9 +741,9 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
             item = DeskItem(
                 "coming", _thread_title(card, titles), said, f"/planning/{card}", place=place
             )
-            (placed if place is not None else rest).append(item)
+            (placed if place is not None else rest if held is None else later).append(item)
         placed.sort(key=lambda item: item.place.place if item.place else 0)
-        items = placed + items + rest
+        items = placed + items + rest + later
 
     return DeskGroup("coming", "Coming", "--hazard", items)
 
