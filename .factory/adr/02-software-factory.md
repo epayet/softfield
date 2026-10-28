@@ -557,6 +557,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** F106's main-red guard holds lead tickets only, so a developer still burns its attempts on a red main, and its rating records two "not merged" games for code that merged. The new bay already shows the Known range's split: Qwen does better than rated on code without pages (+6 over 60 tickets) and as rated on pages (−2 over 114).
 - **Decisions affected:** none. A rating per kind stays deferred, as the card's Later says.
 
+### F82 (2026-10-28): text boxes grow with what you type ([review](../reviews/f82-the-plant-idea-text-box-is.md))
+
+- **Q1:** one developer ticket (difficulty 2). Qwen's attempt 1 was right and failed only `all-tests`, on a red main (the same trap as F80, before f80-02 landed). Attempt 2 stopped with no edit; the ticket then sat about 18 hours parked for a Claude direction ($0.47), and the last attempt passed. One checkpoint nit (a loose height check). Review round 1: one should-fix (the focus half of the script threw on every focus, so a box filled by Try again never fitted) and one nit, both fixed by the review.
+- **Q3:** Qwen about 1.4 hours of model for 16 lines of script and one CSS rule; Claude $0.78 for the plan and $0.47 for the direction.
+- **Q5:** see the review's numbers.
+- **Anything else:** a copy-pasted handler with one changed line (`tagName ===` for `closest`) made the variable a boolean. The ticket's Done when named the focus path only in its Context, so no test pressed it, and the checkpoint judged the tests it saw. A Done when line for each path the plan names would have caught it.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

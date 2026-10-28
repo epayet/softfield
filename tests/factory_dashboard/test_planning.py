@@ -4499,7 +4499,7 @@ def test_emptying_the_plant_box_brings_it_back_to_four_row_height(page, planning
     empty_height = textarea.evaluate("el => el.offsetHeight")
     assert empty_height < grown_height
     # The box returns to its initial height, never below
-    assert empty_height >= initial_height
+    assert abs(empty_height - initial_height) <= 1
 
 
 def test_after_a_plant_is_sent_the_fresh_box_is_at_four_row_height(page, planning, serve):
@@ -4517,7 +4517,25 @@ def test_after_a_plant_is_sent_the_fresh_box_is_at_four_row_height(page, plannin
     page.wait_for_selector("#plant textarea")
     assert page.input_value('#plant textarea[name="text"]') == ""
     fresh_height = textarea.evaluate("el => el.offsetHeight")
-    assert fresh_height >= initial_height
+    assert abs(fresh_height - initial_height) <= 1
+
+
+def test_a_box_filled_by_a_script_fits_when_focused(page, planning, serve):
+    """A value set by a script fires no input event (Try again on a refused note): the box
+    fits its text when it is focused, without a script error (f82 review)."""
+    errors: list[str] = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    _open(page, serve())
+    textarea = page.locator('#plant textarea[name="text"]')
+    initial_height = textarea.evaluate("el => el.offsetHeight")
+    textarea.evaluate(
+        "el => { el.value = Array.from({length: 10}, (_, i) => 'Line ' + i).join('\\n'); }"
+    )
+    assert textarea.evaluate("el => el.offsetHeight") == initial_height
+    textarea.focus()
+    assert textarea.evaluate("el => el.offsetHeight") > initial_height
+    assert textarea.evaluate("el => el.scrollHeight - el.clientHeight") <= 2
+    assert errors == []
 
 
 def test_a_key_point_comment_box_grows_the_same_way(page, planning, db_path, serve):
