@@ -32,3 +32,12 @@ f63-01 reordered `desk()` in `factory_dashboard/planning.py` and moved the `bloc
 - no test reads a desk group by its index, except the order tests
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1836
+gate_failures: []
+tokens: 3287997
+```
