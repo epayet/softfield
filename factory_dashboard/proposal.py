@@ -11,14 +11,13 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
+from factory_dashboard.merges import _known_cards, _merge_words
 from factory_dashboard.planning import (
     _ADR_NUMBER,
     _KIND_COLOR,
     _MOCKUP_RE,
     _adr_waits,
     _has_proposals,
-    _known_cards,
-    _merge_words,
     _proposals,
     _repo,
     _resolve_mockup_path,

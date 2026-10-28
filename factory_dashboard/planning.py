@@ -25,6 +25,14 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, ago, render
 from factory_dashboard.board import RESERVABLE, milestone_cards
 from factory_dashboard.line import live_line
+from factory_dashboard.merges import (
+    _gone_merge,
+    _known_cards,
+    _merge_links,
+    _merge_words,
+    _merged_on,
+    _text_with_links,
+)
 from factory_dashboard.milestones import _to_html
 from factory_dashboard.overview import (
     CANCELLING,
@@ -35,7 +43,6 @@ from factory_dashboard.overview import (
     running_jobs,
 )
 from runner import metrics
-from runner.milestone import milestone_doc
 from runner.planner import (
     APPLIED,
     APPROVED,
@@ -44,10 +51,8 @@ from runner.planner import (
     OPEN,
     PLANNER,
     PlannerError,
-    cards,
     is_proposed,
     merge_cards,
-    merge_words,
     message,
     plant_words,
     proposal_requests,
@@ -68,10 +73,8 @@ from runner.requests import (
     refused,
 )
 from runner.tasks import (
-    TaskError,
     full_key,
     milestone_file,
-    milestone_key,
     short_key,
 )
 
@@ -80,14 +83,6 @@ router = APIRouter()
 GENERAL = "general"
 # A request's result when it worked (D1's table); any other result is a refusal.
 _ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
-# Merge heading written by ``planner.merged_card``: captures source key, title and date.
-_MERGE_HEADING_RE = re.compile(
-    r"^#{3,} From ([A-Z]+\d+): (.+?) "
-    r"\(merged by the (?:lead|owner) on (\d{4}-\d{2}-\d{2})\)[ \t]*$",
-    re.MULTILINE,
-)
-# Path like /planning/f95 in plain text: escape first, then link.
-_PLANNING_PATH_RE = re.compile(r"/planning/([a-z][a-z0-9-]+)")
 _TYPICAL = 20  # finished jobs of the running one's role and agent that make its typical length
 _MINUTE = timedelta(minutes=1)
 _LOOKING = "a ticket blocked on"  # the reason of a planner row that looks at a blocked ticket
@@ -201,112 +196,6 @@ def _answers_wanted(
     ]
 
 
-def _merge_words(proposal: dict[str, object]) -> str | None:
-    """A ``merge`` proposal in words, ``merge F12 into F10``; None for another kind."""
-    if proposal.get("kind") != MERGE:
-        return None
-    try:
-        return merge_words(proposal)
-    except PlannerError:
-        return None
-
-
-def _known_cards(repo: Path | None) -> set[str] | None:
-    """Every card on main, or None when the checkout isn't here."""
-    return None if repo is None else cards(repo)
-
-
-def _merge_links(
-    repo: Path | None, thread: str
-) -> tuple[list[dict[str, str]], list[dict[str, str]], str | None]:
-    """Read merge headings from card docs on main.
-
-    Returns ``(merged_into, merged_here, latest_title)``:
-    - ``merged_into``: links from this thread to cards it was merged into
-    - ``merged_here``: links from this thread to cards merged into it
-    - ``latest_title``: the title from the latest merge heading referencing this thread
-    """
-    if repo is None:
-        return [], [], None
-
-    merged_into: list[dict[str, str]] = []
-    merged_here: list[dict[str, str]] = []
-    source_key = thread.upper()
-    latest_title: str | None = None
-    latest_date: str = ""
-
-    cards_dir = repo / ".factory" / "cards"
-    if not cards_dir.is_dir():
-        return [], [], None
-
-    for path in cards_dir.glob("*.md"):
-        try:
-            doc = path.read_text(encoding="utf-8")
-        except OSError:
-            continue
-
-        card_key: str | None = None
-        with contextlib.suppress(TaskError):  # a card file not named by a key
-            card_key = short_key(milestone_key(path.stem))
-        # "Merged into F95, <title>" names the kept card by its own title, not the merged one's
-        card_title = milestone_doc(doc).get("title") or (card_key or "").upper()
-
-        for match in _MERGE_HEADING_RE.finditer(doc):
-            ref_key = match.group(1)
-            title = match.group(2).strip()
-            date = match.group(3)
-
-            if ref_key == source_key:
-                if card_key is not None:
-                    merged_into.append(
-                        {
-                            "key": card_key,
-                            "title": card_title,
-                            "date": date,
-                            "link": f"/planning/{card_key}",
-                        }
-                    )
-                # Track the latest heading title for this source
-                if date > latest_date:
-                    latest_date = date
-                    latest_title = title
-
-            if card_key is not None and card_key == thread:
-                merged_here.append(
-                    {
-                        "key": ref_key.lower(),
-                        "title": title,
-                        "date": date,
-                        "link": f"/planning/{ref_key.lower()}",
-                    }
-                )
-
-    return merged_into, merged_here, latest_title
-
-
-def _gone_merge(proposal: dict[str, object], known: set[str] | None) -> bool:
-    """A ``merge`` one of whose cards has left main: merged or dropped already, nothing to
-    ask (2026-10-08: such merges filled the desk)."""
-    if proposal.get("kind") != MERGE or known is None:
-        return False
-    try:
-        return not set(merge_cards(proposal)) <= known
-    except PlannerError:
-        return False
-
-
-def _text_with_links(text: str, q: str = "") -> str:
-    """Escape ``text`` then turn ``/planning/<key>`` into links, keeping ``q`` (the page's
-    ``?project=``). The text is a lead's plain line: the owner's messages stay as plain text."""
-    escaped = (
-        text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
-    )
-    href = q.replace("&", "&amp;")
-    return _PLANNING_PATH_RE.sub(
-        lambda m: f'<a href="/planning/{m[1]}{href}">/planning/{m[1]}</a>', escaped
-    )
-
-
 def _part_name(proposal: dict[str, object]) -> str:
     """A proposal's short name on a card's desk item: ``ADR 27``, ``plan``, ``merge F34``."""
     kind = str(proposal.get("kind") or "proposal")
@@ -405,63 +294,6 @@ def _open_proposals(
         if card_parts:
             items.append(_bundle(row["card"], card_parts, repo))
     return items
-
-
-def _merged_on(
-    conn: sqlite3.Connection,
-    project_id: int | None,
-    thread: str,
-    merged_into: list[dict[str, str]],
-    known: set[str] | None,
-) -> list[dict[str, object]]:
-    """Merged-on blocks for a merged-away card's thread page.
-
-    Returns one entry per kept card (most recent merge first), with open
-    proposals and ticket counts. Only when the thread key is not in known
-    (the card was merged away) and merged_into is non-empty.
-    """
-    if project_id is None or not merged_into or known is None or thread in known:
-        return []
-
-    # Sort by date descending (most recent first)
-    sorted_cards = sorted(merged_into, key=lambda m: m["date"], reverse=True)
-
-    all_open = _open_proposals(conn, project_id, known)
-    result: list[dict[str, object]] = []
-
-    for card in sorted_cards:
-        kept_key = card["key"]
-        # Open proposals for this kept card's thread
-        card_proposals = [
-            p for p in all_open if p.link.startswith(f"/planning/{kept_key}/proposals/")
-        ]
-        # Tickets for this kept card
-        milestone_rows = conn.execute(
-            "SELECT m.key, m.id, t.state FROM milestones m"
-            " JOIN tickets t ON t.milestone_id = m.id"
-            " WHERE m.project_id = ? AND m.key LIKE ?"
-            " AND t.state NOT IN ('later', 'removed')"
-            " ORDER BY m.id",
-            (project_id, f"{kept_key.upper()}-%"),
-        ).fetchall()
-        # N and M over the same rows: every milestone of the kept card (a replan has two)
-        milestone = milestone_rows[0] if milestone_rows else None
-        ticket_count = len(milestone_rows)
-        done_count = sum(1 for row in milestone_rows if row["state"] == "done")
-        card_data: dict[str, object] = {
-            "key": kept_key,
-            "title": card["title"],
-            "date": card["date"],
-            "link": card["link"],
-            "proposals": card_proposals,
-        }
-        if milestone:
-            card_data["milestone_key"] = milestone["key"]
-            card_data["ticket_count"] = ticket_count
-            card_data["done_count"] = done_count
-        result.append(card_data)
-
-    return result
 
 
 def _ripe(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
@@ -1462,7 +1294,14 @@ def thread_page(
     # its milestone row, marked removed, so a row says nothing
     card_on_main = known is not None and thread in known
     words = _again(conn, project_id, thread, again)
-    merged_on = _merged_on(conn, project_id, thread, merged_into, known)
+    merged_on = _merged_on(
+        conn,
+        project_id,
+        thread,
+        merged_into,
+        known,
+        lambda: _open_proposals(conn, project_id or 0, known),
+    )
     # F30 D1: the latest exchange first (the lead's latest message, under what came after it),
     # the older messages folded under Earlier; each newest first
     lead = [i for i, msg in enumerate(messages) if msg.author == "lead"]
