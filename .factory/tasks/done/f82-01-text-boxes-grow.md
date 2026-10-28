@@ -30,3 +30,12 @@ Read `.factory/cards/f82-the-plant-idea-text-box-is.md` ("What happens today", D
 - a key point's comment box on a card's thread grows the same way (the rule is page-wide, not the Plant box's)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2072
+gate_failures: ['all-tests', 'stopped']
+tokens: 1330591
+```
