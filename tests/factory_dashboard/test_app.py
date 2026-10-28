@@ -1409,6 +1409,42 @@ def test_compare_uses_per_project_done(page, serve_between, db_path):
     assert page.evaluate("window.sw_notifications.length") == 1
 
 
+def test_all_done_still_notifies_after_a_look_at_another_project(page, serve_between, db_path):
+    """F142 review C1347-1: a look at another project between keeps this project's own
+    "not done", so its work ending still says "All work done", once."""
+    client = serve_between(activity="check-all on main")
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="ready")
+    finally:
+        conn.close()
+    page.add_init_script(FAKE_NOTIFICATION_GRANTED)
+    page.add_init_script(FAKE_SERVICE_WORKER)
+    open_overview(page, client)
+    page.wait_for_selector('#live-facts[data-all-done="false"]', state="attached", timeout=REFRESH)
+    _seen_first_look(page)
+
+    other_live = client.get("/live?project=other").text
+    assert 'data-all-done="true"' in other_live
+    _next_look(page, client, other_live)
+    page.wait_for_timeout(6_000)
+    assert page.evaluate("window.sw_notifications.length") == 0
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        metrics.upsert_ticket(conn, project, "f1-20-next", milestone_id=f1, state="done")
+    finally:
+        conn.close()
+    _next_look(page, client)
+    page.wait_for_function("window.sw_notifications.length > 0", timeout=REFRESH)
+    page.wait_for_timeout(6_000)
+    assert [n["title"] for n in page.evaluate("window.sw_notifications")] == ["All work done"]
+
+
 def test_compare_ignores_old_plain_boolean_done(page, serve_between, db_path):
     """A stored notify:seen with done: false (the old shape), then a look with all done:
     no notification and no error."""

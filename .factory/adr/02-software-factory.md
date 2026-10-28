@@ -523,6 +523,7 @@ _(to fill in at the M3 review)_
 - **Q3:** Claude $4.12 building the two lead tickets and $0.24 for the checkpoint; planning $22.82 over five planner jobs, including ADR 31; the local model 9.9M tokens in for the two developer tickets.
 - **Q5:** see the review's numbers.
 - **Anything else:** the checkpoint caught the id mismatch but not the two other slips in the same diff (words without the card's titles; one "all done" flag for every project). A worded notice's test should use a kind whose words depend on the data (a reply, not an `adr`), or it can't see missing titles.
+- **Round 2 (2026-10-28):** f142-04 (local, first attempt, 37 minutes) and f142-05 (the lead, Sonnet, $0.79) resolved both; the review added one test and removed a duplicate mark. f142-05 was routed "local" but touches protected `runner/`, so it became a lead ticket and waited four days behind Claude's weekly reserve and limits for a ten-line change. A review fix of about 20 lines in protected code is the review's own (lead.md already says so); the router's "local" there was a slip, not a rule gap.
 - **Decisions affected:** ADR 31 is now code.
 
 ### F90 (2026-10-23): a card's page shows the owner's whole note ([review](../reviews/f90-editing-seeds-that-i-ve-planted.md))

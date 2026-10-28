@@ -86,7 +86,6 @@ def test_a_leads_reply_on_a_card_sends_that_the_lead_answered(repo, sent, monkey
 
 
 @pytest.mark.usefixtures("fake_model")
-@pytest.mark.usefixtures("fake_model")
 def test_a_look_at_a_blocked_ticket_sends_the_block_then_the_look(repo, sent, monkeypatch):
     _lead_task(repo, "m1-01-lead")
     _blocks_then_looks(monkeypatch, [])
