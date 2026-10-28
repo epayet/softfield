@@ -468,7 +468,7 @@ def test_a_replan_shows_what_approving_changes_with_each_text(planning, db_path,
         (".factory/tasks/ready/f7-03-c.md", "added", "the replan's c"),
     ]
     assert "main's a" not in html and "<b>'s text" not in html  # escaped
-    colours = re.findall(r'class="word" style="[^"]*color: var\((--[\w-]+)\)', html)
+    colours = re.findall(r'class="word"[^>]*style="[^"]*--c:\s*var\((--[\w-]+)\)', html)
     assert colours == ["--a7", "--muted", "--good"]  # changed, set aside, added (F31 D8)
     assert "<details" in html.split('id="plan-changes"', 1)[1]
     steps = _text(html.split("What happens next", 1)[1].split("</ol>", 1)[0])

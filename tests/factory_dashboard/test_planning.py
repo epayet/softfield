@@ -2410,9 +2410,10 @@ def test_each_thread_page_says_its_place_or_that_it_is_being_written(planning, d
     writing = "Next for the lead · the lead is writing this reply · 2 min in, about 4 min left"
     assert writing in _text(f84)
     assert '<p id="waiting" class="writing"' in f84
-    # the words in Opus's ink, darkened in the light theme to read on a pale bay
-    assert "color: var(--opus-ink)" in f84
-    assert "color: var(--opus-ink)" not in f86
+    # the words in Opus's ink, darkened in the light theme to read on a pale bay (f81-05: the
+    # stylesheet colours .writing)
+    css = (STATIC / "dashboard.css").read_text()
+    assert ".thread-page #waiting.writing { color: var(--opus-ink); }" in css
 
 
 def test_the_tile_names_the_reply_being_written_and_the_line_after_it(planning, db_path, serve):

@@ -3,13 +3,13 @@
 {% block title %}Planning · {{ card_title }} · {{ project }}{% endblock %}
 
 {% block content %}
-<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
+<div class="thread-page">
 
-  <div style="flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px">
+  <div class="main">
 
-    <header id="card" style="background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column">
-      {% if card_meta %}<span style="font: 600 12px var(--mono); color: var(--muted)">{{ card_meta }}</span>{% endif %}
-      <h2 style="margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase">{{ card_title }}</h2>
+    <header id="card" class="card-head">
+      {% if card_meta %}<span class="stamp">{{ card_meta }}</span>{% endif %}
+      <h2>{{ card_title }}</h2>
       {# a planted card's reserve lever (F172 D6), as the allowance panel's: one pulled
          shows on its way until the runner writes the mark #}
       {% if reserve_lever %}
@@ -24,10 +24,10 @@
       </div>
       {% endif %}
       {% for link in merged_into %}
-      <a href="{{ link.link }}{{ q }}" class="merged-into" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{% if card_on_main %}An earlier {{ thread | upper }} was merged into {% else %}Merged into {% endif %}{{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
+      <a href="{{ link.link }}{{ q }}" class="merged-into">{% if card_on_main %}An earlier {{ thread | upper }} was merged into {% else %}Merged into {% endif %}{{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
       {% endfor %}
       {% for link in merged_here %}
-      <a href="{{ link.link }}{{ q }}" class="merged-here" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">Merged here: {{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
+      <a href="{{ link.link }}{{ q }}" class="merged-here">Merged here: {{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
       {% endfor %}
     </header>
 
@@ -35,12 +35,12 @@
     {# F90 D1, D2: the owner's whole note, from the card's doc; folded once a thread exists #}
     {% if has_thread %}
     <details id="note">
-      <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Your note</summary>
-      <p style="margin: 0; white-space: pre-line; overflow-wrap: anywhere">{{ note }}</p>
+      <summary class="fold">Your note</summary>
+      <p class="said">{{ note }}</p>
     </details>
     {% else %}
-    <section id="note" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 16px">
-      <p style="margin: 0; white-space: pre-line; overflow-wrap: anywhere">{{ note }}</p>
+    <section id="note" class="panel">
+      <p class="said">{{ note }}</p>
     </section>
     {% endif %}
     {% endif %}
@@ -48,24 +48,23 @@
     {% if review %}
     {# F50 D2, D3: the review's sheet (the lead's Markdown, through _to_html), and Sign off on a
        ripe card: what was asked shows at once, on its way, and the button goes #}
-    <section id="review" style="background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px">
-      <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">The review</h2>
+    <section id="review" class="panel">
+      <h2>The review</h2>
       {% for heading, html in review.sections %}
-      <h3 style="margin: 4px 0 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted)">{{ heading }}</h3>
+      <h3>{{ heading }}</h3>
       <div class="sheet">{{ html | safe }}</div>
       {% endfor %}
-      <a href="/milestones/{{ review.key }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px">The whole review</a>
-      {% set signing = "border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start" %}
+      <a href="/milestones/{{ review.key }}{{ q }}">The whole review</a>
       {% if review.signing_off %}
-      <span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span>
+      <span class="pill asked" id="signing-off">Signing off at the runner's next pick</span>
       {% elif review.ripe %}
-      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+      <div class="row-of">
         <button type="button" id="signoff-button" class="btn go"
           hx-post="/requests" hx-target="#signoff-status" hx-swap="innerHTML"
           hx-vals='{"kind": "signoff", "project": {{ project | tojson }}, "subject": {{ review.key | tojson }}}'
           hx-on::before-request="this.insertAdjacentHTML('beforebegin', document.getElementById('signing-off-shape').innerHTML); this.remove()">Sign off</button>
-        <template id="signing-off-shape"><span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span></template>
-        <span id="signoff-status" style="font-size: 12.5px; color: var(--muted)">{% if review.refused %}The runner said: {{ review.refused }}{% else %}Marks it done and tags it, at the runner's next pick.{% endif %}</span>
+        <template id="signing-off-shape"><span class="pill asked" id="signing-off">Signing off at the runner's next pick</span></template>
+        <span id="signoff-status" class="aside">{% if review.refused %}The runner said: {{ review.refused }}{% else %}Marks it done and tags it, at the runner's next pick.{% endif %}</span>
       </div>
       {% endif %}
     </section>
@@ -75,72 +74,72 @@
 
     {% macro draw(msg) %}
     {% if msg.author == "owner" %}
-    <article class="message" style="background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px{% if msg.waiting %}; border-style: dashed; border-color: var(--hazard){% endif %}">
-      <span style="font: 600 12px var(--mono); color: var(--hazard)">You · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
-      <p style="margin: 0; white-space: pre-line{% if msg.change and msg.change.cancel %}; text-decoration: line-through{% endif %}">{{ msg.text }}</p>
+    <article class="message"{% if msg.waiting %} data-waiting{% endif %}>
+      <span class="stamp owner">You · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <p class="said{{ ' struck' if msg.change and msg.change.cancel }}">{{ msg.text }}</p>
       {% if msg.change %}
       {# F14 D5: a change on a waiting message is on its way; the message is changed no more #}
-      <p class="on-its-way" style="margin: 0; font-size: 12.5px; color: var(--hazard)">{{ "cancelling at the runner's next pick" if msg.change.cancel else "changed · the runner picks it up at its next pick" }}</p>
+      <p class="on-its-way">{{ "cancelling at the runner's next pick" if msg.change.cancel else "changed · the runner picks it up at its next pick" }}</p>
       {% with asked = {"id": msg.change.id, "done": none} %}{% include "_partials/request.html" %}{% endwith %}
       {% elif msg.waiting %}
-      <p style="margin: 0; font-size: 12.5px; color: var(--muted)">Sent · the runner picks it up at its next pick</p>
+      <p class="aside">Sent · the runner picks it up at its next pick</p>
       {% endif %}
       {% for c in msg.points %}
-      <p style="margin: 0; font-size: 14px; color: var(--ink-2)"><b>On {{ c.n }}:</b> {{ c.comment }}</p>
+      <p class="comment-on"><b>On {{ c.n }}:</b> {{ c.comment }}</p>
       {% endfor %}
       {% if msg.waiting and not msg.change %}
       {# F14: a waiting message is edited or cancelled until the runner takes it. Save sends the
          whole message: the new text, and its comments as they were #}
-      <div class="waiting-message" style="display: flex; flex-direction: column; gap: 8px">
+      <div class="waiting-message">
         <form id="editor-{{ msg.id }}" hidden hx-post="/requests" hx-target="#waiting-status-{{ msg.id }}" hx-swap="innerHTML"
           hx-vals='js:{kind: "change", project: {{ project | tojson }}, subject: "{{ msg.id }}", value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries({{ msg.points | tojson }}.map(function (c) { return [c.n, c.comment]; }))})}'>
-          <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Your message
-            <textarea name="text" rows="4"{% if not msg.points %} required{% endif %} style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ msg.text }}</textarea>
+          <label>Your message
+            <textarea name="text" rows="4"{% if not msg.points %} required{% endif %}>{{ msg.text }}</textarea>
           </label>
         </form>
-        <p style="margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+        <p class="row-of">
           <button type="button" id="edit-{{ msg.id }}" class="btn go"
             hx-on:click="document.getElementById('editor-{{ msg.id }}').hidden = false; document.getElementById('save-{{ msg.id }}').hidden = false; this.remove()"
             >Edit</button>
           <button type="submit" form="editor-{{ msg.id }}" id="save-{{ msg.id }}" class="btn go" hidden>Save</button>
           <button type="button" id="cancel-{{ msg.id }}" class="btn plain" hx-post="/requests" hx-target="#waiting-status-{{ msg.id }}" hx-swap="innerHTML"
             hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ msg.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'>Cancel it</button>
-          <span id="waiting-status-{{ msg.id }}" style="font-size: 12.5px; color: var(--muted)"></span>
+          <span id="waiting-status-{{ msg.id }}" class="aside"></span>
         </p>
       </div>
       {% endif %}
     </article>
     {% elif msg.author == "runner" %}
     {# ADR 29 item 1: the runner's word when it blocks a ticket, never the owner's #}
-    <article class="message runner-message" style="background: var(--plate); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px">
-      <span style="font: 600 12px var(--mono); color: var(--muted)">The runner · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
-      <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+    <article class="message runner-message">
+      <span class="stamp">The runner · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <p class="said">{{ msg.text }}</p>
     </article>
     {% else %}
-    <article class="message" style="background: var(--bay); border: 1px solid var(--opus); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px">
-      <span style="font: 600 12px var(--mono); color: var(--opus)">The lead · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+    <article class="message lead-message">
+      <span class="stamp lead">The lead · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
       {# F41 D2, D3: with points, the text folds (the points say it all); without, it's all there is #}
       {% if msg.points and msg.text %}
       <details class="full-reply">
-        <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Full reply</summary>
-        <p style="margin: 0; white-space: pre-line">{{ msg.text }}</p>
+        <summary class="fold">Full reply</summary>
+        <p class="said">{{ msg.text }}</p>
       </details>
       {% elif msg.text %}
-      <p style="margin: 0; white-space: pre-line">{{ msg.text_html | safe if msg.text_html else msg.text }}</p>
+      <p class="said">{{ msg.text_html | safe if msg.text_html else msg.text }}</p>
       {% endif %}
       {% if msg.points %}
-      <ol class="deck" style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px">
+      <ol class="deck">
       {% for p in msg.points %}
-        <li class="point" data-point="{{ p.n }}" style="background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; gap: 10px; align-items: baseline">
-          <b style="font: 700 13px var(--mono); color: var(--muted); min-width: 22px">{{ p.n }}</b>
-          <div style="display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0">
-            <b style="font-size: 15px">{{ p.title }}</b>
-            {% if p.answer %}<span style="font-size: 14px; color: var(--ink-2)">{{ p.answer }}</span>{% endif %}
-            {% if p.action %}<span style="font-size: 14px"><span style="color: var(--opus); font-weight: 600">→ </span>{{ p.action }}</span>{% endif %}
+        <li class="point" data-point="{{ p.n }}">
+          <b>{{ p.n }}</b>
+          <div>
+            <b>{{ p.title }}</b>
+            {% if p.answer %}<span class="answer">{{ p.answer }}</span>{% endif %}
+            {% if p.action %}<span class="action"><i>→ </i>{{ p.action }}</span>{% endif %}
             {% if msg.latest and next_reply is none %}
             <details class="comment-box">
-              <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); min-height: 44px; display: flex; align-items: center; cursor: pointer">Comment…</summary>
-              <textarea class="comment" data-point="{{ p.n }}" rows="2" aria-label="Your comment on point {{ p.n }}" style="width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px"></textarea>
+              <summary class="fold">Comment…</summary>
+              <textarea class="comment" data-point="{{ p.n }}" rows="2" aria-label="Your comment on point {{ p.n }}"></textarea>
             </details>
             {% endif %}
           </div>
@@ -158,21 +157,21 @@
     <div id="conversation">
     <i id="conversation-stamp" hidden data-stamp="{{ next_reply }}|{{ earlier | length }}|{{ merged_on | length }}{% for m in messages %}|{{ m.author }} {{ m.at }} {{ m.waiting }} {{ m.change.id if m.change }}{% endfor %}"></i>
     {% if next_reply %}
-    <p id="waiting"{% if writing_now %} class="writing"{% endif %} style="margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var({{ '--opus-ink' if writing_now else '--muted' }})">Next for the lead · {{ next_reply }}</p>
+    <p id="waiting"{% if writing_now %} class="writing"{% endif %}>Next for the lead · {{ next_reply }}</p>
     {% endif %}
     {% for msg in messages %}{{ draw(msg) }}{% endfor %}
 
     {% if merged_on %}
-    <div id="merged-on" style="background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; margin-bottom: 8px">
+    <div id="merged-on" class="panel">
     {% for card in merged_on %}
-    <div class="merged-on-card" style="display: flex; flex-direction: column; gap: 6px">
-      <p style="margin: 0; font-size: 14px; color: var(--ink-2)">Merged into {{ card.key | upper }}, {{ card.title }}: the conversation and its plans are there.</p>
-      <a href="{{ card.link }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{{ card.key | upper }}, {{ card.title }} · {{ card.date }}</a>
+    <div class="merged-on-card">
+      <p>Merged into {{ card.key | upper }}, {{ card.title }}: the conversation and its plans are there.</p>
+      <a href="{{ card.link }}{{ q }}" class="tap">{{ card.key | upper }}, {{ card.title }} · {{ card.date }}</a>
       {% for prop in card.proposals %}
-      <a href="{{ prop.link }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">{{ prop.title }}</a>
+      <a href="{{ prop.link }}{{ q }}" class="tap">{{ prop.title }}</a>
       {% endfor %}
       {% if card.ticket_count is defined %}
-      <a href="/milestones/{{ card.milestone_key }}{{ q }}" style="display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg)">Planned: {{ card.ticket_count }} tickets, {{ card.done_count }} done</a>
+      <a href="/milestones/{{ card.milestone_key }}{{ q }}" class="tap">Planned: {{ card.ticket_count }} tickets, {{ card.done_count }} done</a>
       {% endif %}
     </div>
     {% endfor %}
@@ -182,16 +181,16 @@
     {% if not next_reply and merged_on|length != 1 %}
     <form id="reply" hx-post="/requests" hx-target="#reply-status" hx-swap="innerHTML"
       hx-vals='js:{kind: "plan_message", project: {{ project | tojson }}, subject: {{ thread | tojson }}, value: JSON.stringify({text: this.elements.text.value, comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value]).filter(c => c[1].trim())), again: this.elements.again.value || undefined})}'
-      class="dock" style="background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
+      class="dock">
       {# F48 D2: the refused message Try again brought here; the send names it, once #}
       <input type="hidden" name="again" value="{{ again_id }}">
-      {% if points %}<span id="progress" data-points="{{ points }}" style="font: 12px var(--mono); color: var(--muted)">{{ points }} points · 0 comments</span>{% endif %}
-      <label style="display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted)">{{ "Anything else? A question, a new thought" if has_thread else "What should the lead look at? It reads the card too." }}
-        <textarea name="text" rows="2" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ again }}</textarea>
+      {% if points %}<span id="progress" data-points="{{ points }}">{{ points }} points · 0 comments</span>{% endif %}
+      <label>{{ "Anything else? A question, a new thought" if has_thread else "What should the lead look at? It reads the card too." }}
+        <textarea name="text" rows="2">{{ again }}</textarea>
       </label>
-      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+      <div class="row-of">
         <button type="submit" class="btn go">{{ "Send" if has_thread else "Send to the lead" }}</button>
-        <span id="reply-status" style="font-size: 12.5px; color: var(--muted)">Every point is agreed unless you comment on it.</span>
+        <span id="reply-status" class="aside">Every point is agreed unless you comment on it.</span>
       </div>
     </form>
     <script>
@@ -222,7 +221,7 @@
 
     {% if earlier %}
     <details id="earlier">
-      <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Earlier in this thread ({{ earlier | length }})</summary>
+      <summary class="fold">Earlier in this thread ({{ earlier | length }})</summary>
       {% for msg in earlier %}{{ draw(msg) }}{% endfor %}
     </details>
     {% endif %}
@@ -265,44 +264,44 @@
 
     {% if seed %}
     <details id="remove-seed">
-      <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Remove seed</summary>
-      <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
+      <summary class="fold">Remove seed</summary>
+      <div class="row-of">
         <span>Remove {{ thread | upper }}? Its notes go too.</span>
         <button type="button" id="drop-seed" class="btn go"
           hx-post="/requests" hx-target="#drop-status" hx-swap="innerHTML"
           hx-vals='{"kind": "drop_seed", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'>Remove</button>
-        <span id="drop-status" style="font-size: 12.5px; color: var(--muted)"></span>
+        <span id="drop-status" class="aside"></span>
       </div>
     </details>
     {% endif %}
     {% if has_thread %}
     {# Archive (the owner, 2026-10-07): what was asked shows at once, on its way, and the
        button goes; the runner applies it at its next pick. A reply opens the thread again. #}
-    <div id="archive" style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 6px">
+    <div id="archive" class="row-of">
       {% if archiving %}
-      <span class="pill" style="border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px">{{ "Archiving" if archiving == "on" else "Opening again" }} at the runner's next pick</span>
+      <span class="pill asked">{{ "Archiving" if archiving == "on" else "Opening again" }} at the runner's next pick</span>
       {% else %}
-      {% if archived_at %}<span class="pill" style="font: 600 12px var(--mono); color: var(--muted)">Archived {{ archived_at[:10] }}</span>{% endif %}
+      {% if archived_at %}<span class="pill stamp">Archived {{ archived_at[:10] }}</span>{% endif %}
       <button type="button" id="archive-button" class="btn plain"
         hx-post="/requests" hx-target="#archive-status" hx-swap="innerHTML"
         hx-vals='{"kind": "archive", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if archived_at else "on") | tojson }}}'
         hx-on::before-request="this.remove()">{{ "Unarchive" if archived_at else "Archive" }}</button>
-      <span id="archive-status" style="font-size: 12.5px; color: var(--muted)">{% if archived_at %}Or just reply: a message opens it again.{% else %}It leaves your desk; Planning lists it under Archived.{% endif %}</span>
+      <span id="archive-status" class="aside">{% if archived_at %}Or just reply: a message opens it again.{% else %}It leaves your desk; Planning lists it under Archived.{% endif %}</span>
       {% endif %}
     </div>
     {% endif %}
   </div>
 
   {% if proposals %}
-  <aside id="proposals" aria-label="Proposals" style="flex: 1 1 280px; min-width: 0; display: flex; flex-direction: column; gap: 10px">
-    <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Proposals from this card</h2>
+  <aside id="proposals" class="panel" aria-label="Proposals">
+    <h2>Proposals from this card</h2>
     {% for prop in proposals %}
-    <a href="{{ prop.link }}{{ q }}" class="proposal" style="background: var(--bay); border: 1px solid var(--rule); border-top: 3px solid var({{ prop.color }}); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box">
-      <span style="font: 600 11px var(--mono); color: var(--muted)">{{ prop.kind | upper }} · <span class="state">{{ prop.state }}</span></span>
-      <b style="font-size: 15px">{{ prop.title }}</b>
+    <a href="{{ prop.link }}{{ q }}" class="proposal" style="--c: var({{ prop.color }})">
+      <span>{{ prop.kind | upper }} · <span class="state">{{ prop.state }}</span></span>
+      <b>{{ prop.title }}</b>
     </a>
     {% endfor %}
-    <p style="margin: 0; font-size: 12.5px; color: var(--muted)">Nothing becomes a ticket until you approve it.</p>
+    <p class="aside">Nothing becomes a ticket until you approve it.</p>
   </aside>
   {% endif %}
 

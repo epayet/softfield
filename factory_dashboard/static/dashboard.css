@@ -478,6 +478,101 @@ tr.few .gauge { opacity: .35; }
   .replay-readout { flex-basis: 100%; order: -1; }
 }
 
+/* The planning room's two pages (f81-05): a card's thread (.thread-page) and a proposal's
+   review (.proposal-page). Sections with a heading are .panels with a plate header; messages,
+   points and plan changes are plates inside them. Every rule is scoped to its page. No
+   display or position on .deck, .dock or .dock-host here: the phone rules below win. */
+.thread-page, .proposal-page { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px; }
+.thread-page > .main { flex: 999 1 560px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.proposal-page > .main { flex: 999 1 600px; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+:is(.thread-page, .proposal-page) .panel { display: flex; flex-direction: column; gap: 8px; }
+:is(.thread-page, .proposal-page) .panel > h2 { margin-bottom: 2px; }
+:is(.thread-page, .proposal-page) .fold { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+:is(.thread-page, .proposal-page) :is(.tap, .merged-into, .merged-here) { display: inline-flex; align-items: center; min-height: 44px; font-size: 14px; color: var(--fg); }
+:is(.thread-page, .proposal-page) .row-of { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+:is(.thread-page, .proposal-page) .aside { font-size: 12.5px; color: var(--muted); }
+:is(.thread-page, .proposal-page) .stamp { font: 600 12px var(--mono); color: var(--muted); }
+:is(.thread-page, .proposal-page) textarea { font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; }
+:is(.thread-page, .proposal-page) textarea.comment { width: 100%; box-sizing: border-box; font-size: 14px; border-color: var(--hazard); padding: 8px; }
+:is(.thread-page, .proposal-page) .card-head { background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--c, var(--hazard)); padding: 12px 16px; display: flex; flex-direction: column; }
+
+/* Thread page */
+.thread-page .card-head h2 { margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+.thread-page .said { margin: 0; white-space: pre-line; }
+.thread-page .said.struck { text-decoration: line-through; }
+.thread-page #note .said { overflow-wrap: anywhere; }
+.thread-page #review h3 { margin: 4px 0 0; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.thread-page #review > a { display: inline-flex; align-items: center; min-height: 44px; }
+.thread-page .pill.asked { border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; align-self: flex-start; }
+.thread-page .message { background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+.thread-page .message[data-waiting] { border-style: dashed; border-color: var(--hazard); }
+.thread-page .message.runner-message { border-left: 3px solid var(--hazard); }
+.thread-page .message.lead-message { background: var(--bay); border-color: var(--opus); gap: 10px; }
+.thread-page .message .stamp.owner { color: var(--hazard); }
+.thread-page .message .stamp.lead { color: var(--opus); }
+.thread-page .message .on-its-way { margin: 0; font-size: 12.5px; color: var(--hazard); }
+.thread-page .message p.aside { margin: 0; }
+.thread-page .message .comment-on { margin: 0; font-size: 14px; color: var(--ink-2); }
+.thread-page .waiting-message { display: flex; flex-direction: column; gap: 8px; }
+.thread-page :is(.waiting-message, #reply) label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+.thread-page .waiting-message .row-of { margin: 0; gap: 8px; }
+.thread-page .deck { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.thread-page .point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; gap: 10px; align-items: baseline; }
+.thread-page .point > b { font: 700 13px var(--mono); color: var(--muted); min-width: 22px; }
+.thread-page .point > div { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+.thread-page .point > div > b { font-size: 15px; }
+.thread-page .point .answer { font-size: 14px; color: var(--ink-2); }
+.thread-page .point .action { font-size: 14px; }
+.thread-page .point .action > i { font-style: normal; color: var(--opus); font-weight: 600; }
+.thread-page .comment-box > summary { color: var(--hazard); }
+.thread-page #waiting { margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted); }
+.thread-page #waiting.writing { color: var(--opus-ink); }
+.thread-page #merged-on { border-left: 3px solid var(--hazard); gap: 10px; margin-bottom: 8px; }
+.thread-page .merged-on-card { display: flex; flex-direction: column; gap: 6px; }
+.thread-page .merged-on-card > p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.thread-page #reply { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.thread-page #progress { font: 12px var(--mono); color: var(--muted); }
+.thread-page #archive { margin-top: 6px; }
+.thread-page #proposals { flex: 1 1 280px; gap: 10px; }
+.thread-page #proposals > p { margin: 0; }
+.thread-page .proposal { background: var(--plate); border: 1px solid var(--rule); border-top: 3px solid var(--c); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box; }
+.thread-page .proposal > span { font: 600 11px var(--mono); color: var(--muted); }
+.thread-page .proposal > b { font-size: 15px; }
+
+/* Proposal page; the header's colour is the proposal's (--c) */
+.proposal-page > .main > a:first-child { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: inline-flex; align-items: center; }
+.proposal-page .card-head { gap: 8px; }
+.proposal-page .card-head h1 { margin: 0; font: 700 22px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+.proposal-page #merge-words { font: 600 13px var(--mono); color: var(--ink-2); }
+.proposal-page #proposal-tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--rule); align-self: flex-start; }
+.proposal-page #proposal-tabs a { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 14px; min-height: 44px; display: inline-flex; align-items: center; border-right: 1px solid var(--rule); text-decoration: none; box-sizing: border-box; }
+.proposal-page #proposal-tabs a[aria-current="page"] { color: var(--hazard-ink); background: var(--hazard); }
+.proposal-page #mockup { width: 100%; height: 480px; border: 1px solid var(--rule); background: var(--plate); }
+.proposal-page .lede { margin: 0; color: var(--ink-2); }
+.proposal-page #key-points { display: flex; flex-direction: column; gap: 8px; }
+.proposal-page .key-point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.proposal-page .key-point > b { font: 700 13px var(--mono); color: var(--muted); min-width: 26px; }
+.proposal-page .key-point > div { flex: 1 1 360px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.proposal-page .key-point > div > span { font-size: 14px; color: var(--ink-2); }
+.proposal-page .flag { color: var(--hazard); }
+.proposal-page .comment-box { flex-basis: 100%; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }  /* shown as flex by the page's script */
+.proposal-page #plan-changes > span { font-size: 13px; color: var(--muted); }
+.proposal-page #plan-changes ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.proposal-page .plan-change { background: var(--plate); border: 1px solid var(--rule); padding: 8px 12px; min-width: 0; }
+.proposal-page .change-line { min-height: 44px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.proposal-page summary.change-line { cursor: pointer; }
+.proposal-page .word { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--c, var(--muted)); }
+.proposal-page .path { overflow-wrap: anywhere; }
+.proposal-page .who { font: 12px var(--mono); color: var(--muted); }
+.proposal-page .plan-change pre { margin: 6px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 13px/1.4 var(--mono); color: var(--fg); }
+.proposal-page > aside { flex: 1 1 300px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.proposal-page #actions, .proposal-page .action-buttons, .proposal-page #reject > div { display: flex; flex-direction: column; gap: 8px; }
+.proposal-page .way-title { margin: 0; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); }
+.proposal-page #review-count { font: 12.5px var(--mono); }
+.proposal-page #reject > div > span { font-size: 13px; }
+.proposal-page #settled { margin: 0; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-2); }
+.proposal-page #next-steps ol { margin: 0; padding-left: 18px; font-size: 14px; display: flex; flex-direction: column; gap: 4px; }
+
 /* The planning room on a phone (f6-10): deck.js shows one point of each .deck at a time; its
    .deck-nav holds a dot per point (marked where there's a comment) and ◀ ▶. .dock keeps Send
    in view at the bottom; .dock-host lets the review's dock leave its aside, which a sticky

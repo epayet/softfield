@@ -102,7 +102,7 @@ def test_a_reply_with_points_folds_its_text_and_one_without_shows_it(planning, d
     assert "Sorry." not in fold and "(no json block.)" in _text(html)
     assert "Why so?" not in fold and "Why so?" in _text(html)
     assert html.count('class="full-reply"') == 1  # the owner's, the broken and the textless
-    assert '<p style="margin: 0; white-space: pre-line"></p>' not in html
+    assert '<p class="said"></p>' not in html
 
 
 def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_path, serve):
@@ -140,6 +140,15 @@ def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
     msg = page.locator("#conversation .message").first
     assert msg.is_visible()
     assert "And the phone?" in msg.inner_text() and "Sent" in msg.inner_text()
+    # it waits: drawn dashed, in hazard, from the stylesheet (f81-05)
+    border = msg.evaluate(
+        "e => [getComputedStyle(e).borderTopStyle, getComputedStyle(e).borderTopColor]"
+    )
+    hazard = page.evaluate(
+        "() => { const p = document.createElement('p'); p.style.color = 'var(--hazard)';"
+        " document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; }"
+    )
+    assert border == ["dashed", hazard]
     conn = metrics.open_db(db_path)
     try:
         rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
@@ -194,9 +203,8 @@ def test_an_open_plan_message_request_shows_sent_with_dashed_border(planning, db
     assert "On 2:" in _text(msg_html) and "Inside, but say how it stops." in _text(msg_html)
     # "Sent" status
     assert "Sent" in _text(msg_html)
-    # dashed hazard border (on the article's style attribute)
-    assert "border-style: dashed" in msg_style
-    assert "border-color: var(--hazard)" in msg_style
+    # dashed hazard border (on the article via data-waiting attribute)
+    assert "data-waiting" in msg_style
     # #waiting present, #reply absent
     assert '<p id="waiting"' in html
     assert 'id="reply"' not in html
@@ -236,7 +244,7 @@ def test_a_done_plan_message_with_lead_reply_shows_once(planning, db_path, serve
     # first: the waiting message is there
     html = _thread(client, "f6")
     assert "Sent" in _text(html)
-    assert "border-style: dashed" in html
+    assert "data-waiting" in html
 
     # now the request is done and the lead has replied
     def done_and_replied(conn: sqlite3.Connection) -> None:
@@ -254,10 +262,10 @@ def test_a_done_plan_message_with_lead_reply_shows_once(planning, db_path, serve
 
     _write(db_path, done_and_replied)
     html = _thread(client, "f6")
-    # text appears once (no "Sent" line, no dashed border)
+    # text appears once (no "Sent" line, no data-waiting)
     assert html.count("And the phone?") == 1
     assert "Sent" not in _text(html)
-    assert "border-style: dashed" not in html
+    assert "data-waiting" not in html
 
 
 def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve):
@@ -346,7 +354,7 @@ def test_waiting_messages_show_above_the_leads_latest_newest_first(planning, db_
         < conversation.index('<details id="earlier">')
     )
     tablet, phone, _ = _said(html)
-    assert "border-style: dashed" in tablet and "border-style: dashed" in phone
+    assert "data-waiting" in tablet and "data-waiting" in phone
     assert 'id="reply"' not in html
 
 
@@ -372,7 +380,7 @@ def test_a_thread_with_one_message_has_no_earlier(planning, db_path, serve):
     _write(db_path, lambda conn: conn.execute("DELETE FROM planner_messages"))
     html = _thread(client, "general")
     [waiting] = _said(html)
-    assert "Make it calm." in waiting and "border-style: dashed" in waiting
+    assert "Make it calm." in waiting and "data-waiting" in waiting
     assert 'id="earlier"' not in html and '<p id="waiting"' in html
 
 
@@ -807,7 +815,7 @@ def test_a_plans_ticket_rows_say_who_builds_them_and_colour_the_word(
     rows = re.findall(r'<li class="plan-change"[^>]*>(.*?)</li>', section, re.S)
     found = {
         re.search(r'<code class="path"[^>]*>([^<]*)</code>', r)[1]: (  # type: ignore[index]
-            re.search(r'class="word" style="[^"]*color: var\((--[\w-]+)\)', r)[1],  # type: ignore[index]
+            re.search(r'class="word"[^>]*style="[^"]*--c:\s*var\((--[\w-]+)\)', r)[1],  # type: ignore[index]
             _text(m[1]) if (m := re.search(r'<span class="who"[^>]*>(.*?)</span>', r)) else "",
         )
         for r in rows
@@ -873,7 +881,7 @@ def test_an_edit_on_its_way_shows_the_new_message_and_no_buttons(planning, db_pa
     change = _finished(db_path, planning, "change", str(said), edit, None)
     html = _thread(serve(), "f6")
     untouched, changed, _ = _said(html)  # newest first (F30)
-    assert "border-style: dashed" in changed and "line-through" not in changed
+    assert "data-waiting" in changed and "line-through" not in changed
     assert _text(changed).endswith(f"Make it bright. {CHANGED} {ASKED} On 3: Shorter.")
     assert "Make it calm." not in changed and "On 2:" not in changed
     assert f'hx-get="/requests/{change}"' in changed
@@ -899,7 +907,7 @@ def test_a_cancel_on_its_way_strikes_the_message_and_the_send_form_comes_back(
     client = serve()
     html = _thread(client, "f6")
     cancelled, _ = _said(html)
-    assert re.search(r'<p style="[^"]*text-decoration: line-through">Make it calm.</p>', cancelled)
+    assert '<p class="said struck">Make it calm.</p>' in cancelled
     assert _text(cancelled).endswith(f"Make it calm. {CANCELLING} {ASKED}")
     assert f'hx-get="/requests/{cancel}"' in cancelled
     assert "<button" not in cancelled and "<form" not in cancelled
@@ -1180,7 +1188,7 @@ def test_a_seed_shows_its_whole_note_under_a_cut_title(planning, checkout, serve
     html = _thread(serve(), "f9")
     section = html.split('<section id="note"', 1)[1].split("</section>", 1)[0]
     assert "&lt;b&gt;end&lt;/b&gt;?" in section and "not this" not in section
-    assert "white-space: pre-line" in section and "<details" not in section
+    assert '<p class="said">' in section and "<details" not in section  # pre-line, in the CSS
     assert html.index('id="card"') < html.index('id="note"')
 
 
