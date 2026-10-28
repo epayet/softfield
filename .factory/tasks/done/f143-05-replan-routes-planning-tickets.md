@@ -26,3 +26,10 @@ Read D6 in `.factory/cards/f143-split-test-planning-py-by-page.md`, F14's rule a
 - `docs/agents/lead.md` and `docs/task-writing.md` state D6's rule, and no longer say a ticket adding to `tests/factory_dashboard/test_planning.py` is the lead's for that alone
 - every re-routed ticket is listed in the card doc with its reason, and every ticket left with the lead that fits D6 says why in the same list
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
