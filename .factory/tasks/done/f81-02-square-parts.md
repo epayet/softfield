@@ -27,3 +27,12 @@ Build the tags, the empty state and the meter of the Proposed side of `.factory/
 - tags are square with a square lamp, colours as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3186
+gate_failures: []
+tokens: 4654537
+```
