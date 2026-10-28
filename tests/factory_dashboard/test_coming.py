@@ -468,10 +468,11 @@ def test_after_the_leads_reply_the_box_goes_solid(planning, db_path, serve):
     assert ("/planning/f6", "The planning room") in _items(_groups(html)["answers"])
 
 
-def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
+def test_a_waiting_message_adds_nothing_to_the_counts_and_takes_its_proposals_off(
     planning, db_path, serve
 ):
-    """Coming has items: the Planning tab's count and the Overview's Needs you stay the same."""
+    """A message waits for the lead: its dashed box adds nothing to the Planning tab's count or
+    the Overview's Needs you, and its thread's proposals leave the count (F100)."""
     # First check the count without Coming
     client = serve()
     html = _page(client)
@@ -502,6 +503,7 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
     )
     assert planning_tab and planning_tab[1] == str(base_count - 1)
+    # The Overview's Needs you is unchanged: the desk is one line whatever its count
     assert _needs_you_count(client.get("/").text) == base_needs
 
 

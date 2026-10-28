@@ -11,6 +11,7 @@
 import json
 import re
 import sqlite3
+from collections.abc import Collection
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +23,7 @@ from factory_dashboard.coming import (
     GENERAL,
     DeskGroup,
     DeskItem,
+    Place,
     _acted_on,
     _card_titles,
     _held,
@@ -112,28 +114,35 @@ def _waiting_for_lead(conn: sqlite3.Connection, project_id: int) -> set[str]:
     return set(_waiting_order(conn, project_id, _last_messages(conn, project_id)))
 
 
+def _replies(
+    conn: sqlite3.Connection, project_id: int, project: str, now: datetime, cards: Collection[str]
+) -> dict[str, tuple[Place | None, bool, str]]:
+    """For each card the lead owes a reply (F84): its place in the lead's line (none while held
+    for a Claude limit), whether it is held, and the words for when the reply comes."""
+    if not cards:
+        return {}
+    jobs = [j for j in running_jobs(conn, project, now) if j.live]
+    places = reply_line(conn, project, now, jobs)
+    writing = _writing(places)
+    found = {}
+    for card in cards:
+        held = _held(conn, project_id, now, card)
+        place = places.get(card) if held is None else None
+        if place is not None:
+            reply = place.words
+        else:  # pending, so never None
+            reply = _next_reply(conn, project, jobs, True, held, writing) or ""
+        found[card] = (place, held is not None, reply)
+    return found
+
+
 def _revising(
     conn: sqlite3.Connection, project_id: int, project: str, now: datetime
 ) -> dict[str, str]:
     """For each card the lead owes a reply, what its open proposals say (F100): ``being
     revised`` and when the reply comes."""
-    waiting = _waiting_for_lead(conn, project_id)
-    if not waiting:
-        return {}
-    jobs = [j for j in running_jobs(conn, project, now) if j.live]
-    places = reply_line(conn, project, now, jobs)
-    writing = _writing(places)
-    said = {}
-    for card in waiting:
-        held = _held(conn, project_id, now, card)
-        place = places.get(card) if held is None else None
-        reply = (
-            place.words
-            if place is not None
-            else _next_reply(conn, project, jobs, True, held, writing)
-        )
-        said[card] = f"being revised · {reply}"
-    return said
+    replies = _replies(conn, project_id, project, now, _waiting_for_lead(conn, project_id))
+    return {card: f"being revised · {words}" for card, (_, _, words) in replies.items()}
 
 
 def _answers_wanted(
@@ -159,21 +168,13 @@ def _answers_wanted(
         for r in last
         if r["author"] == "lead" and r["archived"] is None and r["card"] not in waiting
     ]
-    if not waiting:
-        return items
     # F84 D4: in the lead's order, the reply being written first, then the plants, then
     # the messages the runner hasn't placed, then those held for a Claude limit
-    jobs = [j for j in running_jobs(conn, project, now) if j.live]
-    places = reply_line(conn, project, now, jobs)
-    writing = _writing(places)
     placed: list[DeskItem] = []
     rest: list[DeskItem] = []
     later: list[DeskItem] = []
-    for card in waiting:
-        held = _held(conn, project_id, now, card)
-        place = places.get(card) if held is None else None
-        reply = _next_reply(conn, project, jobs, True, held, writing)
-        said = place.words if place is not None else f"waiting for the lead · {reply}"
+    for card, (place, held, reply) in _replies(conn, project_id, project, now, waiting).items():
+        said = reply if place is not None else f"waiting for the lead · {reply}"
         item = DeskItem(
             "answers",
             _thread_title(card, titles),
@@ -182,7 +183,7 @@ def _answers_wanted(
             on_its_way=True,
             place=place,
         )
-        (placed if place is not None else rest if held is None else later).append(item)
+        (placed if place is not None else later if held else rest).append(item)
     placed.sort(key=lambda item: item.place.place if item.place else 0)
     return items + placed + rest + later
 

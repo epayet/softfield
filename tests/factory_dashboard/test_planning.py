@@ -1473,6 +1473,29 @@ def test_proposals_wait_for_the_lead_while_the_owners_message_does(
     assert not _waiting_proposals(db_path)
 
 
+def test_the_general_threads_proposals_are_revised_each_on_its_own(planning, db_path, db):
+    """The general thread's proposals are one desk item each (F51 D1): a message on it dashes
+    each, and a message on another thread none."""
+
+    def write(conn: sqlite3.Connection) -> None:
+        _review(conn, planning, "general", _REVIEW_PLAN, _MOCKUP)
+        value = '{"text": "Why?"}'
+        metrics.add_request(conn, planning, "plan_message", "f85", value, _at(timedelta(minutes=6)))
+
+    _write(db_path, write)
+    general = [i for i in _group(db, "proposals") if i.link.startswith("/planning/general/")]
+    assert len(general) == 2 and not any(i.on_its_way for i in general)
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "plan_message", "general", '{"text": "Why?"}', NOW.isoformat()
+        ),
+    )
+    general = [i for i in _group(db, "proposals") if i.link.startswith("/planning/general/")]
+    assert len(general) == 2
+    assert all(i.on_its_way and i.words.startswith("being revised · ") for i in general)
+
+
 def test_a_lead_reply_without_proposals_makes_them_solid_again(planning, db_path, serve):
     serve()
     _revising(db_path, planning, stored=True)

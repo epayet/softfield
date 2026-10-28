@@ -590,6 +590,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** Sonnet turned ten existing tests into the same checks on the new place without weakening any, the opposite of F51's loose edges. Again an edge slipped where no test held it: a merged query lost its `ORDER BY`.
 - **Decisions affected:** none.
 
+### F100 (2026-10-28): proposals show "being revised" while the owner's message waits ([review](../reviews/f100-if-i-replied-to-a-conversation.md))
+
+- **Q1:** one lead ticket (difficulty 3), merged first time by Sonnet in 12 minutes; no checkpoint. Review round 1: one should-fix (the general thread's proposal path untested) and two nits (a duplicated wording loop, a test name contradicting its new assertion), all fixed by the review.
+- **Q3:** Claude only, Sonnet $0.93 for the build; no local tokens.
+- **Q5:** see the review's numbers.
+- **Anything else:** D1's "one rule" was lifted cleanly and read by three pages. Second milestone running where Sonnet leaves one branch untested (F74: an `ORDER BY`; here, the general thread).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
