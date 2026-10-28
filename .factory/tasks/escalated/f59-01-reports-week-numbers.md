@@ -30,3 +30,12 @@ Read `.factory/cards/f59-periodic-review-of-the-factory.md` (D1, D2, D3) and fol
 - `weeks` lists every Monday from the first job's week to this one, newest first, weeks with no job included; `series` is the same weeks, oldest first
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 3856804
+logs: .factory/var/runs/20261027-005355/f59-01-reports-week-numbers
+```
