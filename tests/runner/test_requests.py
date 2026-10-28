@@ -972,6 +972,40 @@ def test_accept_adr_merges_the_draft_and_the_plan_waits_for_it(repo):
     assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
 
 
+def test_a_plan_whose_adr_is_still_proposed_is_refused_and_main_is_unchanged(repo):
+    _card(repo)
+    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
+    head = git(repo, "rev-parse", "HEAD")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert (
+        _request(repo, asked)[1]
+        == "not approved: relies on ADR 23, still Proposed: accept it first"
+    )
+    _main_unchanged(repo, head)
+    assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"
+
+
+def test_accept_then_approve_in_one_pick_accepts_the_adr_and_merges_the_plan(repo):
+    _card(repo)
+    relies = "Build on `.factory/adr/23-parallel-planners.md`."
+    _plan(
+        repo,
+        {
+            ".factory/adr/23-parallel-planners.md": ADR,
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
+        },
+    )
+    accepted = _ask(repo, "accept_adr", "f7", "23")
+    approved = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, accepted)[1] == "accepted .factory/adr/23-parallel-planners.md"
+    assert _request(repo, approved)[1] == "approved plan/f7: queued f7-01-a"
+    adr = repo / ".factory" / "adr" / "23-parallel-planners.md"
+    assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
+    assert (repo / ".factory" / "tasks" / "ready" / "f7-01-a.md").is_file()
+
+
 def test_accept_adr_resolves_the_owner_items_that_ask_about_it(repo):
     _card(repo)
     _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})

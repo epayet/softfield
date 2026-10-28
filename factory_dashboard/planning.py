@@ -1557,13 +1557,18 @@ def _note(repo: Path | None, thread: str) -> str:
     return re.sub(r"^(?:#{1,6} |\\(?=[>#]))", "", note, flags=re.MULTILINE)
 
 
-def _adr_waits(repo: Path | None, proposals: list[dict[str, object]]) -> bool:
+def _adr_waits(
+    repo: Path | None, proposals: list[dict[str, object]], accepting: frozenset[int] = frozenset()
+) -> bool:
     """Whether the card has an ``adr`` proposal whose file on main is missing or still Proposed
-    (as ``runner.requests`` reads it): Approve plan waits for it."""
+    (as ``runner.requests`` reads it): Approve plan waits for it. An ADR in ``accepting`` has an
+    open ``accept_adr`` request, which the runner applies before a later approval (F51 D2)."""
     for p in proposals:
         if p.get("kind") != "adr":
             continue
         number = _ADR_NUMBER.match(str(p.get("path") or ""))
+        if number and int(number[1]) in accepting:
+            continue
         found = (
             sorted((repo / ".factory" / "adr").glob(f"{number[1]}-*.md")) if repo and number else []
         )
@@ -1658,6 +1663,15 @@ def proposal_review(
             mockup = f"/planning/mockups/{thread}/{resolved}"
         else:
             mockup_gone = path
+    accepting = frozenset(
+        int(r["value"])
+        for r in metrics.open_requests(conn, project_id)
+        if r["kind"] == "accept_adr"
+        and r["subject"] == thread
+        and str(r["value"] or "").isascii()
+        and str(r["value"] or "").isdigit()
+    )
+    waits = _adr_waits(repo, listed, accepting)
     return render(
         request,
         conn,
@@ -1665,6 +1679,11 @@ def proposal_review(
         "proposal.html",
         {
             "active": "/planning",
+            "adr_on_its_way": (
+                ", ".join(str(n) for n in sorted(accepting))
+                if accepting and not waits and _adr_waits(repo, listed)
+                else ""
+            ),
             "thread": thread,
             "proposal": proposal,
             "kind": kind,
@@ -1677,7 +1696,7 @@ def proposal_review(
             "merge": _merge_words(proposal),
             "mockup": mockup,
             "mockup_gone": mockup_gone,
-            "adr_waits": _adr_waits(repo, listed),
+            "adr_waits": waits,
             "changes": _plan_changes(repo, thread, kind),
             "word_color": _WORD_COLOR,
             "standing": _standing(conn, project_id, thread, proposal, lead, _known_cards(repo)),

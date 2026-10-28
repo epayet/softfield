@@ -100,7 +100,7 @@
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"{% if adr_waits %} disabled{% endif %}
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
           hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'>{% if adr_waits %}Approve plan{% else %}Approve plan{% endif %}</button>
-        {% if adr_waits %}<span style="font-size: 12.5px; color: var(--muted)">Accept the card's ADR first: the plan builds on it.</span>{% endif %}
+        {% if adr_waits %}<span style="font-size: 12.5px; color: var(--muted)">Accept the card's ADR first: the plan builds on it.</span>{% elif adr_on_its_way %}<span style="font-size: 12.5px; color: var(--muted)">ADR {{ adr_on_its_way }}'s acceptance is on its way: the runner applies it first.</span>{% endif %}
         {% elif kind == "merge" and merge %}
         <button type="button" id="approve-merge" class="btn go"
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"

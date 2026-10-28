@@ -430,6 +430,23 @@ def _proposed(repo: Path, number: int) -> bool:
     return bool(found) and planner.is_proposed(found[0].read_text(encoding="utf-8"))
 
 
+def _proposed_adrs(repo: Path, changes: list[tuple[str, str]]) -> list[int]:
+    """The numbers of the ADRs a branch adds or changes that are still Proposed on the merged
+    tree: a failed accept must not let their plan merge."""
+    found = []
+    for mode, path in changes:
+        name = re.fullmatch(r"\.factory/adr/(\d+)-[^/]+\.md", path)
+        file = repo / path
+        if (
+            name
+            and mode != "000000"
+            and file.is_file()
+            and planner.is_proposed(file.read_text(encoding="utf-8"))
+        ):
+            found.append(int(name[1]))
+    return sorted(found)
+
+
 def ticket_problems(repo: Path, tickets: list[str]) -> list[str]:
     """Each merged ticket's pre-flight problems, and an ADR it relies on that is still
     Proposed, by ticket: one in .factory/tasks/later/ to be queued, or a ready one a replan changed.
@@ -775,6 +792,11 @@ def _approve_plan(
             if problems := ticket_problems(repo, checked):
                 _undo(git)
                 return "not approved: " + "; ".join(problems)
+            if waiting := _proposed_adrs(repo, changes):
+                _undo(git)
+                return "not approved: " + "; ".join(
+                    f"relies on ADR {n}, still Proposed: accept it first" for n in waiting
+                )
             doc = milestone_file(repo, "cards", full_key(repo, thread))
             if not doc.is_file():
                 _undo(git)

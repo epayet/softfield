@@ -1052,6 +1052,27 @@ def test_approve_plan_waits_for_the_cards_adr_on_main(planning, db_path, serve, 
     assert " disabled" not in approve()
 
 
+def test_an_open_accept_adr_enables_approve_plan_and_says_so(planning, db_path, serve, checkout):
+    """An open accept_adr for the card's ADR counts as accepted: the runner applies it first."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    adr = checkout / ".factory" / "adr" / "20-planning-room.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
+    client = serve()
+    waiting = _review_page(client, "/planning/f6/proposals/plan")
+    assert " disabled" in re.search(r'<button type="button" id="approve-plan"[^>]*>', waiting)[0]  # type: ignore[index]
+    assert "acceptance is on its way" not in waiting
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "accept_adr", "f6", "20", "2026-10-28T10:00:00+00:00"
+        ),
+    )
+    html = _review_page(client, "/planning/f6/proposals/plan")
+    assert " disabled" not in re.search(r'<button type="button" id="approve-plan"[^>]*>', html)[0]  # type: ignore[index]
+    assert "ADR 20's acceptance is on its way: the runner applies it first." in html
+
+
 def test_a_seeds_button_posts_plant_about_its_general_id(planning, db_path, serve):
     _write(db_path, lambda conn: _review(conn, planning, "general", _REVIEW_SEED))
     html = _review_page(serve(), "/planning/general/proposals/seed-1")
