@@ -57,6 +57,14 @@ def _items(group: str) -> list[tuple[str, str]]:
     ]
 
 
+def _group(db: sqlite3.Connection, key: str) -> list[Any]:
+    """A desk group's items by its key."""
+    for g in desk(db, PROJECT, NOW):
+        if g.key == key:
+            return g.items
+    return []
+
+
 def _tile(html: str, tile_id: str) -> str:
     found = re.search(rf'<div id="{tile_id}"(.*?)</div>\s*(?=<div id=|</section>)', html, re.S)
     assert found, tile_id
@@ -78,31 +86,32 @@ def test_each_group_shows_its_items_in_order(planning, serve):
     assert _items(groups["seeds"]) == [("/planning/f9", "Parallel developers")]
 
 
-def test_desk_returns_the_five_groups_in_order_empty_ones_too(db_path, db):
+def test_desk_returns_the_six_groups_in_order_empty_ones_too(db_path, db):
     """Without a thread or an idea card, the groups are still there, in order, empty but the
     ripe one: without ``write_live``'s running and ready tickets, f1 is ripe too."""
     groups = desk(db, PROJECT, NOW)
     assert [g.name for g in groups] == [
         "Didn't go through",
+        "Blocked tickets",
         "To sign off",
         "Proposals to review",
         "Your answers wanted",
         "Seeds, not asked about yet",
-        "Blocked tickets",
     ]
     assert [[i.title for i in g.items] for g in groups] == [
+        [],
         [],
         ["The factory measures itself", "The web app"],
         [],
         [],
         [],
-        [],
     ]
-    assert desk(db, "nowhere", NOW)[5].items == []
+    assert _group(db, "blocked") == []
+    assert [g.items for g in desk(db, "nowhere", NOW)] == [[], [], [], [], [], []]
 
 
 def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
-    seeds = desk(db, PROJECT, NOW)[4].items
+    seeds = _group(db, "seeds")
     assert [s.title for s in seeds] == ["Parallel developers"]
 
 
@@ -142,7 +151,7 @@ def test_a_proposal_the_owner_settled_is_not_among_the_proposals(
             ),
         ),
     )
-    (item,) = desk(db, PROJECT, NOW)[2].items  # the card's parts are one item (F51 D1)
+    (item,) = _group(db, "proposals")  # the card's parts are one item (F51 D1)
     names = {"adr-20": "ADR 20", "plan": "plan"}
     assert [name for name, way in item.parts if not way] == [names[p] for p in still_open]
     # a pending one stays, dashed and on its way (the owner, 2026-10-08)
@@ -159,7 +168,7 @@ def test_a_request_older_than_the_reply_settles_nothing(planning, db_path, db):
             conn, planning, "approve_plan", "f6", None, _at(timedelta(hours=3))
         ),
     )
-    (item,) = desk(db, PROJECT, NOW)[2].items  # F51 D1: the card's two proposals are one item
+    (item,) = _group(db, "proposals")  # F51 D1: the card's two proposals are one item
     assert item.parts == (("ADR 20", False), ("plan", False))
 
 
@@ -681,7 +690,7 @@ def test_an_archive_on_its_way_shows_dashed_and_counts_no_more(planning, db_path
             conn, planning, "archive", "general", "on", NOW.isoformat()
         ),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[3].items if i.link == "/planning/general"]
+    [item] = [i for i in _group(db, "answers") if i.link == "/planning/general"]
     assert item.on_its_way and item.words == "archiving at the runner's next pick"
     assert top_bar(db, PROJECT, NOW)["planning_count"] == before - 1
     html = _page(serve())
@@ -698,7 +707,7 @@ def test_a_sign_off_on_its_way_shows_on_the_desk(planning, db_path, db):
         db_path,
         lambda conn: metrics.add_request(conn, planning, "signoff", "m4", None, NOW.isoformat()),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[1].items if i.link == "/planning/m4"]
+    [item] = [i for i in _group(db, "ripe") if i.link == "/planning/m4"]
     assert item.on_its_way and item.words == "signing off at the runner's next pick"
 
 
@@ -803,7 +812,7 @@ def test_the_desk_poll_moves_an_answered_seed_to_the_answers(page, planning, db_
     assert page.locator('#desk-seeds a[href^="/planning/f9"]').count() == 0
 
 
-def test_two_blocked_tickets_appear_second_on_the_desk_with_their_ids_and_reasons(
+def test_two_blocked_tickets_appear_second_on_the_desk_with_their_ids_and_reason(
     planning, db_path, db, serve
 ):
     """Two open blocked rows: the desk's second group is "Blocked tickets" with two items,
@@ -839,6 +848,8 @@ def test_two_blocked_tickets_appear_second_on_the_desk_with_their_ids_and_reason
     assert len(items) == 2
     assert items[0] == ("/tickets/f1-01", "f1-01")
     assert items[1] == ("/tickets/f1-02", "f1-02")
+    blocked_group_items = _group(db, "blocked")
+    assert len(blocked_group_items) == 2
     blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
     assert (blocked_group.key, blocked_group.name, blocked_group.color) == (
         "blocked",

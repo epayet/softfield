@@ -339,8 +339,8 @@ def desk_trail(
 
 def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
     """What waits for the owner (D6), in six groups in this order, empty ones included: what
-    didn't go through first (F31 D9), then sign-offs, proposals, conversations, seeds, and
-    blocked tickets."""
+    didn't go through first (F31 D9), blocked tickets (F106 D1), sign-offs, proposals,
+    conversations, and seeds."""
     project_id = metrics.find_project(conn, project)
     if project_id is None:
         refusals: list[DeskItem] = []
@@ -360,11 +360,11 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         blocked = _acted_on(conn, project_id, _blocked(conn, project_id))
     return [
         DeskGroup("refused", "Didn't go through", "--hazard", refusals),
+        DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),
         DeskGroup("ripe", "To sign off", "--qwen", ripe),
         DeskGroup("proposals", "Proposals to review", "--opus", proposals),
         DeskGroup("answers", "Your answers wanted", "--hazard", answers),
         DeskGroup("seeds", "Seeds, not asked about yet", "--ink-2", seeds),
-        DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),
     ]
 
 

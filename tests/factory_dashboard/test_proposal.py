@@ -22,6 +22,7 @@ from tests.factory_dashboard.test_planning import (
     _REVIEW_MERGE,
     _REVIEW_PLAN,
     _finished,
+    _group,
     _lead_says,
     _open,
     _posts,
@@ -171,7 +172,7 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
     """f6-12: on the desk and its page, its words say "merge F9 into F7"; approving it is the
     thread's ``approve_plan``, which settles it (D6)."""
     _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
-    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    [item] = [i for i in _group(db, "proposals") if i.link.endswith("/merge-f9")]
     assert item.words == "merge F9 into F7 · 1 key points"
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert ">Merge F9 into F7</span>" in html and "Approve: merge F9 into F7" in html
@@ -187,14 +188,12 @@ def test_a_merge_shows_like_the_others_and_its_button_approves_the_threads_plan(
             conn, planning, "approve_plan", "f9", None, NOW.isoformat()
         ),
     )
-    [item] = [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    [item] = [i for i in _group(db, "proposals") if i.link.endswith("/merge-f9")]
     assert item.on_its_way  # on its way until the runner's next pick, no longer waiting on you
 
 
 def _merges_on_the_desk(db: sqlite3.Connection) -> list[str]:
-    return [
-        i.link for i in desk(db, PROJECT, NOW)[2].items if "/merge-" in i.link and not i.on_its_way
-    ]
+    return [i.link for i in _group(db, "proposals") if "/merge-" in i.link and not i.on_its_way]
 
 
 def test_an_approved_merge_leaves_the_desk(planning, db_path, db):
@@ -254,7 +253,7 @@ def _f6_adr_plan_merge(db_path: Path, planning: int, checkout: Path) -> None:
 
 
 def _proposals(db: sqlite3.Connection) -> list[Any]:
-    return desk(db, PROJECT, NOW)[2].items
+    return _group(db, "proposals")
 
 
 def _counted(db: sqlite3.Connection) -> int:
@@ -305,16 +304,16 @@ def test_a_plan_and_its_mockup_are_one_item_and_the_general_seeds_stay_two(plann
 def test_a_thread_with_an_open_plan_message_is_not_an_answer_wanted(planning, db_path, db):
     """F51 D4: the owner answered; the lead's reply is Coming, not on the desk."""
     _lead_says(db_path, planning, "f7", "Which one?")
-    assert "/planning/f7" in [i.link for i in desk(db, PROJECT, NOW)[3].items]
+    assert "/planning/f7" in [i.link for i in _group(db, "answers")]
     _finished(db_path, planning, "plan_message", "f7", "The first.", None)
-    assert "/planning/f7" not in [i.link for i in desk(db, PROJECT, NOW)[3].items]
+    assert "/planning/f7" not in [i.link for i in _group(db, "answers")]
 
 
 def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
     """F49 D1: the runner applied it after the job; no Approve, on the desk or its page."""
     applied = {**_REVIEW_MERGE, "applied": True}
     _write(db_path, lambda conn: _review(conn, planning, "f9", applied))
-    assert not [i for i in desk(db, PROJECT, NOW)[2].items if i.link.endswith("/merge-f9")]
+    assert not [i for i in _group(db, "proposals") if i.link.endswith("/merge-f9")]
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert 'id="approve-merge"' not in html and 'id="merged-by-lead"' in html
     assert 'id="reject"' not in html  # nothing left to reject

@@ -13,7 +13,6 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from factory_dashboard.planning import desk
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     NOW,
@@ -33,6 +32,7 @@ from tests.factory_dashboard.test_planning import (
     _asked_changes,
     _coming_items,
     _finished,
+    _group,
     _groups,
     _items,
     _lead_says,
@@ -615,7 +615,7 @@ def test_a_ripe_cards_page_shows_its_sheet_and_signs_off(planning, db_path, db, 
         "subject": "m4",
     }
     assert html.index('id="review"') < html.index('id="conversation"')
-    [item] = desk(db, PROJECT, NOW)[1].items
+    [item] = _group(db, "ripe")
     assert item.words == "reviewed · waits for your sign-off"
 
 
