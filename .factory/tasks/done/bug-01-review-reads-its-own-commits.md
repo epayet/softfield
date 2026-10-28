@@ -36,3 +36,10 @@ Read `def _plan_commit`, `def run_due_review`, `def _fix_scope` and the round-1 
 - the runner's own commits ("runner: …") in the range don't change which of the two the prompt is
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
