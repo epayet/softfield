@@ -39,3 +39,9 @@ attempts: 3
 tokens: 3856804
 logs: .factory/var/runs/20261027-005355/f59-01-reports-week-numbers
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
