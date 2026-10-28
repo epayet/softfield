@@ -2109,6 +2109,7 @@ def _regate(
     failed = next((r for r in results if not r.ok), None)
     outcome = "passed" if failed is None else f"failed gate {failed.name}"
     s.log(f"↺ [{entry['agent']}] attempt {attempt} of {task.id}, gates run again: {outcome}")
+    note = str(entry.get("note") or "gates run again after a stop")
     if entry.get("job_id") is not None and s.run_id is not None:
         _record(
             s,
@@ -2124,7 +2125,7 @@ def _regate(
                 }
                 for r in results
             ],
-            note="gates run again after a stop",
+            note=note,
         )
     return failed
 
@@ -2187,7 +2188,8 @@ def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None)
     # A requeued ticket continues the branch its escalation kept (ADR 15 item 7).
     resumed = not rec.attempts and _has_branch(s.git, branch)
     regate = s.state.regate.pop(task.id, None)
-    if regate is not None:
+    waited = s.state.waits_on_main.pop(task.id, None)
+    if regate is not None or waited is not None:
         save_state(s.state, s.state_path)
     reset_at_start = _start_attempt(s, branch, "")
     if regate is not None and not reset_at_start and isinstance(regate.get("attempt"), int):
@@ -2315,6 +2317,10 @@ def run_task(s: Session, task: Task, directing: Mapping[str, Any] | None = None)
             _merge(s, task, rec, agent)
             return rec
         end(stopped or ("timed out, " if run.timed_out else "") + f"failed gate {failed.name}")
+        if failed.name == ALL_TESTS and _waits_for_red_main(s, task, logs, attempt, job_id, agent):
+            rec.attempts = attempt - 1  # it costs no attempt (F80 F1)
+            rec.result = "waits for main"
+            return rec
         if run.timed_out:
             s.report.notes.append(f"{task.id} attempt {attempt}: {agent} timed out.")
         if stopped:
@@ -2462,6 +2468,30 @@ def _main_is_red(s: Session, task: Task, failed: Sequence[str], logs: Path) -> b
     return True
 
 
+ALL_TESTS = "all-tests"  # the one gate main itself can fail: the others judge the diff alone
+MAIN_TESTS = "tests"  # check-all's name for it
+
+
+def _waits_for_red_main(
+    s: Session, task: Task, logs: Path, attempt: int, job_id: int | None, agent: str
+) -> bool:
+    """F80 F1: a developer attempt failed only ``all-tests``; whether main fails them too. Then
+    it waits on its branch as a lead ticket does (F106 D5), costing no attempt and no game: once
+    main passes, only its gates run again, and its job gets their outcome."""
+    s.git.checkout(MAIN)
+    if not _main_is_red(s, task, [MAIN_TESTS], logs):
+        s.git.checkout(f"task/{task.id}")
+        return False
+    s.state.regate[task.id] = {
+        "attempt": attempt,
+        "agent": agent,
+        "job_id": job_id,
+        "note": "gates run again once main passed",
+    }
+    save_state(s.state, s.state_path)
+    return True
+
+
 def _look_at_main(s: Session) -> None:
     """While main is red, each commit on it that could change a check (not docs or tickets
     alone) runs the checks it failed again; once it passes them all, the owner's item
@@ -2488,7 +2518,8 @@ def _look_at_main(s: Session) -> None:
 
 
 def waits_for_main(s: Session, ready: Iterable[Task]) -> set[str]:
-    """The lead's tickets held while main is red, all but the one that would mend it."""
+    """The tickets held while main is red, all but the one that would mend it: the lead's, and
+    a developer's whose work waits on its branch (F80 F1)."""
     red = s.state.main_red
     if red is None:
         return set()
@@ -2496,7 +2527,8 @@ def waits_for_main(s: Session, ready: Iterable[Task]) -> set[str]:
     return {
         t.id
         for t in ready
-        if router.lead_only(t.agent, t.files, protected) and t.id != red.get("mender")
+        if (router.lead_only(t.agent, t.files, protected) or t.id in s.state.waits_on_main)
+        and t.id != red.get("mender")
     }
 
 

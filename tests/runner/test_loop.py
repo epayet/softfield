@@ -1335,6 +1335,87 @@ def test_a_lead_ticket_failing_a_check_main_passes_is_blocked(
     assert [item["kind"] for item in _rows(repo, "owner_items")] == ["blocked", "planning"]
 
 
+def _gates_fail_first(monkeypatch, first: list[GateResult]) -> list[int]:
+    """The developer's first gates end as ``first``; every later run of them passes."""
+    calls: list[int] = []
+
+    def run_gates(context: gates.GateContext) -> list[GateResult]:
+        calls.append(1)
+        return first if len(calls) == 1 else [GateResult("all-tests", True, "")]
+
+    monkeypatch.setattr(loop, "run_gates", run_gates)
+    return calls
+
+
+ALL_TESTS_FAIL = [GateResult("ruff", True, ""), GateResult("all-tests", False, "bug-03 fails")]
+
+
+def test_a_developer_attempt_failing_only_where_main_fails_waits_on_its_branch(
+    repo, fake_model, monkeypatch
+):
+    """f80-01 (2026-10-27): Qwen's work passed every gate but all-tests, which failed on main's
+    own test; it cost a second attempt, an escalation and two lost coding games."""
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    _gates_fail_first(monkeypatch, ALL_TESTS_FAIL)
+    calls = _red_main(monkeypatch, {None: ["tests"]})
+    [task] = _run(repo).tasks
+    assert (task.result, task.attempts, task.gate_failures) == ("waits for main", 0, [])
+    assert fake_model.models == ["lmstudio/m"]  # no second attempt
+    assert calls == [(None, ("tests",))]
+    tasks = repo / ".factory" / "tasks"
+    assert (tasks / "ready" / "m1-01-thing.md").exists()
+    assert not (tasks / "escalated" / "m1-01-thing.md").exists()
+    assert "return 42" in git(repo, "show", "task/m1-01-thing:coucou/thing.py")
+    [item] = _rows(repo, "owner_items")
+    assert (item["kind"], item["subject"], item["resolved"]) == ("main-red", "tests", None)
+    assert "m1-01-thing" in str(item["text"])
+
+
+@pytest.mark.parametrize(
+    ("first", "main", "on_main"),
+    [
+        (ALL_TESTS_FAIL, [], [(None, ("tests",))]),  # main passes all-tests
+        ([GateResult("ruff", False, "E501")], ["tests"], []),  # the diff's own gate
+    ],
+)
+def test_a_developer_attempt_failing_where_main_passes_costs_the_attempt(
+    repo, fake_model, monkeypatch, first, main, on_main
+):
+    _add_task(repo, "m1-01-thing")
+    fake_model.extend([_implement, _implement_other])
+    _gates_fail_first(monkeypatch, first)
+    calls = _red_main(monkeypatch, {None: main})
+    [task] = _run(repo).tasks
+    assert (task.result, task.attempts, task.gate_failures) == ("done", 2, [first[-1].name])
+    assert calls == on_main
+    assert _rows(repo, "owner_items") == []
+
+
+def test_once_main_passes_the_waiting_developer_tickets_gates_run_again_and_it_merges(
+    repo, fake_model, monkeypatch
+):
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    gate_runs = _gates_fail_first(monkeypatch, ALL_TESTS_FAIL)
+    fails: dict[str | None, list[str]] = {None: ["tests"]}
+    _red_main(monkeypatch, fails)
+    _run(repo)
+    fails.clear()
+    _fix_main(repo)
+    [task] = _run(repo).tasks  # no scripted run is left: a developer attempt would fail here
+    assert (task.result, task.attempts) == ("done", 1)
+    assert fake_model.models == ["lmstudio/m"] and len(gate_runs) == 2
+    assert "return 42" in (repo / "coucou" / "thing.py").read_text()
+    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").exists()
+    state = load_state(_config(repo).runs_dir / "state.json")
+    assert state.regate == {} and state.waits_on_main == {} and state.main_red is None
+    [job] = _rows(repo, "jobs")
+    assert job["outcome"] == "passed"
+    [item] = _rows(repo, "owner_items")
+    assert item["kind"] == "main-red" and item["resolved"] is not None
+
+
 def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fake_lead):
     for n in (1, 2, 3):
         _add_task(repo, f"m1-0{n}-thing")

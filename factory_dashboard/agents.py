@@ -40,6 +40,7 @@ _AGENT_TOKENS = {
 def _agent_token(agent: str) -> str:
     return next((t for p, t in _AGENT_TOKENS.items() if agent.startswith(p)), "--muted")
 
+
 ROLES: tuple[str, ...] = (
     "developer",
     "last-attempt",
