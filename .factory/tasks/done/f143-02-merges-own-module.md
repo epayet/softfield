@@ -31,3 +31,10 @@ Read the Decisions in `.factory/cards/f143-split-test-planning-py-by-page.md` (D
 - no file in `.factory/tasks/ready/` or `.factory/tasks/later/` names a moved `def` or test beside `factory_dashboard/planning.py` or `tests/factory_dashboard/test_planning.py`
 - the listed `tests:` pass
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
