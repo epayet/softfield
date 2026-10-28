@@ -67,12 +67,12 @@ def test_the_plant_form_posts_a_plant_request(page, planning, db_path, serve, bu
 def test_a_plant_shows_the_idea_in_coming_at_once(page, planning, db_path, serve):
     """With nothing in Coming (#desk-coming absent), typing a note and pressing Plant shows
     #desk-coming holding that note as its title and "planting at the runner's next pick",
-    without a reload; the textarea is empty afterwards."""
+    without a reload and before Coming's 5 s poll; the textarea is empty afterwards."""
     _open(page, serve())
     assert page.locator("#desk-coming").count() == 0
     page.fill('#plant textarea[name="text"]', "A note about the frame")
     page.click("#plant-only")
-    page.wait_for_selector("#desk-coming")
+    page.wait_for_selector("#desk-coming", timeout=2000)  # F63: the poll would take ~5 s
     pick = "planting at the runner's next pick"
     assert _coming_lines(page) == ["COMING · 1", "A note about the frame", pick]
     assert page.input_value('#plant textarea[name="text"]') == ""

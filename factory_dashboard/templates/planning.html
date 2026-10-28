@@ -46,7 +46,7 @@
 
 <div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
 {% if coming.items %}
-<section id="desk-coming" class="desk-coming" aria-label="Coming" style="background: var(--bay)">
+<section id="desk-coming" class="desk-coming" aria-label="Coming" style="margin-top: 14px; background: var(--bay)">
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">Coming · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
     <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
@@ -242,6 +242,8 @@
     // while the new form is on its way (or never comes) must not plant it twice.
     form.elements.text.value = "";
     htmx.ajax("GET", window.location.href, {target: "#plant-row", select: "#plant-row", swap: "outerHTML"});
+    // F63 D1: Coming sits above the box, outside #plant-row, so it is drawn again on its own
+    htmx.ajax("GET", window.location.href, {target: "#live-desk-coming", select: "#desk-coming", swap: "innerHTML"});
   });
   // The box emptied: what comes next is a new note, and the refused one keeps its card
   document.addEventListener("input", (event) => {

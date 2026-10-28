@@ -770,6 +770,16 @@ def test_desk_coming_poll_wrapper_absent_when_no_items(planning, serve):
     assert '<section id="desk-coming"' not in html
 
 
+def test_coming_then_plant_then_the_desk_then_archived(planning, db_path, serve):
+    """F63 D1, D2: what the owner just did first, then the box, the desk, and Archived last."""
+    _finished(db_path, planning, "plant", None, NOTE, None)
+    _archive(db_path, planning, "general", timedelta(hours=1))
+    html = _page(serve())
+    marks = ['<section id="desk-coming"', 'id="plant"', 'id="desk"', 'id="archived"']
+    places = [html.index(mark) for mark in marks]
+    assert places == sorted(places)
+
+
 # --- the desk and an open thread refresh by themselves (F19 review) ---------------------------
 
 LIVE = 9000  # one 5 s poll, and room to draw it
