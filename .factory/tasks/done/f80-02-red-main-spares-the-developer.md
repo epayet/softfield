@@ -27,3 +27,10 @@ Read `_main_is_red`, `_look_at_main` and `waits_for_main` in `runner/loop.py` (m
 - once main passes again, the waiting developer ticket's gates run on its branch and it merges if they pass
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
