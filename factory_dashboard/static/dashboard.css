@@ -369,7 +369,7 @@ tr.few .gauge { opacity: .35; }
   .bar-top .filters label { grid-area: 1 / 3; font-size: 0; min-width: 0; }  /* the select names the project */
   .bar-top .filters select { width: 100%; min-width: 0; }
   .factory-status { grid-area: 1 / 2; }
-  .theme-btn { grid-area: 1 / 4; }
+  .theme-btn { grid-area: 1 / 4; min-height: 44px; }  /* a thumb's target, like the dot */
   .factory-status .dot-btn, .factory-status .sign { width: 44px; height: 44px; }
   .factory-status .words { display: none; }
   .bar-top.show-words .factory-status .words, .factory-status .words.fail { display: block; position: absolute; top: 100%; right: 0;
@@ -405,7 +405,7 @@ tr.few .gauge { opacity: .35; }
 .floor .bar-bg { fill: var(--grid); } .floor .bar-fill { fill: var(--warn); }
 /* Light mode: hazard yellow and --muted fall under 3:1 on the floor's greys (f9-02) */
 :root[data-theme="light"] .floor .bar-fill { fill: var(--warn-ink); }
-:root[data-theme="light"] .floor text.dim, .floor .belt text { fill: var(--ink-2); }
+:root[data-theme="light"] .floor text.dim, :root[data-theme="light"] .floor .belt text { fill: var(--ink-2); }
 .floor [data-station="seeds"], .floor [data-station="rows"] { --c: var(--ink-2); }
 .floor [data-station="planting"] { --c: var(--a3); }
 .floor .developers { --c: var(--dev); }

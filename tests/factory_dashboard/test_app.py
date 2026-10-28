@@ -2894,25 +2894,35 @@ def test_pressing_the_button_switches_to_light_at_once(page, client):
         "getComputedStyle(document.documentElement).getPropertyValue('--copilot').trim()"
     )
     assert copilot == "#3f6fd6", f"copilot {copilot} != light copilot"
-    # Navigate to milestones so the milestone-esc chart (which reads --copilot) is drawn
+
+
+def test_pressing_the_button_redraws_a_drawn_chart_in_place(page, client):
+    """f69 review: a chart already on the page takes the new colours without a reload; the
+    milestone-esc chart's first series reads --a1 (== --copilot)."""
+    page.set_viewport_size(DISPLAY)
+    page.emulate_media(color_scheme="dark")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/milestones")
-    page.wait_for_selector(
-        '.chart[data-chart="milestone-esc"] svg', state="visible", timeout=REFRESH
-    )
-    # The first series in the milestone-esc chart's SVG has been redrawn with the new colour
-    chart_first = page.evaluate(
-        "() => { const el = document.querySelector('.chart[data-chart=\"milestone-esc\"]');"
-        " if (!el) return null;"
-        " const svg = el.querySelector('svg');"
-        " if (!svg) return null;"
-        " const paths = svg.querySelectorAll('path');"
-        " for (let i = 0; i < paths.length; i++) {"
-        "   const fill = paths[i].getAttribute('fill');"
-        "   if (fill && fill !== 'none' && fill !== 'null') return fill;"
-        " }"
-        " return null; }"
-    )
-    assert chart_first == "#3f6fd6", f"milestone-esc fill {chart_first} != light copilot"
+    selector = '.chart[data-chart="milestone-esc"] svg'
+    page.wait_for_selector(selector, state="visible", timeout=REFRESH)
+    first_fill = """() => [...document.querySelectorAll(
+            '.chart[data-chart="milestone-esc"] svg path')]
+        .map((p) => p.getAttribute('fill')).find((f) => f && f !== 'none') || null"""
+    assert page.evaluate(first_fill) == "#7aa7ff"
+    page.evaluate("window._sameLoad = true")
+    page.evaluate("document.getElementById('theme-btn').click()")
+    page.wait_for_function(f"({first_fill})() === '#3f6fd6'", timeout=REFRESH)
+    assert page.evaluate("window._sameLoad") is True, "the page reloaded"
+    assert page.locator(selector).count() == 1, "the chart was drawn twice"
 
 
 def test_the_choice_stays_on_reload(page, client):
@@ -3007,15 +3017,57 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
 
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
+    page.evaluate("() => document.fonts.ready")
     header = page.locator("header.bar")
-    # Measure the dark theme height as the actual prior-height requirement
-    prior_height = header.evaluate("el => el.getBoundingClientRect().height")
-    # Switch to light and verify the header height is unchanged
-    page.evaluate("document.getElementById('theme-btn').click()")
-    light_height = header.evaluate("el => el.getBoundingClientRect().height")
-    assert light_height == prior_height, (
-        f"light header {light_height}px != dark {prior_height}px at 390px viewport"
+    height = "el => el.getBoundingClientRect().height"
+    with_button = header.evaluate(height)
+    assert page.locator("#theme-btn").evaluate(height) >= 44, "the button is under 44px to tap"
+    # The bar as it was before the button: the same page with the button taken out
+    page.evaluate("document.getElementById('theme-btn').style.display = 'none'")
+    without_button = header.evaluate(height)
+    assert with_button <= without_button, (
+        f"header {with_button}px with the button > {without_button}px without it at 390px"
     )
+    page.evaluate("document.getElementById('theme-btn').style.display = ''")
+    page.evaluate("document.getElementById('theme-btn').click()")
+    assert header.evaluate(height) == with_button, "the light theme changes the bar's height"
+
+
+def test_a_system_change_leaves_a_stored_choice_alone(page, client):
+    """f69 review: once the button was pressed, a later system change on the same page doesn't
+    undo the owner's choice."""
+    page.set_viewport_size(DISPLAY)
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.emulate_media(color_scheme="dark")
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
+    page.evaluate("document.getElementById('theme-btn').click()")
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    # The system goes light then dark: the listener registered at load must not follow it
+    page.emulate_media(color_scheme="light")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(100)
+    assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
+    assert page.locator("#theme-btn").text_content() == "Night"
+
+
+def test_every_light_rule_is_scoped_to_the_light_theme():
+    """f69 review: a light rule with a comma names the theme on each selector, else the
+    unscoped part leaks into the night theme (`.floor .belt text` did)."""
+    css = (STATIC / "dashboard.css").read_text()
+    for rule in re.findall(r'([^{}]*:root\[data-theme="light"\][^{]*)\{', css):
+        rule = re.sub(r"/\*.*?\*/", "", rule, flags=re.S)
+        for selector in rule.split(","):
+            assert selector.strip().startswith(':root[data-theme="light"]'), selector
 
 
 def test_live_system_theme_changes_sync_button_and_dispatch_themechange(page, client):

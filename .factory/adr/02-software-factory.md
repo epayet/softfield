@@ -541,6 +541,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** six checkpoints read the brand's tests closely and none clicked the link: the blocking bug was in f68-01's three-line template diff, and its test asserted the wrong href. A checkpoint on a UI ticket should check each Done when against the code, not only the tests' strength. And F114's "fix of a fix is the lead's" rule, written the day f68-07 was filed, didn't reach the checkpoints; f68-08 makes it a check.
 - **Decisions affected:** none.
 
+### F69 (2026-10-28): a button to switch between light and night ([review](../reviews/f69-i-want-a-button-to-switch.md))
+
+- **Q1:** one developer ticket (difficulty 3), merged on the second attempt after a timeout; then five fix tickets from checkpoints (four by Copilot standing in for Claude), four of them on the same two browser tests (f69-03 to f69-06); f69-06 took five attempts, a direction and a 3.8-day park. Review round 1: four should-fix and one nit, all fixed by the review.
+- **Q3:** Qwen only for the building, about 8.2 hours of model for some 60 lines of product: 2.6 on the feature, 5.6 on fixes; Claude $0.69 for one direction before the review.
+- **Q5:** see the review's numbers.
+- **Anything else:** the third card running (F114, F68, F69) where a test finding became a chain of developer tickets that never fully closed it; all three ran before f68-08. Again the checkpoints missed edge bugs in the feature diff (a selector that lost its theme scope, a stored choice the system could override, a 22 px tap target) while judging the newest test. A mechanical media-query-to-attribute rewrite needs each comma-separated selector rescoped; now a test.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

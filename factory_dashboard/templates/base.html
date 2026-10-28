@@ -15,6 +15,8 @@
     document.documentElement.setAttribute("data-theme", theme);
     if (!stored) {
       matchMedia("(prefers-color-scheme: light)").addEventListener("change", function(e) {
+        // A choice made with the button since this page loaded wins over the system (f69 review).
+        try { if (localStorage.getItem("theme")) return; } catch(err) {}
         document.documentElement.setAttribute("data-theme", e.matches ? "light" : "dark");
         var btn = document.getElementById("theme-btn");
         if (btn) {

@@ -249,7 +249,8 @@
       const c = colours();
       chart.setOption({ textStyle: { fontFamily: c.font }, ...option(JSON.parse(block.textContent), c) });
       el.dataset.drawn = "1";
-      new ResizeObserver(() => chart.resize()).observe(el);
+      el._resize = new ResizeObserver(() => chart.resize());
+      el._resize.observe(el);
       // Timeline bars: clicking a bar opens the job page.
       if (el.dataset.chart === "timeline") {
         chart.on("click", (params) => {
@@ -268,8 +269,10 @@
     for (const el of document.querySelectorAll("[data-chart]")) {
       const chart = el._chart;
       if (!chart) continue;
+      el._resize.disconnect();
       chart.dispose();
       delete el._chart;
+      delete el._resize;
       delete el.dataset.drawn;
     }
     draw(document);
