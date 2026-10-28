@@ -5,18 +5,18 @@ milestone: f67-in-proposals-sometimes-i-see-d1
 difficulty: 5
 depends_on: [f67-01-key-point-kinds]
 files:
-  - factory_dashboard/planning.py
+  - factory_dashboard/proposal.py
   - factory_dashboard/templates/proposal.html
   - factory_dashboard/static/dashboard.css
 tests:
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_proposal.py
 ---
 
 ### Goal
 A proposal's review page draws each key point by its kind, information first, and lets the owner answer a choice by tapping an option.
 
 ### Context
-Follow the mock-up, `.factory/cards/f67-mockup/review.html`, which the owner approved with this plan. Read `.factory/cards/f67-in-proposals-sometimes-i-see-d1.md` D2, D3 and D4, `factory_dashboard/templates/proposal.html` (the `#key-points` deck and its script) and, in `factory_dashboard/planning.py`, `proposal_review`.
+Follow the mock-up, `.factory/cards/f67-mockup/review.html`, which the owner approved with this plan. Read `.factory/cards/f67-in-proposals-sometimes-i-see-d1.md` D2, D3 and D4, `factory_dashboard/templates/proposal.html` (the `#key-points` deck and its script) and, in `factory_dashboard/proposal.py`, `proposal_review`.
 - Order in `proposal_review`: `info`, then `attention`, then `choice`, each by `n`; a point without `kind` sorts and draws as today's box, with the `attention` ones.
 - `info`: a plain numbered line in `--muted`, no box, with a small Comment… link. `attention`: a box with a `--hazard` left edge and "Needs a look"; with `flag`, also "Changes an earlier decision" (the ⚑ goes). `choice`: a box with an `--opus` left edge, "Your choice", and one button per option (44 px tall, wrapping at 390 px), the `pick` one pressed and marked "Lead's pick".
 - A one-line key above the points says what each edge colour means.

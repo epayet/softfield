@@ -2170,3 +2170,34 @@ def later_priority_client(db_path: Path) -> TestClient:
     app = create_app(db_path, PROJECT)
     app.dependency_overrides[get_now] = lambda: NOW
     return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+@pytest.fixture
+def planning(db_path: Path) -> int:
+    """``write_planning``'s rows in the fixture database; the project's id."""
+    conn = metrics.open_db(db_path)
+    try:
+        return write_planning(conn)
+    finally:
+        conn.close()
+
+
+@pytest.fixture
+def checkout(tmp_path: Path, db_path: Path, planning: int, monkeypatch) -> Path:
+    """The project's repo, a git checkout on main; its ADR 20 not there yet."""
+    from tests.runner.conftest import git
+
+    for name in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE"):  # set when run from a hook
+        monkeypatch.delenv(name, raising=False)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    git(repo, "init", "-q", "-b", "main")
+    git(repo, "config", "user.email", "t@example.com")
+    git(repo, "config", "user.name", "Test")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "init")
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, PROJECT, repo=str(repo))
+    finally:
+        conn.close()
+    return repo

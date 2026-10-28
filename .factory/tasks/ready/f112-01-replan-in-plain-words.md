@@ -5,12 +5,12 @@ milestone: f112-plain-words-for-replan
 difficulty: 3
 depends_on: []
 files:
-  - factory_dashboard/planning.py
+  - factory_dashboard/proposal.py
   - factory_dashboard/templates/thread.html
   - factory_dashboard/templates/proposal.html
   - factory_dashboard/templates/_partials/queue.html
 tests:
-  - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_proposal.py
   - tests/factory_dashboard/test_overview.py
 ---
 
