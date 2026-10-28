@@ -213,6 +213,10 @@
               select: "#conversation",
               swap: "innerHTML"
             });
+            // F100: the open proposals turn "being revised" with the message
+            if (document.getElementById("proposals")) {
+              htmx.ajax("GET", window.location.href, {target: "#proposals", select: "#proposals", swap: "outerHTML"});
+            }
           }, 100);
         }
       });
@@ -241,11 +245,16 @@
         if (!window.liveIdle()) return;
         const response = await fetch(window.location.href);
         if (!response.ok) return;
-        const fresh = new DOMParser().parseFromString(await response.text(), "text/html").getElementById("conversation");
+        const page = new DOMParser().parseFromString(await response.text(), "text/html");
+        const fresh = page.getElementById("conversation");
         const shown = document.getElementById("conversation");
         const stamp = (c) => c.querySelector("#conversation-stamp").dataset.stamp;
         if (!fresh || !shown || stamp(fresh) === stamp(shown) || !window.liveIdle()) return;
         htmx.swap(shown, fresh.outerHTML, {swapStyle: "outerHTML"});
+        // F100: the proposals follow the conversation (being revised, or solid again)
+        const proposals = page.getElementById("proposals");
+        const listed = document.getElementById("proposals");
+        if (proposals && listed) htmx.swap(listed, proposals.outerHTML, {swapStyle: "outerHTML"});
       }, 5000);
       // f23-01: the summary on a point's details opens the box and focuses the textarea in the
       // tap itself (iOS Safari only raises the keyboard on the tap that touches the element).
@@ -296,12 +305,12 @@
   <aside id="proposals" class="panel" aria-label="Proposals">
     <h2>Proposals from this card</h2>
     {% for prop in proposals %}
-    <a href="{{ prop.link }}{{ q }}" class="proposal" style="--c: var({{ prop.color }})">
+    <a href="{{ prop.link }}{{ q }}" class="proposal{% if prop.state == 'being revised' %} revising{% endif %}" style="--c: var({{ prop.color }})">
       <span>{{ prop.kind | upper }} · <span class="state">{{ prop.state }}</span></span>
       <b>{{ prop.title }}</b>
     </a>
     {% endfor %}
-    <p class="aside">Nothing becomes a ticket until you approve it.</p>
+    <p class="aside">{% if proposals | selectattr("state", "equalto", "being revised") | list %}The lead is revising these after your message. {% endif %}Nothing becomes a ticket until you approve it.</p>
   </aside>
   {% endif %}
 

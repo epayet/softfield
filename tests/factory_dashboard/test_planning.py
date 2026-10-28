@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from factory_dashboard.planning import desk
+from factory_dashboard.planning import desk, waiting_for_you
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     LOCAL,
@@ -1411,3 +1411,112 @@ def test_no_button_in_planning_has_inline_style(planning, serve, db_path):
     buttons = re.findall(r"<button[^>]*>", html)
     for b in buttons:
         assert "style=" not in b.lower(), f"Button has inline style: {b[:100]}"
+
+
+# --- proposals being revised while the owner's message waits (F100) -----------------------------
+
+_MOCKUP: dict[str, Any] = {**_REVIEW_PLAN, "id": "mock", "kind": "mockup", "title": "A mock-up"}
+
+
+def _revising(
+    db_path: Path, planning: int, *, stored: bool = False, proposals: tuple[Any, ...] = ()
+) -> None:
+    """f85's lead reply lists a plan and a mock-up; then the owner's message waits for the lead:
+    an open request, or (``stored``) the message in the thread and a planner job about it."""
+
+    def write(conn: sqlite3.Connection) -> None:
+        _review(conn, planning, "f85", *(proposals or (_REVIEW_PLAN, _MOCKUP)))
+        if not stored:
+            value = '{"text": "Why?"}'
+            metrics.add_request(
+                conn, planning, "plan_message", "f85", value, _at(timedelta(minutes=5))
+            )
+            return
+        found = metrics.planner_thread(conn, planning, "f85", _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(conn, found, "owner", _at(timedelta(minutes=5)), "Why?")
+        metrics.queue_job(
+            conn, planning, "planner", "f85#1", "your message", _at(timedelta(minutes=4))
+        )
+
+    _write(db_path, write)
+
+
+def _proposal_items(db_path: Path) -> list[Any]:
+    conn = metrics.open_db(db_path)
+    try:
+        return [i for i in _group(conn, "proposals") if i.link.startswith("/planning/f85/")]
+    finally:
+        conn.close()
+
+
+def _waiting_proposals(db_path: Path) -> list[Any]:
+    conn = metrics.open_db(db_path)
+    try:
+        return [i for i in waiting_for_you(desk(conn, PROJECT, NOW)) if "/f85/" in i.link]
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("stored", [False, True])
+def test_proposals_wait_for_the_lead_while_the_owners_message_does(
+    planning, db_path, serve, stored
+):
+    """An open request, or the stored message with a planner job open: the thread's proposals
+    are dashed, "being revised · …", and don't wait for the owner."""
+    client = serve()
+    _revising(db_path, planning, stored=stored)
+    (item,) = _proposal_items(db_path)
+    assert item.on_its_way and item.words.startswith("being revised · ")
+    group = _groups(_page(client))["proposals"]
+    assert 'class="on-its-way-item' in group
+    assert "being revised · " in _text(group)
+    assert not _waiting_proposals(db_path)
+
+
+def test_a_lead_reply_without_proposals_makes_them_solid_again(planning, db_path, serve):
+    serve()
+    _revising(db_path, planning, stored=True)
+    _write(db_path, lambda conn: conn.execute("UPDATE work_queue SET done = ?", (NOW.isoformat(),)))
+    _lead_says(db_path, planning, "f85", "Unchanged.")
+    # the reply had no proposals, so the earlier set is still the latest listing: solid
+    (item,) = _proposal_items(db_path)
+    assert not item.on_its_way and "being revised" not in item.words
+    assert _waiting_proposals(db_path)
+
+
+def test_a_cancelled_message_leaves_the_proposals_solid(planning, db_path, serve):
+    serve()
+    _revising(db_path, planning)
+
+    def cancel(conn: sqlite3.Connection) -> None:
+        asked = conn.execute("SELECT id FROM owner_requests WHERE kind = 'plan_message'").fetchone()
+        value = '{"cancel": true}'
+        metrics.add_request(conn, planning, "change", str(asked["id"]), value, NOW.isoformat())
+
+    _write(db_path, cancel)
+    (item,) = _proposal_items(db_path)
+    assert not item.on_its_way
+
+
+def test_an_approve_on_its_way_keeps_its_own_words(planning, db_path, serve):
+    serve()
+    _revising(db_path, planning, proposals=(_REVIEW_PLAN,))
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(
+            conn, planning, "reject", "f85/plan", None, _at(timedelta(minutes=2))
+        ),
+    )
+    (item,) = _proposal_items(db_path)
+    assert item.words == "on its way · the runner applies it at its next pick"
+
+
+def test_the_thread_and_proposal_pages_say_being_revised(planning, db_path, serve):
+    client = serve()
+    _revising(db_path, planning)
+    thread = _thread(client, "f85")
+    assert _text(thread).count("being revised") >= 2
+    assert thread.count('class="proposal revising"') == 2
+    page = _review_page(client, "/planning/f85/proposals/plan")
+    assert "Being revised" in page
+    assert "Approve" in page and "Reject" in page

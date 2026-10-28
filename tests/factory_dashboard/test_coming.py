@@ -495,12 +495,13 @@ def test_the_planning_tab_count_and_overview_needs_you_dont_change_with_coming(
     groups = _groups(html)
     assert list(groups) == ["ripe", "proposals", "answers", "seeds"]
     assert _dashed(html, "/planning/f6") == 1
-    # The Planning tab count is unchanged
+    # The Planning tab count drops by f6's plan and ADR only: with the owner's message waiting
+    # for the lead they are being revised, not waiting for the owner (F100); the dashed box
+    # itself adds nothing
     planning_tab = re.search(
         r'<a href="/planning\?project=coucou"[^>]*id="planning-tab">Planning · (\d+)</a>', html
     )
-    assert planning_tab and planning_tab[1] == str(base_count)
-    # The Overview's Needs you count is unchanged
+    assert planning_tab and planning_tab[1] == str(base_count - 1)
     assert _needs_you_count(client.get("/").text) == base_needs
 
 

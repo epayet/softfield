@@ -83,6 +83,10 @@
       <div id="actions" class="{% if standing.state == 'on its way' %}on-its-way{% endif %}">
       <p class="way-title">On its way · the runner applies it at its next pick</p>
       {% if open %}
+      {% if standing.revising %}
+      {# F100: the owner's message waits for the lead, who may change this draft; the buttons stay #}
+      <p class="revising"><b>Being revised</b>Your message on the thread is on its way to the lead, who may change this draft. You can still approve or reject it as it stands.</p>
+      {% endif %}
       <div class="action-buttons">
       <span id="review-count" class="aside">{{ key_points | length }} agreed · 0 to change</span>
       <button type="button" id="send-back" class="btn go"

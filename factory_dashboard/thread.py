@@ -41,11 +41,12 @@ from factory_dashboard.merges import (
 )
 from factory_dashboard.milestones import _to_html
 from factory_dashboard.overview import Change, open_changes, running_jobs
-from factory_dashboard.planning import _open_proposals, _repo, desk_trail
+from factory_dashboard.planning import _open_proposals, _repo, _waiting_for_lead, desk_trail
 from runner import metrics
 from runner.planner import (
     APPROVED,
     ON_ITS_WAY,
+    OPEN,
     PLANNER,
     PlannerError,
     message,
@@ -56,6 +57,8 @@ from runner.requests import CHANGE, PLANT, RESERVE, owners_words, refused
 from runner.tasks import full_key, milestone_file, short_key
 
 router = APIRouter()
+
+REVISING = "being revised"  # F100: an open proposal while the owner's message waits for the lead
 
 # Each proposal kind's colour, a token from dashboard.css
 _KIND_COLOR = {
@@ -85,7 +88,7 @@ class Proposal:
     kind: str
     title: str
     color: str
-    state: str  # F31 D3: open, on its way, approved, rejected or sent back
+    state: str  # F31 D3: open, on its way, approved, rejected or sent back; F100: being revised
     link: str
 
 
@@ -198,17 +201,22 @@ def _proposals(
     if not lead:
         return []
     requests = _since(conn, project_id, lead[-1]["at"])
-    return [
-        Proposal(
-            str(p.get("kind") or ""),
-            str(p.get("title") or p["id"]),
-            _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
-            APPROVED if _gone_merge(p, known) else proposal_state(p, thread, requests),
-            f"/planning/{thread}/proposals/{p['id']}",
+    revising = thread in _waiting_for_lead(conn, project_id)  # F100
+    found = []
+    for p in json.loads(lead[-1]["proposals"]):
+        if not isinstance(p, dict) or not p.get("id"):
+            continue
+        state = APPROVED if _gone_merge(p, known) else proposal_state(p, thread, requests)
+        found.append(
+            Proposal(
+                str(p.get("kind") or ""),
+                str(p.get("title") or p["id"]),
+                _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
+                REVISING if revising and state == OPEN else state,
+                f"/planning/{thread}/proposals/{p['id']}",
+            )
         )
-        for p in json.loads(lead[-1]["proposals"])
-        if isinstance(p, dict) and p.get("id")
-    ]
+    return found
 
 
 def _since(conn: sqlite3.Connection, project_id: int, at: str) -> list[sqlite3.Row]:
@@ -235,6 +243,7 @@ class Standing:
     state: str
     pending: sqlite3.Row | Mapping[str, Any] | None
     said: str
+    revising: bool = False  # F100: open, but the owner's message waits for the lead
 
 
 def _standing(
@@ -256,7 +265,8 @@ def _standing(
     pending = next((r for r in reversed(about) if r["done"] is None), None)
     done = [r for r in about if r["done"] is not None]
     said = str(done[-1]["result"] or "") if done else ""
-    return Standing(state, pending if state == ON_ITS_WAY else None, said)
+    revising = state == OPEN and thread in _waiting_for_lead(conn, project_id)
+    return Standing(state, pending if state == ON_ITS_WAY else None, said, revising)
 
 
 @dataclass(frozen=True)

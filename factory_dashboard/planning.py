@@ -79,6 +79,63 @@ def _asked(conn: sqlite3.Connection, project_id: int) -> list[str]:
     return [str(r["subject"]) for r in rows if r["subject"] and str(r["id"]) not in cancelled]
 
 
+def _last_messages(conn: sqlite3.Connection, project_id: int) -> list[sqlite3.Row]:
+    """Each thread's latest message, oldest first."""
+    return conn.execute(
+        "SELECT t.card, m.at, m.author, t.archived FROM planner_threads t"
+        " JOIN planner_messages m ON m.id = ("
+        "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
+        " WHERE t.project_id = ? ORDER BY m.id",
+        (project_id,),
+    ).fetchall()
+
+
+def _waiting_order(
+    conn: sqlite3.Connection, project_id: int, last: list[sqlite3.Row]
+) -> dict[str, None]:
+    """The cards the lead owes a reply, in order: the owner's (or the runner's, ADR 29) message
+    is the thread's latest and a planner job about it is open, or an open ``plan_message``
+    request names the card."""
+    planned = {
+        str(r["subject"] or "").split("#")[0]
+        for r in metrics.open_jobs(conn, project_id)
+        if r["kind"] == PLANNER
+    }
+    return dict.fromkeys(
+        [r["card"] for r in last if r["author"] in ("owner", "runner") and r["card"] in planned]
+        + _asked(conn, project_id)
+    )
+
+
+def _waiting_for_lead(conn: sqlite3.Connection, project_id: int) -> set[str]:
+    """The thread cards whose owner's message waits for the lead (F74, F100)."""
+    return set(_waiting_order(conn, project_id, _last_messages(conn, project_id)))
+
+
+def _revising(
+    conn: sqlite3.Connection, project_id: int, project: str, now: datetime
+) -> dict[str, str]:
+    """For each card the lead owes a reply, what its open proposals say (F100): ``being
+    revised`` and when the reply comes."""
+    waiting = _waiting_for_lead(conn, project_id)
+    if not waiting:
+        return {}
+    jobs = [j for j in running_jobs(conn, project, now) if j.live]
+    places = reply_line(conn, project, now, jobs)
+    writing = _writing(places)
+    said = {}
+    for card in waiting:
+        held = _held(conn, project_id, now, card)
+        place = places.get(card) if held is None else None
+        reply = (
+            place.words
+            if place is not None
+            else _next_reply(conn, project, jobs, True, held, writing)
+        )
+        said[card] = f"being revised · {reply}"
+    return said
+
+
 def _answers_wanted(
     conn: sqlite3.Connection,
     project_id: int,
@@ -88,26 +145,10 @@ def _answers_wanted(
 ) -> list[DeskItem]:
     """One box per conversation (F74): threads whose last message is the lead's, a reply the
     owner hasn't answered (an archived thread waits for nothing), then the threads the lead owes
-    a reply, dashed and on their way: an open ``plan_message`` request names the card, or the
-    owner's (or the runner's, ADR 29) message is the latest and a planner job about it is open.
-    Those are listed whatever is stored: archived, or no thread yet."""
-    asked = _asked(conn, project_id)
-    planned = {
-        str(r["subject"] or "").split("#")[0]
-        for r in metrics.open_jobs(conn, project_id)
-        if r["kind"] == PLANNER
-    }
-    last = conn.execute(
-        "SELECT t.card, m.at, m.author, t.archived FROM planner_threads t"
-        " JOIN planner_messages m ON m.id = ("
-        "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
-        " WHERE t.project_id = ? ORDER BY m.id",
-        (project_id,),
-    ).fetchall()
-    waiting = dict.fromkeys(
-        [r["card"] for r in last if r["author"] in ("owner", "runner") and r["card"] in planned]
-        + asked
-    )
+    a reply (``_waiting_order``), dashed and on their way. Those are listed whatever is stored:
+    archived, or no thread yet."""
+    last = _last_messages(conn, project_id)
+    waiting = _waiting_order(conn, project_id, last)
     items = [
         DeskItem(
             "answers",
@@ -164,9 +205,11 @@ def _bundle(
     card: str,
     parts: list[tuple[dict[str, object], str]],
     repo: Path | None,
+    revising: str | None = None,
 ) -> DeskItem:
     """A card's open proposals as one desk item (F51 D1): the plan's title, the parts in the
-    order they are settled (ADR first), the link to the first still to do."""
+    order they are settled (ADR first), the link to the first still to do. ``revising`` (F100):
+    the owner's message waits for the lead, who may change them; they show dashed."""
     parts = sorted(parts, key=lambda p: p[0].get("kind") != "adr")  # stable: ADR first
     leading = next((p for p, _ in parts if p.get("kind") in ("plan", "replan")), parts[0][0])
     total = sum(len(points) for p, _ in parts if isinstance(points := p.get("key_points"), list))
@@ -177,7 +220,7 @@ def _bundle(
     if repo is not None and adr_open and _adr_waits(repo, [p for p, _ in parts]):
         words = f"{words} · accept the ADR first" if words else "accept the ADR first"
     todo = next((p for p, state in parts if state == OPEN), None)
-    on_its_way = todo is None
+    on_its_way = todo is None or revising is not None
     shown = parts[0][0] if todo is None else todo
     title = str(leading.get("title") or leading["id"])
     name = thread_name(card)
@@ -186,7 +229,7 @@ def _bundle(
     return DeskItem(
         "proposals",
         title,
-        _NEXT_PICK if on_its_way else words or str(shown.get("kind") or ""),
+        _NEXT_PICK if todo is None else revising or words or str(shown.get("kind") or ""),
         f"/planning/{card}/proposals/{shown['id']}",
         on_its_way=on_its_way,
         parts=tuple((_part_name(p), state == ON_ITS_WAY) for p, state in parts),
@@ -198,9 +241,13 @@ def _open_proposals(
     project_id: int,
     known: set[str] | None = None,
     repo: Path | None = None,
+    revising: dict[str, str] | None = None,
 ) -> list[DeskItem]:
     """The proposals in each thread's latest lead message that lists some, still open, on
-    threads not archived. A card's make one item (F51 D1); the general thread's, one each."""
+    threads not archived. A card's make one item (F51 D1); the general thread's, one each.
+    ``revising`` (F100): the cards whose owner's message waits for the lead, with the words;
+    their open proposals are on their way too."""
+    revising = revising or {}
     rows = conn.execute(
         "SELECT t.card, m.at, m.proposals FROM planner_threads t"
         " JOIN planner_messages m ON m.id = ("
@@ -232,17 +279,22 @@ def _open_proposals(
             words = f"{len(points)} key points" if isinstance(points, list) and points else ""
             if merged := _merge_words(proposal):
                 words = f"{merged} · {words}" if words else merged
+            asked = state == OPEN and row["card"] in revising
             items.append(
                 DeskItem(
                     "proposals",
                     str(proposal.get("title") or proposal["id"]),
-                    _NEXT_PICK if state == ON_ITS_WAY else words or str(proposal.get("kind") or ""),
+                    _NEXT_PICK
+                    if state == ON_ITS_WAY
+                    else revising[row["card"]]
+                    if asked
+                    else words or str(proposal.get("kind") or ""),
                     f"/planning/{row['card']}/proposals/{proposal['id']}",
-                    on_its_way=state == ON_ITS_WAY,
+                    on_its_way=state == ON_ITS_WAY or asked,
                 )
             )
         if card_parts:
-            items.append(_bundle(row["card"], card_parts, repo))
+            items.append(_bundle(row["card"], card_parts, repo, revising.get(row["card"])))
     return items
 
 
@@ -401,7 +453,9 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         refusals = _refused(conn, project_id, titles)
         repo = _repo(conn, project)
         ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
-        proposals = _open_proposals(conn, project_id, _known_cards(repo), repo)
+        proposals = _open_proposals(
+            conn, project_id, _known_cards(repo), repo, _revising(conn, project_id, project, now)
+        )
         answers = _acted_on(
             conn, project_id, _answers_wanted(conn, project_id, project, titles, now)
         )

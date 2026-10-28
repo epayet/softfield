@@ -537,6 +537,10 @@ tr.few .gauge { opacity: .35; }
 .thread-page #proposals > p { margin: 0; }
 .thread-page .proposal { background: var(--plate); border: 1px solid var(--rule); border-top: 3px solid var(--c); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box; }
 .thread-page .proposal > span { font: 600 11px var(--mono); color: var(--muted); }
+.thread-page .proposal.revising { border-style: dashed; border-color: var(--hazard); border-top-style: solid; border-top-color: var(--c); }  /* F100: being revised */
+.thread-page .proposal.revising .state { color: var(--hazard); }
+.proposal-page .revising { margin: 0; padding: 8px 10px; border: 1px dashed var(--hazard); font-size: 13.5px; color: var(--ink-2); }
+.proposal-page .revising b { display: block; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); }
 .thread-page .proposal > b { font-size: 15px; }
 
 /* Proposal page; the header's colour is the proposal's (--c) */
