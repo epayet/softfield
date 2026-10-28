@@ -1,6 +1,7 @@
 # Milestone F80: See how each agent does by kind of work before splitting its rating
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-28. Base: git tag `f80-developer-rating-could-be-more-tailored-start`. Report: [`.factory/reviews/f80-developer-rating-could-be-more-tailored.md`](../reviews/f80-developer-rating-could-be-more-tailored.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes

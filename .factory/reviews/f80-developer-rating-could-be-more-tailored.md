@@ -1,6 +1,6 @@
 # Review: F80, how each agent does by kind of work
 
-- **Status:** review round 2 done, the loop stops: every finding is resolved (f80-02 landed the runner fix), and one new nit went to the backlog. Waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-28.
 
 ## Sign-off sheet
 
