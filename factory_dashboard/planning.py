@@ -101,7 +101,7 @@ def _answers_wanted(
         "SELECT t.card, m.at, m.author, t.archived FROM planner_threads t"
         " JOIN planner_messages m ON m.id = ("
         "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id)"
-        " WHERE t.project_id = ? ORDER BY t.id",
+        " WHERE t.project_id = ? ORDER BY m.id",
         (project_id,),
     ).fetchall()
     waiting = dict.fromkeys(

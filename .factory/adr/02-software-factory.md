@@ -582,6 +582,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** Sonnet's lead work was right in substance and loose at the edges: tests pinned the doubled titles a look at real data shows, an old assertion was weakened to `!=`, a guard was wider than its decision. The planning cost seventeen times the build.
 - **Decisions affected:** none.
 
+### F74 (2026-10-28): a conversation keeps one box on the desk ([review](../reviews/f74-when-i-reply-to-a-your.md))
+
+- **Q1:** one lead ticket (difficulty 3, planned as a developer's), merged first time by Sonnet in 21 minutes; no checkpoint. Review round 1: one should-fix (the rewritten query re-sorted "Your answers wanted" by thread start, not the lead's latest reply) and one nit (Coming's thread markup left unreachable), both fixed by the review.
+- **Q3:** Claude only, Sonnet $0.94 for the build; no local tokens.
+- **Q5:** see the review's numbers.
+- **Anything else:** Sonnet turned ten existing tests into the same checks on the new place without weakening any, the opposite of F51's loose edges. Again an edge slipped where no test held it: a merged query lost its `ORDER BY`.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

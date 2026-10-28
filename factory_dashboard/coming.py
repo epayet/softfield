@@ -41,7 +41,7 @@ _MAX_REQUEST_ID = 12
 @dataclass(frozen=True)
 class Place:
     """Where a waiting thread's reply stands (F84 D1): being written (``place`` 0) or its place
-    in the lead's line, with the words Coming and the thread say."""
+    in the lead's line, with the words its desk box and the thread say."""
 
     place: int
     words: str

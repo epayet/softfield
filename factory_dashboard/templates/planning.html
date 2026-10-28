@@ -50,19 +50,7 @@
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">{{ coming.name }} · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
     <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
-      {% if item.link %}
-      {% set writing = item.place is not none and item.place.place == 0 %}
-      <a href="{{ item.link }}"{% if writing %} class="writing"{% endif %} style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
-        {# F84 D5: the one reply being written, in the planner's colour #}
-        {% if writing %}<span class="writing-label">Writing now</span>{% endif %}
-        <span style="font-size: 14px">{{ item.title }}</span>
-        {% if item.words %}<span style="font: 11.5px var(--mono); color: var({{ '--opus-ink' if writing else '--muted' }})">{{ item.words }}</span>{% endif %}
-        {% if writing and item.place.typical %}
-        <span class="writing-bar" title="time spent against a typical reply"><span style="width: {{ [100, (item.place.elapsed / item.place.typical * 100) | int] | min }}%"></span></span>
-        <span style="font: 10.5px var(--mono); color: var(--muted)">{{ item.place.elapsed | ago }} of about {{ item.place.typical | ago }} (a reply's usual length)</span>
-        {% endif %}
-      </a>
-      {% elif item.change %}
+      {% if item.change %}
       {# F14: a change on a waiting plant is on its way, dashed orange; the row opens no more #}
       <div class="on-its-way-item" id="waiting-{{ item.id }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px dashed var(--hazard); color: var(--fg); min-height: 44px; box-sizing: border-box">
         <span style="font-size: 14px{% if item.cancelled %}; text-decoration: line-through{% endif %}">{{ item.title }}</span>

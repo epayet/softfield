@@ -314,6 +314,18 @@ def test_a_thread_with_an_open_plan_message_is_not_an_answer_wanted(planning, db
     assert f7() == [("/planning/f7", True)]
 
 
+def test_answers_wanted_keeps_the_order_of_the_leads_replies(planning, db_path, db):
+    """F74 kept the order the desk had: by the lead's latest reply, not by when a thread began."""
+    _lead_says(db_path, planning, "f7", "Which one?")
+    _lead_says(db_path, planning, "f9", "Two developers?")
+    _lead_says(db_path, planning, "f7", "Or the second?")
+    links = [i.link for i in _group(db, "answers")]
+    assert [link for link in links if link in ("/planning/f7", "/planning/f9")] == [
+        "/planning/f9",
+        "/planning/f7",
+    ]
+
+
 def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):
     """F49 D1: the runner applied it after the job; no Approve, on the desk or its page."""
     applied = {**_REVIEW_MERGE, "applied": True}
