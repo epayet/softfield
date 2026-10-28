@@ -2,6 +2,7 @@
 id: f164-06-fix-f164-05-test-tells-ideas-apart
 milestone: f164-i-like-reading-the-milestone-reviews
 difficulty: 2
+agent: lead
 depends_on: []
 files:
 - factory_dashboard/milestones.py

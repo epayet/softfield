@@ -6,6 +6,7 @@ from runner.tasks import (
     AREA_MISSING,
     DEFAULT_PRIORITY,
     FEATURE_PRIORITY,
+    FIX_OF_FIX,
     STOPPED,
     TESTS_ONLY,
     TESTS_ONLY_CODE,
@@ -578,6 +579,30 @@ def test_preflight_refuses_a_feature_tickets_priority_and_passes_a_bugs(repo):
     assert "the board orders the work" in FEATURE_PRIORITY
     assert preflight(_in(ready, "m1-02-b", "1"), repo) == []
     assert preflight(_in(ready, "bug-01-x", "bugs", "area: factory\npriority: 3\n"), repo) == []
+
+
+def test_preflight_sends_a_fix_of_a_fix_to_the_lead(repo):
+    """f68-08: F68's fifth developer fix ticket on one test; the check holds the F114 rule."""
+    tasks = repo / ".factory" / "tasks"
+    _in(tasks / "done", "f1-01-fixed", "f1", "finding: f1-C1-1\n")
+    _in(tasks / "done", "f1-02-plain", "f1")
+
+    def fix(task_id: str, at_fault: str, extra: str) -> Task:
+        _in(tasks / "ready", task_id, "f1", extra)
+        path = tasks / "ready" / f"{task_id}.md"
+        path.write_text(
+            path.read_text().replace(
+                "### Context\n",
+                f"### Context\nOn the merge of `.factory/tasks/done/{at_fault}.md`.\n",
+            )
+        )
+        return parse_task(path, 150)
+
+    assert preflight(fix("f1-03-a", "f1-01-fixed", "finding: f1-C2-1\n"), repo) == [FIX_OF_FIX]
+    lead = fix("f1-04-b", "f1-01-fixed", "finding: f1-C2-2\nagent: lead\n")
+    assert preflight(lead, repo) == []
+    assert preflight(fix("f1-05-c", "f1-02-plain", "finding: f1-C2-3\n"), repo) == []
+    assert preflight(fix("f1-06-d", "f1-01-fixed", ""), repo) == []
 
 
 def test_equal_priorities_keep_milestone_then_id_order(tmp_path):

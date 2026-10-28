@@ -456,6 +456,21 @@ FEATURE_PRIORITY = (
     "a feature ticket has no `priority:`: the board orders the work, and the ticket runs in"
     " its card's place (F173)"
 )
+FIX_OF_FIX = "a fix of a fix: the lead does it"
+_AT_FAULT_RE = re.compile(r"\.factory/tasks/done/([A-Za-z0-9][A-Za-z0-9_.-]*?)\.md")
+
+
+def _fix_of_fix(task: Task, repo: Path, context: str) -> bool:
+    """A developer ticket with `finding:` whose Context names a done ticket with `finding:`."""
+    if task.agent != "developer" or task.finding is None:
+        return False
+    for ticket in _AT_FAULT_RE.findall(context):
+        try:
+            if parse_task(repo / ".factory" / "tasks" / "done" / f"{ticket}.md", 1).finding:
+                return True
+        except (OSError, ValueError, yaml.YAMLError):
+            continue
+    return False
 
 
 def preflight(task: Task, repo: Path) -> list[str]:
@@ -476,6 +491,8 @@ def preflight(task: Task, repo: Path) -> list[str]:
         problems.append(AREA_MISSING)
     if task.milestone != BUGS and task.priority is not None:
         problems.append(FEATURE_PRIORITY)
+    if _fix_of_fix(task, repo, task.sections["Context"]):
+        problems.append(FIX_OF_FIX)
     paths = set(_PATH_RE.findall(text))
     listed = (*task.files, *task.tests)
     named = {Path(f).name for f in listed}  # `overview.py` once its path is listed (f33-01)

@@ -3522,7 +3522,8 @@ def fix_tickets(
 
 
 def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: str) -> Path | None:
-    """A developer ticket in .factory/tasks/ready/ for a stand-in checkpoint's ``findings`` (by
+    """A ticket (the lead's when the ticket at fault was itself a fix: it has `finding:`;
+    else a developer's) in .factory/tasks/ready/ for a stand-in checkpoint's ``findings`` (by
     key), on one ticket at fault and of one kind, from that ticket in .factory/tasks/done/: its
     milestone (unless signed off: then ``milestone``, the running one), its tests, its difficulty,
     and the findings' files that exist (else its files). A `test` kind is `tests_only`: tests in
@@ -3559,6 +3560,8 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     words = re.findall(r"[a-z0-9]+", slug)[:4] + (["tests"] if tests_only else [])
     task_id = f"{prefix}-{max(numbers, default=0) + 1:02d}-fix" + "".join(f"-{w}" for w in words)
     meta: dict[str, Any] = {"id": task_id, "milestone": milestone}
+    if source.finding is not None:  # a fix of a fix is the lead's (f68-08)
+        meta["agent"] = "lead"
     if milestone == source.milestone:  # its card and place in the queue (ADR 19)
         meta |= {"area": source.area} if source.area else {}
         if milestone == BUGS and source.priority is not None:  # a feature's has none (F173)

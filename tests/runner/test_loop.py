@@ -6612,6 +6612,22 @@ def test_a_fix_ticket_on_a_feature_ticket_drops_its_old_priority(repo):
     assert preflight(task, repo) == []
 
 
+def test_a_fix_ticket_on_a_fix_ticket_is_the_leads(repo):
+    """f68-08: a ticket at fault with `finding:` was a fix; one without stays a developer's."""
+    done = repo / ".factory" / "tasks" / "done"
+    fixed = write_task(done, "f4-03-fixed")
+    fixed.write_text(
+        fixed.read_text().replace("milestone: 1\n", "milestone: f4\nfinding: f4-C1-1\n")
+    )
+    plain = write_task(done, "f4-04-plain")
+    plain.write_text(plain.read_text().replace("milestone: 1\n", "milestone: f4\n"))
+    write_task(repo / ".factory" / "tasks" / "ready", "f4-12-mine")
+    path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("f4-03-fixed")}, "copilot-auto")
+    assert path is not None and parse_task(path, 150).agent == "lead"
+    path = loop.fix_ticket(repo, "f4", {"f4-C7-2": _finding_on("f4-04-plain")}, "copilot-auto")
+    assert path is not None and parse_task(path, 150).agent == "developer"
+
+
 def test_a_fix_ticket_drops_the_repo_name_from_the_findings_path(repo):
     """2026-10-03: f4-25 … f4-29 named `coucou/factory_dashboard/…`, the repo's own name first."""
     (repo / "factory_dashboard").mkdir()
