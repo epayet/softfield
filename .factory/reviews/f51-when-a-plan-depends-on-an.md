@@ -1,6 +1,6 @@
 # Review: F51, the desk counts only what waits on you
 
-- **Status:** review round 1 done. The four findings (two should-fix, two nits) are fixed in the review. Waiting for the owner's sign-off.
+- **Status:** review round 2 done, the loop stops: all four round 1 findings are fixed and checked, with nothing new. Waiting for the owner's sign-off.
 
 ## Sign-off sheet
 
@@ -30,7 +30,7 @@ None from this review.
 - 2026-10-23 ([session](../sessions/2026-10-23-1549.md)): the local model passed f51-03 (a 7-line fix) at the first attempt. The Copilot checkpoint found its test didn't check the button. The local model then passed the fix ticket, f51-04, at the first attempt too.
 - 2026-10-27: Opus wrote a third replan from F176 ($7.60). It is still open (see 3).
 - 2026-10-28 ([session](../sessions/2026-10-28-0900.md)): Sonnet did both lead tickets, f51-01 and f51-02, right the first time ($0.76 and $0.39).
-- Review, 2026-10-28: fixed the runner guard's reach, the doubled card name on the desk, a weakened test and a duplicate test.
+- Review, 2026-10-28: round 1 fixed the runner guard's reach, the doubled card name on the desk, a weakened test and a duplicate test. Round 2 checked those fixes and found nothing new.
 - Lessons:
   - **Sonnet's lead tickets were right but loose at the edges.** It did the right thing in the code, then took the easy way at three edges: it pinned doubled text in a test instead of reading real titles, weakened an old test to `!=`, and widened a guard past what D3 said. The Known range now has a line on Sonnet as the lead.
   - **The planning cost more than the build.** Five Opus replies ($19.89) against $1.15 for the two lead tickets, and the local model built the rest for free. F177 (record each job's real cost, late planner replies start fresh) is the card that looks at this.
@@ -67,6 +67,12 @@ Tests: desk bundling (ADR, plan and merge in order; plan and mock-up; the genera
 | F2 | should-fix | claude | A card's desk item doubled its name ("F69: F69: the button becomes…"). 13 of the last 15 plan titles already start with their card | Fixed: the name is added only when the title lacks it. The tests hold both cases |
 | F3 | nit | claude | F35's Previous/Next test was weakened to `next != F6's plan` | Fixed: asserts `/planning/m4` |
 | F4 | nit | claude | f51-03 added a test repeating an existing one | Removed |
+
+**Round 2** (fix diff `e80be04`, the review's own fixes; no fix tickets ran in between):
+- F1 holds up against `_accept_adr`. A successful accept writes the ADR to main as Accepted, so the guard doesn't need to check it. A failed accept is undone, so the ADR is still new to main and the plan is refused. Tests cover both cases.
+- F2's word boundary keeps a near-miss prefixed: on F6's card, "F60 plan" shows as "F6: F60 plan".
+- F3 and F4 are as described. Nothing new found.
+- Tests: `test_requests.py`, `test_planning.py` and `test_overview.py` pass again (675 tests, 9 minutes). The full `tests/runner tests/factory_dashboard` run passed every test up to 86%, then hit this job's time limit and was stopped, as in round 1 (the `E`s were printed as it was killed). The runner's gates run the whole suite before any merge.
 
 Checkpoint verdicts: C1366-2 confirmed (the empty-list test didn't check the proposal kept its link and state; f51-04 fixed it). F4 was missed by the checkpoint that read f51-03. F1 to F3 were in f51-01 and f51-02, which no checkpoint read before this review.
 
