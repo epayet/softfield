@@ -92,6 +92,20 @@ _MERGE_HEADING_RE = re.compile(
 # Path like /planning/f95 in plain text: escape first, then link.
 _PLANNING_PATH_RE = re.compile(r"/planning/([a-z][a-z0-9-]+)")
 _TYPICAL = 20  # finished jobs of the running one's role and agent that make its typical length
+_MINUTE = timedelta(minutes=1)
+_LOOKING = "a ticket blocked on"  # the reason of a planner row that looks at a blocked ticket
+
+
+@dataclass(frozen=True)
+class Place:
+    """Where a waiting thread's reply stands (F84 D1): being written (``place`` 0) or its place
+    in the lead's line, with the words Coming and the thread say."""
+
+    place: int
+    words: str
+    done: timedelta | None  # about when its reply is written; None without a typical length
+    elapsed: timedelta | None = None  # being written: for how long
+    typical: timedelta | None = None  # being written: a reply's usual length
 
 
 @dataclass(frozen=True)
@@ -103,6 +117,7 @@ class DeskItem:
     # the owner acted on it and the runner hasn't yet: it shows dashed, on its way, and no
     # longer counts as waiting for them (the owner, 2026-10-08)
     on_its_way: bool = field(default=False, kw_only=True)
+    place: Place | None = field(default=None, kw_only=True)  # a waiting thread's (F84)
 
 
 @dataclass(frozen=True)
@@ -708,20 +723,26 @@ def coming(conn: sqlite3.Connection, project: str, now: datetime) -> DeskGroup:
         cards += [
             str(r["subject"]) for r in asked if r["subject"] and str(r["id"]) not in cancelled
         ]
+        # F84 D4: in the lead's order, the reply being written first, then the plants, then
+        # the threads the runner hasn't placed (held, or a message it hasn't picked up)
+        placed: list[DeskItem] = []
+        rest: list[DeskItem] = []
         if cards:
             titles = _card_titles(conn, project_id)
             jobs = [j for j in running_jobs(conn, project, now) if j.live]
+            places = reply_line(conn, project, now, jobs)
+            writing = _writing(places)
         for card in dict.fromkeys(cards):
             held = _held(conn, project_id, now, card)
-            next_reply = _next_reply(conn, project, jobs, True, held)
-            items.append(
-                DeskItem(
-                    "coming",
-                    _thread_title(card, titles),
-                    f"waiting for the lead · {next_reply}",
-                    f"/planning/{card}",
-                )
+            place = places.get(card) if held is None else None
+            reply = _next_reply(conn, project, jobs, True, held, writing)
+            said = place.words if place is not None else f"waiting for the lead · {reply}"
+            item = DeskItem(
+                "coming", _thread_title(card, titles), said, f"/planning/{card}", place=place
             )
+            (placed if place is not None else rest).append(item)
+        placed.sort(key=lambda item: item.place.place if item.place else 0)
+        items = placed + items + rest
 
     return DeskGroup("coming", "Coming", "--hazard", items)
 
@@ -830,14 +851,17 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
 # --- the tiles ----------------------------------------------------------------------------
 
 
-def _typical(conn: sqlite3.Connection, project: str, job: Running) -> timedelta | None:
-    """How long the last finished jobs of the running job's role and agent took, on average."""
+def _typical(
+    conn: sqlite3.Connection, project: str, role: str, agent: str | None = None
+) -> timedelta | None:
+    """How long the last finished jobs of a role and agent (any agent: None) took, on average."""
     rows = conn.execute(
         "SELECT j.started, j.ended FROM jobs j JOIN runs r ON r.id = j.run_id"
         " JOIN projects p ON p.id = r.project_id"
-        " WHERE p.name = ? AND j.role = ? AND j.agent = ? AND j.outcome != 'running'"
+        " WHERE p.name = ? AND j.role = ? AND (? IS NULL OR j.agent = ?)"
+        " AND j.outcome != 'running'"
         " AND j.started IS NOT NULL AND j.ended IS NOT NULL ORDER BY j.id DESC LIMIT ?",
-        (project, job.role, job.agent, _TYPICAL),
+        (project, role, agent, agent, _TYPICAL),
     ).fetchall()
     spans = [_when(r["ended"]) - _when(r["started"]) for r in rows]
     return sum(spans, timedelta()) / len(spans) if spans else None
@@ -880,38 +904,133 @@ def _next_reply(
     jobs: list[Running],
     pending: bool,
     held: str | None = None,
+    writing: str | None = None,
 ) -> str | None:
     """When the owner's pending message is answered: after the running job, planning going
-    first (D1), or once Claude's limit resets (``held``); ``None`` with nothing pending."""
+    first (D1), or once Claude's limit resets (``held``); ``None`` with nothing pending.
+    ``writing``: the thread whose reply the lead is writing (F84), for a thread not placed."""
     if not pending:
         return None
     if held is not None:
         return held
-    if any(j.role == PLANNER for j in jobs):
-        return "the lead is writing its reply now"
     if not jobs:
         return "at the factory's next pick"
-    job = jobs[0]
-    typical = _typical(conn, project, job)
+    job = _ahead(jobs)
+    what = _what(job) if job.role != PLANNER else _reply_of(writing)
+    typical = _typical(conn, project, job.role, job.agent)
     if typical is None:
-        return f"after {_what(job)}"
+        return f"after {what}"
     left = typical - job.elapsed
-    if left < timedelta(minutes=1):
-        return f"after {_what(job)}, any minute now"
-    return f"after {_what(job)}, ~{ago(left)}"
+    if left < _MINUTE:
+        return f"after {what}, any minute now"
+    return f"after {what}, ~{ago(left)}"
+
+
+def _ahead(jobs: list[Running]) -> Running:
+    """The live job the lead's line waits for: a planner job first (D1), else the oldest."""
+    return next((j for j in jobs if j.role == PLANNER), jobs[0])
+
+
+def _reply_of(thread: str | None) -> str:
+    return f"{thread.upper()}'s reply" if thread else "the lead's reply"
+
+
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def _about(left: timedelta) -> str:
+    return "any minute now" if left < _MINUTE else f"about {ago(left)}"
+
+
+def _writing(places: Mapping[str, Place]) -> str | None:
+    """The thread whose reply the lead is writing, if any."""
+    return next((thread for thread, p in places.items() if p.place == 0), None)
+
+
+def reply_line(
+    conn: sqlite3.Connection, project: str, now: datetime, jobs: list[Running]
+) -> dict[str, Place]:
+    """F84 D1: each thread with an open planner row, by its short key: being written (its row's
+    ``started_job`` is a live job, ``jobs``), or its place among the rows not started, in
+    ``dispatch.plan``'s order (``queued_jobs`` in overview.py). A row that waits (parked for a
+    Claude limit) has no place, and nothing has one while no job runs: they read as before."""
+    from runner import dispatch
+
+    project_id = metrics.find_project(conn, project)
+    if project_id is None or not jobs:
+        return {}
+    rows = [r for r in metrics.open_jobs(conn, project_id) if r["kind"] == PLANNER]
+    live = {j.job: j for j in jobs}
+    ahead = _ahead(jobs)
+    what = _what(ahead) if ahead.role != PLANNER else _reply_of(None)
+    typical = _typical(conn, project, ahead.role, ahead.agent)
+    left = None if typical is None else max(typical - ahead.elapsed, timedelta(0))
+    found: dict[str, Place] = {}
+    for r in rows:
+        job = live.get(r["started_job"])
+        if job is None:
+            continue
+        thread = str(r["subject"] or "").split("#")[0]
+        looking = str(r["reason"] or "").startswith(_LOOKING)
+        doing = "looking at the blocked ticket" if looking else "writing this reply"
+        words = f"the lead is {doing} · {ago(job.elapsed)} in"
+        mine = left if job is ahead else None
+        if mine is not None:
+            words += ", any minute now" if mine < _MINUTE else f", about {ago(mine)} left"
+        found[thread] = Place(0, words, mine, job.elapsed, typical if job is ahead else None)
+        if job is ahead:
+            what = _reply_of(thread)
+    # a reply after the one ahead takes a planner reply's usual length, on the lead's agent
+    reply = _typical(conn, project, PLANNER, ahead.agent if ahead.role == PLANNER else None)
+    queued = [dispatch.Queued.from_row(r) for r in rows if r["started_job"] not in live]
+    writing = int(_writing(found) is not None)  # the reply being written is first in line
+    n = 0
+    for line in dispatch.plan(queued, [], dispatch.Windows(), now):
+        thread = line.pick.subject.split("#")[0]
+        if line.waits is not None or thread in found:
+            continue
+        n += 1
+        starts = left if n == 1 else None
+        if left is not None and reply is not None:
+            starts = left + (n - 1) * reply
+        when = "" if starts is None else f" · {_about(starts)}"
+        rank = n + writing
+        words = f"next, after {what}{when}" if n == 1 else f"{_ordinal(rank)} in line{when}"
+        done = None if starts is None or reply is None else starts + reply
+        found[thread] = Place(rank, words, done)
+    return found
 
 
 def factory_now(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, object]:
-    """The tile: the running job, and when the next reply is expected."""
+    """The tile: the running job, the reply being written and the replies in line after it
+    (F84 D6), or when the next reply is expected."""
     jobs = [j for j in running_jobs(conn, project, now) if j.live]
     project_id = metrics.find_project(conn, project)
     pending = project_id is not None and any(
         r["kind"] == PLANNER for r in metrics.open_jobs(conn, project_id)
     )
     working = [j for j in jobs if j.role != PLANNER]
+    places = reply_line(conn, project, now, jobs)
+    thread = _writing(places)
+    writing: dict[str, object] | None = None
+    if thread is not None and project_id is not None:
+        line = [p for p in places.values() if p.place > 0]
+        ends = [p.done for p in line if p.done is not None]
+        writing = {
+            "thread": thread,
+            "title": _thread_title(thread, _card_titles(conn, project_id)),
+            "elapsed": places[thread].elapsed,
+            "count": len(line),
+            "all": max(ends) if line and len(ends) == len(line) else None,
+        }
     return {
         "running": working[0] if working else None,
-        "next_reply": _next_reply(conn, project, jobs, pending, _held(conn, project_id, now)),
+        "writing": writing,
+        "next_reply": _next_reply(
+            conn, project, jobs, pending, _held(conn, project_id, now), thread
+        ),
     }
 
 
@@ -1283,6 +1402,15 @@ def thread_page(
     split = lead[-1] if lead else -1
     latest = [*reversed(messages[split + 1 :]), *messages[split : split + 1]]
     earlier = list(reversed(messages[:split])) if lead else []
+    # F84: the reply being written, or this thread's place in the lead's line
+    places = reply_line(conn, project, now, jobs)
+    held = _held(conn, project_id, now, thread)
+    place = places.get(thread) if pending and held is None else None
+    next_reply = (
+        place.words
+        if place is not None
+        else _next_reply(conn, project, jobs, pending, held, _writing(places))
+    )
     return render(
         request,
         conn,
@@ -1307,9 +1435,8 @@ def thread_page(
             "earlier": earlier,
             "points": next((len(m.points) for m in messages if m.latest), 0),
             "proposals": proposals,
-            "next_reply": _next_reply(
-                conn, project, jobs, pending, _held(conn, project_id, now, thread)
-            ),
+            "next_reply": next_reply,
+            "writing_now": place is not None and place.place == 0,
             "merged_into": merged_into,
             "merged_here": merged_here,
             "merged_on": merged_on,

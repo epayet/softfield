@@ -8,10 +8,15 @@
     <h2 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted)">The factory now</h2>
     {% if factory.running %}
     <p style="margin: 0">Running <b>{{ factory.running.ticket or factory.running.role }}</b> on {{ factory.running.agent }}, attempt {{ factory.running.attempt }}, {{ factory.running.elapsed | ago }}.</p>
-    {% else %}
+    {% elif not factory.writing %}
     <p style="margin: 0">Nothing running right now.</p>
     {% endif %}
-    {% if factory.next_reply %}
+    {% if factory.writing %}
+    {# F84 D6: the reply being written, linked to its thread, and the replies after it #}
+    {% set w = factory.writing %}
+    <p class="writing-now" style="margin: 0">Writing now: <a class="key" href="/planning/{{ w.thread }}">{{ w.thread | upper }}</a>, {{ w.title }} · {{ w.elapsed | ago }} in</p>
+    <p style="margin: 0; color: var(--good-ink)">{% if w.count %}Then {{ w.count }} {{ "reply" if w.count == 1 else "replies" }} in line{% if w.all is not none %}, about {{ w.all | ago }} for all{% endif %}.{% else %}No other reply in line.{% endif %}</p>
+    {% elif factory.next_reply %}
     <p style="margin: 0; color: var(--good-ink)">Your next reply: {{ factory.next_reply }}.</p>
     {% else %}
     <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">planning goes first: a message is answered once the running job is done</p>
@@ -63,9 +68,16 @@
     {% for item in coming.items %}
     <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
       {% if item.link %}
-      <a href="{{ item.link }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+      {% set writing = item.place is not none and item.place.place == 0 %}
+      <a href="{{ item.link }}"{% if writing %} class="writing"{% endif %} style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
+        {# F84 D5: the one reply being written, in the planner's colour #}
+        {% if writing %}<span class="writing-label">Writing now</span>{% endif %}
         <span style="font-size: 14px">{{ item.title }}</span>
-        {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
+        {% if item.words %}<span style="font: 11.5px var(--mono); color: var({{ '--opus' if writing else '--muted' }})">{{ item.words }}</span>{% endif %}
+        {% if writing and item.place.typical %}
+        <span class="writing-bar" title="time spent against a typical reply"><span style="width: {{ [100, (item.place.elapsed / item.place.typical * 100) | int] | min }}%"></span></span>
+        <span style="font: 10.5px var(--mono); color: var(--muted)">{{ item.place.elapsed | ago }} of about {{ item.place.typical | ago }} (a reply's usual length)</span>
+        {% endif %}
       </a>
       {% elif item.change %}
       {# F14: a change on a waiting plant is on its way, dashed orange; the row opens no more #}

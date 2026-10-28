@@ -184,7 +184,8 @@ def test_the_factory_tile_names_the_running_ticket(planning, serve):
 
 def test_a_pending_message_says_when_the_reply_comes(planning, db_path, serve):
     """An open planner row: answered after the running job, which ran past its typical
-    10 min; with a planner job running, the lead is writing now."""
+    10 min; after a planner job whose row isn't this thread's, and nothing says "writing" (F84:
+    every thread said the lead was writing its reply)."""
     _write(
         db_path,
         lambda conn: metrics.queue_job(
@@ -211,7 +212,8 @@ def test_a_pending_message_says_when_the_reply_comes(planning, db_path, serve):
 
     _write(db_path, planner_job)
     tile = _tile(_page(client), "factory-now")
-    assert "Your next reply: the lead is writing its reply now." in tile
+    assert "Your next reply: after the lead's reply." in tile
+    assert "writing" not in tile.lower()
     assert "Running f1-04-live" in tile
 
 
@@ -744,7 +746,8 @@ def test_a_pending_reply_hides_send_and_shows_the_wait(planning, db_path, serve)
         ),
     )
     html = _thread(client, "f6")
-    assert "Next for the lead · after f1-04-live, any minute now" in _text(html)
+    # F84: behind general's, older, while a ticket job runs
+    assert "Next for the lead · 2nd in line" in _text(html)
     assert '<form id="reply"' not in html
     assert "Send" not in _text(html)
     assert "Comment…" not in html
@@ -1530,7 +1533,7 @@ def test_a_thread_with_open_planner_row_shows_in_coming(planning, db_path, serve
     html = _page(client)
     assert "desk-coming" in html
     assert ("/planning/f6", "The planning room") in _coming_items(html)
-    assert "after f1-04-live, any minute now" in _coming_text(html)
+    assert "next, after f1-04-live · any minute now" in _coming_text(html)
 
 
 @pytest.mark.parametrize(
@@ -4538,3 +4541,156 @@ def test_a_key_point_comment_box_grows_the_same_way(page, planning, db_path, ser
         abs(textarea.evaluate("el => el.scrollHeight") - textarea.evaluate("el => el.clientHeight"))
         <= 2
     )
+
+
+# --- Coming says which reply the lead is writing (F84) ----------------------------------------
+
+
+def _line(
+    serve: Callable[..., TestClient],
+    db_path: Path,
+    project_id: int,
+    *,
+    writing: bool = True,
+    reason: str = "your message on F84",
+) -> TestClient:
+    """The live run (``serve``), a planner reply that took 6 min, then the owner's messages on
+    f84, f85 and f86, each with its planner row, oldest first. With ``writing``, a planner job
+    2 min in whose row is f84's, as the runner marks it (``runner/loop.py``: ``started_job``);
+    else only the ticket job ``f1-04-live`` runs, past its typical length."""
+    client = serve()
+
+    def write(conn: sqlite3.Connection) -> None:
+        run = conn.execute("SELECT id FROM runs WHERE run_dir = '20261002-113500'").fetchone()
+        planner: dict[str, Any] = {
+            "ticket_id": None,
+            "milestone_id": None,
+            "role": "planner",
+            "agent": OPUS,
+        }
+        # one row per run, ticket, role and attempt (``start_job``): the earlier reply is attempt 1
+        done = metrics.start_job(
+            conn, run["id"], attempt=1, started=_at(timedelta(hours=3)), **planner
+        )
+        metrics.finish_job(
+            conn, done, ended=_at(timedelta(hours=3) - timedelta(minutes=6)), outcome="done"
+        )
+        rows = {}
+        for i, card in enumerate(["f84", "f85", "f86"]):
+            asked = _at(timedelta(minutes=40 - i))
+            metrics.add_request(conn, project_id, "plan_message", card, '{"text": "When?"}', asked)
+            rows[card] = metrics.queue_job(
+                conn,
+                project_id,
+                "planner",
+                f"{card}#{i + 1}",
+                reason if card == "f84" else "your message",
+                _at(timedelta(minutes=30 - i)),
+            )
+        if writing:
+            job = metrics.start_job(
+                conn, run["id"], attempt=2, started=_at(timedelta(minutes=2)), **planner
+            )
+            conn.execute("UPDATE work_queue SET started_job = ? WHERE id = ?", (job, rows["f84"]))
+
+    _write(db_path, write)
+    return client
+
+
+def _boxes(html: str) -> list[tuple[str, str, bool]]:
+    """Coming's thread boxes, in order: (thread, text, drawn as the one being written)."""
+    return [
+        (thread, _text(body), "writing" in attrs)
+        for thread, attrs, body in re.findall(
+            r'<a href="/planning/([^"?]+)"([^>]*)>(.*?)</a>', _coming(html), re.S
+        )
+    ]
+
+
+def test_coming_puts_the_reply_being_written_first_and_the_others_in_line(planning, db_path, serve):
+    """F84 D3, D4: only f84's box, whose row the running planner job started, says "writing";
+    f85 and f86 say their place and about when, from the 6 min a reply takes (4 min left)."""
+    client = _line(serve, db_path, planning)
+    writing = (
+        "Writing now f84 the lead is writing this reply · 2 min in, about 4 min left"
+        " 2 min of about 6 min (a reply's usual length)"
+    )
+    assert _boxes(_page(client)) == [
+        ("f84", writing, True),
+        ("f85", "f85 next, after F84's reply · about 4 min", False),
+        ("f86", "f86 3rd in line · about 10 min", False),
+    ]
+
+
+def test_a_row_not_started_never_says_writing(planning, db_path, serve):
+    """The planner job runs but no row names it: no box nor thread page says "writing"."""
+    client = _line(serve, db_path, planning)
+    _write(db_path, lambda conn: conn.execute("UPDATE work_queue SET started_job = NULL"))
+    boxes = _boxes(_page(client))
+    assert [b[0] for b in boxes] == ["f84", "f85", "f86"]
+    assert not any(writing or "writing" in text for _, text, writing in boxes)
+    assert boxes[0][1] == "f84 next, after the lead's reply · about 4 min"
+    for thread in ("f84", "f85", "f86"):
+        assert "writing" not in _text(_thread(client, thread))
+
+
+def test_a_look_at_a_blocked_ticket_says_so(planning, db_path, serve):
+    client = _line(serve, db_path, planning, reason="a ticket blocked on F84")
+    first = _boxes(_page(client))[0][1]
+    assert first.startswith("Writing now f84 the lead is looking at the blocked ticket · 2 min in")
+    assert "writing this reply" not in first
+
+
+def test_with_a_ticket_job_running_the_first_reply_comes_after_it(planning, db_path, serve):
+    """No planner job: the first thread waits for f1-04-live (past its typical: any minute),
+    the next one a reply's 6 min more."""
+    client = _line(serve, db_path, planning, writing=False)
+    assert _boxes(_page(client)) == [
+        ("f84", "f84 next, after f1-04-live · any minute now", False),
+        ("f85", "f85 2nd in line · about 6 min", False),
+        ("f86", "f86 3rd in line · about 12 min", False),
+    ]
+
+
+def test_each_thread_page_says_its_place_or_that_it_is_being_written(planning, db_path, serve):
+    client = _line(serve, db_path, planning)
+    f86 = _thread(client, "f86")
+    assert "Next for the lead · 3rd in line · about 10 min" in _text(f86)
+    assert '<p id="waiting" class="writing"' not in f86
+    f84 = _thread(client, "f84")
+    writing = "Next for the lead · the lead is writing this reply · 2 min in, about 4 min left"
+    assert writing in _text(f84)
+    assert '<p id="waiting" class="writing"' in f84
+
+
+def test_the_tile_names_the_reply_being_written_and_the_line_after_it(planning, db_path, serve):
+    """F84 D6: the ticket job stays above; f86's reply is written in about 10 + 6 min."""
+    html = _page(_line(serve, db_path, planning))
+    tile = _tile(html, "factory-now")
+    assert "Running f1-04-live" in tile
+    assert "Writing now: F84, f84 · 2 min in" in tile
+    assert "Then 2 replies in line, about 16 min for all." in tile
+    assert "Your next reply" not in tile
+    assert '<a class="key" href="/planning/f84">F84</a>' in html
+
+
+def test_a_held_reply_and_a_message_with_no_row_read_as_today(planning, db_path, serve):
+    """f85's row is parked for a Claude limit, and f87's message has no row yet: neither has a
+    place; the held one says until when, the other after the reply being written."""
+    client = _line(serve, db_path, planning)
+    until = NOW + timedelta(hours=2)
+
+    def hold_and_ask(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "UPDATE work_queue SET not_before = ? WHERE subject = 'f85#2'", (until.isoformat(),)
+        )
+        value = '{"text": "And?"}'
+        metrics.add_request(conn, planning, "plan_message", "f87", value, NOW.isoformat())
+
+    _write(db_path, hold_and_ask)
+    held = f"waits for Claude's 5-hour limit, until {until.astimezone():%a %H:%M}"
+    assert [b[:2] for b in _boxes(_page(client))][1:] == [
+        ("f86", "f86 next, after F84's reply · about 4 min"),
+        ("f85", f"f85 waiting for the lead · {held}"),
+        ("f87", "f87 waiting for the lead · after F84's reply, ~4 min"),
+    ]
