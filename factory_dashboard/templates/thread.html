@@ -60,11 +60,10 @@
       <span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span>
       {% elif review.ripe %}
       <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
-        <button type="button" id="signoff-button"
+        <button type="button" id="signoff-button" class="btn go"
           hx-post="/requests" hx-target="#signoff-status" hx-swap="innerHTML"
           hx-vals='{"kind": "signoff", "project": {{ project | tojson }}, "subject": {{ review.key | tojson }}}'
-          hx-on::before-request="this.insertAdjacentHTML('beforebegin', document.getElementById('signing-off-shape').innerHTML); this.remove()"
-          style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Sign off</button>
+          hx-on::before-request="this.insertAdjacentHTML('beforebegin', document.getElementById('signing-off-shape').innerHTML); this.remove()">Sign off</button>
         <template id="signing-off-shape"><span class="pill" id="signing-off" style="{{ signing }}">Signing off at the runner's next pick</span></template>
         <span id="signoff-status" style="font-size: 12.5px; color: var(--muted)">{% if review.refused %}The runner said: {{ review.refused }}{% else %}Marks it done and tags it, at the runner's next pick.{% endif %}</span>
       </div>
@@ -100,13 +99,12 @@
           </label>
         </form>
         <p style="margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
-          <button type="button" id="edit-{{ msg.id }}"
+          <button type="button" id="edit-{{ msg.id }}" class="btn go"
             hx-on:click="document.getElementById('editor-{{ msg.id }}').hidden = false; document.getElementById('save-{{ msg.id }}').hidden = false; this.remove()"
-            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Edit</button>
-          <button type="submit" form="editor-{{ msg.id }}" id="save-{{ msg.id }}" hidden style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Save</button>
-          <button type="button" id="cancel-{{ msg.id }}" hx-post="/requests" hx-target="#waiting-status-{{ msg.id }}" hx-swap="innerHTML"
-            hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ msg.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'
-            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Cancel it</button>
+            >Edit</button>
+          <button type="submit" form="editor-{{ msg.id }}" id="save-{{ msg.id }}" class="btn go" hidden>Save</button>
+          <button type="button" id="cancel-{{ msg.id }}" class="btn plain" hx-post="/requests" hx-target="#waiting-status-{{ msg.id }}" hx-swap="innerHTML"
+            hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ msg.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'>Cancel it</button>
           <span id="waiting-status-{{ msg.id }}" style="font-size: 12.5px; color: var(--muted)"></span>
         </p>
       </div>
@@ -192,7 +190,7 @@
         <textarea name="text" rows="2" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ again }}</textarea>
       </label>
       <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
-        <button type="submit" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">{{ "Send" if has_thread else "Send to the lead" }}</button>
+        <button type="submit" class="btn go">{{ "Send" if has_thread else "Send to the lead" }}</button>
         <span id="reply-status" style="font-size: 12.5px; color: var(--muted)">Every point is agreed unless you comment on it.</span>
       </div>
     </form>
@@ -270,10 +268,9 @@
       <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Remove seed</summary>
       <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center">
         <span>Remove {{ thread | upper }}? Its notes go too.</span>
-        <button type="button" id="drop-seed"
+        <button type="button" id="drop-seed" class="btn go"
           hx-post="/requests" hx-target="#drop-status" hx-swap="innerHTML"
-          hx-vals='{"kind": "drop_seed", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
-          style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px">Remove</button>
+          hx-vals='{"kind": "drop_seed", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'>Remove</button>
         <span id="drop-status" style="font-size: 12.5px; color: var(--muted)"></span>
       </div>
     </details>
@@ -286,11 +283,10 @@
       <span class="pill" style="border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px">{{ "Archiving" if archiving == "on" else "Opening again" }} at the runner's next pick</span>
       {% else %}
       {% if archived_at %}<span class="pill" style="font: 600 12px var(--mono); color: var(--muted)">Archived {{ archived_at[:10] }}</span>{% endif %}
-      <button type="button" id="archive-button"
+      <button type="button" id="archive-button" class="btn plain"
         hx-post="/requests" hx-target="#archive-status" hx-swap="innerHTML"
         hx-vals='{"kind": "archive", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if archived_at else "on") | tojson }}}'
-        hx-on::before-request="this.remove()"
-        style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">{{ "Unarchive" if archived_at else "Archive" }}</button>
+        hx-on::before-request="this.remove()">{{ "Unarchive" if archived_at else "Archive" }}</button>
       <span id="archive-status" style="font-size: 12.5px; color: var(--muted)">{% if archived_at %}Or just reply: a message opens it again.{% else %}It leaves your desk; Planning lists it under Archived.{% endif %}</span>
       {% endif %}
     </div>

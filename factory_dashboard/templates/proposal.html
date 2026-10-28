@@ -41,7 +41,7 @@
           <b>{% if point.flag %}<span class="flag" title="the lead flags this one" style="color: var(--hazard)">&#9873;</span> {% endif %}{{ point.title }}</b>
           <span style="font-size: 14px; color: var(--ink-2)">{{ point.text }}</span>
         </div>
-        {% if standing.state == "open" %}<button type="button" class="change-btn" data-point="{{ point.n }}" style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); background: transparent; border: 1px solid var(--hazard); padding: 0 12px; min-height: 44px">Comment&hellip;</button>{% endif %}
+        {% if standing.state == "open" %}<button type="button" class="change-btn btn plain" data-point="{{ point.n }}">Comment&hellip;</button>{% endif %}
         <label class="comment-box" data-point="{{ point.n }}" hidden style="flex-basis: 100%; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">What would you change?
           <textarea class="comment" data-point="{{ point.n }}" rows="2" style="width: 100%; box-sizing: border-box; font: 14px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--hazard); padding: 8px"></textarea>
         </label>
@@ -85,39 +85,33 @@
       {% if open %}
       <div class="action-buttons" style="display: flex; flex-direction: column; gap: 8px">
       <span id="review-count" style="font: 12.5px var(--mono); color: var(--muted)">{{ key_points | length }} agreed · 0 to change</span>
-      {% set button = "font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; min-height: 44px; width: 100%" %}
-      <button type="button" id="send-back"
+      <button type="button" id="send-back" class="btn go"
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')" hidden
         hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
-        hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: "", comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'
-        style="{{ button }}">Send back</button>
+        hx-vals='js:{kind: "send_back", project: {{ project | tojson }}, subject: {{ (thread ~ "/" ~ proposal.id) | tojson }}, value: JSON.stringify({text: "", comments: Object.fromEntries(Array.from(document.querySelectorAll("textarea.comment"), t => [t.dataset.point, t.value.trim()]).filter(c => c[1]))})}'>Send back</button>
       <div id="primary">
         {% if kind == "adr" and adr_number %}
-        <button type="button" id="accept-adr"
+        <button type="button" id="accept-adr" class="btn go"
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
-          hx-vals='{"kind": "accept_adr", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ adr_number | tojson }}}'
-          style="{{ button }}">Accept ADR</button>
+          hx-vals='{"kind": "accept_adr", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ adr_number | tojson }}}'>Accept ADR</button>
         {% elif kind in ("plan", "mockup", "replan") %}
-        <button type="button" id="approve-plan"
+        <button type="button" id="approve-plan" class="btn go"
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"{% if adr_waits %} disabled{% endif %}
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
-          hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
-          style="{{ button }}{% if adr_waits %}; color: var(--muted); background: transparent; border: 1px dashed var(--muted){% endif %}">Approve plan</button>
+          hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'>{% if adr_waits %}Approve plan{% else %}Approve plan{% endif %}</button>
         {% if adr_waits %}<span style="font-size: 12.5px; color: var(--muted)">Accept the card's ADR first: the plan builds on it.</span>{% endif %}
         {% elif kind == "merge" and merge %}
-        <button type="button" id="approve-merge"
+        <button type="button" id="approve-merge" class="btn go"
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
-          hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'
-          style="{{ button }}">Approve: {{ merge }}</button>
+          hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}}'>Approve: {{ merge }}</button>
         <span style="font-size: 12.5px; color: var(--muted)">The duplicate's notes join the kept card, its card goes, and its thread points to the kept one.</span>
         {% elif kind == "seed" %}
-        <button type="button" id="plant"
+        <button type="button" id="plant" class="btn go"
           hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
           hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
-          hx-vals='{"kind": "plant", "project": {{ project | tojson }}, "subject": {{ ("general/" ~ proposal.id) | tojson }}}'
-          style="{{ button }}">Plant it</button>
+          hx-vals='{"kind": "plant", "project": {{ project | tojson }}, "subject": {{ ("general/" ~ proposal.id) | tojson }}}'>Plant it</button>
         {% endif %}
       </div>
       {% if not (kind == "merge" and proposal.applied) %}
@@ -126,11 +120,10 @@
         <summary style="font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer">Reject…</summary>
         <div style="display: flex; flex-direction: column; gap: 8px">
           <span style="font-size: 13px">{% if kind in ("adr", "mockup", "plan", "replan") %}Won't do: the card's plan branch goes, with every draft on it. A card with nothing built goes too.{% else %}Won't do: only this proposal closes; nothing else changes.{% endif %}</span>
-          <button type="button" id="reject-button"
+          <button type="button" id="reject-button" class="btn plain"
             hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
             hx-vals='{"kind": "reject", "project": {{ project | tojson }}, "subject": {{ (thread ~ "/" ~ proposal.id) | tojson }}}'
-            hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')"
-            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: transparent; border: 1px solid var(--rule); min-height: 44px; width: 100%">Reject</button>
+            hx-on::before-request="document.getElementById('actions').classList.add('on-its-way')">Reject</button>
         </div>
       </details>
       {% endif %}

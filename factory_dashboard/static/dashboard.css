@@ -901,3 +901,13 @@ body.has-order-bar main { padding-bottom: 120px; }
 
 /* Text areas grow with what is typed, up to 60 vh, then scroll inside (f82-01) */
 textarea { max-height: 60vh; overflow-y: auto; }
+
+/* Buttons (f81-03): Go (hazard-yellow with cut corner) and Plain (outlined) */
+.btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; text-decoration: none; }
+.btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+.btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+.btn.go:disabled { color: var(--muted); background: transparent; border: 1px dashed var(--muted); cursor: default; }
+.action-buttons { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+
+/* Ensure the HTML hidden attribute works even when .btn sets display */
+[hidden] { display: none !important; }

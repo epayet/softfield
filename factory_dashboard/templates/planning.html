@@ -55,8 +55,8 @@
       <input type="hidden" name="ask" value="">
       {# F48 D2: the refused note Try again put in the box; the send names it, once #}
       <input type="hidden" name="again" value="">
-      <button type="submit" id="plant-only" onclick="this.form.elements.ask.value = ''" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Plant</button>
-      <button type="submit" id="plant-ask" onclick="this.form.elements.ask.value = '1'" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); background: transparent; border: 1px solid var(--hazard); padding: 0 14px; min-height: 44px">Plant and ask the lead</button>
+      <button type="submit" id="plant-only" class="btn go" onclick="this.form.elements.ask.value = ''">Plant</button>
+      <button type="submit" id="plant-ask" class="btn plain" onclick="this.form.elements.ask.value = '1'">Plant and ask the lead</button>
       <span id="plant-status" style="font-size: 12.5px; color: var(--muted)">Plant: a seed card that waits for you; write on its thread to send it to the lead. Plant and ask the lead: the lead answers it on its thread.</span>
     </div>
   </form>
@@ -116,11 +116,10 @@
           {% endif %}
           <p style="margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
             {% if not item.seed %}
-            <button type="submit" form="edit-{{ item.id }}" id="save-{{ item.id }}" style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Save</button>
+            <button type="submit" form="edit-{{ item.id }}" id="save-{{ item.id }}" class="btn go">Save</button>
             {% endif %}
-            <button type="button" id="cancel-{{ item.id }}" hx-post="/requests" hx-target="#waiting-status-{{ item.id }}" hx-swap="innerHTML"
-              hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ item.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'
-              style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Cancel it</button>
+            <button type="button" id="cancel-{{ item.id }}" class="btn plain" hx-post="/requests" hx-target="#waiting-status-{{ item.id }}" hx-swap="innerHTML"
+              hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ item.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'>Cancel it</button>
             <span id="waiting-status-{{ item.id }}" style="font-size: 12.5px; color: var(--muted)"></span>
           </p>
         </div>
@@ -152,14 +151,12 @@
             {% if item.again %}
             <a id="again-{{ item.id }}" href="{{ item.again }}{{ q }}&amp;again={{ item.id }}#reply" style="display: inline-flex; align-items: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); padding: 0 14px; min-height: 44px">Try again</a>
             {% elif item.note %}
-            <button type="button" id="again-{{ item.id }}" data-note="{{ item.note }}"
-              onclick="const f = document.getElementById('plant'); f.elements.text.value = this.dataset.note; f.elements.again.value = '{{ item.id }}'; f.scrollIntoView(); f.elements.text.focus()"
-              style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Try again</button>
+            <button type="button" id="again-{{ item.id }}" class="btn go" data-note="{{ item.note }}"
+              onclick="const f = document.getElementById('plant'); f.elements.text.value = this.dataset.note; f.elements.again.value = '{{ item.id }}'; f.scrollIntoView(); f.elements.text.focus()">Try again</button>
             {% endif %}
-            <button type="button" id="dismiss-{{ item.id }}" hx-post="/requests" hx-target="#refused-status-{{ item.id }}" hx-swap="innerHTML"
+            <button type="button" id="dismiss-{{ item.id }}" class="btn plain" hx-post="/requests" hx-target="#refused-status-{{ item.id }}" hx-swap="innerHTML"
               hx-vals='{"kind": "dismiss", "project": {{ project | tojson }}, "subject": {{ item.id | string | tojson }}}'
-              hx-on::before-request="this.closest('.refused').classList.add('dismissing')"
-              style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Dismiss</button>
+              hx-on::before-request="this.closest('.refused').classList.add('dismissing')">Dismiss</button>
           </div>
         </div>
         <p class="refused-gone">Dismissed {{ item.title }}: <span id="refused-status-{{ item.id }}"></span></p>
@@ -173,14 +170,12 @@
           <span class="blocked-words" style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>
         </a>
         <p class="blocked-buttons" style="margin: 0; display: flex; gap: 8px; flex-wrap: wrap">
-          <button type="button" id="try-again-{{ item.title }}" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
+          <button type="button" id="try-again-{{ item.title }}" class="btn go" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
             hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ item.title | tojson }}}'
-            hx-on::before-request="blockedOnItsWay(this, 'Trying again at the runner\'s next pick')"
-            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard); border: 0; padding: 0 14px; min-height: 44px">Try again</button>
-          <button type="button" id="set-aside-{{ item.title }}" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
+            hx-on::before-request="blockedOnItsWay(this, 'Trying again at the runner\'s next pick')">Try again</button>
+          <button type="button" id="set-aside-{{ item.title }}" class="btn plain" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
             hx-vals='{"kind": "set_aside", "project": {{ project | tojson }}, "subject": {{ item.title | tojson }}}'
-            hx-on::before-request="blockedOnItsWay(this, 'Set aside at the runner\'s next pick')"
-            style="font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: transparent; border: 1px solid var(--rule); padding: 0 14px; min-height: 44px">Set aside</button>
+            hx-on::before-request="blockedOnItsWay(this, 'Set aside at the runner\'s next pick')">Set aside</button>
         </p>
         <span id="blocked-status-{{ item.title }}" style="font-size: 12.5px; color: var(--muted)"></span>
       </article>

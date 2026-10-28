@@ -3413,6 +3413,35 @@ def test_about_and_aside_still_render(page, client):
     assert re.search(r"\.aside::after.*right: -1px.*bottom: -1px", css, re.S)
 
 
+# --- one button set (f81-03) --------------------------------------------------------------------
+
+
+def test_btn_go_has_clip_path_notch():
+    """D5: .btn.go has clip-path: var(--notch)."""
+    css = (STATIC / "dashboard.css").read_text()
+    go_block = re.search(r"\.btn\.go\s*\{([^}]*)\}", css)
+    assert go_block, ".btn.go rule not found"
+    assert "clip-path: var(--notch)" in go_block[1]
+
+
+def test_btn_has_44px_min_height():
+    """D5: .btn has min-height: 44px."""
+    css = (STATIC / "dashboard.css").read_text()
+    btn_block = re.search(r"\.btn\s*\{([^}]*)\}", css)
+    assert btn_block, ".btn rule not found"
+    assert "min-height: 44px" in btn_block[1]
+
+
+def test_btn_go_disabled_is_muted():
+    """D5: .btn.go:disabled is muted, transparent, dashed border."""
+    css = (STATIC / "dashboard.css").read_text()
+    disabled_block = re.search(r"\.btn\.go:disabled\s*\{([^}]*)\}", css)
+    assert disabled_block, ".btn.go:disabled rule not found"
+    assert "color: var(--muted)" in disabled_block[1]
+    assert "background: transparent" in disabled_block[1]
+    assert re.search(r"border.*dashed", disabled_block[1])
+
+
 # --- square parts (f81-02) ---------------------------------------------------------------------
 
 

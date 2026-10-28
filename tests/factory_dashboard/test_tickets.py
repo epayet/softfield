@@ -553,7 +553,7 @@ def test_a_later_ticket_page_shows_set_aside_panel(later_client):
     html = later_client.get("/tickets/f1-99-later").text
     assert re.search(r'<section[^>]*\bid="aside"', html, re.S)
     assert "This ticket won't run until you queue it." in html
-    assert re.search(r'<button[^>]*class="go"[^>]*>Queue it</button>', html, re.S)
+    assert re.search(r'<button[^>]*class="[^"]*go[^"]*"[^>]*>Queue it</button>', html, re.S)
 
 
 def test_the_queue_it_button_targets_a_place_on_the_page(later_client):

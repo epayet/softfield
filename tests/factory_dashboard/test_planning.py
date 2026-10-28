@@ -2430,7 +2430,8 @@ def test_a_settled_proposal_shows_its_word_and_the_runners_result(
         assert word in dock
     html = _review_page(serve(), "/planning/f9/proposals/merge-f9")
     assert ('id="approve-merge"' in html) is buttons
-    assert ('class="change-btn"' in html) is buttons
+    found = re.search(r'class="[^"]*change-btn[^"]*"', html) is not None
+    assert found is buttons
 
 
 def test_a_sent_back_proposal_says_so_with_no_buttons(planning, db_path, serve):
@@ -2839,7 +2840,8 @@ def test_a_waiting_message_has_edit_and_cancel_it_and_a_stored_one_neither(
         re.S,
     )
     assert re.search(
-        rf'<button type="submit" form="editor-{said}" id="save-{said}" hidden', waiting
+        rf'<button[^>]*type="submit"[^>]*form="editor-{said}"[^>]*id="save-{said}"[^>]*hidden',
+        waiting,
     )
     assert f'id="edit-{said}"' in waiting and f'id="cancel-{said}"' in waiting
     assert "on-its-way" not in waiting and "line-through" not in waiting
@@ -4716,3 +4718,37 @@ def test_a_held_reply_and_a_message_with_no_row_read_as_today(planning, db_path,
         ("f87", "f87 waiting for the lead · after F84's reply, ~4 min"),
         ("f85", f"f85 waiting for the lead · {held}"),
     ]
+
+
+# --- one button set (f81-03) --------------------------------------------------------------------
+
+
+def test_plant_only_has_btn_go(planning, serve, db_path):
+    """D5: #plant-only carries class 'btn go'."""
+    client = _line(serve, db_path, planning)
+    html = _page(client)
+    btn = re.search(r'<button[^>]*id="plant-only"[^>]*class="([^"]*)"', html)
+    assert btn
+    classes = btn[1].split()
+    assert "btn" in classes
+    assert "go" in classes
+
+
+def test_plant_ask_has_btn_plain(planning, serve, db_path):
+    """D5: #plant-ask carries class 'btn plain'."""
+    client = _line(serve, db_path, planning)
+    html = _page(client)
+    btn = re.search(r'<button[^>]*id="plant-ask"[^>]*class="([^"]*)"', html)
+    assert btn
+    classes = btn[1].split()
+    assert "btn" in classes
+    assert "plain" in classes
+
+
+def test_no_button_in_planning_has_inline_style(planning, serve, db_path):
+    """D5: no <button> tag in planning templates has style=."""
+    client = _line(serve, db_path, planning)
+    html = _page(client)
+    buttons = re.findall(r"<button[^>]*>", html)
+    for b in buttons:
+        assert "style=" not in b.lower(), f"Button has inline style: {b[:100]}"

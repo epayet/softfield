@@ -14,7 +14,7 @@
   <p class="then">Queued, it joins the line at priority {{ later_priority }}, behind the tickets that go first; move it on the board once it is there.</p>
   {% if not on_its_way %}
   {# pressed, the plate shows on its way at once; the runner's answer lands below it #}
-  <button type="button" class="go" id="queue" hx-post="/requests" hx-swap="innerHTML"
+  <button type="button" class="go btn" id="queue" hx-post="/requests" hx-swap="innerHTML"
     hx-target="#ticket-aside-status"
     hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ ticket.ticket | tojson }}}'
     hx-on::before-request="this.disabled = true; this.closest('.aside').classList.add('sent')">Queue it</button>
