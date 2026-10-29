@@ -1,6 +1,6 @@
 # Milestone F146: The board's Developers only view: what runs without the lead, and for how long
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** ready · **Priority:** 1 · **Area:** factory · **Reserve:** yes
 > Planted by the owner on 2026-10-16.
 
 ## Notes
