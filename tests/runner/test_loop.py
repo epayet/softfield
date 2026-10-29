@@ -5693,6 +5693,51 @@ def test_a_card_job_that_drafts_nothing_leaves_no_plan_branch(repo, fake_model, 
     assert git(repo, "branch", "--show-current").strip() == "main"
 
 
+def test_a_mockup_a_planner_job_drew_without_listing_it_reaches_the_reply(
+    repo, fake_model, monkeypatch
+):
+    """F152: the runner lists each mock-up page the job's drafts commit added or changed and
+    no proposal names; not one it removed, nor a .css beside it, nor one already listed."""
+    _plan_message(repo, "f7", "Draw it.")
+    _plan_message(repo, "f7", "Again.")
+    folder = repo / ".factory" / "cards" / "f7-mockup"
+    named = {
+        "id": "b",
+        "kind": "mockup",
+        "title": "Its own",
+        "path": ".factory/cards/f7-mockup/b.html",
+        "key_points": [{"n": 1, "title": "One page", "text": "Drawn.", "flag": False}],
+    }
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        if job.prompt.count("Draw it."):
+            folder.mkdir(parents=True)
+            (folder / "a.html").write_text("<title>The board</title>")
+            (folder / "b.html").write_text("<title>Listed</title>")
+            (folder / "a.css").write_text("body {}")
+            block = json.dumps({"points": POINTS, "proposals": [named]})
+        else:
+            (folder / "a.html").write_text("<title>The board, again</title>")
+            (folder / "b.html").unlink()
+            block = json.dumps({"points": POINTS})
+        reply = f"Drawn.\n```json\n{block}\n```"
+        return JobResult(ok=True, text=reply, duration_s=1.0, session_id="s1")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    _run(repo)
+    first, second = [
+        json.loads(str(m["proposals"])) for m in _messages(repo) if m["author"] == "lead"
+    ]
+    a = ".factory/cards/f7-mockup/a.html"
+    assert [(p["path"], p["title"]) for p in first] == [
+        (named["path"], "Its own"),
+        (a, "The board"),
+    ]
+    assert [(p["kind"], p["path"], p["title"]) for p in second] == [
+        ("mockup", a, "The board, again")
+    ]
+
+
 MERGE_F12 = {
     "id": "merge-f12",
     "kind": "merge",

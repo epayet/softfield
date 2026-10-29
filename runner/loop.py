@@ -4246,8 +4246,11 @@ def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool
     if s.git.commit_all(
         with_trailers(f"planner {subject}: drafts (by Claude)", agent=CLAUDE_HEADLESS_AGENT)
     ):
-        changed = s.git.run("diff", "--name-only", "--diff-filter=AM", "HEAD~1", "HEAD")
-        for path in changed.splitlines():
+        # -z: paths unquoted; --no-renames: a moved mock-up is added at its new path
+        changed = s.git.run(
+            "diff", "--name-only", "-z", "--no-renames", "--diff-filter=AM", "HEAD~1", "HEAD"
+        )
+        for path in changed.split("\0"):
             if planner.is_mockup_file(path):
                 pages[path] = (s.repo / path).read_text(encoding="utf-8", errors="replace")
     s.git.checkout(MAIN)

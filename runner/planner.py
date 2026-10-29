@@ -834,9 +834,11 @@ def with_mockups(reply: Reply, files: Mapping[str, str]) -> Reply:
         stem = path.rsplit("/", 1)[-1].removesuffix(".html")
         found = _PAGE_TITLE_RE.search(files[path])
         title = " ".join(found[1].split()) if found else ""
+        pid = f"{stem}-mockup" if f"{stem}-mockup" not in taken else f"{path}-mockup"
+        taken.add(pid)  # two cards' a.html get two ids
         listed.append(
             {
-                "id": f"{stem}-mockup" if f"{stem}-mockup" not in taken else f"{path}-mockup",
+                "id": pid,
                 "kind": "mockup",
                 "title": title or path.rsplit("/", 1)[-1],
                 "path": path,

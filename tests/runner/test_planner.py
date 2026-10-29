@@ -106,6 +106,12 @@ def test_a_mockup_a_proposal_names_is_not_listed_twice():
     assert planner.with_mockups(reply, {PAGE: "<title>T</title>"}).proposals == (own,)
 
 
+def test_two_cards_mockups_of_one_name_get_two_ids():
+    other = ".factory/cards/f8-mockup/a.html"
+    listed = planner.with_mockups(planner.parse_reply("All text."), {PAGE: "", other: ""})
+    assert [p["id"] for p in listed.proposals] == ["a-mockup", f"{PAGE}-mockup"]
+
+
 @pytest.mark.parametrize(
     "path",
     [".factory/cards/f9-mockup/a.css", ".factory/cards/f9/a.html", "docs/a.html"],
