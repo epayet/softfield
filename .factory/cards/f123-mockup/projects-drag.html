@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F123 mock-up: the Projects page, drag to reorder</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px 20px 120px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card changes */
+  .note { display: block; font: 600 11.5px/1.35 var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 390px; }
+  [hidden] { display: none !important; }
+  /* side by side on a wide screen, one at a time on a phone */
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 390px 390px; }
+    .versions > [data-version] { display: block !important; }
+  }
+
+  /* ---- the panel as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+
+  /* ---- Today: the Projects page (dashboard.css, "The Projects page") ---- */
+  .projects-page .rank { list-style: none; margin: 0; padding: 0; }
+  .projects-page .muted { color: var(--muted); }
+  .projects-page .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0;
+    border-bottom: 1px solid var(--grid); }
+  .projects-page .proj:last-child { border-bottom: 0; }
+  .projects-page .place { grid-row: span 4; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .projects-page .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate);
+    color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .projects-page .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); }
+  .projects-page .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .projects-page .what { color: var(--ink-2); font-size: 13.5px; }
+  .projects-page .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .projects-page .facts b { font-family: var(--display); }
+  .projects-page .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display);
+    letter-spacing: .04em; text-transform: uppercase; }
+  .projects-page .send-order { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    background: var(--hazard); color: var(--hazard-ink); border: 0; padding: 10px 16px; margin-top: 10px; }
+  .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
+
+  /* ---- Proposed: each project a plate with the board's grip and ⋯ (dashboard.css, "Moving cards") ---- */
+  .moving .row { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; margin: 0 0 8px; }
+  .moving .row:last-child { margin-bottom: 0; }
+  .moving .grip, .moving .more { min-height: 44px; padding: 0; background: var(--plate); color: var(--muted);
+    border: 1px solid var(--rule); font: 600 18px var(--mono); }
+  .moving .grip { touch-action: none; cursor: grab; border-right: 0; }
+  .moving .more { border-left: 0; }
+  .moving .plate { position: relative; background: var(--plate); border: 1px solid var(--rule);
+    border-left: 3px solid var(--hazard); padding: 8px 10px 9px; display: grid; gap: 3px; min-width: 0; }
+  /* corner ticks: ornament, in the ink only */
+  .moving .plate::after { content: ""; position: absolute; top: 4px; right: 4px; width: 7px; height: 7px;
+    border-top: 1px solid var(--muted); border-right: 1px solid var(--muted); }
+  .moving .head { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  .moving .rankno { font: 700 20px var(--display); color: var(--hazard); min-width: 30px; }
+  .moving .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .moving .way { font: 600 11.5px/1.35 var(--mono); color: var(--hazard); }
+  .moving .row.moved .plate, .moving .row.sent .plate { border-style: dashed; border-color: var(--hazard); border-left-style: solid; }
+  .moving .row.dragging { position: relative; z-index: 2; opacity: .85; outline: 2px solid var(--hazard);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, .35); }
+  .moving .row.drop-before { box-shadow: 0 -5px 0 var(--hazard); }
+  .moving .row.drop-after { box-shadow: 0 5px 0 var(--hazard); }
+  .order-bar { position: sticky; bottom: 0; margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px 12px;
+    align-items: center; justify-content: flex-end; padding: 10px 12px; background: var(--bay);
+    border: 1px solid var(--rule); border-top: 2px solid var(--hazard); }
+  .order-bar p { margin: 0; flex: 1 1 160px; min-width: 0; font-size: 13.5px; }
+  .order-bar button, .sheet button { min-height: 44px; padding: 0 14px; background: var(--plate);
+    border: 1px solid var(--rule); font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .order-bar .go { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+  .sheet { margin-top: 10px; padding: 10px 12px; background: var(--bay); border: 1px solid var(--rule); }
+  .sheet h4 { margin: 0 0 6px; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .sheet .moves { display: flex; flex-wrap: wrap; gap: 6px; }
+</style>
+</head>
+<body>
+<h1>F123: the Projects page, drag to reorder</h1>
+<p class="lede">The Projects page's order panel, on the three projects it shows today (2026-10-27). In Proposed the drag works: drag a project by its grip ⠿ or use its ⋯, then send. Nothing is really sent.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/projects.html, #projects-order -->
+<div data-version="today" class="phone" hidden>
+  <h3>Today</h3>
+  <div class="projects-page">
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj">
+        <label class="place"><input type="number" value="1" aria-label="travel-companion's place"><small>place</small></label>
+        <div class="name">travel-companion</div>
+        <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+        <div class="facts"><span><b>0</b> ready</span><span><b>2</b> ideas</span><span><b>8</b> done</span><span><b>1</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="2" aria-label="softfield's place"><small>place</small></label>
+        <div class="name">softfield</div>
+        <div class="what">The software factory itself: the runner, the dashboard and the workflow that build every project.</div>
+        <div class="facts"><span><b>59</b> ready</span><span><b>3</b> building</span><span><b>43</b> ideas</span><span><b>43</b> done</span><span><b>36</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="3" aria-label="coucou's place"><small>place</small></label>
+        <div class="name">coucou</div>
+        <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+        <div class="facts"><span><b>0</b> ready</span><span><b>1</b> building</span><span><b>4</b> done</span><span><b>1</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+      </li>
+    </ol>
+    <button type="button" class="send-order" disabled>Send new order</button>
+  </section>
+  <p class="muted" style="font-size: 13px">A new project is set up on its computer, in its folder; it shows here once it's ready.</p>
+  </div>
+  <p class="legend">Each project has a number box; typing other numbers lights up "Send new order". Once sent, the boxes go dashed and can't be changed until the runner takes it.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="phone">
+  <h3>Proposed</h3>
+  <section class="panel projects-page moving">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <div id="rows" class="new"></div>
+    <span class="note">The number boxes go: each project is a plate with its place (#1), the board's grip ⠿ to drag it by and its ⋯ for Top, Up, Down and Bottom.</span>
+    <div id="sheet" class="sheet" hidden>
+      <h4 id="sheet-title"></h4>
+      <div class="moves">
+        <button type="button" data-move="top">Top</button><button type="button" data-move="up">Up</button>
+        <button type="button" data-move="down">Down</button><button type="button" data-move="bottom">Bottom</button>
+        <button type="button" data-move="close">Close</button>
+      </div>
+    </div>
+    <div id="bar" class="order-bar new" hidden>
+      <p role="status"></p>
+      <button type="button" id="cancel">Cancel</button>
+      <button type="button" id="send" class="go">Send new order</button>
+    </div>
+    <span class="note">The board's bar replaces the button under the list: it shows only while a project is out of place, fixed at the foot of the screen on the real page.</span>
+  </section>
+  <p class="muted" style="font-size: 13px">A new project is set up on its computer, in its folder; it shows here once it's ready.</p>
+  <p class="legend"><span class="new">Dashed green</span> marks what changes. A project out of place reads "moved · was #2 · not sent yet", dashed hazard, as on the board. After Send, the projects stay in the order sent and read "on its way · at the runner's next pick" until the runner takes it; you can still move them and send again, which replaces the order on its way.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+
+  // The projects as the Projects page shows them on 2026-10-27
+  const PROJECTS = {
+    "travel-companion": { what: "Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.",
+      facts: [["0", "ready"], ["2", "ideas"], ["8", "done"], ["1", "for you"]] },
+    "softfield": { what: "The software factory itself: the runner, the dashboard and the workflow that build every project.",
+      facts: [["59", "ready"], ["3", "building"], ["43", "ideas"], ["43", "done"], ["36", "for you"]] },
+    "coucou": { what: "A small, private way to send a photo or a note to an always-on screen in someone's home.",
+      facts: [["0", "ready"], ["1", "building"], ["4", "done"], ["1", "for you"]] },
+  };
+  let came = ["travel-companion", "softfield", "coucou"];
+  let line = came.slice();
+  let sent = false;
+  const rowsEl = document.getElementById("rows"), bar = document.getElementById("bar"), sheet = document.getElementById("sheet");
+
+  // As board.js's outOfPlace: those outside the longest common run are moved
+  const outOfPlace = (before, after) => {
+    const n = before.length, m = after.length;
+    const run = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
+      run[i][j] = before[i] === after[j] ? run[i + 1][j + 1] + 1 : Math.max(run[i + 1][j], run[i][j + 1]);
+    const kept = new Set(); let i = 0, j = 0;
+    while (i < n && j < m) {
+      if (before[i] === after[j]) { kept.add(before[i]); i++; j++; }
+      else if (run[i][j + 1] >= run[i + 1][j]) j++; else i++;
+    }
+    return new Set(after.filter((k) => !kept.has(k)));
+  };
+
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; };
+  let menuFor = null;
+  const draw = () => {
+    const moved = outOfPlace(came, line);
+    rowsEl.replaceChildren(...line.map((name, i) => {
+      const p = PROJECTS[name], row = el("div", "row"); row.dataset.name = name;
+      if (moved.has(name)) row.classList.add("moved"); else if (sent) row.classList.add("sent");
+      const grip = el("button", "grip", "⠿"); grip.type = "button"; grip.setAttribute("aria-label", `Drag ${name}`);
+      grip.addEventListener("pointerdown", (e) => startDrag(e, row));
+      const more = el("button", "more", "⋯"); more.type = "button"; more.setAttribute("aria-label", `Move ${name}`);
+      more.addEventListener("click", () => { menuFor = name; document.getElementById("sheet-title").textContent = `Move ${name}`; sheet.hidden = false; });
+      const plate = el("div", "plate"), head = el("div", "head");
+      head.append(el("span", "rankno", `#${i + 1}`), el("span", "name", name));
+      const facts = el("div", "facts"); for (const [b, t] of p.facts) { const s = el("span"); s.append(el("b", "", b), ` ${t}`); facts.append(s); }
+      const links = el("div", "links"); for (const t of ["Planning", "Board", "Overview"]) { const a = el("a", "", t); a.href = "#"; links.append(a); }
+      plate.append(head, el("div", "what", p.what), facts, links);
+      if (moved.has(name)) plate.append(el("span", "way", `moved · was #${came.indexOf(name) + 1} · not sent yet`));
+      else if (sent) plate.append(el("span", "way", "on its way · at the runner's next pick"));
+      row.append(grip, plate, more);
+      return row;
+    }));
+    bar.hidden = !moved.size;
+    bar.querySelector("p").textContent = `${moved.size} project${moved.size === 1 ? "" : "s"} moved. Nothing is sent yet.`;
+  };
+  const move = (name, to) => { const rest = line.filter((n) => n !== name); rest.splice(Math.max(0, Math.min(to, rest.length)), 0, name); line = rest; draw(); };
+
+  for (const b of sheet.querySelectorAll("[data-move]")) b.addEventListener("click", () => {
+    const i = line.indexOf(menuFor);
+    ({ top: () => move(menuFor, 0), up: () => move(menuFor, i - 1), down: () => move(menuFor, i + 1),
+       bottom: () => move(menuFor, line.length), close: () => {} })[b.dataset.move]();
+    sheet.hidden = true;
+  });
+
+  // Drag by the grip, as board.js: the row follows the pointer, a line shows where it lands
+  let drag = null;
+  const target = () => {
+    const others = [...rowsEl.querySelectorAll(".row")].filter((n) => n !== drag.node);
+    const above = others.find((n) => { const r = n.getBoundingClientRect(); return drag.y < r.top + r.height / 2; });
+    return { others, above };
+  };
+  const tick = () => {
+    if (!drag) return;
+    drag.node.style.transform = `translateY(${drag.y - drag.y0}px)`;
+    const { others, above } = target();
+    for (const n of others) n.classList.remove("drop-before", "drop-after");
+    if (above) above.classList.add("drop-before"); else if (others.length) others[others.length - 1].classList.add("drop-after");
+    drag.frame = requestAnimationFrame(tick);
+  };
+  const onMove = (e) => { if (drag) { drag.y = e.clientY; e.preventDefault(); } };
+  const endDrag = () => {
+    if (!drag) return;
+    cancelAnimationFrame(drag.frame);
+    const { others, above } = target(); const name = drag.node.dataset.name;
+    drag = null;
+    removeEventListener("pointermove", onMove); removeEventListener("pointerup", endDrag); removeEventListener("pointercancel", endDrag);
+    const rest = others.map((n) => n.dataset.name);
+    move(name, above ? rest.indexOf(above.dataset.name) : rest.length);
+  };
+  const startDrag = (e, node) => {
+    if (drag || e.button !== 0) return;
+    e.preventDefault();
+    drag = { node, y0: e.clientY, y: e.clientY };
+    node.classList.add("dragging");
+    addEventListener("pointermove", onMove, { passive: false }); addEventListener("pointerup", endDrag); addEventListener("pointercancel", endDrag);
+    drag.frame = requestAnimationFrame(tick);
+  };
+
+  document.getElementById("cancel").addEventListener("click", () => { line = came.slice(); draw(); });
+  document.getElementById("send").addEventListener("click", () => { came = line.slice(); sent = true; draw(); });
+  draw();
+</script>
+</body>
+</html>
