@@ -63,7 +63,8 @@ One factory, one view: the top bar names the job that runs, whichever project it
 - **D5. Next in line is the runner's order** (`project_round` in `runner/loop.py`): every project's queued jobs first (planning replies, reviews, directions), in the project order; then the tickets that can run, project by project in the order (a project's own order inside, as `live_line` gives it today); then the waiting ones. A project that goes first in the order but has no ticket that can run gets one line, "Passed over: <project> goes first in your order, but …", with its first ticket's wait. The count says each project's share: "63 tickets waiting: softfield 54 · travel-companion 9".
 - **D6. Needs you, per project**: one desk line for each project with something on its desk ("4 things wait on its desk", its top three, "Open ›" to that project's `/planning`), and every project's notices, each with its plate. `data-notices` stays as f142-01 (F142, Phone notifications: every project) builds it.
 - **D7. The picker moves into the tab strip** (f132-08), in front of Planning, Board and Tickets, the three as one bay; the bar's top row keeps the brand, the status and the theme. The tab order doesn't change. A factory-wide page's crumbs start "The whole factory" instead of a project's name.
-- **D8. Savings and Claude per milestone leave the Overview** for each project's page (`/projects/<name>`, `project.html`), as "Savings from delegating on <project>, so far" over all its milestones (`queries.savings` with no key) and the project's own spend chart. `current_milestone` goes once nothing calls it. (Question to the owner; see the thread.)
+- **D8. Savings leaves the Overview** for each project's page (`/projects/<name>`, `project.html`), as "Savings from delegating on <project>, so far" over all its milestones (`queries.savings` with no key), its three figures as today. `current_milestone` goes once nothing calls it.
+  - **Claude per milestone goes** (owner, 2026-10-27, from F92: "not super useful, especially on mobile"): not moved, removed. The Milestones page already charts Claude's dollars per merged ticket and the net savings per milestone.
 - **D9. The floor, every project** (f132-05): one floor, as the factory has one set of machines. The field counts every project's cards per stage, a crate's label starts with its project's plate when there are several, the stash counts every project's merges. `live_line` and `replay` take the list from `every_project`.
 
 ## Tickets
@@ -72,7 +73,7 @@ One factory, one view: the top bar names the job that runs, whichever project it
 | 01 | bar-follows-the-job | D | 3 | – | D1 (priority 2: a wrong status on every page) |
 | 02 | overview-live-every-project | L | 6 | f142-01 | D2–D6 for Now, the Queue, Next in line, Needs you |
 | 03 | away-every-project | D | 3 | 02 | While you were away, every project, with plates |
-| 04 | savings-on-project-page | D | 3 | 02 | D8 |
+| 04 | savings-on-project-page | D | 3 | 02 | D8: savings to the project's page, the chart removed (replan 2026-10-27) |
 | 05 | floor-every-project | L | 6 | 02 | D9 |
 | 06 | jobs-runs-every-project | D | 3 | 02 | Jobs and Runs list every project, a Project column |
 | 07 | timeline-every-project | D | 3 | 02, 04 | the Timeline's lanes carry every project; the last 24 h by default |
