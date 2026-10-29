@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F65 mock-up: more work approved, off To sign off at once</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h4.where { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+  p.lede { color: var(--ink-2); max-width: 780px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; grid-template-columns: 1fr; gap: 24px; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [data-version] { display: block !important; }
+    .switch { display: none; }
+  }
+  .vlabel { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--hazard); margin: 10px 0 0;
+    padding: 4px 10px; background: var(--bay); border-left: 3px solid var(--hazard); display: inline-block; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; position: relative; }
+  .mark { display: block; font: 11.5px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none; }
+
+  /* ---- the desk, as planning.html draws it ---- */
+  .desk { background: var(--bay); border: 1px solid var(--rule); }
+  .desk h2 { margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .group { padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px; }
+  .group h3 { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+  .item { display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; }
+  .item .t { font-size: 14px; }
+  .item .w { font: 11.5px var(--mono); color: var(--muted); }
+  .empty { font-size: 13px; color: var(--muted); margin: 0; }
+
+  /* ---- the card's page, as thread.html draws #review ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0; }
+  .panel h3 { font: 600 13px var(--display); color: var(--ink-2); margin: 4px 0 0; }
+  .sheet p, .sheet ol { margin: 0; font-size: 14px; }
+  .row-of { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .btn { min-height: 44px; padding: 0 16px; font: 600 14px var(--display); letter-spacing: .04em; border: 1px solid var(--rule); cursor: pointer; }
+  .btn.go { background: var(--good); color: #0d1a10; border-color: var(--good); }
+  .btn.plain { background: var(--plate); color: var(--fg); }
+  .aside { font-size: 12.5px; color: var(--muted); }
+  .refused { font: 11.5px var(--mono); color: var(--opus); }
+
+  /* ---- proposed: the round plate, a plate with a hazard-striped header ---- */
+  .round-plate { background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .round-plate::before, .round-plate::after { content: ""; position: absolute; width: 8px; height: 8px; border-color: var(--ink-2); border-style: solid; }
+  .round-plate::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+  .round-plate::after { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+  .round-plate header { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px;
+    background: repeating-linear-gradient(135deg, var(--bay) 0 10px, #1d232b 10px 20px); border-bottom: 1px solid var(--rule); }
+  .round-plate header b { font: 700 12.5px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+  .round-plate header span { font: 11px var(--mono); color: var(--muted); }
+  .round-plate .body { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .crates { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .crates li { display: flex; gap: 8px; align-items: baseline; font-size: 13.5px; }
+  .crates .id { font: 12px var(--mono); }
+  .state { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; border: 1px solid var(--rule); color: var(--ink-2); white-space: nowrap; }
+  .asked { border: 1px dashed var(--hazard); padding: 4px 8px; font-size: 12.5px; color: var(--hazard); align-self: flex-start; }
+  .phases { display: flex; flex-wrap: wrap; gap: 4px; font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; }
+  .phases span { padding: 2px 6px; border: 1px solid var(--rule); color: var(--muted); }
+  .phases span.now { color: var(--fg); border-color: var(--ink-2); }
+</style>
+</head>
+<body>
+<h1>F65: more work approved, off To sign off at once</h1>
+<p class="lede">F38, The new-version notice becomes a tag on the top bar, as it was on 2026-10-29 between 00:24 (you approved f38-02) and the runner's 00:52 pick. You pressed Sign off at 00:50 and the runner refused it: "work is left: f38-02-updated-note".</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from planning.html (the desk) and thread.html (#review) -->
+<div data-version="today" hidden>
+  <p class="vlabel">Today</p>
+  <h4 class="where">Planning · Your desk, 00:40</h4>
+  <section class="desk">
+    <h2>Your desk · 21</h2>
+    <div class="group">
+      <h3 style="color: var(--qwen)">To sign off · 1</h3>
+      <a class="item" href="#"><span class="t">The new-version notice becomes a tag on the top bar, so no page moves</span><span class="w">reviewed · waits for your sign-off</span></a>
+    </div>
+  </section>
+
+  <h4 class="where">/planning/f38 · The review</h4>
+  <section class="panel">
+    <h2>The review</h2>
+    <h3>What changed</h3>
+    <div class="sheet"><p>When the dashboard's code changes, the "New version of the dashboard: refresh" bar no longer appears above the page and pushes everything down. Instead a small yellow "↻ New version" tag hangs on the right end of the top bar's hazard stripe…</p></div>
+    <h3>How to test</h3>
+    <div class="sheet"><ol><li>On the laptop, open the Planning page and leave it in front…</li></ol></div>
+    <a href="#">The whole review</a>
+    <div class="row-of">
+      <button type="button" class="btn go">Sign off</button>
+      <span class="aside refused">The runner said: work is left: f38-02-updated-note (ready). Finish it, or sign off with --force.</span>
+    </div>
+  </section>
+  <p class="legend">Your Approve is on its way, but the card still waits for your sign-off, and Sign off is refused at the pick. Its words even send you to a terminal.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <p class="vlabel">Proposed</p>
+  <h4 class="where">Planning · Your desk, 00:40</h4>
+  <section class="desk">
+    <h2>Your desk · 20</h2>
+    <div class="group new">
+      <h3 style="color: var(--qwen)">To sign off</h3>
+      <p class="empty">Nothing to sign off. F38 left the moment you pressed Approve.</p>
+    </div>
+  </section>
+  <span class="mark">F38 isn't in To sign off from your Approve until its round is built and reviewed.</span>
+
+  <h4 class="where">/planning/f38 · The review</h4>
+  <section class="panel">
+    <h2>The review</h2>
+    <h3>What changed</h3>
+    <div class="sheet"><p>When the dashboard's code changes, the "New version of the dashboard: refresh" bar no longer appears above the page and pushes everything down. Instead a small yellow "↻ New version" tag hangs on the right end of the top bar's hazard stripe…</p></div>
+    <h3>How to test</h3>
+    <div class="sheet"><ol><li>On the laptop, open the Planning page and leave it in front…</li></ol></div>
+    <a href="#">The whole review</a>
+
+    <div class="round-plate new" id="round">
+      <header><b>More work approved · round 2</b><span>you approved it 00:24</span></header>
+      <div class="body">
+        <div class="phases" aria-label="Where the round is">
+          <span class="now">Approved</span><span>Building</span><span>Review</span><span>Back for sign-off</span>
+        </div>
+        <ul class="crates">
+          <li><span class="state">queued at the runner's next pick</span> <a class="id" href="#">f38-02-updated-note</a></li>
+          <li style="color: var(--ink-2)">A page that loaded the new version by itself says "✓ Updated HH:MM" for 15 seconds.</li>
+        </ul>
+        <p class="aside" style="margin: 0">Comes back to To sign off once it's built and reviewed, opening on what this round changed.</p>
+        <div class="row-of">
+          <button type="button" class="btn plain" id="drop">Drop this round</button>
+          <span class="aside">Sets f38-02 aside; F38 comes back with this review.</span>
+        </div>
+      </div>
+    </div>
+    <span class="mark">Where Sign off was. The four steps light up as the round moves; the ticket links to its page.</span>
+  </section>
+  <p class="legend"><span class="new" style="padding: 0 4px">Dashed green</span> marks what changes. Pressing Drop this round turns it into a dashed yellow "Dropping this round at the runner's next pick", as Sign off does today.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+  const drop = document.getElementById("drop");
+  drop.addEventListener("click", () => {
+    const shape = document.createElement("span");
+    shape.className = "asked";
+    shape.textContent = "Dropping this round at the runner's next pick";
+    drop.replaceWith(shape);
+  });
+</script>
+</body>
+</html>
