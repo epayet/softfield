@@ -38,3 +38,9 @@ attempts: 3
 tokens: 213228
 logs: .factory/var/runs/20261029-143524/f172-06-next-in-line-marked-first
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
