@@ -38,17 +38,17 @@
   // or has text selected, so neither the queue's scroll nor a selection is lost (2026-10-03).
   let lastScroll = 0;
   addEventListener("scroll", () => { lastScroll = Date.now(); }, { capture: true, passive: true });
-  // Phone top bar steps aside (f42-02): hide on scroll down past bar height, show on scroll up.
+  // Phone top bar steps aside (f42-02): a scroll down of more than 8 px past the bar's height
+  // hides it, any scroll up or a position within its height shows it. The way down counts from
+  // the last scroll up (from), so small steps add up and a 1 px jitter does nothing (f42 review).
   (function () {
-    let lastY = window.scrollY;
+    let lastY = window.scrollY, from = lastY;
     addEventListener("scroll", () => {
       const y = window.scrollY;
       const bar = document.querySelector("header.bar");
-      if (!bar) { lastY = y; return; }
-      const stickyTop = parseFloat(getComputedStyle(bar).top) || 0;
-      if (window.innerWidth >= 640) { lastY = y; return; }
-      if (y > lastY && y > stickyTop) { bar.classList.add("steps-aside"); }
-      else { bar.classList.remove("steps-aside"); }
+      if (!bar || window.innerWidth >= 640) { lastY = from = y; return; }
+      if (y < lastY || y <= bar.offsetHeight) { bar.classList.remove("steps-aside"); from = y; }
+      else if (y - from > 8) { bar.classList.add("steps-aside"); }
       lastY = y;
     }, { passive: true });
   })();

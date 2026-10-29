@@ -598,6 +598,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** D1's "one rule" was lifted cleanly and read by three pages. Second milestone running where Sonnet leaves one branch untested (F74: an `ORDER BY`; here, the general thread).
 - **Decisions affected:** none.
 
+### F42 (2026-10-29): the review page and the top bar give a phone's screen to the content ([review](../reviews/f42-the-space-for-me-to-scroll.md))
+
+- **Q1:** two developer tickets (difficulty 3, CSS and a little JS). Neither passed first time: f42-01 stopped twice for "no edit after 20 min" and was finished by the lead; f42-02 stopped twice the same way and passed on its third attempt (51 min). One Sonnet checkpoint nit (no scroll threshold), confirmed. Review round 1: one should-fix (that same threshold, which the ticket had asked for: fixed by the review, with a test), one should-fix (a twelve-line setup copied into four tests: ticket f42-03) and one nit (the phone loaded the hidden mock-up frame: fixed).
+- **Q3:** Opus about $2 on the f42 jobs (two directions, one escalation) and Sonnet $0.16 for the checkpoint; Qwen about 131 minutes of model, 80 of them in four stalled attempts.
+- **Q5:** see the review's numbers.
+- **Anything else:** layout that has to be measured in a browser stalls Qwen even with the cause named in a direction; f42-02 passed but dropped one sentence of its ticket (the 8 px threshold), and its test couldn't catch it because the test only checked big scrolls. A ticket's numbers want a test that pins them.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

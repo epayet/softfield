@@ -614,6 +614,21 @@ def test_phone_top_bar_steps_aside_on_scroll(page, client, tmp_path):
     bcr = bar.evaluate("el => el.getBoundingClientRect()")
     assert bcr["top"] == pytest.approx(0, abs=2), f"bar not at top: top={bcr['top']:.1f}"
 
+    # A jitter of 5 px down leaves it in view; small steps that add up past 8 px hide it (review)
+    page.evaluate("() => window.scrollTo(0, 355)")
+    page.wait_for_timeout(300)
+    assert bar.evaluate("el => el.getBoundingClientRect().top") == pytest.approx(0, abs=2)
+    for y in (360, 365):
+        page.evaluate(f"() => window.scrollTo(0, {y})")
+        page.wait_for_timeout(50)
+    page.wait_for_function(
+        "() => document.querySelector('header.bar').getBoundingClientRect().bottom <= 0"
+    )
+    page.evaluate("() => window.scrollTo(0, 350)")
+    page.wait_for_function(
+        "() => document.querySelector('header.bar').getBoundingClientRect().top >= -2"
+    )
+
     # Back at the top, bar is in view
     page.evaluate("() => window.scrollTo(0, 0)")
     page.wait_for_function(

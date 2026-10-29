@@ -27,7 +27,7 @@
 
     {% if mockup %}
     <a class="mockup-link" href="{{ mockup }}{{ q }}" target="_blank" rel="noopener">Open the mock-up</a>
-    <iframe id="mockup" src="{{ mockup }}{{ q }}" sandbox="allow-scripts" title="{{ proposal.title }}"></iframe>
+    <iframe id="mockup" src="{{ mockup }}{{ q }}" sandbox="allow-scripts" title="{{ proposal.title }}" loading="lazy"></iframe>
     {% elif mockup_gone %}
     <div class="gone">The mock-up's file isn't in the repo any more, so there is nothing to show.<br><code>{{ mockup_gone }}</code></div>
     {% endif %}
