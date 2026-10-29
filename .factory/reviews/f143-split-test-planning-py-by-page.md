@@ -1,5 +1,7 @@
 # Review: F143, the planning room's code and tests split by page
 
+- **Status:** done, signed off by the owner on 2026-10-29.
+
 ## Sign-off sheet
 
 ### 1. What changed

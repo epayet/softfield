@@ -1,6 +1,7 @@
 # Milestone F143: Split the planning room's code and tests by page, so developers can take them
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f143-split-test-planning-py-by-page-start`. Report: [`.factory/reviews/f143-split-test-planning-py-by-page.md`](../reviews/f143-split-test-planning-py-by-page.md).
 > Planted by the owner on 2026-10-16.
 
 ## Notes
