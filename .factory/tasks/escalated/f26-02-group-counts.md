@@ -28,3 +28,12 @@ Read `.factory/cards/f26-i-want-to-see-numbers-next.md` (D2 as built, D3, D4), t
 - the tests assert each heading's exact text, and would fail on main
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 183054
+logs: .factory/var/runs/20261029-043403/f26-02-group-counts
+```
