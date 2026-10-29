@@ -79,6 +79,42 @@ def test_the_adrs_a_ticket_relies_on_are_the_ones_it_names(text, adrs):
     assert planner.named_adrs(text) == adrs
 
 
+PAGE = ".factory/cards/f9-mockup/a.html"
+PLAN = {**PROPOSAL, "id": "plan-9", "kind": "plan", "path": ".factory/cards/f9-x.md"}
+
+
+def test_a_mockup_the_reply_did_not_list_is_listed_by_the_runner():
+    reply = planner.parse_reply(_reply({"points": POINTS, "proposals": [PLAN]}))
+    listed = planner.with_mockups(reply, {PAGE: "<html><title> The  board\n</title></html>"})
+    assert listed.proposals[0] == PLAN
+    mockup = listed.proposals[1]
+    assert (mockup["kind"], mockup["path"], mockup["id"]) == ("mockup", PAGE, "a-mockup")
+    assert mockup["title"] == "The board"
+    assert mockup["key_points"][0]["title"] == "Listed by the runner"
+    assert len(listed.proposals) == 2
+
+
+def test_a_mockup_without_a_title_is_named_by_its_file_and_a_blockless_reply_gets_it():
+    listed = planner.with_mockups(planner.parse_reply("All text."), {PAGE: "<html></html>"})
+    assert listed.note is not None
+    assert [(p["path"], p["title"]) for p in listed.proposals] == [(PAGE, "a.html")]
+
+
+def test_a_mockup_a_proposal_names_is_not_listed_twice():
+    own = {**PLAN, "kind": "mockup", "path": PAGE}
+    reply = planner.parse_reply(_reply({"points": POINTS, "proposals": [own]}))
+    assert planner.with_mockups(reply, {PAGE: "<title>T</title>"}).proposals == (own,)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [".factory/cards/f9-mockup/a.css", ".factory/cards/f9/a.html", "docs/a.html"],
+)
+def test_only_mockup_pages_are_listed(path):
+    reply = planner.parse_reply(_reply({"points": POINTS}))
+    assert planner.with_mockups(reply, {path: "x"}).proposals == ()
+
+
 def test_a_reply_without_proposals_has_none():
     reply = planner.parse_reply(_reply({"points": POINTS}))
     assert reply.points == tuple(POINTS) and reply.proposals == ()

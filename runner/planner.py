@@ -13,7 +13,7 @@ import statistics
 import subprocess
 import unicodedata
 from collections.abc import Collection, Iterable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -810,6 +810,48 @@ def parse_reply(text: str, known: Collection[str] = ()) -> Reply:
     title, ignored = _title(given)
     said = "\n\n".join(part for part in around if part)
     return Reply(said, points, proposals, title=title, ignored=ignored)
+
+
+_MOCKUP_FILE_RE = re.compile(r"\.factory/cards/[^/]+-mockup/[^/]+\.html")
+_PAGE_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+
+
+def is_mockup_file(path: str) -> bool:
+    """A mock-up page a card's drafts hold: an ``.html`` file straight in ``-mockup/``."""
+    return _MOCKUP_FILE_RE.fullmatch(path) is not None
+
+
+def with_mockups(reply: Reply, files: Mapping[str, str]) -> Reply:
+    """F152: the reply with a ``mockup`` proposal for each mock-up in ``files`` (path to page
+    text, the ones the job added or changed) that no proposal names as its ``path``. The
+    proposal page shows a mock-up only from one."""
+    named = {proposal.get("path") for proposal in reply.proposals}
+    taken = {proposal.get("id") for proposal in reply.proposals}
+    listed = []
+    for path in sorted(files):
+        if not is_mockup_file(path) or path in named:
+            continue
+        stem = path.rsplit("/", 1)[-1].removesuffix(".html")
+        found = _PAGE_TITLE_RE.search(files[path])
+        title = " ".join(found[1].split()) if found else ""
+        listed.append(
+            {
+                "id": f"{stem}-mockup" if f"{stem}-mockup" not in taken else f"{path}-mockup",
+                "kind": "mockup",
+                "title": title or path.rsplit("/", 1)[-1],
+                "path": path,
+                "key_points": [
+                    {
+                        "n": 1,
+                        "title": "Listed by the runner",
+                        "text": "The lead drew this mock-up without listing it.",
+                    }
+                ],
+            }
+        )
+    if not listed:
+        return reply
+    return replace(reply, proposals=reply.proposals + tuple(listed))
 
 
 def _title(given: object) -> tuple[str | None, str | None]:

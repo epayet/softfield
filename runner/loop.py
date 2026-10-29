@@ -4224,13 +4224,14 @@ def _plan_branch(s: Session, branch: str) -> bool:
     return False
 
 
-def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool) -> None:
+def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool) -> dict[str, str]:
     """After a planner job: commit its drafts on ``branch`` and go back to main (f6 D4). What
     it changed outside the drafts' folders and its card's ready tickets (a replan's, f6-13) is
-    dropped; a new branch with no drafts goes."""
+    dropped; a new branch with no drafts goes. Returns the mock-up pages the commit added or
+    changed, path to text (F152)."""
     if s.git.current_branch() != branch:  # never commit drafts anywhere else
         s.git.checkout(MAIN)
-        return
+        return {}
     status = s.git.run("status", "--porcelain", "--untracked-files=all").splitlines()
     stray = [(line[:2], line[3:]) for line in status if not planner.is_draft(line[3:], thread)]
     for code, path in stray:
@@ -4241,12 +4242,18 @@ def _commit_drafts(s: Session, thread: str, branch: str, subject: str, new: bool
     if stray:
         dropped = ", ".join(path for _, path in stray)
         s.report.notes.append(f"The planner's {subject} changed {dropped}, outside its drafts.")
-    s.git.commit_all(
+    pages: dict[str, str] = {}
+    if s.git.commit_all(
         with_trailers(f"planner {subject}: drafts (by Claude)", agent=CLAUDE_HEADLESS_AGENT)
-    )
+    ):
+        changed = s.git.run("diff", "--name-only", "--diff-filter=AM", "HEAD~1", "HEAD")
+        for path in changed.splitlines():
+            if planner.is_mockup_file(path):
+                pages[path] = (s.repo / path).read_text(encoding="utf-8", errors="replace")
     s.git.checkout(MAIN)
     if new and not s.git.run("rev-list", f"{MAIN}..{branch}").strip():
         s.git.run("branch", "-q", "-D", branch)
+    return pages
 
 
 def _auto_merge(s: Session, reply: planner.Reply, thread: str) -> planner.Reply:
@@ -4469,17 +4476,19 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
     )
     milestone = "" if thread == planner.GENERAL else full_key(s.repo, thread)
     new = branch is not None and _plan_branch(s, branch)
+    pages: dict[str, str] = {}
     try:
         result = call_claude(s, job, milestone, row.subject, park=True)
     except Parked:
         return
     finally:
         if branch is not None:
-            _commit_drafts(s, thread, branch, row.subject, new)
+            pages = _commit_drafts(s, thread, branch, row.subject, new)
     if result.ok:
         reply = planner.parse_reply(
             result.text, planner.cards(s.repo)
         )  # main's: merges apply there
+        reply = planner.with_mockups(reply, pages)
     else:  # its message is the owner's to send again
         failed = f"the lead's job failed ({result.text.strip()[:200]}): send the message again"
         reply = planner.Reply("", note=failed)
@@ -4504,7 +4513,7 @@ def run_planner(s: Session, row: dispatch.Queued) -> None:
         now().isoformat(),
         planner.stored_text(reply),
         points=None if reply.note else reply.points,
-        proposals=None if reply.note else reply.proposals,
+        proposals=None if reply.note and not reply.proposals else reply.proposals,
         job_id=s.last_job_id,
     )
     name = planner.thread_name(thread)
