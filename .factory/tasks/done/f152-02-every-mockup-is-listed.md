@@ -26,3 +26,10 @@ F152's first reply drew `.factory/cards/f152-mockup/review-note.html` but listed
 - a changed mock-up file is listed like an added one; a removed one, a `.css` beside it, or a file outside `-mockup/` is not
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
