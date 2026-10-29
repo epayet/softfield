@@ -100,7 +100,9 @@ def _restart() -> None:
     """Carry on in a fresh process: Claude changed runner/, and Python keeps the old modules.
     The switches are in state.json, so nothing else is handed on."""
     print("runner: the runner's code changed; restarting.", flush=True)
-    argv_again = [sys.executable, "-m", "runner.cli", *sys.argv[1:]]
+    # -P: not from the folder it runs in, or Softfield's own work tree shadows ``live`` and
+    # ``live`` never moves again (2026-10-29: 122 commits behind, the runner on task branches)
+    argv_again = [sys.executable, "-P", "-m", "runner.cli", *sys.argv[1:]]
     env = dict(os.environ)
     env[RESTARTED_ENV] = "1"  # so `--use-reserve` doesn't start its 24 hours again
     os.execve(sys.executable, argv_again, env)  # noqa: S606 - our own interpreter and args

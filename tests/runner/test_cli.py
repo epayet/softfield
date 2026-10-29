@@ -144,6 +144,7 @@ def test_runner_run_restarts_itself_after_a_runner_change(in_repo, monkeypatch):
     with pytest.raises(Restarted):
         cli.main(["run", "--here"])
     assert argvs[0][-1] == "run"
+    assert "-P" in argvs[0]  # 2026-10-29: run from the repo, its work tree's code shadowed live's
     assert envs[0][cli.RESTARTED_ENV] == "1"
 
 
