@@ -33,3 +33,12 @@ Read `factory_dashboard/templates/proposal.html` (the `#mockup` iframe and the `
 - after sending, the request's answer shows in the dock at 390 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 97641
+logs: .factory/var/runs/20261029-005226/f42-01-review-page-room
+```
