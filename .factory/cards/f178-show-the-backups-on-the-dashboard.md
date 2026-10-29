@@ -1,4 +1,4 @@
-# Milestone F178: Show the backups on the dashboard: how many copies, their…
+# Milestone F178: Backups on the dashboard: copies, size, last copy, and a desk item on failure
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-27.
