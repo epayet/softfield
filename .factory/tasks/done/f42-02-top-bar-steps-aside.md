@@ -26,3 +26,12 @@ Read the top bar and its script in `factory_dashboard/templates/base.html`, `hea
 - at 1024 px scrolling down leaves the bar in view, as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 5472
+gate_failures: ['stopped', 'stopped']
+tokens: 594134
+```
