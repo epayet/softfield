@@ -6,6 +6,9 @@
 ## Notes
 Planner replies cost half of Claude's week (19 Oct: $150 of $305, $2.58 a reply): find what makes a reply cost that much and cut it, keeping planning on Opus
 
+### From F189: I just talked somewhere about adding new logic to use… (merged by the lead on 2026-10-29)
+I just talked somewhere about adding new logic to use --resume Claude if under 5 minutes but not if longer and send the whole thread as new chat instead. Actually, why not --resume all the time? Why the extra logic? Claude might change the cache time over time
+
 ## Plan (lead, 2026-10-27)
 - **Expected outcome:** the dashboard shows what each Claude job really cost, and a planner reply on a thread the owner comes back to hours later costs about half what it does now. Planning stays on Opus.
 - **Done when:** a resumed job's cost is its own, past rows included; a planner reply more than an hour after the thread's last one starts a fresh session with the thread's history.
