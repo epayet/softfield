@@ -19,6 +19,7 @@ from tests.factory_dashboard.conftest import (
     LOCAL,
     NOW,
     OPUS,
+    PLANNING_PLAN,
     PROJECT,
     _at,
 )
@@ -672,17 +673,19 @@ def test_desk_heading_leaves_out_what_is_on_its_way(planning, db_path, serve):
 # --- archiving a thread (the owner, 2026-10-07) ---------------------------------------------
 
 
-def _archive(db_path: Path, project_id: int, card: str, ago: timedelta) -> None:
+def _archive(
+    db_path: Path, project_id: int, card: str, ago: timedelta, why: str | None = None
+) -> None:
     def write(conn: sqlite3.Connection) -> None:
         found = metrics.find_thread(conn, project_id, card)
         assert found is not None, card
-        metrics.set_thread_archived(conn, found["id"], _at(ago))
+        metrics.set_thread_archived(conn, found["id"], _at(ago), why)
 
     _write(db_path, write)
 
 
-def _archived(html: str) -> list[tuple[str, str]]:
-    found = re.search(r'<details id="archived"(.*?)</details>', html, re.S)
+def _archived(html: str, list_id: str = "archived") -> list[tuple[str, str]]:
+    found = re.search(rf'<details id="{list_id}"(.*?)</details>', html, re.S)
     return [] if found is None else _items(found[1])
 
 
@@ -710,6 +713,87 @@ def test_the_archived_list_shows_the_most_recently_archived_first(planning, db_p
     assert found is not None
     assert "Archived · 2" in _text(found[1])
     assert "archived 30 min ago" in found[1] and "archived 2 h ago" in found[1]
+
+
+# --- set aside: archived by the owner with a proposal still open (F73 D1) --------------------
+
+
+def _set_aside_words(html: str) -> str:
+    found = re.search(r'<details id="set-aside"(.*?)</details>', html, re.S)
+    return "" if found is None else _text(found[1])
+
+
+def _f6_latest(db_path: Path, project_id: int, proposals: list[dict[str, Any]]) -> None:
+    """F6's lead lists ``proposals`` 40 min ago, after the fixture's own reply."""
+
+    def write(conn: sqlite3.Connection) -> None:
+        found = metrics.find_thread(conn, project_id, "f6")
+        assert found is not None
+        at = _at(timedelta(minutes=40))
+        metrics.add_planner_message(conn, found["id"], "lead", at, "Again.", proposals=proposals)
+
+    _write(db_path, write)
+
+
+def test_a_thread_the_owner_archived_with_an_open_plan_is_set_aside(planning, db_path, serve):
+    """F6's latest lead message holds an open ADR and an open plan; the general thread lists
+    no proposal: archived by the owner, F6 is set aside and the general thread archived."""
+    client = serve()
+    _archive(db_path, planning, "general", timedelta(hours=2), "by you")
+    _archive(db_path, planning, "f6", timedelta(minutes=30), "by you")
+    html = _page(client)
+    assert _archived(html, "set-aside") == [("/planning/f6", "The planning room")]
+    assert [link for link, _ in _archived(html)] == ["/planning/general"]
+    words = _set_aside_words(html)
+    assert "Set aside · 1" in words and "1 ADR, 1 plan · set aside 30 min ago" in words
+    archived = re.search(r'<details id="archived"(.*?)</details>', html, re.S)
+    assert archived is not None and "Archived · 1" in _text(archived[1])
+    assert re.search(r'<details id="set-aside"(?![^>]*\bopen\b)', html)  # closed
+    assert html.index('id="set-aside"') < html.index('id="archived"')
+
+
+def test_a_thread_archived_as_approved_stays_under_archived(planning, db_path, serve):
+    """The same open proposals, but archived by an approval and not by the owner."""
+    _archive(db_path, planning, "f6", timedelta(minutes=30), "approved")
+    html = _page(serve())
+    assert 'id="set-aside"' not in html
+    assert _archived(html) == [("/planning/f6", "The planning room")]
+
+
+@pytest.mark.parametrize("settled", ["applied", "rejected"])
+def test_a_thread_whose_only_proposal_is_settled_stays_under_archived(
+    planning, db_path, serve, settled
+):
+    if settled == "applied":
+        _f6_latest(db_path, planning, [{**PLANNING_PLAN, "applied": True}])
+    else:
+        _f6_latest(db_path, planning, [PLANNING_PLAN])
+        _finished(db_path, planning, "reject", "f6/plan", None, "rejected")
+    _archive(db_path, planning, "f6", timedelta(minutes=5), "by you")
+    html = _page(serve())
+    assert 'id="set-aside"' not in html
+    assert _archived(html) == [("/planning/f6", "The planning room")]
+
+
+def test_a_set_aside_thread_is_on_no_desk_group_and_not_in_the_planning_count(
+    planning, db_path, serve
+):
+    """Set aside or archived plainly, F6 leaves the desk and the Planning tab alike."""
+
+    def tab(html: str) -> str:
+        found = re.search(r'id="planning-tab">(.*?)</a>', html, re.S)
+        assert found is not None
+        return unescape(found[1])
+
+    client = serve()
+    _archive(db_path, planning, "f6", timedelta(minutes=30))
+    plain = _page(client)
+    _archive(db_path, planning, "f6", timedelta(minutes=30), "by you")
+    aside = _page(client)
+    assert _archived(aside, "set-aside") == [("/planning/f6", "The planning room")]
+    assert not any("/planning/f6" in group for group in _groups(aside).values())
+    assert tab(aside) == tab(plain)
+    assert _groups(aside).keys() == _groups(plain).keys()
 
 
 # --- "Didn't go through": the owner's words a request refused (F31 D9) -----------------------

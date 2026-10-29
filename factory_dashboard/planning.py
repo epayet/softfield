@@ -59,6 +59,7 @@ from runner.planner import (
     proposal_state,
     thread_name,
 )
+from runner.requests import BY_YOU
 from runner.tasks import (
     short_key,
 )
@@ -379,29 +380,84 @@ def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     return items
 
 
-def archived(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
-    """The archived threads, the most recently archived first (the owner, 2026-10-07). A
-    message from the owner opens one again."""
+def _put_aside(conn: sqlite3.Connection, project_id: int) -> dict[str, str]:
+    """F73 D1: the threads the owner archived themselves while their latest lead message that
+    lists proposals still has one open, each with what waits in it: ``1 ADR, 1 plan``."""
+    rows = conn.execute(
+        "SELECT t.card, m.at, m.proposals FROM planner_threads t"
+        " JOIN planner_messages m ON m.id = ("
+        "   SELECT max(id) FROM planner_messages WHERE thread_id = t.id AND author = 'lead'"
+        "   AND proposals IS NOT NULL AND proposals != '[]')"
+        " WHERE t.project_id = ? AND t.archived IS NOT NULL AND t.archived_why = ?",
+        (project_id, BY_YOU),
+    ).fetchall()
+    requests = conn.execute(
+        "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id", (project_id,)
+    ).fetchall()
+    waiting = {}
+    for row in rows:
+        since = _when(row["at"])
+        later = [r for r in requests if _when(r["created"]) > since]
+        kinds: dict[str, int] = {}
+        for proposal in json.loads(row["proposals"]):
+            if not isinstance(proposal, dict) or not proposal.get("id") or proposal.get(APPLIED):
+                continue
+            if proposal_state(proposal, row["card"], later) in (OPEN, ON_ITS_WAY):
+                kind = str(proposal.get("kind") or "proposal")
+                name = {"adr": "ADR", "mockup": "mock-up"}.get(kind, kind)
+                kinds[name] = kinds.get(name, 0) + 1
+        if kinds:
+            waiting[row["card"]] = ", ".join(
+                f"{n} {name}{'s' if n > 1 else ''}" for name, n in kinds.items()
+            )
+    return waiting
+
+
+def _archived_threads(
+    conn: sqlite3.Connection, project: str, now: datetime, aside: bool
+) -> list[DeskItem]:
+    """The archived threads set aside (``aside``) or not, the most recently archived first."""
     project_id = metrics.find_project(conn, project)
     if project_id is None:
         return []
     titles = _card_titles(conn, project_id)
+    waiting = _put_aside(conn, project_id)
     rows = conn.execute(
         "SELECT card, archived, archived_why FROM planner_threads"
         " WHERE project_id = ? AND archived IS NOT NULL ORDER BY archived DESC, id DESC",
         (project_id,),
     ).fetchall()
-    return [
-        DeskItem(
-            "archived",
-            _thread_title(r["card"], titles),
-            " · ".join(
-                filter(None, [r["archived_why"], f"archived {ago(now - _when(r['archived']))} ago"])
-            ),
-            f"/planning/{r['card']}",
+    items = []
+    for r in rows:
+        if (r["card"] in waiting) != aside:
+            continue
+        when = ago(now - _when(r["archived"]))
+        words = (
+            f"{waiting[r['card']]} · set aside {when} ago"
+            if aside
+            else " · ".join(filter(None, [r["archived_why"], f"archived {when} ago"]))
         )
-        for r in rows
-    ]
+        items.append(
+            DeskItem(
+                "set aside" if aside else "archived",
+                _thread_title(r["card"], titles),
+                words,
+                f"/planning/{r['card']}",
+            )
+        )
+    return items
+
+
+def archived(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
+    """The archived threads, the most recently archived first (the owner, 2026-10-07), but
+    those set aside (F73). A message from the owner opens one again."""
+    return _archived_threads(conn, project, now, aside=False)
+
+
+def set_aside(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
+    """F73 D1: the threads the owner archived with a proposal still open, to come back to,
+    the most recently archived first."""
+    return _archived_threads(conn, project, now, aside=True)
 
 
 def waiting_for_you(groups: list[DeskGroup]) -> list[DeskItem]:
@@ -531,6 +587,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "coming": c,
             "groups": desk(conn, project, now),
             "archived": archived(conn, project, now),
+            "set_aside": set_aside(conn, project, now),
         },
     )
 
