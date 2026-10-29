@@ -1,6 +1,6 @@
 # Milestone F26: I want to see numbers next to "Coming" and "Your desk" to have a sense of how many there are
 
-> **Status: planned** (2026-10-07, with the owner, in the planning room). **State:** ready · **Priority:** 7 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f26-i-want-to-see-numbers-next-start`. Report: [`.factory/reviews/f26-i-want-to-see-numbers-next.md`](../reviews/f26-i-want-to-see-numbers-next.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes

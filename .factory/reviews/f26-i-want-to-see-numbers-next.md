@@ -1,6 +1,6 @@
 # Review: F26 numbers next to "Coming" and "Your desk"
 
-- **Status:** reviewed on 2026-10-10 (round 1); waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 
