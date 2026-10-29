@@ -31,3 +31,10 @@ Read ADR 35 in `.factory/adr/35-a-marked-card-goes-first.md` (it must be Accepte
 - while the owner pauses, a lane ticket waits and a planner job is picked
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
