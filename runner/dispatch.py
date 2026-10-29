@@ -18,6 +18,10 @@ callers read the metrics database, ``.factory/tasks/`` and ``state.json``.
   meanwhile" (ADR 16 item 2) without a path of its own.
 - While the owner pauses the factory, every job waits, "paused by you" (ADR 22 item 5), but
   the planner's: the owner pauses to talk a change through on /planning (its ⚑, f6-14).
+- The fast lane goes before everything (ADR 35 item 2): the caller's ``first`` (a lane card's
+  tickets and what they wait for), each queued direction or escalation about one of them,
+  then those tickets in the order given. They may use both of Claude's reserves (item 4),
+  never a real limit, and the owner's pause holds them too (item 5).
 """
 
 import sqlite3
@@ -38,6 +42,8 @@ TICKET = "ticket"
 CLAUDE = "claude"
 COST = 0.0  # a job's share of Claude's windows isn't learned yet (`loop.LEAD_COST`)
 SUPPORT_RESERVE = "seven_day"  # the week's reserve is the support roles' (ADR 15 item 4)
+LANE_RESERVES = frozenset({"seven_day", "five_hour"})  # the fast lane's (ADR 35 item 4)
+GOES_WITH = (ESCALATION, DIRECTION)  # a ticket's own work: it joins the lane with it
 UNKNOWN_KIND = "unknown kind of job"
 PAUSED = "paused by you"  # the owner paused the factory (f5-18): every line but planning waits
 
@@ -109,9 +115,10 @@ def pick(
     now: datetime,
     *,
     paused: bool = False,
+    first: Collection[str] = frozenset(),
 ) -> Pick | None:
     """The job that runs next, or None when every one waits."""
-    lines = plan(queued, tickets, windows, now, paused=paused)
+    lines = plan(queued, tickets, windows, now, paused=paused, first=first)
     return next((line.pick for line in lines if not line.waits), None)
 
 
@@ -122,14 +129,20 @@ def plan(
     now: datetime,
     *,
     paused: bool = False,
+    first: Collection[str] = frozenset(),
 ) -> list[Line]:
-    """Every job in the order it would run, each with what it waits for. While the owner
-    pauses the factory (ADR 22 item 5), every one waits for them but a planner job, which
-    keeps its own wait (its ⚑, f6-14)."""
+    """Every job in the order it would run, each with what it waits for, the fast lane's
+    (``first``'s ticket ids) on top. While the owner pauses the factory (ADR 22 item 5), every
+    one waits for them but a planner job, which keeps its own wait (its ⚑, f6-14)."""
     rows = sorted(queued, key=lambda q: (_rank(q.kind), _at(q.created), q.id or 0))
+    lane_rows = [q for q in rows if q.kind in GOES_WITH and q.subject in first]
+    rows = [q for q in rows if not (q.kind in GOES_WITH and q.subject in first)]
+    lane = [_queued_line(q, windows, now, LANE_RESERVES) for q in lane_rows]
+    lane += [_ticket_line(t, windows, now, lane=True) for t in tickets if t.id in first]
+    tickets = [t for t in tickets if t.id not in first]
     ordered = sorted(tickets, key=lambda t: _ticket_rank(t, now))  # stable: the run order
     regate = [_ticket_line(t, windows, now) for t in ordered if t.regate]
-    lines = [_queued_line(q, windows, now) for q in rows if q.kind == PLANNER]
+    lines = lane + [_queued_line(q, windows, now) for q in rows if q.kind == PLANNER]
     lines += regate  # after the planner's jobs, before every other job (bug-04)
     lines += [_queued_line(q, windows, now) for q in rows if q.kind in KINDS and q.kind != PLANNER]
     lines += [_ticket_line(t, windows, now) for t in ordered if not t.regate]
@@ -152,17 +165,21 @@ def _ticket_rank(t: Ticket, now: datetime) -> int:
     return 1 if t.lead else 2
 
 
-def _queued_line(q: Queued, windows: Windows, now: datetime) -> Line:
+def _queued_line(
+    q: Queued, windows: Windows, now: datetime, reserves: Collection[str] = frozenset()
+) -> Line:
     job = Pick(q.kind, q.subject, q.reason)
     if q.not_before is not None and (until := _at(q.not_before)) > now:
         return Line(job, f"waits until {_when(until, now)}")
-    return Line(job, _claude_says(windows, now, {SUPPORT_RESERVE, *windows.reserves}))
+    return Line(job, _claude_says(windows, now, {SUPPORT_RESERVE, *windows.reserves, *reserves}))
 
 
-def _ticket_line(t: Ticket, windows: Windows, now: datetime) -> Line:
+def _ticket_line(t: Ticket, windows: Windows, now: datetime, *, lane: bool = False) -> Line:
     who = "lead" if t.lead else "developer"
     place = f"early for {t.early_for}" if t.early_for else f"priority {t.priority}"
     reason = "its gates wait" if t.regate else place
+    if lane:
+        reason = f"fast lane, {reason}"
     reason += f", {who} ticket"
     if t.not_before is not None and t.not_before <= now:
         reason += ", its reset has passed"
@@ -175,7 +192,7 @@ def _ticket_line(t: Ticket, windows: Windows, now: datetime) -> Line:
         return Line(job, f"waits until {_when(t.not_before, now)}")
     if not t.lead:
         return Line(job, None)
-    return Line(job, _claude_says(windows, now, windows.reserves))
+    return Line(job, _claude_says(windows, now, LANE_RESERVES if lane else windows.reserves))
 
 
 def _claude_says(windows: Windows, now: datetime, reserves: Collection[str]) -> str | None:

@@ -437,6 +437,66 @@ def test_a_regate_ticket_that_waits_waits_as_today(repo, monkeypatch):
     loop.close_session(s)
 
 
+def _fast_lane(repo: Path, key: str, place: int) -> None:
+    """The owner put ``key``'s card, at ``place`` on the board, in the fast lane (ADR 35)."""
+    _milestone_doc(repo, key, f"> **State:** ready · **Priority:** {place} · **Fast lane:** yes")
+
+
+def _lane_session(repo: Path, monkeypatch, *, limited: bool = False):
+    """f1-01 (a developer's, first on the board), f2-01 parked with its reset passed, and the
+    lane's f9-01 (lead), which waits for f20-01 (a developer's, last on the board)."""
+    _on_card(repo, "f1-01-first", 1)
+    _on_card(repo, "f2-01-parked", 2)
+    _on_card(repo, "f9-01-lane", 9, deps="[f20-01-dep]", agent="lead")
+    _fast_lane(repo, "f9", 9)
+    _on_card(repo, "f20-01-dep", 20)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    s = loop.open_session(_config(repo), None)
+    s.state.parked["f2-01-parked"] = {
+        "kind": "limit",
+        "branch": "",
+        "session_id": "",
+        "resets_at": "2026-01-01T00:00:00+00:00",
+    }
+    monkeypatch.setattr(loop, "_limits_ahead", lambda *a, **k: [object()] if limited else [])
+    monkeypatch.setattr(loop, "_waits_for_the_owner", lambda *a: limited)
+    return s, load_dir(repo / ".factory" / "tasks" / "ready", 150)
+
+
+def test_the_fast_lane_goes_before_a_due_parked_ticket_and_the_board(repo, monkeypatch):
+    """ADR 35 item 2: what the lane waits for first, then the lane's own ticket."""
+    s, ready = _lane_session(repo, monkeypatch)
+    task = loop._next_task(s, ready, set(), set())
+    assert task is not None and task.id == "f20-01-dep"
+    rest = [t for t in ready if t.id != "f20-01-dep"]
+    task = loop._next_task(s, rest, {"f20-01-dep"}, set())
+    assert task is not None and task.id == "f9-01-lane"
+    loop.close_session(s)
+
+
+def test_with_claude_limited_the_line_goes_on_while_the_lanes_lead_ticket_waits(repo, monkeypatch):
+    """ADR 35 item 5: a real limit holds the lane, and the next job is picked."""
+    s, ready = _lane_session(repo, monkeypatch, limited=True)
+    del s.state.parked["f2-01-parked"]
+    rest = [t for t in ready if t.id != "f20-01-dep"]
+    task = loop._next_task(s, rest, {"f20-01-dep"}, set())
+    assert task is not None and task.id == "f1-01-first"
+    loop.close_session(s)
+
+
+def test_dry_run_lists_the_fast_lane_first(repo, capsys):
+    _on_card(repo, "f1-01-first", 1)
+    _on_card(repo, "f9-01-lane", 9)
+    _fast_lane(repo, "f9", 9)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "cards")
+    out = _dry_run(repo, capsys)
+    assert "-> f9-01-lane: runnable, fast lane, priority 9, developer ticket" in out
+    assert out.index("f9-01-lane:") < out.index("f1-01-first:")
+    assert "next: f9-01-lane" in out
+
+
 def test_a_signed_off_milestone_releases_the_tickets_waiting_for_it(repo, capsys):
     _waiting_milestones(repo)
     (repo / ".factory" / "cards" / "m1-first.md").write_text(
@@ -5064,11 +5124,11 @@ def _leads_in_order(
     script.extend([lead] * count)
 
 
-def test_past_the_week_mark_a_marked_cards_lead_ticket_runs_after_the_developers(
+def test_past_the_week_mark_a_marked_cards_lead_ticket_runs_before_the_developers(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):
-    """ADR 34 items 3 and 6: developer tickets first, then the marked card's lead ticket; the
-    unmarked one parks as before, though it comes first by milestone."""
+    """ADR 34 item 3, ADR 35 item 2: the fast lane's lead ticket first, then developer tickets;
+    the unmarked one parks as before, though it comes first by milestone."""
     _readings_at(repo, 0.79)
     _marked(repo, "m2")
     _card_ticket(repo, "m1-01-lead")
@@ -5081,14 +5141,14 @@ def test_past_the_week_mark_a_marked_cards_lead_ticket_runs_after_the_developers
     _passes(monkeypatch)
     report = _run(repo)
     assert [(t.id, t.result) for t in report.tasks] == [
-        ("m1-02-thing", "done"),
         ("m2-01-lead", "done"),
+        ("m1-02-thing", "done"),
     ]
     assert set(_state(repo).parked) == {"m1-01-lead"}
     assert {(i["kind"], i["subject"]) for i in _rows(repo, "owner_items")} == {
         ("reserve", "m1-01-lead")
     }
-    assert fake_clock[0] == THURSDAY
+    assert fake_clock[0] < THURSDAY + timedelta(minutes=1)  # no wait for a reset
 
 
 def test_the_tickets_a_marked_card_waits_for_pass_the_reserve_too(

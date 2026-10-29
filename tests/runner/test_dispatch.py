@@ -243,3 +243,81 @@ def test_while_the_owner_pauses_a_planner_job_still_goes_and_keeps_its_own_wait(
     [line] = plan([_row("planner", "f6/1")], [], limited, NOW, paused=True)
     assert line.waits == "Claude is limited until Mon 5 Oct 14:00"
     assert pick([parked], tickets, OPEN, NOW, paused=True) is None
+
+
+# --- The fast lane (ADR 35) --------------------------------------------------------------
+
+LANE_QUEUE = [
+    _row("review", "f7", minutes_ago=50),
+    _row("checkpoint", "f8", minutes_ago=40),
+    _row("direction", "f8-05", minutes_ago=30),
+    _row("escalation", "f8-04", minutes_ago=20),
+    _row("planner", "f9", minutes_ago=10),
+]
+
+
+def test_a_fast_lane_ticket_goes_before_the_planner_a_checkpoint_and_a_review():
+    """ADR 35 item 2: before everything, a parked ticket whose reset has passed included."""
+    parked = _dev("f8-07", 1, not_before=NOW - timedelta(minutes=1))
+    tickets = [parked, _lead("f8-02", 2), _dev("f172-01", 50)]
+    got = pick(LANE_QUEUE, tickets, OPEN, NOW, first={"f172-01"})
+    assert got == Pick("ticket", "f172-01", "fast lane, priority 50, developer ticket")
+    lines = plan(LANE_QUEUE, tickets, OPEN, NOW, first={"f172-01"})
+    assert _order(lines)[0] == ("ticket", "f172-01")
+    assert len(lines) == 8
+
+
+def test_a_direction_or_escalation_for_a_lane_ticket_goes_with_it():
+    """ADR 35 item 2: it is that ticket's own work; one for another ticket keeps its place."""
+    lines = plan(LANE_QUEUE, [_lead("f8-02", 2)], OPEN, NOW, first={"f8-05", "f8-02"})
+    assert _order(lines) == [
+        ("direction", "f8-05"),
+        ("ticket", "f8-02"),
+        ("planner", "f9"),
+        ("escalation", "f8-04"),
+        ("checkpoint", "f8"),
+        ("review", "f7"),
+    ]
+    got = pick(LANE_QUEUE, [], OPEN, NOW, first={"f8-05"})
+    assert got == Pick("direction", "f8-05", "why direction f8-05")
+
+
+def test_inside_the_lane_the_order_the_caller_gives():
+    """ADR 35 item 3: the board's order (`pick_next`'s), not lead before developer."""
+    tickets = [_dev("f90-01", 3), _lead("f142-01", 9), _lead("f8-02", 1)]
+    lines = plan([], tickets, OPEN, NOW, first={"f90-01", "f142-01"})
+    assert [line.pick.subject for line in lines] == ["f90-01", "f142-01", "f8-02"]
+
+
+def test_without_a_lane_the_lines_are_todays():
+    queued = [*LANE_QUEUE, _row("mystery", "x")]
+    tickets = [
+        _dev("f8-07", 1),
+        _lead("f8-02", 2),
+        _dev("f8-09", 5, regate=True),
+        _dev("f8-08", 4, not_before=NOW - timedelta(minutes=1)),
+    ]
+    assert plan(queued, tickets, OPEN, NOW, first=()) == plan(queued, tickets, OPEN, NOW)
+
+
+def test_a_lane_lead_ticket_waits_for_a_real_limit_and_the_line_goes_on():
+    """ADR 35 items 4 and 5: both reserves, but not a limit; a developer ticket goes meanwhile."""
+    limited = Windows(limited_until=NOW + timedelta(hours=2))
+    tickets = [_lead("f172-01", 9), _dev("f8-07", 2)]
+    lines = plan([], tickets, limited, NOW, first={"f172-01"})
+    assert lines[0].waits == "Claude is limited until Mon 5 Oct 14:00"
+    got = pick([], tickets, limited, NOW, first={"f172-01"})
+    assert got is not None and got.subject == "f8-07"
+    at_reserve = Windows(claude=(_week(0.75),))
+    assert pick([], tickets, at_reserve, NOW, first={"f172-01"}) == Pick(
+        "ticket", "f172-01", "fast lane, priority 9, lead ticket"
+    )
+
+
+def test_while_the_owner_pauses_the_lane_waits_and_the_planner_goes():
+    """ADR 35 item 5: the pause stays the owner's one stop."""
+    tickets = [_lead("f172-01", 9)]
+    lines = plan(LANE_QUEUE, tickets, OPEN, NOW, paused=True, first={"f172-01", "f8-05"})
+    assert {line.pick.subject: line.waits for line in lines}["f172-01"] == "paused by you"
+    got = pick(LANE_QUEUE, tickets, OPEN, NOW, paused=True, first={"f172-01", "f8-05"})
+    assert got is not None and got.kind == "planner"

@@ -4784,14 +4784,14 @@ def _waits_for_the_owner(s: Session, at: datetime, task: Task, marked: set[str])
 
 def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) -> Task | None:
     """A ticket waiting only for its gates (`state.regate`) goes first, whatever Claude's state:
-    its gates run before main moves on and its work is thrown away. Then parked tickets whose
-    reset has passed; while Claude is limited, only work that
-    needs no Claude: developer tickets, which local takes. At Claude's reserve or the owner's
-    share of its 5-hour window with its switch off, developer tickets go before lead ones, so
-    a lead ticket parks only when nothing else can run (ADR 15 item 5, ADR 16 item 3); then the
-    tickets of a card marked to use the reserve, and what they wait for (ADR 34 item 6). Each
-    by priority (f5 D6), a ticket waited for in its first waiter's place, read from the whole
-    ready list (F173 D6)."""
+    its gates run before main moves on and its work is thrown away. Then the fast lane's
+    (`reserve_cards`, ADR 35 item 2): a lane card's tickets and what they wait for, one that
+    can't run passed over. Then parked tickets whose reset has passed; while Claude is limited,
+    only work that needs no Claude: developer tickets, which local takes. At Claude's reserve
+    or the owner's share of its 5-hour window with its switch off, developer tickets go before
+    lead ones, so a lead ticket parks only when nothing else can run (ADR 15 item 5, ADR 16
+    item 3). Each by priority (f5 D6), a ticket waited for in its first waiter's place, read
+    from the whole ready list (F173 D6)."""
     at = now()
     cards = _cards(s.repo, ready)
     pulled = pulls(ready, cards)
@@ -4800,19 +4800,21 @@ def _next_task(s: Session, ready: list[Task], done: set[str], paused: set[str]) 
         return task
     held = {t.id for t in ready if t.id in s.state.parked}
     due = [t for t in ready if t.id in held and _due(s.state.parked[t.id], at)]
-    if (task := pick_next(due, done, paused, cards, pulled)) is not None:
-        return task
     limited = bool(_limits_ahead(s, at, five_hour=False))
     free = [t for t in ready if t.id not in held and not (limited and t.agent != "developer")]
+    marked = reserve_cards(s.repo, ready)
+    lane = [t for t in due + free if t.id in marked]
+    if (task := pick_next(lane, done, paused, cards, pulled)) is not None:
+        return task
+    if (task := pick_next(due, done, paused, cards, pulled)) is not None:
+        return task
     task = pick_next(free, done, paused, cards, pulled)
     if task is None or task.agent != "lead":
         return task
-    marked = reserve_cards(s.repo, ready)
     if not _waits_for_the_owner(s, at, task, marked):
         return task
     developers = pick_next([t for t in free if t.agent != "lead"], done, paused, cards, pulled)
-    passing = pick_next([t for t in free if t.id in marked], done, paused, cards, pulled)
-    return developers or passing or task
+    return developers or task
 
 
 def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queued]) -> bool:
@@ -5103,7 +5105,9 @@ def work_queue(
     `dispatch.pick` returns; the next ticket is `_next_task`'s. Returns True if Claude (a lead
     ticket or an escalation) changed the runner, which needs a restart.
 
-    A queued job goes before any ticket, a parked one once its reset has passed; a ticket
+    The fast lane goes before everything (ADR 35 item 2): its tickets, and a queued direction
+    or escalation about one of them. Otherwise a queued job goes before any ticket, a parked
+    one once its reset has passed; a ticket
     parked for a Claude limit goes first among tickets once its reset has passed. Until then
     only developer tickets run, and with none left the queue sleeps until the earliest reset.
     Claude's windows are checked by each job as it starts (a stand-in, a park), so the pick
@@ -5155,7 +5159,10 @@ def work_queue(
         )
         tickets = [] if task is None else [_dispatch_ticket(s, task, ready)]
         paused_by_owner = s.state.owner_pause is not None
-        job = dispatch.pick(rows, tickets, dispatch.Windows(), now(), paused=paused_by_owner)
+        lane = reserve_cards(s.repo, ready)  # the fast lane (ADR 35)
+        job = dispatch.pick(
+            rows, tickets, dispatch.Windows(), now(), paused=paused_by_owner, first=lane
+        )
         if once and ran and (job is None or job.kind == dispatch.TICKET):
             return False
         if job is None:
@@ -5586,7 +5593,14 @@ def dry_run_plan(cfg: Config) -> None:
             *(("five_hour",) if switch_on(state, FIVE_HOUR, at) else ()),
         },
     )
-    lines = dispatch.plan(queued, tickets, windows, at, paused=state.owner_pause is not None)
+    lines = dispatch.plan(
+        queued,
+        tickets,
+        windows,
+        at,
+        paused=state.owner_pause is not None,
+        first=reserve_cards(cfg.repo, ready),
+    )
     _print_plan(lines, ready, done, paused, cfg.repo)
 
 
