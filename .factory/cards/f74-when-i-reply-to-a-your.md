@@ -1,6 +1,7 @@
 # Milestone F74: when i reply to a 'your answers wanted' thread, there's a…
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** done · **Priority:** 4 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f74-when-i-reply-to-a-your-start`. Report: [`.factory/reviews/f74-when-i-reply-to-a-your.md`](../reviews/f74-when-i-reply-to-a-your.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes

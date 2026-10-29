@@ -1,6 +1,6 @@
 # Review: F74, one box per conversation on the planning desk
 
-- **Status:** review round 1 done; waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 
