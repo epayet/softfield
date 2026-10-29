@@ -47,6 +47,7 @@ from tests.factory_dashboard.test_planning import (
     _values,
     _write,
 )
+from tests.factory_dashboard.test_proposal import _REVIEW_MOCKUP, ADR_ON_MAIN
 from tests.layout import DISPLAY, PHONE, layout_problems
 from tests.runner.conftest import git
 
@@ -1231,3 +1232,62 @@ def test_no_notes_none_or_the_general_thread_show_no_note(planning, checkout, se
 def test_a_repo_that_is_not_a_folder_shows_no_note(planning, db_path, serve):
     _write(db_path, lambda conn: metrics.upsert_project(conn, PROJECT, repo="https://x/y.git"))
     assert 'id="note"' not in _thread(serve(), "f9")
+
+
+def test_the_dock_is_compact_on_a_phone(page, planning, db_path, serve, checkout):
+    """At 390 × 844 the dock is at most 72 px tall and still holds the count, the button and
+    the closed Reject… fold on one row, the button in view; opened, the fold may grow the
+    dock."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    for rel, text in (
+        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/mockup")
+    dock = page.locator(".proposal-page .dock")
+    height = dock.evaluate("e => e.offsetHeight")
+    assert height <= 72, height
+    assert not page.locator(".dock > h2").is_visible()
+    assert not page.locator("#review-status").is_visible()
+    row = ("#review-count", "#approve-plan", "#reject > summary")
+    boxes = [page.locator(s).bounding_box() for s in row]
+    dock_box = dock.bounding_box()
+    assert dock_box
+    for box in boxes:
+        assert box and dock_box["y"] <= box["y"]
+        assert box["y"] + box["height"] <= dock_box["y"] + height
+    # this page is shorter than the screen, so the dock sits in the flow: Send at the bottom on a
+    # long page is test_on_a_phone_one_point_shows_at_a_time's check
+    box = boxes[1]
+    assert box and box["y"] + box["height"] <= PHONE["height"]
+    page.locator("#reject > summary").click()
+    assert page.locator("#reject-button").is_visible()
+
+
+def test_the_review_status_shows_after_sending_on_a_phone(page, planning, db_path, serve, checkout):
+    """After sending, the request's answer shows in the dock at 390 px."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    for rel, text in (
+        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/mockup")
+    page.click("#approve-plan")
+    page.wait_for_selector("#review-status >> text=Asked")
+    status = page.locator("#review-status")
+    assert status.is_visible()
+    assert "Asked" in status.inner_text()

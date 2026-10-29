@@ -26,6 +26,7 @@
     </header>
 
     {% if mockup %}
+    <a class="mockup-link" href="{{ mockup }}{{ q }}" target="_blank" rel="noopener">Open the mock-up</a>
     <iframe id="mockup" src="{{ mockup }}{{ q }}" sandbox="allow-scripts" title="{{ proposal.title }}"></iframe>
     {% elif mockup_gone %}
     <div class="gone">The mock-up's file isn't in the repo any more, so there is nothing to show.<br><code>{{ mockup_gone }}</code></div>
@@ -137,7 +138,7 @@
       <p id="settled">{{ standing.state[:1] | upper }}{{ standing.state[1:] }}</p>
       {% if kind == "merge" and proposal.applied %}<span id="merged-by-lead" class="aside">Done: the lead merged them. To undo it, say so on the kept card's thread.</span>{% endif %}
       {% endif %}
-      <span id="review-status" class="aside">{% if standing.pending %}{% with asked = standing.pending %}{% include "_partials/request.html" %}{% endwith %}{% elif standing.said and standing.state in ("open", "approved", "rejected") %}The runner said: {{ standing.said }}{% elif open %}Every point is agreed unless you comment on it.{% endif %}</span>
+      <span id="review-status" class="aside" data-has-answer="{% if standing.pending or (standing.said and standing.state in ('open', 'approved', 'rejected')) %}true{% else %}false{% endif %}">{% if standing.pending %}{% with asked = standing.pending %}{% include "_partials/request.html" %}{% endwith %}{% elif standing.said and standing.state in ("open", "approved", "rejected") %}The runner said: {{ standing.said }}{% elif open %}Every point is agreed unless you comment on it.{% endif %}</span>
       </div>
     </section>
     <section id="next-steps" class="panel">
@@ -182,6 +183,11 @@
     });
   });
   document.querySelectorAll('textarea.comment').forEach(function (t) { t.addEventListener('input', update); });
+  document.addEventListener('htmx:afterSwap', function (e) {
+    if (e.target.id === 'review-status') {
+      e.target.setAttribute('data-has-answer', 'true');
+    }
+  });
 })();
 </script>
 <script src="{{ static('deck.js') }}"></script>

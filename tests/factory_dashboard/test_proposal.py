@@ -31,6 +31,7 @@ from tests.factory_dashboard.test_planning import (
     _text,
     _write,
 )
+from tests.layout import PHONE
 from tests.runner.conftest import git
 
 ORIGIN = "http://127.0.0.1:8765"
@@ -555,3 +556,51 @@ def test_a_plan_proposal_shows_no_frame_and_no_gone_block(planning, db_path, ser
     html = _review_page(serve(), "/planning/f6/proposals/plan")
     assert 'id="mockup"' not in html
     assert re.search(r'<div class="gone">', html) is None
+
+
+def test_a_mockup_link_is_visible_on_a_phone(page, planning, db_path, serve, checkout):
+    """At 390 px a mock-up review shows no iframe and an "Open the mock-up" link, at least
+    44 px tall, whose href is the mock-up's route and which opens a new tab."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    for rel, text in (
+        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/mockup")
+    link = page.locator(".mockup-link")
+    assert link.is_visible()
+    assert link.evaluate("e => e.offsetHeight") >= 44
+    href = link.get_attribute("href")
+    assert href and "/planning/mockups/f6/.factory/cards/f6-mockup/index.html" in href
+    assert link.get_attribute("target") == "_blank"
+    assert link.get_attribute("rel") == "noopener"
+
+
+def test_the_mockup_iframe_shows_at_display(page, planning, db_path, serve, checkout):
+    """At 1024 px the iframe shows, at least 480 px tall, with the same link."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    for rel, text in (
+        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    page.set_viewport_size({"width": 1024, "height": 768})
+    _open(page, serve(), "/planning/f6/proposals/mockup")
+    iframe = page.locator("#mockup")
+    assert iframe.is_visible()
+    height = iframe.evaluate("e => e.offsetHeight")
+    assert height >= 480
+    link = page.locator(".mockup-link")
+    assert link.is_visible()

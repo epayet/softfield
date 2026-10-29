@@ -551,7 +551,12 @@ tr.few .gauge { opacity: .35; }
 .proposal-page #proposal-tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--rule); align-self: flex-start; }
 .proposal-page #proposal-tabs a { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 14px; min-height: 44px; display: inline-flex; align-items: center; border-right: 1px solid var(--rule); text-decoration: none; box-sizing: border-box; }
 .proposal-page #proposal-tabs a[aria-current="page"] { color: var(--hazard-ink); background: var(--hazard); }
-.proposal-page #mockup { width: 100%; height: 480px; border: 1px solid var(--rule); background: var(--plate); }
+.proposal-page .mockup-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px;
+  font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--accent);
+  border: 1px solid var(--rule); background: var(--plate); text-decoration: none; margin-bottom: 8px; }
+.proposal-page .mockup-link:hover { text-decoration: underline; }
+.proposal-page #mockup { width: 100%; height: max(480px, calc(100dvh - 220px)); border: 1px solid var(--rule); background: var(--plate); }
+@media (max-width: 639px) { .proposal-page #mockup { display: none; } }
 .proposal-page .lede { margin: 0; color: var(--ink-2); }
 .proposal-page #key-points { display: flex; flex-direction: column; gap: 8px; }
 .proposal-page .key-point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -596,6 +601,16 @@ tr.few .gauge { opacity: .35; }
   .dock-host { display: contents !important; }
   .dock-host > * { flex: 1 1 100%; }
   .dock { position: sticky; bottom: 0; z-index: 5; box-shadow: 0 -6px 16px rgba(0,0,0,.25); }
+  /* f42: the review's dock is one 44 px row (count, button, the closed Reject… fold); opened,
+     the fold takes a row of its own */
+  .proposal-page .dock > h2 { display: none; }
+  .proposal-page #actions, .proposal-page .action-buttons { flex-direction: row; align-items: center; }
+  .proposal-page #actions:has(#reject[open]) { flex-wrap: wrap; }
+  .proposal-page .action-buttons { flex: 1 1 auto; min-width: 0; }
+  .proposal-page #review-count { flex: 1 1 0; min-width: 0; line-height: 1.2; }
+  .proposal-page #primary, .proposal-page #send-back, .proposal-page #reject:not([open]) { flex: 0 0 auto; }
+  .proposal-page #reject[open] { flex: 1 1 100%; }
+  .proposal-page #review-status[data-has-answer="false"] { display: none; }
 }
 
 /* "New version" (app.py's /version poller): a tag hung on the right of the hazard stripe, out of
