@@ -38,3 +38,12 @@ The picture to build is `.factory/cards/f172-mockup/goes-first.html` (Proposed: 
 - no page says "may use Claude's reserve", "uses Claude's reserve" or "Past both marks for"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 392874
+logs: .factory/var/runs/20261029-110520/f172-05-reserve-lever-on-the-milestone-page
+```
