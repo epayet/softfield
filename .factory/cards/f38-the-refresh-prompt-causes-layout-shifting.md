@@ -19,8 +19,10 @@ When the dashboard's code changes, no page moves: a small "↻ New version" tag 
 - **D1 A tag on the stripe, out of the flow.** The notice is drawn over the hazard stripe (`position: absolute` in a relative wrapper), not in the bar's row: the row already holds the brand, the status, the project picker and the theme switch, and on a phone a new item there would wrap and move the page itself. Mock-up: [`f38-mockup/new-version-tag.html`](f38-mockup/new-version-tag.html).
 - **D2 A hidden page reloads itself.** When the page isn't visible and `liveIdle()` says nothing is being typed or selected, it reloads; a visible page only shows the tag, so nothing changes under the owner's eyes.
 - **D3 Same poll.** `/version` and its 10 s poll stay; only what it returns and where it sits change.
+- **D4 A page that updated itself says so** (the owner, 2026-10-28: "I've left the page open through a few tickets being done and haven't seen the new tag at all"). On main, `/version` answers with the tag, but a page reloads itself whenever it comes back into view (D2 and the review's fix), so in normal use the tag is rarely seen and the update leaves no trace. After a reload the page started itself, "✓ Updated HH:MM" shows where the tag hangs for 15 s, in plate colours, not hazard yellow: it states a fact, there's nothing to press. Mock-up: [`f38-mockup/updated-note.html`](f38-mockup/updated-note.html).
 
 ## Tickets
 | # | name | agent | difficulty | depends on | covers |
 |---|------|-------|------------|------------|--------|
 | 01 | new-version-tag | D | 3 | – | D1–D3 |
+| 02 | updated-note | D | 2 | – | D4 |
