@@ -1,6 +1,6 @@
 # Review: F42, the space for me to scroll
 
-- **Status:** review round 1 done; one small test-tidying ticket (f42-03) left for the developer.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 

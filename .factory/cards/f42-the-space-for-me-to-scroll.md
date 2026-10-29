@@ -1,6 +1,7 @@
 # Milestone F42: The space for me to scroll on a planning proposal card is very small
 
-> **State:** ready · **Priority:** 6 · **Area:** factory
+> **State:** done · **Priority:** 6 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f42-the-space-for-me-to-scroll-start`. Report: [`.factory/reviews/f42-the-space-for-me-to-scroll.md`](../reviews/f42-the-space-for-me-to-scroll.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes
