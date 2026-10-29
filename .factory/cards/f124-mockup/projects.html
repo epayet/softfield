@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F124 mock-up: pause one project from the Projects page</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --warn: var(--hazard); --accent: var(--sonnet);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+    --stripe: repeating-linear-gradient(135deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px);
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 16px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { display: block; font: 500 11.5px var(--mono); color: var(--good); margin-top: 4px; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 900px) {   /* a wide screen: side by side, the switch goes */
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [data-version] { display: block !important; }
+    .switch { display: none; }
+  }
+  .frame { max-width: 520px; }
+
+  /* ---- the panel and the Projects page as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .projects-page .rank { list-style: none; margin: 0; padding: 0; }
+  .projects-page .muted { color: var(--muted); }
+  .projects-page .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0;
+    border-bottom: 1px solid var(--grid); }
+  .projects-page .proj:last-child { border-bottom: 0; }
+  .projects-page .place { grid-row: span 5; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .projects-page .place input { width: 44px; text-align: center; font: 700 18px var(--display); background: var(--plate);
+    color: var(--fg); border: 1px solid var(--rule); padding: 4px 0; }
+  .projects-page .place small { font: 500 11px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .projects-page .name { font: 700 17px var(--display); letter-spacing: .03em; }
+  .projects-page .what { color: var(--ink-2); font-size: 13.5px; }
+  .projects-page .facts { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13.5px; }
+  .projects-page .facts b { font-family: var(--display); }
+  .projects-page .links { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 600 13px var(--display);
+    letter-spacing: .04em; text-transform: uppercase; }
+  .projects-page .send-order { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    background: var(--hazard); color: var(--hazard-ink); border: 0; padding: 10px 16px; margin-top: 10px; }
+  .projects-page .send-order:disabled { background: var(--plate); color: var(--muted); }
+
+  /* ---- proposed: a hold switch on each project, its pause shown on the project ---- */
+  .projects-page .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .projects-page .head .name { flex: 1; min-width: 0; }
+  .hold { font: 700 12px var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 7px 12px;
+    background: var(--plate); color: var(--fg); border: 1px solid var(--rule); cursor: pointer;
+    display: inline-flex; align-items: center; gap: 8px; }
+  .hold::before { content: ""; width: 10px; height: 10px; border: 2px solid currentColor; border-width: 0 3px; }  /* ⏸, drawn */
+  .hold.resume::before { border-width: 5px 0 5px 9px; border-color: transparent transparent transparent currentColor; width: 0; height: 0; }
+  .hold.resume { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+  .hold.asked { border: 1px dashed var(--opus); color: var(--opus); background: transparent; cursor: default; }
+  .projects-page .proj.held { position: relative; padding-left: 12px; margin-left: -2px;
+    border-left: 4px solid var(--warn); }
+  .held-line { color: var(--warn); font-size: 13.5px; }
+  .held-line b { font-family: var(--display); letter-spacing: .03em; }
+  .way { color: var(--opus); font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>F124: pause one project</h1>
+<p class="lede">The Projects page on the evening of 2026-10-27: the three projects in the owner's order with their real counts.
+Proposed shows the three states a project can be in: softfield runs as today, travel-companion's pause is on its way, coucou is paused by you (the 21:40 is an example).</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/projects.html -->
+<div data-version="today" hidden class="frame">
+  <h3>Today</h3>
+  <div class="projects-page">
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj">
+        <label class="place"><input type="number" value="1"><small>place</small></label>
+        <div class="name">travel-companion</div>
+        <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+        <div class="facts"><span><b>0</b> ready</span><span><b>2</b> ideas</span><span><b>8</b> done</span><span><b>1</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="2"><small>place</small></label>
+        <div class="name">softfield</div>
+        <div class="what">The software factory itself: the runner, the dashboard and the workflow that build every project.</div>
+        <div class="facts"><span><b>59</b> ready</span><span><b>3</b> building</span><span><b>43</b> ideas</span><span><b>43</b> done</span><span><b>38</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="3"><small>place</small></label>
+        <div class="name">coucou</div>
+        <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+        <div class="facts"><span><b>0</b> ready</span><span><b>1</b> building</span><span><b>4</b> done</span><span><b>1</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+      </li>
+    </ol>
+    <button type="button" class="send-order" disabled>Send new order</button>
+  </section>
+  </div>
+  <p class="legend">No way to hold one project: the top bar's Pause holds every project's tickets.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="frame">
+  <h3>Proposed</h3>
+  <div class="projects-page">
+  <section class="panel">
+    <h2>Projects <span class="src">the runner works in this order</span></h2>
+    <ol class="rank">
+      <li class="proj">
+        <label class="place"><input type="number" value="1"><small>place</small></label>
+        <div class="head"><div class="name">travel-companion</div>
+          <button type="button" class="hold asked new" disabled>Pausing…</button></div>
+        <div class="what">Stampu: trip ideas from a prompt, shown visually, remembering what you like and where you've been.</div>
+        <div class="way new">On its way: the runner takes it at its next pick, after the job it is on.</div>
+        <div class="facts"><span><b>0</b> ready</span><span><b>2</b> ideas</span><span><b>8</b> done</span><span><b>1</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+        <span class="note">pressed: dashed orange at once, no longer pressable (owner, 2026-10-07)</span>
+      </li>
+      <li class="proj">
+        <label class="place"><input type="number" value="2"><small>place</small></label>
+        <div class="head"><div class="name">softfield</div>
+          <button type="button" class="hold new">Pause</button></div>
+        <div class="what">The software factory itself: the runner, the dashboard and the workflow that build every project.</div>
+        <div class="facts"><span><b>59</b> ready</span><span><b>3</b> building</span><span><b>43</b> ideas</span><span><b>43</b> done</span><span><b>38</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+        <span class="note">running: Pause holds this project's tickets only</span>
+      </li>
+      <li class="proj held new">
+        <label class="place"><input type="number" value="3"><small>place</small></label>
+        <div class="head"><div class="name">coucou</div>
+          <button type="button" class="hold resume">Resume</button></div>
+        <div class="what">A small, private way to send a photo or a note to an always-on screen in someone's home.</div>
+        <div class="held-line"><b>Paused by you since 21:40.</b> Its tickets wait; its planning still answers you.</div>
+        <div class="facts"><span><b>0</b> ready</span><span><b>1</b> building</span><span><b>4</b> done</span><span><b>1</b> for you</span></div>
+        <div class="links"><a href="#">Planning</a><a href="#">Board</a><a href="#">Overview</a></div>
+        <span class="note">paused: the hazard edge and line say so; Resume in hazard yellow</span>
+      </li>
+    </ol>
+    <button type="button" class="send-order" disabled>Send new order</button>
+  </section>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. The top bar's Pause still holds the whole factory;
+  a project's pause holds only its own tickets, checkpoints and reviews, as the factory's pause does, so its planning room keeps answering and Approve still goes.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
