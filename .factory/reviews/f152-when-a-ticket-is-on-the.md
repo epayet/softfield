@@ -1,6 +1,6 @@
 # Review: F152, a done card says where its review is, and set aside says it won't run
 
-- **Status:** round 2 done: all three round-1 findings confirmed fixed, nothing new; waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 

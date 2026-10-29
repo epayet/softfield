@@ -1,6 +1,7 @@
 # Milestone F152: A done card says where its review is, and set aside says it won't run
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Reserve:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f152-when-a-ticket-is-on-the-start`. Report: [`.factory/reviews/f152-when-a-ticket-is-on-the.md`](../reviews/f152-when-a-ticket-is-on-the.md).
 > Planted by the owner on 2026-10-20.
 
 ## Notes
