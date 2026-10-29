@@ -6,6 +6,9 @@
 ## Notes
 There's a blocked ticket that I keep trying to approve and it keeps coming back I don't get it. What am I supposed to do with this, why doesn't it just work
 
+### From F190: A blocked ticket doesn't link back to the milestone /… (merged by the lead on 2026-10-29)
+A blocked ticket doesn't link back to the milestone / original discussion and plans so the current blocked ticket f21 atm looks like I can't do anything about it
+
 ## What happened (2026-10-21)
 - **One cause, two tickets.** The full test suite takes 1100 to 1170 s and the gate stops it at 1200 s (`[timeouts] gate` in `.factory/project.toml`). f132-01 (blocked 15:56) and f152-01 (blocked 22:25) had good work, cut on that limit three times each. Each cost about 3.5 h of the line and about $2 of Opus (direction and escalation), plus the lead's look. f15-09 was cut the same way on 2026-10-20 and passed only on its last attempt.
 - **The escalations couldn't fix it.** Each raised the limit on its ticket's branch, but the runner reads a project's config at the session's start and keeps it, so neither the branch nor a raise merged to main reaches it before a restart.
