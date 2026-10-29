@@ -1175,6 +1175,128 @@ def test_the_dock_is_compact_on_a_phone(page, planning, db_path, serve, checkout
     assert page.locator("#reject-button").is_visible()
 
 
+# --- every number the lead writes links to what it names (F37 D2, D3) -------------------------
+
+_F42 = "The space for me to scroll extraordinarily far"
+_ADR_29 = "The lead looks at a blocked ticket before the owner does"
+_NUMBERS = (
+    "F42 waits for F15, Reprioritising tickets and f15-06-card-actions; f63-01 runs late,"
+    " F50 is on main; f99-09 and F777 name nothing, as ADR 29 says."
+)
+# what _NUMBERS shows on a thread, each as the page draws it
+_F42_LINK = (
+    f'<a class="ref" href="/planning/f42?project=coucou" title="{_F42}">F42'
+    '<span class="named">, The space for me to scroll…</span></a>'
+)
+_F15_LINK = (
+    '<a class="ref" href="/planning/f15?project=coucou" title="Reprioritising tickets">F15</a>'
+    ", Reprioritising tickets"
+)
+_F50_LINK = '<a class="ref" href="/planning/f50?project=coucou">F50</a> is on main'
+_TICKET_LINK = (
+    '<a class="ref" href="/tickets/f15-06-card-actions?project=coucou">f15-06-card-actions</a>'
+)
+_SHORT_LINK = (
+    '<a class="ref" href="/tickets/f63-01-desk-order?project=coucou" title="f63-01-desk-order">'
+    'f63-01<span class="named">, desk order</span></a>'
+)
+_ADR_NAMED = (
+    f'<span class="ref-plain" title="{_ADR_29}">ADR 29'
+    '<span class="named">, The lead looks at a blocked ticket…</span></span>'
+)
+_NAMED = (_F42_LINK, _F15_LINK, _F50_LINK, _TICKET_LINK, _SHORT_LINK, _ADR_NAMED)
+
+
+def _numbers_thread(db_path: Path, project_id: int, checkout: Path) -> None:
+    """F42 and F50 have docs on main, F15 and F42 milestone rows with titles; two tickets and
+    ADR 29. On f6's thread: the runner's message, the owner's, the lead's plain reply, then its
+    latest with ``_NUMBERS`` in its text and in one point's title, answer and action."""
+    cards = checkout / ".factory" / "cards"
+    cards.mkdir(parents=True)
+    (cards / "f42-the-space.md").write_text("# Milestone F42: The space\n")
+    (cards / "f50-on-main.md").write_text("# Milestone F50: On main\n")
+    adrs = checkout / ".factory" / "adr"
+    adrs.mkdir(parents=True)
+    (adrs / "29-the-lead-looks.md").write_text(f"# ADR 29: {_ADR_29}\n\n## Status\nAccepted\n")
+
+    def write(conn: sqlite3.Connection) -> None:
+        metrics.upsert_milestone(conn, project_id, "f42-the-space", title=_F42)
+        metrics.upsert_milestone(
+            conn, project_id, "f15-reprioritising", title="Reprioritising tickets"
+        )
+        metrics.upsert_ticket(conn, project_id, "f15-06-card-actions")
+        metrics.upsert_ticket(conn, project_id, "f63-01-desk-order")
+        f6 = metrics.planner_thread(conn, project_id, "f6", _at(timedelta(hours=5)))["id"]
+        metrics.add_planner_message(conn, f6, "runner", _at(timedelta(hours=4)), _NUMBERS)
+        owner = "Is F42 <b>done</b>?"
+        metrics.add_planner_message(conn, f6, "owner", _at(timedelta(hours=3)), owner)
+        metrics.add_planner_message(conn, f6, "lead", _at(timedelta(hours=2)), _NUMBERS)
+        point = {"n": 1, "title": _NUMBERS, "answer": _NUMBERS, "action": _NUMBERS}
+        metrics.add_planner_message(
+            conn, f6, "lead", _at(timedelta(hours=1)), _NUMBERS, points=[point]
+        )
+
+    _write(db_path, write)
+
+
+def test_a_lead_point_links_cards_and_tickets_and_names_what_the_lead_left_bare(
+    planning, db_path, serve, checkout
+):
+    """F42 links to its thread with its title cut at a word (the whole title on the link);
+    "F15, Reprioritising tickets" isn't named twice; F50 (on main, no title) links bare; a
+    ticket links to its page; f63-01 to its one ticket with its words; ADR 29 shows its title
+    with no link; f99-09 and F777 name nothing and stay plain. In each of the point's lines."""
+    _numbers_thread(db_path, planning, checkout)
+    point = _thread(serve(), "f6").split('<li class="point"', 1)[1].split("</li>", 1)[0]
+    lines = re.search(
+        r'<div>\s*<b>(.*?)</b>\s*<span class="answer">(.*?)</span>\s*'
+        r'<span class="action"><i>→ </i>(.*?)</span>\s*<details',
+        point,
+        re.S,
+    )
+    assert lines
+    for said in lines.groups():
+        assert said.startswith(_F42_LINK)
+        for named in _NAMED:
+            assert named in said, named
+        assert "; f99-09 and F777 name nothing, as " in said
+        assert said.endswith(f"{_ADR_NAMED} says.")
+    assert _text(point).count("Reprioritising tickets") == 3  # once in each line, never twice
+    assert "/tickets/f99-09" not in point and "/planning/f777" not in point
+
+
+def test_the_leads_text_and_the_runners_link_but_the_owners_stays_plain(
+    planning, db_path, serve, checkout
+):
+    """The lead's text with points (under Full reply) and without, and the runner's message,
+    link and name the same; the owner's message shows F42 and ``<b>`` as plain text."""
+    _numbers_thread(db_path, planning, checkout)
+    html = _thread(serve(), "f6")
+    said = re.findall(r'<p class="said">(.*?)</p>', html, re.S)
+    linked = [s for s in said if s.startswith(_F42_LINK)]
+    assert len(linked) == 3  # the latest reply's Full reply, the plain reply, the runner's
+    for s in linked:
+        for named in _NAMED:
+            assert named in s, named
+    fold = html.split('<details class="full-reply"', 1)[1].split("</details>", 1)[0]
+    assert _F42_LINK in fold
+    runner = html.split('class="message runner-message"', 1)[1].split("</article>", 1)[0]
+    assert _F42_LINK in runner
+    assert '<p class="said">Is F42 &lt;b&gt;done&lt;/b&gt;?</p>' in html
+
+
+def test_a_named_number_fits_a_phone(page, planning, db_path, serve, checkout):
+    """At 390 px the point with its links and added names runs off nothing."""
+    _numbers_thread(db_path, planning, checkout)
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6")
+    assert page.locator("li.point a.ref .named").first.is_visible()
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]
+    page.evaluate("() => document.querySelector('.dock').style.position = 'static'")
+    assert layout_problems(page) == []
+
+
 def test_the_review_status_shows_after_sending_on_a_phone(page, planning, db_path, serve, checkout):
     """After sending, the request's answer shows in the dock at 390 px."""
     _f6_mockup_review(db_path, planning, checkout)

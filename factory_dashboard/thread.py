@@ -20,6 +20,7 @@ from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.coming import (
     _MAX_REQUEST_ID,
     GENERAL,
+    _card_titles,
     _edit_words,
     _edited,
     _held,
@@ -32,6 +33,8 @@ from factory_dashboard.coming import (
 )
 from factory_dashboard.line import live_line
 from factory_dashboard.merges import (
+    Names,
+    _adr_titles,
     _gone_merge,
     _known_cards,
     _merge_links,
@@ -79,7 +82,7 @@ class Message:
     waiting: bool = False  # an open plan_message request not yet picked up
     id: int = 0  # a waiting message's request: what a change names (F14 D1)
     change: Change | None = None  # a waiting message's open change: on its way, no more edits
-    text_html: str | None = None  # pre-rendered HTML for lead messages without points
+    text_html: str | None = None  # the lead's or the runner's text as linked HTML (F37 D3)
 
 
 @dataclass(frozen=True)
@@ -350,13 +353,19 @@ def thread_page(
             messages.append(
                 Message("owner", req["created"], text, points, False, True, req["id"], change)
             )
-    # Lead messages without points: convert /planning/<key> paths to links
-    q = "?" + urlencode({"project": project})
-    for i, msg in enumerate(messages):
-        if msg.author == "lead" and not msg.points and msg.text:
-            messages[i] = replace(msg, text_html=_text_with_links(msg.text, q))
-    jobs = [j for j in running_jobs(conn, project, now) if j.live]
     repo = _repo(conn, project)
+    # F37 D3: the lead's and the runner's words link their paths, cards and tickets; the
+    # owner's stay plain
+    q = "?" + urlencode({"project": project})
+    names = _names(conn, project_id, repo)
+    for i, msg in enumerate(messages):
+        if msg.author == "lead":
+            points = [_point_links(p, q, names) if isinstance(p, dict) else p for p in msg.points]
+            text_html = _text_with_links(msg.text, q, names)
+            messages[i] = replace(msg, points=points, text_html=text_html)
+        elif msg.author == "runner":
+            messages[i] = replace(msg, text_html=_text_with_links(msg.text, q, names))
+    jobs = [j for j in running_jobs(conn, project, now) if j.live]
     merged_into, merged_here, latest_title = _merge_links(repo, thread)
     known = _known_cards(repo)
     # When the card has no milestone row, use the heading's title for the h2
@@ -420,6 +429,32 @@ def thread_page(
             "card_on_main": card_on_main,
         },
     )
+
+
+def _names(conn: sqlite3.Connection, project_id: int | None, repo: Path | None) -> Names:
+    """What a lead's line on the project may name (F37 D2)."""
+    if project_id is None:
+        return Names()
+    tickets = conn.execute("SELECT ticket FROM tickets WHERE project_id = ?", (project_id,))
+    return Names(
+        _card_titles(conn, project_id),
+        _known_cards(repo) or set(),
+        {r["ticket"] for r in tickets.fetchall()},
+        _adr_titles(repo),
+    )
+
+
+_POINT_WORDS = ("title", "answer", "action")
+
+
+def _point_links(point: dict[str, object], q: str, names: Names) -> dict[str, object]:
+    """A lead's point with its words as HTML too (``title_html`` and so on), linked."""
+    linked = {
+        f"{key}_html": _text_with_links(str(point[key]), q, names)
+        for key in _POINT_WORDS
+        if point.get(key)
+    }
+    return {**point, **linked}
 
 
 def _note(repo: Path | None, thread: str) -> str:

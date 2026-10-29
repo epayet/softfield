@@ -527,6 +527,10 @@ tr.few .gauge { opacity: .35; }
 .thread-page .point .answer { font-size: 14px; color: var(--ink-2); }
 .thread-page .point .action { font-size: 14px; }
 .thread-page .point .action > i { font-style: normal; color: var(--opus); font-weight: 600; }
+/* F37 D2: a card, ticket or ADR the lead named, and the name the page added in muted ink */
+/* one box each (inline-block), so a reference that wraps never spans its neighbours' lines */
+.thread-page a.ref { display: inline-block; max-width: 100%; border-bottom: 1px solid var(--rule); overflow-wrap: anywhere; }
+.thread-page .ref .named { color: var(--muted); }
 .thread-page .comment-box > summary { color: var(--hazard); }
 .thread-page #waiting { margin: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; color: var(--muted); }
 .thread-page #waiting.writing { color: var(--opus-ink); }

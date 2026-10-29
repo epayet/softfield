@@ -100,7 +100,7 @@
     {# ADR 29 item 1: the runner's word when it blocks a ticket, never the owner's #}
     <article class="message runner-message">
       <span class="stamp">The runner · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
-      <p class="said">{{ msg.text }}</p>
+      <p class="said">{{ msg.text_html | safe if msg.text_html is not none else msg.text }}</p>
     </article>
     {% else %}
     <article class="message lead-message">
@@ -109,10 +109,10 @@
       {% if msg.points and msg.text %}
       <details class="full-reply">
         <summary class="fold">Full reply</summary>
-        <p class="said">{{ msg.text }}</p>
+        <p class="said">{{ msg.text_html | safe }}</p>
       </details>
       {% elif msg.text %}
-      <p class="said">{{ msg.text_html | safe if msg.text_html else msg.text }}</p>
+      <p class="said">{{ msg.text_html | safe }}</p>
       {% endif %}
       {% if msg.points %}
       <ol class="deck">
@@ -120,9 +120,9 @@
         <li class="point" data-point="{{ p.n }}">
           <b>{{ p.n }}</b>
           <div>
-            <b>{{ p.title }}</b>
-            {% if p.answer %}<span class="answer">{{ p.answer }}</span>{% endif %}
-            {% if p.action %}<span class="action"><i>→ </i>{{ p.action }}</span>{% endif %}
+            <b>{{ p.title_html | safe if p.title_html else p.title }}</b>
+            {% if p.answer %}<span class="answer">{{ p.answer_html | safe }}</span>{% endif %}
+            {% if p.action %}<span class="action"><i>→ </i>{{ p.action_html | safe }}</span>{% endif %}
             {% if msg.latest and next_reply is none %}
             <details class="comment-box">
               <summary class="fold">Comment…</summary>
