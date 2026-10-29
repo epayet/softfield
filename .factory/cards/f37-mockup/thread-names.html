@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F37 mock-up: every number on a thread says what it is</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1d242c; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --opus: #ff8a3d; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-direction: column; gap: 24px; }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card adds */
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 390px; }
+  [hidden] { display: none !important; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { flex-direction: row; align-items: flex-start; }
+    [data-version][hidden] { display: block !important; }
+  }
+
+  /* ---- a lead message and its points, as thread.html draws them ---- */
+  .message { background: var(--bay); border: 1px solid var(--opus); padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .who { font: 600 12px var(--mono); color: var(--opus); }
+  ol.deck { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  li.point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; gap: 10px; align-items: baseline; }
+  li.point > b { font: 700 13px var(--mono); color: var(--muted); min-width: 22px; }
+  li.point div { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  li.point .t { font-size: 15px; }
+  li.point .a { font-size: 14px; color: var(--ink-2); }
+  li.point .act { font-size: 14px; }
+  li.point .act i { color: var(--opus); font-style: normal; font-weight: 600; }
+  .comment { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard); min-height: 44px; display: flex; align-items: center; }
+
+  /* ---- proposed: a reference is a link; the page adds the name when the lead left it out ---- */
+  a.ref { color: var(--sonnet); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  a.ref .key { font: 600 13px var(--mono); }
+  .ref .named { color: var(--muted); }
+  .ref-plain .key { font: 600 13px var(--mono); }
+</style>
+</head>
+<body>
+<h1>F37: every number on a thread says what it is</h1>
+<p class="lede">A point from the lead's reply on F173, The board's order is the order the work runs in (26 Oct, 22:57); the answer is word for word, the action line is an example. Card names are their titles in the metrics database; the tickets and ADR 29 are real.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/thread.html (the lead's message and li.point) -->
+<div data-version="today" class="phone" hidden>
+  <h3>Today</h3>
+  <article class="message">
+    <span class="who">The lead · 2026-10-26 22:57</span>
+    <ol class="deck">
+      <li class="point"><b>1</b><div>
+        <b class="t">Why it happens today</b>
+        <span class="a">When the top ticket is waiting on another one, the runner skips it and takes the next ticket it can run. Today's example: F15, Reprioritising tickets (place 4) needs f15-06-card-actions. That ticket waits on five others from F73 and F42 (place 6), F26 (place 7) and F63 (place 14). So all seven of F132's tickets (place 5) run first, and f63-01-desk-order runs near the very end.</span>
+        <span class="act"><i>→ </i>f173-01 holds the runner to the board; a blocked ticket still goes to the lead, as ADR 29 says.</span>
+        <span class="comment">Comment…</span>
+      </div></li>
+    </ol>
+  </article>
+  <p class="legend">Only F15 has its name. F73, F42, F26, F63, F132, f173-01 and ADR 29 are bare, and nothing can be tapped.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="phone">
+  <h3>Proposed</h3>
+  <article class="message">
+    <span class="who">The lead · 2026-10-26 22:57</span>
+    <ol class="deck">
+      <li class="point"><b>1</b><div>
+        <b class="t">Why it happens today</b>
+        <span class="a">When the top ticket is waiting on another one, the runner skips it and takes the next ticket it can run. Today's example:
+          <a class="ref" href="#"><span class="key">F15</span>, Reprioritising tickets</a> (place 4) needs
+          <a class="ref new" href="#"><span class="key">f15-06-card-actions</span></a>. That ticket waits on five others from
+          <a class="ref new" href="#"><span class="key">F73</span><span class="named">, I want to be able to mark a proposal…</span></a> and
+          <a class="ref new" href="#"><span class="key">F42</span><span class="named">, The space for me to scroll on a…</span></a> (place 6),
+          <a class="ref new" href="#"><span class="key">F26</span><span class="named">, I want to see numbers next to…</span></a> (place 7) and
+          <a class="ref new" href="#"><span class="key">F63</span><span class="named">, I want to see cards in planning by…</span></a> (place 14). So all seven of
+          <a class="ref new" href="#"><span class="key">F132</span><span class="named">, One view of the whole factory: the top…</span></a>'s tickets (place 5) run first, and
+          <a class="ref new" href="#"><span class="key">f63-01-desk-order</span></a> runs near the very end.</span>
+        <span class="act"><i>→ </i><a class="ref new" href="#"><span class="key">f173-01</span><span class="named">, board order only</span></a> holds the runner to the board; a blocked ticket still goes to the lead, as
+          <span class="ref-plain new"><span class="key">ADR 29</span><span class="named">, The lead looks at a blocked ticket</span></span> says.</span>
+        <span class="comment">Comment…</span>
+      </div></li>
+    </ol>
+  </article>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. Each card number links to its thread; the page adds its name (cut to about 40 letters, the whole name on a long press) when the lead didn't write it, so F15 is left as the lead wrote it. A ticket links to its page; a short ticket number gets its words. An ADR gets its title (no page holds ADRs yet, so no link). The lead is also told to write a few words beside every number, so most of the grey names won't be needed.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
