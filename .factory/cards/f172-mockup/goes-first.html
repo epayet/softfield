@@ -1,0 +1,282 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F172 mock-up: the fast lane</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --fail: #ec5458;
+    --factory: #f2b10a; --product: #4fd1a5; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1.page { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.where { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 780px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .version { flex: 1 1 390px; max-width: 600px; min-width: 0; }
+  .version > h2 { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 18px 0 0; color: var(--hazard); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds, moves or renames */
+  .note { display: block; margin-top: 6px; font: 12px var(--mono); color: var(--good); }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 10px 0 0; }
+  [hidden] { display: none !important; }
+  @media (min-width: 900px) { .switch { display: none; } .version[hidden] { display: block !important; } }
+
+  /* ---- the card's page header (milestone.html, #card-head) ---- */
+  .crumbs { font: 12px var(--mono); color: var(--muted); margin-bottom: 6px; }
+  #card-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; background: var(--bay);
+    border: 1px solid var(--rule); border-left: 6px solid var(--factory); padding: 14px 16px; }
+  #card-head .icon { flex: none; width: 48px; height: 48px; color: var(--product); }
+  .card-name { display: flex; flex-direction: column; gap: 2px; flex: 1 1 260px; min-width: 0; }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-name h1 { margin: 0; font: 700 24px/1.15 var(--display); text-transform: uppercase; overflow-wrap: anywhere; }
+  #card-head dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; font: 13px var(--mono); align-items: center; }
+  #card-head dt { color: var(--muted); } #card-head dd { margin: 0; min-width: 0; }
+  #card-head .stage-name { color: var(--product); font-weight: 600; }
+  .card-thread { flex: 1 1 100%; display: inline-flex; align-items: center; min-height: 44px;
+    font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  /* the planning thread's header (thread.html, #card), with today's lever */
+  .thread-head { background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--hazard); padding: 12px 16px; display: flex; flex-direction: column; }
+  .thread-head .meta { font: 600 12px var(--mono); color: var(--muted); }
+  .thread-head h2 { margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+  .reserve-bay { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
+    padding: 4px 10px 6px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .reserve-bay::before, dd.lane::before, .lane-bay::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .reserve-bay small { flex-basis: 100%; padding-left: 4px; color: var(--ink-2); font-size: 13px; line-height: 1.4; }
+  /* proposed: the Fast lane row, a striped plate in the header's list */
+  dd.lane { display: flex; flex-direction: column; gap: 2px; padding: 2px 8px 4px 12px; background: var(--plate);
+    border: 1px solid var(--rule); position: relative; }
+  dd.lane small { font: 12px var(--body); color: var(--ink-2); max-width: 32ch; line-height: 1.35; }
+
+  /* ---- the lever (dashboard.css, f8-14) ---- */
+  .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+    border: 1px solid transparent; background: none; color: var(--ink-2); cursor: pointer;
+    font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .lever .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--grid); box-shadow: inset 0 0 0 1px var(--rule); }
+  .lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate);
+    border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+  .lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule); transition: left .22s; }
+  .lever[aria-checked="true"] { color: var(--fg); }
+  .lever[aria-checked="true"] .slot { background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+  .lever[aria-checked="true"] .knob { left: 24px; background: linear-gradient(#fff, var(--ink-2)); }
+  .lever[aria-checked="true"] .lamp { background: var(--hazard); box-shadow: 0 0 6px var(--hazard); }
+  .lever.on-its-way { border: 1px dashed var(--hazard); cursor: default; }
+  .lever.on-its-way .knob { left: 13px; }
+
+  /* ---- the board's cards (dashboard.css, .card) ---- */
+  .stage { background: var(--bay); border: 1px solid var(--rule); }
+  .stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .stage-head h4 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; background: var(--plate);
+    border: 1px solid var(--rule); border-left: 4px solid var(--factory); color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card .meter { display: block; height: 8px; background: var(--grid); }
+  .card .meter span { display: block; height: 100%; background: var(--good); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-reserve { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 0;
+    background: var(--floor); font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+  .card-reserve i { width: 14px; align-self: stretch; background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+
+  /* ---- the Overview: allowance line and Next in line (_partials/allowance.html, queue.html) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; }
+  .panel > h3 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 6px; }
+  .panel > p { margin: 0; }
+  .cards-on { font-size: 13px; color: var(--ink-2); }
+  .cards-on b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); margin-right: 4px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .next-in-line { display: grid; gap: 4px; border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
+  .next-in-line h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0; font-weight: 600; }
+  .next-in-line p { margin: 4px 0 0; }
+  .next-row { font-size: 14px; color: var(--ink-2); }
+  .next-row b { color: var(--fg); }
+  .more { color: var(--muted); font: 12px var(--mono); }
+  /* proposed: the fast lane's bay, on top */
+  .lane-bay { display: grid; gap: 4px; padding: 6px 8px 8px 16px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+  .lane-bay .label { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--fg); }
+  .lane-bay .label span { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+</style>
+</head>
+<body>
+<h1 class="page">F172: the fast lane</h1>
+<p class="lede">Real values from the morning of 2026-10-27. F173 and F142 are marked on main. On the Overview, Next in line held 15 planning jobs, 2 escalations, 4 directions, a checkpoint and F68's review before f173-02 and f142-05, their two tickets. Proposed shows the same two cards in the fast lane.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from milestone.html, thread.html, board.html, _partials/allowance.html and _partials/queue.html -->
+<div class="version" data-version="today" hidden>
+  <h2>Today</h2>
+
+  <h3 class="where">The card's page · /milestones/f142-… (a tap on the board)</h3>
+  <div class="crumbs">Board › F142-WHY-AM-I-NOT-GETTING-NOTIFICATIONS</div>
+  <header id="card-head">
+    <svg class="icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40h32M24 40V20M24 26c-6 0-10-4-10-10 6 0 10 4 10 10zM24 22c0-6 4-10 10-10 0 6-4 10-10 10z" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>
+    <div class="card-name">
+      <span class="card-meta">F142 · f142-why-am-i-not-getting-notifications</span>
+      <h1>Phone notifications: every project, and with the dashboard closed</h1>
+    </div>
+    <dl>
+      <dt>Stage</dt><dd class="stage-name">Planted: in line for the factory · growing</dd>
+      <dt>Priority</dt><dd>P2</dd>
+      <dt>Area</dt><dd>factory</dd>
+      <dt>Tickets</dt><dd>5 of 6 done</dd>
+    </dl>
+    <a class="card-thread" href="#">Its planning thread: talk it through, sign it off ›</a>
+  </header>
+
+  <h3 class="where">The planning thread · /planning/f142</h3>
+  <header class="thread-head">
+    <span class="meta">softfield · factory</span>
+    <h2>Phone notifications: every project, and with the dashboard closed</h2>
+    <div class="reserve-bay">
+      <button type="button" class="lever" role="switch" aria-checked="true">may use Claude's reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+      <small>Comes before Claude's reserves: its lead tickets, and the ones they wait for, use the week's reserve and your 25% of the 5-hour window, with both switches off. Ends by itself when its tickets are done.</small>
+    </div>
+  </header>
+
+  <h3 class="where">The board · Planted</h3>
+  <section class="stage">
+    <div class="stage-head"><h4>Planted</h4><span>tickets ready</span></div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> F173 factory</span><span class="card-title">The board's order is the order the work runs in</span><span class="card-reserve"><i></i>uses Claude's reserve</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#3</b> F142 factory</span><span class="card-title">Phone notifications: every project, and with the dashboard closed</span><span class="meter"><span style="width:83%"></span></span><span class="card-count">5 of 6 tickets</span><span class="card-reserve"><i></i>uses Claude's reserve</span></a>
+    </div>
+  </section>
+
+  <h3 class="where">The Overview</h3>
+  <section class="panel">
+    <h3>Queue</h3>
+    <p>72 tickets waiting.</p>
+    <div class="next-in-line">
+      <h3>Next in line</h3>
+      <div class="next-row"><b class="mono">Planning: <a href="#">F176</a></b> · "Conversations and proposals can be better bundled together. …"</div>
+      <div class="next-row"><b class="mono">Planning: <a href="#">F37</a></b> · "You mentioned mock-up I don't see it. Again ..."</div>
+      <div class="more">… 13 more planning jobs …</div>
+      <div class="next-row"><b class="mono">Escalation: f38-01-new-version-tag</b> · BLOCKED: needs-file</div>
+      <div class="next-row"><b class="mono">Escalation: f80-01-by-kind-of-work</b> · BLOCKED: needs-file</div>
+      <div class="more">… 4 directions …</div>
+      <div class="next-row"><b class="mono">Checkpoint: f51-when-a-plan-depends-on-an</b> · Claude re-checks 7 tickets after a stand-in</div>
+      <div class="next-row"><b class="mono">1 review F68</b> · a batch</div>
+      <div class="next-row"><b class="mono">2 <a href="#">f173-02-waited-for-goes-first</a></b> A ticket that a higher ticket waits for runs in that ticket's place in the line. · the lead · priority 0</div>
+      <div class="next-row"><b class="mono">3 <a href="#">f142-05-fix-a-look-is-not-an-answer</a></b> The phone's notification after a planner job says what happened. · a developer · priority 2</div>
+      <p><a href="#">Reorder on the board ›</a></p>
+    </div>
+    <div class="next-in-line">
+      <h3>Agent allowance · under Claude's meters</h3>
+      <div class="cards-on"><b>Past both marks for:</b><a href="#">F173, The board's order is the order the work runs in</a> · <a href="#">F142, Phone notifications</a></div>
+    </div>
+  </section>
+  <p class="legend">The lever is only on the planning thread, and the two marked cards' tickets come after 24 queued jobs.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h2>Proposed</h2>
+
+  <h3 class="where">The card's page · /milestones/f142-… (a tap on the board)</h3>
+  <div class="crumbs">Board › F142-WHY-AM-I-NOT-GETTING-NOTIFICATIONS</div>
+  <header id="card-head">
+    <svg class="icon" viewBox="0 0 48 48" aria-hidden="true"><path d="M8 40h32M24 40V20M24 26c-6 0-10-4-10-10 6 0 10 4 10 10zM24 22c0-6 4-10 10-10 0 6-4 10-10 10z" fill="none" stroke="currentColor" stroke-width="2.5"/></svg>
+    <div class="card-name">
+      <span class="card-meta">F142 · f142-why-am-i-not-getting-notifications</span>
+      <h1>Phone notifications: every project, and with the dashboard closed</h1>
+    </div>
+    <dl>
+      <dt>Stage</dt><dd class="stage-name">Planted: in line for the factory · growing</dd>
+      <dt>Priority</dt><dd>P2</dd>
+      <dt>Area</dt><dd>factory</dd>
+      <dt>Tickets</dt><dd>5 of 6 done</dd>
+      <dt>Fast lane</dt><dd class="lane new">
+        <button type="button" class="lever" role="switch" aria-checked="true" data-toggle>fast lane <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+        <small>Goes before everything, planning and reviews too, and uses both of Claude's reserves. Leaves the lane when its tickets are done.</small></dd>
+    </dl>
+    <a class="card-thread" href="#">Its planning thread: talk it through, sign it off ›</a>
+  </header>
+  <span class="note">moved and renamed: the lever is a row of the card's header, where a tap on the board lands. Tap it: it goes halfway with a dashed edge until the runner takes it.</span>
+
+  <h3 class="where">The planning thread · /planning/f142</h3>
+  <header class="thread-head">
+    <span class="meta">softfield · factory</span>
+    <h2>Phone notifications: every project, and with the dashboard closed</h2>
+  </header>
+  <span class="note">gone from here: the thread is for talking.</span>
+
+  <h3 class="where">The board · Planted</h3>
+  <section class="stage">
+    <div class="stage-head"><h4>Planted</h4><span>tickets ready</span></div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> F173 factory</span><span class="card-title">The board's order is the order the work runs in</span><span class="card-reserve new"><i></i>fast lane</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#3</b> F142 factory</span><span class="card-title">Phone notifications: every project, and with the dashboard closed</span><span class="meter"><span style="width:83%"></span></span><span class="card-count">5 of 6 tickets</span><span class="card-reserve new"><i></i>fast lane</span></a>
+    </div>
+  </section>
+  <span class="note">renamed: the plate says "fast lane".</span>
+
+  <h3 class="where">The Overview</h3>
+  <section class="panel">
+    <h3>Queue</h3>
+    <p>72 tickets waiting.</p>
+    <div class="next-in-line">
+      <h3>Next in line</h3>
+      <div class="lane-bay new">
+        <span class="label">Fast lane <span>goes before everything</span></span>
+        <div class="next-row"><b class="mono">1 <a href="#">f173-02-waited-for-goes-first</a></b> A ticket that a higher ticket waits for runs in that ticket's place in the line. · the lead · F173</div>
+        <div class="next-row"><b class="mono">2 <a href="#">f142-05-fix-a-look-is-not-an-answer</a></b> The phone's notification after a planner job says what happened. · a developer · F142</div>
+      </div>
+      <div class="next-row"><b class="mono">Planning: <a href="#">F176</a></b> · "Conversations and proposals can be better bundled together. …"</div>
+      <div class="next-row"><b class="mono">Planning: <a href="#">F37</a></b> · "You mentioned mock-up I don't see it. Again ..."</div>
+      <div class="more">… 13 more planning jobs …</div>
+      <div class="next-row"><b class="mono">Escalation: f38-01-new-version-tag</b> · BLOCKED: needs-file</div>
+      <div class="next-row"><b class="mono">Escalation: f80-01-by-kind-of-work</b> · BLOCKED: needs-file</div>
+      <div class="more">… 4 directions …</div>
+      <div class="next-row"><b class="mono">Checkpoint: f51-when-a-plan-depends-on-an</b> · Claude re-checks 7 tickets after a stand-in</div>
+      <div class="next-row"><b class="mono">3 review F68</b> · a batch</div>
+      <p><a href="#">Reorder on the board ›</a></p>
+    </div>
+    <div class="next-in-line">
+      <h3>Agent allowance · under Claude's meters</h3>
+      <div class="cards-on new"><b>Fast lane:</b><a href="#">F173, The board's order is the order the work runs in</a> · <a href="#">F142, Phone notifications</a></div>
+    </div>
+  </section>
+  <span class="note">new: the lane's tickets sit on top in a striped bay, before the 15 planning jobs and F68's review. Under Claude's meters the list reads "Fast lane:" and opens each card's page.</span>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll('.switch button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.switch button').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+      document.querySelectorAll('[data-version]').forEach(function (v) { v.hidden = v.dataset.version !== b.dataset.show; });
+    });
+  });
+  document.querySelectorAll('[data-toggle]').forEach(function (l) {
+    l.addEventListener('click', function () {
+      if (l.classList.contains('on-its-way')) { l.classList.remove('on-its-way');
+        l.setAttribute('aria-checked', l.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); return; }
+      l.classList.add('on-its-way');
+    });
+  });
+</script>
+</body>
+</html>
