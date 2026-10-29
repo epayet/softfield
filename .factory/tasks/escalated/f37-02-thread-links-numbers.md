@@ -31,3 +31,12 @@ The picture to build: `.factory/cards/f37-mockup/thread-names.html` (Proposed). 
 - the layout check passes at 390 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 379632
+logs: .factory/var/runs/20261029-110520/f37-02-thread-links-numbers
+```
