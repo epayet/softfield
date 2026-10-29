@@ -1,6 +1,7 @@
 # Milestone F84: Coming says which reply the lead is writing, and when each other one comes
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f84-when-the-planner-is-replying-to-start`. Report: [`.factory/reviews/f84-when-the-planner-is-replying-to.md`](../reviews/f84-when-the-planner-is-replying-to.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes

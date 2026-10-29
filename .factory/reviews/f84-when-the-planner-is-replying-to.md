@@ -1,6 +1,6 @@
 # Review: F84, Coming says which reply the lead is writing
 
-- **Status:** review round 1 done. Both should-fix findings are fixed in the review, and one nit and one factory point went to the backlog. Waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 
