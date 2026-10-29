@@ -1,6 +1,7 @@
 # Milestone F82: Text boxes grow with what you type, the Plant box first
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f82-the-plant-idea-text-box-is-start`. Report: [`.factory/reviews/f82-the-plant-idea-text-box-is.md`](../reviews/f82-the-plant-idea-text-box-is.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes

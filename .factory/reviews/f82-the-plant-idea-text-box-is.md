@@ -1,6 +1,6 @@
 # Review: F82, text boxes grow with what you type
 
-- **Status:** review round 1 done: both findings are fixed in the review. Waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 
