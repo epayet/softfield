@@ -32,3 +32,10 @@ Read ADR 35 item 1 in `.factory/adr/35-a-marked-card-goes-first.md` (it must be 
 - no card doc in `.factory/cards/` says `**Reserve:**` after this change
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
