@@ -1,6 +1,6 @@
 # Milestone F132: One view of the whole factory: the top bar, the Overview, Jobs and the floor
 
-> **State:** ready · **Priority:** 9 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-15.
 
 ## Notes
