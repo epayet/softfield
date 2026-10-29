@@ -1,6 +1,6 @@
 # Review: F100, proposals show "being revised" while your reply waits for the lead
 
-- **Status:** review round 1 done; waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 

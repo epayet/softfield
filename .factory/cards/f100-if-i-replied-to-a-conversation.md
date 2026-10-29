@@ -1,6 +1,7 @@
 # Milestone F100: Proposals show "being revised" while your reply waits for the lead
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** done · **Priority:** 4 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f100-if-i-replied-to-a-conversation-start`. Report: [`.factory/reviews/f100-if-i-replied-to-a-conversation.md`](../reviews/f100-if-i-replied-to-a-conversation.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes
