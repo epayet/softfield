@@ -1,6 +1,6 @@
 # Review: F152, a done card says where its review is, and set aside says it won't run
 
-- **Status:** round 1 done, nothing open; waiting for the owner's sign-off.
+- **Status:** round 2 done: all three round-1 findings confirmed fixed, nothing new; waiting for the owner's sign-off.
 
 ## Sign-off sheet
 
@@ -46,6 +46,11 @@ All three were fixed by the lead in this review (each under 10 lines). They are 
 - No checkpoint findings to judge. No checkpoint ran on this lead ticket, so nothing counts as missed.
 - No French to check, since nothing in `coucou/` changed.
 - Score: 7/10. The feature is right and small. Its tests stopped at the function and left out the git step that can break.
+
+### Round 2 (2026-10-29)
+I re-read the fix diff (`7fc6493`): the `-z --no-renames` diff, the shared `taken` ids and the two new tests. All three findings are fixed. The empty field after the last NUL in the git output is skipped, because `is_mockup_file` needs a full path match. The loop test covers added, changed, deleted, already-listed and `.css` files over two replies. No existing test was edited. Nothing new came up, so there's nothing for the backlog. The score stays at 7/10.
+
+Tests in round 2: `test_planner.py` and `test_loop.py` passed in the foreground (543 passed). The full `tests/runner tests/factory_dashboard` run went over the 10-minute limit for one command again and had to go to the background. It was stopped at about 93% with no failure before then. A few `E`s were printed only after it was stopped, as in round 1. I then ran the last dashboard files in the foreground, from `test_planning.py` to `test_timeline.py`: 325 passed. So everything passed, but in pieces. The fix for the slow run is still the F88 backlog item.
 
 ## Backlog
 Nothing added.
