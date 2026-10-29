@@ -31,3 +31,12 @@ Read `.factory/cards/f103-the-number-of-things-in-planning.md` ("What happens to
 - the desk groups' numbers other than Seeds add up to "Your desk · N"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 281184
+logs: .factory/var/runs/20261029-091445/f103-01-seeds-not-counted
+```
