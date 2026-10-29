@@ -1,6 +1,6 @@
 # Review: F51, the desk counts only what waits on you
 
-- **Status:** review round 2 done, the loop stops: all four round 1 findings are fixed and checked, with nothing new. Waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 

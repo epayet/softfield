@@ -1,6 +1,7 @@
 # Milestone F51: when a plan depends on an adr i have approved but is waiting for planner
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** done · **Priority:** 2 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f51-when-a-plan-depends-on-an-start`. Report: [`.factory/reviews/f51-when-a-plan-depends-on-an.md`](../reviews/f51-when-a-plan-depends-on-an.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes
