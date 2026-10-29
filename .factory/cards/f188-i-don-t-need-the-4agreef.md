@@ -1,4 +1,4 @@
-# Milestone F188: I don't need the '4agreef 0 to change ' to be sticky in…
+# Milestone F188: Drop the 'N agreed · M to change' count from the review's phone bar
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-29.
