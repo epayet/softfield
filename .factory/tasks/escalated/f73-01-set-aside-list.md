@@ -30,3 +30,12 @@ Read `.factory/cards/f73-i-want-to-be-able-to.md` (D1 to D3). In `factory_dashbo
 - the set-aside thread is in no group of the desk, and the Planning tab's count is the same with and without it
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 196786
+logs: .factory/var/runs/20261029-043403/f73-01-set-aside-list
+```
