@@ -37,20 +37,20 @@ def sections(text: str) -> dict[str, str]:
     return {heading: "\n".join(lines).strip() for heading, lines in found.items()}
 
 
-def brief(repo: Path, role: str) -> tuple[str, list[str]]:
-    """What goes first in a lead job's prompt (f21 D2): owner.md, then the lead.md sections
-    ``role`` needs, the same text for every job of the role, so jobs close together share
-    Claude's prompt cache. Also what the map names and wasn't found: the job goes with the
-    rest. Empty for a role with no sections, and in a repo without a lead.md."""
+def brief(repo: Path, role: str, owner: bool = True) -> tuple[str, list[str]]:
+    """What goes first in a lead job's prompt (f21 D2): owner.md (unless ``owner`` is false:
+    the agent loads it by itself), then the lead.md sections ``role`` needs, the same text for
+    every job of the role, so jobs close together share Claude's prompt cache. Also what the
+    map names and wasn't found: the job goes with the rest. Empty for a role with no
+    sections, and in a repo without a lead.md."""
     lead = repo / LEAD_DOC
     if role not in SECTIONS or not lead.is_file():
         return "", []
     missing: list[str] = []
     parts: list[str] = []
-    owner = repo / OWNER_DOC
-    if owner.is_file():
-        parts.append(owner.read_text(encoding="utf-8").strip() + "\n\n")
-    else:
+    if owner and (repo / OWNER_DOC).is_file():
+        parts.append((repo / OWNER_DOC).read_text(encoding="utf-8").strip() + "\n\n")
+    elif owner:
         missing.append(OWNER_DOC)
     found = sections(lead.read_text(encoding="utf-8"))
     missing += [name for name in SECTIONS[role] if name not in found]

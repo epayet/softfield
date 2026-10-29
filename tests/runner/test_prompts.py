@@ -149,6 +149,14 @@ def test_a_role_without_sections_or_a_repo_without_lead_md_gets_no_brief(tmp_pat
     assert prompts.brief(tmp_path, "checkpoint-shadow") == ("", [])
 
 
+def test_a_brief_without_owner_md_when_the_agent_loads_it_itself(tmp_path: Path):
+    _lead_doc(tmp_path, ("Your own work", "Tickets"))
+    text, missing = prompts.brief(tmp_path, "lead-ticket", owner=False)
+    assert missing == [] and "Low ceremony" not in text and text.count("\n## ") == 2
+    (tmp_path / prompts.OWNER_DOC).unlink()
+    assert prompts.brief(tmp_path, "lead-ticket", owner=False) == (text, [])  # not missed
+
+
 @pytest.mark.parametrize("role", sorted(LEAD_PROMPTS))
 def test_the_lead_prompts_no_longer_point_at_lead_md_or_owner_md(role):
     """f21 D2: the text is in the prompt. One pointer stays, to a section no role is given."""

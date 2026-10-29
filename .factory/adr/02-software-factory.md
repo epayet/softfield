@@ -606,6 +606,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** layout that has to be measured in a browser stalls Qwen even with the cause named in a direction; f42-02 passed but dropped one sentence of its ticket (the 8 px threshold), and its test couldn't catch it because the test only checked big scrolls. A ticket's numbers want a test that pins them.
 - **Decisions affected:** none.
 
+### F21 (2026-10-29): the lead's briefs ([review](../reviews/f21-lead-briefs.md))
+
+- **Q1:** three lead tickets. f21-01 (where the work stands, for the planner) and f21-02 (lead.md's sections pasted into every lead prompt) were done first time by Opus on 12 October, but blocked by a stray test file on main failing the layout gate, and landed by hand. f21-03 (trim owner.md) ran twice, changed nothing both times (no target was possible without rewording rules), and was set aside. No checkpoint. Review round 1: one should-fix (owner.md reached every headless lead job twice, through CLAUDE.md's import and the brief) and one nit (the block didn't explain a ticket pulled early by F173), both fixed by the review.
+- **Q3:** Claude only: Opus $4.04 for the two built tickets, $1.13 (Opus and Sonnet) for f21-03's two empty runs; no local tokens.
+- **Q5:** see the review's numbers.
+- **Anything else:** a plan that pastes text into prompts must account for what the agent loads by itself (CLAUDE.md and its imports); and a word-count target on a document that keeps gaining rules can't hold. The card sat over two weeks between its build and its review, mostly behind f21-03.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

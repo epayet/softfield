@@ -525,6 +525,19 @@ def test_the_block_lists_the_ticket_in_flight_then_the_ready_ones_in_the_order_g
     )
 
 
+def test_a_ticket_pulled_ahead_of_its_priority_says_who_it_runs_early_for():
+    """F21 review F2: F173 D7 places it before tickets of a lower priority; the block says why."""
+    ready = [
+        planner.ReadyTicket("f9-01-x", "f9-base", "developer", 8, early="f8-02-y"),
+        planner.ReadyTicket("f8-02-y", "f8-the-line", "lead", 1, "waits for f9-01-x"),
+    ]
+    lines = planner.where_it_stands(None, ready, [], []).splitlines()
+    assert "1. f9-01-x (f9-base, developer, priority 8, early for f8-02-y, which waits for it)" in (
+        lines
+    )
+    assert "2. f8-02-y (f8-the-line, lead, priority 1): waits for f9-01-x" in lines
+
+
 def test_the_block_says_when_nothing_is_in_flight_or_ready_and_names_another_job():
     idle = planner.where_it_stands(None, [], [], []).splitlines()
     assert "In flight: nothing." in idle and "Ready: no ticket." in idle

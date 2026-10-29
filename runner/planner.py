@@ -621,16 +621,19 @@ _CARD_STATES = ("building", "needs sign-off", "ready", "planning", "idea", "done
 @dataclass(frozen=True)
 class ReadyTicket:
     """A ready ticket as the block lists it: its milestone, who does it (``lead`` or
-    ``developer``), its priority and what it waits for, if anything."""
+    ``developer``), its priority, what it waits for, if anything, and the ticket it runs
+    early for (``early``, F173 D7), which explains its place ahead of its priority."""
 
     id: str
     milestone: str
     who: str
     priority: int
     waits: str | None = None
+    early: str | None = None
 
     def __str__(self) -> str:
-        return f"{self.id} ({self.milestone}, {self.who}, priority {self.priority})"
+        early = f", early for {self.early}, which waits for it" if self.early else ""
+        return f"{self.id} ({self.milestone}, {self.who}, priority {self.priority}{early})"
 
 
 def _in_flight(job: Mapping[str, Any] | None, ready: Mapping[str, ReadyTicket]) -> str:

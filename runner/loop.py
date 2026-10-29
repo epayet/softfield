@@ -46,7 +46,7 @@ from runner.agents import (
     Reading,
     adapter_for,
 )
-from runner.claude import Progress, backoff_seconds, probe
+from runner.claude import Progress, backoff_seconds, imports, probe
 from runner.config import Config, project_checks, read_protected
 from runner.gates import (
     BLOCKED_FILE,
@@ -1417,7 +1417,9 @@ def _brief(s: Session, role: str) -> str:
     there is a note in the session report, once, and the job goes with the rest."""
     # A project's own docs/agents/ (Softfield's) or the shared ones (ADR 30 item 4)
     home = s.repo if (s.repo / prompts.LEAD_DOC).is_file() else config.HOME
-    text, missing = prompts.brief(home, role)
+    # Claude Code loads what CLAUDE.md imports into every session, -p too: not twice
+    loaded = home == s.repo and imports(s.repo, prompts.OWNER_DOC)
+    text, missing = prompts.brief(home, role, owner=not loaded)
     rules = s.repo / config.PROJECT_MD
     if text and rules.is_file():
         text += "This project's own rules (.factory/project.md):\n\n"
@@ -4357,6 +4359,7 @@ def work_stands(
             ticket.priority,
             # a dependency in the block's words: "waits for <id>"
             ticket.waits and ticket.waits.replace("waiting on ", "waits for ", 1),
+            ticket.early_for,
         )
         for ticket in _dispatch_tickets(
             cfg.repo, ready, done, paused, state.parked, now(), behind, state.regate.keys()

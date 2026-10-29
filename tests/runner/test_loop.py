@@ -2548,6 +2548,26 @@ def test_a_heading_missing_from_lead_md_is_a_report_note_and_the_job_runs(repo, 
     assert "lead-ticket" in notes[0] and "Tickets" in notes[0]
 
 
+def test_owner_md_is_not_pasted_again_when_claude_md_already_loads_it(repo, monkeypatch):
+    """F21 review F1: CLAUDE.md's `@docs/agents/owner.md` loads it into every session, a
+    headless one too, so the brief goes with lead.md's sections alone."""
+    _lead_docs(repo)
+    (repo / "CLAUDE.md").write_text("# Claude\n\nMentions @docs/agents/owner.md inline.\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a CLAUDE.md")
+    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
+    calls = _limited_then(monkeypatch, done, done)
+    s = loop.open_session(_config(repo))
+    loop.call_claude(s, _job(), "m1", "m1-01-lead")
+    assert calls[0][0].startswith(OWNER_MD)  # only an import on its own line counts
+    (repo / "CLAUDE.md").write_text("# Claude\n\n@docs/agents/owner.md\n")
+    loop.call_claude(s, _job(), "m1", "m1-02-lead")
+    prompt, _ = calls[1]
+    assert "Low ceremony" not in prompt and _headings(prompt) == ROLE_SECTIONS["lead-ticket"]
+    assert prompt.startswith("From docs/agents/lead.md") and prompt.endswith("Do the ticket.")
+    assert not [note for note in s.report.notes if "went without" in note]
+
+
 def test_a_lead_tickets_prompt_starts_with_the_brief_then_names_its_ticket(
     repo, fake_model, fake_lead, monkeypatch
 ):
