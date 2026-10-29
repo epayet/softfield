@@ -29,3 +29,10 @@ Read `.factory/cards/f146-some-kind-of-view-or-toggle.md` (D1–D4, D6, and "Whe
 - with `developers=False`, the board is the same as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
