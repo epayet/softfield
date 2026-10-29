@@ -114,8 +114,12 @@ def test_signoff_takes_a_planning_room_card_and_a_review_with_no_status_line(rep
             "> **State:** building · **Priority:** 2 · **Area:** factory · **Reserve:** yes",
             "> **State:** done · **Priority:** 2 · **Area:** factory",
         ),
+        (
+            "> **State:** building · **Priority:** 2 · **Area:** factory · **Fast lane:** yes",
+            "> **State:** done · **Priority:** 2 · **Area:** factory",
+        ),
         (  # a field after the mark keeps its " · "
-            "> **State:** building · **Reserve:** yes · **Area:** factory",
+            "> **State:** building · **Fast lane:** yes · **Area:** factory",
             "> **State:** done · **Area:** factory",
         ),
     ],

@@ -185,6 +185,9 @@ def test_a_card_marked_reserve_yes_may_use_the_reserve():
     assert card("f9", marked) == Card("ready", 2, "factory", reserve=True)
     assert not card("f9", marked.replace("yes", "no")).reserve
     assert not card("f9", marked.replace(" · **Reserve:** yes", "")).reserve
+    lane = marked.replace("**Reserve:**", "**Fast lane:**")  # the name in the card (F172 D10)
+    assert card("f9", lane) == Card("ready", 2, "factory", reserve=True)
+    assert not card("f9", lane.replace("yes", "no")).reserve
     below = "# F9\n\n> **State:** ready\n\n## Outcome\n**Reserve:** yes\n"
     assert not card("f9", below).reserve  # only the header counts
 

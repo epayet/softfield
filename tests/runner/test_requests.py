@@ -451,35 +451,41 @@ def _reserve_card(repo: Path, card: str = MARKED_CARD) -> str:
 def test_a_reserve_request_on_a_card_marks_its_header_and_commits_it(repo):
     head = _reserve_card(repo)
     asked = _ask(repo, "reserve", "f142", "on")
-    assert _apply(repo) == ["reserve f142: F142 may use Claude's reserve"]
-    assert _request(repo, asked) == (NOW.isoformat(), "F142 may use Claude's reserve")
+    assert _apply(repo) == ["reserve f142: F142 in the fast lane"]
+    assert _request(repo, asked) == (NOW.isoformat(), "F142 in the fast lane")
     doc = _marked_doc(repo)
-    assert doc == MARKED_CARD.replace("**Area:** factory", "**Area:** factory · **Reserve:** yes")
+    assert doc == MARKED_CARD.replace("**Area:** factory", "**Area:** factory · **Fast lane:** yes")
     assert milestone.card(MARKED, doc).reserve
     assert git(repo, "rev-parse", "HEAD~1") == head
-    assert git(repo, "log", "-1", "--format=%s").strip() == (
-        "F142 may use Claude's reserve, by the owner"
-    )
+    assert git(repo, "log", "-1", "--format=%s").strip() == ("F142 in the fast lane, by the owner")
     assert git(repo, "show", "--name-only", "--format=", "HEAD").split() == [
         f".factory/cards/{MARKED}.md"
     ]
     assert git(repo, "status", "--porcelain") == ""
     _ask(repo, "reserve", "f142", "off")
-    assert _apply(repo) == ["reserve f142: F142 may no longer use Claude's reserve"]
+    assert _apply(repo) == ["reserve f142: F142 out of the fast lane"]
     assert _marked_doc(repo) == MARKED_CARD
     assert git(repo, "log", "-1", "--format=%s").strip() == (
-        "F142 may no longer use Claude's reserve, by the owner"
+        "F142 out of the fast lane, by the owner"
     )
+
+
+def test_taking_a_card_out_of_the_lane_removes_the_old_mark_too(repo):
+    old = MARKED_CARD.replace("**Area:** factory", "**Area:** factory · **Reserve:** yes")
+    _reserve_card(repo, old)
+    _ask(repo, "reserve", "f142", "off")
+    assert _apply(repo) == ["reserve f142: F142 out of the fast lane"]
+    assert _marked_doc(repo) == MARKED_CARD
 
 
 @pytest.mark.parametrize("value", ["on", "off"])
 def test_a_reserve_request_on_a_card_already_so_commits_nothing(repo, value):
     card = MARKED_CARD
     if value == "on":
-        card = card.replace("**Area:** factory", "**Area:** factory · **Reserve:** yes")
+        card = card.replace("**Area:** factory", "**Area:** factory · **Fast lane:** yes")
     head = _reserve_card(repo, card)
     _ask(repo, "reserve", "f142", value)
-    said = "may use Claude's reserve" if value == "on" else "may not use Claude's reserve"
+    said = "is in the fast lane" if value == "on" else "is not in the fast lane"
     assert _apply(repo) == [f"reserve f142: F142 {said} already"]
     assert git(repo, "rev-parse", "HEAD") == head
     assert _marked_doc(repo) == card
@@ -491,7 +497,7 @@ def test_a_card_without_an_area_is_marked_after_its_priority(repo):
     _ask(repo, "reserve", "f142", "on")
     _apply(repo)
     assert _marked_doc(repo) == card.replace(
-        "**Priority:** 1", "**Priority:** 1 · **Reserve:** yes"
+        "**Priority:** 1", "**Priority:** 1 · **Fast lane:** yes"
     )
 
 
@@ -503,13 +509,13 @@ def test_a_card_without_an_area_is_marked_after_its_priority(repo):
             MARKED_CARD.replace("ready", "idea"),
             "f142",
             "on",
-            "F142 is idea: only a ready or building card may use Claude's reserve",
+            "F142 is idea: only a planted card goes in the fast lane",
         ),
         (
             MARKED_CARD.replace("ready", "done"),
             "f142",
             "on",
-            "F142 is done: only a ready or building card may use Claude's reserve",
+            "F142 is done: only a planted card goes in the fast lane",
         ),
         (MARKED_CARD, "f142", "yes", "a card's reserve is turned on or off, not 'yes'"),
         (

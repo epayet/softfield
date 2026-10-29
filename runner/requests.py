@@ -1492,9 +1492,9 @@ _CARD_AREA_RE = re.compile(r"\*\*Area:\*\*[ \t]*[^·*\n]*[^·*\n \t]")
 _CARD_PRIORITY_FIELD_RE = re.compile(r"\*\*Priority:\*\*[ \t]*\d+")
 # the field with the " · " before it, up to the next field or the line's end
 _CARD_RESERVE_FIELD_RE = re.compile(
-    r"(?:[ \t]*·[ \t]*)?\*\*Reserve:\*\*[^·*\n]*?(?=[ \t]*(?:·|\n|$))"
+    r"(?:[ \t]*·[ \t]*)?\*\*(?:Fast lane|Reserve):\*\*[^·*\n]*?(?=[ \t]*(?:·|\n|$))"
 )
-_MARK = "**Reserve:** yes"
+_MARK = "**Fast lane:** yes"
 
 
 def _card_reserve_subject(subject: object) -> str | None:
@@ -1505,7 +1505,7 @@ def _card_reserve_subject(subject: object) -> str | None:
 
 
 def _card_marked(doc: str, on: bool) -> str:
-    """A card's doc with its header's ``**Reserve:** yes`` (F172 D1): written after its Area,
+    """A card's doc with its header's ``**Fast lane:** yes`` (F172 D1): written after its Area,
     else its Priority, else its State, else on a line of its own under the title; or removed
     with its `` · ``."""
     section = re.search(r"^## ", doc, re.MULTILINE)
@@ -1554,8 +1554,8 @@ def _card_reserve(
     subject: object,
     value: object,
 ) -> str:
-    """The owner marks a ready or building card as one that may use Claude's reserve, or
-    unmarks it (F172 D2): its header's ``**Reserve:** yes`` written or removed in a commit of
+    """The owner puts a ready or building card in the fast lane (it may use Claude's reserve),
+    or takes it out (F172 D2): its header's ``**Fast lane:** yes`` written or removed in a commit of
     its own. Marked, its tickets parked at either reserve go (``_free_parked``). Already so,
     nothing is committed."""
     key = _card_reserve_subject(subject)
@@ -1571,15 +1571,13 @@ def _card_reserve(
     text = doc.read_text(encoding="utf-8")
     found = milestone.card(doc.stem, text)
     if found.state not in _RESERVE_CARD_STATES:
-        return f"{name} is {found.state}: only a ready or building card may use Claude's reserve"
-    said = (
-        f"{name} may use Claude's reserve" if on else f"{name} may no longer use Claude's reserve"
-    )
+        return f"{name} is {found.state}: only a planted card goes in the fast lane"
+    said = f"{name} in the fast lane" if on else f"{name} out of the fast lane"
     if found.reserve == on:
-        return f"{name} may {'' if on else 'not '}use Claude's reserve already"
+        return f"{name} is {'' if on else 'not '}in the fast lane already"
     changed = _card_marked(text, on)
     if milestone.card(doc.stem, changed) != replace(found, reserve=on):
-        return f"{name}'s header can't take the reserve's mark: not changed"
+        return f"{name}'s header can't take the fast lane's mark: not changed"
     _commit_file(Git(repo), doc, changed, f"{said}, by the owner")
     if on:
         _free_parked(repo, conn, project_id, state, now)

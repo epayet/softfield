@@ -245,7 +245,8 @@ DEFAULT_PRIORITY = 100
 _CARD_STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*([^·*\n]+)")
 _CARD_PRIORITY_RE = re.compile(r"\*\*Priority:\*\*[ \t]*(\d+)\b")
 _CARD_AREA_RE = re.compile(r"\*\*Area:\*\*[ \t]*(factory|product)\b")
-CARD_RESERVE_RE = re.compile(r"\*\*Reserve:\*\*[ \t]*([^·*\n]*)")  # F172 D1
+# F172 D1, D10: the fast lane's mark; the old ``**Reserve:**`` counts as the same
+CARD_RESERVE_RE = re.compile(r"\*\*(?:Fast lane|Reserve):\*\*[ \t]*([^·*\n]*)")
 
 
 @dataclass(frozen=True)
@@ -253,14 +254,14 @@ class Card:
     state: str
     priority: int
     area: str
-    reserve: bool = False  # the owner's "may use Claude's reserve" (ADR 34)
+    reserve: bool = False  # the owner's fast lane (ADR 34, ADR 35): may use Claude's reserve
 
 
 def card(key: str, text: str) -> Card:
     """A milestone doc's card, from its header. A missing (or unknown) state is derived: done
     once its doc says "Status: done", else building. A missing priority is 100; a missing area
     is the key's series: ``f`` factory, ``m`` product. It may use the reserve only when it
-    says ``**Reserve:** yes``."""
+    says ``**Fast lane:** yes`` (or the old ``**Reserve:** yes``)."""
     header = _header(text)
     state = _CARD_STATE_RE.search(header)
     priority = _CARD_PRIORITY_RE.search(header)

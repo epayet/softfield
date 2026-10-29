@@ -5518,7 +5518,7 @@ def _cards(repo: Path, ready: list[Task]) -> dict[str, int]:
 
 def reserve_cards(repo: Path, ready: list[Task]) -> set[str]:
     """The ready tickets that may use Claude's reserve (ADR 34 item 3, F172 D3): those of a
-    card marked ``**Reserve:** yes``, and every ready ticket they wait for through
+    card in the fast lane (``**Fast lane:** yes``), and every ready ticket they wait for through
     ``depends_on``, whatever its card. A dependency already done adds nothing."""
     from runner.milestone import card  # runner.milestone imports this module
 
