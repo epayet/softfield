@@ -28,3 +28,33 @@ The planning thread behind F170's plan, oldest first, as it was when the owner a
 > Proposals:
 > - F170: the tests get 30 minutes, and a blocked ticket's fix is one press (plan)
 > - F170 mock-up: a blocked ticket on the desk offers the lead's fix (mockup)
+
+## The lead, 2026-10-22 08:21
+
+> Approved by the owner on 2026-10-22: approved plan/f170: queued f170-02-fix-after-try-again, f170-03-desk-offers-the-fix
+
+## The lead, 2026-10-29 09:59
+
+> Merged F190 here: A blocked ticket doesn't link back to the milestone /…
+
+## The owner, 2026-10-29 09:59
+
+> From F190, merged here:
+> A blocked ticket doesn't link back to the milestone / original discussion and plans so the current blocked ticket f21 atm looks like I can't do anything about it
+
+## The lead, 2026-10-29 10:02
+
+> I've added the part that F170 didn't cover yet: a blocked ticket's own page will say why it is blocked, link back to its card and thread, and carry the same buttons as the desk. Nothing on main is touched.
+>
+> 1. **You're right: nothing on a blocked ticket leads back to its card**: f21-03 was blocked from 28 October 11:54 to 29 October 09:55. During those 22 hours the lead's fix ("Set aside f21-03, trim owner.md") was waiting on the thread of F21, The lead's briefs. On the desk, the blocked item linked only to the ticket's page. That page didn't say it was blocked or why, and had no buttons. Its one link back, F21-LEAD-BRIEFS at the top, opens the list of F21's tickets, not the card or its thread. The desk did say "the lead's fix waits on F21's thread", but that wasn't a link. f21-03 is sorted out now: approving F21's plan this morning set it aside, and nothing is blocked at the moment.
+>    Action: Ticket f170-04, below.
+> 2. **The blocked ticket's page gets a Blocked panel with the lead's fix and the buttons**: f170-04 adds a panel at the top of the page, built like the 'Set aside' panel the page already has: a hazard plate, the runner's reason in plain words, the lead's diagnosis and the name of its fix, then the desk's three buttons: "Approve the lead's fix" in yellow, "Try again as it is" and "Set aside" quiet. Under them are links to the card's thread and to the card's page. While the lead is still looking, the panel says so and shows only the quiet buttons. The desk and the page read the same facts through one shared function, so they can't disagree. The mock-up shows f21-03's page with its real words, Today and Proposed.
+>    Action: Look at the mock-up; f170-04 (developer) builds it after f170-03.
+> 3. **Every ticket's page names its card and opens the card**: The first link at the top of every ticket's page, not only a blocked one, becomes the card's name ("F21, The lead's briefs") and opens the card's page. Today it shows the card's long key and opens the list of its tickets. The Tickets page can still filter by card, so nothing is lost.
+>    Action: Part of f170-04.
+> 4. **F170 is last on the board, so this fix comes last**: F170 sits at the very end of the board, behind about 100 ready tickets. At roughly 20 minutes a ticket, that is more than a day of the line before f170-02 even starts. A blocked ticket is when you most need the right button, and it has hit you twice now (f132-01, then f21-03). I recommend dragging F170 up to just after F172, I'd like to be able…, which is first today. Its three remaining tickets are small and run unattended.
+>    Action: Drag F170 up on the board when you next reorder.
+>
+> Proposals:
+> - F170: a blocked ticket's page says why, links back and has the buttons (plan)
+> - F170 mock-up: a blocked ticket's page (mockup)

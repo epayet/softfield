@@ -18,8 +18,10 @@ A blocked ticket doesn't link back to the milestone / original discussion and pl
 - **D1: overtaken by F71 the same night** (lead, 2026-10-21): the suite runs on 16 workers, and check-all takes 4.5 minutes instead of 19.6, so no limit is raised. f170-01, f132-09 and f152-03 are dropped.
 - **D2: Try again never makes the lead's fix unapprovable** (f170-02): approving a replan whose ticket Try again already put back replaces that ticket with the lead's version, footers carried over.
 - **D3: the desk offers the lead's fix as its yellow button** (f170-03, mock-up `.factory/cards/f170-mockup/blocked-on-the-desk.html`): the fix's first point and title in the blocked item, "Approve the lead's fix" right there, "Try again as it is" quiet beside it with what it does. A bug ticket keeps today's two buttons.
+- **D4: a blocked ticket's page says why, links back and has the buttons** (f170-04, from F190, 2026-10-29; mock-up `.factory/cards/f170-mockup/blocked-ticket-page.html`): a Blocked panel like the set-aside one, with the runner's reason, the lead's fix (the same lookup as the desk's, one function in `factory_dashboard/planning.py`), the desk's three buttons, and links to the card's thread and page. Every ticket page's first crumb names its card and opens the card's page, not the list of its tickets. Evidence: f21-03 was blocked from 28 October 11:54 to 29 October 09:55 with its fix waiting on F21's thread, and its page said nothing.
 - **f132-01 and f152-01:** their escalations' work was landed from their branches by the lead in a terminal session (2026-10-21), check-all passing on workers. F132's and F152's replans are overtaken.
 
 ## Tickets
 - f170-02-fix-after-try-again (lead)
 - f170-03-desk-offers-the-fix (developer)
+- f170-04-blocked-ticket-page (developer)
