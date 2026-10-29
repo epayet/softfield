@@ -29,3 +29,12 @@ Read `.factory/cards/f146-some-kind-of-view-or-toggle.md` (D3–D5) and build th
 - dragging a card in the view and pressing Send new order posts the same reorder as from the normal board
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 725004
+logs: .factory/var/runs/20261029-143524/f146-02-developers-only-view
+```
