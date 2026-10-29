@@ -40,3 +40,9 @@ attempts: 3
 tokens: 281184
 logs: .factory/var/runs/20261029-091445/f103-01-seeds-not-counted
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
