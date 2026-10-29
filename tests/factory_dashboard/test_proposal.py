@@ -5,6 +5,7 @@ desk and the thread page stay in ``test_planning``."""
 import json
 import re
 import sqlite3
+from datetime import timedelta
 from html import unescape
 from pathlib import Path
 from typing import Any
@@ -52,6 +53,10 @@ _REVIEW_SEED: dict[str, Any] = {
     "key_points": [{"n": 1, "title": "Two at once", "text": "Beside each other.", "flag": False}],
 }
 ADR_ON_MAIN = "# ADR 20: the planning room\n\n- **Status:** {status}\n"
+REFRESH = (
+    "Check this against main as it is now: renumber what is taken, drop what is done or gone,"
+    " and update the tickets."
+)
 
 
 def _key_points(html: str) -> list[str]:
@@ -586,6 +591,134 @@ def test_a_mockup_link_is_visible_on_a_phone(page, planning, db_path, serve, che
     assert href and "/planning/mockups/f6/.factory/cards/f6-mockup/index.html" in href
     assert link.get_attribute("target") == "_blank"
     assert link.get_attribute("rel") == "noopener"
+
+
+# --- Set aside, Refresh and the stale note (F73 D2, D4, D6) ----------------------------------
+
+
+def _asked(db_path: Path, planning: int) -> list[tuple[str, str, str]]:
+    conn = metrics.open_db(db_path)
+    try:
+        rows = conn.execute("SELECT * FROM owner_requests WHERE project_id = ?", (planning,))
+        return [(r["kind"], r["subject"], r["value"]) for r in rows]
+    finally:
+        conn.close()
+
+
+def test_an_open_plan_has_set_aside_and_refresh_posting_their_requests(planning, db_path, serve):
+    """Set aside posts the thread's ``archive`` (the whole conversation, D2); Refresh posts
+    Send back on the proposal with the fixed words and no comments (D6)."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    html = _review_page(serve(), "/planning/f6/proposals/plan")
+    assert _posts(html, "set-aside-button") == {
+        "kind": "archive",
+        "project": PROJECT,
+        "subject": "f6",
+        "value": "on",
+    }
+    refresh = _posts(html, "refresh-button")
+    assert {k: v for k, v in refresh.items() if k != "value"} == {
+        "kind": "send_back",
+        "project": PROJECT,
+        "subject": "f6/plan",
+    }
+    assert json.loads(refresh["value"]) == {"text": REFRESH, "comments": {}}
+    assert "It leaves your desk with its drafts kept." in _text(html)
+
+
+def test_an_adr_has_set_aside_but_no_refresh_and_a_merge_neither_refresh(planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    client = serve()
+    adr = _review_page(client, "/planning/f6/proposals/adr-20")
+    assert 'id="set-aside-button"' in adr and 'id="refresh-button"' not in adr
+    merge = _review_page(client, "/planning/f9/proposals/merge-f9")
+    assert 'id="refresh-button"' not in merge
+
+
+def test_an_approved_plan_and_an_archived_thread_have_no_set_aside(planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    client = serve()
+    assert 'id="set-aside-button"' in _review_page(client, "/planning/f6/proposals/plan")
+    _finished(db_path, planning, "approve_plan", "f6", None, "approved: 2 tickets queued")
+    approved = _review_page(client, "/planning/f6/proposals/plan")
+    assert 'id="settled"' in approved  # the plan's own state, not a page that failed to show
+    assert 'id="set-aside-button"' not in approved
+
+    _write(db_path, lambda conn: _review(conn, planning, "f9", _REVIEW_MERGE))
+    assert 'id="set-aside-button"' in _review_page(client, "/planning/f9/proposals/merge-f9")
+
+    def archive(conn: sqlite3.Connection) -> None:
+        found = metrics.planner_thread(conn, planning, "f9", NOW.isoformat())["id"]
+        metrics.set_thread_archived(conn, found, NOW.isoformat(), "by you")
+
+    _write(db_path, archive)
+    archived = _review_page(client, "/planning/f9/proposals/merge-f9")
+    assert 'id="approve-merge"' in archived  # still open: only the Set aside button goes
+    assert 'id="set-aside-button"' not in archived
+
+
+def _drafted(db_path: Path, days: int) -> None:
+    """The lead's last message on F6, ``days`` days before ``NOW``."""
+
+    def write(conn: sqlite3.Connection) -> None:
+        conn.execute(
+            "UPDATE planner_messages SET at = ? WHERE id = (SELECT MAX(id) FROM planner_messages"
+            " WHERE author = 'lead')",
+            ((NOW - timedelta(days=days)).isoformat(),),
+        )
+
+    _write(db_path, write)
+
+
+def test_a_plan_drafted_five_days_ago_says_so_and_one_from_today_doesnt(planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    client = serve()
+    stale = "Refresh it before approving."
+    assert stale not in _review_page(client, "/planning/f6/proposals/plan")
+    _drafted(db_path, 2)
+    assert stale not in _review_page(client, "/planning/f6/proposals/plan")
+    _drafted(db_path, 5)
+    html = _review_page(client, "/planning/f6/proposals/plan")
+    assert "Drafted 5 days ago: the code may have moved. Refresh it before approving." in _text(
+        html
+    )
+
+
+def test_set_aside_posts_one_archive_and_cant_be_pressed_again(page, planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.click("#set-aside-button")
+    page.wait_for_selector("#review-status >> text=Asked")
+    assert "on-its-way" in (page.locator("#actions").get_attribute("class") or "")
+    button = page.locator("#set-aside-button")
+    assert button.is_disabled() and not button.is_visible()
+    assert _asked(db_path, planning) == [("archive", "f6", "on")]
+
+
+def test_refresh_posts_one_send_back_with_the_fixed_words(page, planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    page.click("#refresh-button")
+    page.wait_for_selector("#review-status >> text=Asked")
+    assert not page.locator("#refresh-button").is_visible()
+    [(kind, subject, value)] = _asked(db_path, planning)
+    assert (kind, subject, json.loads(value)) == (
+        "send_back",
+        "f6/plan",
+        {"text": REFRESH, "comments": {}},
+    )
+
+
+def test_on_a_phone_set_aside_is_a_thumbs_target_inside_the_page(page, planning, db_path, serve):
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/plan")
+    for button in ("#set-aside-button", "#refresh-button"):
+        box = page.locator(button).bounding_box()
+        assert box, button
+        assert box["height"] >= 44, button
+        assert box["x"] >= 0 and box["x"] + box["width"] <= PHONE["width"], button
 
 
 def test_the_mockup_iframe_shows_at_display(page, planning, db_path, serve, checkout):

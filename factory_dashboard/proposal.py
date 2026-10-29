@@ -4,6 +4,7 @@ and ``/planning/mockups/{thread}/{path}``. What the thread page shares with them
 
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 import yaml
@@ -65,6 +66,12 @@ def _plan_changes(repo: Path | None, thread: str, kind: str) -> list[PlanChange]
     return found
 
 
+# F73 D6: Refresh against main is Send back with these words, so the owner types nothing
+REFRESH_WORDS = (
+    "Check this against main as it is now: renumber what is taken, drop what is done or gone,"
+    " and update the tickets."
+)
+
 _WORD_COLOR = {"added": "--good", "changed": "--a7"}  # set aside and removed: --muted (D8)
 
 
@@ -123,6 +130,11 @@ def proposal_review(
         and str(r["value"] or "").isdigit()
     )
     waits = _adr_waits(repo, listed, accepting)
+    archived = conn.execute(
+        "SELECT archived FROM planner_threads WHERE project_id = ? AND card = ?",
+        (project_id, thread),
+    ).fetchone()
+    drafted = (now - datetime.fromisoformat(lead[-1]["at"])).days if lead else 0
     return render(
         request,
         conn,
@@ -152,5 +164,8 @@ def proposal_review(
             "word_color": _WORD_COLOR,
             "standing": _standing(conn, project_id, thread, proposal, lead, _known_cards(repo)),
             "trail": desk_trail(conn, project, now, request.url.path),
+            "archived": bool(archived and archived["archived"]),
+            "drafted_days": drafted,
+            "refresh_words": REFRESH_WORDS,
         },
     )

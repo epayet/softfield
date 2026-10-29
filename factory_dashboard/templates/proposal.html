@@ -141,6 +141,27 @@
       <span id="review-status" class="aside" data-has-answer="{% if standing.pending or (standing.said and standing.state in ('open', 'approved', 'rejected')) %}true{% else %}false{% endif %}">{% if standing.pending %}{% with asked = standing.pending %}{% include "_partials/request.html" %}{% endwith %}{% elif standing.said and standing.state in ("open", "approved", "rejected") %}The runner said: {{ standing.said }}{% elif open %}Every point is agreed unless you comment on it.{% endif %}</span>
       </div>
     </section>
+    {% set refresh = kind in ("plan", "mockup", "replan") %}
+    {% if open and not archived and not (kind == "merge" and proposal.applied) %}
+    {# F73 D2, D4, D6: the whole conversation off the desk, the archive request with its drafts
+       kept; Refresh is Send back with the words written, and a draft three days old says so.
+       Outside the dock, which stays one row on a phone; a press marks #actions on its way #}
+    <section id="later" class="panel">
+      <h2>Not now</h2>
+      {% if refresh and drafted_days >= 3 %}<span id="stale" class="aside">Drafted {{ drafted_days }} days ago: the code may have moved. Refresh it before approving.</span>{% endif %}
+      {% if refresh %}
+      <button type="button" id="refresh-button" class="btn plain"
+        hx-on::before-request="this.disabled = true; document.getElementById('actions').classList.add('on-its-way')"
+        hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+        hx-vals='{"kind": "send_back", "project": {{ project | tojson }}, "subject": {{ (thread ~ "/" ~ proposal.id) | tojson }}, "value": {{ {"text": refresh_words, "comments": {}} | tojson | tojson }}}'>Refresh against main</button>
+      {% endif %}
+      <button type="button" id="set-aside-button" class="btn plain"
+        hx-on::before-request="this.disabled = true; document.getElementById('actions').classList.add('on-its-way')"
+        hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
+        hx-vals='{"kind": "archive", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": "on"}'>Set aside</button>
+      <span class="aside">It leaves your desk with its drafts kept. Planning lists it under Set aside; a message from you opens it again.</span>
+    </section>
+    {% endif %}
     <section id="next-steps" class="panel">
       <h2>What happens next</h2>
       <ol>
