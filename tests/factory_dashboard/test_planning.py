@@ -230,12 +230,16 @@ def test_the_lead_window_shows_the_75_line(planning, db_path, serve):
         ),
     )
     html = _page(serve())
-    assert "5-hour window 80% · planning may go past the 75% line" in _tile(html, "lead-window")
+    tile = _text(_tile(html, "lead-window"))
+    # NOW is 12:00, so the reset two hours on is later today (f32-01)
+    assert "5-hour window 80% · resets at 14:00 · planning may go past the 75% line" in tile
+    assert "the factory stops there" in tile
     assert re.search(r'class="past-mark" style="width: 80%"', html)
     assert re.search(r'class="mark"[^>]*style="left: 75%"', html)
 
 
 def test_the_lead_window_shows_the_week_row(planning, db_path, serve):
+    resets = NOW + timedelta(days=2)
     _write(
         db_path,
         lambda conn: metrics.add_usage_event(
@@ -245,13 +249,43 @@ def test_the_lead_window_shows_the_week_row(planning, db_path, serve):
             "reading",
             window="seven_day",
             value=0.6,
-            resets_at=(NOW + timedelta(days=2)).isoformat(),
+            resets_at=resets.isoformat(),
         ),
     )
     html = _page(serve())
-    tile = _tile(html, "lead-window")
-    assert "week 60%" in tile
+    tile = _text(_tile(html, "lead-window"))
+    # a reset on a later day names the day (f32-01)
+    assert f"week 60% · resets on {resets:%b} {resets.day} 12:00" in tile
     assert re.search(r'class="under-mark" style="width: 60%"', html)
+
+
+def test_the_lead_window_says_a_reset_since_and_no_reading(planning, db_path, serve):
+    """A row without a fresh reading says why, from its status (f32-01)."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_usage_event(
+            conn,
+            OPUS,
+            (NOW - timedelta(hours=6)).isoformat(),
+            "reading",
+            window="five_hour",
+            value=0.8,
+            resets_at=(NOW - timedelta(hours=1)).isoformat(),
+        ),
+    )
+    tile = _text(_tile(_page(serve()), "lead-window"))
+    assert "5-hour window – · reset since, no new reading · planning may go past" in tile
+    assert "week – · no data yet" in tile
+    assert "resets" not in tile
+
+
+def test_the_lead_window_template_holds_no_status_words():
+    """Both status sentences come from the row's status, never the template (f32-01)."""
+    template = (
+        Path(__file__).parents[2] / "factory_dashboard" / "templates" / "planning.html"
+    ).read_text()
+    assert "no data yet" not in template
+    assert "reset since" not in template
 
 
 def test_the_top_bar_has_a_planning_tab(client):
