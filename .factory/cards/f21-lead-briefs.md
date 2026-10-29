@@ -32,3 +32,10 @@
 | 03 | trim-owner | L | 2 | – | D3 |
 
 All lead: `runner/` and `docs/agents/` are protected.
+
+## Notes
+### From F181: Why is f21-03 blocked? What should I do with it (merged by the lead on 2026-10-29)
+Why is f21-03 blocked? What should I do with it
+
+What was said on F181's thread:
+The owner asked why f21-03 is blocked and what to do with it. The answer and the replan that sets the ticket aside are already on F21's thread, waiting for the owner's Approve.
