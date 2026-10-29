@@ -609,18 +609,21 @@ def _desk_number(html: str) -> int:
 
 def test_group_headings_count_what_waits_and_add_up_to_the_desk(planning, db_path, serve):
     """F26: each group's heading reads its name, " · " and its items still waiting, and the
-    numbers add up to "Your desk · N" and the Planning tab on the same page."""
+    numbers add up to "Your desk · N" and the Planning tab on the same page. F103 D1: Seeds
+    keeps its own number but is left out of the sum."""
     html = _page(serve())
     headings = _headings(html)
     waiting = _waiting_by_group(db_path)
     assert set(headings) == set(waiting)
-    assert len(headings) > 1
+    assert len(headings) > 2
     for key, (name, n) in waiting.items():
         assert n > 0
         assert headings[key] == f"{name} · {n}"
     # the fixture's card with open proposals: one item since F51 D1
     assert headings["proposals"] == "Proposals to review · 1"
-    total = sum(n for _, n in waiting.values())
+    # the fixture's seed, F9
+    assert headings["seeds"] == "Seeds, not asked about yet · 1"
+    total = sum(n for key, (_, n) in waiting.items() if key != "seeds")
     assert _desk_number(html) == total
     assert f'id="planning-tab">Planning · {total}</a>' in html
 
@@ -641,7 +644,8 @@ def test_a_group_heading_leaves_out_what_is_on_its_way(planning, db_path, serve)
     assert {k: v for k, v in after.items() if k != holder} == {
         k: v for k, v in before.items() if k != holder
     }
-    assert sum(n for _, n in _waiting_by_group(db_path).values()) == _desk_number(html)
+    waiting = _waiting_by_group(db_path)
+    assert sum(n for key, (_, n) in waiting.items() if key != "seeds") == _desk_number(html)
 
 
 def _group_holding(html: str, link: str) -> str:
@@ -689,8 +693,17 @@ def test_desk_heading_leaves_out_what_is_on_its_way(planning, db_path, serve):
         assert heading and tab
         return unescape(heading[1]), unescape(tab[1])
 
+    def cards_outside_seeds(html: str) -> int:
+        # F103 D1: seeds are listed but wait on no one
+        return sum(
+            len(re.findall(r"<a href=", group))
+            for key, group in _groups(html).items()
+            if key != "seeds"
+        )
+
     html = _page(serve())
-    cards = sum(len(re.findall(r"<a href=", group)) for group in _groups(html).values())
+    assert re.findall(r"<a href=", _groups(html)["seeds"])
+    cards = cards_outside_seeds(html)
     assert cards > 1
     assert heading_and_tab(html) == (f"Your desk · {cards}", f"Planning · {cards}")
     _write(
@@ -700,7 +713,7 @@ def test_desk_heading_leaves_out_what_is_on_its_way(planning, db_path, serve):
         ),
     )
     html = _page(serve(live=False))
-    assert sum(len(re.findall(r"<a href=", g)) for g in _groups(html).values()) == cards
+    assert cards_outside_seeds(html) == cards
     assert heading_and_tab(html) == (f"Your desk · {cards - 1}", f"Planning · {cards - 1}")
 
 
@@ -926,12 +939,16 @@ def _trail(html: str) -> dict[str, str]:
 
 
 def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
-    """F35: from the general thread, Next is F9 (seeds come after answers); from there Previous is
-    back and Next is the ripe card; a page already done with leads to the first one left."""
+    """F35: the general thread is the last one waiting: no Next, the proposal before it. F103 D1:
+    the seed F9 is not stepped through, and from its page Next leads to the first one waiting;
+    a page already done with leads to the first one left."""
     client = serve()
     first = _trail(_thread(client, "general"))
-    assert first["next"] == "/planning/f9" and first["previous"] == "/planning/f6/proposals/adr-20"
-    assert "3 of " in first["words"] and "waiting for you" in first["words"]
+    assert "next" not in first and first["previous"] == "/planning/f6/proposals/adr-20"
+    assert "3 of 3 waiting for you" in first["words"]
+    seed = _trail(_thread(client, "f9"))
+    assert seed["next"] == "/planning/m4" and "previous" not in seed
+    assert "3 waiting for you" in seed["words"] and " of " not in seed["words"]
     middle = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
     assert middle["previous"] == "/planning/m4"
     assert middle["next"] == "/planning/general"

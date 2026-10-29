@@ -2268,6 +2268,7 @@ def _tab(html: str) -> str:
 
 def test_every_page_shows_the_planning_count_on_first_paint(serve, db_path):
     client = serve()
+    assert _tab(client.get("/live").text) == "Planning · 1"  # the fixture's ripe card
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -2275,8 +2276,10 @@ def test_every_page_shows_the_planning_count_on_first_paint(serve, db_path):
             metrics.upsert_milestone(conn, project, key, title=f"Idea {key}", state="idea")
     finally:
         conn.close()
+    assert _tab(client.get("/live").text) == "Planning · 1"  # F103 D1: seeds wait on no one
+    lead_replies(db_path, "f7")  # an answer wanted, which does wait for the owner
     counted = _tab(client.get("/live").text)
-    assert re.fullmatch(r"Planning · \d+", counted), counted
+    assert counted == "Planning · 2"
     # the Planning page itself too: the count went missing there (the owner, 2026-10-07)
     for path in ("/", "/planning", "/tickets", "/jobs"):
         assert _tab(client.get(path).text) == counted, path

@@ -462,8 +462,15 @@ def set_aside(conn: sqlite3.Connection, project: str, now: datetime) -> list[Des
 
 def waiting_for_you(groups: list[DeskGroup]) -> list[DeskItem]:
     """The desk's items still waiting for the owner, in desk order: the Planning tab's count,
-    Overview's Needs you and the arrows between pages (F35) read these."""
-    return [item for group in groups for item in group.items if not item.on_its_way]
+    Overview's Needs you and the arrows between pages (F35) read these. Seeds wait on no one
+    (F103 D1): the desk lists them, but they are left out here."""
+    return [
+        item
+        for group in groups
+        if group.key != "seeds"
+        for item in group.items
+        if not item.on_its_way
+    ]
 
 
 def desk_trail(

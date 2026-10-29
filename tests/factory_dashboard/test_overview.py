@@ -2647,6 +2647,48 @@ def test_a_lead_reply_shows_once_in_the_desk_entry(serve_between, db_path):
     assert "The lead replied" in facts
 
 
+def _seeds(db_path: Path, *cards: str) -> None:
+    """An idea card per key with no thread: a seed on the desk."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        for card in cards:
+            metrics.upsert_milestone(conn, project, card, title=f"Idea {card}", state="idea")
+    finally:
+        conn.close()
+
+
+def test_seeds_are_not_counted_as_waiting_for_you(serve_between, db_path):
+    """F103 D1: with two seeds and one answer wanted, Needs you and the tab count the answer
+    only, and the desk entry links to it alone."""
+    client = serve_between()
+    sign_off_all(db_path)
+    _seeds(db_path, "f8", "f9")
+    lead_replies(db_path, "f7")
+    for html in (client.get("/").text, client.get("/live").text):
+        needs = section(html, "needs-you")
+        assert "1 thing waits for you on your desk" in needs
+        entry = html.split('id="desk-entry"')[1].split("</li>")[0]
+        assert re.findall(r'href="/planning/(f\d)\?', entry) == ["f7"]
+        assert planning_tab(html) == "Planning · 1"
+
+
+def test_seeds_alone_leave_needs_you_and_the_tab_empty(serve_between, db_path):
+    """F103 D1: with seeds only, Needs you has no desk line and the tab no number, while the
+    desk still lists the seeds under their own number."""
+    client = serve_between()
+    sign_off_all(db_path)
+    _seeds(db_path, "f8", "f9")
+    for html in (client.get("/").text, client.get("/live").text):
+        assert 'id="desk-entry"' not in html
+        assert planning_tab(html) == "Planning"
+    desk = client.get("/planning").text
+    seeds = desk.split('id="desk-seeds"')[1].split("</section>")[0]
+    assert "Seeds, not asked about yet · 2" in seeds
+    assert "/planning/f8" in seeds and "/planning/f9" in seeds
+    assert re.search(r"<h2[^>]*>Your desk</h2>", desk)
+
+
 def test_a_signoff_on_a_ripe_milestone_shows_once_in_the_desk_entry(serve_between, db_path):
     """f95-01: a sign-off for a milestone on the desk's "Finished, to talk through" shows
     through the desk's entry only, never as a separate row."""
