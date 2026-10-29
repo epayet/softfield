@@ -27,3 +27,4 @@ The picture: [`f68-mockup/logos.html`](f68-mockup/logos.html), four logos; A (th
 | # | Ticket | Who | d | Depends on | What |
 |---|---|---|---|---|---|
 | 01 | softfield-brand | D | 3 | f17-01, f9-30 | logo and name top left, one link to the Overview; titles and favicon |
+| 09 | logo-as-designed | L | 1 | – | the logo as the mock-up drew it: f68-01 redrew logo A (upright slats, thin curled leaves); the owner noticed, 2026-10-28 |

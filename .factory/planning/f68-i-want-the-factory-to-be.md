@@ -48,3 +48,25 @@ The planning thread behind F68's plan, oldest first, as it was when the owner ap
 > Proposals:
 > - SoftField: four logos in the top bar (mockup)
 > - F68: SoftField, its logo and a link home (plan)
+
+## The lead, 2026-10-09 20:34
+
+> Approved by the owner on 2026-10-09: approved plan/f68: queued f68-01-softfield-brand
+
+## The owner, 2026-10-28 08:53
+
+> Is the logo that originally designed? It looks a bit different
+
+## The lead, 2026-10-28 08:54
+
+> You're right: it isn't the logo we designed. The local model that built it drew its own version. I've drafted a one-line-of-work ticket that copies the mock-up's drawing in exactly; it passes the ticket check.
+>
+> 1. **No: the developer redrew logo A instead of copying it**: Ticket f68-01 was built by the local model, and it drew its own version of logo A. The ticket said to copy it from the mock-up. Three things differ. The leaves are thin curled lines instead of the two filled leaves. The crate has two upright slats instead of two flat planks across it. And the sprout is smaller, about a third of the logo's height instead of half. The colours, the place in the top bar, the yellow "Soft" and green "Field", and the link back to the Overview are all as agreed. The browser tab's icon has the same redrawn shapes.
+>    Action: Ticket f68-09 puts back the drawing from the mock-up
+> 2. **The fix goes to the lead, not a developer**: Copying a drawing exactly is what went wrong the first time, so the lead does it. It's a small Claude job, about one step. Its test checks the mock-up's leaf and plank shapes are in both files, so the logo can't be redrawn again without a test failing.
+>    Action: Ticket f68-09, given to the lead
+> 3. **No new mock-up**: This only puts back the logo you already chose. The picture is still logo A in the F68 mock-up (the first of the four), so the ticket builds from that.
+>    Action: Nothing
+>
+> Proposals:
+> - F68: the logo as you chose it (plan)
