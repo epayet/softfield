@@ -44,3 +44,12 @@ attempts: 3
 tokens: 3191863
 logs: .factory/var/runs/20261010-085423/f32-01-lead-window-resets
 ```
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 227853
+logs: .factory/var/runs/20261029-110520/f32-01-lead-window-resets
+```
