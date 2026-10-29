@@ -53,3 +53,9 @@ attempts: 3
 tokens: 227853
 logs: .factory/var/runs/20261029-110520/f32-01-lead-window-resets
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
