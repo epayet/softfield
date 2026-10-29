@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from factory_dashboard.app import create_app, get_now
-from factory_dashboard.board import STAGES, Board, Card, DevWork, board, milestone_card
+from factory_dashboard.board import STAGES, Board, Card, DevWork, _hours, board, milestone_card
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
@@ -1803,3 +1803,125 @@ def test_waits_populated_only_for_planted_cards(board_db):
     m3 = card(found, "M3")
     assert m3.stage == "harvested"
     assert m3.waits == ()
+
+
+# --- the developer's view (f146-02, after .factory/cards/f146-mockup/developers-only.html) ------
+
+
+def _lever(html: str) -> tuple[str, str]:
+    """The lever's link and whether it is on."""
+    found = re.search(
+        r'<a href="([^"]*)" class="lever" role="switch" aria-checked="(true|false)"', html
+    )
+    assert found
+    return unescape(found[1]), found[2]
+
+
+def _slot(html: str, link: str) -> tuple[list[str], str]:
+    """A card's slot by its card's link: the slot's classes, and the card's ``dev-tag`` words."""
+    found = re.search(
+        rf'<div class="slot([^"]*)"[^>]*>\s*<a class="card[^"]*" href="{re.escape(link)}\?.*?</a>',
+        html,
+        re.S,
+    )
+    assert found, link
+    tag = re.search(r'<span class="dev-tag">(.*?)</span>\s*</a>', found[0], re.S)
+    words = " ".join(unescape(re.sub(r"<[^>]+>", " ", tag[1])).split()) if tag else ""
+    return found[1].split(), words
+
+
+def _three_looks(db: Path) -> None:
+    """F70 developers can work on (1 now, 5 after it, then the lead's f70-07), F71 whose two
+    developer tickets wait for the lead's f71-01, and F72, lead only."""
+    write(
+        db,
+        _tickets(
+            ("f70-a", "f70-01", "developer", "ready", ()),
+            *[("f70-a", f"f70-0{n}", "developer", "ready", ("f70-01",)) for n in range(2, 7)],
+            ("f70-a", "f70-07", "lead", "ready", ("f70-02",)),
+            ("f71-a", "f71-01", "lead", "ready", ()),
+            ("f71-a", "f71-02", "developer", "ready", ("f71-01",)),
+            ("f71-a", "f71-03", "developer", "ready", ("f71-01",)),
+            ("f72-a", "f72-01", "lead", "ready", ()),
+        ),
+    )
+
+
+def test_the_lever_comes_after_the_kinds_off_and_links_to_the_view(board_client):
+    html = _page(board_client)
+    form = re.search(r'<form id="board-filter"(.*?)</form>', html, re.S)
+    assert form
+    assert form[1].index('class="kinds"') < form[1].index('class="lever"')
+    assert _lever(html) == (f"/board?project={PROJECT}&view=developers", "false")
+    assert 'name="view"' not in form[1]
+
+    on = _page(board_client, "?view=developers&q=duck&kind=bug")
+    assert _lever(on) == (f"/board?project={PROJECT}&q=duck&kind=bug", "true")
+    # searching or picking a kind sends the view with them
+    form = re.search(r'<form id="board-filter"(.*?)</form>', on, re.S)
+    assert form
+    assert '<input type="hidden" name="view" value="developers">' in form[1]
+    assert _lever(_page(board_client, "?q=duck&kind=bug"))[0] == (
+        f"/board?project={PROJECT}&q=duck&kind=bug&view=developers"
+    )
+
+
+def test_each_planted_card_says_what_it_holds_for_developers(db_path):
+    _three_looks(db_path)
+    html = _page(_client(db_path), "?view=developers")
+    assert 'class="field dev-view"' in html
+    assert _slot(html, "/milestones/f70-a") == (
+        ["dev-can"],
+        "developers: 1 now · 5 after it · then the lead's f70-07",
+    )
+    assert _slot(html, "/milestones/f71-a") == (
+        ["dev-waits"],
+        "2 developer tickets wait for f71-01",
+    )
+    assert _slot(html, "/milestones/f72-a") == (["dev-none"], "lead only")
+
+
+def test_the_planted_head_counts_what_developers_can_work_on_and_how_long(db_path, monkeypatch):
+    _three_looks(db_path)
+    monkeypatch.setattr("factory_dashboard.board.ticket_minutes", lambda conn, p: [50.5, 40, 60])
+    head = _head(_columns(_page(_client(db_path), "?view=developers"))["planted"])
+    # one card, its six developer tickets, 6 × the median 50.5 minutes
+    assert head.endswith(
+        "Developers can work on 1 card, 6 tickets , about 5 h 03 min,"
+        " before every developer ticket left waits for the lead"
+    )
+    assert _hours(45.4) == "45 min"
+
+
+def test_off_the_lever_gives_the_normal_board_unchanged(db_path):
+    _three_looks(db_path)
+    client = _client(db_path)
+    normal = _page(client)
+    for page in (normal, _page(client, "?view=nonsense")):
+        assert "dev-" not in page
+        assert "Developers can work on" not in page
+    assert _columns(_page(client, "?view=nonsense")) == _columns(normal)
+    # the view changes looks and words only: the same cards, in the same places
+    assert _links(_page(client, "?view=developers")) == _links(normal)
+
+
+def test_sending_from_the_view_posts_the_same_reorder(page, board_db):
+    write(board_db, _planted(("f27-third", 9)))
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board?view=developers")
+    assert page.locator("#field.dev-view").count() == 1
+    line = [key for key, _ in read(board_db).line]
+    posts: list[str] = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+    _drag(page, "f27", "f23")
+    page.get_by_role("button", name="Send new order").click()
+    page.locator(".slot[data-key=f27] .card.on-its-way").wait_for()
+    assert posts == [f"{ORIGIN}/requests"]
+    conn = connect(board_db)
+    try:
+        rows = conn.execute("SELECT kind, value FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    line.remove("f27")
+    line.insert(line.index("f23"), "f27")
+    assert [(r["kind"], json.loads(r["value"])) for r in rows] == [("reorder", line)]

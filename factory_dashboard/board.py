@@ -28,6 +28,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -664,9 +665,14 @@ def board_page(
     now: Now,
     q: str | None = None,
     kind: str | None = None,
+    view: str | None = None,
 ) -> HTMLResponse:
     kind = kind if kind in KINDS else ""  # anything else shows every kind
-    found = board(conn, project, now, q=q, kind=kind)
+    view = "developers" if view == "developers" else ""  # anything else is the normal board
+    found = board(conn, project, now, q=q, kind=kind, developers=bool(view))
+    # the lever is a link to the other view, keeping the project, the search and the kind (D5)
+    lever = {"project": project, "q": q or "", "kind": kind, "view": "" if view else "developers"}
+    _, _, minutes = found.developers
     return render(
         request,
         conn,
@@ -679,5 +685,14 @@ def board_page(
             "search": q or "",  # ``q`` is the links' ``?project=`` in every template
             "kind": kind,
             "kinds": [("", "All"), ("factory", "Factory"), ("product", "Product"), ("bug", "Bugs")],
+            "view": view,
+            "lever": "/board?" + urlencode({k: v for k, v in lever.items() if v}),
+            "dev_time": _hours(minutes) if minutes else "",
         },
     )
+
+
+def _hours(minutes: float) -> str:
+    """``5 h 05 min``, or ``45 min`` under the hour (F146's mock-up)."""
+    h, m = divmod(round(minutes), 60)
+    return f"{h} h {m:02d} min" if h else f"{m} min"

@@ -8,6 +8,21 @@
 
 {% from "_partials/stage_icon.html" import icon, plant %}
 
+{# In the developer's view, what a card holds for developers, in words (F146 D3, D4) #}
+{% macro dev_tag(c) %}{% set d = c.developers %}
+<span class="dev-tag"><i class="pip"></i>
+  {%- if d.look == "can" -%}
+  developers: {{ d.now }} now{% if d.after %} · {{ d.after }} after it{% endif %} · then {% if d.then == "review" %}Claude's review{% else %}the lead's <code>{{ d.then }}</code>{% endif %}
+  {%- elif d.look == "waits" -%}
+  {{ d.waiting }} developer ticket{{ "" if d.waiting == 1 else "s" }} wait{{ "s" if d.waiting == 1 else "" }} for {% for t in d.waits_for %}<code>{{ t }}</code>{{ ", " if not loop.last }}{% endfor %}
+  {%- elif c.stage == "planted" -%}
+  lead only
+  {%- else -%}
+  no ticket to run
+  {%- endif -%}
+</span>
+{%- endmacro %}
+
 {# A card: its edge is its area's colour, a bug's is striped and its label says "bug". A
    planted card with a ticket started has the orange edge and a "growing" tag (F154 D3) #}
 {% macro card_link(c) %}
@@ -27,6 +42,7 @@
   {% endif %}
   {% if c.stage == "ripe" and not c.bug %}<span class="card-action">Read the review and sign off ›</span>{% endif %}
   {% if c.on_its_way %}<span class="card-way">on its way · was #{{ c.was }} · at the runner's next pick</span>{% endif %}
+  {% if c.developers %}{{ dev_tag(c) }}{% endif %}
 </a>
 {% endmacro %}
 
@@ -54,6 +70,7 @@
 {# The form's first button is the one Enter sends: it keeps the kind shown #}
 <form id="board-filter" class="board-filter" role="search" method="get" action="/board">
   <input type="hidden" name="project" value="{{ project }}">
+  {% if view %}<input type="hidden" name="view" value="{{ view }}">{% endif %}
   <label>Search
     <input type="search" name="q" value="{{ search }}" placeholder="memory drift, f4, duck…">
   </label>
@@ -63,9 +80,11 @@
     <button name="kind" value="{{ value }}" aria-pressed="{{ 'true' if value == kind else 'false' }}">{{ label }}</button>
     {% endfor %}
   </div>
+  {# a link, not a button: it opens the other view, keeping the search and the kind (F146 D5) #}
+  <a href="{{ lever }}" class="lever" role="switch" aria-checked="{{ 'true' if view else 'false' }}" data-lever>developer's view <i class="lamp"></i><span class="slot"><span class="knob"></span></span></a>
 </form>
 
-<section id="field" class="field" aria-label="The field" data-project="{{ project }}">
+<section id="field" class="field{% if view %} dev-view{% endif %}" aria-label="The field" data-project="{{ project }}">
   <div class="field-head">
     <h2>The field</h2>
     <p>Left to right, a card grows. The runner takes tickets from planted cards, #1 first.</p>
@@ -78,11 +97,13 @@
         {{ icon(stage) }}
         {% set growing = cards | selectattr("started") | list | length %}
         <div><h3>{{ words[stage][0] }}</h3><span>{{ words[stage][1] }}{% if stage == "planted" %}, #1 first{% endif %} · {{ cards | length + more }}{% if more %}, latest {{ cards | length }}{% endif %}{% if growing %}, {{ growing }} growing{% endif %}</span>
-          {% if words[stage][2] %}<span class="stage-next"><b>Next</b>{{ words[stage][2] }}</span>{% endif %}</div>
+          {% if words[stage][2] %}<span class="stage-next"><b>Next</b>{{ words[stage][2] }}</span>{% endif %}
+          {% if stage == "planted" and view %}{% set n, tickets = found.developers[0], found.developers[1] %}
+          <span class="dev-sum">Developers can work on <b>{{ n }} card{{ "" if n == 1 else "s" }}, {{ tickets }} ticket{{ "" if tickets == 1 else "s" }}</b>{% if dev_time %}, about {{ dev_time }}{% endif %}{% if n %}, before every developer ticket left waits for the lead{% endif %}</span>{% endif %}</div>
       </div>
       <div class="cards">
         {% for c in cards %}
-        <div class="slot" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}</div>
+        <div class="slot{% if c.developers %} dev-{{ c.developers.look }}{% endif %}" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}</div>
         {% else %}
         <div class="empty">{% include "_partials/idle_crate.svg" %}<span>Nothing here.</span></div>
         {% endfor %}
@@ -91,6 +112,9 @@
     </section>
     {% endfor %}
   </div>
+  {% if view %}
+  <p class="legend dev-legend"><span><i class="pip can"></i>lit: developers can take a ticket now, or after another developer ticket</span><span><i class="pip waits"></i>half-dark: its developer work waits for a lead ticket</span><span><i class="pip none"></i>faded: lead only</span></p>
+  {% endif %}
   {# the whole open order, which a send carries with its moves (F15 D10) #}
   <script type="application/json" id="board-line">{{ found.line | tojson }}</script>
   <div class="field-foot">

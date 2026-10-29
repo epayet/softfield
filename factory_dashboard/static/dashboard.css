@@ -863,6 +863,29 @@ main:has(.board) { max-width: 1360px; }
   border-left-color: var(--c, var(--muted)); }
 @media (prefers-reduced-motion: no-preference) { .slot .card { transition: border-color .15s; } }
 .slot.dragging .card { transition: none; }
+/* The developer's view (F146 D3, after .factory/cards/f146-mockup/developers-only.html): lit when
+   developers can take a ticket, half-dark when their work waits for the lead, faded when lead
+   only. Each card says which in words; a faded one comes back under the pointer or focus */
+.stage-head .dev-sum { display: block; margin-top: 4px; color: var(--fg); }
+.stage-head .dev-sum b { color: var(--dev); }
+.dev-view .slot.dev-can .card { box-shadow: inset -4px 0 0 var(--dev), 0 0 0 1px var(--dev); }
+.dev-view .slot.dev-waits:not(.dragging) { opacity: .62; }
+.dev-view .slot.dev-waits .card { border-right: 1px dashed var(--dev); }
+.dev-view .slot.dev-none:not(.dragging) { opacity: .32; }
+.dev-view .slot:is(.dev-waits, .dev-none):is(:hover, :focus-within):not(.dragging) { opacity: .85; }
+.dev-tag { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
+  font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; background: var(--floor);
+  overflow-wrap: anywhere; }
+.dev-tag .pip, .dev-legend .pip { flex: none; width: 9px; height: 9px; display: inline-block; }
+.dev-legend .pip { margin-right: 4px; vertical-align: -1px; }
+.dev-tag code { font: 11px var(--mono); text-transform: none; color: var(--fg); }
+.dev-can .dev-tag { color: var(--fg); }
+.dev-waits .dev-tag { color: var(--ink-2); }
+.dev-none .dev-tag { color: var(--muted); }
+.dev-can .dev-tag .pip, .dev-legend .can { background: var(--dev); }
+.dev-waits .dev-tag .pip, .dev-legend .waits { box-shadow: inset 0 0 0 2px var(--dev); }
+.dev-none .dev-tag .pip, .dev-legend .none { background: var(--opus); }
+.field > .dev-legend { margin: 0; padding: 8px 14px; border-top: 1px solid var(--rule); }
 body.has-order-bar main { padding-bottom: 120px; }
 .order-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap;
   gap: 8px 12px; align-items: center; justify-content: flex-end;
