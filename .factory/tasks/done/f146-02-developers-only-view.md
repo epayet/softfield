@@ -38,3 +38,9 @@ attempts: 3
 tokens: 725004
 logs: .factory/var/runs/20261029-143524/f146-02-developers-only-view
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
