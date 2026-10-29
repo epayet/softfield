@@ -4,6 +4,7 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from html import unescape
 from pathlib import Path
+from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 from factory_dashboard.overview import queue, queued_jobs
@@ -3626,3 +3627,95 @@ def test_data_notices_ids_start_with_project_name(client, db_path):
     assert {f"coucou/owner-{own}", f"other/owner-{others}"} <= set(notices)
     assert notices[f"other/owner-{others}"]["body"] == "Other item."
     assert all(key.startswith(("coucou/", "other/")) for key in notices)
+
+
+def _lane_bay(html: str) -> tuple[str, str]:
+    """Next in line's raw HTML in the queue panel: the fast lane's bay ("" without one), and
+    what follows it."""
+    panel = html.split('<section id="queue"', 1)[1].split("</section>", 1)[0]
+    rows = panel.split("Next in line", 1)[1]
+    if '<div class="lane-bay">' not in rows:
+        return "", rows
+    before, bay = rows.split('<div class="lane-bay">', 1)
+    assert 'class="next-row"' not in before  # the bay comes first
+    inside, after = bay.split("\n    </div>", 1)
+    return inside, after
+
+
+def _rows(markup: str) -> list[str]:
+    """The text of each ``next-row`` in ``markup``."""
+    return [row_text(r) for r in re.findall(r'<div class="next-row"[^>]*>(.*?)</div>', markup)]
+
+
+def _queue_on(board_db: Path, kind: str, subject: str) -> None:
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.find_project(conn, PROJECT)
+        assert project is not None
+        metrics.queue_job(conn, project, kind, subject, "Why", NOW.isoformat())
+    finally:
+        conn.close()
+
+
+def test_a_fast_lane_card_s_ticket_comes_first_in_its_bay_above_a_planner_job(board_db, tmp_path):
+    """F172 D9: with F23 in the fast lane, its first ready ticket is the first ticket of Next
+    in line, inside the striped Fast lane bay, naming its card; the planner job sits below it."""
+    _queue_on(board_db, "planner", "f11#1")
+    client = _reserve_client(board_db, tmp_path, "f23-planted")
+    for path in ("/", "/live"):
+        bay, after = _lane_bay(client.get(path).text)
+        assert bay, path
+        assert "Fast lane" in bay
+        tickets = re.findall(r'href="/tickets/([^"?]+)', bay)
+        assert tickets[0] == "f23-01-first", path
+        assert _rows(bay)[0].endswith("· F23"), path
+        assert "Planning:" not in bay
+        assert "Planning:" in after, path
+        # the rest of the line holds no F23 ticket a second time
+        assert not set(tickets) & set(re.findall(r'href="/tickets/([^"?]+)', after))
+
+
+def test_a_direction_for_a_fast_lane_ticket_shows_in_the_bay_before_its_tickets(board_db, tmp_path):
+    _queue_on(board_db, "direction", "f23-01-first")
+    _queue_on(board_db, "direction", "f24-01-other")  # not in the lane: stays below
+    bay, after = _lane_bay(_reserve_client(board_db, tmp_path, "f23-planted").get("/").text)
+    rows = _rows(bay)
+    assert rows[0] == "Direction: f23-01-first · Why"
+    assert rows[1].startswith("1 f23-01-first ")
+    assert "Direction: f23-01-first" not in after
+    assert "Direction: f24-01-other" in row_text(after)
+
+
+def test_no_card_in_the_fast_lane_leaves_next_in_line_as_the_run_order(board_db, tmp_path):
+    from factory_dashboard.line import live_line
+
+    _queue_on(board_db, "direction", "f23-01-first")
+    html = _reserve_client(board_db, tmp_path).get("/").text
+    bay, rows = _lane_bay(html)
+    assert bay == ""
+    assert 'class="lane-bay"' not in html
+    conn = metrics.open_db(board_db)
+    try:
+        first_three = [r["ticket"] for r in live_line(conn, PROJECT, NOW.astimezone())["queue"][:3]]
+    finally:
+        conn.close()
+    assert re.findall(r'href="/tickets/([^"?]+)', rows) == [t for t in first_three if t]
+    assert "Direction: f23-01-first" in row_text(rows)
+
+
+def test_the_fast_lane_takes_the_tickets_a_lane_ticket_waits_for_in_the_run_order():
+    """As the runner's ``loop.reserve_cards``: a ticket another card's lane ticket waits for,
+    and the one that waits for it in turn, join the lane; the order is kept."""
+    from factory_dashboard.overview import fast_lane
+
+    rows: list[dict[str, Any]] = [
+        {"ticket": "f9-01-a", "milestone": "f9-other", "waits": []},
+        {"ticket": "f8-01-b", "milestone": "f8-other", "waits": []},
+        {"ticket": "f23-01-first", "milestone": "f23-planted", "waits": ["f8-01-b"]},
+        {"ticket": None, "milestone": "f23-planted", "waits": []},  # a review: never a lane row
+        {"ticket": "f23-02-second", "milestone": "f23-planted", "waits": ["f23-01-first"]},
+    ]
+    lane, rest = fast_lane(rows, {"F23"})
+    assert [r["ticket"] for r in lane] == ["f8-01-b", "f23-01-first", "f23-02-second"]
+    assert [r["ticket"] for r in rest] == ["f9-01-a", None]
+    assert fast_lane(rows, set()) == ([], rows)

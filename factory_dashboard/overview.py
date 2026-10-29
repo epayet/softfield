@@ -8,10 +8,10 @@ allowance, savings for the current milestone and the Claude spend chart.
 
 import json
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 from urllib.parse import quote
 
 from fastapi import APIRouter, Request
@@ -22,7 +22,7 @@ from factory_dashboard.app import Db, Now, Project, ago, factory_status, render
 from runner import loop, metrics
 from runner.requests import CHANGE, PLANT, RESERVE, owners_words
 from runner.state import load_state
-from runner.tasks import milestone_order
+from runner.tasks import milestone_order, short_key
 
 if TYPE_CHECKING:
     from factory_dashboard.coming import DeskItem  # coming.py imports from here
@@ -289,6 +289,7 @@ class QueuedJob:
     message: str | None = None  # truncated message preview for Planning rows
     title: str | None = None  # plant title for Plant rows
     cancelled: bool = False  # a plant the owner cancelled, the runner yet to take it (F14)
+    lane: bool = False  # a direction or escalation of a fast lane ticket: in its bay (F172 D9)
 
 
 CANCELLING = "cancelling at the runner's next pick"
@@ -330,10 +331,13 @@ def queued_jobs(
     conn: sqlite3.Connection,
     project: str,
     now: datetime,
+    *,
+    first: Collection[str] = frozenset(),
 ) -> list[QueuedJob]:
     """The project's open ``work_queue`` rows, minus those whose ``started_job`` is still
-    running, each with the order and wait from ``dispatch.plan``. Also includes open plant
-    requests from ``owner_requests``."""
+    running, each with the order and wait from ``dispatch.plan``, a direction or escalation of
+    ``first``'s tickets (the fast lane's) on top. Also includes open plant requests from
+    ``owner_requests``."""
     from runner import dispatch
 
     found_project = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
@@ -354,7 +358,7 @@ def queued_jobs(
         row for row in rows if row["started_job"] is None or row["started_job"] not in running_jobs
     ]
     queued = [dispatch.Queued.from_row(row) for row in open_queues]
-    plan = dispatch.plan(queued, [], dispatch.Windows(), now)
+    plan = dispatch.plan(queued, [], dispatch.Windows(), now, first=first)
     found: list[QueuedJob] = []
     for line in plan:
         pick = line.pick
@@ -387,7 +391,8 @@ def queued_jobs(
                                 text = next(iter(comments.values()), "")
                         if text:
                             message = text
-        found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits, message))
+        lane = pick.kind in dispatch.GOES_WITH and pick.subject in first
+        found.append(QueuedJob(plain, pick.subject, pick.reason, line.waits, message, lane=lane))
     # Open plant requests from owner_requests.
     plant_rows = conn.execute(
         "SELECT owner_requests.id, kind, subject, value FROM owner_requests"
@@ -493,7 +498,6 @@ def notices(
     The card's title comes from ``card_titles``; a card with no title in the database shows its
     key.  The general thread is titled "General".
     """
-    from runner.tasks import short_key
 
     found: dict[str, Notices] = {}
     for need in open_needs:
@@ -724,6 +728,24 @@ def spend_chart(conn: sqlite3.Connection, project: str) -> dict[str, list[str] |
     }
 
 
+def fast_lane(
+    rows: Sequence[dict[str, Any]], keys: Collection[str]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """The run order's ticket rows split into the fast lane's and the rest (F172 D9), each kept
+    in order: a ticket of a card in ``keys`` (short keys in capitals), and every ticket a lane
+    ticket still waits for, whatever its card, as the runner's ``loop.reserve_cards`` does."""
+    by_id = {str(r["ticket"]): r for r in rows if r.get("ticket")}
+    todo = [t for t, r in by_id.items() if short_key(str(r["milestone"])).upper() in keys]
+    found: set[str] = set()
+    while todo:
+        ticket = todo.pop()
+        if ticket in by_id and ticket not in found:
+            found.add(ticket)
+            todo.extend(by_id[ticket].get("waits") or [])
+    lane = [r for r in rows if r.get("ticket") in found]
+    return lane, [r for r in rows if r.get("ticket") not in found]
+
+
 # --- the routes ---------------------------------------------------------------------------
 
 
@@ -744,7 +766,16 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     all_queued = queue(conn, project, now)
     # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
-    qjobs = queued_jobs(conn, project, now)
+    # the fast lane's tickets, and their directions and escalations, go first (F172 D9)
+    reserve_cards = reserve_marked(conn, project, now)
+    lane, rest = fast_lane(
+        live_line(conn, project, now.astimezone())["queue"], {c.key for c in reserve_cards}
+    )
+    lane_ids = {str(r["ticket"]) for r in lane}
+    qjobs = queued_jobs(conn, project, now, first=lane_ids)
+    lane = [{**r, "card": short_key(str(r["milestone"])).upper()} for r in lane[:3]]
+    # three tickets in all, renumbered: the lane's run before the rest
+    upcoming = [{**r, "number": n} for n, r in enumerate([*lane, *rest][:3], start=1)]
     open_needs = needs_you(conn, project, now, jobs, all_queued)
     # the desk's entry stands for its answers wanted, its sign-offs and its blocked tickets, so no
     # lead reply (f6-09), no stored sign-off row (f95-01) and no blocked row shows on its own
@@ -805,13 +836,14 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
         # the owner's pause on Now (f5-18), as the top bar words it (f28-02)
         "pause_words": pause_words(conn, project, now),
         "queue": all_queued,
-        "next": live_line(conn, project, now.astimezone())["now"]["next"],
+        "lane": upcoming[: len(lane)],
+        "next": upcoming[len(lane) :],
         "waits": waits,
         "queued_jobs": qjobs,
         # Claude's allowance and its reserve switches, below Now (f8-06)
         "allowance": agent_allowances(conn, now),
         "switches": reserve_switches(conn, project, now),
-        "reserve_cards": reserve_marked(conn, project, now),  # named under them (F172 D6)
+        "reserve_cards": reserve_cards,  # named under them (F172 D6)
     }
 
 

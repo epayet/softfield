@@ -283,6 +283,14 @@ tbody tr:hover { background: var(--accent-wash); }
 .next-in-line h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
   margin: 0; font-weight: 600; }
 .next-in-line p { margin: 4px 0 0; }
+/* the fast lane's bay on top of Next in line (F172 D9): the hazard stripe and the ink, as .card-reserve */
+.lane-bay { display: grid; gap: 4px; padding: 6px 8px 8px 16px; background: var(--plate);
+  border: 1px solid var(--rule); position: relative; }
+.lane-bay::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+  background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+.lane-bay .label { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--fg); }
+.lane-bay .label span { font: 400 12px var(--body); text-transform: none; letter-spacing: 0;
+  color: var(--muted); margin-left: 6px; }
 .warnline { color: var(--serious-ink); font-size: 13px; }
 .steps { list-style: none; margin: 0; padding: 0; }
 .steps li { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }
