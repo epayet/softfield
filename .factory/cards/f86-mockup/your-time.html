@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F86 mock-up: your time on the weekly report</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode; --owner is new (D6) */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405;
+    --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62;
+    --factory: #f2b10a; --good: #5fd17a;
+    --owner: var(--fg);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.frame { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; font: 400 12px var(--mono); color: var(--good); margin: 4px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 820px; }
+  .legend .new { padding: 0 4px; }
+  [hidden] { display: none !important; }
+  .views { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .wide { flex: 1 1 760px; min-width: 0; max-width: 1040px; }
+  .phone { flex: 0 0 390px; max-width: 100%; }
+  .page { padding: 12px; display: grid; gap: 12px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; position: relative; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .plate-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: -12px -14px 10px; padding: 7px 14px;
+    border-bottom: 1px solid var(--rule); background: var(--plate); }
+  .plate-h h2 { margin: 0; }
+  .ticks::before, .ticks::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--ink-2); }
+  .ticks::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .ticks::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .tag { font: 400 11px var(--mono); color: var(--muted); letter-spacing: .04em; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .tile { background: var(--plate); border: 1px solid var(--rule); padding: 8px 10px; position: relative; }
+  .tile .k { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .tile .v { font: 700 24px/1.15 var(--display); letter-spacing: .02em; }
+  .tile .d { font: 400 12px var(--mono); color: var(--ink-2); }
+  /* the owner's tiles: a plate with the hazard stripe along its top, ornament only */
+  .tile.you { border-color: var(--ink-2); }
+  .tile.you::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 6px, transparent 6px 12px); opacity: .7; }
+  svg.chart { width: 100%; height: auto; display: block; }
+  svg.chart text { font: 400 10px var(--mono); fill: var(--muted); }
+  svg.chart text.val { fill: var(--ink-2); }
+  .key { display: flex; flex-wrap: wrap; gap: 4px 14px; font: 400 12px var(--mono); color: var(--ink-2); margin: 6px 0 0; }
+  .key i { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+  .rows { display: grid; gap: 5px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr) 64px; gap: 8px; align-items: center; }
+  .row .lab { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .lab b { font: 600 12px var(--mono); color: var(--fg); margin-right: 6px; }
+  .row .lab .p { font: 400 11px var(--mono); color: var(--muted); margin-right: 4px; }
+  .row .bar { grid-column: 1 / 2; height: 8px; background: var(--owner); margin-top: -2px; }
+  .row .m { font: 600 12px var(--mono); text-align: right; grid-row: 1 / 3; grid-column: 2; align-self: center; }
+  .row.else .bar { background: repeating-linear-gradient(135deg, var(--owner) 0 3px, transparent 3px 6px); }
+  .counts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .counts span { font: 400 12px var(--mono); color: var(--ink-2); border: 1px solid var(--rule); background: var(--plate); padding: 2px 7px; }
+  .counts span b { color: var(--fg); font-weight: 600; }
+  .fine { font-size: 12px; color: var(--muted); margin: 8px 0 0; }
+</style>
+</head>
+<body>
+<h1>F86: your time, on the weekly report</h1>
+<p class="lede">Today is F59's Reports page as approved (its mock-up, <span style="font-family:var(--mono)">.factory/cards/f59-mockup/reports.html</span>; the page isn't built yet), cut to the two sections this card changes. Every number is real, read from the metrics database on 27 Oct, for the week of 19 to 25 Oct: your presses on the dashboard grouped into sittings (D2).</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div data-version="today" hidden>
+  <div class="views">
+    <div class="wide"><h3 class="frame">Wide screen · the whole factory</h3><div data-slot="today-whole"></div></div>
+    <div class="phone"><h3 class="frame">Phone · travel-companion</h3><div data-slot="today-travel"></div></div>
+  </div>
+  <p class="legend">The report counts what the agents did and spent. Nothing says how much of your time it took, or which cards took it.</p>
+</div>
+
+<div data-version="proposed">
+  <div class="views">
+    <div class="wide"><h3 class="frame">Wide screen · the whole factory</h3><div data-slot="whole"></div></div>
+    <div class="phone"><h3 class="frame">Phone · travel-companion</h3><div data-slot="travel"></div></div>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what this card adds. Your parts are drawn in plain ink (the new token <span style="font-family:var(--mono)">--owner</span>), never an agent's colour; the hazard stripe on your two tiles is ornament only. Before 7 Oct nothing recorded your presses, so 28 Sep has no ink.</p>
+</div>
+
+<template id="page">
+  <div class="page">
+    <section class="panel ticks">
+      <div class="plate-h"><h2>The week in numbers</h2><span class="tag" data-sub></span></div>
+      <div class="tiles" data-tiles></div>
+    </section>
+    <section class="panel ticks">
+      <div class="plate-h"><h2>Hours worked, by agent</h2><span class="tag">by week</span></div>
+      <div data-chart="hours"></div>
+    </section>
+    <section class="panel ticks new" data-where>
+      <div class="plate-h"><h2>Where your time went</h2><span class="tag">this week, by card</span></div>
+      <div class="rows" data-rows></div>
+      <div class="counts" data-counts></div>
+      <p class="fine">Counted from your presses on the dashboard; terminal sessions are not included.</p>
+      <span class="note">New panel, after the four graphs (D6)</span>
+    </section>
+  </div>
+</template>
+
+<script>
+  const WEEKS = ["28 Sep", "5 Oct", "12 Oct", "19 Oct"];
+  const DATA = {
+    whole: {
+      sub: "Whole factory · 19 to 25 Oct",
+      tiles: [["Milestones done", "22", "21 the week before"], ["Tickets merged", "122", "49 the week before"],
+              ["Claude's dollars", "$305", "$178 the week before"], ["Local developer passed", "77%", "80 of 104 attempts · 36% before"],
+              ["Timeouts", "4", "14 the week before"], ["Saved by delegating", "$190", "example value"]],
+      you: [["Your time", "11.5 h", "28 sittings on 6 days · 12.8 h before"], ["Waited for you", "5.5 h", "median of 62 items · 8.2 h before"]],
+      local: [58.3, 64.9, 70.9, 51.8], claude: [19.6, 17.5, 19.1, 25.7], owner: [null, 12.5, 12.8, 11.5],
+      rows: [[null, "Planting", "32 plants", 95], [null, "Steering the line", "pauses, reserves, reorders", 87],
+             ["travel-companion", "F1", "Rename Tabi: a name from the Japanese travel notebook", 38],
+             [null, "F172", "Mark a card to use Claude's reserve, so only its tickets run past the mark", 33],
+             [null, "F152", "A done card says where its review is, and set aside says it won't run", 25],
+             [null, "F164", "Plant a review's ideas straight from the review", 24]],
+      rest: 391, rest_cards: 108,
+      counts: [["244", "presses"], ["90", "messages"], ["27", "plan approvals"], ["22", "sign-offs"], ["32", "plants"]],
+    },
+    travel: {
+      sub: "travel-companion · 19 to 25 Oct",
+      tiles: [["Milestones done", "8", "its first full week"], ["Tickets merged", "69", "53 by the local developer"],
+              ["Claude's dollars", "$115", "$22 the week before"], ["Local developer passed", "88%", "53 of 60 attempts"]],
+      you: [["Your time", "3.1 h", "1.1 h the week before"], ["Waited for you", "9.3 h", "median of 21 items"]],
+      local: [0, 0, 0, 17.0], claude: [0, 0, 0.4, 3.2], owner: [null, 0, 1.1, 3.1],
+      rows: [[null, "Planting", "11 plants", 44], [null, "F1", "Rename Tabi: a name from the Japanese travel notebook", 38],
+             [null, "F5", "", 23], [null, "Steering the line", "reserves", 17]],
+      rest: 64, rest_cards: 9,
+      counts: [["54", "presses"], ["17", "messages"], ["8", "plan approvals"], ["8", "sign-offs"], ["9", "plants"]],
+    },
+  };
+  const NS = "http://www.w3.org/2000/svg";
+  const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function el(tag, attrs, text) { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; }
+  const xAt = (i, w, pad) => pad + 10 + i * ((w - pad - 20) / 3);
+  function hours(d, withOwner) {
+    const w = 360, h = 160, pad = 30, s = el("svg", { viewBox: `0 0 ${w} ${h}`, class: "chart", role: "img" });
+    const tot = d.local.map((v, i) => v + d.claude[i] + (withOwner ? (d.owner[i] || 0) : 0));
+    const scale = 115 / (Math.max(...tot) || 1), base = h - 18;
+    s.append(el("line", { x1: pad, y1: base, x2: w, y2: base, stroke: css("--rule") }));
+    WEEKS.forEach((wk, i) => s.append(el("text", { x: xAt(i, w, pad) - 14, y: h - 4 }, wk)));
+    d.local.forEach((v, i) => {
+      const x = xAt(i, w, pad) - 14; let y = base;
+      [[v, css("--qwen")], [d.claude[i], css("--opus")]].forEach(([n, c]) => { const hh = n * scale; y -= hh; s.append(el("rect", { x, y, width: 28, height: hh, fill: c })); });
+      if (withOwner) {
+        const o = d.owner[i];
+        if (o == null) { s.append(el("text", { x: x - 6, y: y - 16 }, "not")); s.append(el("text", { x: x - 10, y: y - 6 }, "recorded")); }
+        else if (o > 0) {
+          const hh = o * scale; y -= hh;
+          s.append(el("rect", { x, y, width: 28, height: hh, fill: css("--owner") }));
+          s.append(el("rect", { x: x - 3, y: y - 1, width: 34, height: hh + 2, fill: "none", stroke: css("--good"), "stroke-dasharray": "3 2" }));
+          s.append(el("text", { x: x + 32, y: y + Math.min(hh, 12), class: "val" }, o + " h you"));
+        }
+      }
+      s.append(el("text", { x: x - 2, y: y - (withOwner && d.owner[i] == null ? 28 : 4), class: "val" }, Math.round(tot[i]) + " h"));
+    });
+    return s;
+  }
+  function key(items) { const k = document.createElement("div"); k.className = "key"; items.forEach(([c, t, n]) => { const s = document.createElement("span"); if (n) s.className = "new"; s.innerHTML = `<i style="background:${css(c)}"></i>${t}`; k.append(s); }); return k; }
+  const fmt = (m) => m >= 60 ? `${Math.floor(m / 60)} h ${String(Math.round(m % 60)).padStart(2, "0")}` : `${m} min`;
+
+  function fill(slot, d, proposed) {
+    const root = document.querySelector(`[data-slot="${slot}"]`);
+    root.append(document.getElementById("page").content.cloneNode(true));
+    root.querySelector("[data-sub]").textContent = d.sub;
+    let tiles = d.tiles.map(([k, v, x]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${x}</div></div>`).join("");
+    if (proposed) tiles += d.you.map(([k, v, x]) => `<div class="tile you new"><div class="k">${k}</div><div class="v">${v}</div><div class="d">${x}</div></div>`).join("");
+    root.querySelector("[data-tiles]").innerHTML = tiles;
+    if (proposed) root.querySelector("[data-tiles]").insertAdjacentHTML("afterend", '<span class="note">Two tiles at the end: your time, and how long things waited for you</span>');
+    const hc = root.querySelector('[data-chart="hours"]');
+    hc.append(hours(d, proposed));
+    const items = [["--qwen", "local and cloud workers"], ["--opus", "Claude"]];
+    if (proposed) items.push(["--owner", "you, on the dashboard", true]);
+    hc.append(key(items));
+    if (proposed) hc.insertAdjacentHTML("beforeend", '<span class="note">Your hours stacked on top, in ink</span>');
+    const where = root.querySelector("[data-where]");
+    if (!proposed) { where.remove(); return; }
+    const max = d.rows[0][3];
+    root.querySelector("[data-rows]").innerHTML = d.rows.map(([p, k, t, m]) =>
+      `<div class="row"><div class="lab">${p ? `<span class="p">${p}</span>` : ""}<b>${k}</b>${t}</div><div class="m">${fmt(m)}</div><div class="bar" style="width:${(m / max) * 100}%"></div></div>`).join("") +
+      `<div class="row else"><div class="lab"><b>Everything else</b>${d.rest_cards} more cards</div><div class="m">${fmt(d.rest)}</div></div>`;
+    root.querySelector("[data-counts]").innerHTML = d.counts.map(([n, t]) => `<span><b>${n}</b> ${t}</span>`).join("");
+  }
+  fill("today-whole", DATA.whole, false);
+  fill("today-travel", DATA.travel, false);
+  fill("whole", DATA.whole, true);
+  fill("travel", DATA.travel, true);
+
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
