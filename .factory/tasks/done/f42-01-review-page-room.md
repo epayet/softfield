@@ -42,3 +42,9 @@ attempts: 3
 tokens: 97641
 logs: .factory/var/runs/20261029-005226/f42-01-review-page-room
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
