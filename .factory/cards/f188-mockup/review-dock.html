@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F188 mock-up: the review's bar on a phone, without the count</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --good: #5fd17a;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .versions > div { flex: 0 1 390px; min-width: 0; }
+  @media (max-width: 839px) { .versions > [hidden] { display: none; } }
+  @media (min-width: 840px) { .switch { display: none; } .versions > [hidden] { display: block; } }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }   /* what this card changes */
+  .note { color: var(--good); font: 12px var(--mono); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 10px 0 0; }
+  .phone { width: 390px; max-width: 100%; box-sizing: border-box; background: var(--floor); border: 1px solid var(--rule); padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+
+  /* ---- the review page on a phone, as drawn (dashboard.css) ---- */
+  .key-point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .key-point > b { font: 600 15px var(--display); color: var(--hazard); }
+  .key-point > div { flex: 1 1 200px; display: flex; flex-direction: column; gap: 2px; }
+  .key-point span { color: var(--ink-2); font-size: 14px; }
+  .deck-nav { display: flex; flex-direction: column; gap: 8px; }
+  .deck-dots { display: flex; gap: 4px; }
+  .deck-dots span { flex: 1; height: 6px; background: var(--rule); }
+  .deck-dots .commented { background: var(--hazard); }
+  .deck-dots .at { outline: 2px solid var(--fg); outline-offset: 1px; }
+  .deck-arrows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .deck-arrows button { font: 600 15px var(--display); color: var(--fg); background: var(--plate); border: 1px solid var(--rule); min-height: 44px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .dock { box-shadow: 0 -6px 16px rgba(0,0,0,.25); }
+  .actions { display: flex; flex-direction: row; align-items: center; gap: 8px; }
+  .action-buttons { display: flex; flex-direction: row; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+  .review-count { flex: 1 1 0; min-width: 0; line-height: 1.2; font: 12.5px/1.2 var(--mono); color: var(--muted); }
+  .primary { flex: 0 0 auto; }
+  .proposed .action-buttons { justify-content: flex-start; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .fold { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; flex: 0 0 auto; }
+  .gap { flex: 1 1 auto; }
+</style>
+</head>
+<body>
+<h1>F188: the review's bar on a phone</h1>
+<p class="lede">The bottom of a review page at 390 px, the bar that stays in view as you scroll. The points are this card's own plan (4 of them); the second picture has a comment on point 2.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/proposal.html and dashboard.css's phone rules -->
+<div data-version="today" hidden>
+  <h3>Today · no comment</h3>
+  <div class="phone">
+    <div class="key-point"><b>1</b><div><b>The count leaves the bar</b><span>On a phone, "4 agreed · 0 to change" no longer sits in the bar at the bottom.</span></div></div>
+    <div class="deck-nav"><div class="deck-dots"><span class="at"></span><span></span><span></span><span></span></div>
+      <div class="deck-arrows"><button>&#9664;</button><button>&#9654;</button></div></div>
+    <section class="dock panel"><div class="actions"><div class="action-buttons">
+      <span class="review-count">4 agreed · 0 to change</span>
+      <span class="primary"><button class="btn go">Approve plan</button></span>
+      <span class="fold">Reject…</span>
+    </div></div></section>
+  </div>
+  <h3>Today · a comment on point 2</h3>
+  <div class="phone">
+    <div class="deck-nav"><div class="deck-dots"><span></span><span class="commented at"></span><span></span><span></span></div>
+      <div class="deck-arrows"><button>&#9664;</button><button>&#9654;</button></div></div>
+    <section class="dock panel"><div class="actions"><div class="action-buttons">
+      <span class="review-count">3 agreed · 1 to change</span>
+      <button class="btn go">Send 1 change back</button>
+      <span class="fold">Reject…</span>
+    </div></div></section>
+  </div>
+  <p class="legend">The count says again what the yellow dots and the button already say, and squeezes the row.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" class="proposed">
+  <h3>Proposed · no comment</h3>
+  <div class="phone">
+    <div class="key-point"><b>1</b><div><b>The count leaves the bar</b><span>On a phone, "4 agreed · 0 to change" no longer sits in the bar at the bottom.</span></div></div>
+    <div class="deck-nav"><div class="deck-dots"><span class="at"></span><span></span><span></span><span></span></div>
+      <div class="deck-arrows"><button>&#9664;</button><button>&#9654;</button></div></div>
+    <section class="dock panel new"><div class="actions"><div class="action-buttons">
+      <span class="primary"><button class="btn go">Approve plan</button></span>
+      <span class="gap"></span>
+      <span class="fold">Reject…</span>
+    </div></div></section>
+    <p class="note">no count: the button and Reject… alone</p>
+  </div>
+  <h3>Proposed · a comment on point 2</h3>
+  <div class="phone">
+    <div class="deck-nav"><div class="deck-dots"><span></span><span class="commented at"></span><span></span><span></span></div>
+      <div class="deck-arrows"><button>&#9664;</button><button>&#9654;</button></div></div>
+    <section class="dock panel new"><div class="actions"><div class="action-buttons">
+      <button class="btn go">Send 1 change back</button>
+      <span class="gap"></span>
+      <span class="fold">Reject…</span>
+    </div></div></section>
+    <p class="note">the yellow dot and "Send 1 change back" say how many</p>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what changes. On a wide screen nothing changes: the review sits in its side panel, not stuck to the bottom, and keeps its count.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
