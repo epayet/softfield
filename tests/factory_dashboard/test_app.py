@@ -586,6 +586,52 @@ def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme
     assert layout_problems(page) == []
 
 
+def test_phone_top_bar_steps_aside_on_scroll(page, client, tmp_path):
+    """f42-02: on a phone the top bar slides away when scrolling down
+    and comes back on scroll up."""
+    page.set_viewport_size(PHONE)
+    open_overview(page, client)
+    page.evaluate("() => document.fonts.ready")
+    page.evaluate("() => document.body.style.minHeight = '3000px'")
+    bar = page.locator("header.bar")
+
+    # At the top of the page the bar is in view
+    assert bar.evaluate("el => el.getBoundingClientRect().top") == pytest.approx(0, abs=2)
+
+    # Scroll down 400 px: bar should be out of view
+    page.evaluate("() => window.scrollTo(0, 400)")
+    page.wait_for_function(
+        "() => document.querySelector('header.bar').getBoundingClientRect().bottom <= 0"
+    )
+    bcr = bar.evaluate("el => el.getBoundingClientRect()")
+    assert bcr["bottom"] <= 0, f"bar still visible at bottom={bcr['bottom']:.1f}"
+
+    # Scroll up 50 px: bar should be fully in view at the top
+    page.evaluate("() => window.scrollTo(0, 350)")
+    page.wait_for_function(
+        "() => document.querySelector('header.bar').getBoundingClientRect().top >= 0"
+    )
+    bcr = bar.evaluate("el => el.getBoundingClientRect()")
+    assert bcr["top"] == pytest.approx(0, abs=2), f"bar not at top: top={bcr['top']:.1f}"
+
+    # Back at the top, bar is in view
+    page.evaluate("() => window.scrollTo(0, 0)")
+    page.wait_for_function(
+        "() => document.querySelector('header.bar').getBoundingClientRect().top >= 0"
+    )
+    assert bar.evaluate("el => el.getBoundingClientRect().top") == pytest.approx(0, abs=2)
+
+    # At 1024 px scrolling down leaves the bar in view
+    page.set_viewport_size(DISPLAY)
+    page.evaluate("() => window.scrollTo(0, 0)")
+    page.wait_for_timeout(100)
+    assert bar.evaluate("el => el.getBoundingClientRect().top") == pytest.approx(0, abs=2)
+    page.evaluate("() => window.scrollTo(0, 400)")
+    page.wait_for_timeout(200)
+    bcr = bar.evaluate("el => el.getBoundingClientRect()")
+    assert bcr["top"] == pytest.approx(0, abs=2), f"bar moved at desktop: top={bcr['top']:.1f}"
+
+
 def test_desktop_bar_unchanged_at_1440(client):
     """f3-30: at 1440 px the bar is as today (host visible, tabs fit without scrolling)."""
     html = client.get("/").text

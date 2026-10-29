@@ -38,6 +38,20 @@
   // or has text selected, so neither the queue's scroll nor a selection is lost (2026-10-03).
   let lastScroll = 0;
   addEventListener("scroll", () => { lastScroll = Date.now(); }, { capture: true, passive: true });
+  // Phone top bar steps aside (f42-02): hide on scroll down past bar height, show on scroll up.
+  (function () {
+    let lastY = window.scrollY;
+    addEventListener("scroll", () => {
+      const y = window.scrollY;
+      const bar = document.querySelector("header.bar");
+      if (!bar) { lastY = y; return; }
+      const stickyTop = parseFloat(getComputedStyle(bar).top) || 0;
+      if (window.innerWidth >= 640) { lastY = y; return; }
+      if (y > lastY && y > stickyTop) { bar.classList.add("steps-aside"); }
+      else { bar.classList.remove("steps-aside"); }
+      lastY = y;
+    }, { passive: true });
+  })();
   window.liveIdle = () => {
     if (Date.now() - lastScroll <= 10000) return false;
     if (String(getSelection())) return false;

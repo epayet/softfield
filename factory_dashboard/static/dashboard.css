@@ -390,6 +390,10 @@ tr.few .gauge { opacity: .35; }
     scrollbar-width: none; border-top: 0; width: 100%; }
   nav.tabs a { flex: none; white-space: nowrap; }
   nav.tabs::-webkit-scrollbar { display: none; }
+  header.bar.steps-aside { transform: translateY(-100%); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  header.bar.steps-aside { transition: transform 0.2s ease; }
 }
 .floor { display: block; width: 100%; min-width: 1100px; height: auto; background: var(--bg);
   font-family: var(--mono); font-size: 11px; }
