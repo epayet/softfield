@@ -1,4 +1,4 @@
-# Milestone F138: Run again right after Ctrl-C
+# Milestone F138: Run again right after Ctrl-C, without the 2-minute refusal
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-15.
