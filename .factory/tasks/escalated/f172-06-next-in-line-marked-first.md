@@ -29,3 +29,12 @@ The picture to build is `.factory/cards/f172-mockup/goes-first.html` (Proposed, 
 - with no card in the lane, Next in line is as today, with no bay
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 213228
+logs: .factory/var/runs/20261029-143524/f172-06-next-in-line-marked-first
+```
