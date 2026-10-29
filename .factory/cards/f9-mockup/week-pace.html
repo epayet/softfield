@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F9 mock-up: Claude's week pace, on the Overview</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --fail: #ec5458;
+    --opus: #ff9640;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 1100px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [hidden] { display: block !important; }
+    .versions > div::before { content: attr(data-label); display: block; font: 700 14px var(--display);
+      letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); margin: 12px 0 0; }
+  }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { display: block; font: 11px var(--mono); color: var(--good); margin-top: 6px; }
+  .legend-m { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: the panel, the meter, the lever, the queue ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .agent { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .meter { height: 10px; background: var(--grid); position: relative; }
+  .meter > span { position: absolute; inset: 0 auto 0 0; max-width: 100%; }
+  .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--fg);
+    outline: 1px solid var(--bay); z-index: 1; }
+  .meter > .under-mark, .swatch.under-mark { background: var(--good); }
+  .meter > .past-mark, .swatch.past-mark { background: var(--hazard); }
+  .meter > .nearly-out, .swatch.nearly-out { background: var(--fail); }
+  .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+  .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+    border: 1px solid transparent; background: none; color: var(--ink-2);
+    font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .lever .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--grid); box-shadow: inset 0 0 0 1px var(--rule); }
+  .lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate);
+    border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+  .lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule); }
+  .allow { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+  .allow > div { min-width: 180px; flex: 1; }
+  .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; align-items: center; }
+  .allow .line small { color: var(--muted); }
+  .allow .cards-on { flex-basis: 100%; justify-content: flex-start; color: var(--ink-2); }
+  .allow .cards-on b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+  details.legend { color: var(--ink-2); font-size: 13px; }
+  details.legend span { display: block; margin: 2px 0; }
+  .next-in-line { display: grid; gap: 4px; border-top: 1px solid var(--grid); padding-top: 10px; margin-top: 10px; }
+  .next-in-line h3 { font-size: 12px; margin: 0; }
+  .next-row { font-size: 14px; }
+  .phone .allow { flex-direction: column; gap: 8px; }
+  .phone .allow > div { background: var(--bay); border: 1px solid var(--rule); padding: 6px 8px; }
+  .phone .line { font-size: 12px; }
+  .phone .meter { height: 8px; }
+
+  /* ---- proposed: the pace tick, the stretch over it, the words under it ---- */
+  /* the pace line: a dashed hazard post with a small flag on top, so it never reads as the mark */
+  .meter > .pace { position: absolute; top: -6px; bottom: -6px; width: 0; border-left: 2px dashed var(--hazard); z-index: 2; }
+  .meter > .pace::before { content: ""; position: absolute; top: -1px; left: -2px; width: 8px; height: 6px;
+    background: var(--hazard); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+  /* what is used beyond today's pace: hazard stripes over the fill, the share that holds lead tickets back */
+  .meter > .over-pace { background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .pace-plate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; margin-top: 6px;
+    padding: 4px 10px 5px 14px; background: var(--plate); border: 1px solid var(--rule); position: relative; font-size: 13px; }
+  .pace-plate::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .pace-plate b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .06em; color: var(--hazard); }
+  .pace-plate .until { font-family: var(--mono); color: var(--hazard); }
+  .pace-plate small { color: var(--ink-2); }
+  .held { color: var(--hazard); font-family: var(--mono); font-size: 12.5px; }
+  .swatch.pace { width: 0; height: 14px; border-left: 2px dashed var(--hazard); margin: 0 9px 0 4px; vertical-align: -3px; }
+  .swatch.over-pace { background: repeating-linear-gradient(135deg, var(--hazard) 0 3px, var(--hazard-ink) 3px 6px); }
+</style>
+</head>
+<body>
+<h1>F9: Claude's week pace, on the Overview</h1>
+<p class="lede">The Overview's allowance and queue, as they read at 20:10 on Tue 27 Oct: Claude's week is 29% used; its
+  mark (the lead's reserve) is at 70%, and today's pace line at 22%, so lead tickets are held now and pass again
+  about Wed 13:40. Developer tickets and planner replies go on.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/_partials/allowance.html and queue.html -->
+<div data-version="today" data-label="Today" hidden>
+  <h3>Wide screen</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 66%</span>
+          <span class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></span></div>
+        <div class="meter"><span class="under-mark" style="width:66%"></span><span class="mark" style="left:75%"></span></div>
+        <div class="line"><small>resets at 18:50</small><small>kept for you from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 29%</span>
+          <span class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></span></div>
+        <div class="meter"><span class="under-mark" style="width:29%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 2 16:00</small><small>reserve kept for the lead from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Copilot</span><span>month: 24%</span></div>
+        <div class="meter"><span class="under-mark" style="width:24%"></span></div>
+        <div class="line"><small>resets on Nov 1 00:00</small></div>
+      </div>
+    </div>
+    <details class="legend"><summary>How to read the allowance</summary>
+      <span><i class="swatch under-mark"></i>green: under the mark</span>
+      <span><i class="swatch past-mark"></i>yellow: past the mark</span>
+      <span><i class="swatch nearly-out"></i>red: above 95%</span>
+      <span>the mark: the factory stops here; the rest of the window is the owner's</span>
+    </details>
+  </section>
+  <h3>Queue, Next in line</h3>
+  <section class="panel">
+    <div class="next-in-line">
+      <div class="next-row"><b class="mono">2 <a href="#">f173-02-waited-for-goes-first</a></b> A ticket that a higher ticket waits for runs in that ticket's place in the line… · the lead · priority 0</div>
+      <div class="next-row"><b class="mono">3 <a href="#">f171-04-plant-takes-the-projects-area</a></b> A note planted without an area takes its project's area… · the lead · priority 4</div>
+    </div>
+  </section>
+  <h3>Phone</h3>
+  <section class="panel phone">
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 29%</span></div>
+        <div class="meter"><span class="under-mark" style="width:29%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 2 16:00</small><small>reserve kept for the lead from here</small></div>
+      </div>
+    </div>
+  </section>
+  <p class="legend-m">Green and well under the mark: nothing says that lead tickets are held right now. Only the
+    Tickets page's row reason says "over its pace line of 22%".</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed" data-label="Proposed">
+  <h3>Wide screen</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 66%</span>
+          <span class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></span></div>
+        <div class="meter"><span class="under-mark" style="width:66%"></span><span class="mark" style="left:75%"></span></div>
+        <div class="line"><small>resets at 18:50</small><small>kept for you from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 29%</span>
+          <span class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></span></div>
+        <div class="meter new"><span class="under-mark" style="width:29%"></span><span class="over-pace" style="left:22%;width:7%"></span><span class="pace" style="left:22%" title="today's pace: 22%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 2 16:00</small><small>reserve kept for the lead from here</small></div>
+        <div class="pace-plate new"><b>Over pace</b><span>lead tickets wait until about <span class="until">Wed 13:40</span></span><small>developers go on · today's pace 22%</small></div>
+        <span class="note">new: the pace post, the striped stretch over it, and the plate</span>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Copilot</span><span>month: 24%</span></div>
+        <div class="meter"><span class="under-mark" style="width:24%"></span></div>
+        <div class="line"><small>resets on Nov 1 00:00</small></div>
+      </div>
+    </div>
+    <details class="legend" open><summary>How to read the allowance</summary>
+      <span><i class="swatch under-mark"></i>green: under the mark</span>
+      <span><i class="swatch past-mark"></i>yellow: past the mark</span>
+      <span><i class="swatch nearly-out"></i>red: above 95%</span>
+      <span>the mark: the factory stops here; the rest of the window is the owner's</span>
+      <span class="new"><i class="swatch pace"></i>dashed yellow post: today's pace; the week is spread so lead tickets don't use it up early</span>
+      <span class="new"><i class="swatch over-pace"></i>striped: used beyond today's pace; lead tickets wait until the post catches up</span>
+    </details>
+  </section>
+  <h3>Queue, Next in line</h3>
+  <section class="panel">
+    <div class="next-in-line">
+      <div class="next-row"><b class="mono">2 <a href="#">f173-02-waited-for-goes-first</a></b> A ticket that a higher ticket waits for runs in that ticket's place in the line… · the lead · <span class="held new">held by Claude's week pace until about Wed 13:40</span> · priority 0</div>
+      <div class="next-row"><b class="mono">3 <a href="#">f171-04-plant-takes-the-projects-area</a></b> A note planted without an area takes its project's area… · the lead · <span class="held new">held by Claude's week pace until about Wed 13:40</span> · priority 4</div>
+    </div>
+    <span class="note">new: a held lead ticket says so, and until when</span>
+  </section>
+  <h3>Phone</h3>
+  <section class="panel phone">
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 29%</span></div>
+        <div class="meter new"><span class="under-mark" style="width:29%"></span><span class="over-pace" style="left:22%;width:7%"></span><span class="pace" style="left:22%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 2 16:00</small><small>reserve kept for the lead from here</small></div>
+        <div class="pace-plate new"><b>Over pace</b><span>lead tickets wait until about <span class="until">Wed 13:40</span></span><small>developers go on</small></div>
+      </div>
+    </div>
+  </section>
+  <h3>When on pace</h3>
+  <section class="panel phone">
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 18%</span></div>
+        <div class="meter new"><span class="under-mark" style="width:18%"></span><span class="pace" style="left:22%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 2 16:00</small><small>on pace · today's 22%</small></div>
+      </div>
+    </div>
+    <span class="note">example value (18%): on pace, only the post and a quiet line, no plate</span>
+  </section>
+  <p class="legend-m"><span class="new">Dashed green</span> marks what is new. The post moves through the week (it runs a day
+    ahead, ADR 25) and stops at the mark; the stripes and plate show only while lead tickets are actually held. The
+    time is when the post reaches today's use, from the same function the runner holds tickets with.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>

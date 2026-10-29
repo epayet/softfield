@@ -41,7 +41,7 @@
 | 26 | replay-under-floor | D | 2 | 13 | the replay bar right after the floor |
 | 27 | phone-rows-compact | L | 4 | 25 | the phone's planted rows: 3 compact rows and "Show all N" |
 | 28 | allowance-live | D | 3 | 16 | the allowance panel refreshes live, its legend at the bottom; the lead window shows the week too (owner, 2026-10-07) |
-| 29 | week-pace | L | 3 | 28 | Claude's week meter shows today's pace line and says "on pace" or "over pace: lead tickets wait" (owner, 2026-10-07) |
+| 29 | week-pace | L | 3 | 28 | Claude's week meter shows today's pace line and says "on pace" or "over pace: lead tickets wait"; a held lead ticket's row in Next in line says until when (owner, 2026-10-07 and F116 2026-10-27; mock-up `f9-mockup/week-pace.html`) |
 
 **The owner's notes of 2026-10-06** (from using the line on the phone) are 17 and 21–27. Crates moving along the belts went to [F10](f10-crates.md).
 
