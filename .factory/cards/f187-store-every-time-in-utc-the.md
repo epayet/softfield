@@ -1,4 +1,4 @@
-# Milestone F187: Store every time in UTC. The runner writes local time…
+# Milestone F187: Store every time in UTC, show local time on screen only
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-29.
