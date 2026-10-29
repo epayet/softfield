@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F97 mock-up: Needs you steps aside on the Overview</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1e252d; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458;
+    --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a; --dev: #5b9cf5;
+    --warn: var(--hazard); --a1: var(--opus);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .phone { width: 390px; max-width: 100%; display: grid; gap: 10px; }
+  /* wide screen: both side by side, no switch */
+  @media (min-width: 880px) {
+    .switch { display: none; }
+    [data-version][hidden] { display: grid !important; }
+  }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; position: relative; }   /* what this card changes */
+  .note { display: block; font: 12px var(--body); color: var(--good); margin: 4px 0 0; }
+  .gone { opacity: .45; outline: 1px dashed var(--muted); outline-offset: 3px; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 820px; }
+  [hidden] { display: none !important; }
+
+  /* ---- the top bar's tabs (dashboard.css nav.tabs) ---- */
+  nav.tabs { display: flex; flex-wrap: nowrap; overflow-x: auto; border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); background: var(--bay); }
+  nav.tabs a { flex: none; white-space: nowrap; font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; }
+  nav.tabs a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
+  .bar { font: 600 13px var(--mono); color: var(--ink-2); padding: 6px 0; }
+  .bar .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--opus); margin-right: 6px; }
+
+  /* ---- panels as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; position: relative; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .panel.needs { border-color: var(--warn); }
+  .sub { color: var(--ink-2); margin: 2px 0 8px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .agent { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .steps { list-style: none; margin: 0; padding: 0; }
+  .steps li { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }
+  .steps li:last-child { border-bottom: 0; }
+  .steps .what { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: baseline; min-width: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 7px 1px 5px; border: 1px solid var(--rule); white-space: nowrap; }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--dot, var(--muted)); }
+  .pill.warn { --dot: var(--warn); } .pill.running { --dot: var(--a1); } .pill.critical { --dot: var(--fail); }
+  .running-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  dl.kv { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 8px 0 0; }
+  dl.kv dt { color: var(--muted); font-size: 13px; } dl.kv dd { margin: 0; }
+  .next-row { padding: 4px 0; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+  .floor { height: 90px; display: grid; place-items: center; color: var(--muted); font: 12px var(--mono);
+    background: repeating-linear-gradient(-45deg, transparent 0 10px, rgba(242,177,10,.06) 10px 20px); border: 1px solid var(--rule); }
+  .proj { display: inline-flex; align-items: center; font: 600 11px var(--mono); letter-spacing: .04em; color: var(--ink-2);
+    padding: 0 6px; border: 1px solid var(--rule); position: relative; }
+  .proj::before, .proj::after { content: ""; position: absolute; width: 4px; height: 4px; border: solid var(--ink-2); }
+  .proj::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; }
+  .proj::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; }
+
+  /* ---- proposed: a line-stop strip inside Now; the desks' counts as plates ---- */
+  .stop { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; margin: 0 0 10px; padding: 8px 10px;
+    border: 1px solid var(--fail); border-left-width: 4px; background: var(--plate); }
+  .stop b { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--fail); }
+  .desks { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 6px; }
+  .desk { display: inline-flex; align-items: baseline; gap: 8px; padding: 4px 10px; border: 1px solid var(--rule); background: var(--plate); color: var(--fg); }
+  .desk b { font: 700 16px var(--display); color: var(--hazard); }
+  .needs.calm { border-color: var(--rule); border-top: 3px solid var(--hazard); }
+</style>
+</head>
+<body>
+<h1>F97: Needs you steps aside on the Overview</h1>
+<p class="lede">The Overview of softfield on 2026-10-27, from the dashboard (<span class="mono">softfield look page /</span>) and the metrics database: 25 things on softfield's desk, 1 on travel-companion's, 1 on coucou's, and two open "Claude's allowance" questions on travel-companion. Proposed is drawn after F132, One view of the whole factory (its project plates and every project's queue), since this card's ticket follows its f132-02.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/overview.html and its partials -->
+<div class="phone" data-version="today" hidden>
+  <h3>Today</h3>
+  <div class="bar"><span class="dot"></span>Running: softfield · planner, job 1406</div>
+  <nav class="tabs"><a href="#">Projects</a><a href="#" aria-current="page">Overview</a><a href="#">Planning · 25</a><a href="#">Board</a><a href="#">Tickets</a><a href="#">Jobs</a></nav>
+  <section class="panel needs">
+    <h2>Needs you <span class="src">each item goes when it's done</span></h2>
+    <ul class="steps">
+      <li><span class="when"><span class="pill warn">desk</span></span>
+        <span class="what"><span>25 things wait for you on your desk</span>
+          <a class="mono" href="#">Bring the factory theme to the older pages, the Planning room first</a>
+          <a class="mono" href="#">Text boxes grow with what you type, the Plant box first</a>
+          <a class="mono" href="#">Coming says which reply the lead is writing, and when each other one comes</a>
+          <a class="mono" href="#">Open your desk ›</a></span></li>
+    </ul>
+  </section>
+  <section class="panel">
+    <h2>Now <span class="src">refreshes every 5 s</span></h2>
+    <div class="running-head"><span class="pill running">attempt 5</span><span class="agent">claude-opus</span><span>planner</span><a href="#">job 1406 ›</a></div>
+    <dl class="kv"><dt>Elapsed</dt><dd class="mono">9 s</dd><dt>Live</dt><dd class="mono">no tokens reported yet</dd><dt>Heartbeat</dt><dd class="mono">0 s ago</dd></dl>
+  </section>
+  <section class="panel">
+    <h2>Queue</h2>
+    <p class="sub">59 tickets waiting.</p>
+    <div class="next-row"><b class="mono">1 review F68</b> · a batch</div>
+    <div class="next-row"><b class="mono">2 <a href="#">f173-02-waited-for-goes-first</a></b> · the lead</div>
+    <div class="next-row"><b class="mono">3 <a href="#">f142-05-fix-a-look-is-not-an-answer</a></b> · a developer</div>
+  </section>
+  <section class="panel"><h2>Agent allowance <span class="src">latest reading per window</span></h2><p class="sub">Claude 5-hour window: 27% · Claude week: 11% · Copilot month: 24%</p></section>
+  <section class="panel"><h2>From the field to the stash <span class="src">live</span></h2><div class="floor">the floor</div></section>
+  <section class="panel"><h2>While you were away <span class="src">since 20:00</span></h2><p class="sub">0 merged, 6 failed attempts, 0 escalations, 17 new for you, 0 blocked now, $31.18 on Claude</p></section>
+  <section class="panel"><h2>Savings from delegating so far on F177 <span class="src">API-equivalent dollars</span></h2><p class="sub">No delegated tickets yet.</p></section>
+  <p class="legend">On a phone, the desk line fills the first screen: the same 25 the Planning tab already shows, and Now starts below it.</p>
+</div>
+
+<!-- Proposed -->
+<div class="phone" data-version="proposed">
+  <h3>Proposed</h3>
+  <div class="bar"><span class="dot"></span>Running: softfield · planner, job 1406</div>
+  <nav class="tabs"><a href="#">Projects</a><a href="#" aria-current="page">Overview</a><a href="#">Planning · 25</a><a href="#">Board</a><a href="#">Tickets</a><a href="#">Jobs</a></nav>
+  <section class="panel">
+    <h2>Now <span class="src">refreshes every 5 s</span></h2>
+    <div class="running-head"><span class="proj">softfield</span><span class="pill running">attempt 5</span><span class="agent">claude-opus</span><span>planner</span><a href="#">job 1406 ›</a></div>
+    <dl class="kv"><dt>Elapsed</dt><dd class="mono">9 s</dd><dt>Live</dt><dd class="mono">no tokens reported yet</dd><dt>Heartbeat</dt><dd class="mono">0 s ago</dd></dl>
+    <span class="note">Now is the first panel: Needs you no longer sits above it.</span>
+  </section>
+  <section class="panel">
+    <h2>Queue</h2>
+    <p class="sub">59 tickets waiting.</p>
+    <div class="next-row"><b class="mono">1 review F68</b> · a batch · <span class="proj">softfield</span></div>
+    <div class="next-row"><b class="mono">2 <a href="#">f173-02-waited-for-goes-first</a></b> · the lead · <span class="proj">softfield</span></div>
+    <div class="next-row"><b class="mono">3 <a href="#">f142-05-fix-a-look-is-not-an-answer</a></b> · a developer · <span class="proj">softfield</span></div>
+  </section>
+  <section class="panel"><h2>Agent allowance <span class="src">latest reading per window</span></h2><p class="sub">Claude 5-hour window: 27% · Claude week: 11% · Copilot month: 24%</p></section>
+  <section class="panel"><h2>From the field to the stash <span class="src">live</span></h2><div class="floor">the floor</div></section>
+  <section class="panel"><h2>While you were away <span class="src">since 20:00</span></h2><p class="sub">0 merged, 6 failed attempts, 0 escalations, 17 new for you, 0 blocked now, $31.18 on Claude</p></section>
+  <section class="panel needs calm new">
+    <h2>Needs you <span class="src">each item goes when it's done</span></h2>
+    <div class="desks">
+      <a class="desk" href="#"><b>25</b><span class="proj">softfield</span><span>desk ›</span></a>
+      <a class="desk" href="#"><b>1</b><span class="proj">travel-companion</span><span>desk ›</span></a>
+      <a class="desk" href="#"><b>1</b><span class="proj">coucou</span><span>desk ›</span></a>
+    </div>
+    <ul class="steps">
+      <li><span class="when"><span class="pill warn">reserve</span></span><span class="what"><span class="proj">travel-companion</span><span>Claude's reserve: the week's switch went off after 24 hours. Turn “Let the factory use the week's reserve” on again for 24 h?</span></span></li>
+      <li><span class="when"><span class="pill warn">reserve</span></span><span class="what"><span class="proj">travel-companion</span><span>Claude's reserve: the 5-hour switch went off after 24 hours. Turn “Let the factory use your 25% of the 5-hour window” on again for 24 h?</span></span></li>
+    </ul>
+    <span class="note">At the bottom, a box. Each desk is one plate with its count, a tap opens that project's Planning room; no titles (the desk lists them). Below, what is on no desk.</span>
+  </section>
+
+  <h3>Proposed, when the line stops (an example)</h3>
+  <section class="panel">
+    <h2>Now <span class="src">refreshes every 5 s</span></h2>
+    <div class="stop new"><b>Line stopped</b><span class="proj">softfield</span><span>The runner's heartbeat stopped 12 min ago mid-job: a crash or a closed terminal. Rerun it; it picks up where it stopped.</span></div>
+    <div class="running-head"><span class="proj">softfield</span><span class="pill running">attempt 1</span><span class="agent">qwen3.6-35b-a3b</span><span>developer</span><a href="#">job 1402 ›</a></div>
+    <span class="note">The three things that stop the line (the runner stopped, a check fails on main, tickets wait while the runner is idle) show inside Now, at its top, never at the bottom.</span>
+  </section>
+</div>
+
+</div>
+
+<p class="legend"><span class="new">Dashed green</span> marks what this card changes. Savings and Claude per milestone are gone from Proposed because F132's f132-04 moves them to each project's page. The tab count, the phone notifications and the "since" filter are unchanged. The line-stop example is drawn, not real: nothing stops the line today.</p>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
