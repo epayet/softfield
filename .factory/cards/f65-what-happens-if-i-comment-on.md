@@ -18,6 +18,9 @@ What was said on F183's thread:
 Asked: a card whose follow-up plan the owner approved shouldn't wait on the desk for sign-off until that work is done, unless the owner cancels the plan.
 Found: once the runner has taken the approval, ready tickets already keep the card off To sign off (F172, F38, F68, F69 today). Still open: (a) between Approve and the runner's pick, the card stays in To sign off and a Sign off press is refused (F38: approved 00:24, sign-off refused 00:50 on 2026-10-29; F172 and F69 waited 07:36 to 07:50); cancelling the approval, or setting the new tickets aside, should bring the card back. (b) F142's sign-off: done in git on 10-28 (dd2f7e6, tag exists), never recorded in the database, so every press fails on `git tag … already exists` (requests 910, 921; 929 pending) and the card stays Ripe. It needs a fix ticket first in line.
 
+### From F182: When I don't sign off a card and comment on it instead, I… (merged by the lead on 2026-10-29)
+When I don't sign off a card and comment on it instead, I would like to see it orange dotted like I responded it. I wonder if that should be part of the bundling the whole task into one thing. Should sign offs be bundled with the plan and the original conversation, especially if I keep discussing the results and want to iterate on it, sounds like a step further in the bundling idea. I still want to see the tasks that are done first. Perhaps it should be styled differently if it's ripe
+
 ## Expected outcome
 Commenting on a card that waits for sign-off starts a round: the lead answers and drafts the follow-up, you approve it, the line builds it, a short review checks it, and the card comes back to your desk opening on **"Round 2: what changed since your comment"**: your comment quoted, each change with how to test it, and the tickets linked. Earlier rounds fold below. Repeat until you press Sign off.
 
