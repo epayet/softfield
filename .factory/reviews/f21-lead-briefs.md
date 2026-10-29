@@ -1,6 +1,6 @@
 # Review: F21, the lead's briefs
 
-- **Status:** review round 1 done (2026-10-29), waiting for the owner's sign-off.
+- **Status:** review round 2 done (2026-10-29): both round 1 fixes hold, nothing left to fix; waiting for the owner's sign-off.
 
 ## Sign-off sheet
 
@@ -26,7 +26,7 @@ None.
 - 2026-10-10: f21-01 and f21-02 waited for Claude's reserve (1% of the week left) ([session](../sessions/2026-10-10-0854.md)).
 - 2026-10-12: both lead tickets done by Claude Opus at the first attempt ($1.73 and $2.31), but blocked by a stray test file on main failing the layout gate; they landed from their branches in a terminal session the same evening ([session](../sessions/2026-10-12-lead.md)). f21-03 ran ($0.92) and changed nothing on purpose: the 800-word target couldn't be met without dropping rules.
 - 2026-10-28: f21-03 ran again on Sonnet ($0.21), changed nothing again, and was set aside ([session](../sessions/2026-10-28-0900.md)). 0 local tokens: everything was protected runner code.
-- 2026-10-29: the review was parked three times for Claude's 5-hour cap, then ran.
+- 2026-10-29: the review was parked three times for Claude's 5-hour cap, then ran: round 1 fixed two findings itself; round 2 checked them and found only one nit, for the backlog.
 - Lessons: a word-count target on a document whose rules keep growing can't hold (the ticket now has no ceiling test); a file left on main by a review blocked four finished tickets for two days (fixed then by running f12-03 first); a brief that pastes a doc must check what the agent already loads (this review's F1).
 
 ### 6. What next
@@ -51,15 +51,18 @@ Tests: the commits only added tests (none edited): the block's order, waits, car
 |---|---|---|---|---|
 | F1 | should-fix | claude | owner.md reached every new headless lead job twice: CLAUDE.md imports it (since 2026-10-07) and the brief pasted it again, about 2.5k tokens a job | Fixed: `claude.imports` reads CLAUDE.md's `@` imports; `_brief` leaves owner.md out when it is already loaded (still pasted for another project's repo or the shared docs). Two tests |
 | F2 | nit | claude | The block didn't say when a ticket runs early for another (F173 D7, merged after F21), so its place looked wrong for its priority | Fixed: `ReadyTicket.early`, "early for <id>, which waits for it". One test |
+| F3 | nit | backlog | Round 2: `work_stands` passes `early_for` by position right after `waits` (both `str \| None`, so mypy can't catch a swap), and no `work_stands` test has a pulled-ahead ticket | Right today; in `docs/backlog.md`: pass both by name and test it when `ReadyTicket` next changes |
+
+Round 2 re-read the fixes. F1 holds: only an `@docs/agents/owner.md` line of its own counts (the test checks that an inline mention still gets the paste), the shared docs (ADR 30) still get it pasted, and a repo without owner.md isn't reported as missing. This review's own prompt shows it live: lead.md's sections, and owner.md once, through CLAUDE.md. F2 holds: the field is the dry run's own `early_for`. Neither fix edited an existing test.
 
 No checkpoint ran (all lead tickets), so there are no checkpoint verdicts. Score: 7/10: both decisions are built as planned, with clear, thorough tests; the brief duplicated what CLAUDE.md already loads, which the ticket's author could have seen in CLAUDE.md.
 
-After the fixes, ruff, mypy and the 1,740 runner and 1,102 dashboard tests pass.
+After the fixes, ruff, mypy and the 1,740 runner and 1,102 dashboard tests pass (round 1). Round 2 re-ran them on a slow machine: every runner test passed (the full run was stopped at its 20-minute limit at about 95%, with no failure before it), and all 1,102 dashboard tests passed on their own in 16 minutes.
 
 The French: no `coucou/locale/fr/` change in this milestone.
 
 ## Backlog
-Nothing new.
+- F3 (nit, round 2), in `docs/backlog.md` under "Waiting for something".
 
 ## Factory
 - Flow: three lead tickets, all first attempt on Claude; two blocked by a broken main (not their work) and landed by hand; one set aside as impossible. No stops for the owner. The review waited for the 5-hour cap three times.
