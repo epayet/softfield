@@ -11,6 +11,13 @@ From the code (2026-10-09), what happens today:
 - When those tickets are done, **no new review runs**: `_reviewed` in `runner/milestone.py` sees the first review's stop in `state.review_stop`, so `due_reviews` skips the card. Its rounds are used up too (`review_counts`).
 - The card ripens again at once with the **old** sheet: `_field` in `factory_dashboard/line.py` calls it ripe when every ticket is done and `milestones.signoff` is stored, and that's still the first review's. The page's "What changed" describes the first build, not the change asked for. So today it isn't clear at all.
 
+### From F183: When I haven't signed off a ticket and approved a plan to… (merged by the lead on 2026-10-29)
+When I haven't signed off a ticket and approved a plan to do some more work on top of it and the work is not done, it should not be on by desk for.me to sign off, unless I cancel the related plans that change it
+
+What was said on F183's thread:
+Asked: a card whose follow-up plan the owner approved shouldn't wait on the desk for sign-off until that work is done, unless the owner cancels the plan.
+Found: once the runner has taken the approval, ready tickets already keep the card off To sign off (F172, F38, F68, F69 today). Still open: (a) between Approve and the runner's pick, the card stays in To sign off and a Sign off press is refused (F38: approved 00:24, sign-off refused 00:50 on 2026-10-29; F172 and F69 waited 07:36 to 07:50); cancelling the approval, or setting the new tickets aside, should bring the card back. (b) F142's sign-off: done in git on 10-28 (dd2f7e6, tag exists), never recorded in the database, so every press fails on `git tag … already exists` (requests 910, 921; 929 pending) and the card stays Ripe. It needs a fix ticket first in line.
+
 ## Expected outcome
 Commenting on a card that waits for sign-off starts a round: the lead answers and drafts the follow-up, you approve it, the line builds it, a short review checks it, and the card comes back to your desk opening on **"Round 2: what changed since your comment"**: your comment quoted, each change with how to test it, and the tickets linked. Earlier rounds fold below. Repeat until you press Sign off.
 
