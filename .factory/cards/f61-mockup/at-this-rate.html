@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F61 mock-up: at this rate, out by…</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --fail: #ec5458;
+    --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255,255,255,.07) 5px 7px);
+    --ink: var(--fg); --surface: var(--bay); --warn-ink: var(--hazard);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }      /* what this card adds */
+  .planned { outline: 1px dotted var(--muted); outline-offset: 3px; } /* already planned elsewhere */
+  .note { display: block; font: 11px var(--mono); color: var(--good); margin-top: 6px; }
+  .note.dim { color: var(--muted); }
+  .legend-mock { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+  /* Wide screens: Today and Proposed side by side, no switch */
+  @media (min-width: 980px) {
+    .switch { display: none; }
+    .versions { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start; }
+    .versions > [data-version][hidden] { display: block !important; }
+  }
+
+  /* ---- the panel as drawn (dashboard.css) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em;
+    margin: 0 0 10px; display: flex; gap: 8px; align-items: baseline; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: auto; }
+  .agent { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .meter { height: 10px; background: var(--grid); position: relative; }
+  .meter > span { position: absolute; inset: 0 auto 0 0; max-width: 100%; }
+  .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
+    outline: 1px solid var(--surface); z-index: 1; }
+  .meter > .under-mark, .swatch.under-mark { background: var(--good); }
+  .meter > .past-mark, .swatch.past-mark { background: var(--hazard); }
+  .meter > .nearly-out, .swatch.nearly-out { background: var(--fail); }
+  .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+  .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+    border: 1px solid transparent; background: none; color: var(--ink-2); cursor: pointer;
+    font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .lever .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--grid); box-shadow: inset 0 0 0 1px var(--rule); }
+  .lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate);
+    border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+  .lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule); }
+  .allow { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 8px; }
+  .allow > div { min-width: 180px; flex: 1; }
+  .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
+  .allow .line small { color: var(--muted); }
+  .legend { color: var(--ink-2); font-size: 13px; }
+  .legend summary { cursor: pointer; color: var(--muted); }
+  .legend span { display: block; margin: 2px 0; }
+
+  /* ---- proposed (D1, D4): the ghost and the line ---- */
+  .meter > .ahead { background: var(--ghost), var(--plate); box-shadow: inset 0 0 0 1px var(--rule); }
+  .swatch.ahead { background: var(--ghost), var(--plate); box-shadow: inset 0 0 0 1px var(--rule); }
+  .allow .line .rate { flex-basis: 100%; font: 12px var(--mono); color: var(--muted); }
+  .allow .line .rate.out { color: var(--warn-ink); }
+  .allow .line .rate b { font-weight: 600; }
+  .allow .line .pace { flex-basis: 100%; font: 12px var(--mono); color: var(--hazard); }
+</style>
+</head>
+<body>
+<h1>F61: at this rate, out by…</h1>
+<p class="lede">The Overview's Agent allowance, read on Wednesday 21 October at 22:44: the real readings from that night (week 58%, 5-hour window 59%, Copilot's month as last read). That week ran out on Thursday at 19:38 and only came back on Monday at 17:00.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/_partials/allowance.html -->
+<div data-version="today" hidden>
+  <h3>Today</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 59%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter"><span class="under-mark" style="width:59%"></span><span class="mark" style="left:75%" title="kept for you from here"></span></div>
+        <div class="line"><small>resets on Oct 22 00:50</small><small>kept for you from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 58%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter"><span class="under-mark" style="width:58%"></span><span class="mark" style="left:70%" title="reserve kept for the lead from here"></span></div>
+        <div class="line"><small>resets on Oct 26 17:00</small><small>reserve kept for the lead from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Copilot</span><span>month: 24%</span></div>
+        <div class="meter"><span class="under-mark" style="width:24%"></span></div>
+        <div class="line"><small>resets on Nov 1 00:00</small></div>
+      </div>
+    </div>
+    <details class="legend"><summary>How to read the allowance</summary>
+      <span><i class="swatch under-mark"></i>green: under the mark</span>
+      <span><i class="swatch past-mark"></i>yellow: past the mark</span>
+      <span><i class="swatch nearly-out"></i>red: above 95%</span>
+      <span>the mark: the factory stops here; the rest of the window is the owner's</span>
+    </details>
+  </section>
+  <p class="legend-mock">Both meters are green and under their marks. Nothing says the week will be gone in fifteen hours.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>Proposed</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 59%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter new"><span class="ahead" style="width:100%"></span><span class="under-mark" style="width:59%"></span><span class="mark" style="left:75%" title="kept for you from here"></span></div>
+        <div class="line"><small>resets on Oct 22 00:50</small><small>kept for you from here</small>
+          <small class="rate out new">at this rate: out <b>00:45</b>, 5 min before the reset</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 58%</span>
+          <button type="button" class="lever" role="switch" aria-checked="false">use reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button></div>
+        <div class="meter new"><span class="ahead" style="width:100%"></span><span class="under-mark" style="width:58%"></span><span class="mark" style="left:70%" title="reserve kept for the lead from here"></span></div>
+        <div class="line"><small>resets on Oct 26 17:00</small><small>reserve kept for the lead from here</small>
+          <small class="pace planned">over pace: lead tickets wait until about Fri 12:10, developers go on</small>
+          <small class="rate out new">at this rate: out <b>Thu 13:38</b>, 3 days 3 h before the reset</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Copilot</span><span>month: 24%</span></div>
+        <div class="meter"><span class="under-mark" style="width:24%"></span></div>
+        <div class="line"><small>resets on Nov 1 00:00</small></div>
+      </div>
+    </div>
+    <details class="legend" open><summary>How to read the allowance</summary>
+      <span><i class="swatch under-mark"></i>green: under the mark</span>
+      <span><i class="swatch past-mark"></i>yellow: past the mark</span>
+      <span><i class="swatch nearly-out"></i>red: above 95%</span>
+      <span>the mark: the factory stops here; the rest of the window is the owner's</span>
+      <span class="new"><i class="swatch ahead"></i>hatched: where the meter will be at the reset, at this rate</span>
+    </details>
+  </section>
+
+  <h3>The other states (example values)</h3>
+  <section class="panel">
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 30%</span></div>
+        <div class="meter new"><span class="ahead" style="width:79%"></span><span class="under-mark" style="width:30%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 2 17:00</small>
+          <small class="rate new">at this rate: lasts to the reset, about 79% by then</small></div>
+        <span class="note">A Thursday-morning week that lasts: muted words, the ghost stops at 79%.</span>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 4%</span></div>
+        <div class="meter"><span class="under-mark" style="width:4%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 2 17:00</small></div>
+        <span class="note">Tonight (real: 4% six hours after the reset): too early to tell, so no line and no ghost until about Tuesday 09:50.</span>
+      </div>
+    </div>
+  </section>
+  <p class="legend-mock"><span class="new">Dashed green</span> marks what this card adds: the line under each Claude meter (in the warn ink when it runs out before the reset) and the hatched ghost on the meter. <span class="planned">Dotted grey</span> is f9-29's pace line, already planned in F9, Line polish, shown so you can see both together. Copilot's month gets neither.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
