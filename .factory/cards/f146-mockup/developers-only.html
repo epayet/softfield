@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F146 mock-up: the board through a developer's eyes</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --opus: #ff9640; --sonnet: #ffc48a;
+    --factory: #f2b10a; --product: #4fd1a5; --good: #5fd17a; --dev: #5b9cf5;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3.where { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+  .version { flex: 1 1 400px; max-width: 600px; min-width: 0; }
+  .version > h2 { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; margin: 18px 0 0; color: var(--hazard); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds or changes */
+  .note { display: block; margin-top: 6px; font: 12px var(--mono); color: var(--good); }
+  [hidden] { display: none !important; }
+  @media (min-width: 900px) { .switch { display: none; } .version[hidden] { display: block !important; } }
+
+  /* ---- the filter row (dashboard.css, .board-filter, .kinds) ---- */
+  .board-filter { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+  .board-filter label { display: flex; align-items: center; gap: 8px; font: 500 12px var(--display);
+    letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .board-filter input { font: 14px var(--body); padding: 9px 12px; width: 170px; min-height: 44px;
+    background: var(--plate); color: var(--fg); border: 1px solid var(--rule); }
+  .board-filter button { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    padding: 0 12px; min-height: 44px; background: var(--plate); color: var(--fg); border: 1px solid var(--rule); }
+  .kinds { display: flex; }
+  .kinds button { background: none; }
+  .kinds button + button { border-left: 0; }
+  .kinds button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* ---- the lever (dashboard.css .lever, f8-14), here a link to ?view=developers ---- */
+  .lever { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 2px 0 6px;
+    border: 1px solid transparent; background: none; color: var(--ink-2); cursor: pointer;
+    font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; }
+  .lever .lamp { width: 7px; height: 7px; border-radius: 50%; background: var(--grid); box-shadow: inset 0 0 0 1px var(--rule); }
+  .lever .slot { position: relative; width: 44px; height: 22px; background: var(--plate);
+    border: 1px solid var(--rule); box-shadow: inset 0 2px 3px rgba(0,0,0,.35); }
+  .lever .knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    background: linear-gradient(var(--ink-2), var(--muted)); border: 1px solid var(--rule); transition: left .22s; }
+  .lever[aria-checked="true"] { color: var(--fg); }
+  .lever[aria-checked="true"] .slot { background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+  .lever[aria-checked="true"] .knob { left: 24px; background: linear-gradient(#fff, var(--ink-2)); }
+  .lever[aria-checked="true"] .lamp { background: var(--hazard); box-shadow: 0 0 6px var(--hazard); }
+
+  /* ---- the field and its cards (dashboard.css, .field, .stage, .card, .slot) ---- */
+  .field { background: var(--bay); border: 1px solid var(--rule); margin-top: 12px; }
+  .stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .stage-head h4 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .stage-head .dev-sum { display: block; margin-top: 4px; color: var(--fg); }
+  .stage-head .dev-sum b { color: var(--dev); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .slot { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  .slot .grip, .slot .more { min-height: 44px; background: var(--plate); color: var(--muted);
+    border: 1px solid var(--rule); display: grid; place-items: center; font: 16px var(--mono); }
+  .slot .grip { border-right: 0; } .slot .more { border-left: 0; }
+  .card { display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; background: var(--plate);
+    border: 1px solid var(--rule); border-left: 4px solid var(--c, var(--muted)); color: var(--fg); position: relative; }
+  .card.factory { --c: var(--factory); }
+  .card.bug { --c: var(--factory); }
+  .card.started { --c: var(--opus); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-growing { color: var(--opus); margin-left: 4px; }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card .meter { display: block; height: 8px; background: var(--grid); }
+  .card .meter span { display: block; height: 100%; background: var(--sonnet); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-note { font-size: 12.5px; color: var(--muted); }
+  .gap { margin: 0; font: 12px var(--mono); color: var(--muted); padding-left: 44px; }
+
+  /* ---- proposed: the developer's view. Three looks, each said in words on the card ---- */
+  /* lit: developers can take a ticket now, or after another developer ticket */
+  .dev-view .slot.dev-can .card { box-shadow: inset -4px 0 0 var(--dev), 0 0 0 1px var(--dev); }
+  /* waits: the card has developer work, held by a lead ticket */
+  .dev-view .slot.dev-waits { opacity: .62; }
+  .dev-view .slot.dev-waits .card { box-shadow: inset -4px 0 0 transparent; border-right: 1px dashed var(--dev); }
+  /* lead only, or nothing to build: faded, still in its place, still draggable */
+  .dev-view .slot.dev-none { opacity: .32; }
+  .dev-view .slot.dev-none:hover { opacity: .7; }
+  .dev-tag { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px;
+    font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .04em; background: var(--floor); }
+  .dev-tag .pip { width: 9px; height: 9px; display: inline-block; }
+  .dev-can .dev-tag { color: var(--fg); }
+  .dev-can .dev-tag .pip { background: var(--dev); }
+  .dev-waits .dev-tag { color: var(--ink-2); }
+  .dev-waits .dev-tag .pip { background: none; box-shadow: inset 0 0 0 2px var(--dev); }
+  .dev-none .dev-tag { color: var(--muted); }
+  .dev-none .dev-tag .pip { background: var(--opus); }
+  .dev-tag code { font: 11px var(--mono); text-transform: none; color: var(--fg); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono); color: var(--ink-2); margin: 0; padding: 8px 12px; border-top: 1px solid var(--rule); }
+  .legend .pip { width: 9px; height: 9px; display: inline-block; margin-right: 4px; vertical-align: -1px; }
+  .legend .can { background: var(--dev); } .legend .waits { box-shadow: inset 0 0 0 2px var(--dev); } .legend .none { background: var(--opus); }
+  .order-bar { margin-top: 10px; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--plate);
+    border: 1px solid var(--rule); border-top: 3px solid var(--hazard); font: 12px var(--mono); }
+  .order-bar button { margin-left: auto; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase;
+    padding: 0 14px; min-height: 44px; background: var(--hazard); color: var(--hazard-ink); border: 0; }
+</style>
+</head>
+<body>
+<h1>F146: the board through a developer's eyes</h1>
+<p class="lede">The same board, with a lever that shows it as a developer sees it: the cards developers can work on light up, the ones whose developer work waits for the lead go half-dark, and the rest fade, all still in their place and still draggable. Values from the queue on 2026-10-28: 80 tickets ready, 24 of them developers' (a ticket touching <code>runner/</code> counts as the lead's, as the runner takes it); 34 minutes a ticket lately. Only the Planted column is drawn; the other columns fade whole, since none of their cards has a ticket to run.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from board.html (the filter form, the Planted stage, card_link and its slot) -->
+<div class="version" data-version="today" hidden>
+  <h2>Today</h2>
+  <h3 class="where">/board · the filter and the Planted stage</h3>
+  <div class="board-filter">
+    <label>Search <input type="search" placeholder="memory drift, f4, duck…"></label>
+    <button type="button">Search</button>
+    <div class="kinds" role="group" aria-label="Kind">
+      <button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">Factory</button><button type="button" aria-pressed="false">Product</button><button type="button" aria-pressed="false">Bugs</button>
+    </div>
+  </div>
+  <section class="field">
+    <div class="stage-head"><div><h4>Planted</h4><span>in line for the factory, #1 first · 46, 20 growing</span></div></div>
+    <div class="cards">
+      <div class="slot"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#1</b> F15 factory <span class="card-growing">growing</span></span><span class="card-title">Reprioritising tickets</span><span class="meter"><span style="width:90%"></span></span><span class="card-count">9 of 10 tickets</span><span class="card-note">waits for F73</span></a><span class="more">⋯</span></div>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#2</b> F171 factory <span class="card-growing">growing</span></span><span class="card-title">Each card once on the board, and fix tickets named after what they fix</span><span class="meter"><span style="width:80%"></span></span><span class="card-count">4 of 5 tickets</span></a><span class="more">⋯</span></div>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#3</b> F132 factory <span class="card-growing">growing</span></span><span class="card-title">One view of the whole factory: the top bar, the Overview, Jobs and the floor</span><span class="meter"><span style="width:13%"></span></span><span class="card-count">1 of 8 tickets</span></a><span class="more">⋯</span></div>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory" href="#"><span class="card-meta"><b>#4</b> F42 factory</span><span class="card-title">The space for me to scroll on a planning proposal card is very small</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 2 tickets</span></a><span class="more">⋯</span></div>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory" href="#"><span class="card-meta"><b>#5</b> F73 factory</span><span class="card-title">I want to be able to mark a proposal as parked for now</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 2 tickets</span><span class="card-note">waits for F26, F42</span></a><span class="more">⋯</span></div>
+      <p class="gap">… #6 to #31 …</p>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#32</b> F59 factory <span class="card-growing">growing</span></span><span class="card-title">A weekly report page: the factory's numbers over time and the lead's read</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 4 tickets</span></a><span class="more">⋯</span></div>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory" href="#"><span class="card-meta"><b>#33</b> F62 factory</span><span class="card-title">A review on Now says which card it reviews</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 1 ticket</span><span class="card-note">waits for F132</span></a><span class="more">⋯</span></div>
+      <p class="gap">… #34 to #38 …</p>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#39</b> F81 factory <span class="card-growing">growing</span></span><span class="card-title">Bring the factory theme to the older pages, the Planning room first</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 7 tickets</span></a><span class="more">⋯</span></div>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#40</b> F82 factory <span class="card-growing">growing</span></span><span class="card-title">Text boxes grow with what you type, the Plant box first</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 1 ticket</span></a><span class="more">⋯</span></div>
+      <div class="slot"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#41</b> F84 factory <span class="card-growing">growing</span></span><span class="card-title">Coming says which reply the lead is writing, and when each other one comes</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 1 ticket</span></a><span class="more">⋯</span></div>
+      <p class="gap">… #42 to #46 …</p>
+    </div>
+  </section>
+  <p class="lede" style="margin-top:10px">Nothing tells a card developers can build from one only the lead can start.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h2>Proposed</h2>
+  <h3 class="where">/board?view=developers</h3>
+  <div class="board-filter">
+    <label>Search <input type="search" placeholder="memory drift, f4, duck…"></label>
+    <button type="button">Search</button>
+    <div class="kinds" role="group" aria-label="Kind">
+      <button type="button" aria-pressed="true">All</button><button type="button" aria-pressed="false">Factory</button><button type="button" aria-pressed="false">Product</button><button type="button" aria-pressed="false">Bugs</button>
+    </div>
+    <a href="#" class="lever new" role="switch" aria-checked="true" data-lever>developer's view <i class="lamp"></i><span class="slot"><span class="knob"></span></span></a>
+  </div>
+  <span class="note">new: a lever after the kinds, a link to ?view=developers and back; search and the kinds keep it. Tap it here to compare.</span>
+
+  <section class="field dev-view" data-field>
+    <div class="stage-head"><div><h4>Planted</h4><span>in line for the factory, #1 first · 46, 20 growing</span>
+      <span class="dev-sum new" data-sum>Developers can work on <b>4 cards, 9 tickets</b>, about 5 h 05 min, before every developer ticket left waits for the lead</span></div></div>
+    <div class="cards">
+      <div class="slot dev-waits"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#1</b> F15 factory <span class="card-growing">growing</span></span><span class="card-title">Reprioritising tickets</span><span class="meter"><span style="width:90%"></span></span><span class="card-count">9 of 10 tickets</span><span class="card-note">waits for F73</span><span class="dev-tag" data-tag><i class="pip"></i>1 developer ticket waits for <code>f73-02</code></span></a><span class="more">⋯</span></div>
+      <div class="slot dev-none"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#2</b> F171 factory <span class="card-growing">growing</span></span><span class="card-title">Each card once on the board, and fix tickets named after what they fix</span><span class="meter"><span style="width:80%"></span></span><span class="card-count">4 of 5 tickets</span><span class="dev-tag" data-tag><i class="pip"></i>lead only</span></a><span class="more">⋯</span></div>
+      <div class="slot dev-waits new"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#3</b> F132 factory <span class="card-growing">growing</span></span><span class="card-title">One view of the whole factory: the top bar, the Overview, Jobs and the floor</span><span class="meter"><span style="width:13%"></span></span><span class="card-count">1 of 8 tickets</span><span class="dev-tag" data-tag><i class="pip"></i>5 developer tickets wait for <code>f132-02</code></span></a><span class="more">⋯</span></div>
+      <div class="slot dev-waits"><span class="grip">⠿</span><a class="card factory" href="#"><span class="card-meta"><b>#4</b> F42 factory</span><span class="card-title">The space for me to scroll on a planning proposal card is very small</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 2 tickets</span><span class="dev-tag" data-tag><i class="pip"></i>1 developer ticket waits for <code>f42-01</code></span></a><span class="more">⋯</span></div>
+      <div class="slot dev-none"><span class="grip">⠿</span><a class="card factory" href="#"><span class="card-meta"><b>#5</b> F73 factory</span><span class="card-title">I want to be able to mark a proposal as parked for now</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 2 tickets</span><span class="card-note">waits for F26, F42</span><span class="dev-tag" data-tag><i class="pip"></i>lead only</span></a><span class="more">⋯</span></div>
+      <p class="gap">… #6 to #31: F103 waits for <code>f26-02</code>, the rest lead only …</p>
+      <div class="slot dev-can new"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#32</b> F59 factory <span class="card-growing">growing</span></span><span class="card-title">A weekly report page: the factory's numbers over time and the lead's read</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 4 tickets</span><span class="dev-tag" data-tag><i class="pip"></i>developers: 1 now · then the lead's <code>f59-02</code></span></a><span class="more">⋯</span></div>
+      <div class="slot dev-waits"><span class="grip">⠿</span><a class="card factory" href="#"><span class="card-meta"><b>#33</b> F62 factory</span><span class="card-title">A review on Now says which card it reviews</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 1 ticket</span><span class="card-note">waits for F132</span><span class="dev-tag" data-tag><i class="pip"></i>1 developer ticket waits for <code>f132-02</code></span></a><span class="more">⋯</span></div>
+      <p class="gap">… #34 to #38: F77 waits for <code>f9-29</code>, the rest lead only or under review …</p>
+      <div class="slot dev-can new"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#39</b> F81 factory <span class="card-growing">growing</span></span><span class="card-title">Bring the factory theme to the older pages, the Planning room first</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 7 tickets</span><span class="dev-tag" data-tag><i class="pip"></i>developers: 1 now · 5 after it · then the lead's <code>f81-07</code></span></a><span class="more">⋯</span></div>
+      <div class="slot dev-can"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#40</b> F82 factory <span class="card-growing">growing</span></span><span class="card-title">Text boxes grow with what you type, the Plant box first</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 1 ticket</span><span class="dev-tag" data-tag><i class="pip"></i>developers: 1 now · then Claude's review</span></a><span class="more">⋯</span></div>
+      <div class="slot dev-can"><span class="grip">⠿</span><a class="card factory started" href="#"><span class="card-meta"><b>#41</b> F84 factory <span class="card-growing">growing</span></span><span class="card-title">Coming says which reply the lead is writing, and when each other one comes</span><span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 1 ticket</span><span class="dev-tag" data-tag><i class="pip"></i>developers: 1 now · then Claude's review</span></a><span class="more">⋯</span></div>
+      <p class="gap">… #42 to #46: F89 waits for <code>f32-01</code>, F98 for <code>f98-01</code>, F170 for <code>f170-02</code> …</p>
+    </div>
+    <p class="legend new" data-legend><span><i class="pip can"></i>lit: developers can take a ticket now, or after another developer ticket</span><span><i class="pip waits"></i>half-dark: its developer work waits for a lead ticket</span><span><i class="pip none"></i>faded: lead only</span></p>
+  </section>
+  <span class="note">new: each planted card says, in words, what it holds for developers; light and fade follow. Cards keep their places, grips and ⋯: drag F81 up here and the order you send is the board's one order, as from the normal view.</span>
+
+  <div class="order-bar new"><span>1 card moved · F81 #39 → #4</span><button type="button">Send new order</button></div>
+  <span class="note">the same bar as today, in this view too.</span>
+</div>
+
+</div>
+
+<script>
+  document.querySelectorAll('.switch button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('.switch button').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+      document.querySelectorAll('[data-version]').forEach(function (v) { v.hidden = v.dataset.version !== b.dataset.show; });
+    });
+  });
+  // the lever: off shows the normal board, as the link back would
+  document.querySelectorAll('[data-lever]').forEach(function (l) {
+    l.addEventListener('click', function (e) {
+      e.preventDefault();
+      var on = l.getAttribute('aria-checked') !== 'true';
+      l.setAttribute('aria-checked', String(on));
+      document.querySelectorAll('[data-field]').forEach(function (f) { f.classList.toggle('dev-view', on); });
+      document.querySelectorAll('[data-tag], [data-sum], [data-legend]').forEach(function (t) { t.hidden = !on; });
+    });
+  });
+</script>
+</body>
+</html>
