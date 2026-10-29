@@ -253,6 +253,21 @@ def _f6_adr_plan_merge(db_path: Path, planning: int, checkout: Path) -> None:
     _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN, merge, _REVIEW_ADR))
 
 
+def _f6_mockup_review(db_path: Path, planning: int, checkout: Path) -> None:
+    """F6's thread lists a mock-up proposal whose file is on ``plan/f6``."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    for rel, text in (
+        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+
+
 def _proposals(db: sqlite3.Connection) -> list[Any]:
     return _group(db, "proposals")
 
@@ -561,17 +576,7 @@ def test_a_plan_proposal_shows_no_frame_and_no_gone_block(planning, db_path, ser
 def test_a_mockup_link_is_visible_on_a_phone(page, planning, db_path, serve, checkout):
     """At 390 px a mock-up review shows no iframe and an "Open the mock-up" link, at least
     44 px tall, whose href is the mock-up's route and which opens a new tab."""
-    git(checkout, "checkout", "-q", "-b", "plan/f6")
-    for rel, text in (
-        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
-        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
-    ):
-        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
-        (checkout / rel).write_text(text)
-    git(checkout, "add", "-A")
-    git(checkout, "commit", "-q", "-m", "drafts")
-    git(checkout, "checkout", "-q", "main")
-    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    _f6_mockup_review(db_path, planning, checkout)
     page.set_viewport_size(PHONE)
     _open(page, serve(), "/planning/f6/proposals/mockup")
     link = page.locator(".mockup-link")
@@ -585,17 +590,7 @@ def test_a_mockup_link_is_visible_on_a_phone(page, planning, db_path, serve, che
 
 def test_the_mockup_iframe_shows_at_display(page, planning, db_path, serve, checkout):
     """At 1024 px the iframe shows, at least 480 px tall, with the same link."""
-    git(checkout, "checkout", "-q", "-b", "plan/f6")
-    for rel, text in (
-        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
-        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
-    ):
-        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
-        (checkout / rel).write_text(text)
-    git(checkout, "add", "-A")
-    git(checkout, "commit", "-q", "-m", "drafts")
-    git(checkout, "checkout", "-q", "main")
-    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    _f6_mockup_review(db_path, planning, checkout)
     page.set_viewport_size({"width": 1024, "height": 768})
     _open(page, serve(), "/planning/f6/proposals/mockup")
     iframe = page.locator("#mockup")

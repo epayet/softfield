@@ -47,7 +47,9 @@ from tests.factory_dashboard.test_planning import (
     _values,
     _write,
 )
-from tests.factory_dashboard.test_proposal import _REVIEW_MOCKUP, ADR_ON_MAIN
+from tests.factory_dashboard.test_proposal import (
+    _f6_mockup_review,
+)
 from tests.layout import DISPLAY, PHONE, layout_problems
 from tests.runner.conftest import git
 
@@ -1238,17 +1240,7 @@ def test_the_dock_is_compact_on_a_phone(page, planning, db_path, serve, checkout
     """At 390 × 844 the dock is at most 72 px tall and still holds the count, the button and
     the closed Reject… fold on one row, the button in view; opened, the fold may grow the
     dock."""
-    git(checkout, "checkout", "-q", "-b", "plan/f6")
-    for rel, text in (
-        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
-        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
-    ):
-        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
-        (checkout / rel).write_text(text)
-    git(checkout, "add", "-A")
-    git(checkout, "commit", "-q", "-m", "drafts")
-    git(checkout, "checkout", "-q", "main")
-    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    _f6_mockup_review(db_path, planning, checkout)
     page.set_viewport_size(PHONE)
     _open(page, serve(), "/planning/f6/proposals/mockup")
     dock = page.locator(".proposal-page .dock")
@@ -1273,17 +1265,7 @@ def test_the_dock_is_compact_on_a_phone(page, planning, db_path, serve, checkout
 
 def test_the_review_status_shows_after_sending_on_a_phone(page, planning, db_path, serve, checkout):
     """After sending, the request's answer shows in the dock at 390 px."""
-    git(checkout, "checkout", "-q", "-b", "plan/f6")
-    for rel, text in (
-        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
-        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
-    ):
-        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
-        (checkout / rel).write_text(text)
-    git(checkout, "add", "-A")
-    git(checkout, "commit", "-q", "-m", "drafts")
-    git(checkout, "checkout", "-q", "main")
-    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_MOCKUP))
+    _f6_mockup_review(db_path, planning, checkout)
     page.set_viewport_size(PHONE)
     _open(page, serve(), "/planning/f6/proposals/mockup")
     page.click("#approve-plan")
