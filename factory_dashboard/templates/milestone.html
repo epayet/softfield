@@ -23,6 +23,19 @@
     <dt>Priority</dt><dd>{% if card.stage in ("ripe", "harvested") %}–{% else %}P{{ card.priority }}{% endif %}</dd>
     <dt>Area</dt><dd>{{ card.area }}</dd>
     <dt>Tickets</dt><dd>{% if card.total %}{{ card.done }} of {{ card.total }} done{% else %}none yet{% endif %}{% if card.set_aside %} · {{ card.set_aside }} set aside, won't run{% endif %}</dd>
+    {# a planted card's fast lane lever (F172 D8), as the allowance panel's: one pulled
+       shows on its way until the runner writes the mark #}
+    {% if reserve_lever %}
+    <dt>Fast lane</dt><dd id="fast-lane" class="fast-lane">
+      <button type="button" class="lever{{ ' on-its-way' if reserve_lever.asked }}" role="switch"
+        aria-checked="{{ 'true' if reserve_lever.on else 'false' }}"
+        title="{{ 'asked: ' ~ reserve_lever.asked if reserve_lever.asked else 'fast lane' }}"
+        hx-post="/requests" hx-swap="none"
+        hx-vals='{"kind": "reserve", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if reserve_lever.on else "on") | tojson }}}'
+        hx-on::before-request="this.classList.add('on-its-way'); this.disabled = true"{{ ' disabled' if reserve_lever.asked }}>fast lane <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
+      <small>Goes before everything, planning and reviews too, and uses both of Claude's reserves. Leaves the lane when its tickets are done.</small>
+    </dd>
+    {% endif %}
   </dl>
   {% endif %}
   <a class="card-thread" href="/planning/{{ thread | urlencode }}{{ q }}">Its planning thread: talk it through, sign it off ›</a>

@@ -10,19 +10,6 @@
     <header id="card" class="card-head">
       {% if card_meta %}<span class="stamp">{{ card_meta }}</span>{% endif %}
       <h2>{{ card_title }}</h2>
-      {# a planted card's reserve lever (F172 D6), as the allowance panel's: one pulled
-         shows on its way until the runner writes the mark #}
-      {% if reserve_lever %}
-      <div id="reserve-bay" class="reserve-bay">
-        <button type="button" class="lever{{ ' on-its-way' if reserve_lever.asked }}" role="switch"
-          aria-checked="{{ 'true' if reserve_lever.on else 'false' }}"
-          title="{{ 'asked: ' ~ reserve_lever.asked if reserve_lever.asked else "may use Claude's reserve" }}"
-          hx-post="/requests" hx-swap="none"
-          hx-vals='{"kind": "reserve", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if reserve_lever.on else "on") | tojson }}}'
-          hx-on::before-request="this.classList.add('on-its-way'); this.disabled = true"{{ ' disabled' if reserve_lever.asked }}>may use Claude's reserve <i class="lamp"></i><span class="slot"><span class="knob"></span></span></button>
-        <small>Comes before Claude's reserves: its lead tickets, and the ones they wait for, use the week's reserve and your 25% of the 5-hour window, with both switches off. Ends by itself when its tickets are done.</small>
-      </div>
-      {% endif %}
       {% for link in merged_into %}
       <a href="{{ link.link }}{{ q }}" class="merged-into">{% if card_on_main %}An earlier {{ thread | upper }} was merged into {% else %}Merged into {% endif %}{{ link.key | upper }}, {{ link.title }} · {{ link.date }}</a>
       {% endfor %}

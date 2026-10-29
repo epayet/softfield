@@ -155,6 +155,21 @@ def test_preflight_reads_prose_class_as_no_symbol(repo):
     assert preflight(task, repo) == ["symbol not found in the task's files: missing"]
 
 
+def test_preflight_refuses_a_name_placed_in_a_module_it_moved_out_of(repo):
+    """f172-05 said "`_reserve_lever` and `ReserveLever` in `factory_dashboard/planning.py`";
+    F143's split had moved both to `thread.py`, and three attempts read for them (2026-10-29).
+    A name the module holds, or one defined nowhere beside it (a new one), passes."""
+    (repo / "coucou" / "other.py").write_text("class Lever:\n    pass\n\n\ndef _lever(): ...\n")
+    task = _with_context(repo, "Built by `_lever` and `Lever` in `coucou/thing.py`.")
+    assert preflight(task, repo) == [
+        "`_lever` is not in coucou/thing.py: it is defined in coucou/other.py",
+        "`Lever` is not in coucou/thing.py: it is defined in coucou/other.py",
+    ]
+    assert preflight(_with_context(repo, "Built by `thing` in `coucou/thing.py`."), repo) == []
+    assert preflight(_with_context(repo, "Add `fresh` in `coucou/thing.py`."), repo) == []
+    assert preflight(_with_context(repo, "Built by `_lever` in `coucou/other.py`."), repo) == []
+
+
 def test_preflight_takes_a_listed_files_bare_name(repo):
     """f33-01 said `overview.py` after naming its listed path (2026-10-08)."""
     task = _with_context(repo, "Read `coucou/thing.py`; `thing.py` gains a function.")

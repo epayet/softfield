@@ -1741,3 +1741,125 @@ def test_id_less_idea_matches_by_text_not_project_fallback(db_path, tmp_path):
     assert ideas[0].card == "f164"
     assert ideas[1].state == "planted"
     assert ideas[1].card == "f164"
+
+
+# --- the card's fast lane lever (F172 D6, D8) ---------------------------------------------
+
+
+def _lane_client(board_db) -> TestClient:
+    """``board_db``, its checkout marking F23 (planted) and F20 (a seed); F24 and F25 are
+    growing and unmarked, F1 is ripe."""
+    from factory_dashboard.app import create_app, get_now
+    from tests.factory_dashboard.conftest import mark_reserve
+
+    mark_reserve(board_db, board_db.parent / "repo", "f23-planted", "f20-duck-pond")
+    app = create_app(board_db, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def _lever(client: TestClient, key: str) -> dict[str, object] | None:
+    """The Fast lane row of ``key``'s header: the lever's aria-checked, classes, disabled,
+    what it posts and the row's words; None when the header has no such row."""
+    response = client.get(f"/milestones/{key}")
+    assert response.status_code == 200
+    head = re.search(r'<header id="card-head"[^>]*>(.*?)</header>', response.text, re.S)
+    assert head, "no card header"
+    row = re.search(r'<dt>Fast lane</dt>\s*<dd id="fast-lane"[^>]*>(.*?)</dd>', head[1], re.S)
+    if row is None:
+        assert 'role="switch"' not in head[1] and "Fast lane" not in head[1]
+        return None
+    tag = re.search(r"<button[^>]*>", row[1])
+    assert tag, "no lever"
+    vals = re.search(r"hx-vals='([^']*)'", tag[0])
+    assert vals, tag[0]
+    return {
+        "checked": re.search(r'aria-checked="([^"]*)"', tag[0])[1],  # type: ignore[index]
+        "classes": re.search(r'class="([^"]*)"', tag[0])[1].split(),  # type: ignore[index]
+        "disabled": " disabled" in tag[0],
+        "posts": json.loads(html.unescape(vals[1])),
+        "words": _words(row[1]),
+    }
+
+
+def test_a_planted_card_s_fast_lane_row_is_on_when_marked_and_off_when_not(board_db):
+    """F23's doc is marked: on, posting ``off``; F24's isn't: off, posting ``on``. Each posts
+    the card's short key; the words say it goes first and uses both reserves."""
+    client = _lane_client(board_db)
+    marked = _lever(client, "f23-planted")
+    assert marked is not None
+    assert (marked["checked"], marked["disabled"]) == ("true", False)
+    assert "on-its-way" not in marked["classes"]  # type: ignore[operator]
+    reserve = {"kind": "reserve", "project": PROJECT}
+    assert marked["posts"] == {**reserve, "subject": "f23", "value": "off"}
+    assert marked["words"] == (
+        "fast lane Goes before everything, planning and reviews too, and uses both of"
+        " Claude's reserves. Leaves the lane when its tickets are done."
+    )
+    unmarked = _lever(client, "f24-growing")
+    assert unmarked is not None
+    assert unmarked["checked"] == "false"
+    assert unmarked["posts"] == {**reserve, "subject": "f24", "value": "on"}
+    # after Tickets, the header's last row
+    head = _card_head(client.get("/milestones/f24-growing").text)
+    assert head.index(" Tickets ") < head.index(" Fast lane fast lane Goes before"), head
+
+
+@pytest.mark.parametrize("key", ["f20-duck-pond", "f1", "m3", "f25-unreviewed"])
+def test_an_idea_ripe_or_done_card_has_no_fast_lane_row(board_db, key):
+    """F20 is a seed (its doc marked all the same), F1 ripe, M3 signed off, and F25 growing
+    with its one ticket done, waiting for its review: nothing left to run (F172 D6)."""
+    assert _lever(_lane_client(board_db), key) is None
+
+
+def test_a_lever_pulled_shows_on_its_way_until_the_runner_applies_it(board_db):
+    """An open ``reserve`` request for F24 (and a done one for F23, and the week's switch,
+    which name other subjects): F24's lever is on its way and can't be pulled again; F23's
+    isn't. Done, the request leaves F24's lever as its doc says."""
+    client = _lane_client(board_db)
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.add_request(conn, project, "reserve", "f24", "on", NOW.isoformat())
+        metrics.add_request(conn, project, "reserve", "week", "on", NOW.isoformat())
+        done = metrics.add_request(conn, project, "reserve", "f23", "off", NOW.isoformat())
+        conn.execute("UPDATE owner_requests SET done = ? WHERE id = ?", (NOW.isoformat(), done))
+        conn.commit()
+    finally:
+        conn.close()
+    pulled = _lever(client, "f24-growing")
+    assert pulled is not None
+    assert "on-its-way" in pulled["classes"] and pulled["disabled"]  # type: ignore[operator]
+    assert pulled["checked"] == "false"  # the doc isn't marked yet
+    still = _lever(client, "f23-planted")
+    assert still is not None
+    assert "on-its-way" not in still["classes"] and not still["disabled"]  # type: ignore[operator]
+    conn = metrics.open_db(board_db)
+    try:
+        conn.execute("UPDATE owner_requests SET done = ? WHERE done IS NULL", (NOW.isoformat(),))
+        conn.commit()
+    finally:
+        conn.close()
+    taken = _lever(client, "f24-growing")
+    assert taken is not None
+    assert "on-its-way" not in taken["classes"] and not taken["disabled"]  # type: ignore[operator]
+
+
+def test_pulling_the_lever_posts_its_request_and_shows_it_on_its_way(page, board_db):
+    """In Chromium: the lever on F24's card page posts ``reserve`` for ``f24``, ``on``; at
+    once it has the dashed edge and is disabled; the request is stored, open."""
+    client = _lane_client(board_db)
+    open_page(page, client, "/milestones/f24-growing")
+    lever = page.locator("#fast-lane .lever")
+    with page.expect_response(lambda r: r.url.endswith("/requests")):
+        lever.click()
+    assert "on-its-way" in (lever.get_attribute("class") or "")
+    assert lever.is_disabled()
+    conn = metrics.open_db(board_db)
+    try:
+        rows = conn.execute(
+            "SELECT subject, value, done FROM owner_requests WHERE kind = 'reserve'"
+        ).fetchall()
+    finally:
+        conn.close()
+    assert [tuple(r) for r in rows] == [("f24", "on", None)]

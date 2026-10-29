@@ -17,7 +17,6 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
-from factory_dashboard.board import RESERVABLE, milestone_cards
 from factory_dashboard.coming import (
     _MAX_REQUEST_ID,
     GENERAL,
@@ -53,7 +52,7 @@ from runner.planner import (
     proposal_requests,
     proposal_state,
 )
-from runner.requests import CHANGE, PLANT, RESERVE, owners_words, refused
+from runner.requests import CHANGE, PLANT, owners_words, refused
 from runner.tasks import full_key, milestone_file, short_key
 
 router = APIRouter()
@@ -269,31 +268,6 @@ def _standing(
     return Standing(state, pending if state == ON_ITS_WAY else None, said, revising)
 
 
-@dataclass(frozen=True)
-class ReserveLever:
-    """A planted card's "may use Claude's reserve" lever (F172 D6), started or not."""
-
-    on: bool  # its doc says ``**Reserve:** yes``
-    asked: str | None  # "on" or "off": the owner's latest request the runner hasn't taken
-
-
-def _reserve_lever(
-    conn: sqlite3.Connection, project: str, project_id: int, now: datetime, thread: str
-) -> ReserveLever | None:
-    """The card's lever, as the board has its mark; None for a card in no ``RESERVABLE``
-    stage, or with every ticket done (F172 D6: only while it has work to run, not in its
-    review). A lever pulled shows on its way, as ``reserve_switches`` finds a switch's."""
-    found = next((c for c in milestone_cards(conn, project, now) if c.key.lower() == thread), None)
-    if found is None or found.stage not in RESERVABLE or found.done >= found.total:
-        return None
-    asked = conn.execute(
-        "SELECT value FROM owner_requests WHERE project_id = ? AND kind = ? AND subject = ?"
-        " AND done IS NULL ORDER BY id DESC LIMIT 1",
-        (project_id, RESERVE, thread),
-    ).fetchone()
-    return ReserveLever(found.reserve, asked["value"] if asked is not None else None)
-
-
 def _again(conn: sqlite3.Connection, project_id: int | None, thread: str, again: str) -> str:
     """The words of the refused message ``again`` names, for the thread's reply box, or of a
     message's edit that didn't go through (f14-04: its thread is the message's); "" for
@@ -330,10 +304,8 @@ def thread_page(
     archived_at: str | None = None
     archiving: str | None = None  # "on" or "off": an archive request the runner hasn't done
     review: Review | None = None
-    lever: ReserveLever | None = None
     if project_id is not None:
         title, meta, seed = _header(conn, project_id, thread)
-        lever = _reserve_lever(conn, project, project_id, now, thread)
         review = _review(conn, project, project_id, thread, now)
         found = metrics.find_thread(conn, project_id, thread)
         archived_at = found["archived"] if found is not None else None
@@ -430,7 +402,6 @@ def thread_page(
             "card_title": title,
             "card_meta": meta,
             "note": _note(repo, thread),
-            "reserve_lever": lever,
             "seed": seed,
             "has_thread": bool(messages),
             "archived_at": archived_at,

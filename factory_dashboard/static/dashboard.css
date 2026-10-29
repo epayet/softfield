@@ -241,13 +241,12 @@ tbody tr:hover { background: var(--accent-wash); }
 @media (prefers-reduced-motion: reduce) { .lever .knob { transition: none; }
   .lever.on-its-way .lamp { animation: none; } }
 .until { color: var(--hazard); font-family: var(--mono); }
-/* A card's own reserve lever, under its title (F172 D6) */
-.reserve-bay { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px;
-  padding: 4px 10px 6px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
-.reserve-bay::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px;
+/* A card's fast lane lever, a striped plate in its header's list (F172 D8) */
+#card-head dd.fast-lane { display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  padding: 2px 8px 4px 12px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+.fast-lane::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
   background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
-.reserve-bay .lever { margin-left: 4px; }
-.reserve-bay small { flex-basis: 100%; padding-left: 4px; color: var(--ink-2); font-size: 13px; line-height: 1.4; }
+.fast-lane small { font: 12px var(--body); color: var(--ink-2); max-width: 32ch; line-height: 1.35; }
 /* An allowance meter says how close it is (owner, 2026-10-02); the legend says it in words */
 .swatch.under-mark, .meter > .under-mark { background: var(--good); }
 .swatch.past-mark, .meter > .past-mark { background: var(--hazard); }

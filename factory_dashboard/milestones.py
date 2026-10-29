@@ -25,10 +25,11 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
-from factory_dashboard.board import STAGES, WORDS, Card, milestone_card
+from factory_dashboard.board import RESERVABLE, STAGES, WORDS, Card, milestone_card
 from factory_dashboard.line import _natural
 from runner import metrics
 from runner.milestone import milestone_doc
+from runner.requests import RESERVE
 from runner.tasks import full_key, milestone_file, short_key
 
 router = APIRouter()
@@ -498,6 +499,32 @@ def get_milestone_detail(
     )
 
 
+@dataclass(frozen=True)
+class ReserveLever:
+    """A planted card's fast lane lever (F172 D6, D8), started or not."""
+
+    on: bool  # its doc says ``**Fast lane:** yes``
+    asked: str | None  # "on" or "off": the owner's latest request the runner hasn't taken
+
+
+def _reserve_lever(
+    conn: sqlite3.Connection, project_id: int | None, card: Card | None
+) -> ReserveLever | None:
+    """The card's lever, as the board has its mark; None for a card in no ``RESERVABLE``
+    stage, or with every ticket done (F172 D6: only while it has work to run, not in its
+    review). A lever pulled shows on its way, as ``reserve_switches`` finds a switch's."""
+    if project_id is None or card is None:
+        return None
+    if card.stage not in RESERVABLE or card.done >= card.total:
+        return None
+    asked = conn.execute(
+        "SELECT value FROM owner_requests WHERE project_id = ? AND kind = ? AND subject = ?"
+        " AND done IS NULL ORDER BY id DESC LIMIT 1",
+        (project_id, RESERVE, card.key.lower()),
+    ).fetchone()
+    return ReserveLever(card.reserve, asked["value"] if asked is not None else None)
+
+
 @router.get("/milestones/{key}", response_class=HTMLResponse)
 def milestone_detail(
     key: str,
@@ -543,6 +570,7 @@ def milestone_detail(
             "active": "/board",  # the board is how a milestone is found (f5-17)
             "milestone": detail,
             "card": card,
+            "reserve_lever": _reserve_lever(conn, project_id, card),
             "words": WORDS,
             "grew": grew,
             # the header's "growing since", on a started card's own stage (F154 D4)

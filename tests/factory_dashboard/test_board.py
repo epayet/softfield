@@ -699,11 +699,11 @@ def test_a_card_s_link_opens_its_page(board_client):
         assert board_client.get(link).status_code == 200, link
 
 
-def test_a_marked_card_shows_the_uses_reserve_plate_and_an_unmarked_one_doesn_t(
+def test_a_marked_card_shows_the_fast_lane_plate_and_an_unmarked_one_doesn_t(
     board_db, board_client, tmp_path
 ):
-    """F172 D6: the plate on a planted card (F23) and a started one (F24) whose doc says
-    ``**Reserve:** yes``; none on F25, unmarked, nor on F20, a seed whose doc is marked."""
+    """F172 D6, D8: the "fast lane" plate on a planted card (F23) and a started one (F24) whose
+    doc is marked; none on F25, unmarked, nor on F20, a seed whose doc is marked."""
     mark_reserve(board_db, tmp_path / "repo", "f23-planted", "f24-growing", "f20-duck-pond")
     found = read(board_db)
     assert [c.key for cards in found.stages.values() for c in cards if c.reserve] == ["F24", "F23"]
@@ -716,7 +716,8 @@ def test_a_marked_card_shows_the_uses_reserve_plate_and_an_unmarked_one_doesn_t(
     ):
         _, words, raw = _card(html, link)
         assert ('class="card-reserve"' in raw) is plate, link
-        assert ("uses Claude's reserve" in words) is plate, link
+        assert ("fast lane" in words) is plate, link
+        assert "uses Claude's reserve" not in words, link
 
 
 def test_no_card_is_marked_without_a_checkout(board_db):

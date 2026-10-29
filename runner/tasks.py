@@ -15,6 +15,12 @@ _PATH_RE = re.compile(r"`([\w./-]+\.(?:py|js|html|css|md|toml|json|txt))`")
 # Code only: `def name` in backticks, or followed by ( or : as in a code block; prose such as
 # "adds a class to" names no symbol (f42-02)
 _SYMBOL_RE = re.compile(r"`(?:def|class)\s+([A-Za-z_]\w*)|\b(?:def|class)\s+([A-Za-z_]\w*)\s*[(:]")
+# "`_reserve_lever` and `ReserveLever` in `factory_dashboard/planning.py`": where names are said
+# to live; f172-05's had moved to `thread.py` in F143's split, and three attempts read for it
+_PLACED_RE = re.compile(
+    r"((?:`[A-Za-z_]\w*`(?:,\s*|\s+and\s+|\s+or\s+)?)+)\s+in\s+`([\w./-]+\.py)`"
+)
+_NAME_RE = re.compile(r"`([A-Za-z_]\w*)`")
 
 
 AGENTS = ("developer", "lead")  # who works a ticket (ADR 12 item 9)
@@ -460,6 +466,28 @@ FIX_OF_FIX = "a fix of a fix: the lead does it"
 _AT_FAULT_RE = re.compile(r"\.factory/tasks/done/([A-Za-z0-9][A-Za-z0-9_.-]*?)\.md")
 
 
+def _misplaced(repo: Path, context: str) -> list[str]:
+    """Names the Context places "in `x.py`" that ``x.py`` lacks while a module beside it
+    defines them: the code moved since the ticket was written. A name defined nowhere
+    beside it may be one the ticket adds, so it passes."""
+    problems = []
+    for names, rel in _PLACED_RE.findall(context):
+        target = repo / rel
+        if not target.is_file():
+            continue  # the path check reports it, or the ticket creates it
+        text = target.read_text(encoding="utf-8")
+        for name in _NAME_RE.findall(names):
+            if re.search(rf"\b{re.escape(name)}\b", text):
+                continue
+            defines = re.compile(rf"^\s*(?:async\s+)?(?:def|class)\s+{re.escape(name)}\b", re.M)
+            for other in sorted(target.parent.glob("*.py")):
+                if other != target and defines.search(other.read_text(encoding="utf-8")):
+                    where = other.relative_to(repo).as_posix()
+                    problems.append(f"`{name}` is not in {rel}: it is defined in {where}")
+                    break
+    return problems
+
+
 def _fix_of_fix(task: Task, repo: Path, context: str) -> bool:
     """A developer ticket with `finding:` whose Context names a done ticket with `finding:`."""
     if task.agent != "developer" or task.finding is None:
@@ -493,6 +521,7 @@ def preflight(task: Task, repo: Path) -> list[str]:
         problems.append(FEATURE_PRIORITY)
     if _fix_of_fix(task, repo, task.sections["Context"]):
         problems.append(FIX_OF_FIX)
+    problems += _misplaced(repo, text)
     paths = set(_PATH_RE.findall(text))
     listed = (*task.files, *task.tests)
     named = {Path(f).name for f in listed}  # `overview.py` once its path is listed (f33-01)
