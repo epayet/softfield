@@ -1,6 +1,6 @@
 # Milestone F77: Allowance bars: the same length on the Overview, the same colours on every page
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 6 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

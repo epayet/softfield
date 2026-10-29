@@ -1,6 +1,6 @@
 # Milestone F162: No checkpoint on merges the milestone's review is about to read
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory
 > Planted by the owner on 2026-10-20.
 
 ## Notes

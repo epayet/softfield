@@ -1,6 +1,6 @@
 # Milestone F185: Your answers wanted before Proposals on the desk, newest answer first
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 4 · **Area:** factory
 > Planted by the owner on 2026-10-29.
 
 ## Notes

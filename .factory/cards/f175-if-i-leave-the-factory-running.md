@@ -1,6 +1,6 @@
 # Milestone F175: The factory cleans up its temp files, so the disk stops filling
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 2 · **Area:** factory
 > Planted by the owner on 2026-10-26.
 
 ## Notes

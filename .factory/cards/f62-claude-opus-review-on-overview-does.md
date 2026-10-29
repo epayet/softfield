@@ -1,6 +1,6 @@
 # Milestone F62: A review on Now says which card it reviews
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 7 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes
