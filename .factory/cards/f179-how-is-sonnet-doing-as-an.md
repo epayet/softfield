@@ -1,4 +1,4 @@
-# Milestone F179: How is sonnet doing as an easy lead, how much saving is…
+# Milestone F179: Sonnet as the lead on easy tickets: how it does, what it saves, in reports
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-10-28.
