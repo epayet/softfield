@@ -40,3 +40,9 @@ Read ADR 35 in `.factory/adr/35-pictures-at-sign-off-in-every-project.md` (it mu
 - Softfield's `.factory/project.toml` has `[shots]`, and pictures of `/` can be taken with it
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the lead ticket changed nothing
+```
