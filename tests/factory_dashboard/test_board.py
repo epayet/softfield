@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from factory_dashboard.app import create_app, get_now
-from factory_dashboard.board import STAGES, Board, Card, board, milestone_card
+from factory_dashboard.board import STAGES, Board, Card, DevWork, board, milestone_card
 from factory_dashboard.line import live_line
 from factory_dashboard.queries import connect
 from runner import metrics
@@ -588,6 +588,151 @@ def test_an_unknown_project_has_an_empty_board(board_db):
         conn.close()
     assert found.stages == {stage: [] for stage in STAGES}
     assert found.more_harvested == 0
+
+
+# --- the developers' line (F146 D1-D4) -------------------------------------------------------
+
+
+def _tickets(
+    *rows: tuple[str, str, str, str, tuple[str, ...]],
+) -> Callable[[sqlite3.Connection, int], None]:
+    """Planted cards with tickets: (card, ticket, kind, state, depends_on); files from
+    ``FILES`` when the ticket id is in it."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        made: dict[str, int] = {}
+        for card_key, ticket, kind, state, deps in rows:
+            if card_key not in made:
+                made[card_key] = metrics.upsert_milestone(
+                    conn, p, card_key, title=card_key, state="ready", priority=1
+                )
+            metrics.upsert_ticket(
+                conn,
+                p,
+                ticket,
+                milestone_id=made[card_key],
+                kind=kind,
+                state=state,
+                depends_on=list(deps),
+                files=FILES.get(ticket, []),
+            )
+
+    return change
+
+
+FILES: dict[str, list[str]] = {}
+
+
+def _work(db: Path, key: str, **filters: Any):
+    found = read(db, developers=True, **filters)
+    return next(
+        c for cards in found.stages.values() for c in cards if c.full_key == key.lower()
+    ).developers
+
+
+def test_developer_work_is_none_without_the_view(board_db):
+    found = read(board_db)
+    assert all(c.developers is None for cards in found.stages.values() for c in cards)
+    assert found.developers == (0, 0, None)
+    assert read(board_db, developers=True).line == found.line
+
+
+def test_a_developer_ticket_that_can_start_is_now_and_one_after_it_is_after(db_path):
+    write(
+        db_path,
+        _tickets(
+            ("f60-a", "f60-01", "developer", "ready", ()),
+            ("f60-a", "f60-02", "developer", "ready", ("f60-01",)),
+            ("f60-a", "f60-03", "lead", "ready", ("f60-02",)),
+        ),
+    )
+    work = _work(db_path, "F60-A")
+    assert (work.look, work.now, work.after, work.waiting, work.waits_for) == ("can", 1, 1, 0, ())
+    assert work.then == "f60-03"
+
+
+def test_a_card_with_only_developer_tickets_says_review_next(db_path):
+    write(db_path, _tickets(("f61-a", "f61-01", "developer", "ready", ())))
+    assert _work(db_path, "F61-A").then == "review"
+
+
+def test_a_developer_ticket_after_a_lead_one_waits_even_through_another_developer(db_path):
+    write(
+        db_path,
+        _tickets(
+            ("f62-a", "f62-01", "lead", "ready", ()),
+            ("f62-a", "f62-02", "developer", "ready", ("f62-01",)),
+            ("f62-a", "f62-03", "developer", "ready", ("f62-02",)),
+        ),
+    )
+    work = _work(db_path, "F62-A")
+    assert (work.look, work.now, work.after, work.waiting) == ("waits", 0, 0, 2)
+    assert work.waits_for == ("f62-01",)
+    assert work.then is None
+
+
+def test_a_set_aside_or_unknown_dependency_waits_under_its_own_id(db_path):
+    write(
+        db_path,
+        _tickets(
+            ("f63-a", "f63-01", "developer", "later", ()),
+            ("f63-a", "f63-02", "developer", "ready", ("f63-01", "nowhere-01")),
+        ),
+    )
+    work = _work(db_path, "F63-A")
+    assert (work.look, work.waits_for) == ("waits", ("f63-01", "nowhere-01"))
+
+
+def test_a_card_with_a_ticket_that_can_run_and_one_that_waits_is_can(db_path):
+    write(
+        db_path,
+        _tickets(
+            ("f64-a", "f64-01", "lead", "ready", ()),
+            ("f64-a", "f64-02", "developer", "ready", ("f64-01",)),
+            ("f64-a", "f64-03", "developer", "ready", ()),
+        ),
+    )
+    work = _work(db_path, "F64-A")
+    assert (work.look, work.now, work.waiting, work.then) == ("can", 1, 1, "f64-01")
+
+
+def test_a_lead_only_card_and_the_other_stages_look_none(db_path):
+    write(db_path, _tickets(("f65-a", "f65-01", "lead", "ready", ())))
+    found = read(db_path, developers=True)
+    assert card(found, "F65").developers == DevWork("none")
+    assert all(
+        c.developers == DevWork("none")
+        for stage in ("seed", "sprouting", "ripe", "harvested")
+        for c in found.stages[stage]
+    )
+
+
+def test_a_ticket_under_a_protected_path_is_the_lead_s_with_a_checkout(db_path, tmp_path):
+    (tmp_path / ".factory").mkdir()
+    (tmp_path / ".factory" / "protected-paths.txt").write_text("runner/**\n", encoding="utf-8")
+    FILES["f66-01"] = ["runner/x.py"]
+    try:
+        write(db_path, _tickets(("f66-a", "f66-01", "developer", "ready", ())))
+        assert _work(db_path, "F66-A").look == "can"  # no checkout: kind alone
+        write(db_path, lambda conn, p: metrics.upsert_project(conn, PROJECT, repo=str(tmp_path)))
+        assert _work(db_path, "F66-A").look == "none"
+    finally:
+        FILES.clear()
+
+
+def test_the_board_counts_the_cards_and_tickets_developers_can_work_on(db_path):
+    write(
+        db_path,
+        _tickets(
+            ("f67-a", "f67-01", "developer", "ready", ()),
+            ("f67-a", "f67-02", "developer", "ready", ("f67-01",)),
+            ("f68-b", "f68-03", "developer", "ready", ("f68-04",)),
+            ("f68-b", "f68-04", "lead", "ready", ()),
+        ),
+    )
+    cards, tickets, minutes = read(db_path, developers=True).developers
+    assert (cards, tickets) == (1, 2)
+    assert minutes is None or minutes > 0
 
 
 # --- the page (f5-16) ------------------------------------------------------------------------

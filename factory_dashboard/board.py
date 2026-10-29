@@ -23,7 +23,8 @@ card, for its page (f5-17).
 
 import json
 import sqlite3
-from collections.abc import Mapping
+import statistics
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
@@ -36,8 +37,11 @@ from factory_dashboard.line import _LONG_AGO, _natural, _when
 from factory_dashboard.overview import Running, running_jobs
 from factory_dashboard.queries import depends_on, ticket_priority
 from runner import metrics
+from runner.config import read_protected
+from runner.loop import ticket_minutes
 from runner.milestone import card as milestone_header
 from runner.requests import REORDER
+from runner.router import lead_only
 from runner.tasks import BUGS, DEFAULT_PRIORITY, milestone_file, short_key
 
 router = APIRouter()
@@ -80,6 +84,18 @@ class ReviewStep:
 
 
 @dataclass(frozen=True)
+class DevWork:
+    """What a planted card holds for the developers (F146 D4)."""
+
+    look: str  # ``can``, ``waits`` or ``none`` (D3)
+    now: int = 0  # developer tickets that can start now
+    after: int = 0  # ... that can run once developer tickets before them have
+    waiting: int = 0  # ... that wait for a lead ticket
+    waits_for: tuple[str, ...] = ()  # those lead tickets, in id order
+    then: str | None = None  # on a ``can`` card: the first lead ticket left, else ``review``
+
+
+@dataclass(frozen=True)
 class Card:
     key: str  # the short key in capitals, ``F5``; a bug's ticket id
     full_key: str  # for its link: the milestone's key, or the bug's ticket id
@@ -100,6 +116,7 @@ class Card:
     was: int = 0  # then, its place without the reorder
     waits: tuple[str, ...] = ()  # other card keys this card's ready tickets depend on
     reserve: bool = False  # a planted card marked to use Claude's reserve (F172 D6)
+    developers: DevWork | None = None  # its developer work; None outside the developers' view
 
     @property
     def kind(self) -> str:
@@ -114,6 +131,77 @@ class Board:
     # every card not harvested, in the order shown, whatever ``q`` and ``kind`` keep: the key a
     # reorder names it by, and its stage. The page sends it whole, with its moves (F15 D10)
     line: tuple[tuple[str, str], ...] = ()
+    # with the developers' view: the planted cards developers can work on, their tickets, and the
+    # minutes that work takes (the median merged ticket's, None with no merged ticket) (F146 D4)
+    developers: tuple[int, int, float | None] = (0, 0, None)
+
+
+def _developer_ticket(row: sqlite3.Row, protected: list[str]) -> bool:
+    """Whether the developers take this ticket: the runner's rule (F146 D1)."""
+    files = json.loads(row["files"]) if row["files"] else []
+    return not lead_only(row["kind"] or "", files, protected)
+
+
+def _dev_resolver(
+    rows: dict[str, sqlite3.Row], protected: list[str]
+) -> Callable[[sqlite3.Row], frozenset[str]]:
+    """For a ready developer ticket, the unfinished lead-side tickets it waits for, directly or
+    through other developer tickets: none means developers alone can run it (F146 D2). A
+    dependency that isn't a ready developer ticket (set aside, blocked, unknown) is named."""
+    seen: dict[str, frozenset[str]] = {}
+
+    def leads(row: sqlite3.Row) -> frozenset[str]:
+        name = row["ticket"]
+        if name in seen:
+            return seen[name]
+        seen[name] = frozenset()  # a cycle adds nothing
+        found: set[str] = set()
+        for dep in depends_on(row):
+            other = rows.get(dep)
+            if other is not None and other["state"] == "done":
+                continue
+            if (
+                other is not None
+                and other["state"] == "ready"
+                and _developer_ticket(other, protected)
+            ):
+                found |= leads(other)
+            else:
+                found.add(dep)
+        seen[name] = frozenset(found)
+        return seen[name]
+
+    return leads
+
+
+def _dev_work(
+    own: list[sqlite3.Row],
+    rows: dict[str, sqlite3.Row],
+    leads: Callable[[sqlite3.Row], frozenset[str]],
+    protected: list[str],
+) -> DevWork:
+    """D3 and D4's line for one card's tickets (set-aside and removed ones already left out)."""
+    now = after = waiting = 0
+    waits_for: set[str] = set()
+    for t in own:
+        if t["state"] != "ready" or not _developer_ticket(t, protected):
+            continue
+        named = leads(t)
+        if named:
+            waiting += 1
+            waits_for |= named
+        elif all(rows.get(d) is not None and rows[d]["state"] == "done" for d in depends_on(t)):
+            now += 1
+        else:
+            after += 1
+    if now + after == 0 and waiting == 0:
+        return DevWork("none")
+    look = "can" if now + after else "waits"
+    then = None
+    if look == "can":
+        left = [t for t in own if t["state"] != "done" and not _developer_ticket(t, protected)]
+        then = left[0]["ticket"] if left else "review"
+    return DevWork(look, now, after, waiting, tuple(sorted(waits_for)), then)
 
 
 def _milestone_stage(m: sqlite3.Row, tickets: list[sqlite3.Row], threads: set[str]) -> str:
@@ -254,12 +342,20 @@ def _matches(card: Card, q: str | None, kind: str | None) -> bool:
     return not word or word in card.key.lower() or word in (card.title or "").lower()
 
 
-def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[Card, datetime]]:
+def _cards(
+    conn: sqlite3.Connection, project: str, now: datetime, developers: bool = False
+) -> list[tuple[Card, datetime]]:
     """Every card of the project's, with when it was harvested. ``now`` tells which jobs are
-    live."""
+    live. ``developers`` fills each card's ``developers`` (F146)."""
     from factory_dashboard.planning import _repo  # planning.py imports this module
 
     repo = _repo(conn, project)
+    protected: list[str] = []
+    if repo is not None:
+        try:
+            protected = read_protected(repo)
+        except OSError:
+            protected = []
     milestones = conn.execute(
         "SELECT m.*, m.state FROM milestones m JOIN projects p ON p.id = m.project_id"
         " WHERE p.name = ?",
@@ -272,6 +368,7 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
     ticket_to_milestone: dict[int, str] = {}  # ticket id → milestone's short key
     all_name_to_mkey: dict[str, str] = {}  # ticket name → milestone's short key
     done_tickets: set[str] = set()
+    by_name: dict[str, sqlite3.Row] = {}
     for t in conn.execute(
         "SELECT t.* FROM tickets t JOIN projects p ON p.id = t.project_id"
         " WHERE p.name = ? AND t.milestone_id IS NOT NULL AND t.state IS NOT ? ORDER BY t.ticket",
@@ -282,6 +379,16 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
         all_name_to_mkey[t["ticket"]] = mkey[t["milestone_id"]]
         if t["state"] == "done":
             done_tickets.add(t["ticket"])
+        by_name[t["ticket"]] = t
+    leads = _dev_resolver(by_name, protected)
+
+    def dev_work(stage: str, own: list[sqlite3.Row]) -> DevWork | None:
+        if not developers:
+            return None
+        if stage != "planted":
+            return DevWork("none")
+        return _dev_work([t for t in own if t["state"] not in _OFF], by_name, leads, protected)
+
     threads = {
         r["card"]
         for r in conn.execute(
@@ -371,6 +478,7 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
                     note=SET_ASIDE if stage == "seed" else "",
                     started=started,
                     running=running([t]) if stage == "planted" else None,
+                    developers=dev_work(stage, [t]),
                 )
                 found.append((card, ended.get(t["id"], _LONG_AGO)))
             continue
@@ -400,6 +508,7 @@ def _cards(conn: sqlite3.Connection, project: str, now: datetime) -> list[tuple[
             reserve=stage in RESERVABLE and marked(repo, m["key"]),
             started=started,
             running=running(counted) if stage == "planted" else None,
+            developers=dev_work(stage, own),
             review_step=_review_step(
                 m["key"],
                 started,
@@ -500,10 +609,12 @@ def board(
     now: datetime,
     q: str | None = None,
     kind: str | None = None,
+    developers: bool = False,
 ) -> Board:
     """The project's cards by stage. ``q`` keeps the cards whose key or title contains it,
-    whatever the case; ``kind`` is one of ``KINDS``. ``now`` tells which jobs are live."""
-    found = _placed(conn, project, _cards(conn, project, now))
+    whatever the case; ``kind`` is one of ``KINDS``. ``now`` tells which jobs are live.
+    ``developers`` adds each card's developer work and the board's totals (F146 D4)."""
+    found = _placed(conn, project, _cards(conn, project, now, developers))
     kept = [(card, at) for card, at in found if _matches(card, q, kind)]
     stages: dict[str, list[Card]] = {stage: [] for stage in STAGES}
     for card, _ in kept:
@@ -514,7 +625,25 @@ def board(
     )
     stages["harvested"] = [card for card, _ in harvested[:HARVESTED]]
     line = tuple((card.key.lower(), card.stage) for card, _ in found if card.stage != "harvested")
-    return Board(stages, max(len(harvested) - HARVESTED, 0), line)
+    return Board(
+        stages,
+        max(len(harvested) - HARVESTED, 0),
+        line,
+        _developer_totals(conn, project, [card for card, _ in found])
+        if developers
+        else (0, 0, None),
+    )
+
+
+def _developer_totals(
+    conn: sqlite3.Connection, project: str, cards: list[Card]
+) -> tuple[int, int, float | None]:
+    """The cards of look ``can``, their tickets, and those tickets' minutes (F146 D4)."""
+    can = [c.developers for c in cards if c.developers and c.developers.look == "can"]
+    tickets = sum(d.now + d.after for d in can)
+    row = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
+    minutes = ticket_minutes(conn, row["id"]) if row else []
+    return len(can), tickets, tickets * statistics.median(minutes) if minutes else None
 
 
 def reserve_marked(conn: sqlite3.Connection, project: str, now: datetime) -> list[Card]:
