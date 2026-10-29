@@ -39,3 +39,9 @@ attempts: 3
 tokens: 196786
 logs: .factory/var/runs/20261029-043403/f73-01-set-aside-list
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
