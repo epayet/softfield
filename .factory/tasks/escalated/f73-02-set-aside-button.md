@@ -32,3 +32,12 @@ Read `.factory/cards/f73-i-want-to-be-able-to.md` (D2, D4, D5). In `factory_dash
 - at 390 px the button is at least 44 px tall and inside the page's width
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 46510
+logs: .factory/var/runs/20261029-091445/f73-02-set-aside-button
+```
