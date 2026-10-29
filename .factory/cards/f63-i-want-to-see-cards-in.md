@@ -1,6 +1,7 @@
 # Milestone F63: I want to see cards in planning by order of importance.…
 
-> **State:** ready · **Priority:** 5 · **Area:** factory
+> **State:** done · **Priority:** 5 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-10-29. Base: git tag `f63-i-want-to-see-cards-in-start`. Report: [`.factory/reviews/f63-i-want-to-see-cards-in.md`](../reviews/f63-i-want-to-see-cards-in.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes

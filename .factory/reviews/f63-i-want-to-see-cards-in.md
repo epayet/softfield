@@ -1,6 +1,6 @@
 # Review: F63, cards on the planning page in order of importance
 
-- **Status:** round 1 done; one fix ticket open (f63-02-blocked-stays-second), then round 2.
+- **Status:** done, signed off by the owner on 2026-10-29.
 
 ## Sign-off sheet
 
