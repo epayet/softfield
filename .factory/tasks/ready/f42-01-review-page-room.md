@@ -20,13 +20,16 @@ Read `factory_dashboard/templates/proposal.html` (the `#mockup` iframe and the `
   - under 640 px the iframe is not shown, only the link;
   - from 640 px the iframe stays, `height: max(480px, calc(100dvh - 220px))`, with the link above it.
 - **The dock, under 640 px only:** the count and the button side by side on one row; its `h2` hidden; `#review-status` hidden while it holds its standing sentence, shown again once a request's answer is swapped into it. From 640 px the dock is as today.
+  - The dock's `#actions` holds two things side by side: `.action-buttons` (the count, Send back, `#primary`) and the `details#reject` fold ("Reject…"). Closed, the fold stays on the same row; opened, the dock may grow.
+  - The rule `.proposal-page #actions, .proposal-page .action-buttons, .proposal-page #reject > div` (about line 578 of `dashboard.css`) makes them columns: the phone rules must set the direction, not only `display`.
+  - Room: `.panel` pads 12 px top and bottom, and `.btn` is 44 px, so the row is one 44 px line, about 360 px wide at 390 px. Let the count wrap onto two short lines rather than push the others down.
 - The frame already carries `sandbox="allow-scripts"` (f104-01, tested in `test_a_mockups_scripts_run_in_the_review_pages_frame_as_no_one`): keep it exactly, and keep that test passing at 1024 px.
 - Keep every id the tests and scripts use (`#send-back`, `#primary`, `#review-count`, `#review-status`).
 
 ### Done when
 - at 390 × 844 a mock-up review shows no iframe and an "Open the mock-up" link, at least 44 px tall, whose `href` is the mock-up's route and which opens a new tab
 - at 1024 px the iframe shows, at least 480 px tall, with the same link
-- at 390 × 844 the dock is at most 72 px tall and still holds the count and the button, Send still in view at the bottom (the existing test's check)
+- at 390 × 844 the dock is at most 72 px tall and still holds the count, the button and the closed "Reject…" fold, Send still in view at the bottom (the existing test's check)
 - after sending, the request's answer shows in the dock at 390 px
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
