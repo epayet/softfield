@@ -543,17 +543,105 @@ def test_empty_desk_heading_has_no_number_and_nothing_waits(tmp_path: Path, db_p
     assert "Nothing waits for you." in html
 
 
-def test_group_headings_get_no_number(planning, serve):
-    """The groups' own headings ("Your answers wanted", …) get no number."""
+def _headings(html: str) -> dict[str, str]:
+    """Each desk group's heading text by its key."""
+    found = {}
+    for key, markup in _groups(html).items():
+        h3 = re.search(r"<h3[^>]*>(.*?)</h3>", markup, re.S)
+        assert h3 is not None, f"group {key} has no heading"
+        found[key] = unescape(h3[1])
+    return found
+
+
+def _waiting_by_group(db_path: Path) -> dict[str, tuple[str, int]]:
+    """Each shown group's name and its items not on their way, from the desk itself."""
+    conn = metrics.open_db(db_path)
+    try:
+        return {
+            g.key: (g.name, sum(not item.on_its_way for item in g.items))
+            for g in desk(conn, PROJECT, NOW)
+            if g.items
+        }
+    finally:
+        conn.close()
+
+
+def _desk_number(html: str) -> int:
+    heading = re.search(r'<section id="desk"[^>]*>\s*<h2[^>]*>Your desk · (\d+)</h2>', html)
+    assert heading, "the desk heading has no number"
+    return int(heading[1])
+
+
+def test_group_headings_count_what_waits_and_add_up_to_the_desk(planning, db_path, serve):
+    """F26: each group's heading reads its name, " · " and its items still waiting, and the
+    numbers add up to "Your desk · N" and the Planning tab on the same page."""
     html = _page(serve())
-    groups = _groups(html)
-    for key in groups:
-        # Group headings should not contain " · " pattern like "Your desk · N"
-        group_div = groups[key]
-        h3_match = re.search(r"<h3[^>]*>(.*?)</h3>", group_div, re.S)
-        assert h3_match is not None
-        h3_text = unescape(re.sub(r"<[^>]+>", "", h3_match[1]))
-        assert " · " not in h3_text, f"group {key} heading has a number: {h3_text}"
+    headings = _headings(html)
+    waiting = _waiting_by_group(db_path)
+    assert set(headings) == set(waiting)
+    assert len(headings) > 1
+    for key, (name, n) in waiting.items():
+        assert n > 0
+        assert headings[key] == f"{name} · {n}"
+    # the fixture's card with open proposals: one item since F51 D1
+    assert headings["proposals"] == "Proposals to review · 1"
+    total = sum(n for _, n in waiting.values())
+    assert _desk_number(html) == total
+    assert f'id="planning-tab">Planning · {total}</a>' in html
+
+
+def test_a_group_heading_leaves_out_what_is_on_its_way(planning, db_path, serve):
+    """F26: after an archive request, the thread's card stays listed in its group, and that
+    group's number is one less, or its name alone when nothing in it waits any more."""
+    html = _page(serve())
+    before = _headings(html)
+    holder = _group_holding(html, "/planning/general")
+    name, n = _waiting_by_group(db_path)[holder]
+    assert before[holder] == f"{name} · {n}"
+    _ask_archive(db_path, planning, "general")
+    html = _page(serve(live=False))
+    after = _headings(html)
+    assert "/planning/general" in dict(_items(_groups(html)[holder]))
+    assert after[holder] == (f"{name} · {n - 1}" if n > 1 else name)
+    assert {k: v for k, v in after.items() if k != holder} == {
+        k: v for k, v in before.items() if k != holder
+    }
+    assert sum(n for _, n in _waiting_by_group(db_path).values()) == _desk_number(html)
+
+
+def _group_holding(html: str, link: str) -> str:
+    """The key of the desk group that lists ``link``."""
+    return next(k for k, markup in _groups(html).items() if link in dict(_items(markup)))
+
+
+def _ask_archive(db_path: Path, project_id: int, card: str) -> None:
+    """An archive request on ``card``'s thread, not yet done by the runner."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(conn, project_id, "archive", card, "on", NOW.isoformat()),
+    )
+
+
+def test_a_group_whose_items_are_all_on_their_way_reads_its_name_alone(planning, db_path, serve):
+    """F26: with every thread of a group archived but not yet done, each stays listed and the
+    heading reads the group's name alone, with no " · "."""
+    html = _page(serve())
+    holder = _group_holding(html, "/planning/general")
+    links = [link for link, _ in _items(_groups(html)[holder])]
+    for link in links:
+        _ask_archive(db_path, planning, link.removeprefix("/planning/"))
+    html = _page(serve(live=False))
+    name, n = _waiting_by_group(db_path)[holder]
+    assert n == 0
+    assert [link for link, _ in _items(_groups(html)[holder])] == links
+    assert _headings(html)[holder] == name
+
+
+def test_the_refused_group_counts_its_notes(planning, db_path, serve):
+    """F26: a refused note on the desk makes "Didn't go through · 1"."""
+    _finished(db_path, planning, "plant", None, DUCKS, TAKEN)
+    html = _page(serve())
+    assert _headings(html)["refused"] == "Didn't go through · 1"
 
 
 def test_desk_heading_leaves_out_what_is_on_its_way(planning, db_path, serve):

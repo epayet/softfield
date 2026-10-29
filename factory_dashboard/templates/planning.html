@@ -127,7 +127,7 @@
     <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk{% if planning_count %} · {{ planning_count }}{% endif %}</h2>
     {% for group in groups if group.items %}
     <div id="desk-{{ group.key }}" style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
-      <h3 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var({{ group.color }})">{{ group.name }}</h3>
+      <h3 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var({{ group.color }})">{% set waiting = group.items | rejectattr("on_its_way") | list | length %}{{ group.name }}{% if waiting %} · {{ waiting }}{% endif %}</h3>
       {% for item in group.items %}
       {% if group.key == "refused" %}
       {# The owner's words the runner refused (F31 D9): in full, why, Try again and Dismiss.
