@@ -28,3 +28,12 @@ f42-01 copied the same twelve lines (make `plan/f6` with the f6-mockup folder's 
 - the four tests call `_f6_mockup_review` and none of them runs `git(checkout, ...)` itself
 - the listed `tests:` pass
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2641
+gate_failures: []
+tokens: 681304
+```
