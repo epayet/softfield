@@ -3,7 +3,9 @@
 import atexit
 import contextlib
 import os
+import shutil
 import signal
+import stat
 import subprocess
 import sys
 import tempfile
@@ -12,6 +14,7 @@ import time
 from collections.abc import Callable, Iterator, Mapping
 from pathlib import Path
 from types import FrameType
+from typing import IO
 
 LIVE_EVERY = 30.0  # seconds between live updates while a job runs (f1 D3)
 GRACE = 5.0  # seconds a stopped group gets between SIGTERM and SIGKILL
@@ -49,7 +52,99 @@ def _watched(args: list[str]) -> list[str]:
     return [sys.executable, "-I", "-c", _WATCH, str(os.getpid()), *args]
 
 
-_live: set[subprocess.Popen[str]] = set()
+# Each command gets a temp folder of its own, removed when its group ends (f175 D1): the
+# SIGKILL that ends every group leaves nothing in it the time to remove its own (pytest's
+# folders, Chromium profiles), and Ubuntu empties /tmp only at boot. Not TMPDIR's: inside a
+# job, that is the job's folder.
+TMP_BASE = Path("/tmp")  # noqa: S108 - the root is checked as ours before any use
+
+
+def _tmp_root() -> Path | None:
+    """``/tmp/softfield-<uid>``, made private; None when the path there isn't our own folder
+    (another user's, or a link planted in the shared ``/tmp``)."""
+    root = TMP_BASE / f"softfield-{os.getuid()}"
+    with contextlib.suppress(FileExistsError):
+        root.mkdir(mode=0o700)
+    try:
+        st = root.lstat()
+    except OSError:
+        return None
+    if not stat.S_ISDIR(st.st_mode) or st.st_uid != os.getuid() or st.st_mode & 0o077:
+        return None
+    return root
+
+
+def _job_tmp(env: dict[str, str]) -> Path | None:
+    """A fresh folder ``<runner pid>-<random>`` under the root, set as ``TMPDIR`` in ``env``;
+    None, ``env`` unchanged, when it already names one under the root (D2: a nested command
+    keeps its job's) or the root isn't ours."""
+    root = _tmp_root()
+    if root is None:
+        return None
+    if root in Path(env.get("TMPDIR", "/")).parents:
+        return None
+    folder = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=root))
+    env["TMPDIR"] = str(folder)
+    return folder
+
+
+def _remove(folder: Path | None) -> None:
+    if folder is not None:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def sweep_tmp() -> None:
+    """Remove the folders runners that died left under the root (D3): a reboot, a crash, a
+    SIGKILL. Folders of a live runner, and anything else, stay."""
+    root = _tmp_root()
+    if root is None:
+        return
+    for folder in root.iterdir():
+        pid, dash, _ = folder.name.partition("-")
+        if dash and pid.isdigit() and not _alive(int(pid)):
+            _remove(folder)
+
+
+def _start(
+    args: list[str],
+    cwd: Path,
+    env: Mapping[str, str] | None,
+    stdin: int | None,
+    stdout: int | IO[str],
+    stderr: int | IO[str],
+) -> tuple[subprocess.Popen[str], Path | None]:
+    """``args`` watched, in a session of its own with a temp folder of its own; the folder is
+    removed if the start fails."""
+    full_env = dict(os.environ if env is None else env)
+    folder = _job_tmp(full_env)
+    try:
+        proc = subprocess.Popen(
+            _watched(args),
+            cwd=cwd,
+            env=full_env,
+            stdin=stdin,
+            stdout=stdout,
+            stderr=stderr,
+            text=True,
+            start_new_session=True,
+        )
+    except BaseException:
+        _remove(folder)
+        raise
+    return proc, folder
+
+
+_live: dict[subprocess.Popen[str], Path | None] = {}  # each group and its temp folder
 _live_lock = threading.Lock()
 
 
@@ -72,12 +167,12 @@ def _stop(proc: subprocess.Popen[str]) -> None:
 
 
 @contextlib.contextmanager
-def _owned(proc: subprocess.Popen[str]) -> Iterator[None]:
+def _owned(proc: subprocess.Popen[str], folder: Path | None) -> Iterator[None]:
     """The child dies with whatever leaves the wait: Ctrl-C, SIGTERM, a crash. It runs in its
     own session, so Ctrl-C never reaches it: after one, the runner's `opencode run` kept
-    editing the working tree for 15 minutes (f3-13)."""
+    editing the working tree for 15 minutes (f3-13). Its temp folder goes with it."""
     with _live_lock:
-        _live.add(proc)
+        _live[proc] = folder
     try:
         yield
     except BaseException:
@@ -90,20 +185,23 @@ def _owned(proc: subprocess.Popen[str]) -> Iterator[None]:
             os.killpg(proc.pid, signal.SIGKILL)
     finally:
         with _live_lock:
-            _live.discard(proc)
+            _live.pop(proc, None)
+        _remove(folder)
 
 
 def stop_all() -> None:
-    """Stop every group still running. At exit: Claude jobs and gates wait in a worker thread
-    (`loop.with_progress`), which a Ctrl-C in the main thread never interrupts."""
+    """Stop every group still running, and remove their temp folders. At exit: Claude jobs and
+    gates wait in a worker thread (`loop.with_progress`), which a Ctrl-C in the main thread
+    never interrupts."""
     with _live_lock:
-        procs = list(_live)
+        procs = dict(_live)
     try:
         for proc in procs:
             _stop(proc)
     finally:
-        for proc in procs:
+        for proc, folder in procs.items():
             _kill(proc)
+            _remove(folder)
 
 
 atexit.register(stop_all)
@@ -128,17 +226,8 @@ def run_bounded(
     """Run ``args`` in its own process group: (exit code, stdout, stderr), the code None on
     timeout. A timeout kills the whole group: ``subprocess.run`` kills only the direct child,
     so `uv run pytest` left pytest running for a day (2026-10-01)."""
-    proc = subprocess.Popen(
-        _watched(args),
-        cwd=cwd,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        stdin=subprocess.DEVNULL,
-        text=True,
-        start_new_session=True,
-    )
-    with _owned(proc):
+    proc, folder = _start(args, cwd, env, subprocess.DEVNULL, subprocess.PIPE, subprocess.PIPE)
+    with _owned(proc, folder):
         try:
             out, err = proc.communicate(timeout=timeout)
         except subprocess.TimeoutExpired:
@@ -173,20 +262,11 @@ def run_streaming(
     """
     env = {**(os.environ if env is None else env), "PWD": str(cwd.absolute())}
     with out_path.open("w", encoding="utf-8") as out, tempfile.TemporaryFile("w+") as err:
-        proc = subprocess.Popen(
-            _watched(cmd),
-            cwd=cwd,
-            env=env,
-            stdin=stdin,
-            stdout=out,
-            stderr=err,
-            text=True,
-            start_new_session=True,
-        )
+        proc, folder = _start(cmd, cwd, env, stdin, out, err)
         deadline = clock() + timeout
         next_tick = clock() + every
         code: int | None = None
-        with _owned(proc):
+        with _owned(proc, folder):
             while True:
                 try:
                     code = proc.wait(timeout=max(0.05, min(next_tick, deadline) - clock()))

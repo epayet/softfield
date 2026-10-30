@@ -546,6 +546,8 @@ def main(argv: list[str] | None = None) -> int:
     restarted = os.environ.pop(RESTARTED_ENV, None) == "1"
     if args.command is None:
         return _guide()
+    if args.command == "run":
+        procs.sweep_tmp()  # what runners killed by a reboot or a SIGKILL left (f175 D3)
     if args.command == "run" and not (getattr(args, "here", False) or getattr(args, "once", False)):
         return _run_projects(args, restarted)
     if args.command in ("init", "service", "forget", "notify") or (

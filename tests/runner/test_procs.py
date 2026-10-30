@@ -1,13 +1,16 @@
 import os
+import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
 
 import pytest
 
+from runner import procs
 from runner.procs import run_bounded, run_streaming, stop_all, stop_on_sigterm
 
 
@@ -275,3 +278,121 @@ def test_a_command_keeps_its_stdin(tmp_path: Path):
 def test_a_command_killed_by_a_signal_reports_it(tmp_path: Path):
     code, _, _ = run_bounded(["sh", "-c", "kill -TERM $$"], tmp_path, 10)
     assert code == -signal.SIGTERM
+
+
+# f175 D1: the runner SIGKILLs every group, so nothing in it can remove its temp files.
+ROOT = Path(f"/tmp/softfield-{os.getuid()}")  # noqa: S108 - the root D1 names
+SAYS_TMP = 'echo "$TMPDIR" > tmpdir.txt; test -d "$TMPDIR"'
+
+
+@pytest.fixture
+def outside_a_job(monkeypatch):
+    """These tests may run inside a job's folder (D2): start from outside one."""
+    monkeypatch.delenv("TMPDIR", raising=False)
+
+
+def _seen_tmp(tmp_path: Path) -> Path:
+    seen = Path((tmp_path / "tmpdir.txt").read_text().strip())
+    assert seen.parent == ROOT and seen.name.startswith(f"{os.getpid()}-")
+    return seen
+
+
+def test_a_command_gets_its_own_temp_folder_gone_when_it_ends(tmp_path: Path, outside_a_job):
+    code, _, _ = run_bounded(["sh", "-c", SAYS_TMP], tmp_path, 10)
+    assert code == 0
+    assert not _seen_tmp(tmp_path).exists()
+
+
+def test_an_agent_gets_its_own_temp_folder_gone_when_it_ends(tmp_path: Path, outside_a_job):
+    _, code = run_streaming(["sh", "-c", SAYS_TMP], tmp_path, 10, tmp_path / "out.log")
+    assert code == 0
+    assert not _seen_tmp(tmp_path).exists()
+
+
+def test_a_file_a_test_leaves_in_the_temp_folder_is_gone(tmp_path: Path, outside_a_job):
+    """f175: a dashboard test left a `tmp*.sqlite` in `/tmp` at every check-all."""
+    leave = (
+        "import pathlib, tempfile; f = tempfile.NamedTemporaryFile(suffix='.sqlite', delete=False);"
+        "pathlib.Path('left.txt').write_text(f.name)"
+    )
+    code, _, err = run_bounded([sys.executable, "-c", leave], tmp_path, 10)
+    assert code == 0, err
+    left = Path((tmp_path / "left.txt").read_text())
+    assert left.parent.parent == ROOT
+    assert not left.exists()
+
+
+def test_a_timed_out_command_leaves_no_temp_folder(tmp_path: Path, outside_a_job):
+    code, _, _ = run_bounded(["sh", "-c", f"{SAYS_TMP}; sleep 60"], tmp_path, timeout=1)
+    assert code is None
+    assert not _seen_tmp(tmp_path).exists()
+
+
+def test_a_stopped_agent_leaves_no_temp_folder(tmp_path: Path, outside_a_job):
+    said = tmp_path / "tmpdir.txt"
+    worker = threading.Thread(
+        target=run_streaming,
+        args=(["sh", "-c", f"{SAYS_TMP}; sleep 60"], tmp_path, 60, tmp_path / "out.log"),
+        daemon=True,
+    )
+    worker.start()
+    deadline = time.monotonic() + 5
+    while not (said.exists() and said.read_text().strip()) and time.monotonic() < deadline:
+        time.sleep(0.05)
+    seen = _seen_tmp(tmp_path)
+    assert seen.is_dir()
+    stop_all()
+    assert not seen.exists()
+    worker.join(5)
+
+
+def test_a_command_inside_a_job_keeps_the_jobs_folder(tmp_path: Path, monkeypatch):
+    """D2: an agent's `softfield check-all` writes in its job's folder, which goes with the job."""
+    ROOT.mkdir(mode=0o700, exist_ok=True)
+    job = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=ROOT))
+    try:
+        monkeypatch.setenv("TMPDIR", str(job))
+        code, _, _ = run_bounded(["sh", "-c", f"{SAYS_TMP}; touch $TMPDIR/shot.png"], tmp_path, 10)
+        assert code == 0
+        assert (tmp_path / "tmpdir.txt").read_text().strip() == str(job)
+        assert (job / "shot.png").exists()
+    finally:
+        shutil.rmtree(job, ignore_errors=True)
+
+
+def _dead_pid() -> int:
+    proc = subprocess.Popen(["true"])
+    proc.wait()
+    return proc.pid
+
+
+def test_the_sweep_removes_only_the_folders_of_dead_runners(tmp_path: Path, monkeypatch):
+    """D3: a runner killed by a reboot, a crash or a SIGKILL leaves its folders behind."""
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path)
+    root = tmp_path / f"softfield-{os.getuid()}"
+    root.mkdir(mode=0o700)
+    dead = root / f"{_dead_pid()}-abc"
+    (dead / "pytest-of-me").mkdir(parents=True)
+    alive = root / f"{os.getppid()}-xyz"
+    alive.mkdir()
+    odd = root / "not-a-runner"
+    odd.mkdir()
+    other = tmp_path / f"{_dead_pid()}-theirs"
+    other.mkdir()
+    procs.sweep_tmp()
+    assert not dead.exists()
+    assert alive.is_dir() and odd.is_dir() and other.is_dir()
+
+
+def test_a_root_someone_else_made_is_left_alone(tmp_path: Path, monkeypatch, outside_a_job):
+    """The root is in the shared `/tmp`: a link planted there is never followed."""
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path)
+    elsewhere = tmp_path / "elsewhere"
+    (elsewhere / f"{_dead_pid()}-abc").mkdir(parents=True)
+    (tmp_path / f"softfield-{os.getuid()}").symlink_to(elsewhere)
+    procs.sweep_tmp()
+    assert len(list(elsewhere.iterdir())) == 1
+    code, _, _ = run_bounded(["sh", "-c", 'echo "${TMPDIR-}" > tmpdir.txt'], tmp_path, 10)
+    assert code == 0
+    assert (tmp_path / "tmpdir.txt").read_text().strip() == ""
+    assert len(list(elsewhere.iterdir())) == 1

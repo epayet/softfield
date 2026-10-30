@@ -7,7 +7,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from runner import cli, loop, metrics, owner
+from runner import cli, loop, metrics, owner, procs
 from runner.config import load_config
 from runner.milestone import RESTART
 from runner.report import SessionReport
@@ -154,6 +154,19 @@ def test_runner_run_without_a_runner_change_just_ends(in_repo, monkeypatch):
     )
     monkeypatch.setattr(os, "execve", lambda *a: pytest.fail("restarted"))
     assert cli.main(["run", "--here"]) == 0
+
+
+@pytest.mark.parametrize("argv", [["run", "--here"], ["run"]])
+def test_runner_run_sweeps_what_dead_runners_left_in_tmp(in_repo, monkeypatch, argv):
+    """f175 D3: a runner killed by a reboot or a SIGKILL never removed its temp folders."""
+    swept: list[int] = []
+    monkeypatch.setattr(procs, "sweep_tmp", lambda: swept.append(1))
+    monkeypatch.setattr(cli, "_project_configs", lambda: [])
+    monkeypatch.setattr(
+        cli, "run_session", lambda cfg, **kw: SessionReport(started=datetime.now(UTC))
+    )
+    cli.main(argv)
+    assert swept == [1]
 
 
 def test_runner_run_goes_on_after_an_idle_session_ended_at_midnight(in_repo, monkeypatch):
