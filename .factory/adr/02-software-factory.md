@@ -654,6 +654,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** same night shape as F103 and F172; bug-48 is the fix. The view itself gives the queue's answer to "what keeps the local model fed": 11 of 97 ready tickets, and a handful of lead tickets (f132-02, f9-29) hold most of the rest.
 - **Decisions affected:** none.
 
+### F185 (2026-10-30): answers before proposals, newest answer first ([review](../reviews/f185-i-changed-my-mind-i-want.md))
+
+- **Q1:** one developer ticket at difficulty 2 (swap two `DeskGroup` lines, reverse one loop). Qwen 0/3, all "no edit after 20 min", the third under a direction; an Opus escalation did it on main in 18 minutes. No checkpoint. Review round 1: no findings.
+- **Q3:** Opus $1.82 on the ticket (direction $0.59, escalation $1.23); Qwen 1 hour of model with nothing merged.
+- **Q5:** see the review's numbers.
+- **Anything else:** the ticket named the group-order tests but not three others that pinned the old order (inside the group, Previous and Next, Needs you), so even correct code would have failed the gates; now a line in `docs/task-writing.md`. The sixth no-edit night ticket; bug-48 is the fix.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
