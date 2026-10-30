@@ -74,9 +74,10 @@ def _tile(html: str, tile_id: str) -> str:
 
 def test_each_group_shows_its_items_in_order(planning, serve):
     """A reply unanswered, the open proposals and a ripe card, each in its group, and the
-    groups in D6's order; the thread the owner answered last is not among the answers."""
+    groups in D6's order, answers before proposals (F185 D1); the thread the owner answered
+    last is not among the answers."""
     groups = _groups(_page(serve()))
-    assert list(groups) == ["ripe", "proposals", "answers", "seeds"]
+    assert list(groups) == ["ripe", "answers", "proposals", "seeds"]
     assert _items(groups["answers"]) == [("/planning/general", "General")]
     assert "the lead replied 60 min ago" in groups["answers"]
     assert _items(groups["proposals"]) == [
@@ -95,8 +96,8 @@ def test_desk_returns_the_six_groups_in_order_empty_ones_too(db_path, db):
         "Didn't go through",
         "Blocked tickets",
         "To sign off",
-        "Proposals to review",
         "Your answers wanted",
+        "Proposals to review",
         "Seeds, not asked about yet",
     ]
     assert [[i.title for i in g.items] for g in groups] == [
@@ -939,19 +940,22 @@ def _trail(html: str) -> dict[str, str]:
 
 
 def test_previous_and_next_step_through_what_waits(planning, db_path, serve):
-    """F35: the general thread is the last one waiting: no Next, the proposal before it. F103 D1:
-    the seed F9 is not stepped through, and from its page Next leads to the first one waiting;
-    a page already done with leads to the first one left."""
+    """F35: the sign-off, then the general thread, then the proposal (F185 D1): the proposal is
+    the last one waiting, no Next. F103 D1: the seed F9 is not stepped through, and from its
+    page Next leads to the first one waiting; a page already done with leads to the first one
+    left."""
     client = serve()
-    first = _trail(_thread(client, "general"))
-    assert "next" not in first and first["previous"] == "/planning/f6/proposals/adr-20"
-    assert "3 of 3 waiting for you" in first["words"]
+    ripe = _trail(_thread(client, "m4"))
+    assert ripe["next"] == "/planning/general" and "previous" not in ripe
+    last = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
+    assert "next" not in last and last["previous"] == "/planning/general"
+    assert "3 of 3 waiting for you" in last["words"]
     seed = _trail(_thread(client, "f9"))
     assert seed["next"] == "/planning/m4" and "previous" not in seed
     assert "3 waiting for you" in seed["words"] and " of " not in seed["words"]
-    middle = _trail(_review_page(client, "/planning/f6/proposals/adr-20"))
+    middle = _trail(_thread(client, "general"))
     assert middle["previous"] == "/planning/m4"
-    assert middle["next"] == "/planning/general"
+    assert middle["next"] == "/planning/f6/proposals/adr-20"
     _write(
         db_path,
         lambda conn: metrics.add_request(

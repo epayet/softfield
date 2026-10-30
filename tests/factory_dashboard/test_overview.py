@@ -2631,7 +2631,7 @@ def test_three_desk_items_show_their_count_links_and_tab(serve_between, db_path)
         assert "Open your desk ›" in needs
         entry = html.split('id="desk-entry"')[1].split("</li>")[0]
         links = re.findall(r'href="/planning/(f\d)\?', entry)
-        assert links == ["f7", "f8", "f9"]
+        assert links == ["f9", "f8", "f7"]  # the lead's newest reply first (F185 D3)
         assert planning_tab(html) == "Planning · 3"
 
 

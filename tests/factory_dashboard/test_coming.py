@@ -494,7 +494,7 @@ def test_a_waiting_message_adds_nothing_to_the_counts_and_takes_its_proposals_of
     html = _page(client)
     # The dashed box is the only new item, and it doesn't count
     groups = _groups(html)
-    assert list(groups) == ["ripe", "proposals", "answers", "seeds"]
+    assert list(groups) == ["ripe", "answers", "proposals", "seeds"]
     assert _dashed(html, "/planning/f6") == 1
     # The Planning tab count drops by f6's plan and ADR only: with the owner's message waiting
     # for the lead they are being revised, not waiting for the owner (F100); the dashed box

@@ -335,16 +335,17 @@ def test_a_thread_with_an_open_plan_message_is_not_an_answer_wanted(planning, db
     assert f7() == [("/planning/f7", True)]
 
 
-def test_answers_wanted_keeps_the_order_of_the_leads_replies(planning, db_path, db):
-    """F74 kept the order the desk had: by the lead's latest reply, not by when a thread began."""
+def test_answers_wanted_lists_the_leads_newest_reply_first(planning, db_path, db):
+    """F185 D3: by the lead's latest reply, newest first, not by when a thread began; a thread
+    the lead still owes a reply comes after every answered one (F84 D4)."""
     _lead_says(db_path, planning, "f7", "Which one?")
     _lead_says(db_path, planning, "f9", "Two developers?")
     _lead_says(db_path, planning, "f7", "Or the second?")
+    _finished(db_path, planning, "plan_message", "f1", "And this one?", None)
     links = [i.link for i in _group(db, "answers")]
-    assert [link for link in links if link in ("/planning/f7", "/planning/f9")] == [
-        "/planning/f9",
-        "/planning/f7",
-    ]
+    shown = ("/planning/f7", "/planning/f9", "/planning/general", "/planning/f1")
+    # general's reply is the fixture's, written before the test's
+    assert [link for link in links if link in shown] == list(shown)
 
 
 def test_a_merge_the_lead_applied_asks_nothing(planning, db_path, db, serve):

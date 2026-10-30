@@ -156,7 +156,7 @@ def _answers_wanted(
     """One box per conversation (F74): threads whose last message is the lead's, a reply the
     owner hasn't answered (an archived thread waits for nothing), then the threads the lead owes
     a reply (``_waiting_order``), dashed and on their way. Those are listed whatever is stored:
-    archived, or no thread yet."""
+    archived, or no thread yet. The lead's replies come newest first (F185 D3)."""
     last = _last_messages(conn, project_id)
     waiting = _waiting_order(conn, project_id, last)
     items = [
@@ -166,7 +166,7 @@ def _answers_wanted(
             f"the lead replied {ago(now - _when(r['at']))} ago",
             f"/planning/{r['card']}",
         )
-        for r in last
+        for r in reversed(last)
         if r["author"] == "lead" and r["archived"] is None and r["card"] not in waiting
     ]
     # F84 D4: in the lead's order, the reply being written first, then the plants, then
@@ -502,8 +502,8 @@ def desk_trail(
 
 def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
     """What waits for the owner (D6), in six groups in this order, empty ones included: what
-    didn't go through first (F31 D9), blocked tickets (F106 D1), sign-offs, proposals,
-    conversations, and seeds."""
+    didn't go through first (F31 D9), blocked tickets (F106 D1), sign-offs, conversations
+    (F185 D1), proposals, and seeds."""
     project_id = metrics.find_project(conn, project)
     if project_id is None:
         refusals: list[DeskItem] = []
@@ -529,8 +529,8 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         DeskGroup("refused", "Didn't go through", "--hazard", refusals),
         DeskGroup("blocked", "Blocked tickets", "--hazard", blocked),
         DeskGroup("ripe", "To sign off", "--qwen", ripe),
-        DeskGroup("proposals", "Proposals to review", "--opus", proposals),
         DeskGroup("answers", "Your answers wanted", "--hazard", answers),
+        DeskGroup("proposals", "Proposals to review", "--opus", proposals),
         DeskGroup("seeds", "Seeds, not asked about yet", "--ink-2", seeds),
     ]
 
