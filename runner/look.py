@@ -1,6 +1,6 @@
 """``softfield look``: what a planner or a review job may read (ADR 28). No AI in it.
 
-Two forms, both read-only:
+Three forms, all read-only (``look disk`` says where the disk space went, f175):
 - ``look sql "<one SELECT>"`` prints rows of the metrics database. The file is opened
   read-only, and SQLite's authorizer allows reads only: a write, an ``ATTACH`` (which makes a
   file even on a read-only connection) or a ``PRAGMA`` that changes anything is refused by
@@ -12,6 +12,8 @@ Two forms, both read-only:
 Rows, cells and pages are capped, and the output says when it cut.
 """
 
+import getpass
+import os
 import sqlite3
 import warnings
 from html.parser import HTMLParser
@@ -105,6 +107,141 @@ def sql(db: Path, query: str) -> str:
     if cut:
         cells_cut = "1 cell" if cut == 1 else f"{cut} cells"
         lines.append(f"(cut: {cells_cut} longer than {MAX_CELL} characters, ending in …)")
+    return "\n".join(lines)
+
+
+# --- where the disk went ----------------------------------------------------------------------
+
+TMP_LABEL = "/tmp, all of it"  # noqa: S108 - a label, not a path used
+MAX_HELD = 20  # deleted-but-open files listed; the rest are counted
+_TMP_ROOT = "softfield-"  # the runner's own folder in /tmp, then the user id (f175-02)
+
+
+def _size(path: Path) -> tuple[int, int]:
+    """Bytes and files under ``path`` (itself, when a file), links not followed, anything that
+    can't be read skipped. A path that isn't there is 0 and 0."""
+    total = files = 0
+    pending = [path]
+    while pending:
+        here = pending.pop()
+        try:
+            info = here.lstat()
+            if here.is_symlink() or not here.is_dir():
+                total, files = total + info.st_size, files + 1
+                continue
+            with os.scandir(here) as entries:
+                pending.extend(Path(entry.path) for entry in entries)
+        except OSError:
+            continue
+    return total, files
+
+
+def _amount(size: tuple[int, int]) -> str:
+    nbytes, files = size
+    shown = f"{nbytes / 1e9:.1f} GB" if nbytes >= 1e9 else f"{nbytes / 1e6:.1f} MB"
+    return f"{shown}, {files} files"
+
+
+def _holding(proc: Path, uid: int) -> list[tuple[int, int, str]]:
+    """Files deleted but still open in the user's processes: size, pid, command; the largest
+    first. A file held by two descriptors counts once."""
+    seen: set[tuple[int, int, int]] = set()
+    found: list[tuple[int, int, str]] = []
+    try:
+        pids = [p for p in proc.iterdir() if p.name.isdigit()]
+    except OSError:
+        return []
+    for pid in pids:
+        try:
+            if pid.stat().st_uid != uid:
+                continue
+            links = list((pid / "fd").iterdir())
+        except OSError:
+            continue
+        for link in links:
+            try:
+                if not os.readlink(link).endswith(" (deleted)"):
+                    continue
+                info = link.stat()
+                key = (int(pid.name), info.st_dev, info.st_ino)
+                if key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    command = (pid / "comm").read_text().strip()
+                except OSError:
+                    command = "?"
+                found.append((info.st_size, int(pid.name), command))
+            except OSError:
+                continue
+    return sorted(found, reverse=True)
+
+
+def disk(
+    db: Path,
+    bench: Path,
+    runs: Path,
+    *,
+    tmp: Path = Path("/tmp"),  # noqa: S108 - the place being measured, never written to
+    proc: Path = Path("/proc"),
+    uid: int | None = None,
+    user: str | None = None,
+) -> str:
+    """Where the factory's disk space went, a line a place with its size and file count, then
+    the deleted files still held open, largest first. Read-only; what can't be read is skipped."""
+    uid = os.getuid() if uid is None else uid
+    user = user or getpass.getuser()
+    try:
+        names = sorted(p.name for p in tmp.iterdir())
+    except OSError:
+        names = []
+    # each top-level entry is walked once, then counted in the group that names it
+    groups: dict[str, list[int]] = {
+        f"{_TMP_ROOT}{uid}": [0, 0, 0],
+        f"pytest-of-{user}": [0, 0, 0],
+        "Chromium temp folders": [0, 0, 0],
+        "Playwright folders": [0, 0, 0],
+        "tmp*.sqlite databases": [0, 0, 0],
+    }
+    everything = [0, 0]
+    for name in names:
+        nbytes, files = _size(tmp / name)
+        everything[0] += nbytes
+        everything[1] += files
+        if name == f"{_TMP_ROOT}{uid}" or name == f"pytest-of-{user}":
+            group = name
+        elif name.lstrip(".").startswith(("org.chromium.", "com.google.", "chromium")):
+            group = "Chromium temp folders"
+        elif name.lstrip(".").startswith("playwright"):
+            group = "Playwright folders"
+        elif name.startswith("tmp") and name.endswith(".sqlite"):
+            group = "tmp*.sqlite databases"
+        else:
+            continue
+        counts = groups[group]
+        counts[0], counts[1], counts[2] = counts[0] + nbytes, counts[1] + files, counts[2] + 1
+    lines = [f"{TMP_LABEL:32} {_amount((everything[0], everything[1]))}"]
+    for group, (nbytes, files, folders) in groups.items():
+        label = f"  {group}" + (f" ({folders})" if folders > 1 else "")
+        lines.append(f"{label:32} {_amount((nbytes, files))}")
+    lines += [
+        f"{'the bench folder':32} {_amount(_size(bench))}",
+        f"{'.factory/var/runs/':32} {_amount(_size(runs))}",
+        f"{'the metrics database':32} {_amount(_size(db))}",
+        f"{'its write-ahead log (-wal)':32} {_amount(_size(db.with_name(db.name + '-wal')))}",
+    ]
+    held = _holding(proc, uid)
+    if not held:
+        lines.append("deleted files still held open: none")
+    else:
+        lines.append(f"deleted files still held open: {len(held)}, largest first")
+        lines += [
+            f"  {_amount((n, 1)).split(',')[0]:>10}  pid {pid}  {cmd}"
+            for n, pid, cmd in held[:MAX_HELD]
+        ]
+        if len(held) > MAX_HELD:
+            rest = sum(n for n, _, _ in held[MAX_HELD:])
+            lines.append(f"  (and {len(held) - MAX_HELD} more, {_amount((rest, 0)).split(',')[0]})")
     return "\n".join(lines)
 
 

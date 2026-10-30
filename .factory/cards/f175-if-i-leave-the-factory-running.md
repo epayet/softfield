@@ -18,3 +18,10 @@ if i leave the factory running for a long time, the disk space goes away, probab
 - **D2: a nested command keeps its job's folder.** When `TMPDIR` is already a folder under that root (an agent's `softfield check-all` inside its job), procs gives no new one: the job's folder holds it all and goes with the job, so a screenshot a test leaves in `tmp_path` is still there for the agent to read until the job ends.
 - **D3: `softfield run` sweeps leftovers at its start:** every folder under the root whose runner pid is no longer alive is removed (a runner killed by a reboot, a crash, a SIGKILL). Only folders under the root, never anything else in `/tmp`: what other programs leave there is theirs.
 - **D4: `softfield look disk` says where the space went,** read-only, in plain lines with sizes: `/tmp` in total and the factory's part of it (the root, `pytest-of-<user>`, Chromium and Playwright folders, `tmp*.sqlite`), the bench folder, `.factory/var/runs/`, the metrics database and its `-wal`, and deleted files still held open by the user's processes (from `/proc/<pid>/fd`), largest first with the command that holds them. Unreadable entries are skipped, never an error.
+
+## Measured
+`uv run softfield look disk` on 2026-10-30 (f175-01), a few days after the last reboot:
+- `/tmp` in all: 6.0 GB, 1,149,741 files. **`pytest-of-manu` is 5.4 GB in 1,148,932 files**, nearly all of it; the 345 Chromium folders are 41 MB, the 63 `tmp*.sqlite` databases 195 MB, the Playwright folders 0.1 MB, and `softfield-1000` isn't there yet (f175-02).
+- `.factory/var/runs/` 772 MB (3,090 files); the bench folder 7 MB; the metrics database 7.8 MB with a 4.4 MB `-wal`: none of them is the lost space.
+- 1,154 deleted files still held open, but the largest are 67 MB each (shared memory of desktop programs: gnome-shell, kitty, chrome, psensor…), 635 MB beyond the 20 listed: not the factory's, and small.
+- So the 30 GB is most likely pytest's folders (the factory's own test runs, over a million small files), not the leftovers of killed jobs; f175-03 should look at why they grow so large and what keeps them.

@@ -460,6 +460,7 @@ def main(argv: list[str] | None = None) -> int:
         "page", help="a dashboard page as plain text, or its data as is (/line/live)"
     )
     look_page.add_argument("address", help="its path, e.g. /, /planning or /milestones/f95")
+    look_what.add_parser("disk", help="where the factory's disk space went, with sizes")
     copilot_review = sub.add_parser(
         "copilot-review", help="one read-only Copilot prompt (f1's probes; capped per day)"
     )
@@ -752,6 +753,9 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "look":
             if args.what == "sql":
                 print(look.sql(cfg.metrics_db, args.query))
+            elif args.what == "disk":
+                runs = repo / ".factory" / "var" / "runs"
+                print(look.disk(cfg.metrics_db, bench.bench_dir(cfg), runs))
             else:
                 print(look.page(cfg.metrics_db, project_name(repo), args.address))
         elif args.command == "check-layout":

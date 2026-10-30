@@ -241,6 +241,110 @@ def test_no_get_route_of_the_dashboard_writes(db, tmp_path):
     assert sorted(p.name for p in tmp_path.iterdir()) == ["db"]
 
 
+# --- look disk --------------------------------------------------------------------------------
+
+
+def _fill(path: Path, nbytes: int) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"x" * nbytes)
+    return path
+
+
+def test_disk_sizes_each_place_and_the_factorys_parts_of_tmp(tmp_path):
+    tmp = tmp_path / "tmp"
+    _fill(tmp / "softfield-1000" / "1-1" / "a", 2_000_000)
+    _fill(tmp / "pytest-of-sam" / "pytest-3" / "b", 1_000_000)
+    _fill(tmp / "org.chromium.Chromium.x" / "c", 500_000)
+    _fill(tmp / "tmpabc.sqlite", 300_000)
+    _fill(tmp / "someone-elses" / "d", 4_000_000)
+    _fill(tmp_path / "bench" / "e", 10_000)
+    _fill(tmp_path / "runs" / "f", 20_000)
+    db = _fill(tmp_path / "m.sqlite", 30_000)
+    _fill(tmp_path / "m.sqlite-wal", 40_000)
+    out = look.disk(
+        db, tmp_path / "bench", tmp_path / "runs", tmp=tmp, proc=tmp_path / "noproc",
+        uid=1000, user="sam",
+    )  # fmt: skip
+    lines = {line[:32].strip(): line for line in out.splitlines()}
+    assert "7.8 MB, 5 files" in lines[look.TMP_LABEL]
+    assert "2.0 MB, 1 files" in lines["softfield-1000"]
+    assert "1.0 MB, 1 files" in lines["pytest-of-sam"]
+    assert "0.5 MB, 1 files" in lines["Chromium temp folders"]
+    assert "0.3 MB, 1 files" in lines["tmp*.sqlite databases"]
+    assert "0.0 MB, 0 files" in lines["Playwright folders"]
+    assert "someone-elses" not in out
+    assert "0.0 MB, 1 files" in lines["the bench folder"]
+    assert "0.0 MB, 1 files" in lines[".factory/var/runs/"]
+    assert "0.0 MB, 1 files" in lines["the metrics database"]
+    assert "0.0 MB, 1 files" in lines["its write-ahead log (-wal)"]
+    assert "none" in out.splitlines()[-1]
+
+
+def test_disk_reads_a_missing_folder_as_zero_and_skips_what_it_cannot_read(tmp_path):
+    tmp = tmp_path / "tmp"
+    _fill(tmp / "pytest-of-sam" / "ok", 1000)
+    locked = tmp / "pytest-of-sam" / "locked"
+    _fill(locked / "hidden", 1000)
+    locked.chmod(0)
+    try:
+        out = look.disk(
+            tmp_path / "none.sqlite", tmp_path / "nobench", tmp_path / "noruns", tmp=tmp,
+            proc=tmp_path / "noproc", uid=1000, user="sam",
+        )  # fmt: skip
+    finally:
+        locked.chmod(0o700)
+    lines = {line[:32].strip(): line for line in out.splitlines()}
+    for place in ("the bench folder", ".factory/var/runs/", "the metrics database"):
+        assert lines[place].endswith("0.0 MB, 0 files")
+    assert lines["pytest-of-sam"].endswith("0.0 MB, 1 files")  # the locked folder is skipped
+
+
+def test_disk_lists_deleted_files_held_open_largest_first(tmp_path):
+    proc = tmp_path / "proc"
+    for pid, command, nbytes in ((11, "small", 100), (22, "big", 5_000_000)):
+        (proc / str(pid) / "fd").mkdir(parents=True)
+        (proc / str(pid) / "comm").write_text(command + "\n")
+        gone = _fill(tmp_path / f"{command} (deleted)", nbytes)
+        (proc / str(pid) / "fd" / "3").symlink_to(gone)
+        (proc / str(pid) / "fd" / "4").symlink_to(tmp_path)  # not deleted
+    (proc / "self").mkdir()  # not a pid
+    out = look.disk(
+        tmp_path / "m.sqlite", tmp_path / "b", tmp_path / "r", tmp=tmp_path / "t", proc=proc,
+        uid=Path(proc).stat().st_uid, user="sam",
+    )  # fmt: skip
+    held = out.splitlines()[-3:]
+    assert "2 " in held[0] or "held open: 2" in held[0]
+    assert "pid 22  big" in held[1] and "5.0 MB" in held[1]
+    assert "pid 11  small" in held[2]
+
+
+def test_disk_caps_the_deleted_files_listed_and_counts_the_rest(tmp_path, monkeypatch):
+    monkeypatch.setattr(look, "MAX_HELD", 1)
+    proc = tmp_path / "proc"
+    for pid, nbytes in ((11, 100), (22, 5_000_000), (33, 2_000_000)):
+        (proc / str(pid) / "fd").mkdir(parents=True)
+        gone = _fill(tmp_path / f"g{pid} (deleted)", nbytes)
+        (proc / str(pid) / "fd" / "3").symlink_to(gone)
+    out = look.disk(
+        tmp_path / "m", tmp_path / "b", tmp_path / "r", tmp=tmp_path / "t", proc=proc,
+        uid=proc.stat().st_uid, user="sam",
+    )  # fmt: skip
+    assert out.splitlines()[-3:] == [
+        "deleted files still held open: 3, largest first",
+        "      5.0 MB  pid 22  ?",
+        "  (and 2 more, 2.0 MB)",
+    ]
+
+
+def test_disk_writes_nothing(tmp_path):
+    _fill(tmp_path / "tmp" / "pytest-of-sam" / "a", 10)
+    before = sorted(p.as_posix() for p in tmp_path.rglob("*"))
+    look.disk(
+        tmp_path / "m", tmp_path / "b", tmp_path / "r", tmp=tmp_path / "tmp", uid=1, user="sam"
+    )
+    assert sorted(p.as_posix() for p in tmp_path.rglob("*")) == before
+
+
 # --- the command ------------------------------------------------------------------------------
 
 
