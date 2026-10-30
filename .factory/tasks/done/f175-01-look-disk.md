@@ -28,3 +28,10 @@ Read D4 in `.factory/cards/f175-if-i-leave-the-factory-running.md`, then `sql` a
 - at the end, run `uv run softfield look disk` on the branch and add what it printed, dated, under a "Measured" heading in the card doc
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
