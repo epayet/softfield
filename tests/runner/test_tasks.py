@@ -7,6 +7,7 @@ from runner.tasks import (
     DEFAULT_PRIORITY,
     FEATURE_PRIORITY,
     FIX_OF_FIX,
+    STALE_BRANCH,
     STOPPED,
     TESTS_ONLY,
     TESTS_ONLY_CODE,
@@ -34,7 +35,7 @@ from runner.tasks import (
     task_priority,
     ticket_prefix,
 )
-from tests.runner.conftest import write_task
+from tests.runner.conftest import git, write_task
 
 
 def test_parse_task(tmp_path):
@@ -618,6 +619,29 @@ def test_preflight_sends_a_fix_of_a_fix_to_the_lead(repo):
     assert preflight(lead, repo) == []
     assert preflight(fix("f1-05-c", "f1-02-plain", "finding: f1-C2-3\n"), repo) == []
     assert preflight(fix("f1-06-d", "f1-01-fixed", ""), repo) == []
+
+
+def test_preflight_refuses_a_branch_so_far_with_no_branch_work(repo):
+    """f32-01, as F17: a requeue's "The branch so far" after the branch went back to main."""
+    ready = repo / ".factory" / "tasks" / "ready"
+    plain = _in(ready, "f1-01-plain", "f1")
+    task = _in(ready, "f1-02-requeued", "f1")
+    task.path.write_text(
+        task.path.read_text().replace(
+            "### Done when",
+            "### The branch so far (2026-10-10)\nTwo small things left.\n\n### Done when",
+        )
+    )
+    task = parse_task(task.path, 150)
+    assert preflight(plain, repo) == []
+    assert preflight(task, repo) == [STALE_BRANCH]  # no task/<id> branch at all
+    git(repo, "branch", "task/f1-02-requeued")
+    assert preflight(task, repo) == [STALE_BRANCH]  # a branch that is main
+    git(repo, "checkout", "-q", "task/f1-02-requeued")
+    (repo / "coucou" / "thing.py").write_text("def thing() -> int:\n    return 1\n")
+    git(repo, "commit", "-qam", "work")
+    git(repo, "checkout", "-q", "main")
+    assert preflight(task, repo) == []
 
 
 def test_equal_priorities_keep_milestone_then_id_order(tmp_path):

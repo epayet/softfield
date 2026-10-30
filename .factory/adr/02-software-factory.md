@@ -614,6 +614,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** a plan that pastes text into prompts must account for what the agent loads by itself (CLAUDE.md and its imports); and a word-count target on a document that keeps gaining rules can't hold. The card sat over two weeks between its build and its review, mostly behind f21-03.
 - **Decisions affected:** none.
 
+### F32 (2026-10-30): the lead window says when it resets ([review](../reviews/f32-the-5-hour-lead-s-window.md))
+
+- **Q1:** one developer ticket (difficulty 2, two template lines). Six Qwen attempts over two runs, none merged. On 2026-10-10 the second attempt had it right but the layout gate failed on a review's stray test file; the ticket was requeued behind its removal with a "The branch so far". By 2026-10-29 that branch was gone, so three attempts read for 20 minutes each for lines that weren't there. An Opus escalation finished it in 10 minutes. No checkpoint. Review round 1: one should-fix (no check for a stale "The branch so far"), fixed by the review with a pre-flight check.
+- **Q3:** Claude only on the merged work: Opus $1.87 over a direction and two escalations; Qwen about 2.5 hours of model with nothing merged.
+- **Q5:** see the review's numbers.
+- **Anything else:** the second ticket (after F17) lost to one day's stale requeues, and the second time a lesson was written as a line before it became a check. Two lines of template took 19 days, almost all of it waiting on another card's fix.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

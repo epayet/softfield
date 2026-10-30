@@ -1,6 +1,7 @@
 """Task files: parsing, validation, picking and pre-flight (docs/task-format.md)."""
 
 import re
+import subprocess
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -463,6 +464,10 @@ FEATURE_PRIORITY = (
     " its card's place (F173)"
 )
 FIX_OF_FIX = "a fix of a fix: the lead does it"
+STALE_BRANCH = (
+    '"The branch so far" describes work that `task/<id>` no longer holds (no diff from main):'
+    " rewrite the ticket from main (f32-01)"
+)
 _AT_FAULT_RE = re.compile(r"\.factory/tasks/done/([A-Za-z0-9][A-Za-z0-9_.-]*?)\.md")
 
 
@@ -501,6 +506,17 @@ def _fix_of_fix(task: Task, repo: Path, context: str) -> bool:
     return False
 
 
+def _stale_branch(task: Task, repo: Path) -> bool:
+    """A requeue's "The branch so far" while its branch is gone or holds nothing beyond main:
+    the developer reads for lines it no longer has (F17, f32-01)."""
+    if not any(name.startswith("The branch so far") for name in task.sections):
+        return False
+    diff = subprocess.run(
+        ["git", "diff", "--quiet", f"main...task/{task.id}"], cwd=repo, capture_output=True
+    )
+    return diff.returncode != 1  # 0: no diff; 128: no such branch
+
+
 def preflight(task: Task, repo: Path) -> list[str]:
     """Problems with the task's files and Context/Pattern references. Empty means OK.
 
@@ -521,6 +537,8 @@ def preflight(task: Task, repo: Path) -> list[str]:
         problems.append(FEATURE_PRIORITY)
     if _fix_of_fix(task, repo, task.sections["Context"]):
         problems.append(FIX_OF_FIX)
+    if _stale_branch(task, repo):
+        problems.append(STALE_BRANCH)
     problems += _misplaced(repo, text)
     paths = set(_PATH_RE.findall(text))
     listed = (*task.files, *task.tests)
