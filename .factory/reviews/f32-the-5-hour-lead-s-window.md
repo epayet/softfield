@@ -1,6 +1,6 @@
 # Review: F32, the 5-hour lead's window
 
-- **Status:** review round 1 done (2026-10-30): one should-fix, fixed by the review; waiting for the owner's sign-off.
+- **Status:** review round 2 done (2026-10-30): round 1's one should-fix is confirmed fixed and no new finding; the loop stops here, waiting for the owner's sign-off.
 
 ## Sign-off sheet
 
@@ -57,6 +57,9 @@ No checkpoint ran (the ticket was finished by the lead), so there are no checkpo
 After the fix, ruff and mypy pass on the changed files, and `tests/runner/test_tasks.py` (131), the lead window tests and the 29 pre-flight, requeue and escalation tests in `test_loop.py` pass. The full runner and dashboard run was stopped at its 20-minute limit at about 94%, with no failure before it (the four errors at the end are the stop's own, as the run was killed mid-test).
 
 The French: no `coucou/locale/fr/` change in this milestone.
+
+### Round 2 (2026-10-30)
+The only fix diff is round 1's own: `_stale_branch` and its test, the `lead.md` line, the backlog line and ADR 02's learnings entry. F1 is resolved. The check calls git only for a ticket with a "The branch so far" section, so `_print_plan` and the other pre-flight callers pay nothing for the rest, and `git diff --quiet` exit 1 (work on the branch) is the only pass, so a missing branch (128) is refused as well. The test covers the four cases: no section, no branch, a branch equal to main, and a branch with a commit. No ready or later ticket has the section. ruff and mypy pass on `runner/tasks.py`, and `tests/runner/test_tasks.py` passes (131). The full runner and dashboard run hit its 20-minute limit at 2,744 passed and none failed (its one error was the stop itself, in `test_runs.py`); the six dashboard test files it hadn't reached, `test_runs.py` included, then passed on their own (196). No new finding; score stays 8/10; no checkpoint ran, so there are no verdicts.
 
 ## Backlog
 - F1's residual gap (a branch reset at the start of an attempt after a merge conflict), in `docs/backlog.md` under "Waiting for something".
