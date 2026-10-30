@@ -1546,6 +1546,57 @@ def test_send_posts_the_whole_open_order_once_and_the_board_shows_it_on_its_way(
     assert posts == [f"{ORIGIN}/requests"]
 
 
+def _requests(board_db: Path) -> list[tuple[str, str | None]]:
+    conn = connect(board_db)
+    try:
+        rows = conn.execute("SELECT kind, subject FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    return [(r["kind"], r["subject"]) for r in rows]
+
+
+def test_a_refused_send_keeps_the_moves_and_a_second_press_sends_them(page, board_db):
+    _three_planted(page, board_db)
+    _drag(page, "f27", "f23")
+    moved = ["f24", "f27", "f23", "bug-02-stale", *STARTED]
+    assert _order(page, "planted") == moved
+    page.route("**/requests", lambda route: route.fulfill(status=500))
+    send = page.get_by_role("button", name="Send new order")
+    send.click()
+    refused = "Not sent: the dashboard didn't take it. Your moves are kept; try again."
+    page.wait_for_function(
+        "(words) => document.querySelector('#order-bar p').textContent === words", arg=refused
+    )
+    assert _bar(page) == refused
+    assert send.is_enabled()
+    assert _order(page, "planted") == moved
+    assert "moved · was #4 · not sent yet" in _words(page, "f27")
+    assert page.locator(".slot[data-key=f27] .card.on-its-way").count() == 0
+    assert _requests(board_db) == []
+    # the dashboard takes it now: the same moves go at the second press
+    page.unroute("**/requests")
+    send.click()
+    page.locator(".slot[data-key=f27] .card.on-its-way").wait_for()
+    assert _requests(board_db) == [("reorder", None)]
+    assert "on its way · was #4 · at the runner's next pick" in _words(page, "f27")
+
+
+def test_a_refused_set_aside_can_be_pressed_again(page, board_db):
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    page.get_by_role("button", name="Sprouting").click()
+    page.locator('.slot[data-key="f21"] .more').click()
+    page.route("**/requests", lambda route: route.fulfill(status=500))
+    aside = page.locator("#order-sheet").get_by_role("button", name="Set aside")
+    aside.click()
+    page.wait_for_function(
+        "() => document.querySelector('#order-sheet .set-aside').textContent"
+        " === 'Set aside · not sent, try again'"
+    )
+    assert aside.is_enabled()
+    assert _requests(board_db) == []
+
+
 def test_a_card_stays_in_its_stage_and_a_ripe_or_harvested_one_has_no_grip(page, board_db):
     _three_planted(page, board_db, DISPLAY)
     sprouting = _order(page, "sprouting")
