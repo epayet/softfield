@@ -27,3 +27,10 @@ Read D1–D3 in `.factory/cards/f175-if-i-leave-the-factory-running.md`, then `r
 - a file a test leaves in `tempfile.gettempdir()` (as `test_a_page_that_names_cdn_example_com_after_the_top_bar_fails` in `tests/factory_dashboard/test_app.py` does) is gone once `softfield check-all` ends
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
