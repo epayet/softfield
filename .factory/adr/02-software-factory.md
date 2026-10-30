@@ -622,6 +622,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the second ticket (after F17) lost to one day's stale requeues, and the second time a lesson was written as a line before it became a check. Two lines of template took 19 days, almost all of it waiting on another card's fix.
 - **Decisions affected:** none.
 
+### F15 (2026-10-30): reorder from the board ([review](../reviews/f15-reprioritising-tickets.md))
+
+- **Q1:** ten tickets. Six lead tickets (the `reorder` request, the order on the board, the field, drag and send, the replan, the arrows' removal) passed first time on Opus. f15-08 (developer, "waits for F22") passed on Qwen's second attempt after a timeout; a stand-in checkpoint (copilot-auto) found two weak points, whose fix tickets f15-09 and f15-10 took three attempts and a direction, and one attempt. f15-06 (the ⋯ actions) stopped three times with no edit on a slow night and was escalated. Review round 1: one should-fix fixed by the review (a card waiting on a bug read "waits for BUGS"), one should-fix ticket (f15-11: a refused send is untested), one factory should-fix as a lead bug ticket (bug-48: skip the direction on a slow night), two nits fixed, one to the backlog.
+- **Q3:** Opus $14.17 on the milestone's own jobs ($11.36 of it the six lead tickets); Qwen about 7.2 hours of model, 1 hour of it on f15-06 with nothing to show.
+- **Q5:** see the review's numbers.
+- **Anything else:** the plan's "Who builds" was right: the parts with a new module, script or phone layout went to the lead and passed at once; the small ticket that went to Qwen merged, but cost two fix tickets and 4 hours of model for 4 lines. The fifth no-edit escalation in two nights made a lesson that had stayed a line in `lead.md` into a ticket (bug-48).
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

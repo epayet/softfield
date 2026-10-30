@@ -776,16 +776,10 @@ def _card(html: str, link: str) -> tuple[list[str], str, str]:
 
 
 def _card_note(html: str, link: str) -> str:
-    """Extract the card-note text of a card by its link."""
-    found = re.search(
-        rf'<a class="card([^"]*)" href="{re.escape(link)}\?[^"]*">'
-        rf'.*?<span class="card-note">([^<]*)</span>',
-        html,
-        re.S,
-    )
-    if found:
-        return unescape(found[2])
-    return ""
+    """A card's note by its link, "" when it has none: read inside that card alone, so another
+    card's note further down never answers for it."""
+    found = re.search(r'<span class="card-note">([^<]*)</span>', _card(html, link)[2])
+    return unescape(found[1]) if found else ""
 
 
 def test_the_page_lists_each_card_in_its_stage_s_column(board_db, board_client):
@@ -1750,7 +1744,6 @@ def test_a_planted_card_says_what_it_waits_for(board_db):
     assert f23.stage == "planted"
     assert f23.waits == ("F22",)
     html = _page(_client(board_db))
-    _, _, _ = _card(html, "/milestones/f23-planted")
     assert _card_note(html, "/milestones/f23-planted") == "waits for F22"
 
 
@@ -1814,8 +1807,23 @@ def test_ready_tickets_depend_on_two_other_cards(board_db):
     f23 = card(found, "F23")
     assert f23.waits == ("F22", "F63")
     html = _page(_client(board_db))
-    _, _, _ = _card(html, "/milestones/f23-planted")
     assert _card_note(html, "/milestones/f23-planted") == "waits for F22, F63"
+
+
+def test_a_card_waiting_on_a_bug_names_the_bug(board_db):
+    """A bug's card is its ticket: the note names it, not the standing ``bugs`` key."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        conn.execute("UPDATE tickets SET state = 'later' WHERE ticket = 'f23-02-second'")
+        conn.execute(
+            "UPDATE tickets SET depends_on = ? WHERE ticket = 'f23-01-first'",
+            (json.dumps(["bug-02-stale"]),),
+        )
+
+    write(board_db, change)
+    assert card(read(board_db), "F23").waits == ("bug-02-stale",)
+    html = _page(_client(board_db))
+    assert _card_note(html, "/milestones/f23-planted") == "waits for bug-02-stale"
 
 
 def test_done_dependency_and_own_ticket_name_no_card(board_db):
@@ -1855,8 +1863,9 @@ def test_bug_and_ripe_card_have_no_waits_line(board_db):
 
 
 def test_waits_populated_only_for_planted_cards(board_db):
-    """waits is empty for seed, sprouting, ripe, and harvested cards even when their
-    tickets have dependencies, because only planted cards, started or not, expose waits."""
+    """Only planted cards, started or not, have waits: a sprouting card whose ticket depends
+    on another card's has none. (Seed, ripe and harvested cards have no ready ticket to wait;
+    `test_bug_and_ripe_card_have_no_waits_line` covers the ripe one.)"""
 
     def change(conn: sqlite3.Connection, p: int) -> None:
         # create f22 milestone with a ready ticket (to be a dependency target)
@@ -1924,22 +1933,6 @@ def test_waits_populated_only_for_planted_cards(board_db):
     f22 = card(found, "F22")
     assert f22.stage == "sprouting"
     assert f22.waits == ()
-    # seed card F20: waits is empty even though its tickets may have deps
-    f20 = card(found, "F20")
-    assert f20.stage == "seed"
-    assert f20.waits == ()
-    # sprouting card F21: waits is empty
-    f21 = card(found, "F21")
-    assert f21.stage == "sprouting"
-    assert f21.waits == ()
-    # ripe card F1: waits is empty
-    f1 = card(found, "F1")
-    assert f1.stage == "ripe"
-    assert f1.waits == ()
-    # harvested card M3: waits is empty
-    m3 = card(found, "M3")
-    assert m3.stage == "harvested"
-    assert m3.waits == ()
 
 
 # --- the developer's view (f146-02, after .factory/cards/f146-mockup/developers-only.html) ------

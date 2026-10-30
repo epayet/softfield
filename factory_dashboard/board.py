@@ -281,8 +281,9 @@ def _card_waits(
     done: set[str],
     own_key: str,
 ) -> tuple[str, ...]:
-    """The other card keys a milestone's ready tickets depend on, in key order, each once.
-    Empty when any ready ticket can start or only depends on its own milestone."""
+    """The other card keys a milestone's ready tickets depend on, in key order, each once (a
+    bug ticket by its id, as its card is named). Empty when any ready ticket can start or only
+    depends on its own milestone."""
     ready = [t for t in tickets if t["state"] == "ready"]
     if not ready:
         return ()
@@ -299,7 +300,7 @@ def _card_waits(
             if m is None:
                 continue
             if m != own_key and dep not in done:
-                others.add(m.upper())
+                others.add(dep if m == BUGS else m.upper())  # a bug's card is its ticket
     return tuple(sorted(others))
 
 
@@ -368,7 +369,6 @@ def _cards(
     for m in milestones:
         mkey[m["id"]] = short_key(m["key"]).lower()
     tickets: dict[int, list[sqlite3.Row]] = {}
-    ticket_to_milestone: dict[int, str] = {}  # ticket id → milestone's short key
     all_name_to_mkey: dict[str, str] = {}  # ticket name → milestone's short key
     done_tickets: set[str] = set()
     by_name: dict[str, sqlite3.Row] = {}
@@ -378,7 +378,6 @@ def _cards(
         (project, metrics.REMOVED),
     ):
         tickets.setdefault(t["milestone_id"], []).append(t)
-        ticket_to_milestone[t["id"]] = mkey[t["milestone_id"]]
         all_name_to_mkey[t["ticket"]] = mkey[t["milestone_id"]]
         if t["state"] == "done":
             done_tickets.add(t["ticket"])
