@@ -36,3 +36,9 @@ attempts: 3
 tokens: 217043
 logs: .factory/var/runs/20261030-015512/f15-11-a-refused-send-keeps-the-moves
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
