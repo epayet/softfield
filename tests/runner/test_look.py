@@ -345,6 +345,13 @@ def test_disk_writes_nothing(tmp_path):
     assert sorted(p.as_posix() for p in tmp_path.rglob("*")) == before
 
 
+def test_a_test_repo_holds_no_sample_hooks(tmp_path):
+    """F175: a run makes thousands of repos; each copied git's template (fifteen sample
+    hooks) and /tmp/pytest-of-<user> grew past a million files."""
+    git(tmp_path, "init", "-q", "-b", "main")
+    assert not list((tmp_path / ".git" / "hooks").glob("*"))
+
+
 # --- the command ------------------------------------------------------------------------------
 
 
