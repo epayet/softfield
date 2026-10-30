@@ -148,6 +148,10 @@
        Outside the dock, which stays one row on a phone; a press marks #actions on its way #}
     <section id="later" class="panel">
       <h2>Not now</h2>
+      {% if setting_aside %}
+      {# A Set aside the runner hasn't done shows on its way after a reload too (owner, 2026-10-07) #}
+      <span id="setting-aside" class="pill asked">Setting aside at the runner's next pick</span>
+      {% else %}
       {% if refresh and drafted_days >= 3 %}<span id="stale" class="aside">Drafted {{ drafted_days }} days ago: the code may have moved. Refresh it before approving.</span>{% endif %}
       {% if refresh %}
       <button type="button" id="refresh-button" class="btn plain"
@@ -160,6 +164,7 @@
         hx-post="/requests" hx-target="#review-status" hx-swap="innerHTML"
         hx-vals='{"kind": "archive", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": "on"}'>Set aside</button>
       <span class="aside">It leaves your desk with its drafts kept. Planning lists it under Set aside; a message from you opens it again.</span>
+      {% endif %}
     </section>
     {% endif %}
     <section id="next-steps" class="panel">

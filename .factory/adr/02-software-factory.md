@@ -630,6 +630,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the plan's "Who builds" was right: the parts with a new module, script or phone layout went to the lead and passed at once; the small ticket that went to Qwen merged, but cost two fix tickets and 4 hours of model for 4 lines. The fifth no-edit escalation in two nights made a lesson that had stayed a line in `lead.md` into a ticket (bug-48).
 - **Decisions affected:** none.
 
+### F73 (2026-10-30): set a proposal aside ([review](../reviews/f73-i-want-to-be-able-to.md))
+
+- **Q1:** two developer tickets at difficulty 4, both Qwen 0/3 with no edit (2–5 steps per 20-minute attempt), both given a direction at the second failure and both finished by an Opus escalation in one session. Review round 1: one should-fix fixed by the review (a Set aside on its way vanished on a reload), one nit fixed (two CSS rules joined on one line), two nits to the backlog.
+- **Q3:** Opus $4.58 on the milestone's jobs ($1.10 of it two directions that changed nothing); Qwen 2 hours of model with nothing merged.
+- **Q5:** see the review's numbers.
+- **Anything else:** the same no-edit stop as f26-02 and f15-06 in the same two nights; bug-48 (ready, from F15's review) skips the direction on such a night. The plan's "D" for both tickets was wrong for that week's model: a template-plus-SQL ticket against a 2,000-line test file.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

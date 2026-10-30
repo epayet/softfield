@@ -134,6 +134,11 @@ def proposal_review(
         "SELECT archived FROM planner_threads WHERE project_id = ? AND card = ?",
         (project_id, thread),
     ).fetchone()
+    setting_aside = conn.execute(
+        "SELECT 1 FROM owner_requests WHERE project_id = ? AND kind = 'archive' AND subject = ?"
+        " AND value = 'on' AND done IS NULL",
+        (project_id, thread),
+    ).fetchone()
     drafted = (now - datetime.fromisoformat(lead[-1]["at"])).days if lead else 0
     return render(
         request,
@@ -165,6 +170,7 @@ def proposal_review(
             "standing": _standing(conn, project_id, thread, proposal, lead, _known_cards(repo)),
             "trail": desk_trail(conn, project, now, request.url.path),
             "archived": bool(archived and archived["archived"]),
+            "setting_aside": setting_aside is not None,
             "drafted_days": drafted,
             "refresh_words": REFRESH_WORDS,
         },

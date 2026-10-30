@@ -659,6 +659,20 @@ def test_an_approved_plan_and_an_archived_thread_have_no_set_aside(planning, db_
     assert 'id="set-aside-button"' not in archived
 
 
+def test_a_set_aside_on_its_way_shows_after_a_reload(planning, db_path, serve):
+    """Pressed, then the page opened again before the runner's pick: on its way, no buttons."""
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
+    client = serve()
+    assert 'id="setting-aside"' not in _review_page(client, "/planning/f6/proposals/plan")
+    _write(
+        db_path,
+        lambda conn: metrics.add_request(conn, planning, "archive", "f6", "on", NOW.isoformat()),
+    )
+    html = _review_page(client, "/planning/f6/proposals/plan")
+    assert "Setting aside at the runner's next pick" in _text(html)
+    assert 'id="set-aside-button"' not in html and 'id="refresh-button"' not in html
+
+
 def _drafted(db_path: Path, days: int) -> None:
     """The lead's last message on F6, ``days`` days before ``NOW``."""
 
