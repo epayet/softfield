@@ -27,3 +27,12 @@ Read `.factory/cards/f185-i-changed-my-mind-i-want.md` (Outcome, D1–D3), and `
 - with two threads the lead answered, the one with the later reply is listed first in Your answers wanted; a thread the lead still owes a reply is listed after both
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 158873
+logs: .factory/var/runs/20261029-222125/f185-01-answers-before-proposals
+```
