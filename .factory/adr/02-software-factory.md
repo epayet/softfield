@@ -638,6 +638,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the same no-edit stop as f26-02 and f15-06 in the same two nights; bug-48 (ready, from F15's review) skips the direction on such a night. The plan's "D" for both tickets was wrong for that week's model: a template-plus-SQL ticket against a 2,000-line test file.
 - **Decisions affected:** none.
 
+### F103 (2026-10-30): seeds no longer count as waiting for you ([review](../reviews/f103-the-number-of-things-in-planning.md))
+
+- **Q1:** one developer ticket at difficulty 2 (a one-line filter in `waiting_for_you`, four test files). Qwen 0/3, every attempt stopped "no edit after 20 min" with 2, 2 and 10 steps, the third under a line-numbered direction; an Opus escalation finished it in 8 minutes. No checkpoint. Review round 1: no defect; one nit fixed (the Known range line pointed at bug-48).
+- **Q3:** Opus $2.46 on the milestone's jobs (planner $0.78, a direction $0.51 that changed nothing, the escalation $1.17); Qwen 1 hour of model with nothing merged.
+- **Q5:** see the review's numbers.
+- **Anything else:** the fourth ticket of the 2026-10-29 09:14 run to stop this way, and the smallest: even a one-line filter didn't get an edit that night, so the size of the ticket wasn't the cause. Its direction waited 5 hours for Claude's window. bug-48 is the fix.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
