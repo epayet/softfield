@@ -25,3 +25,10 @@ Read the Plan, D1–D4 and the "Measured" heading in `.factory/cards/f175-if-i-l
 - a place that still grows and is safe to bound (a `-wal` checkpointed, a cache pruned) is bounded here with its test; one that touches the owner's data is a draft ADR, named in the card doc
 - the listed `tests:` pass
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
