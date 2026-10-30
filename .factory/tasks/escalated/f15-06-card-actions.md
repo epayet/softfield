@@ -39,3 +39,12 @@ What to build:
 - in Chromium, at 390 px: ⋯ on a sprouting card shows the moves, then the three actions; pressing "Set aside" posts one request (kind `archive`, the thread, `on`) and the button is disabled
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 221255
+logs: .factory/var/runs/20261029-222125/f15-06-card-actions
+```
