@@ -27,3 +27,12 @@ Worked examples in `tests/factory_dashboard/test_board.py`: `test_send_posts_the
 - a Set aside the dashboard answers with 500: the button reads "Set aside · not sent, try again" and is enabled; no `archive` row is in `owner_requests`
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 217043
+logs: .factory/var/runs/20261030-015512/f15-11-a-refused-send-keeps-the-moves
+```
