@@ -127,6 +127,31 @@
     });
   }
 
+  // The card's own actions, copied from its slot's template on each ⋯ (F15 D7). "Set aside"
+  // posts an archive request for its conversation, which the runner does at its next pick.
+  const actions = sheet.querySelector(".order-actions");
+  actions.addEventListener("click", async (e) => {
+    const aside = e.target.closest(".set-aside");
+    if (!aside || aside.disabled) return;
+    const { key } = menuFor;
+    aside.disabled = true;
+    aside.textContent = "Set aside · on its way";
+    const body = new URLSearchParams({
+      kind: "archive", project: field.dataset.project, subject: aside.dataset.thread, value: "on",
+    });
+    try {
+      const asked = await fetch("/requests", { method: "POST", headers: { "HX-Request": "true" }, body });
+      if (!asked.ok) throw new Error(String(asked.status));
+    } catch {
+      aside.disabled = false;
+      aside.textContent = "Set aside · not sent, try again";
+      return;
+    }
+    // the slot's own copy says so too, for the next ⋯ before the page is fetched again
+    const own = slot(key)?.querySelector("template.card-actions")?.content.querySelector(".set-aside");
+    if (own) { own.disabled = true; own.textContent = aside.textContent; }
+  });
+
   // Drag: the card follows the pointer, a line shows where it lands, the page scrolls near its
   // top and bottom edges. It lands among its own stage's cards only.
   let drag = null;
@@ -194,10 +219,12 @@
       const name = card.querySelector(".card-meta span").textContent;
       const grip = button("grip", "⠿", `Drag ${name}`);
       grip.addEventListener("pointerdown", (e) => startDrag(e, s));
-      const more = button("more", "⋯", `Move ${name}`);
+      const more = button("more", "⋯", `Actions for ${name}`);
       more.addEventListener("click", () => {
         menuFor = { key: s.dataset.key, stage: s.dataset.stage, opener: more };
         sheet.querySelector("h3").textContent = `${name} · ${card.querySelector(".card-title").textContent}`;
+        const own = s.querySelector("template.card-actions");
+        actions.replaceChildren(...(own ? [own.content.cloneNode(true)] : []));
         sheet.showModal();
       });
       s.classList.add("movable");

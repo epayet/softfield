@@ -1019,8 +1019,9 @@ def test_the_page_posts_only_a_reorder_and_links_to_the_factory_floor(board_clie
     assert "hx-post" not in main
     assert "Read-only" not in main
     script = (STATIC / "board.js").read_text(encoding="utf-8")
-    assert re.findall(r'kind: "(\w+)"', script) == ["reorder"]
-    assert script.count('fetch("/requests"') == 1
+    # the order, and a card's Set aside from its ⋯ (f15-06)
+    assert re.findall(r'kind: "(\w+)"', script) == ["archive", "reorder"]
+    assert script.count('fetch("/requests"') == 2
     assert re.search(
         r'<a href="/\?project=coucou">\s*Planted cards feed the factory floor ›\s*</a>', main
     )
@@ -1350,7 +1351,7 @@ def test_dragging_a_card_by_its_grip_moves_it_and_back_again(page, board_db):
 def test_the_menu_does_the_same_moves_by_keyboard_too(page, board_db):
     _three_planted(page, board_db)
     more = page.locator('.slot[data-key="f27"] .more')
-    assert more.get_attribute("aria-label") == "Move F27"
+    assert more.get_attribute("aria-label") == "Actions for F27"
     more.focus()
     page.keyboard.press("Enter")
     sheet = page.locator("#order-sheet")
@@ -1385,6 +1386,142 @@ def test_cancel_puts_the_order_back(page, board_db):
     assert _order(page, "planted") == ["f24", "f23", "bug-02-stale", "f27", *STARTED]
     assert page.locator(".card.moved").count() == 0
     assert _bar(page) is None
+
+
+# --- a card's actions in its ⋯ menu (f15-06) ---------------------------------------------------
+
+
+def _actions(html: str, key: str) -> list[tuple[str, str]] | None:
+    """The actions in the slot of the card ``key`` (lower case), each as its words and where it
+    goes: a link's ``href``, a Set aside button's ``data-thread`` (``disabled`` after it when
+    disabled). None when the slot has no actions."""
+    found = re.search(
+        rf'<div class="slot[^"]*" data-key="{re.escape(key)}"[^>]*>(.*?)</div>', html, re.S
+    )
+    assert found, key
+    template = re.search(r'<template class="card-actions">(.*?)</template>', found[1], re.S)
+    if template is None:
+        return None
+    actions = []
+    for tag, attrs, words in re.findall(r"<(a|button)([^>]*)>(.*?)</\1>", template[1], re.S):
+        if tag == "a":
+            where = unescape(re.search(r'href="([^"]*)"', attrs)[1])  # type: ignore[index]
+        else:
+            assert 'class="set-aside"' in attrs and 'type="button"' in attrs
+            where = re.search(r'data-thread="([^"]*)"', attrs)[1]  # type: ignore[index]
+            where += " disabled" if re.search(r"\sdisabled\b", attrs) else ""
+        actions.append((unescape(" ".join(words.split())), where))
+    return actions
+
+
+def test_each_placed_card_s_actions_lead_to_its_conversation_set_aside_and_its_page(
+    board_db, board_client
+):
+    """F21 sprouts on a thread; F22 sprouts from its plan with none; F20 is a seed with none;
+    F23 is planted and given a thread here."""
+    write(board_db, lambda conn, p: metrics.planner_thread(conn, p, "f23", NOW.isoformat()))
+    html = _page(board_client)
+    q = "?project=coucou"
+    assert _actions(html, "f21") == [
+        ("Open its conversation", f"/planning/f21{q}"),
+        ("Set aside", "f21"),
+        ("Open the card", f"/milestones/f21-parallel{q}"),
+    ]
+    assert _actions(html, "f22") == [("Open the card", f"/milestones/f22-research{q}")]
+    assert _actions(html, "f20") == [("Open the card", f"/milestones/f20-duck-pond{q}")]
+    # a planted card keeps its conversation but isn't set aside from the board
+    assert _actions(html, "f23") == [
+        ("Open its conversation", f"/planning/f23{q}"),
+        ("Open the card", f"/milestones/f23-planted{q}"),
+    ]
+    # a bug has no conversation, seed or planted
+    assert _actions(html, "bug-01-duck-count") == [
+        ("Open the card", f"/tickets/bug-01-duck-count{q}")
+    ]
+    assert _actions(html, "bug-02-stale") == [("Open the card", f"/tickets/bug-02-stale{q}")]
+    # every placed card's last action is its own card's link; ripe and harvested have none
+    columns = _columns(html)
+    for stage in STAGES:
+        for key in re.findall(r'<div class="slot[^"]*" data-key="([^"]+)"', columns[stage]):
+            actions = _actions(html, key)
+            if stage in ("ripe", "harvested"):
+                assert actions is None, key
+                continue
+            link = re.search(
+                rf'data-key="{re.escape(key)}"[^>]*>\s*<a class="card[^"]*" href="([^"]+)"', html
+            )
+            assert link and actions and actions[-1] == ("Open the card", unescape(link[1])), key
+
+
+def test_a_card_set_aside_on_its_way_says_so_and_can_t_be_pressed_again(board_db, board_client):
+    def ask(conn: sqlite3.Connection, project: int) -> None:
+        metrics.planner_thread(conn, project, "f20", NOW.isoformat())
+        metrics.add_request(conn, project, "archive", "f21", "on", NOW.isoformat())
+        # another thread's request, one taking it back, and one done: none of them is F20's
+        metrics.add_request(conn, project, "archive", "f20", "off", NOW.isoformat())
+        done = metrics.add_request(conn, project, "archive", "f22", "on", NOW.isoformat())
+        conn.execute("UPDATE owner_requests SET done = ? WHERE id = ?", (NOW.isoformat(), done))
+        conn.commit()
+
+    write(board_db, ask)
+    found = read(board_db)
+    assert (card(found, "F21").thread, card(found, "F21").setting_aside) == ("f21", True)
+    assert (card(found, "F20").thread, card(found, "F20").setting_aside) == ("f20", False)
+    assert (card(found, "F22").thread, card(found, "F22").setting_aside) == ("", False)
+    assert card(found, "bug-01-duck-count").thread == ""
+    html = _page(board_client)
+    assert ("Set aside · on its way", "f21 disabled") in (_actions(html, "f21") or [])
+    assert ("Set aside", "f20") in (_actions(html, "f20") or [])
+
+
+def test_the_menu_shows_a_card_s_actions_under_its_moves_and_sets_it_aside(page, board_db):
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    page.get_by_role("button", name="Sprouting").click()
+    posts: list[str] = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" else None)
+    page.locator('.slot[data-key="f21"] .more').click()
+    sheet = page.locator("#order-sheet")
+    assert sheet.is_visible()
+    buttons = [" ".join(t.split()) for t in sheet.locator("button, a").all_inner_texts()]
+    # upper case in the sheet, as its buttons are drawn
+    assert [b.lower() for b in buttons] == [
+        "top",
+        "up",
+        "down",
+        "bottom",
+        "open its conversation",
+        "set aside",
+        "open the card",
+        "close",
+    ]
+    for action in sheet.locator(".order-actions > *").all():
+        box = action.bounding_box()
+        assert box and box["height"] >= 44
+    assert sheet.get_by_role("link", name="Open its conversation").get_attribute("href") == (
+        "/planning/f21?project=coucou"
+    )
+    aside = sheet.get_by_role("button", name="Set aside")
+    aside.click()
+    page.wait_for_function(
+        "() => document.querySelector('#order-sheet .set-aside').textContent"
+        " === 'Set aside · on its way'"
+    )
+    assert aside.is_disabled()
+    assert posts == [f"{ORIGIN}/requests"]
+    conn = connect(board_db)
+    try:
+        rows = conn.execute("SELECT kind, subject, value, done FROM owner_requests").fetchall()
+    finally:
+        conn.close()
+    assert [tuple(r) for r in rows] == [("archive", "f21", "on", None)]
+    # another card's ⋯ shows its own actions, not F21's
+    page.keyboard.press("Escape")
+    page.get_by_role("button", name="Seed").click()
+    page.locator('.slot[data-key="f20"] .more').click()
+    assert [
+        " ".join(t.split()).lower() for t in sheet.locator(".order-actions > *").all_inner_texts()
+    ] == ["open the card"]
 
 
 def test_send_posts_the_whole_open_order_once_and_the_board_shows_it_on_its_way(page, board_db):

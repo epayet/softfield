@@ -25,8 +25,9 @@
 
 {# A card: its edge is its area's colour, a bug's is striped and its label says "bug". A
    planted card with a ticket started has the orange edge and a "growing" tag (F154 D3) #}
+{% macro card_href(c) %}{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}{% endmacro %}
 {% macro card_link(c) %}
-<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way %} on-its-way{% endif %}" href="{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}">
+<a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way %} on-its-way{% endif %}" href="{{ card_href(c) }}">
   <span class="card-meta">{% if c.place %}<b>#{{ c.place }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span>{% if c.started %} <span class="card-growing">{{ icon("growing", 14) }}growing</span>{% endif %}</span>
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
@@ -45,6 +46,17 @@
   {% if c.developers %}{{ dev_tag(c) }}{% endif %}
 </a>
 {% endmacro %}
+
+{# What the owner does with a card, which board.js copies into its ⋯ menu (F15 D7, f15-06) #}
+{% macro card_actions(c) %}
+<template class="card-actions">
+  {% if c.thread %}<a href="/planning/{{ c.thread }}{{ q }}">Open its conversation</a>{% endif %}
+  {% if c.thread and c.stage in ("seed", "sprouting") %}
+  <button type="button" class="set-aside" data-thread="{{ c.thread }}"{% if c.setting_aside %} disabled{% endif %}>{{ "Set aside · on its way" if c.setting_aside else "Set aside" }}</button>
+  {% endif %}
+  <a href="{{ card_href(c) }}">Open the card</a>
+</template>
+{%- endmacro %}
 
 {% block content %}
 <div class="page board">
@@ -103,7 +115,7 @@
       </div>
       <div class="cards">
         {% for c in cards %}
-        <div class="slot{% if c.developers %} dev-{{ c.developers.look }}{% endif %}" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}</div>
+        <div class="slot{% if c.developers %} dev-{{ c.developers.look }}{% endif %}" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}{% if stage in ("seed", "sprouting", "planted") %}{{ card_actions(c) }}{% endif %}</div>
         {% else %}
         <div class="empty">{% include "_partials/idle_crate.svg" %}<span>Nothing here.</span></div>
         {% endfor %}
@@ -145,6 +157,7 @@
     <button type="button" data-move="down">Down</button>
     <button type="button" data-move="bottom">Bottom</button>
   </div>
+  <div class="order-actions"></div>
   <form method="dialog"><button>Close</button></form>
 </dialog>
 

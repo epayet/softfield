@@ -118,6 +118,8 @@ class Card:
     waits: tuple[str, ...] = ()  # other card keys this card's ready tickets depend on
     reserve: bool = False  # a planted card marked to use Claude's reserve (F172 D6)
     developers: DevWork | None = None  # its developer work; None outside the developers' view
+    thread: str = ""  # its conversation's short key, lower case; "" for a bug or none (f15-06)
+    setting_aside: bool = False  # an open request sets its thread aside
 
     @property
     def kind(self) -> str:
@@ -408,6 +410,15 @@ def _cards(
         )
     }
     threads |= sent
+    # the threads a set-aside request waits on, as thread.py finds one (f15-06)
+    setting_aside = {
+        r["subject"]
+        for r in conn.execute(
+            "SELECT r.subject FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+            " WHERE p.name = ? AND r.kind = 'archive' AND r.value = 'on' AND r.done IS NULL",
+            (project,),
+        )
+    }
     latest_messages: dict[str, sqlite3.Row] = {}
     for r in conn.execute(
         "SELECT t.card, m.author, m.at FROM planner_messages m"
@@ -493,6 +504,7 @@ def _cards(
             waits = _card_waits(own, all_name_to_mkey, done_tickets, mkey[m["id"]])
         else:
             waits = ()
+        thread = key.lower() if key.lower() in threads else ""
         card = Card(
             key=key,
             full_key=m["key"],
@@ -510,6 +522,8 @@ def _cards(
             started=started,
             running=running(counted) if stage == "planted" else None,
             developers=dev_work(stage, own),
+            thread=thread,
+            setting_aside=bool(thread) and thread in setting_aside,
             review_step=_review_step(
                 m["key"],
                 started,

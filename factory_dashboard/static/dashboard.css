@@ -905,6 +905,13 @@ body.has-order-bar main { padding-bottom: 120px; }
 .order-sheet small { color: var(--muted); font-size: 12px; }
 .order-moves { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .order-moves button { padding: 0 4px; }
+.order-actions { display: flex; flex-direction: column; gap: 6px; }
+.order-actions:empty { display: none; }
+.order-actions button:disabled { opacity: 1; color: var(--hazard); border: 1px dashed var(--hazard); }
+.order-actions a, .order-actions button { display: flex; align-items: center; width: 100%;
+  min-height: 44px; padding: 0 14px; border: 1px solid var(--rule); background: var(--plate);
+  color: var(--fg); text-decoration: none; text-align: left;
+  font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; }
 .order-sheet form { margin: 0; } .order-sheet form button { width: 100%; }
 .cards .more, .field-foot a { display: inline-flex; align-items: center; min-height: 44px; }
 .cards .more { font-size: 13px; }
