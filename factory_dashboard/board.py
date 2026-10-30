@@ -93,7 +93,9 @@ class DevWork:
     after: int = 0  # ... that can run once developer tickets before them have
     waiting: int = 0  # ... that wait for a lead ticket
     waits_for: tuple[str, ...] = ()  # those lead tickets, in id order
-    then: str | None = None  # on a ``can`` card: the first lead ticket left, else ``review``
+    # on a ``can`` card: the first lead ticket left, else ``review``; ``review`` too on a card
+    # whose every ticket is done
+    then: str | None = None
 
 
 @dataclass(frozen=True)
@@ -198,7 +200,9 @@ def _dev_work(
         else:
             after += 1
     if now + after == 0 and waiting == 0:
-        return DevWork("none")
+        # every ticket done: what is left is Claude's review, not the lead's tickets
+        done = bool(own) and all(t["state"] == "done" for t in own)
+        return DevWork("none", then="review" if done else None)
     look = "can" if now + after else "waits"
     then = None
     if look == "can":

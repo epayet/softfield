@@ -646,6 +646,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the fourth ticket of the 2026-10-29 09:14 run to stop this way, and the smallest: even a one-line filter didn't get an edit that night, so the size of the ticket wasn't the cause. Its direction waited 5 hours for Claude's window. bug-48 is the fix.
 - **Decisions affected:** none.
 
+### F146 (2026-10-30): the board's developer's view ([review](../reviews/f146-some-kind-of-view-or-toggle.md))
+
+- **Q1:** one lead ticket (Sonnet, passed at its second try after a limit park of about 6 hours) and one developer ticket at difficulty 3 (lever, macro, CSS, tests). Qwen 0/3: two no-edit stops, then a directed attempt that called a macro with an argument it doesn't take and broke every board page. An Opus escalation finished it in 13 minutes. No checkpoint. Review round 1: one should-fix (a fully merged card read "lead only") and one nit (a test that couldn't fail), both fixed by the lead.
+- **Q3:** see the review's numbers; Qwen 2 h 15 of model with nothing merged.
+- **Q5:** see the review's numbers.
+- **Anything else:** same night shape as F103 and F172; bug-48 is the fix. The view itself gives the queue's answer to "what keeps the local model fed": 11 of 97 ready tickets, and a handful of lead tickets (f132-02, f9-29) hold most of the rest.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

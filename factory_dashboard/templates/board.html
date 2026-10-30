@@ -15,6 +15,8 @@
   developers: {{ d.now }} now{% if d.after %} · {{ d.after }} after it{% endif %} · then {% if d.then == "review" %}Claude's review{% else %}the lead's <code>{{ d.then }}</code>{% endif %}
   {%- elif d.look == "waits" -%}
   {{ d.waiting }} developer ticket{{ "" if d.waiting == 1 else "s" }} wait{{ "s" if d.waiting == 1 else "" }} for {% for t in d.waits_for %}<code>{{ t }}</code>{{ ", " if not loop.last }}{% endfor %}
+  {%- elif c.stage == "planted" and d.then == "review" -%}
+  every ticket done · then Claude's review
   {%- elif c.stage == "planted" -%}
   lead only
   {%- else -%}

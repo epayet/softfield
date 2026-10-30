@@ -730,9 +730,15 @@ def test_the_board_counts_the_cards_and_tickets_developers_can_work_on(db_path):
             ("f68-b", "f68-04", "lead", "ready", ()),
         ),
     )
-    cards, tickets, minutes = read(db_path, developers=True).developers
-    assert (cards, tickets) == (1, 2)
-    assert minutes is None or minutes > 0
+    # two tickets times the fixture's one merged ticket, 10 minutes long
+    assert read(db_path, developers=True).developers == (1, 2, 20.0)
+
+
+def test_a_planted_card_with_every_ticket_done_says_review_next(db_path):
+    write(db_path, _tickets(("f69-a", "f69-01", "developer", "done", ())))
+    assert _work(db_path, "F69-A") == DevWork("none", then="review")
+    _, words = _slot(_page(_client(db_path), "?view=developers"), "/milestones/f69-a")
+    assert words == "every ticket done · then Claude's review"
 
 
 # --- the page (f5-16) ------------------------------------------------------------------------
