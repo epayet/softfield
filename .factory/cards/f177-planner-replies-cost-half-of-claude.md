@@ -11,7 +11,7 @@ I just talked somewhere about adding new logic to use --resume Claude if under 5
 
 ## Plan (lead, 2026-10-27)
 - **Expected outcome:** the dashboard shows what each Claude job really cost, and a planner reply on a thread the owner comes back to hours later costs about half what it does now. Planning stays on Opus.
-- **Done when:** a resumed job's cost is its own, past rows included; a planner reply more than an hour after the thread's last one starts a fresh session with the thread's history.
+- **Done when:** a resumed job's cost is its own, past rows included; every planner reply starts a fresh session with the thread's history.
 
 ### What was found (from `jobs` and the logs under `.factory/var/runs/`)
 - **Half of the $150 was never spent.** `claude -p --resume` reports `total_cost_usd` for the whole session so far, and `run_claude` (`runner/claude.py`) stores it as the job's own cost. Every thread's recorded costs only climb (0.92 → 1.10 → 1.18 → 1.26 for replies of 6, 1 and 1 steps); f172's fourth reply recorded $14.02, of which $5.22 was its own. Week of 19 Oct, own costs: planner $71.36 of $227 (31%, $1.32 a reply), not $149.76 of $305 (49%). The other roles were right: they don't resume, except after a usage limit.
@@ -20,12 +20,13 @@ I just talked somewhere about adding new logic to use --resume Claude if under 5
 
 ### Decisions
 - **D1. A job's cost is its own.** When a Claude job resumes a session, its `cost_usd` is the result's `total_cost_usd` minus the `cost_usd` of the session's earlier jobs (summed, since they are own costs too). Past rows are fixed once, by a new step at the end of `MIGRATIONS` (`runner/metrics.py`), in each session's order: own = recorded − the previous recorded value of the same session. `runner/backfill.py` subtracts the same way. Tokens are unchanged (the result's `usage` is already per job).
-- **D2. A planner job resumes only a warm session.** `run_planner` (`runner/loop.py`) resumes the thread's session only when that session's last job ended under 55 minutes before (`PLANNER_WARM_S = 55 * 60`); otherwise it starts a fresh session with the thread's history (`planner.history`, the path a new thread takes today) and the session it gets replaces the thread's. A session cut off by a usage limit still resumes as now (`state.interrupted`).
+- **D2. A planner job always starts a fresh session** (revised 2026-10-29 with the owner, from F189: no timer tied to the cache's lifetime). `run_planner` (`runner/loop.py`) never resumes the thread's session: every reply gets the thread's history (`planner.history`, the path a new thread takes today). The thread keeps recording its last session. A session cut off by a usage limit still resumes as now (`state.interrupted`). Why not always resume: since 13 Oct, 57 cold resumes cost $1.62 each ($92, 42% of the planner's own spend), each first writing the whole old session back into the cache; only 13 replies came within the hour ($0.46 each), so the 55-minute rule first drafted would have saved about $3 more over two weeks than always fresh, for a timer that breaks if the cache's lifetime changes.
+  - **What carries over** (2026-10-30, the owner asked whether losing the earlier investigation hurts the answer): the card's doc. The planner's brief tells it to keep what it found and what it ruled out (facts, files, numbers) in the doc under the plan, as this doc's "What was found" does, and to check the code again before relying on it. A cold follow-up came 64 hours after the last reply on average, while main took about 300 commits over the same span, so what an old session remembers reading is often out of date; cold follow-ups already made 18 tool calls each while carrying their full context.
 
 ### Tickets
 | # | id | agent | what |
 |---|----|-------|------|
 | 01 | f177-01-own-cost-per-job | lead | D1: the meter |
-| 02 | f177-02-planner-resumes-only-warm | lead | D2: cold threads start fresh |
+| 02 | f177-02-planner-resumes-only-warm | lead | D2: every reply starts fresh (the id keeps its first name) |
 
 Both touch `runner/`, which is protected, so both are the lead's. 02 doesn't wait for 01, but 01 goes first on the board's order so 02's saving can be measured on true numbers.
