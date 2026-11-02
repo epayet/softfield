@@ -6,17 +6,16 @@ A secret check reads what is about to go first, and names a file and line, never
 import json
 import os
 import re
-import tomllib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from runner.config import PROJECT_TOML
 from runner.procs import run_bounded
 
 TIMEOUT = 300  # seconds, a push or a fetch
 MAIN = "main"
+REMOTE = "origin"
 STATE = Path(".softfield") / "var" / "push.json"
 KEEPS_FAILING = timedelta(hours=6)  # a passing network error says nothing until then
 
@@ -31,16 +30,6 @@ _RISKY_FILE = re.compile(
 _HUNK = re.compile(r"^@@ -\S+ \+(\d+)")
 
 Run = Callable[[list[str], Path, float, Mapping[str, str] | None], tuple[int | None, str, str]]
-
-
-def remote_of(repo: Path) -> str | None:
-    """The project's remote, `[project] remote`: without it nothing is pushed (ADR 42 item 2)."""
-    path = repo / PROJECT_TOML
-    if not path.is_file():
-        return None
-    project = tomllib.loads(path.read_text(encoding="utf-8")).get("project", {})
-    value = project.get("remote") if isinstance(project, dict) else None
-    return str(value) if value else None
 
 
 def secret_problems(diff: str, topic: str | None) -> list[str]:
@@ -72,8 +61,15 @@ class Outcome:
 
 
 def _git(run: Run, repo: Path, *args: str) -> tuple[int | None, str, str]:
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}  # nobody is there to type a password
+    # Nobody is there to type a password, or a key's passphrase
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0", "GIT_SSH_COMMAND": "ssh -o BatchMode=yes"}
     return run(["git", *args], repo, TIMEOUT, env)
+
+
+def remote_of(repo: Path, run: Run = run_bounded) -> str | None:
+    """``origin`` when the repo has one: setting it is how a project opts in (the owner,
+    2026-11-02, ADR 42 item 2). Without it nothing is pushed."""
+    return REMOTE if _git(run, repo, "remote", "get-url", REMOTE)[0] == 0 else None
 
 
 def _done_tags(run: Run, repo: Path) -> list[str]:

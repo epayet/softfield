@@ -155,14 +155,11 @@ def test_a_remote_that_doesnt_answer_is_a_failure_to_try_again(work: Path, tmp_p
     assert push.push_signed_off(work, "origin").pushed == ("f1-done",)  # no state to clear
 
 
-def test_the_project_names_its_remote_or_nothing_is_pushed(tmp_path: Path):
-    assert push.remote_of(tmp_path) is None
-    (tmp_path / ".softfield").mkdir()
-    toml = tmp_path / ".softfield" / "project.toml"
-    toml.write_text('[project]\nname = "x"\n')
-    assert push.remote_of(tmp_path) is None
-    toml.write_text('[project]\nname = "x"\nremote = "origin"\n')
-    assert push.remote_of(tmp_path) == "origin"
+def test_origin_being_set_is_what_turns_pushing_on(work: Path):
+    """The owner, 2026-11-02: if the origin is set, push; otherwise don't."""
+    assert push.remote_of(work) == "origin"
+    git(work, "remote", "remove", "origin")
+    assert push.remote_of(work) is None
 
 
 def test_it_says_keeps_failing_only_after_hours(tmp_path: Path):

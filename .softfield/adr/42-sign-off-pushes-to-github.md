@@ -7,7 +7,7 @@
 
 ## Decisions
 1. **Sign-off is the only trigger.** No model decides and no agent ever runs `git push`; the runner does it.
-2. **Opt-in per project:** `[project] remote = "origin"` in `project.toml`. Without it nothing is pushed. Softfield opts in; Coucou and Travel Companion stay local until each is scanned and opts in.
+2. ⚑ **A project opts in by having an `origin`** (amended by the owner, 2026-11-02, replacing a `remote` line in `project.toml`): if the origin is set, it pushes; otherwise it doesn't. Softfield has one; Coucou and Travel Companion stay local until someone sets theirs, so scan a repo before you do.
 3. **What goes:** main up to exactly the sign-off commit and its `<key>-done` tag. Never a task, plan or superseded branch. Tickets merged after that sign-off wait for the next one.
 4. **When:** at each runner pick, any `-done` tag missing from the remote is pushed. A failed push retries by itself; a repeated sign-off changes nothing.
 5. **Never `--force`.** A diverged remote stops the push; work carries on.

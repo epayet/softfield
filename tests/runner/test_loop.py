@@ -7556,11 +7556,8 @@ def _signed_off_project(repo: Path, tmp_path: Path, monkeypatch) -> Path:
     bare = tmp_path / "remote.git"
     subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
     git(repo, "remote", "add", "origin", str(bare))
-    toml = repo / ".softfield" / "project.toml"
-    toml.parent.mkdir(exist_ok=True)
-    toml.write_text('[project]\nname = "m"\nremote = "origin"\n')
     git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "a remote")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "signed off")
     git(repo, "tag", "f1-done")
     monkeypatch.setattr("runner.config.machine_ntfy", lambda: None)
     return bare
@@ -7610,6 +7607,6 @@ def test_a_held_push_is_a_desk_item_and_goes_when_it_clears(repo, tmp_path, monk
     assert "f1-done" in git(repo, "ls-remote", "--tags", "origin")
 
 
-def test_a_project_with_no_remote_pushes_nothing(repo, monkeypatch):
+def test_a_project_with_no_origin_pushes_nothing(repo, monkeypatch):
     monkeypatch.setattr("runner.push.push_signed_off", lambda *a, **k: pytest.fail("pushed"))
     loop.check_push(loop.open_session(_config(repo)))
