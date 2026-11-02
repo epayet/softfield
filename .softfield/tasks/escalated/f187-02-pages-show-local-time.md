@@ -28,3 +28,12 @@ Read `.softfield/cards/f187-store-every-time-in-utc-the.md` ("What we know", D3 
 - with the zone set to Paris, the top bar's paused time for a pause stored at `08:00+00:00` reads 09:00
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: mypy)
+attempts: 3
+tokens: 2016898
+logs: .softfield/var/runs/20261102-221022/f187-02-pages-show-local-time
+```
