@@ -1,6 +1,6 @@
 # Review: F142, phone notifications from every project, and with the dashboard closed
 
-- **Status:** done, signed off by the owner on 2026-10-29.
+- **Status:** done, signed off by the owner on 2026-11-02.
 
 ## Sign-off sheet
 
