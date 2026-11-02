@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F192 mock-up: a card on its way into the fast lane</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a;
+    --factory: #f2b10a; --accent: var(--sonnet); --good: #5fd17a;
+    --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(255,255,255,.07) 5px 7px);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 48px 48px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h4 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  [hidden] { display: none !important; }
+
+  .switch { display: inline-flex; margin: 8px 0 12px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    min-height: 44px; background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .both { display: grid; gap: 20px; grid-template-columns: minmax(0, 1fr); }
+  .version > h3 { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 4px;
+    padding: 4px 10px; background: var(--bay); border: 1px solid var(--rule); border-left: 5px solid var(--hazard); }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .both { grid-template-columns: 1fr 1fr; }
+    .version[hidden] { display: block !important; }
+  }
+
+  /* what this card adds: the mock-up's own mark, not part of the page */
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .why { display: block; margin: 7px 0 2px; font: 12px/1.35 var(--body); color: var(--good); }
+
+  /* ---- the board's cards, copied from dashboard.css ---- */
+  .stage { background: var(--bay); border: 1px solid var(--rule); }
+  .stage-head { padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+  .stage-head b { font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); display: block; }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
+    padding: 9px 10px; background: var(--plate); border: 1px solid var(--rule);
+    border-left: 4px solid var(--factory); color: var(--fg); overflow-wrap: anywhere; }
+  .card.started { border-color: var(--opus); border-left-color: var(--factory); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .meter { display: block; height: 8px; background: var(--floor); }
+  .meter span { display: block; height: 100%; background: var(--good); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-growing { display: inline-flex; margin-left: 4px; padding: 1px 6px; font: 600 10.5px var(--display);
+    letter-spacing: .08em; text-transform: uppercase; color: var(--opus); border: 1px solid var(--opus); background: var(--floor); }
+  .card-reserve { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 0;
+    background: var(--floor); font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+  .card-reserve i { width: 14px; align-self: stretch;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+
+  /* ---- proposed: the plate while the runner hasn't taken the request ---- */
+  .card-reserve.on-its-way { outline: 1px dashed var(--hazard); outline-offset: 0; color: var(--hazard); }
+  .card-reserve.on-its-way.leaving i { background: var(--ghost); }
+
+  /* ---- the Overview, copied from dashboard.css ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; margin-top: 8px; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .cards-on { color: var(--ink-2); font-size: 13.5px; }
+  .cards-on b { font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+  .lane-way { font: 600 11.5px var(--mono); color: var(--hazard); white-space: nowrap; }
+  .lane-bay { display: grid; gap: 4px; padding: 6px 8px 8px 16px; background: var(--plate);
+    border: 1px solid var(--rule); position: relative; }
+  .lane-bay::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .lane-bay .label { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .lane-bay .label span { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .next-row { font-size: 13.5px; overflow-wrap: anywhere; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; }
+</style>
+</head>
+<body>
+<h1>F192: on its way into the fast lane</h1>
+<p class="lede">The planted cards, tickets and counts are the factory's own of 2 November. F170 is shown as it stood from 30 October to 2 November, when its request waited three and a half days. F85 leaving the lane is an example.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="both">
+<!-- Today: copied from factory_dashboard/templates/board.html, _partials/allowance.html, _partials/queue.html -->
+<div class="version" data-version="today" hidden>
+  <h3>Today</h3>
+  <h4>The board</h4>
+  <section class="stage">
+    <div class="stage-head"><b>Planted</b><span>in line for the factory, #1 first · 54, 18 growing</span></div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> <span>F170</span> <span>factory</span></span>
+        <span class="card-title">Blocked tickets: give the tests 30 minutes, and put the lead's fix on the desk</span>
+        <span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#2</b> <span>F187</span> <span>factory</span></span>
+        <span class="card-title">Store every time in UTC, show local time on screen only</span>
+        <span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span></a>
+      <a class="card started" href="#"><span class="card-meta"><b>#3</b> <span>F85</span> <span>factory</span> <span class="card-growing">growing</span></span>
+        <span class="card-title">Real before and after pictures of the changed pages when you sign a card off</span>
+        <span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span>
+        <span class="card-reserve"><i></i>fast lane</span></a>
+      <a class="card started" href="#"><span class="card-meta"><b>#4</b> <span>F175</span> <span>factory</span> <span class="card-growing">growing</span></span>
+        <span class="card-title">The factory cleans up its temp files, so the disk stops filling</span>
+        <span class="meter"><span style="width:100%"></span></span><span class="card-count">3 of 3 tickets</span>
+        <span class="card-reserve"><i></i>fast lane</span></a>
+    </div>
+  </section>
+  <h4>The Overview</h4>
+  <section class="panel">
+    <h2>Agent allowance</h2>
+    <div class="cards-on"><b>Fast lane:</b> <a href="#">F85, Real before and after pictures…</a> · <a href="#">F175, The factory cleans up its temp files…</a></div>
+  </section>
+  <section class="panel">
+    <h2>Queue</h2>
+    <div class="lane-bay">
+      <span class="label">Fast lane <span>goes before everything</span></span>
+      <div class="next-row"><b class="mono">1 <a href="#">f85-01-pictures-at-the-review</a></b> · the lead · F85</div>
+      <div class="next-row"><b class="mono">2 <a href="#">f85-02-before-and-after-on-the-card</a></b> · the lead · F85</div>
+      <div class="next-row"><b class="mono">3 <a href="#">f85-03-planner-lists-the-pages</a></b> · the lead · F85</div>
+    </div>
+  </section>
+  <p class="legend">The lever on the card's own page turned dashed, but nothing else knows: F170 looks untouched everywhere until the runner takes the request.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed</h3>
+  <h4>The board</h4>
+  <section class="stage">
+    <div class="stage-head"><b>Planted</b><span>in line for the factory, #1 first · 54, 18 growing</span></div>
+    <div class="cards">
+      <a class="card" href="#"><span class="card-meta"><b>#1</b> <span>F170</span> <span>factory</span></span>
+        <span class="card-title">Blocked tickets: give the tests 30 minutes, and put the lead's fix on the desk</span>
+        <span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span>
+        <span class="card-reserve on-its-way new"><i></i>fast lane · on its way · at the runner's next pick</span>
+        <span class="why">The moment the lever is pulled, and still there when you come back with the back button.</span></a>
+      <a class="card" href="#"><span class="card-meta"><b>#2</b> <span>F187</span> <span>factory</span></span>
+        <span class="card-title">Store every time in UTC, show local time on screen only</span>
+        <span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span></a>
+      <a class="card started" href="#"><span class="card-meta"><b>#3</b> <span>F85</span> <span>factory</span> <span class="card-growing">growing</span></span>
+        <span class="card-title">Real before and after pictures of the changed pages when you sign a card off</span>
+        <span class="meter"><span style="width:0%"></span></span><span class="card-count">0 of 3 tickets</span>
+        <span class="card-reserve on-its-way leaving new"><i></i>leaving the fast lane · on its way</span>
+        <span class="why">Turning it off shows the same way; the stripe goes grey.</span></a>
+      <a class="card started" href="#"><span class="card-meta"><b>#4</b> <span>F175</span> <span>factory</span> <span class="card-growing">growing</span></span>
+        <span class="card-title">The factory cleans up its temp files, so the disk stops filling</span>
+        <span class="meter"><span style="width:100%"></span></span><span class="card-count">3 of 3 tickets</span>
+        <span class="card-reserve"><i></i>fast lane</span></a>
+    </div>
+  </section>
+  <h4>The Overview</h4>
+  <section class="panel">
+    <h2>Agent allowance</h2>
+    <div class="cards-on new"><b>Fast lane:</b> <a href="#">F170, Blocked tickets: give the tests 30 minutes…</a> <span class="lane-way">on its way</span> · <a href="#">F85, Real before and after pictures…</a> <span class="lane-way">leaving · on its way</span> · <a href="#">F175, The factory cleans up its temp files…</a></div>
+  </section>
+  <section class="panel">
+    <h2>Queue</h2>
+    <div class="lane-bay new">
+      <span class="label">Fast lane <span>goes before everything</span></span>
+      <div class="next-row"><b class="mono">1 <a href="#">f170-02-fix-after-try-again</a></b> · the lead · F170 <span class="lane-way">on its way</span></div>
+      <div class="next-row"><b class="mono">2 <a href="#">f170-03-desk-offers-the-fix</a></b> · a developer · F170 <span class="lane-way">on its way</span></div>
+      <div class="next-row"><b class="mono">3 <a href="#">f170-04-blocked-ticket-page</a></b> · a developer · F170 <span class="lane-way">on its way</span></div>
+    </div>
+    <span class="why">Next in line shows what the runner's next pick will really do: it takes the request just before it picks.</span>
+  </section>
+  <p class="legend"><span class="new">Dashed green</span> marks what this card adds, for this drawing only. The dashed yellow plate is the on-its-way edge the lever already has. Once the runner takes the request, the plate is today's plain "fast lane", or gone.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+</script>
+</body>
+</html>
