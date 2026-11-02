@@ -1,4 +1,4 @@
-# Milestone F199: Let's improve the factory floor it's not very good ATM and…
+# Milestone F199: The factory floor: a small strip on the Overview and a one-screen map
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-02.
