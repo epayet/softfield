@@ -1,6 +1,7 @@
 # Milestone F103: The Planning tab's number counts only what you have to answer, not seeds
 
-> **State:** ready · **Priority:** 10 · **Area:** factory
+> **State:** done · **Priority:** 10 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-02. Base: git tag `f103-the-number-of-things-in-planning-start`. Report: [`.factory/reviews/f103-the-number-of-things-in-planning.md`](../reviews/f103-the-number-of-things-in-planning.md).
 > Planted by the owner on 2026-10-10.
 
 ## Notes

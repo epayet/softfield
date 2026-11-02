@@ -1,6 +1,6 @@
 # Review: F103 the Planning tab counts only what you have to answer
 
-- **Status:** review round 1 done, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-02.
 
 ## Sign-off sheet
 
