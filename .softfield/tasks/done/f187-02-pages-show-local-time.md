@@ -37,3 +37,9 @@ attempts: 3
 tokens: 2016898
 logs: .softfield/var/runs/20261102-221022/f187-02-pages-show-local-time
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
