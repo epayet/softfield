@@ -52,6 +52,11 @@ Their `[shots]` is their own work, on their own board, once this card is built. 
 | 02 | f85-02-before-and-after-on-the-card | lead | 4 | 01 | D7: the panel and the route serving the pictures, for any project's card |
 | 03 | f85-03-planner-lists-the-pages | lead | 2 | 01 | D1 in the planner's brief and `lead.md`; D8 in the review's brief; D10 in the setup guide |
 
+## Blocked on 2026-10-29
+- **What happened:** f85-01 started, read ADR 35 (it must be Accepted), found it still Proposed, and stopped without a change: right to stop. Three files were numbered 35 (`35-no-backlog-file.md`, `35-a-marked-card-goes-first.md`, this card's). The owner's approval at 08:14 ("ADR 35 accepted by the owner", `db23e80`) brought this card's file onto main but set the status of the first `35-*.md` in name order, `35-a-marked-card-goes-first.md`, which was already Accepted: `decide_adr` (`runner/owner.py`) and `_accept_adr` (`runner/requests.py`) both take the first file with the number.
+- **Why numbers collide:** each planner drafts on its own branch and takes the next number free on main, so cards planned at the same time pick the same one. F127's branch also has a 35 (`35-project-rules-local-and-updatable.md`) and F140's a 36 (`36-copilot-checks-first-within-its-pace.md`): their approvals would go wrong the same way.
+- **Fix (2026-11-02, terminal session):** this card's ADR is ADR 40, Accepted. What.
+
 ## Later
 - `softfield look page <address> --shot` for planner jobs (ADR 28 "Later"): the same script, when a question about looks comes that the text can't answer.
 - Pictures in the light theme too, if the owner uses it.

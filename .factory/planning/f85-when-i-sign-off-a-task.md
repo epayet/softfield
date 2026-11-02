@@ -81,3 +81,32 @@ The planning thread behind F85's plan, oldest first, as it was when the owner ap
 > - ADR 35: Before and after pictures at sign-off, in every project (adr)
 > - F85: real before and after pictures at sign-off, in every project (plan)
 > - Before and after on a ripe card's page (mockup)
+
+## The lead, 2026-10-29 08:14
+
+> Approved by the owner on 2026-10-29: approved plan/f85: queued f85-01-pictures-at-the-review, f85-02-before-and-after-on-the-card, f85-03-planner-lists-the-pages
+
+## The runner, 2026-10-29 22:22
+
+> f85-01-pictures-at-the-review blocked: the lead ticket changed nothing.
+> Its work is on task/f85-01-pictures-at-the-review; its run's logs are in .factory/var/runs/20261029-222125/f85-01-pictures-at-the-review.
+> What went wrong, and what is the fix? Propose it as a replan: the ticket reworked, split or set aside.
+
+## The lead, 2026-10-29 22:25
+
+> f85-01 stopped without changing anything, and it was right to. Its ADR was never really accepted: three ADRs were numbered 35, and your approval landed on another one that was already Accepted. I've renumbered F85's ADR to 39 and drafted a replan that brings f85-01 back behind a new ticket that fixes the numbering.
+>
+> 1. **Why f85-01 stopped: your approval reached the wrong ADR**: The ticket starts with 'ADR 35 must be Accepted', and the file it read still said Proposed, so it stopped without changing anything. Three files were numbered 35: 'No backlog file', 'A marked card goes first', and this card's pictures ADR. Your approval this morning ('ADR 35 accepted by the owner', 08:14) brought the pictures ADR onto main. But the runner set the status of the first file numbered 35 in name order, 'A marked card goes first', which was already Accepted, so nothing changed. Both `decide_adr` (runner/owner.py) and `_accept_adr` (runner/requests.py) take the first file with the number. The job cost a few minutes of Claude and nothing else.
+>    Action: The replan below.
+> 2. **It will happen again on other cards**: Each planner drafts on its own card's branch and takes the next number free on main, so cards planned around the same time pick the same number. Two drafts waiting right now already collide: F127's branch has another 35, and F140's has a 36. Their approvals would go wrong the same way.
+>    Action: f85-04 fixes it for every card, below.
+> 3. **The pictures ADR becomes ADR 39**: Same text, new number: 39 is free on main and on every branch. The old '35' copy now says it is replaced by ADR 39, and f85-04 removes it. The card's doc and tickets f85-01 and f85-03 now say ADR 39. Please accept ADR 39 first, then approve the replan: the tickets can't be queued while the ADR they need is still Proposed.
+>    Action: Accept ADR 39, then approve the replan.
+> 4. **New ticket f85-04: an approval always reaches the ADR you approved**: When you approve a draft whose number main already uses, the runner gives it the next free number at that moment, renames it, and updates the card and tickets that mention it. A number that two files on main share is refused, with both files named on your desk, instead of quietly changing the first one. It runs first on this card, and f85-01 waits for it. It's a lead ticket (the runner's code is protected), about one hour of work. The two Accepted ADRs numbered 35 keep their numbers, since other files point at them.
+>    Action: f85-04, first in F85.
+> 5. **No need to pause the factory**: F85's other tickets are already held behind the blocked one, so none of this card's work can start while you decide. The rest of the line keeps going.
+>    Action: Nothing.
+>
+> Proposals:
+> - ADR 39: Before and after pictures at sign-off, in every project (was 35) (adr)
+> - F85: renumber its ADR, fix ADR approval, bring f85-01 back (replan)
