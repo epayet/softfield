@@ -1,6 +1,6 @@
 # Milestone F170: Blocked tickets: give the tests 30 minutes, and put the lead's fix on the desk
 
-> **State:** ready · **Priority:** 1 · **Area:** factory
+> **State:** ready · **Priority:** 1 · **Area:** factory · **Fast lane:** yes
 > Planted by the owner on 2026-10-21.
 
 ## Notes
