@@ -26,3 +26,6 @@ Read D1–D4 in `.softfield/cards/f139-the-factory-folder-should-actually-be.md`
 - `move_home` returns None, changing nothing, with no `.softfield/`, or with both folders (and says so on the desk); a dirty main is refused the same way
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+---
+**Done in the owner's terminal session of 2026-11-02.** Commit: "F139: <project>'s folder moves to .softfield, in Softfield, Coucou and Travel Companion".
