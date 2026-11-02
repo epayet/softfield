@@ -1,6 +1,6 @@
 # ADR 42: The owner's sign-off pushes the milestone to GitHub
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-11-02)
 - **Date:** 2026-11-02
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Evidence:** The owner, 2026-11-02: push to GitHub at the end of milestones, deterministically. `epayet/softfield` exists, public and empty; no project has a remote. A scan of all history found no keys or tokens; planning threads do hold pasted logs, so a later paste could carry one.
