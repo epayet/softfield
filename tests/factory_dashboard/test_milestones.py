@@ -566,7 +566,9 @@ def test_how_it_grew_marks_the_current_stage_and_dims_the_later_ones(card_client
     assert not any(later for _, _, later, _ in harvested)
 
 
-def test_how_it_grew_dates_planted_and_harvested_where_the_database_has_them(card_client, board_db):
+def test_how_it_grew_dates_planted_and_harvested_where_the_database_has_them(
+    paris, card_client, board_db
+):
     words = {name: rest for name, _, _, rest in _grew(card_client.get("/milestones/m3").text)}
     assert words["Harvested"] == "15 Sep 12:00"  # ``milestones.ended``
     assert words["Planted"] == ""  # no ``started`` stored: no date made up

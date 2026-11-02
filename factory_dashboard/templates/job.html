@@ -22,8 +22,8 @@
 <section id="time" class="panel">
   <h2>Time and tokens <span class="src">start, duration, tokens, cost, steps</span></h2>
   <dl class="kv">
-    <dt>Started</dt><dd class="time">{{ job.started }}</dd>
-    {% if job.ended %}<dt>Ended</dt><dd class="time">{{ job.ended }}</dd>{% endif %}
+    <dt>Started</dt><dd class="time">{{ job.started | local }}</dd>
+    {% if job.ended %}<dt>Ended</dt><dd class="time">{{ job.ended | local }}</dd>{% endif %}
     {% if job.minutes %}<dt>Duration</dt><dd class="num">{{ "%.1f" | format(job.minutes) }} min</dd>{% endif %}
     {% if job.tokens_in is not none %}<dt>In</dt><dd class="num">{{ job.tokens_in | tokens }}</dd>{% endif %}
     {% if job.tokens_cached is not none %}<dt>Cached</dt><dd class="num">{{ job.tokens_cached | tokens }}</dd>{% endif %}

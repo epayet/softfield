@@ -79,7 +79,7 @@ class Running:
 
 
 def _clock(at: str | None) -> str | None:
-    return datetime.fromisoformat(at).strftime("%H:%M") if at else None
+    return queries.local(at).strftime("%H:%M") if at else None
 
 
 @dataclass(frozen=True)
@@ -606,7 +606,7 @@ RESET_SINCE = "reset since, no new reading"
 
 def _reset_label(resets: datetime, now: datetime) -> str:
     """A reading's reset: "resets at 17:00" later today, "resets on Oct 9 12:00" later on."""
-    if resets.date() == now.date():
+    if resets.date() == now.astimezone().date():
         return f"resets at {resets:%H:%M}"
     return f"resets on {resets:%b} {resets.day} {resets:%H:%M}"
 
@@ -628,7 +628,7 @@ def _agent_allowances(
         row = readings.get(wkey)
         value = None if row is None else row["value"]
         resets_at = None if row is None else row["resets_at"]
-        resets = datetime.fromisoformat(resets_at) if resets_at else None
+        resets = queries.local(resets_at) if resets_at else None
         if value is None:
             status: str | None = NO_DATA
         elif resets is not None and resets <= now:
@@ -714,7 +714,7 @@ def reserve_switches(conn: sqlite3.Connection, project: str, now: datetime) -> d
     for window, name in SWITCH_OF.items():
         until = None
         if state is not None and loop.switch_on(state, name, now):
-            ends = datetime.fromisoformat(state.switches[name])
+            ends = queries.local(state.switches[name])
             until = f"{ends + timedelta(hours=loop.USE_RESERVE_HOURS):%a %H:%M}"
         switches[window] = Switch(name, loop.SWITCHES[name], until, asked.get(name))
     return switches

@@ -1,16 +1,19 @@
+import re
 import sqlite3
 from collections.abc import Iterator
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
 
+from factory_dashboard import milestones, overview
 from factory_dashboard.queries import (
     SEED_DOLLARS_PER_LINE,
     Idle,
     clog,
     connect,
     eligibility,
+    local,
     milestone_results,
     parse_review_note,
     review_note,
@@ -408,6 +411,87 @@ def test_trends_run_oldest_first(db):
     assert [p.results.key for p in points] == ["m4", "f1"]
     assert points[0].results.pass_rate == 1.0
     assert points[1].savings.net == pytest.approx(-2.70)
+
+
+def _hour_and_minute(at: datetime) -> tuple[int, int]:
+    return at.hour, at.minute
+
+
+def test_local_gives_the_same_moment_on_the_machines_clock(paris):
+    """F187 D3: whatever offset a time was stored with; winter (+01:00) and summer (+02:00)."""
+    assert _hour_and_minute(local("2026-10-29T08:00:00+00:00")) == (9, 0)
+    assert _hour_and_minute(local("2026-10-24T09:00:00+01:00")) == (10, 0)
+    assert local("2026-10-24T09:00:00+01:00").utcoffset() == timedelta(hours=2)
+    assert _hour_and_minute(local(datetime(2026, 10, 29, 8, 0, tzinfo=UTC))) == (9, 0)
+    assert local(None) is None
+
+
+def test_local_counts_a_naive_time_as_utc(paris):
+    assert _hour_and_minute(local("2026-10-29T08:00:00")) == (9, 0)
+
+
+def test_the_top_bars_paused_time_is_local(paris, serve, db_path):
+    client = serve()
+    writer = metrics.open_db(db_path)
+    try:
+        metrics.add_usage_event(writer, "runner", "2026-10-29T08:00:00+00:00", "pause")
+    finally:
+        writer.close()
+    bar = re.search(r'<span class="words" role="status">([^<]*)</span>', client.get("/live").text)
+    assert bar, "the top bar's status"
+    assert bar.group(1).startswith("Paused by you since 09:00")
+
+
+def test_a_cards_date_is_local(paris):
+    assert milestones._date("2026-10-29T08:00:00+00:00") == "29 Oct 09:00"
+
+
+def test_the_allowance_resets_are_local(paris, allowance_client):
+    """The fixture's 5-hour window resets at 17:00 UTC on 2 Oct and its week at 12:00 on 9 Oct,
+    both in Paris's summer time."""
+    html = allowance_client.get("/").text
+    assert "resets at 19:00" in html and "resets on Oct 9 14:00" in html
+    assert "resets at 17:00" not in html and "resets on Oct 9 12:00" not in html
+
+
+def test_a_reset_after_midnight_local_is_not_today(paris):
+    """22:30 UTC is 00:30 the next day in Paris: not "later today"."""
+    now = datetime(2026, 10, 2, 21, 0, tzinfo=UTC)
+    resets = local("2026-10-02T22:30:00+00:00")
+    assert overview._reset_label(resets, now) == "resets on Oct 3 00:30"
+
+
+def test_the_runs_and_jobs_pages_print_local_times(paris, serve, db_path):
+    writer = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(writer, PROJECT)
+        milestone = metrics.upsert_milestone(writer, project, "f187")
+        run = metrics.upsert_run(
+            writer,
+            project,
+            "20261029-090000",
+            started="2026-10-29T08:00:00+00:00",
+            ended="2026-10-29T08:30:00+00:00",
+        )
+        job = metrics.start_job(
+            writer,
+            run,
+            ticket_id=None,
+            milestone_id=milestone,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started="2026-10-29T08:00:00+00:00",
+        )
+        metrics.finish_job(writer, job, ended="2026-10-29T08:30:00+00:00", outcome="passed")
+    finally:
+        writer.close()
+    client = serve()
+    pages = ("/runs", "/runs/20261029-090000", "/jobs", f"/jobs/{job}", f"/projects/{PROJECT}")
+    for path in pages:
+        html = client.get(path).text
+        assert "2026-10-29T09:" in html, path
+        assert "2026-10-29T08:" not in html, path
 
 
 REVIEWER, OTHER_REVIEWER, SHADOW = "copilot-auto", "copilot-gpt", "copilot-shadow"

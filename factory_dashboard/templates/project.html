@@ -41,7 +41,7 @@
     {% for r in runs %}
     <li>
       <a href="/runs/{{ r.run_dir }}{{ q }}">{{ r.run_dir }}</a>
-      {% if r.ended %}(ended {{ r.ended }}){% endif %}
+      {% if r.ended %}(ended {{ r.ended | local }}){% endif %}
     </li>
     {% endfor %}
   </ul>

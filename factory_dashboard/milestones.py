@@ -419,7 +419,7 @@ class Grown:
 
 
 def _date(at: str) -> str:
-    moment = datetime.fromisoformat(at)
+    moment = queries.local(at)
     return f"{moment.day} {moment:%b %H:%M}"
 
 

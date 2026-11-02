@@ -36,7 +36,7 @@ from fastapi.responses import HTMLResponse
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.line import _LONG_AGO, _natural, _when
 from factory_dashboard.overview import Running, running_jobs
-from factory_dashboard.queries import depends_on, ticket_priority
+from factory_dashboard.queries import depends_on, local, ticket_priority
 from runner import metrics
 from runner.config import read_protected
 from runner.loop import ticket_minutes
@@ -328,7 +328,7 @@ def _card_note(
     if msg is None:
         return ""
     if msg["author"] == "lead":
-        return f"waits for your answer since {_when(msg['at']).strftime('%-d %b')}"
+        return f"waits for your answer since {local(msg['at']).strftime('%-d %b')}"
     if msg["author"] == "owner":
         return "the lead is answering"
     return ""

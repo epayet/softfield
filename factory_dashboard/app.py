@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from factory_dashboard.queries import local
 from runner.usage import short
 
 HOST, PORT = "127.0.0.1", 8765
@@ -55,7 +56,15 @@ def ago(delta: timedelta) -> str:
     return f"{seconds / 3600:.1f} h".replace(".0 h", " h")
 
 
-templates.env.filters.update(usd=usd, pct=pct, tokens=short, ago=ago)
+def shown(at: str | datetime | None, form: str | None = None) -> str:
+    """A stored time as a page prints it: local, whole by default, or in ``form`` (F187 D3)."""
+    moment = local(at)
+    if moment is None:
+        return ""
+    return moment.strftime(form) if form else moment.isoformat()
+
+
+templates.env.filters.update(usd=usd, pct=pct, tokens=short, ago=ago, local=shown)
 
 # Cache by path -> (mtime, first 10 hex chars of sha256).
 _static_cache: dict[str, tuple[float, str]] = {}
@@ -240,7 +249,7 @@ IDLE = "Idle: "  # runner writes its idle activity starting with this prefix (F1
 
 
 def _clock(at: str) -> str:
-    return datetime.fromisoformat(at).strftime("%H:%M")
+    return local(at).strftime("%H:%M")
 
 
 def _asked(conn: sqlite3.Connection, project: str) -> str | None:

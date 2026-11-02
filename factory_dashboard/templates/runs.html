@@ -13,7 +13,7 @@
       <tr>
         <td class="id"><a href="/runs/{{ run.run_dir }}{{ q }}">{{ run.run_dir }}</a></td>
         <td>{{ run.command or "–" }}</td>
-        <td class="time">{{ run.started }}</td>
+        <td class="time">{{ run.started | local }}</td>
         <td class="num">{{ "%.1f" | format(run.minutes) if run.minutes is not none else "–" }}</td>
         <td>{{ run.verdict or run.status or "–" }}</td>
         <td class="num">{{ run.job_count }}</td>

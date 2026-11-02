@@ -13,7 +13,9 @@ wasn't kept: 500k input tokens.
 ``write_live`` adds what the Overview shows live, at ``NOW``; the ``client`` fixture serves both.
 """
 
+import os
 import sqlite3
+import time
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
@@ -33,6 +35,41 @@ MACHINE = Path(__file__).resolve().parents[1] / "fixtures" / "softfield-machine.
 def _machine_config(monkeypatch):
     """The dashboard reads a project's config over this fixed machine file, never the real one."""
     monkeypatch.setenv("SOFTFIELD_CONFIG", str(MACHINE))
+
+
+def _set_zone(name: str | None) -> None:
+    if name is None:
+        os.environ.pop("TZ", None)
+    else:
+        os.environ["TZ"] = name
+    time.tzset()
+
+
+@pytest.fixture(autouse=True)
+def _utc_zone() -> Iterator[None]:
+    """Pages print local time (F187), so these tests fix the zone: on a machine in the UK, the
+    fixtures' dates before 25 Oct would read an hour later than the tests expect."""
+    before = os.environ.get("TZ")
+    _set_zone("UTC")
+    yield
+    _set_zone(before)
+
+
+@pytest.fixture
+def paris(_utc_zone: None) -> Iterator[None]:
+    """The machine's zone is Paris, so local is not UTC and a slip shows (F187 D6)."""
+    _set_zone("Europe/Paris")
+    yield
+    _set_zone("UTC")
+
+
+@pytest.fixture
+def london(_utc_zone: None) -> Iterator[None]:
+    """The owner's machine in summer time: +01:00 at the fixture night's dates, which its
+    "overnight" (20:00 local) is worked out from."""
+    _set_zone("Europe/London")
+    yield
+    _set_zone("UTC")
 
 
 PROJECT, OTHER = "coucou", "other"

@@ -852,7 +852,7 @@ def write_night(conn: Any) -> None:
 
 
 @pytest.fixture
-def night_db(tmp_path: Path) -> Path:
+def night_db(tmp_path: Path, london: None) -> Path:
     path = tmp_path / "night.sqlite"
     conn = metrics.open_db(path)
     try:

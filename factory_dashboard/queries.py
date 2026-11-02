@@ -16,6 +16,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import overload
 
 import yaml
 
@@ -38,6 +39,25 @@ from runner.tasks import task_priority as _task_priority
 from runner.usage import CACHE_READ_WEIGHT, OUTPUT_WEIGHT
 
 DOLLARS_PER_TOKEN = 4 / 1_000_000  # per token-equivalent (D7)
+
+
+@overload
+def local(at: str | datetime) -> datetime: ...
+@overload
+def local(at: None) -> None: ...
+@overload
+def local(at: str | datetime | None) -> datetime | None: ...
+def local(at: str | datetime | None) -> datetime | None:
+    """A stored time in the machine's zone, for a page to print (F187 D3). A naive value counts
+    as UTC."""
+    if at is None:
+        return None
+    moment = datetime.fromisoformat(at) if isinstance(at, str) else at
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=UTC)
+    return moment.astimezone()
+
+
 # D7's seed: the lead's M4 tickets L0–L3 took 3.5M token-equivalents for 1,979 lines.
 SEED_TOKENS_PER_LINE = 3_500_000 / 1979
 SEED_DOLLARS_PER_LINE = SEED_TOKENS_PER_LINE * DOLLARS_PER_TOKEN

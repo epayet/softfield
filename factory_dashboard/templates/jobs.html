@@ -31,7 +31,7 @@
     <tbody>
       {% for job in jobs %}
       <tr>
-        <td class="time">{{ job.started }}</td>
+        <td class="time">{{ job.started | local }}</td>
         <td class="id"><a href="/jobs/{{ job.id }}">{{ job.id }}</a></td>
         <td class="id">{% if job.ticket %}<a href="/tickets/{{ job.ticket }}{{ q }}">{{ job.ticket }}</a>{% else %}–{% endif %}</td>
         <td>{{ job.role }}</td>

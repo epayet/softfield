@@ -358,6 +358,17 @@ def test_waiting_messages_show_above_the_leads_latest_newest_first(planning, db_
     assert 'id="reply"' not in html
 
 
+def test_a_messages_stamp_is_local(paris, planning, db_path, serve):
+    """F187: a message stored at 23:30 UTC reads the next day at 00:30 in Paris."""
+
+    def lead_only(conn: sqlite3.Connection) -> None:
+        f7 = metrics.planner_thread(conn, planning, "f7", NOW.isoformat())["id"]
+        metrics.add_planner_message(conn, f7, "lead", "2026-10-29T23:30:00+00:00", "Hello there.")
+
+    _write(db_path, lead_only)
+    assert "The lead · 2026-10-30 00:30" in _thread(serve(), "f7")
+
+
 def test_a_thread_with_one_message_has_no_earlier(planning, db_path, serve):
     """F30 D1: a lone lead message, or the owner's first message still waiting, shows open,
     with nothing folded."""

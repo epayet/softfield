@@ -62,7 +62,7 @@
     {% macro draw(msg) %}
     {% if msg.author == "owner" %}
     <article class="message"{% if msg.waiting %} data-waiting{% endif %}>
-      <span class="stamp owner">You · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <span class="stamp owner">You · {{ msg.at | local("%Y-%m-%d %H:%M") }}</span>
       <p class="said{{ ' struck' if msg.change and msg.change.cancel }}">{{ msg.text }}</p>
       {% if msg.change %}
       {# F14 D5: a change on a waiting message is on its way; the message is changed no more #}
@@ -99,12 +99,12 @@
     {% elif msg.author == "runner" %}
     {# ADR 29 item 1: the runner's word when it blocks a ticket, never the owner's #}
     <article class="message runner-message">
-      <span class="stamp">The runner · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <span class="stamp">The runner · {{ msg.at | local("%Y-%m-%d %H:%M") }}</span>
       <p class="said">{{ msg.text_html | safe if msg.text_html is not none else msg.text }}</p>
     </article>
     {% else %}
     <article class="message lead-message">
-      <span class="stamp lead">The lead · {{ msg.at[:10] }} {{ msg.at[11:16] }}</span>
+      <span class="stamp lead">The lead · {{ msg.at | local("%Y-%m-%d %H:%M") }}</span>
       {# F41 D2, D3: with points, the text folds (the points say it all); without, it's all there is #}
       {% if msg.points and msg.text %}
       <details class="full-reply">
@@ -277,7 +277,7 @@
       {% if archiving %}
       <span class="pill asked">{{ "Archiving" if archiving == "on" else "Opening again" }} at the runner's next pick</span>
       {% else %}
-      {% if archived_at %}<span class="pill stamp">Archived {{ archived_at[:10] }}</span>{% endif %}
+      {% if archived_at %}<span class="pill stamp">Archived {{ archived_at | local("%Y-%m-%d") }}</span>{% endif %}
       <button type="button" id="archive-button" class="btn plain"
         hx-post="/requests" hx-target="#archive-status" hx-swap="innerHTML"
         hx-vals='{"kind": "archive", "project": {{ project | tojson }}, "subject": {{ thread | tojson }}, "value": {{ ("off" if archived_at else "on") | tojson }}}'

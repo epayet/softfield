@@ -80,6 +80,24 @@ def test_archived_threads_are_excluded_from_sprouting(board_db):
     assert card(found, "F21").stage == "seed"
 
 
+def test_a_sprouting_cards_since_date_is_local(paris, board_db):
+    """F187: 23:30 UTC on 1 Oct is already 2 Oct in Paris."""
+    conn = metrics.open_db(board_db)
+    try:
+        (thread_id,) = conn.execute(
+            "SELECT id FROM planner_threads WHERE card = ?", ("f21",)
+        ).fetchone()
+        conn.execute(
+            "INSERT INTO planner_messages (thread_id, author, at, text)"
+            " VALUES (?, 'lead', '2026-10-01T23:30:00+00:00', 'What do you think?')",
+            (thread_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    assert card(read(board_db), "F21").note == "waits for your answer since 2 Oct"
+
+
 def test_sprouting_card_shows_note_from_lead_message(board_db):
     conn = metrics.open_db(board_db)
     try:

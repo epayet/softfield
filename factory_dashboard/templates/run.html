@@ -11,8 +11,8 @@
   <h2>Run {{ run.run_dir }} <span class="src">{{ run.status }}</span></h2>
   <dl class="kv">
     <dt>Command</dt><dd><code>{{ run.command or "–" }}</code></dd>
-    <dt>Started</dt><dd class="time">{{ run.started }}</dd>
-    {% if run.ended %}<dt>Ended</dt><dd class="time">{{ run.ended }}</dd>{% endif %}
+    <dt>Started</dt><dd class="time">{{ run.started | local }}</dd>
+    {% if run.ended %}<dt>Ended</dt><dd class="time">{{ run.ended | local }}</dd>{% endif %}
     {% if run.minutes %}<dt>Duration</dt><dd class="num">{{ "%.1f" | format(run.minutes) }} min</dd>{% endif %}
     {% if run.verdict %}<dt>Verdict</dt><dd>{{ run.verdict }}</dd>{% endif %}
     {% if run.status == "running" %}<dt>Status</dt><dd><span class="pill running">running</span></dd>{% endif %}
