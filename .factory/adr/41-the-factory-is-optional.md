@@ -1,6 +1,6 @@
 # ADR 41: The factory is optional: its context is injected, and each thing it knows lives with whoever it's true for
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-11-02)
 - **Date:** 2026-11-02 (drafted 2026-10-27 on F127 as "35", rewritten twice with the owner)
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 30](30-many-projects-one-factory.md) item 4 (a project's `AGENTS.md` and `CLAUDE.md` point at the global rules), item 7 (`init` writes the pointer files) and its amendment "a project may carry its own `docs/agents/lead.md`".
