@@ -38,6 +38,8 @@ OWNER_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone"
 _UNFINISHED = ("ready", *STOPPED)
 _STATUS_MILESTONE = re.compile(r"^> \*\*Status:.*$", re.MULTILINE)
 _STATUS_LINE = re.compile(r"^- \*\*Status:\*\*.*$", re.MULTILINE)
+# As planner.is_proposed
+_PROPOSED_STATUS = re.compile(r"^- \*\*Status:\*\*[ \t]*Proposed\b", re.MULTILINE)
 _CARD_STATE_LINE = re.compile(r"^> \*\*State:\*\*.*$", re.MULTILINE)  # a planning-room card
 # ` · **Fast lane:** yes` (or the old `**Reserve:**`), keeping the space before a field after it
 _CARD_RESERVE = re.compile(r"[ \t]*·[ \t]*\*\*(?:Fast lane|Reserve):\*\*[^·\n]*?(?=[ \t]*(?:·|$))")
@@ -406,15 +408,35 @@ def _is_adr(number: int) -> Callable[[str, str], bool]:
     return wanted
 
 
-def decide_adr(repo: Path, number: int, status: str, today: date, db: Path | None = None) -> Path:
-    """Set ADR N's status ("Accepted" or "Rejected") with the date, in one commit. With a
-    metrics ``db``, the owner items asking about it are resolved."""
+def _adr_file(repo: Path, number: int) -> Path:
+    """ADR N's file. Two plan branches can draft the same number, so the number alone names the
+    one still undecided (2026-11-02: an Accept went to the wrong ADR 39), and refuses to guess."""
     found = sorted((repo / ".factory" / "adr").glob(f"{number:02d}-*.md"))
     if not found:
         raise OwnerError(f"ADR {number} not found in .factory/adr/")
-    _replace_line(
-        found[0], _STATUS_LINE, f"- **Status:** {status} (by the owner, {today.isoformat()})"
-    )
+    open_ = [p for p in found if _PROPOSED_STATUS.search(p.read_text(encoding="utf-8"))]
+    if len(found) == 1 or len(open_) == 1:
+        return found[0] if len(found) == 1 else open_[0]
+    names = ", ".join(p.name for p in found)
+    raise OwnerError(f"ADR {number} could be any of {names}: not guessing")
+
+
+def decide_adr(
+    repo: Path,
+    number: int,
+    status: str,
+    today: date,
+    db: Path | None = None,
+    path: Path | None = None,
+    asked_as: int | None = None,
+) -> Path:
+    """Set an ADR's status ("Accepted" or "Rejected") with the date, in one commit: ``path``
+    when the caller knows the file, else ``_adr_file``. With a metrics ``db``, the owner items
+    asking about it are resolved, under ``asked_as`` too when it was renumbered on landing."""
+    file = path if path is not None else _adr_file(repo, number)
+    _replace_line(file, _STATUS_LINE, f"- **Status:** {status} (by the owner, {today.isoformat()})")
     Git(repo).commit_all(f"ADR {number} {status.lower()} by the owner")
     _write(repo, db, lambda conn, project: _resolve(conn, project, _is_adr(number)))
-    return found[0]
+    if asked_as is not None and asked_as != number:
+        _write(repo, db, lambda conn, project: _resolve(conn, project, _is_adr(asked_as)))
+    return file

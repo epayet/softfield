@@ -427,6 +427,38 @@ def test_the_verdict_is_on_the_milestone_row(repo: Path):
         conn.close()
 
 
+def _adr(repo: Path, name: str, status: str = "Proposed") -> Path:
+    adr = repo / ".factory" / "adr" / name
+    adr.parent.mkdir(parents=True, exist_ok=True)
+    adr.write_text(f"# ADR\n\n- **Status:** {status}\n- **Date:** x\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", name)
+    return adr
+
+
+def test_a_shared_number_accepts_the_one_still_proposed(repo: Path):
+    decided = _adr(repo, "39-a.md", "Accepted (by the owner, 2026-09-01)")
+    undecided = _adr(repo, "39-b.md")
+    assert owner.decide_adr(repo, 39, "Accepted", TODAY) == undecided
+    assert "Accepted (by the owner, 2026-10-01)" in undecided.read_text()
+    assert "2026-09-01" in decided.read_text()
+
+
+def test_a_shared_number_with_two_undecided_refuses_to_guess(repo: Path):
+    first = _adr(repo, "39-a.md")
+    second = _adr(repo, "39-b.md")
+    with pytest.raises(owner.OwnerError, match=r"39-a\.md, 39-b\.md"):
+        owner.decide_adr(repo, 39, "Accepted", TODAY)
+    assert "Proposed" in first.read_text() and "Proposed" in second.read_text()
+
+
+def test_decide_adr_takes_the_exact_file_when_told(repo: Path):
+    first = _adr(repo, "39-a.md")
+    second = _adr(repo, "39-b.md")
+    assert owner.decide_adr(repo, 39, "Accepted", TODAY, path=second) == second
+    assert "Proposed" in first.read_text() and "Accepted" in second.read_text()
+
+
 def test_accept_and_reject_resolve_the_adrs_item(repo: Path):
     adr = repo / ".factory" / "adr" / "14-photos.md"
     adr.parent.mkdir(parents=True)

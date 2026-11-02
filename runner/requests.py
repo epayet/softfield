@@ -856,36 +856,138 @@ def _adr_number(value: object) -> int:
     return int(text)
 
 
-def _accept_adr(repo: Path, db: Path, now: datetime, subject: object, value: object) -> str:
+def _adr_draft(git: Git, branch: str, number: int) -> str | None:
+    """The branch's draft of ADR N: the file main doesn't have, else the one still Proposed. A
+    branch that merged main also holds main's ADRs of that number (2026-11-02: the first in
+    name order took an Accept meant for the draft)."""
+    names = git.run("ls-tree", "--name-only", branch, ".factory/adr/").splitlines()
+    wanted = re.compile(rf"\.factory/adr/{number:02d}-[^/]+\.md")
+    found = [name for name in names if wanted.fullmatch(name)]
+    new = [name for name in found if not Path(git.repo, name).is_file()]
+    own = new or [n for n in found if planner.is_proposed(git.run("show", f"{branch}:{n}"))]
+    if len(own) > 1:
+        raise planner.PlannerError(f"{branch} has several ADR {number}s: {', '.join(own)}")
+    return own[0] if own else None
+
+
+def _adr_path(draft: str, number: int) -> str:
+    """The draft's path under another number."""
+    folder, name = draft.rsplit("/", 1)
+    return f"{folder}/{number:02d}-{name.split('-', 1)[1]}"
+
+
+def _free_adr_number(repo: Path) -> int:
+    numbers = [int(p.name.split("-")[0]) for p in (repo / ".factory" / "adr").glob("[0-9]*-*.md")]
+    return max(numbers, default=0) + 1
+
+
+def _renumber_draft(repo: Path, draft: str, target: str, old: int, new: int) -> None:
+    """Move the checked out draft to its free number, its heading with it."""
+    Git(repo).run("mv", draft, target)
+    path = repo / target
+    text = path.read_text(encoding="utf-8")
+    path.write_text(re.sub(rf"^# ADR {old}\b", f"# ADR {new}", text, flags=re.M), encoding="utf-8")
+
+
+def _renumber_mentions(git: Git, draft: str, target: str, old: int, new: int) -> None:
+    """On the plan branch: what this branch alone drafted says the ADR's new number."""
+    changed = git.run("diff", "--name-only", f"{loop.MAIN}...HEAD").splitlines()
+    for name in changed:
+        path = Path(git.repo, name)
+        if not name.startswith((".factory/cards/", ".factory/tasks/")) or not path.is_file():
+            continue
+        text = path.read_text(encoding="utf-8")
+        moved = re.sub(rf"\bADR {old}\b", f"ADR {new}", text).replace(
+            Path(draft).name, Path(target).name
+        )
+        if moved != text:
+            path.write_text(moved, encoding="utf-8")
+
+
+def _has_tickets(git: Git, branch: str | None, thread: str) -> bool:
+    """Whether the card has a ticket anywhere: on main in any folder, or drafted on its branch."""
+    found = list(Path(git.repo, ".factory", "tasks").glob(f"*/{thread}-*.md"))
+    if found or branch is None or not _has_branch(git, branch):
+        return bool(found)
+    names = git.run("ls-tree", "-r", "--name-only", branch, ".factory/tasks/").splitlines()
+    return any(Path(name).name.startswith(f"{thread}-") for name in names)
+
+
+def _ask_for_the_plan(
+    conn: sqlite3.Connection, project_id: int, now: datetime, thread: str, adr: str
+) -> None:
+    """Accepting an ADR queues no work, so a card with an ADR and no tickets would wait for ever
+    (F127, 2026-11-02): its thread's lead is asked for the plan."""
+    said = json.dumps(
+        {
+            "text": f"(Sent by the runner.) {adr} is accepted and this card has no tickets yet."
+            " Draft the plan and its tickets.",
+            "comments": {},
+        }
+    )
+    at = now.isoformat()
+    request_id = metrics.add_request(conn, project_id, PLAN_MESSAGE, thread, said, at)
+    message = metrics.find_request(conn, request_id)
+    if message is None:  # just written
+        raise planner.PlannerError(f"the message for {planner.thread_name(thread)} is gone")
+    metrics.finish_request(conn, request_id, at, _plan_message(conn, project_id, now, message))
+
+
+def _accept_adr(
+    repo: Path,
+    db: Path,
+    conn: sqlite3.Connection,
+    project_id: int,
+    now: datetime,
+    subject: object,
+    value: object,
+) -> str:
     """Merge ADR N's draft from the card's plan branch into main and accept it (``decide_adr``,
     one commit). The branch takes main's accepted copy, so approving the plan merges cleanly.
-    An ADR already on main is accepted as it is."""
+    An ADR already on main is accepted as it is. A number main already gave another ADR moves
+    to the next free one, and a card left with no tickets asks its lead for the plan."""
     thread = planner.thread_key(subject)
     number = _adr_number(value)
     git = Git(repo)
     branch = planner.plan_branch(thread)
-    draft = None
-    if branch is not None and _has_branch(git, branch):
-        names = git.run("ls-tree", "--name-only", branch, ".factory/adr/").splitlines()
-        wanted = re.compile(rf"\.factory/adr/{number:02d}-[^/]+\.md")
-        draft = next((name for name in sorted(names) if wanted.fullmatch(name)), None)
+    draft = _adr_draft(git, branch, number) if branch and _has_branch(git, branch) else None
     if branch is None or draft is None:
         path = owner.decide_adr(repo, number, "Accepted", now.date(), db=db)
-        return f"accepted {path.relative_to(repo).as_posix()}"
-    git.run("checkout", branch, "--", draft)
-    try:
-        owner.decide_adr(repo, number, "Accepted", now.date(), db=db)
-    except Exception:
-        _undo(git)
-        raise
-    git.checkout(branch)
-    try:
-        git.run("checkout", loop.MAIN, "--", draft)
-        message = f"runner: ADR {number} accepted on {loop.MAIN}"
-        git.commit_all(with_trailers(message, agent="runner"), author=RUNNER_AUTHOR)
-    finally:
-        git.checkout(loop.MAIN)
-    return f"accepted {draft}"
+        accepted = path.relative_to(repo).as_posix()
+        result = f"accepted {accepted}"
+    else:
+        git.run("checkout", branch, "--", draft)
+        new = number
+        target = draft
+        others = (repo / ".factory" / "adr").glob(f"{number:02d}-*.md")
+        if any(p.relative_to(repo).as_posix() != draft for p in others):
+            new = _free_adr_number(repo)
+            target = _adr_path(draft, new)
+        try:
+            if target != draft:
+                _renumber_draft(repo, draft, target, number, new)
+            owner.decide_adr(
+                repo, new, "Accepted", now.date(), db=db, path=repo / target, asked_as=number
+            )
+        except Exception:
+            _undo(git)
+            raise
+        git.checkout(branch)
+        try:
+            if target != draft:
+                git.run("rm", "-q", draft)
+                _renumber_mentions(git, draft, target, number, new)
+            git.run("checkout", loop.MAIN, "--", target)
+            message = f"runner: ADR {new} accepted on {loop.MAIN}"
+            git.commit_all(with_trailers(message, agent="runner"), author=RUNNER_AUTHOR)
+        finally:
+            git.checkout(loop.MAIN)
+        result = f"accepted {target}"
+        if target != draft:
+            result += f" (number {number} was taken, so it is ADR {new})"
+    if thread != planner.GENERAL and not _has_tickets(git, branch, thread):
+        _ask_for_the_plan(conn, project_id, now, thread, f"ADR {number}")
+    return result
 
 
 # --- planting: a seed card without Claude (ADR 20 item 8, f6 D5) -----------------------------
@@ -1657,7 +1759,7 @@ def _apply(
         if kind == APPROVE_PLAN:
             return _approve_plan(repo, conn, project_id, state, now, subject)
         if kind == ACCEPT_ADR:
-            return _accept_adr(repo, db, now, subject, value)
+            return _accept_adr(repo, db, conn, project_id, now, subject, value)
         if kind == PLANT:
             return _plant(repo, conn, project_id, now, row)
         if kind == DROP_SEED:

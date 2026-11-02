@@ -1036,6 +1036,82 @@ def test_accept_adr_resolves_the_owner_items_that_ask_about_it(repo):
     assert _items(repo)[0][3] is False
 
 
+def _main_adr(repo, name: str, text: str = ADR) -> None:
+    (repo / ".factory" / "adr").mkdir(exist_ok=True)
+    (repo / ".factory" / "adr" / name).write_text(text)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", name)
+
+
+def test_accept_adr_takes_the_branchs_own_draft_when_main_has_that_number(repo):
+    """2026-11-02: F85's Accept of its ADR 39 marked another ADR 39, first in name order."""
+    _card(repo)
+    _plan(
+        repo,
+        {
+            ".factory/adr/23-parallel-planners.md": ADR,
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Builds on ADR 23."),
+        },
+    )
+    _main_adr(repo, "23-another.md")
+    asked = _ask(repo, "accept_adr", "f7", "23")
+    _apply(repo)
+    result = _request(repo, asked)[1]
+    assert result == (
+        "accepted .factory/adr/24-parallel-planners.md (number 23 was taken, so it is ADR 24)"
+    )
+    adr = repo / ".factory" / "adr"
+    assert "Proposed" in (adr / "23-another.md").read_text()
+    assert not (adr / "23-parallel-planners.md").exists()
+    moved = (adr / "24-parallel-planners.md").read_text()
+    assert moved.startswith("# ADR 24:") and "Accepted (by the owner" in moved
+
+    git(repo, "checkout", "-q", "plan/f7")
+    assert "ADR 24" in (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").read_text()
+    assert not (adr / "23-parallel-planners.md").exists()
+    git(repo, "checkout", "-q", "main")
+    second = _ask(repo, "approve_plan", "f7")
+    _apply(repo)
+    assert _request(repo, second)[1] == "approved plan/f7: queued f7-01-a"
+
+
+def test_accepting_an_adr_on_a_card_with_no_tickets_asks_its_lead_for_the_plan(repo):
+    _card(repo)
+    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
+    _ask(repo, "accept_adr", "f7", "23")
+    _apply(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        thread = conn.execute("SELECT id FROM planner_threads WHERE card = 'f7'").fetchone()
+        said = [m["text"] for m in metrics.planner_messages(conn, thread["id"])]
+        queued = conn.execute(
+            "SELECT COUNT(*) FROM work_queue WHERE kind = 'planner' AND subject LIKE 'f7%'"
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    assert any("ADR 23 is accepted" in text and "no tickets" in text for text in said)
+    assert queued == 1
+
+
+def test_accepting_an_adr_on_a_card_with_tickets_asks_nothing(repo):
+    _card(repo)
+    _plan(
+        repo,
+        {
+            ".factory/adr/23-parallel-planners.md": ADR,
+            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+        },
+    )
+    _ask(repo, "accept_adr", "f7", "23")
+    _apply(repo)
+    conn = metrics.open_db(_db(repo))
+    try:
+        found = conn.execute("SELECT id FROM planner_threads WHERE card = 'f7'").fetchone()
+    finally:
+        conn.close()
+    assert found is None
+
+
 def test_accept_adr_of_an_adr_already_on_main_accepts_it(repo):
     _card(repo)
     (repo / ".factory" / "adr").mkdir()
