@@ -1,6 +1,6 @@
 # Milestone F187: Store every time in UTC, show local time on screen only
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 1 · **Area:** factory
 > Planted by the owner on 2026-10-29.
 
 ## Notes
