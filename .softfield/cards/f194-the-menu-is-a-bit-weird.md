@@ -1,4 +1,4 @@
-# Milestone F194: The menu is a bit weird being horizontal scroll. The…
+# Milestone F194: The menu: Overview, Planning, Board in fixed places, the rest in a sub menu
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-02.
