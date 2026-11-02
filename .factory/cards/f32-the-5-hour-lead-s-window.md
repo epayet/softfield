@@ -1,6 +1,7 @@
 # Milestone F32: the 5 hour lead's window gauge on planning does'n say when it resets
 
-> **State:** ready · **Priority:** 15 · **Area:** factory
+> **State:** done · **Priority:** 15 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-02. Base: git tag `f32-the-5-hour-lead-s-window-start`. Report: [`.factory/reviews/f32-the-5-hour-lead-s-window.md`](../reviews/f32-the-5-hour-lead-s-window.md).
 > Planted by the owner on 2026-10-08.
 
 ## Notes

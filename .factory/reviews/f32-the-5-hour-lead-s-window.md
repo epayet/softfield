@@ -1,6 +1,6 @@
 # Review: F32, the 5-hour lead's window
 
-- **Status:** review round 2 done (2026-10-30): round 1's one should-fix is confirmed fixed and no new finding; the loop stops here, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-02.
 
 ## Sign-off sheet
 
