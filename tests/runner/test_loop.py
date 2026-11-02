@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+import subprocess
 import tempfile
 import threading
 import time
@@ -7549,3 +7550,66 @@ def test_end_to_end_tests_run_only_where_the_project_names_them(tmp_path, monkey
             ]
         ]
     ]
+
+
+def _signed_off_project(repo: Path, tmp_path: Path, monkeypatch) -> Path:
+    bare = tmp_path / "remote.git"
+    subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(bare)], check=True)
+    git(repo, "remote", "add", "origin", str(bare))
+    toml = repo / ".softfield" / "project.toml"
+    toml.parent.mkdir(exist_ok=True)
+    toml.write_text('[project]\nname = "m"\nremote = "origin"\n')
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a remote")
+    git(repo, "tag", "f1-done")
+    monkeypatch.setattr("runner.config.machine_ntfy", lambda: None)
+    return bare
+
+
+def _open_items(s) -> list[str]:
+    conn = metrics.open_db(s.cfg.metrics_db)
+    try:
+        project = metrics.find_project(conn, s.cfg.project_name)
+        assert project is not None
+        return [r["text"] for r in metrics.open_owner_items(conn, project) if r["kind"] == "push"]
+    finally:
+        conn.close()
+
+
+def test_a_pick_pushes_what_is_signed_off_and_doesnt_ask_again(repo, tmp_path, monkeypatch):
+    """ADR 42: the runner pushes, and no tag changed means no call to the remote."""
+    _signed_off_project(repo, tmp_path, monkeypatch)
+    s = loop.open_session(_config(repo))
+    loop.check_push(s)
+    assert git(repo, "ls-remote", "--tags", "origin").strip().endswith("refs/tags/f1-done")
+    monkeypatch.setattr(
+        "runner.push.push_signed_off", lambda *a, **k: pytest.fail("asked the remote again")
+    )
+    loop.check_push(s)
+    assert _open_items(s) == []
+
+
+def test_a_held_push_is_a_desk_item_and_goes_when_it_clears(repo, tmp_path, monkeypatch):
+    """ADR 42 items 6 and 7: the desk names the file, never the value; work goes on."""
+    _signed_off_project(repo, tmp_path, monkeypatch)
+    key = "sk-ant-" + "abcdefghij0123456789"
+    (repo / "config.py").write_text(f'KEY = "{key}"\n')
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a key")
+    git(repo, "tag", "-f", "f1-done")
+    s = loop.open_session(_config(repo))
+    loop.check_push(s)
+    [text] = _open_items(s)
+    assert "config.py:1" in text and key not in text
+    assert "f1-done" not in git(repo, "ls-remote", "--tags", "origin")
+    monkeypatch.setattr(
+        "runner.push.secret_problems", lambda diff, topic: []
+    )  # the owner dealt with it
+    loop.check_push(s)
+    assert _open_items(s) == []
+    assert "f1-done" in git(repo, "ls-remote", "--tags", "origin")
+
+
+def test_a_project_with_no_remote_pushes_nothing(repo, monkeypatch):
+    monkeypatch.setattr("runner.push.push_signed_off", lambda *a, **k: pytest.fail("pushed"))
+    loop.check_push(loop.open_session(_config(repo)))

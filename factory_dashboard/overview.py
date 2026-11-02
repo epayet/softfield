@@ -559,6 +559,7 @@ NEEDS_YOU = "Something needs you"
 # The items that open the Overview, by kind (D1); all the work done is notify.js's own
 _OVERVIEW_TITLES = {
     "adr": "A decision for you",
+    "push": "A push to GitHub waits",
     "blocked": "A ticket is blocked",
     "escalated": "A ticket is blocked",
     "reserve": "Claude's allowance: your choice",

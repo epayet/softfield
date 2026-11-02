@@ -1,4 +1,4 @@
-# Workflow: how Coucou gets built
+# Workflow: how a project gets built
 
 > Plain-language overview: [`how-it-works.md`](how-it-works.md).
 >
@@ -11,7 +11,7 @@
 | **Owner** | Accepts ADRs and workflow changes, decides architecture and critical code questions, signs off milestones on real devices. |
 | **Lead** (a frontier model; today Claude Code, Pro login) | The tech lead: plans, decides the contracts between pieces, writes tickets, builds protected paths test-first, handles escalations, reviews. See [`runner/instructions/lead.md`](agents/lead.md). |
 | **Runner** (`softfield`) | A deterministic Python script with **no AI in it**. It picks tasks, runs the local model and the gates, merges, retries and escalates, and calls the lead headlessly for lead tickets, directions, checkpoints, escalations and reviews. |
-| **Developers** (local models: OpenCode + Qwen via LM Studio) | Implement one ticket at a time, tests included. See [`.softfield/developer.md`](agents/developer.md). |
+| **Developers** (local models: OpenCode + Qwen via LM Studio) | Implement one ticket at a time, tests included. See [`.softfield/developer.md`](../.softfield/developer.md). |
 
 All coordination goes through files in the repo. Run logs go to `.softfield/var/runs/<timestamp>-<task>/`, which is gitignored.
 
@@ -58,7 +58,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    13. `tests-fail-on-main`: the test files the task added or changed fail against main's code (with every other changed file put back as it is on main), so they test the change ([ADR 07](../.softfield/adr/07-spend-less-frontier.md)). A `tests_only` ticket skips it and may change only `tests/` ([`runner/instructions/task-format.md`](task-format.md))
 
    `files:` is a pointer, not a gate: the session report lists files changed outside `files:` and `tests:`, and every existing test the developer changed, for the review.
-6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `Coucou local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit). **Checkpoint** (ADR 12 item 8): after every `checkpoint_every` (2) developer merges, a headless review of those diffs (by the `checkpoint` role's agent in `[roles]`, Sonnet) may queue a fix ticket the next ones wait for, tighten upcoming tickets, or add a `developer.md` note; its tools can't touch code. It also writes its findings to `checkpoint-<n>.json` (ADR 14 item 13), which become finding rows on its job, keyed `<milestone>-C<job>-<n>`; a malformed file is noted in the session report.
+6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `<Project> local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit). **Checkpoint** (ADR 12 item 8): after every `checkpoint_every` (2) developer merges, a headless review of those diffs (by the `checkpoint` role's agent in `[roles]`, Sonnet) may queue a fix ticket the next ones wait for, tighten upcoming tickets, or add a `developer.md` note; its tools can't touch code. It also writes its findings to `checkpoint-<n>.json` (ADR 14 item 13), which become finding rows on its job, keyed `<milestone>-C<job>-<n>`; a malformed file is noted in the session report.
 7. **Fail:**
    - attempt 2: same branch; the prompt adds the gate's one-line hint (what to do) and its exact output. After a timeout it also says the attempt ran out of time and lists the files changed on the branch so far; after an attempt that changed nothing, it says why (ran out of time, commands refused, or stopped early).
    - **the lead's direction** (ADR 12 item 6): before the last attempt, unless every failure was mechanical (`ruff`, `translations`, one empty attempt), a headless job reads the gate logs, the diff and the developer's thinking (copied read-only from OpenCode's `opencode.db` into the run logs) and writes a few lines of direction, no code. It may repair the ticket instead (committed on main). At most `directions_per_task` (1). Directions and escalations also write a 2–4 line process note (`note.md`: did the developer follow the ticket, run its checks, go round in circles), kept on the job's row and never scored (ADR 14 item 13).
@@ -66,7 +66,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    - still failing: move the task to `escalated/` with logs and the last diff, pause its dependants, continue with independent tasks. The branch is kept.
    - **a requeued ticket continues its branch** (with `main` merged in), and its first prompt lists the files the earlier run changed, unless the escalation's `decision.json` says `"reset": true`, which deletes the branch.
    - the runner logs the longest run of edits without a command per task (in the report and the direction prompt); it doesn't stop on it yet.
-8. **`BLOCKED.md`** (categories in AGENTS.md):
+8. **`BLOCKED.md`** (categories in `runner/instructions/rules.md`):
    - `unrelated-problem`: append it to `.softfield/discoveries.md` and continue gating
    - anything else: escalate immediately; this doesn't count as a failed attempt
 9. **Discoveries:** the local model may append to `.softfield/discoveries.md`. Claude triages it at milestone review into set-aside bug tickets, tasks or ADRs.
@@ -130,7 +130,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 
 | Made by | Author | Trailer |
 |---|---|---|
-| Local model (merges and task-branch WIP) | `Coucou local model` | `Agent: local-model`, plus `Task:`, `Model:`, `Attempts:` on merges |
+| Local model (merges and task-branch WIP) | `<Project> local model` | `Agent: local-model`, plus `Task:`, `Model:`, `Attempts:` on merges |
 | Runner bookkeeping | `Coucou runner` | `Agent: runner` |
 | Headless Claude (lead tickets, directions, checkpoints, escalations, reviews) | owner | `Agent: claude-headless` (plus `Task:` on a lead ticket's merge and an `implemented` escalation's commit, and `Developer:`, `Task:`, `Model:` on a finished branch's merge) |
 | Interactive Claude | owner | `Co-Authored-By: Claude …` |

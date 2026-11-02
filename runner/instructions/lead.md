@@ -1,4 +1,4 @@
-# The lead: how to run Coucou's build
+# The lead: how to run a project's build
 
 For whichever frontier model leads: Claude today, possibly another tomorrow ([ADR 02](../../.softfield/adr/02-software-factory.md)). Read with [`AGENTS.md`](../../AGENTS.md). The process is in [`docs/workflow.md`](../../docs/workflow.md); why it works this way is in [ADR 07](../../.softfield/adr/07-spend-less-frontier.md).
 

@@ -55,6 +55,7 @@ loginctl enable-linger $USER                                 # keep them up whil
 | What the developers may not touch | its `.softfield/protected-paths.txt` |
 | This machine's agents, roles, Claude's reserves, backup | `~/.config/softfield/factory.toml` (a copy: `tests/fixtures/softfield-machine.toml`) |
 | Every project's runs, jobs, requests and threads | `~/.local/share/software-factory/factory-metrics.sqlite`, copied daily to `~/Dropbox/software-factory-backups` |
+| What the factory tells its agents, in their system prompt (ADR 41) | this repo's `runner/instructions/`; the author's opinions in its `author/`, replaced by a file of the same name in `~/.config/softfield/` |
 | The owner's preferences, the lead's craft, how tickets are written | this repo's `runner/instructions/author/owner.md`, `runner/instructions/lead.md`, `runner/instructions/task-writing.md` |
 
 ## How Softfield updates itself
@@ -77,6 +78,8 @@ uv run pytest tests/runner      # or one folder
 `uv run softfield` runs this work tree's code; plain `softfield` runs `live`'s. Commits go
 through `softfield check-all` (the hook in `.softfield/hooks/`). While the runner runs, work in a
 worktree: it checks out task branches here.
+
+A plain `claude` or `opencode` here knows nothing of the factory, on purpose: start a lead session with `softfield lead`.
 
 How it works: [docs/how-it-works.md](docs/how-it-works.md) and [docs/workflow.md](docs/workflow.md).
 Tickets: [runner/instructions/task-format.md](runner/instructions/task-format.md). The lead's craft:

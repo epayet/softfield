@@ -1,7 +1,9 @@
+import tomllib
 from pathlib import Path
 
 import pytest
 
+from runner import config
 from runner.agents import Agent, WindowSeed
 from runner.config import ConfigError, load_config, read_protected
 from runner.gates import touching_protected
@@ -202,3 +204,14 @@ def test_security_tests_and_the_leads_docs_are_protected():
 def test_ordinary_tests_are_not_protected():
     free = ["tests/runner/test_tasks.py", "tests/factory_dashboard/test_board.py"]
     assert touching_protected(free, read_protected(REPO)) == []
+
+
+def test_the_package_ships_what_it_injects():
+    """ADR 41 item 8: an install has only the package. A file the runner reads by name is there,
+    and the wheel takes the whole of `runner`, so it ships."""
+    wheel = tomllib.loads((Path(config.__file__).parents[1] / "pyproject.toml").read_text())
+    assert "runner" in wheel["tool"]["hatch"]["build"]["targets"]["wheel"]["packages"]
+    for name in ("rules.md", "lead.md", "developer.md", "bootstrap.md", "claude.md"):
+        assert (config.INSTRUCTIONS / name).is_file(), name
+    for name in ("owner.md", "known-range.md"):
+        assert "~/.config/softfield/" in (config.INSTRUCTIONS / "author" / name).read_text(), name

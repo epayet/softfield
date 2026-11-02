@@ -32,6 +32,7 @@ from runner import (
     notify,
     planner,
     prompts,
+    push,
     ratings,
     router,
 )
@@ -688,6 +689,62 @@ def check_backup(s: Session) -> None:
     if path is not None:
         s.backup_failed = False
         s.log(f"[{RUNNER_AGENT}] backed up the metrics database to {path}")
+
+
+PUSH_KIND = "push"  # a push that needs the owner (ADR 42); its subject is the project's remote
+
+
+def _push_item(s: Session, remote: str, text: str | None) -> None:
+    """The push's desk item (ADR 42 item 7): open with ``text``, resolved without."""
+    conn = metrics.open_db(s.cfg.metrics_db)
+    try:
+        project_id = metrics.find_project(conn, s.cfg.project_name)
+        if project_id is None:
+            return
+        if text is not None:
+            metrics.upsert_owner_item(
+                conn, project_id, PUSH_KIND, remote, text=text, created=now().isoformat()
+            )
+            return
+        for row in metrics.open_owner_items(conn, project_id):
+            if row["kind"] == PUSH_KIND and row["subject"] == remote:
+                metrics.resolve_owner_item(conn, row["id"], now().isoformat())
+    finally:
+        conn.close()
+
+
+def check_push(s: Session) -> None:
+    """What the owner signed off goes to the project's remote (ADR 42), at each pick and without
+    asking it when no tag has changed. Never stops the work: a failure tries again."""
+    remote = push.remote_of(s.repo)
+    if remote is None:
+        return
+    try:
+        tags = push.done_tags(s.repo)
+        memory = push.read_memory(s.repo)
+        if tags == memory.settled and not memory.failing_since:
+            return
+        address = config.machine_ntfy()
+        outcome = push.push_signed_off(
+            s.repo, remote, address.rsplit("/", 1)[-1] if address else None
+        )
+        for tag in outcome.pushed:
+            s.log(f"[{RUNNER_AGENT}] pushed {tag} to {remote}")
+        if outcome.held:
+            s.log(f"[{RUNNER_AGENT}] {outcome.held}")
+            push.write_memory(s.repo, push.Memory(memory.settled, now().isoformat()))
+            _push_item(s, remote, outcome.held)
+        elif outcome.failed:
+            since = memory.failing_since or now().isoformat()
+            s.log(f"[{RUNNER_AGENT}] the push to {remote} failed, and a later pick tries again")
+            push.write_memory(s.repo, push.Memory(memory.settled, since))
+            if push.keeps_failing(since, now()):
+                _push_item(s, remote, f"The push to {remote} keeps failing: {outcome.failed}")
+        else:
+            push.write_memory(s.repo, push.Memory(tags))
+            _push_item(s, remote, None)
+    except Exception as exc:  # a push never stops the work
+        s.log(f"[{RUNNER_AGENT}] the push check failed ({type(exc).__name__}: {exc})")
 
 
 BACKUP_POLL_S = 3600.0  # how often a long sleep stops to check the backup (F20 D1)
@@ -5142,6 +5199,7 @@ def work_queue(
             set_activity(s, PICKING)
         apply_owner_requests(s)
         check_backup(s)
+        check_push(s)
         set_aside_unreadable(s)
         fresh_reading(s)
         if reviews:
@@ -5256,6 +5314,7 @@ def run_session(cfg: Config, *, once: bool, dry_run: bool, escalate: bool) -> Se
         return None
     s = open_session(cfg)
     check_backup(s)  # the run's start; each pick checks again (F20 D1)
+    check_push(s)
     try:
         restart = work_queue(s, escalate=escalate, once=once, reviews=True)
     except KeyboardInterrupt:

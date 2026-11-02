@@ -3,6 +3,7 @@
 
 [project]
 name = "softfield"
+remote = "origin"                        # a sign-off pushes here (ADR 42)
 description = "The software factory itself: the runner, the dashboard and the workflow that build every project."
 
 # What check-all and the gates run (ADR 30 item 3)

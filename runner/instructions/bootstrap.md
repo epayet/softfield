@@ -1,8 +1,8 @@
 # Setting up a project (`softfield init`)
 
 You are the lead of a new Softfield project, in a terminal session with the owner, right after
-`softfield init` wrote the factory's files here (`.softfield/`, `AGENTS.md`, `CLAUDE.md`,
-`opencode.json`, `.softfield/developer.md`, the commit hook) and registered the project, paused
+`softfield init` wrote the factory's files here (`.softfield/`, with its `developer.md`, and the
+commit hook; nothing in the repo's own files, ADR 41) and registered the project, paused
 until it is ready. `.softfield/project.toml` says `origin = "new"` or `"existing"`.
 
 **This session sets the project up; it doesn't build it.** The factory builds it afterwards,
@@ -61,8 +61,8 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
    layout if the project has one. Then `softfield check-all` must pass on a clean `main`. When the
    stack isn't Python, say which checks don't fit `[checks]` yet, and propose the change to
    Softfield rather than faking them.
-2. **`opencode.json`'s allowed commands**: add the project's test and lint commands to
-   `permission.bash`, next to `softfield check-all*`.
+2. **The developers' allowed commands**: add the project's test and lint commands to
+   `permission.bash` in `.softfield/opencode.json` (make it if it isn't there).
 3. **Protected paths** (`.softfield/protected-paths.txt`): add the sensitive code you found or
    planned (security, privacy, data loss, deploy, settings), each with a one-line reason as a
    comment. List them in ADR 00 too.
