@@ -1,6 +1,7 @@
 # Milestone F146: The board's Developers only view: what runs without the lead, and for how long
 
-> **State:** ready · **Priority:** 1 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 1 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-02. Base: git tag `f146-some-kind-of-view-or-toggle-start`. Report: [`.factory/reviews/f146-some-kind-of-view-or-toggle.md`](../reviews/f146-some-kind-of-view-or-toggle.md).
 > Planted by the owner on 2026-10-16.
 
 ## Notes
