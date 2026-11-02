@@ -134,13 +134,13 @@ Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **s
 When the review loop stops, write this at the top of `.factory/reviews/mN.md`, in plain language, without being asked, each item under its own heading, `### 1. What changed` (the runner stores the sheet from them, and the desk lists a milestone for sign-off only once it is stored):
 1. **What changed:** what the owner and Mum will notice.
 2. **How to test it yourself:** numbered steps on real devices.
-3. **Left for later:** deferred items and the backlog.
+3. **Left for later:** deferred items and the bug tickets set aside.
 4. **Decisions waiting for you:** ADRs, with links.
 5. **How the work went:** one line per session (date, tasks merged or escalated, lead vs local tokens), the 3–5 lessons that mattered and what changed because of them, links to `.factory/sessions/`.
 6. **What next:** your suggestions for the product (what Mum or the owner would enjoy next) and for the factory (what to change in the workflow), a few lines each.
 7. **What clogged the factory line** (owner, 2026-10-02): where the hours went that weren't merging work: waits for limits, failed attempts, stops for the owner, tickets that waited on one another while agents sat idle. Hours from the metrics database (runs, jobs, `usage_events`), each with what would unclog it.
 
-Then the rest of the report: what was built, findings, backlog, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `softfield report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../../.factory/adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
+Then the rest of the report: what was built, findings, what was set aside, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `softfield report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../../.factory/adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
 
 ## Reporting
 - The numbers come from the metrics database: `softfield report <key>` for a milestone review, the same queries as the dashboard (`factory_dashboard/queries.py`). The database isn't in git, so the review keeps a frozen snapshot.

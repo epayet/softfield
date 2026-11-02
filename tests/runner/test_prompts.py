@@ -1,12 +1,13 @@
 """The developer's prompt (ADR 12 item 1): one finish line, last before any retry text."""
 
+import inspect
 import json
 import re
 from pathlib import Path
 
 import pytest
 
-from runner import prompts
+from runner import milestone, prompts
 from runner.prompts import local_prompt
 from runner.tasks import parse_task
 from tests.runner.conftest import write_task
@@ -289,3 +290,10 @@ def test_on_a_duplicate_the_planner_only_merges_and_never_sends_the_owner_elsewh
     assert "say only which card it repeats" in looks
     assert "brings their note to the kept card's thread and queues you there" in looks
     assert "Never ask the owner to write" in looks and "on another page" in looks
+
+
+def test_no_prompt_or_re_review_names_a_backlog():
+    """ADR 35: a finding is a set-aside bug ticket or a line in the report, never a backlog."""
+    texts = [v for k, v in vars(prompts).items() if k.isupper() and isinstance(v, str)]
+    assert texts and not [t for t in texts if "backlog" in t.lower()]
+    assert "backlog" not in inspect.getsource(milestone._fix_scope).lower()

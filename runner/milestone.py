@@ -628,15 +628,15 @@ def _fix_scope(s: Session, milestone: str, since: str) -> str:
     if len(own) == len(merges):
         return (
             f"Re-review only the fix diffs `git diff {since}..{MAIN}` and whether each"
-            " earlier finding is resolved. New should-fix points about untouched code go to"
-            " the backlog."
+            " earlier finding is resolved. New should-fix points about untouched code take the"
+            " route `later` or `report`."
         )
     listed = "\n".join(f"- {ticket}: `git show {sha[:9]}`" for ticket, sha in own)
     return (
         "Re-review only this milestone's fix merges since the last round and whether each"
         " earlier finding is resolved. Other milestones' tickets merged meanwhile: leave them"
-        " out. New should-fix points about untouched code go to the backlog. The fix merges:\n"
-        + (listed or "none")
+        " out. New should-fix points about untouched code take the route `later` or `report`."
+        " The fix merges:\n" + (listed or "none")
     )
 
 

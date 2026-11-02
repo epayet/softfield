@@ -69,7 +69,7 @@ All coordination goes through files in the repo. Run logs go to `.factory/var/ru
 8. **`BLOCKED.md`** (categories in AGENTS.md):
    - `unrelated-problem`: append it to `docs/discoveries.md` and continue gating
    - anything else: escalate immediately; this doesn't count as a failed attempt
-9. **Discoveries:** the local model may append to `docs/discoveries.md`. Claude triages it at milestone review into the backlog, tasks or ADRs.
+9. **Discoveries:** the local model may append to `docs/discoveries.md`. Claude triages it at milestone review into set-aside bug tickets, tasks or ADRs.
 
 ## Escalation (headless Claude)
 
@@ -86,12 +86,12 @@ All coordination goes through files in the repo. Run logs go to `.factory/var/ru
 1. **Review round:** the headless lead reviews `git diff <milestone-base>..main`, tests as closely as code (missing edges, every existing test a developer changed), and the French. It writes the findings to `.factory/var/runs/review-mN-rK.json`, each with its file, line, detail and the ticket at fault. Each round also marks the checkpoints' findings `confirmed` or `rejected`, its own findings a checkpoint should have caught `missed`, and scores the milestone 1–10; the last round's verdicts and score are kept (ADR 14 item 13).
    - **Blocking:** bugs, security issues, AGENTS.md or ADR violations.
    - **Should-fix:** design drift, missing edge cases, weak tests.
-   - **Nit** → `docs/backlog.md`. Nits never loop.
+   - **Nit** → a bug ticket set aside in `.factory/tasks/later/` if it's worth a run (route `later`), else said in the review report only (route `report`). Nits never loop.
 2. **Routing each blocking or should-fix finding:**
    - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5)
    - small (about 20 lines in one file), protected or security, or a developer already failed it once → Claude fixes it directly
-   - needs the owner (`docs/agents/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner in the backlog.
-3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code go to the backlog.
+   - needs the owner (`docs/agents/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner.
+3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code take the route `later` or `report`.
 
 **Stop rules** (the values are in `.factory/project.toml`):
 

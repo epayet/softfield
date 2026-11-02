@@ -5,6 +5,8 @@
 > Planted by the owner on 2026-10-16.
 
 ## Notes
+From docs/backlog.md (f84-review), 2026-11-02: Three plans (F30, F172, F84) sent a developer a ticket the Known range in `docs/agents/lead.md` said was the lead's; the rule is prose the planner doesn't always read. Fix: once F143 lands its D6 rule (f143-05), make it a `check-tickets` check: a developer ticket whose `files:` span two pages' modules under `factory_dashboard/`, or a protected path, fails with "the lead's (lead.md, Known range)". Stays: waits for f143-05, which rewrites the rule the check would encode.
+
 Split test_planning.py by page (desk, thread, proposals, plant), so the local developer can take planning-page tickets again instead of the lead. Open questions: one file per page or per feature? Does the split need its own ticket before the 16 lead tickets run, or can it go after?
 
 ## Plan (lead, 2026-10-27)

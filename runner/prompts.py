@@ -264,8 +264,8 @@ Write {out}: 2-5 lines on what you found and did. Also write {findings}, one ent
 problem you found (an empty list if none; the final review judges them):
 {{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
   "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
-  "route": "local" | "backlog", "ticket": "<the merged ticket at fault>"}}]}}
-route: "local" if you wrote a fix ticket for it, "backlog" otherwise.
+  "route": "local" | "report", "ticket": "<the merged ticket at fault>"}}]}}
+route: "local" if you wrote a fix ticket for it, "report" otherwise.
 Change nothing else; don't run git beyond diff, log and show.
 """
 
@@ -280,7 +280,7 @@ fixed. Change nothing. Answer with only this JSON, one entry per problem (an emp
 none):
 {{"findings": [{{"severity": "blocking" | "should-fix" | "nit", "file": "coucou/x.py",
   "line": 12 | null, "summary": "one line", "detail": "what is wrong and why",
-  "route": "backlog", "ticket": "<the merged ticket at fault>"}}]}}
+  "route": "report", "ticket": "<the merged ticket at fault>"}}]}}
 """
 
 # ADR 16 item 9: when Claude can't, a read-only agent does the checkpoint; the runner turns
@@ -302,7 +302,7 @@ Write one entry per merged ticket and kind, every problem of that kind in its "d
 empty list if none):
 {{"findings": [{{"severity": "blocking" | "should-fix", "kind": "code" | "test",
   "file": "factory_dashboard/queries.py", "line": 12 | null, "summary": "one line",
-  "detail": "what is wrong and why", "route": "backlog",
+  "detail": "what is wrong and why", "route": "report",
   "ticket": "<the merged ticket at fault>"}}]}}
 """
 
@@ -328,7 +328,11 @@ Grade each finding blocking / should-fix / nit and route it:
 - adr: only for what the owner is asked for (their preferences, above). Draft an ADR (status
   Proposed) and set "stop": "adr-needed". Decide everything else yourself; never park a
   finding for the owner.
-- backlog: nits and should-fix points about untouched code go to docs/backlog.md.
+- later: a nit or a should-fix point about untouched code, worth a run: write a bug ticket set
+  aside in .factory/tasks/later/ (docs/task-format.md: `milestone: bugs`, `area:`,
+  `finding: <id>`, the next free `bug-<nn>`, no `priority:`), and run
+  `softfield check-tickets <its files>` until it passes. The board shows it as a seed.
+- report: not worth a run: say it once, in the review report, and nowhere else.
 Recurring findings (fix these yourself): {recurring}
 
 The checkpoints' findings so far, by key (ADR 14 item 13):
@@ -350,7 +354,7 @@ Keep ids stable across rounds; mark findings fixed since the last round "resolve
 Give checkpoint_verdicts and score every round, as they stand: the last round's are kept.
 Also create or update .factory/reviews/{milestone}.md. It starts with the owner's sign-off
 sheet ("Sign-off sheet" above), ending with "6. What next": your product and factory
-suggestions. Then what was built, findings and resolutions, backlog and workflow
+suggestions. Then what was built, findings and resolutions, what was set aside and workflow
 observations. The numbers come from `softfield report {milestone}`, between the
 `<!-- runner report -->` markers: leave that block as it is and don't recount them.
 Read-only git (diff, log, show) is fine; don't commit: the runner does.

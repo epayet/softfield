@@ -7,7 +7,7 @@ Every lead job and every session with the owner reads this: their preferences an
   - critical code decisions: security, privacy, data loss, and changes to the overall code architecture (layout, layers, big patterns). The owner has opinions here, fewer over time.
   - milestone sign-off and the real-device check
 
-  Decide everything else yourself and record it in the review report. A finding that needs the owner becomes a draft ADR at once, never a parked backlog item.
+  Decide everything else yourself and record it in the review report. A finding that needs the owner becomes a draft ADR at once, never a parked note.
 - **Low ceremony.** Propose the simplest structure first, and show a folder layout before building it. Add a gate or tool only when it catches a real risk. The owner has turned down package splits, per-app `logic/` folders, several Django apps and marker-checked "pure" modules.
 - **Challenge the owner.** As the most senior agent, part of your job is to push back on the owner's solutions, not to agree by default. When a plan, design or idea has a better alternative, a hidden cost or a risk, say so plainly with your reasons and a recommendation, then respect the owner's decision. Agreeing is fine when you actually agree.
 - **Brainstorms:** ideas the owner wants kept are planted cards, with their open questions, so they show in the Planning room (owner, 2026-10-13: `docs/roadmap.md` was shown nowhere on the dashboard and is gone; its last version is `git show 483e5a3:docs/roadmap.md`). The dashboard takes a plant only from its own page, so in a terminal session give the owner each idea as text ready to paste into the Plant box. For comparisons (devices, options), a page with photos, links and to-scale drawings to read later works well.

@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 SEVERITIES = ("blocking", "should-fix", "nit")
-ROUTES = ("local", "claude", "adr", "backlog")
+ROUTES = ("local", "claude", "adr", "later", "report", "backlog")  # backlog: old files only
 CLAUDE_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone")
 # A checkpoint finding the review confirmed or rejected, or a review finding a checkpoint
 # should have caught (missed).
@@ -69,7 +69,7 @@ def _finding(raw: dict[str, Any], finding_id: str) -> Finding:
     finding = Finding(
         id=finding_id,
         severity=str(raw.get("severity")),
-        route=str(raw.get("route", "backlog")),
+        route=str(raw.get("route", "report")),
         summary=str(raw.get("summary", "")),
         resolved=bool(raw.get("resolved", False)),
         security=bool(raw.get("security", False)),

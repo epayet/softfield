@@ -76,7 +76,7 @@ The owner starts a whole milestone with `softfield milestone N` ([ADR 12](../.fa
 7. **Escalation:** the headless frontier model, at most twice per task. It repairs or splits the spec, adds missing facts, does the task itself, or drafts an ADR for the owner. Its code must pass every check, or it stays on a branch. The runner commits its changes and moves the file.
 8. **Session report:** written to `.factory/sessions/` at the end.
 
-After a milestone's tasks are done, the review loop (`softfield review --milestone N` on its own) runs the staging end-to-end tests and a headless review. Blocking and should-fix findings become fix tasks or direct fixes, and nits go to the backlog. The loop stops on the rules in `workflow.md`.
+After a milestone's tasks are done, the review loop (`softfield review --milestone N` on its own) runs the staging end-to-end tests and a headless review. Blocking and should-fix findings become fix tasks or direct fixes, and nits become set-aside bug tickets, or are said in the report. The loop stops on the rules in `workflow.md`.
 
 Everything is plain git and files, so a bad run is easy to inspect (logs go in `.factory/var/runs/`) or undo.
 

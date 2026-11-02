@@ -37,3 +37,9 @@ No review in any project writes a backlog file again; Softfield's is gone, each 
 ## Tickets
 - f149-01-reviews-stop-writing-a-backlog (lead)
 - f149-02-backlog-items-to-seeds (lead, after 01)
+
+## Done (2026-11-02, terminal session)
+**Where each item went:** bug-49 (f90-F2), bug-50 (f151-F2), bug-51 (f158-F3), bug-52 (f73-F3), bug-53 (f73-F4); cards F200 (f53), F201 (f159-F5), F202 (f80-F4, it amends ADR 29 item 7); F143's Notes (f84-F4, waits for f143-05).
+**Dropped, each still in its review report:** already tickets: f79-F3 (bug-01), ADR 07's parallel developers (bug-03), f12-F10 (bug-40). Not worth a run, as D4 decided: f12-F11, f104-F3, f17-F5, f153-F3, f3 (SIGKILL), f4-F4, f3-C310-2, f114-F7, f2 (two gates). Added since D4, same reason (never seen, or right today): f68-F7, f84-F3, f32-F1, f21-F3, f15-F6.
+**Coucou's section and m2-F6** are in Coucou's own file, which its F1 card retires. Travel Companion's goes through its F10.
+

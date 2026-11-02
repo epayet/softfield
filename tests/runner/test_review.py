@@ -119,7 +119,7 @@ def test_a_checkpoints_findings_are_numbered_in_order(tmp_path):
     first, second = parse_checkpoint(path)
     assert (first.id, first.route, first.file, first.line, first.detail) == (
         "1",
-        "backlog",
+        "report",
         "a.py",
         3,
         "d",
