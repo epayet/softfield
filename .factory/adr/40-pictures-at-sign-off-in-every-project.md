@@ -1,7 +1,7 @@
-# ADR 39: Before and after pictures at sign-off, in every project
+# ADR 40: Before and after pictures at sign-off, in every project
 
-- **Status:** Proposed
-- **Date:** 2026-10-27 (renumbered from 35 on 2026-10-29: two other ADRs had taken 35, and the owner's approval on 2026-10-29 went to one of them)
+- **Status:** Accepted (by the owner, 2026-11-02)
+- **Date:** 2026-10-27 (drafted as 35, then 39: other ADRs held those numbers, and the owner's Accepts of 2026-10-29 and 2026-10-31 reached them instead; the runner now accepts the exact file)
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Amends:** [ADR 30](30-many-projects-one-factory.md) item 3 (`.factory/project.toml` gets a `[shots]` section) and item 7 (the setup session fills it in). [ADR 28](28-lead-jobs-can-look.md) stays as it is: no job gets a browser.
 - **Evidence:** F85 (owner, 2026-10-09: "when i sign off a task … i would like to see screenshots of before after, in a similar fashion of the mock ups"; 2026-10-27: "i essentially want screenshots of the product, whether the product is softfield or travel-companion or coucou"). Today a sign-off is read as text only; the mock-up is drawn before the work and nobody checks the built page against it.
