@@ -1,6 +1,7 @@
 # Milestone F185: Your answers wanted before Proposals on the desk, newest answer first
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** done · **Priority:** 4 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-02. Base: git tag `f185-i-changed-my-mind-i-want-start`. Report: [`.factory/reviews/f185-i-changed-my-mind-i-want.md`](../reviews/f185-i-changed-my-mind-i-want.md).
 > Planted by the owner on 2026-10-29.
 
 ## Notes
