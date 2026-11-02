@@ -1,6 +1,6 @@
 # ADR 39: Bound the run logs under `.factory/var/runs/`
 
-- **Status:** Proposed
+- **Status:** Accepted (by the owner, 2026-11-02)
 - **Date:** 2026-10-30
 - **Deciders:** project owner (accepts), Claude (drafts)
 - **Evidence:** F175 (owner, 2026-10-26: the disk fills while the factory runs). `softfield look disk` on 2026-10-30: `.factory/var/runs/` holds 773 MB in 3,096 files, every job's log since the first run, and it only grows (+0.7 MB between f175-01 and f175-03). It is the one place the factory fills that nothing bounds; `/tmp` is fixed by f175-02 and the empty git template in tests.
