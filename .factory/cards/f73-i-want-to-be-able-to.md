@@ -1,6 +1,7 @@
 # Milestone F73: I want to be able to mark a proposal as parked for now
 
-> **State:** ready · **Priority:** 8 · **Area:** factory
+> **State:** done · **Priority:** 8 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-02. Base: git tag `f73-i-want-to-be-able-to-start`. Report: [`.factory/reviews/f73-i-want-to-be-able-to.md`](../reviews/f73-i-want-to-be-able-to.md).
 > Planted by the owner on 2026-10-09.
 
 ## Notes

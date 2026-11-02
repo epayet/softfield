@@ -1,6 +1,6 @@
 # Review: F73 set a proposal aside for now
 
-- **Status:** review round 1 done, waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-02.
 
 ## Sign-off sheet
 
