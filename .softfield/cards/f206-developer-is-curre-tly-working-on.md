@@ -1,4 +1,4 @@
-# Milestone F206: Developer is curre tly working on f187. On the board…
+# Milestone F206: The board's developer's view counts tickets a developer has started
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-02.
