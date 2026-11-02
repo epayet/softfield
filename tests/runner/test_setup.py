@@ -32,8 +32,17 @@ def test_init_sets_up_an_empty_folder_as_a_new_project_on_main(tmp_path, machine
     folder.mkdir()
     origin, written = setup.init(folder, db)
     assert origin == "new"
-    for rel in (".softfield/project.toml", "AGENTS.md", "CLAUDE.md", "opencode.json", ".gitignore"):
+    for rel in (".softfield/project.toml", ".softfield/README.md", ".softfield/.gitignore"):
         assert rel in written and (folder / rel).is_file()
+    for rel in ("AGENTS.md", "CLAUDE.md", "opencode.json", ".gitignore", "docs"):  # ADR 41 item 1
+        assert not (folder / rel).exists()
+    (folder / ".softfield/var").mkdir()
+    (folder / ".softfield/var/x").write_text("x")
+    (folder / "BLOCKED.md").write_text("x")
+    assert git(folder, "status", "--porcelain") == ""  # neither shows in git
+    (folder / ".softfield/var/x").unlink()
+    (folder / ".softfield/var").rmdir()
+    (folder / "BLOCKED.md").unlink()
     assert (folder / ".softfield/tasks/ready").is_dir() and (folder / ".softfield/cards").is_dir()
     assert 'name = "ducks"' in (folder / ".softfield/project.toml").read_text()
     assert 'origin = "new"' in (folder / ".softfield/project.toml").read_text()
@@ -65,7 +74,8 @@ def test_init_keeps_what_an_existing_repo_has_and_says_existing(tmp_path):
     origin, written = setup.init(folder, tmp_path / "m.sqlite")
     assert origin == "existing" and "AGENTS.md" not in written
     assert (folder / "AGENTS.md").read_text() == "our own rules\n"
-    assert (folder / ".gitignore").read_text() == "node_modules/\n.softfield/var/\nBLOCKED.md\n"
+    assert (folder / ".gitignore").read_text() == "node_modules/\n"
+    assert not (folder / "CLAUDE.md").exists() and not (folder / "opencode.json").exists()
     assert git(folder, "log", "--format=%an", "-1").strip() == "Softfield runner"
 
 
@@ -188,7 +198,7 @@ def test_the_setup_session_gets_the_guide_as_its_instructions(monkeypatch):
     built the idea. The guide is its instructions now, and it opens with the steps."""
     monkeypatch.setattr("runner.config.HOME", Path(setup.__file__).parents[1])
     command = setup.claude_command(Path("/r/ducks"), "new")
-    assert command[:3] == ["claude", "--add-dir", str(config.HOME / "docs")]
+    assert command[:3] == ["claude", "--add-dir", str(config.INSTRUCTIONS)]
     guide = command[command.index("--append-system-prompt") + 1]
     assert "**Never build the idea.**" in guide and "Your first message" in guide
     assert "Never mark ADR 00 Accepted yourself" in guide
@@ -334,3 +344,34 @@ def test_doctor_puts_the_first_card_on_the_desk_at_once(tmp_path):
     finally:
         conn.close()
     assert [tuple(r) for r in rows] == [("m1-say-hi", "Say hi", "idea")]
+
+
+def test_removing_the_dot_folder_leaves_the_repo_as_it_was(tmp_path):
+    """ADR 41 item 1: the factory's footprint is its folder."""
+    folder = tmp_path / "shop"
+    folder.mkdir()
+    git(folder, "init", "-q", "-b", "main")
+    git(folder, "config", "user.email", "t@example.com")
+    git(folder, "config", "user.name", "Test")
+    (folder / "AGENTS.md").write_text("ours\n")
+    (folder / "CLAUDE.md").write_text("ours too\n")
+    git(folder, "add", "-A")
+    git(folder, "commit", "-q", "-m", "init")
+    before = git(folder, "rev-parse", "HEAD").strip()
+    setup.init(folder, tmp_path / "m.sqlite")
+    git(folder, "rm", "-rq", ".softfield")
+    assert git(folder, "diff", "--stat", before).strip() == ""
+    assert (folder / "AGENTS.md").read_text() == "ours\n"
+
+
+def test_softfield_lead_starts_claude_with_the_factorys_context(tmp_path, monkeypatch):
+    """ADR 41 item 3: a plain `claude` stays plain; this one has the brief."""
+    monkeypatch.setattr("runner.config.HOME", Path(setup.__file__).parents[1])
+    (tmp_path / ".softfield").mkdir()
+    (tmp_path / ".softfield" / "project.md").write_text("# Project rule\n")
+    command = setup.lead_command(tmp_path, ["--model", "opus"])
+    assert command[0] == "claude" and command[-2:] == ["--model", "opus"]
+    system = command[command.index("--append-system-prompt") + 1]
+    assert "Low ceremony" in system and "# Project rule" in system
+    assert "When the lead is Claude" in system
+    assert command[command.index("--add-dir") + 1] == str(config.INSTRUCTIONS)

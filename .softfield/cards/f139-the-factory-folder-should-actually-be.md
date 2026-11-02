@@ -11,7 +11,7 @@ the .softfield folder should actually be .softfield. you'll need to update exist
 - **The approach: one move, done by the runner, not by hand.** Rewriting 1,300 lines in a lead ticket would cost a lot and miss some; and a branch that renamed the folder would be merged by the old runner, which then writes the ticket to `.softfield/tasks/done/` on a main that no longer has it. So a ticket builds `move_home` (D1–D4), a second wires it into the runner's start (D5), and the move itself happens on the machine, checked before it commits.
 - **Softfield moves first, then the others:** Softfield's own move rewrites the runner's code, so the runner restarts on it (as after any runner/ change), and only that code moves coucou and travel-companion. A project that comes back later (a forgotten one) moves the first time the runner opens it.
 - **What keeps the word "factory":** `factory_dashboard/`, `~/.config/softfield/factory.toml`, the `factory` area and the CSS classes (`.card.factory`, `.factory-status`). The folder is the tool's (like `.github`); the factory is the idea. Not asked to change.
-- **No ADR:** AGENTS.md, the protected paths and `docs/agents/` change only in the folder's name; no rule changes. The owner's approval of this plan covers it.
+- **No ADR:** AGENTS.md, the protected paths and `runner/instructions/` change only in the folder's name; no rule changes. The owner's approval of this plan covers it.
 - **No mock-up:** the dashboard only shows the path in two places (a ticket's "Set aside" plate, the proposal's file list), and that is wording.
 - Tickets: `f139-01-move-home` (lead: `runner/`, git and the database), `f139-02-runner-moves-projects` (lead: the runner's start and restart).
 

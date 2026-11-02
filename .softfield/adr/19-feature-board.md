@@ -3,7 +3,7 @@
 - **Status:** Accepted (by the owner, 2026-10-02)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (accepts), Claude (drafts)
-- **Amends:** [ADR 13](13-factory-dashboard.md) (new pages); `docs/task-format.md` (a `feature:` field); `runner/tasks.py` `pick_next` (priority before milestone order)
+- **Amends:** [ADR 13](13-factory-dashboard.md) (new pages); `runner/instructions/task-format.md` (a `feature:` field); `runner/tasks.py` `pick_next` (priority before milestone order)
 - **Evidence:** the owner's notes after F2 (`docs/roadmap.md`, "Owner's notes after F2", "The feature board"). The owner chose files in the repo over Linear (2026-10-02).
 
 ## Context
@@ -19,7 +19,7 @@
    - Adding an idea creates `.softfield/cards/<key>.md` at once, with the next free key in its series, the owner's notes and two header lines: `State:` and `Priority:`.
    - States: idea → planning → ready → building → needs sign-off → done.
    - A milestone is planned from its own card. There is no separate feature file, and the roadmap's ideas move into cards over time.
-2. **⚑ Bugs are tickets outside milestones, and first-class cards** (owner, 2026-10-02; amends `docs/task-format.md`).
+2. **⚑ Bugs are tickets outside milestones, and first-class cards** (owner, 2026-10-02; amends `runner/instructions/task-format.md`).
    - A bug is `bug-<nn>-<slug>` with `milestone: bugs`: no plan or sign-off, done when it merges. Checkpoints read it like any merge.
    - On the board each bug is its own card in the same field, with its own states:
      - **seed:** its ticket is in `.softfield/tasks/later/`;

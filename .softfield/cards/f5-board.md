@@ -39,7 +39,7 @@
 - **D3 The dashboard's write** (ADR 18 items 2–3): `POST /requests` in `factory_dashboard/requests.py`. It is the only route that opens the database for writing (`writable`, a second connection in `factory_dashboard/app.py`).
   - It requires the `HX-Request` header and a same-origin `Origin` or `Referer`, else 403; a kind outside `KINDS` is 400.
   - It answers with a small htmx partial, `factory_dashboard/templates/_partials/request.html`: "Asked: the runner will do it.", polling `GET /requests/{id}` every 5 s, then the result once done.
-  - Worked example for the buttons (08, 09), in `docs/agents/developer.md`.
+  - Worked example for the buttons (08, 09), in `.softfield/developer.md`.
 - **D4 Cards** (ADR 19 items 1 and 2b): a milestone doc's header blockquote may hold `**State:** <state> · **Priority:** <n> · **Area:** factory|product`.
   - States: idea, planning, ready, building, needs sign-off, done.
   - `runner/milestone.py` `card(key, text) -> Card(state, priority, area)`: a missing state is derived (done when "Status: done", else building), a missing priority is 100, and a missing area comes from the key's series (`f` factory, `m` product).

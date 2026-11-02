@@ -126,7 +126,7 @@ class CopilotAdapter:
     ) -> JobResult:
         if not spec.read_only:
             raise CopilotError(f"Copilot jobs are read-only; {spec.role} asks to edit")
-        cmd = review_command(spec.prompt, agent.model)
+        cmd = review_command(spec.whole_prompt, agent.model)
         started = time.monotonic()
         log_path.parent.mkdir(parents=True, exist_ok=True)
         try:

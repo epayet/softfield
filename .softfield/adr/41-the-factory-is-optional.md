@@ -3,7 +3,7 @@
 - **Status:** Accepted (by the owner, 2026-11-02)
 - **Date:** 2026-11-02 (drafted 2026-10-27 on F127 as "35", rewritten twice with the owner)
 - **Deciders:** project owner (accepts), Claude (drafts)
-- **Amends:** [ADR 30](30-many-projects-one-factory.md) item 4 (a project's `AGENTS.md` and `CLAUDE.md` point at the global rules), item 7 (`init` writes the pointer files) and its amendment "a project may carry its own `docs/agents/lead.md`".
+- **Amends:** [ADR 30](30-many-projects-one-factory.md) item 4 (a project's `AGENTS.md` and `CLAUDE.md` point at the global rules), item 7 (`init` writes the pointer files) and its amendment "a project may carry its own `runner/instructions/lead.md`".
 - **Evidence:** F127, F134 and F137's threads. `softfield init` copies `AGENTS.md`, `CLAUDE.md`, `opencode.json` and `developer.md` into a project and never looks again; four generic lessons in Softfield's developer notes since 2026-10-15 never reached Travel Companion. The owner, 2026-11-02: people should be able to use OpenCode and Claude on a project with little context of the factory; it's an optional addition; agents started by the factory must have its context, and agents, local ones especially, don't always follow an instruction to read a file. Probe, OpenCode 1.18.32, on a fake model that captured the request: `instructions` set through `OPENCODE_CONFIG_CONTENT` reach the system message, from an absolute path outside the repo with `external_directory` denied, and the repo's own AGENTS.md and `instructions` still arrive; with `OPENCODE_CONFIG` a repo's own `opencode.json` wins (`"bash": "deny"` beat the factory's permission).
 
 ## Decisions (⚑ = deviates from an earlier decision)
@@ -21,7 +21,7 @@
 5. **A gated rule changes where the gate reads it** (`project.toml`, `protected-paths.txt`), not in words.
 6. **Updating Softfield updates the rules.** Nothing is copied, so nothing merges and nothing goes stale. The owner follows main through `live`; others `uv tool install` from GitHub and `uv tool upgrade`. Numbered releases and an "update available" notice come with publishing (its own card). A dashboard view lists each role's files as from Softfield, yours, or this project's.
 7. ⚑ **How a lesson travels.** A checkpoint writes it into its own project's notes, always: a job in one project can't write to Softfield's repo. If it holds everywhere, the review suggests it as a Softfield card in "What next"; once approved it lands in Softfield and ships with the next version. 15 notes per file (ADR 07).
-8. ⚑ **`docs/` is for people.** Softfield's agent instructions leave `docs/agents/` for the package, which today ships none of them. The factory stops writing in a project's `docs/`.
+8. ⚑ **`docs/` is for people.** Softfield's agent instructions leave `runner/instructions/` for the package, which today ships none of them. The factory stops writing in a project's `docs/`.
 9. ⚑ **One rule, Softfield included, and the three projects migrate once.** Coucou's and Travel Companion's root files keep only what's useful to anyone working on them, and go if nothing is left. Softfield's `AGENTS.md` and `CLAUDE.md` describe only how to work on its code. So `claude` in a project is no longer the lead; `softfield lead` is.
 
 ## Alternatives turned down

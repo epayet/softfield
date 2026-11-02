@@ -31,7 +31,7 @@ If I replied to a conversation and it has related plans. It usually means I'm no
 |---|---|---|---|---|---|
 | 01 | proposals-being-revised | L | 3 | f74-01 | D1–D6 on the desk, the thread page and the proposal page |
 
-A lead ticket, like f74-01 and f75-01 beside it: it reads `planning.py` and three templates (`docs/agents/lead.md`, F6: page tickets that must read planning.py are past the local developers). After f74-01, which builds the rule D1 reuses; F75's f75-01 also counts "on its way" proposals for archiving and runs after this one or before it without conflict (a "being revised" proposal is not an Approve on its way).
+A lead ticket, like f74-01 and f75-01 beside it: it reads `planning.py` and three templates (`runner/instructions/lead.md`, F6: page tickets that must read planning.py are past the local developers). After f74-01, which builds the rule D1 reuses; F75's f75-01 also counts "on its way" proposals for archiving and runs after this one or before it without conflict (a "being revised" proposal is not an Approve on its way).
 
 ## Done when
 - Send a message on a thread with two open proposals: on `/planning` both are dashed orange under "Proposals to review", "being revised · …", and the Planning tab's count drops by them.

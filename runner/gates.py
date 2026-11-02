@@ -13,7 +13,7 @@ from runner.gitops import Git
 from runner.procs import run_bounded
 from runner.tasks import Task
 
-ALWAYS_ALLOWED = ("docs/discoveries.md",)
+ALWAYS_ALLOWED = (".softfield/discoveries.md",)
 BLOCKED_FILE = "BLOCKED.md"
 BLOCKED_CATEGORIES = ("false-assumption", "needs-file", "needs-info", "unrelated-problem")
 _OUTPUT_LIMIT = 6000
@@ -37,7 +37,7 @@ HINTS = {
     " Make small, targeted edits instead.",
     "layout": "Keep one test file per module, named test_<module>.py, directly in its folder.",
     "translations": "Add the missing French to coucou/locale/fr/LC_MESSAGES/ and compile it"
-    " with msgfmt, as AGENTS.md shows.",
+    " with msgfmt.",
     "ruff": "Run `uv run ruff format` and `uv run ruff check --fix` on your files, then fix"
     " what's left.",
     "mypy": "Fix the type errors below.",

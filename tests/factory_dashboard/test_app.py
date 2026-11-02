@@ -687,7 +687,7 @@ def test_the_overview_wears_the_factory_look_in_both_themes(
 
 
 def test_templates_use_the_tokens_never_raw_colours():
-    """docs/agents/developer.md: a raw colour skips the light theme (f5-14)."""
+    """.softfield/developer.md: a raw colour skips the light theme (f5-14)."""
     raw = re.compile(r"#[0-9a-fA-F]{3,8}\b|\brgba?\(|\bhsla?\(")
     for template in (STATIC.parent / "templates").rglob("*.html"):
         html = template.read_text()

@@ -17,7 +17,7 @@ Each project on the Projects page has a Pause or Resume button that asks the run
 ### Context
 The picture to build: the Proposed side of `.softfield/cards/f124-mockup/projects.html`. Read D5 in `.softfield/cards/f124-pause-one-project-from-the-projects.md`.
 - The page is `projects_page` in `factory_dashboard/projects.py`, template `factory_dashboard/templates/projects.html`, styles under "The Projects page" in `factory_dashboard/static/dashboard.css`.
-- The requests are `pause_project` and `resume_project`, posted to `/requests` with no subject and the row's project as `project` (the order form in the same template posts the same way); follow the worked example for a button that asks the runner in `docs/agents/developer.md`.
+- The requests are `pause_project` and `resume_project`, posted to `/requests` with no subject and the row's project as `project` (the order form in the same template posts the same way); follow the worked example for a button that asks the runner in `.softfield/developer.md`.
 - `ProjectCard.paused` already carries the column; `paused_by_you` in `runner/metrics.py` gives the time a project was paused by you, None otherwise.
 - On its way: the project's latest `pause_project` or `resume_project` row with no `done`, read as `order_on_its_way` reads the order.
 - The paused edge and line use `--warn`, as the top bar's pause does; the on-its-way dashed edge is `--opus`, as `.place input.asked`.

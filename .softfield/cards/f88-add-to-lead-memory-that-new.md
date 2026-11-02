@@ -11,8 +11,8 @@ add to lead memory that new software factory features should be done with the ma
 Every new factory page, element and mock-up is drawn in the factory theme from its first draft, a little bolder than needed, so the owner tones it down rather than asking for more. The theme is described in plain traits any agent can follow, and nothing in it is taken from the game.
 
 ## Done when
-- `docs/agents/owner.md` carries the rule (D1–D4), dated 2026-10-09, in a few lines.
-- `docs/agents/lead.md` (Planning room) points at it in one line.
+- `runner/instructions/author/owner.md` carries the rule (D1–D4), dated 2026-10-09, in a few lines.
+- `runner/instructions/lead.md` (Planning room) points at it in one line.
 - `PLANNER`'s mock-up paragraph (`runner/prompts.py`, added by f72-01) says a mock-up's Proposed is drawn in the factory theme, leaning bolder; a test checks it.
 - The next factory card with a mock-up is themed without being asked.
 

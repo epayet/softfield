@@ -127,7 +127,7 @@ _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
                 1,
                 edit=(
                     ".softfield/tasks/ready/**",
-                    "docs/agents/developer.md",
+                    ".softfield/developer.md",
                     ".softfield/var/runs/**",
                 ),
                 commands=(*GIT_READ_COMMANDS, "uv run pytest"),
@@ -137,7 +137,7 @@ _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
                 *_GIT,
                 "Bash(uv run pytest:*)",
                 "Edit(.softfield/tasks/ready/**)",
-                "Edit(docs/agents/developer.md)",
+                "Edit(.softfield/developer.md)",
                 "Edit(.softfield/var/runs/**)",
             ),
         ),
@@ -188,10 +188,12 @@ def test_every_job_may_read_softfields_shared_docs_and_only_read_them(tmp_path, 
     home = tmp_path / "live"
     (home / "docs").mkdir(parents=True)
     monkeypatch.setattr("runner.config.HOME", home)
+    monkeypatch.setattr("runner.config.INSTRUCTIONS", home / "runner" / "instructions")
     seen = _fake_claude(monkeypatch, '{"result": "ok", "session_id": "s1"}', returncode=0)
     _adapter_run(tmp_path, JobSpec("review", "Review.", 10, commands=GIT_READ_COMMANDS))
     cmd = seen[0]
-    assert cmd[cmd.index("--add-dir") + 1] == str(home / "docs")
+    dirs = [cmd[i + 1] for i, arg in enumerate(cmd) if arg == "--add-dir"]
+    assert dirs == [str(home / "runner" / "instructions"), str(home / "docs")]
     assert [t for t in cmd if t.startswith(("Edit", "Write"))] == []
 
 
@@ -614,3 +616,19 @@ def test_a_stream_with_no_result_event_is_transient(tmp_path, monkeypatch, retur
         run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
     assert blip.value.session_id is None
     assert [r.window for r in blip.value.readings] == ["five_hour", "seven_day"]
+
+
+def test_the_factorys_context_goes_in_the_system_prompt_not_the_message(tmp_path, monkeypatch):
+    """ADR 41 item 2."""
+    seen = _fake_claude(monkeypatch, '{"result": "ok", "session_id": "s1"}', returncode=0)
+    spec = JobSpec("review", "Review.", 10, system="The factory's rules.")
+    _adapter_run(tmp_path, spec)
+    cmd = seen[0]
+    assert cmd[cmd.index("--append-system-prompt") + 1] == "The factory's rules."
+    assert "The factory's rules." not in cmd[cmd.index("-p") + 1]
+
+
+def test_no_context_no_system_prompt_flag(tmp_path, monkeypatch):
+    seen = _fake_claude(monkeypatch, '{"result": "ok", "session_id": "s1"}', returncode=0)
+    _adapter_run(tmp_path, JobSpec("review", "Review.", 10))
+    assert "--append-system-prompt" not in seen[0]

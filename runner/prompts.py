@@ -2,14 +2,17 @@
 
 from pathlib import Path
 
+from runner import config
 from runner.tasks import Task
 
 # f21 D2: every lead job's prompt starts with the owner's preferences and the lead.md sections
 # its role needs, pasted in: a pointer was skipped (neither planner job of 2026-10-07 opened
 # lead.md). Sections are named by their `## ` heading; tests/runner/test_prompts.py reads the
 # real lead.md, so a renamed heading fails at commit.
-OWNER_DOC = "docs/agents/owner.md"
-LEAD_DOC = "docs/agents/lead.md"
+OWNER_DOC = "runner/instructions/author/owner.md"
+LEAD_DOC = "runner/instructions/lead.md"
+KNOWN_RANGE_DOC = "runner/instructions/author/known-range.md"
+CLAUDE_DOC = "runner/instructions/claude.md"
 _PLANS = ("Authority", "Plan", "Planning room", "Tickets")
 _SUPPORTS = ("Known range", "Escalations (headless or interactive)", "Your own work")
 _REVIEWS = ("Review", "Sign-off sheet", "Reporting")
@@ -21,7 +24,7 @@ SECTIONS: dict[str, tuple[str, ...]] = {
     "checkpoint": _REVIEWS,
     "review": _REVIEWS,
 }
-_BRIEF_SECTIONS = "From docs/agents/lead.md, the sections this job needs:\n\n"
+_BRIEF_SECTIONS = "From runner/instructions/lead.md, the sections this job needs:\n\n"
 BRIEF_END = "---\n\n"
 
 
@@ -37,27 +40,55 @@ def sections(text: str) -> dict[str, str]:
     return {heading: "\n".join(lines).strip() for heading, lines in found.items()}
 
 
-def brief(repo: Path, role: str, owner: bool = True) -> tuple[str, list[str]]:
-    """What goes first in a lead job's prompt (f21 D2): owner.md (unless ``owner`` is false:
-    the agent loads it by itself), then the lead.md sections ``role`` needs, the same text for
-    every job of the role, so jobs close together share Claude's prompt cache. Also what the
-    map names and wasn't found: the job goes with the rest. Empty for a role with no
-    sections, and in a repo without a lead.md."""
-    lead = repo / LEAD_DOC
+def _authors(home: Path, doc: str) -> Path:
+    """One of the author's files, or this machine's that replaces it (ADR 41 item 4)."""
+    mine = config.author_override(Path(doc).name)
+    return mine if mine.is_file() else home / doc
+
+
+def brief(home: Path, role: str) -> tuple[str, list[str]]:
+    """What a lead job's system prompt holds (ADR 41 item 2): owner.md, then the lead.md sections
+    ``role`` needs, the same text for every job of the role, so jobs close together share
+    Claude's prompt cache. Also what the map names and wasn't found: the job goes with the rest.
+    Empty for a role with no sections, and without a lead.md."""
+    lead = home / LEAD_DOC
     if role not in SECTIONS or not lead.is_file():
         return "", []
     missing: list[str] = []
     parts: list[str] = []
-    if owner and (repo / OWNER_DOC).is_file():
-        parts.append((repo / OWNER_DOC).read_text(encoding="utf-8").strip() + "\n\n")
-    elif owner:
+    owner = _authors(home, OWNER_DOC)
+    if owner.is_file():
+        parts.append(owner.read_text(encoding="utf-8").strip() + "\n\n")
+    else:
         missing.append(OWNER_DOC)
     found = sections(lead.read_text(encoding="utf-8"))
+    known = _authors(home, KNOWN_RANGE_DOC)
+    if known.is_file():
+        found |= sections(known.read_text(encoding="utf-8"))
     missing += [name for name in SECTIONS[role] if name not in found]
     wanted = [found[name] + "\n\n" for name in SECTIONS[role] if name in found]
     if wanted:
         parts += [_BRIEF_SECTIONS, *wanted]
     return "".join(parts) + BRIEF_END if parts else "", missing
+
+
+def lead_session(home: Path, project_rules: Path) -> str:
+    """The system prompt of a terminal lead session (``softfield lead``, ADR 41 item 3)."""
+    docs = [_authors(home, OWNER_DOC), home / LEAD_DOC, _authors(home, KNOWN_RANGE_DOC)]
+    docs += [home / CLAUDE_DOC, project_rules]
+    return "\n\n".join(p.read_text(encoding="utf-8").strip() for p in docs if p.is_file()) + "\n"
+
+
+def developer_instructions(home: Path, repo: Path) -> list[str]:
+    """What OpenCode puts in a developer's system prompt, package first: a later file wins
+    (ADR 41 items 2 and 4). The repo's own AGENTS.md comes along by itself."""
+    files = [
+        home / "runner/instructions/rules.md",
+        home / "runner/instructions/developer.md",
+        repo / ".softfield/project.md",
+        repo / ".softfield/developer.md",
+    ]
+    return [str(p) for p in files if p.is_file()]
 
 
 # The developer's prompt stays short: it drops instructions from long prompts (ADR 01).
@@ -66,7 +97,7 @@ Implement the task below in this repository. Start from the files under `files:`
 change other files only if the goal needs it. Write or update tests for what "Done when"
 asks, in the test files under `tests:`. Never edit protected paths
 (.softfield/protected-paths.txt) and never run git. If you're stuck, write BLOCKED.md as
-AGENTS.md describes, then stop. Run commands exactly as written: pipes (`|`), redirections
+your rules describe, then stop. Run commands exactly as written: pipes (`|`), redirections
 and unknown flags are refused, and a refused command returns nothing.
 
 {task}
@@ -206,7 +237,8 @@ Do exactly one of:
    work there and make `softfield check-all --task {id}` pass. The runner merges the
    branch, crediting you both. Check out nothing else, and only for this outcome.
 2. requeue: repair or split the ticket and write the task file(s) to .softfield/tasks/ready/
-   (docs/task-format.md), then run `softfield check-tickets <its files>` until it passes. Add
+   (runner/instructions/task-format.md), then run `softfield check-tickets <its files>` until it
+   passes. Add
    facts, not a solution. Its next run builds on the branch; if
    the work there is unusable, add "reset": true to decision.json and it starts from main.
 3. requeue: answer the model's question by adding the facts to the task's Context, and write
@@ -222,7 +254,7 @@ Then write {logs}/decision.json as
 "reset": true, and for "owner" also {{"adr": ".softfield/adr/NN-slug.md", "question": "<one line
 for the owner>"}}, and {logs}/escalation.md: 3-6 lines on what happened, what the local
 model got wrong, and the lesson. Turn the lesson into a check, an example or a line in
-docs/agents/developer.md (its budget is in docs/agents/lead.md ("Developers' notes")), and
+.softfield/developer.md (at most 15 notes), and
 say which. """
     + PROCESS_NOTE
     + """\
@@ -252,10 +284,11 @@ what the ticket asks, do the tests act as a person would and check content, not 
 is anything masked instead of fixed? Don't read the developer's thinking unless a finding needs
 explaining. Then do what helps the next tickets most, any of:
 - nothing, if it's sound
-- a fix ticket in .softfield/tasks/ready/ (docs/task-format.md, `finding:` in the frontmatter), and
+- a fix ticket in .softfield/tasks/ready/ (runner/instructions/task-format.md, `finding:` in the
+frontmatter), and
   add its id to `depends_on` of the ready tickets that build on the problem
 - tighten upcoming tickets in .softfield/tasks/ready/ with what you saw (facts, not solutions)
-- one line in docs/agents/developer.md (its budget is in docs/agents/lead.md ("Developers' notes"))
+- one line in .softfield/developer.md (at most 15 notes)
 
 If you wrote or changed a ticket, run `softfield check-tickets <its files>` and fix what it
 reports: the format (`tests:` is never empty), pre-flight, and that every path it names exists
@@ -321,7 +354,8 @@ The hours, jobs and counts the report quotes come from the metrics database: rea
 dashboard page as text with `softfield look page <address>` (ADR 28).
 
 Grade each finding blocking / should-fix / nit and route it:
-- local: write a ticket in .softfield/tasks/ready/ (docs/task-format.md), `finding: <id>` in the
+- local: write a ticket in .softfield/tasks/ready/ (runner/instructions/task-format.md), `finding:
+<id>` in the
   frontmatter, and run `softfield check-tickets <its files>` until it passes (`tests:` is never
   empty: a ticket with nothing to test, like deleting a file, you do yourself as a claude fix).
   Findings listed as recurring must NOT go to the local model.
@@ -330,7 +364,7 @@ Grade each finding blocking / should-fix / nit and route it:
   Proposed) and set "stop": "adr-needed". Decide everything else yourself; never park a
   finding for the owner.
 - later: a nit or a should-fix point about untouched code, worth a run: write a bug ticket set
-  aside in .softfield/tasks/later/ (docs/task-format.md: `milestone: bugs`, `area:`,
+  aside in .softfield/tasks/later/ (runner/instructions/task-format.md: `milestone: bugs`, `area:`,
   `finding: <id>`, the next free `bug-<nn>`, no `priority:`), and run
   `softfield check-tickets <its files>` until it passes. The board shows it as a seed.
 - report: not worth a run: say it once, in the review report, and nowhere else.
@@ -444,7 +478,8 @@ self-contained HTML in .softfield/cards/{card}-mockup/ (one file with its style,
 data inside: the owner reads it in a frame that runs its scripts and nothing else, so no \
 localStorage, no alert or confirm, no form to submit, no request to the dashboard and no \
 link to a new tab; any of these stops it answering); the card's milestone doc in \
-.softfield/cards/; tickets in .softfield/tasks/later/ (docs/task-format.md). Edit nothing else, and
+.softfield/cards/; tickets in .softfield/tasks/later/ (runner/instructions/task-format.md). Edit
+nothing else, and
 \
 don't commit: the runner commits the branch after your reply.
 - A card that changes what a page shows or how it is laid out (a new view, an element \

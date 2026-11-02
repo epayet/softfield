@@ -3,7 +3,7 @@
 - **Status:** Accepted (by the owner, 2026-10-02)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (accepts), Claude (drafts)
-- **Amends:** [ADR 14](14-developers-and-agents.md) item 12; [ADR 15](15-allowance-aware-routing.md) items 1, 4, 5 and 6; `docs/task-format.md` (milestone keys); the lead's replans (lead.md, a trial in F1)
+- **Amends:** [ADR 14](14-developers-and-agents.md) item 12; [ADR 15](15-allowance-aware-routing.md) items 1, 4, 5 and 6; `runner/instructions/task-format.md` (milestone keys); the lead's replans (lead.md, a trial in F1)
 - **Evidence:** [`.softfield/reviews/factory-f1.md`](../reviews/factory-f1.md); the owner's notes after F1 (2026-10-02). The owner chose the 25%, the 50%, the non-blocking question and items 8–10 (2026-10-02).
 
 ## Context
@@ -25,7 +25,7 @@
    - Asked only when nothing else can run. A yes lets the waiting work go at once and lasts for the command. No answer: the work stays parked until the window resets, then goes on by itself; the question also shows as a Needs-you item. The runner never stops for it.
 4. **Support roles go through the allowance and park** (amends ADR 15 item 4's "support roles may always use the reserve" only for the 5-hour window). Checkpoints and escalations check the 5-hour window like the others, and park instead of sleeping when it's full or refused, so other agents keep working.
 5. **Every job records its exact model:** a `jobs.model` column, from the harness's own report (Claude's stream, OpenCode's model id). The agent id stays the role's handle (`claude-sonnet`); pages and reports can split an agent's results by model.
-6. **⚑ Named milestones** (amends `docs/task-format.md`).
+6. **⚑ Named milestones** (amends `runner/instructions/task-format.md`).
    - A key is `<series><n>-<slug>`: `f2-cloud-first`, `m5-history`. The slug is a few words, short enough to type.
    - The command takes the full key or its short form (`f2`, or `5` for `m5`).
    - Ticket ids stay short, `<series><n>-<nn>-<slug>` (`f2-03-runner-status`). Frontmatter's `milestone:` takes either form. Docs are `.softfield/cards/<full key>.md` and `.softfield/reviews/<full key>.md`.

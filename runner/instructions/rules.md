@@ -1,10 +1,8 @@
-# AGENTS.md: rules for every coding agent
+# The factory's rules, for every job it starts
 
-**Who are you?**
-- **Developer** (running a task from `.softfield/tasks/`): this file plus `docs/agents/developer.md` (both are in your prompt already).
-- **Lead** (planning, writing tickets, escalations, review): this file plus `.softfield/project.md`, and Softfield's `docs/agents/owner.md` (the owner's preferences, first) and `docs/agents/lead.md`, in `~/.local/share/softfield/live/`.
+A project's `.softfield/project.md` overrides any of them, except a rule a gate enforces: that one changes in `.softfield/project.toml` or `.softfield/protected-paths.txt`.
 
-When a task file and this file disagree, stop and write `BLOCKED.md`.
+When a task file and these rules disagree, stop and write `BLOCKED.md`.
 
 ## Scope
 1. Start from your task's `files:` and `tests:`. Change other files only when the goal needs it, and no "while I'm here" fixes.
@@ -28,4 +26,4 @@ Write `BLOCKED.md` at the repo root, then stop. Its first line is exactly one of
 Never ask questions interactively. Nobody is there to answer.
 
 ## Discoveries
-Unplanned work you notice (a bug, missing test, refactor idea) goes as one bullet in `docs/discoveries.md`, **never** into code.
+Unplanned work you notice (a bug, missing test, refactor idea) goes as one bullet in `.softfield/discoveries.md`, **never** into code.

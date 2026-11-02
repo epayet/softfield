@@ -46,7 +46,7 @@ from runner.agents import (
     Reading,
     adapter_for,
 )
-from runner.claude import Progress, backoff_seconds, imports, probe
+from runner.claude import Progress, backoff_seconds, probe
 from runner.config import Config, project_checks, read_protected
 from runner.gates import (
     BLOCKED_FILE,
@@ -1415,18 +1415,16 @@ def _process_note(path: Path | None) -> str | None:
 def _brief(s: Session, role: str) -> str:
     """What a new lead session starts with (f21 D2, `prompts.brief`). A section that isn't
     there is a note in the session report, once, and the job goes with the rest."""
-    # A project's own docs/agents/ (Softfield's) or the shared ones (ADR 30 item 4)
-    home = s.repo if (s.repo / prompts.LEAD_DOC).is_file() else config.HOME
-    # Claude Code loads what CLAUDE.md imports into every session, -p too: not twice
-    loaded = home == s.repo and imports(s.repo, prompts.OWNER_DOC)
-    text, missing = prompts.brief(home, role, owner=not loaded)
+    home = config.HOME
+    text, missing = prompts.brief(home, role)
     rules = s.repo / config.PROJECT_MD
     if text and rules.is_file():
         text += "This project's own rules (.softfield/project.md):\n\n"
         text += rules.read_text(encoding="utf-8").strip() + "\n\n" + prompts.BRIEF_END
     if missing:
         note = (
-            f"The {role} prompt went without {', '.join(missing)}: not found in {home}/docs/agents/"
+            f"The {role} prompt went without {', '.join(missing)}:"
+            f" not found in {home}/runner/instructions/"
             " (`SECTIONS` in runner/prompts.py names the lead.md headings)."
         )
         if note not in s.report.notes:
@@ -1535,16 +1533,18 @@ def call_claude(
             claude_live_update(s, job_id, progress)
 
     while True:
-        if resume:
-            prompt = resume_prompt
-        else:
-            prompt = _brief(s, job.role) + job.prompt + (partial_note if interrupted else "")
+        prompt = resume_prompt if resume else job.prompt + (partial_note if interrupted else "")
         resume_prompt = RESUME_PROMPT  # a later resume follows a pause for a limit
         log = s.run_dir / f"{base}{f'-retry{attempt}' if attempt else ''}.log"
         if attempt:
             s.log(console.resumed(agent, what))
         run = partial(
-            adapter.run, runner, replace(job, prompt=prompt, resume=resume), s.repo, log, now()
+            adapter.run,
+            runner,
+            replace(job, prompt=prompt, resume=resume, system=_brief(s, job.role)),
+            s.repo,
+            log,
+            now(),
         )
         if runner.harness == CLAUDE:
             run = partial(run, on_progress=partial(latest.__setitem__, "progress"))
@@ -3272,7 +3272,7 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
         )
         + _recheck_note(s.state),
         timeout=s.cfg.claude_timeout,
-        edit=(".softfield/tasks/ready/**", "docs/agents/developer.md", ".softfield/var/runs/**"),
+        edit=(".softfield/tasks/ready/**", ".softfield/developer.md", ".softfield/var/runs/**"),
         # pytest: the tickets' pre-flight test; its commit skips the hook
         commands=(*GIT_READ_COMMANDS, "uv run pytest", CHECK_TICKETS),
     )
@@ -5566,7 +5566,8 @@ PARKED_REASON = "parked for a Claude limit"
 
 def dry_run_plan(cfg: Config) -> None:
     """`runner run --dry-run` (f8-02): `dispatch.plan`'s list, each job with what it waits for and
-    why it is there, and each ticket's pre-flight problems (docs/task-writing.md). Reads
+    why it is there, and each ticket's pre-flight problems (runner/instructions/task-writing.md).
+    Reads
     .softfield/tasks/, state.json and the metrics database if there is one: any branch, any tree,
     and
     no run folder or row (f1-33). A due review not queued yet is listed as the run would queue it,

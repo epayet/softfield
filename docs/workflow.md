@@ -2,16 +2,16 @@
 
 > Plain-language overview: [`how-it-works.md`](how-it-works.md).
 >
-> Reflects the brief §7, [ADR 00](../.softfield/adr/00-initial.md), [ADR 07](../.softfield/adr/07-spend-less-frontier.md) and [ADR 12](../.softfield/adr/12-junior-feedback-and-checkpoints.md) (Accepted). Changes to anything here need an Accepted ADR (see [`docs/agents/lead.md`](agents/lead.md)).
+> Reflects the brief §7, [ADR 00](../.softfield/adr/00-initial.md), [ADR 07](../.softfield/adr/07-spend-less-frontier.md) and [ADR 12](../.softfield/adr/12-junior-feedback-and-checkpoints.md) (Accepted). Changes to anything here need an Accepted ADR (see [`runner/instructions/lead.md`](agents/lead.md)).
 
 ## Roles
 
 | Who | Does |
 |---|---|
 | **Owner** | Accepts ADRs and workflow changes, decides architecture and critical code questions, signs off milestones on real devices. |
-| **Lead** (a frontier model; today Claude Code, Pro login) | The tech lead: plans, decides the contracts between pieces, writes tickets, builds protected paths test-first, handles escalations, reviews. See [`docs/agents/lead.md`](agents/lead.md). |
+| **Lead** (a frontier model; today Claude Code, Pro login) | The tech lead: plans, decides the contracts between pieces, writes tickets, builds protected paths test-first, handles escalations, reviews. See [`runner/instructions/lead.md`](agents/lead.md). |
 | **Runner** (`softfield`) | A deterministic Python script with **no AI in it**. It picks tasks, runs the local model and the gates, merges, retries and escalates, and calls the lead headlessly for lead tickets, directions, checkpoints, escalations and reviews. |
-| **Developers** (local models: OpenCode + Qwen via LM Studio) | Implement one ticket at a time, tests included. See [`docs/agents/developer.md`](agents/developer.md). |
+| **Developers** (local models: OpenCode + Qwen via LM Studio) | Implement one ticket at a time, tests included. See [`.softfield/developer.md`](agents/developer.md). |
 
 All coordination goes through files in the repo. Run logs go to `.softfield/var/runs/<timestamp>-<task>/`, which is gitignored.
 
@@ -55,7 +55,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    10. `mypy`
    11. the task's `tests:`
    12. all unit, integration, runner and browser tests ([ADR 06](../.softfield/adr/06-sse-and-browser-tests.md): ES modules in headless Chromium), and the dashboard's: every test file on main, whatever the queue holds ([ADR 21](../.softfield/adr/21-gate-every-test-file.md))
-   13. `tests-fail-on-main`: the test files the task added or changed fail against main's code (with every other changed file put back as it is on main), so they test the change ([ADR 07](../.softfield/adr/07-spend-less-frontier.md)). A `tests_only` ticket skips it and may change only `tests/` ([`docs/task-format.md`](task-format.md))
+   13. `tests-fail-on-main`: the test files the task added or changed fail against main's code (with every other changed file put back as it is on main), so they test the change ([ADR 07](../.softfield/adr/07-spend-less-frontier.md)). A `tests_only` ticket skips it and may change only `tests/` ([`runner/instructions/task-format.md`](task-format.md))
 
    `files:` is a pointer, not a gate: the session report lists files changed outside `files:` and `tests:`, and every existing test the developer changed, for the review.
 6. **Pass:** squash-merge to `main` and `git mv` the task to `done/` with a result footer. The merge is authored by `Coucou local model` and carries `Agent: local-model` and `Task:` trailers (see §Who made each commit). **Checkpoint** (ADR 12 item 8): after every `checkpoint_every` (2) developer merges, a headless review of those diffs (by the `checkpoint` role's agent in `[roles]`, Sonnet) may queue a fix ticket the next ones wait for, tighten upcoming tickets, or add a `developer.md` note; its tools can't touch code. It also writes its findings to `checkpoint-<n>.json` (ADR 14 item 13), which become finding rows on its job, keyed `<milestone>-C<job>-<n>`; a malformed file is noted in the session report.
@@ -67,9 +67,9 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    - **a requeued ticket continues its branch** (with `main` merged in), and its first prompt lists the files the earlier run changed, unless the escalation's `decision.json` says `"reset": true`, which deletes the branch.
    - the runner logs the longest run of edits without a command per task (in the report and the direction prompt); it doesn't stop on it yet.
 8. **`BLOCKED.md`** (categories in AGENTS.md):
-   - `unrelated-problem`: append it to `docs/discoveries.md` and continue gating
+   - `unrelated-problem`: append it to `.softfield/discoveries.md` and continue gating
    - anything else: escalate immediately; this doesn't count as a failed attempt
-9. **Discoveries:** the local model may append to `docs/discoveries.md`. Claude triages it at milestone review into set-aside bug tickets, tasks or ADRs.
+9. **Discoveries:** the local model may append to `.softfield/discoveries.md`. Claude triages it at milestone review into set-aside bug tickets, tasks or ADRs.
 
 ## Escalation (headless Claude)
 
@@ -77,7 +77,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 - **What Claude gets:** the task, `BLOCKED.md` or the gate logs, the last diff and the developer's thinking; the runner first merges `main` into `task/<task>`. Tools: Read/Edit/Write, `uv run pytest`/`ruff`/`mypy`/`runner check-all`, read-only git, and `git checkout task/<task>` (that branch only).
 - **Its code must pass `check-all`** (ADR 12 item 11). If not, the work goes to the branch `escalation/<task>`, the task to `blocked/`, and nothing reaches main.
 - **`finish`** ([ADR 15](../.softfield/adr/15-allowance-aware-routing.md) item 8), first choice when the gates fail on a small, clear gap: the lead checks out `task/<task>` itself and finishes the work there. The runner commits it, runs `check-all --task <task>`, and squash-merges it as a developer pass: `Agent: claude-headless` with `Developer: local-model`, `Task:` and `Model:` trailers, and the ticket row's `merged_by` is the lead. The task moves to `done/`. If `check-all` fails, or the job left `main` without answering `finish` on that branch, the work stays on its branch and the task goes to `blocked/`.
-- **Outcome:** `finish`, a repaired or split ticket back in `ready/` (building on the branch unless `"reset": true`), an answered question (facts added to Context), the lead doing the task itself, or **stop for the owner** (a draft ADR, only for what `docs/agents/lead.md` reserves for the owner; `decision.json` names the ADR and a one-line question, which the verdict shows). The lesson becomes a check, a worked example or a note in `docs/agents/developer.md`.
+- **Outcome:** `finish`, a repaired or split ticket back in `ready/` (building on the branch unless `"reset": true`), an answered question (facts added to Context), the lead doing the task itself, or **stop for the owner** (a draft ADR, only for what `runner/instructions/lead.md` reserves for the owner; `decision.json` names the ADR and a one-line question, which the verdict shows). The lesson becomes a check, a worked example or a note in `.softfield/developer.md`.
 
 ## Milestone review loop
 
@@ -90,7 +90,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 2. **Routing each blocking or should-fix finding:**
    - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5)
    - small (about 20 lines in one file), protected or security, or a developer already failed it once → Claude fixes it directly
-   - needs the owner (`docs/agents/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner.
+   - needs the owner (`runner/instructions/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner.
 3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code take the route `later` or `report`.
 
 **Stop rules** (the values are in `.softfield/project.toml`):
@@ -104,7 +104,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 | This round's findings ≥ the previous round's | stop |
 | ADR needed / unresolved security finding / cross-milestone surprise | stop immediately |
 
-**Report:** `.softfield/reviews/mN.md` starts with the owner's **sign-off sheet** (what changed, how to test it yourself, left for later, decisions waiting, how the work went; see `docs/agents/lead.md`), then covers what was built, the findings and their resolutions, the backlog items, the metrics (tasks, attempts per task, escalation rate, review rounds, headless runs), the stop reason and workflow observations. **Only the owner marks a milestone done.**
+**Report:** `.softfield/reviews/mN.md` starts with the owner's **sign-off sheet** (what changed, how to test it yourself, left for later, decisions waiting, how the work went; see `runner/instructions/lead.md`), then covers what was built, the findings and their resolutions, the backlog items, the metrics (tasks, attempts per task, escalation rate, review rounds, headless runs), the stop reason and workflow observations. **Only the owner marks a milestone done.**
 
 ## Headless Claude invocation
 

@@ -49,7 +49,7 @@ A Copilot job that fails within pace falls through to step 2. Copilot is still n
 - runner/loop.py `stand_in_checkpoint`: take a reason string instead of a `Hold`. Stop adding to `state.recheck` / `recheck_filed`, but keep the fields and `_recheck_note` so leftover entries drain to Claude. Commit and report wording: "(by copilot-auto, within pace)" or "(…, standing in for Claude)".
 - runner/prompts.py `CHECKPOINT_STAND_IN`: likely unchanged.
 - factory.toml (machine config): the comment on `checkpoint-stand-in`; the key stays.
-- ADR 31 (draft for the owner to accept); ADR 16 items 9–10 point to it; docs/agents/lead.md if it says who does checkpoints.
+- ADR 31 (draft for the owner to accept); ADR 16 items 9–10 point to it; runner/instructions/lead.md if it says who does checkpoints.
 - The dashboard's "who did each ticket" and stand-in labels may need the new wording.
 
 ## Tests

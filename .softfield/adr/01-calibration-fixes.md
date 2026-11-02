@@ -34,7 +34,7 @@ Adding more rules to the prompt would make this worse.
 **Change.**
 - **Retries: the gate output goes last.** `RETRY`/`FRESH` move to the end of the prompt, after the task, and gain one line: "If the failing file isn't in `files:`, you can't fix it: write BLOCKED.md with `CATEGORY: needs-file` and stop."
 - **`LOCAL` gets shorter, not longer.** It keeps only what the gates can't catch cheaply: the allowed files and "don't edit tests". It ends with one line: "Finish by running: `<exact commands>`", with pytest, ruff and mypy filled in by the runner for this task. The gates already enforce everything else, and AGENTS.md is loaded by OpenCode anyway.
-- **Task specs get a length budget** (in `docs/task-format.md`): Context ≤ ~60 lines, Steps ≤ 5 short items. Paste only what the model calls or implements. Spell out the test expectations only where the test file doesn't make them obvious (the model reads the tests anyway).
+- **Task specs get a length budget** (in `runner/instructions/task-format.md`): Context ≤ ~60 lines, Steps ≤ 5 short items. Paste only what the model calls or implements. Spell out the test expectations only where the test file doesn't make them obvious (the model reads the tests anyway).
 
 ## Consequences
 

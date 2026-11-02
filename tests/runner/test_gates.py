@@ -22,7 +22,7 @@ from tests.runner.conftest import git, write_task
 
 
 def test_outside_allowed_permits_discoveries():
-    changed = ["coucou/a.py", "coucou/b.py", "docs/discoveries.md"]
+    changed = ["coucou/a.py", "coucou/b.py", ".softfield/discoveries.md"]
     assert outside_allowed(changed, ["coucou/a.py"]) == ["coucou/b.py"]
 
 

@@ -18,7 +18,7 @@ says which project.
 
 Proposed: each project has its own series letter(s) in `.softfield/project.toml`
 (`[project] series = "h"`); `softfield init` picks one no registered project uses, from the
-project's name (hello → h), and the setup session (docs/bootstrap.md) can change it; `next_key`
+project's name (hello → h), and the setup session (runner/instructions/bootstrap.md) can change it; `next_key`
 uses it. Softfield keeps `f` and Coucou keeps `m`: nothing is renumbered. The factory/product
 "area" goes, since each repo is one project now (ADR 19 2b foresaw it: "the area becomes the
 project"); check what still reads `area` (the board's colours, plants' `area`, milestone docs'

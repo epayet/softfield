@@ -16,6 +16,7 @@ from runner.local_model import (
     TokenTotals,
     empty_cause,
     is_local,
+    opencode_config,
     parse_events,
     repeating,
     session_reasoning,
@@ -332,7 +333,7 @@ def test_the_ollama_agents_are_opencode_json_tags_and_none_develops_for_now(mach
     has another role."""
     cfg = load_config(REPO)
     ollama = [a for a in cfg.agents.values() if a.model.startswith("ollama/")]
-    config = json.loads((REPO / "opencode.json").read_text(encoding="utf-8"))
+    config = json.loads(opencode_config(REPO))
     tags = set(config["provider"]["ollama"]["models"])
     assert {a.model.removeprefix("ollama/") for a in ollama} == tags and len(tags) == 6
     for agent in ollama:
@@ -464,3 +465,37 @@ def test_a_stopped_attempt_fails_with_its_reason(tmp_path, monkeypatch):
     assert stop_reason(_run(LOCAL, tmp_path)) is not None
     _fake_stream(monkeypatch, [_step(100, 1)], code=None)
     assert stop_reason(_run(LOCAL, tmp_path)) is None  # a plain timeout
+
+
+def test_the_runs_config_has_the_factorys_context_and_a_projects_additions(tmp_path):
+    """ADR 41 item 2: a project needs no opencode.json; what it adds lives in its dot folder."""
+    (tmp_path / ".softfield").mkdir()
+    (tmp_path / ".softfield" / "project.md").write_text("# Ours\n")
+    plain = json.loads(opencode_config(tmp_path))
+    assert str(tmp_path / ".softfield" / "project.md") in plain["instructions"]
+    assert plain["instructions"][0].endswith("runner/instructions/rules.md")
+    assert plain["permission"]["bash"]["softfield check-all*"] == "allow"
+    assert plain["permission"]["bash"]["*"] == "deny"
+    assert "msgfmt *" not in plain["permission"]["bash"]
+    (tmp_path / ".softfield" / "opencode.json").write_text(
+        json.dumps({"permission": {"bash": {"msgfmt *": "allow"}}})
+    )
+    added = json.loads(opencode_config(tmp_path))
+    assert added["permission"]["bash"]["msgfmt *"] == "allow"
+    assert added["permission"]["bash"]["softfield check-all*"] == "allow"
+    assert "provider" in added
+
+
+def test_opencode_runs_with_that_config_in_its_environment(tmp_path, monkeypatch):
+    from runner import local_model
+
+    seen = {}
+
+    def fake(cmd, repo, timeout, log_path, tick, clock, env):
+        seen.update(env)
+        log_path.write_text("")
+        return "", 0
+
+    monkeypatch.setattr(local_model, "run_streaming", fake)
+    local_model.run_opencode(tmp_path, "m", "t", "p", 60, tmp_path / "log")
+    assert json.loads(seen["OPENCODE_CONFIG_CONTENT"]) == json.loads(opencode_config(tmp_path))

@@ -12,7 +12,7 @@
 3. **An idea that needs a card is a quoted line** in the sign-off sheet's "What next", which the owner plants from the dashboard (F164 D1). A review never writes a note to a file for later.
 4. **Checkpoints' findings without a fix ticket take the route `report`**; the review judges them as today (ADR 14 item 13).
 5. **`docs/backlog.md` is removed in every project**, its items each made a bug seed, a planted card, or dropped with a reason. Old review files that say `backlog` still read.
-6. **Discoveries stay** (`docs/discoveries.md`, the developers' inbox): the review triages it into bug seeds, tickets or ADRs.
+6. **Discoveries stay** (`.softfield/discoveries.md`, the developers' inbox): the review triages it into bug seeds, tickets or ADRs.
 
 ## Alternatives turned down
 - **A planted card per item:** about 65 items in three projects, mostly one-line nits, would bury the 36 ideas on the board. A bug seed is the board's card for a fix already.

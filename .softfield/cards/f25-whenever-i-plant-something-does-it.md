@@ -8,7 +8,7 @@
 - What happens today (read in the code, 2026-10-07):
   - "Plant and ask the lead" writes the card and queues the lead's reply on its thread at once (`_plant` in `runner/requests.py`), on Opus. "Plant" alone writes the card only; the lead answers when the owner first writes on its thread.
   - The lead's prompt (`_PLANNER_HEAD` in `runner/prompts.py`) asks for one check only: does the seed repeat a card in state idea, planning or ready, or another thread? It never names work that is done or being built, nor the code's history.
-  - `docs/agents/owner.md` asks to "answer from the code and the queue", so the lead usually reads the code, but nothing in the prompt makes it ask "is this already done, or no longer true?".
+  - `runner/instructions/author/owner.md` asks to "answer from the code and the queue", so the lead usually reads the code, but nothing in the prompt makes it ask "is this already done, or no longer true?".
   - After approval, nothing checks again. Pre-flight only checks that the ticket's paths and names exist. A ticket that went stale gets "the attempt changed no file" three times, then an escalation, where the lead finds out.
 
 ## Expected outcome

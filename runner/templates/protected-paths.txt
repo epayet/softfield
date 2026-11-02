@@ -4,8 +4,3 @@
 
 # The factory's own files: tickets, cards, ADRs, settings, and these rules
 .softfield/**
-AGENTS.md
-CLAUDE.md
-opencode.json
-# The lead's notes for the developers (ADR 07 items 6 and 14)
-docs/agents/**

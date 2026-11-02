@@ -64,8 +64,8 @@ def _history(repo: Path, trailer: bool = True) -> str:
     Without ``trailer``, merged as an escalation that implemented it (no `Task:`). Returns the
     merge's parent."""
     (repo / "AGENTS.md").write_text("old rules\n")
-    (repo / "docs" / "agents").mkdir(parents=True)
-    (repo / "docs" / "agents" / "developer.md").write_text("old notes\n")
+    (repo / ".softfield").mkdir(exist_ok=True)
+    (repo / ".softfield" / "developer.md").write_text("old notes\n")
     write_task(repo / ".softfield" / "tasks" / "ready", TICKET)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", f"add {TICKET}")
@@ -85,7 +85,7 @@ def _history(repo: Path, trailer: bool = True) -> str:
     )
     git(repo, "commit", "-q", "-am", f"runner: {TICKET} done")
     (repo / "AGENTS.md").write_text("today's rules\n")
-    (repo / "docs" / "agents" / "developer.md").write_text("today's notes\n")
+    (repo / ".softfield" / "developer.md").write_text("today's notes\n")
     git(repo, "commit", "-q", "-am", "today's workflow")
     return parent
 
@@ -195,7 +195,7 @@ def test_the_copy_starts_at_the_merges_parent_with_todays_workflow(repo, copies,
         seen["tree"] = git(work, "rev-parse", "HEAD~1^{tree}").strip()
         seen["thing"] = (work / "coucou" / "thing.py").read_text()
         seen["agents"] = (work / "AGENTS.md").read_text()
-        seen["notes"] = (work / "docs" / "agents" / "developer.md").read_text()
+        seen["notes"] = (work / ".softfield" / "developer.md").read_text()
         seen["ticket"] = (work / ".softfield" / "tasks" / "ready" / f"{TICKET}.md").read_text()
         seen["branch"] = git(work, "rev-parse", "--abbrev-ref", "HEAD").strip()
         seen["remotes"] = git(work, "remote")

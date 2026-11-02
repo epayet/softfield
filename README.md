@@ -26,7 +26,7 @@ In the project's folder (an empty one for a new project):
 
 ```sh
 softfield init      # the factory's files in .softfield/, committed on main, the project registered,
-                    # then Claude opens to finish with you (docs/bootstrap.md):
+                    # then Claude opens to finish with you (runner/instructions/bootstrap.md):
                     # the idea or a look at the repo, ADR 00, the checks, the first card
 softfield doctor    # asks to accept ADR 00, then what the web still needs; when it passes,
                     # the runner takes the project
@@ -55,7 +55,7 @@ loginctl enable-linger $USER                                 # keep them up whil
 | What the developers may not touch | its `.softfield/protected-paths.txt` |
 | This machine's agents, roles, Claude's reserves, backup | `~/.config/softfield/factory.toml` (a copy: `tests/fixtures/softfield-machine.toml`) |
 | Every project's runs, jobs, requests and threads | `~/.local/share/software-factory/factory-metrics.sqlite`, copied daily to `~/Dropbox/software-factory-backups` |
-| The owner's preferences, the lead's craft, how tickets are written | this repo's `docs/agents/owner.md`, `docs/agents/lead.md`, `docs/task-writing.md` |
+| The owner's preferences, the lead's craft, how tickets are written | this repo's `runner/instructions/author/owner.md`, `runner/instructions/lead.md`, `runner/instructions/task-writing.md` |
 
 ## How Softfield updates itself
 
@@ -79,5 +79,5 @@ through `softfield check-all` (the hook in `.softfield/hooks/`). While the runne
 worktree: it checks out task branches here.
 
 How it works: [docs/how-it-works.md](docs/how-it-works.md) and [docs/workflow.md](docs/workflow.md).
-Tickets: [docs/task-format.md](docs/task-format.md). The lead's craft:
-[docs/agents/lead.md](docs/agents/lead.md).
+Tickets: [runner/instructions/task-format.md](runner/instructions/task-format.md). The lead's craft:
+[runner/instructions/lead.md](runner/instructions/lead.md).

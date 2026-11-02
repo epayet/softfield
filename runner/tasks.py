@@ -1,4 +1,4 @@
-"""Task files: parsing, validation, picking and pre-flight (docs/task-format.md)."""
+"""Task files: parsing, validation, picking and pre-flight (runner/instructions/task-format.md)."""
 
 import re
 import subprocess
@@ -246,7 +246,7 @@ def _commands(meta: dict[str, Any], agent: str) -> tuple[str, ...]:
 
 def difficulty(meta: dict[str, Any], key: str) -> int | None:
     """``difficulty`` or ``difficulty_corrected``: absent, or an integer from 1 to 10 (the
-    rubric is in docs/task-writing.md)."""
+    rubric is in runner/instructions/task-writing.md)."""
     if key not in meta:
         return None
     value = meta[key]

@@ -51,10 +51,17 @@ class JobSpec:
     # Sandboxed: it may write only under these folders (runner/sandbox.py; the bench's copy).
     # OpenCode only for now; empty: no sandbox.
     writable: tuple[Path, ...] = ()
+    # The factory's context (ADR 41 item 2): the system prompt where the harness has one
+    system: str = ""
 
     @property
     def read_only(self) -> bool:
         return not self.edit
+
+    @property
+    def whole_prompt(self) -> str:
+        """For a harness with no system prompt of its own."""
+        return self.system + self.prompt
 
 
 @dataclass(frozen=True)

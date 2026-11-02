@@ -191,9 +191,9 @@ def test_security_tests_and_the_leads_docs_are_protected():
         "tests/factory_dashboard/test_requests.py",
         "factory_dashboard/requests.py",
         ".softfield/project.toml",
-        "docs/agents/lead.md",
-        "docs/agents/owner.md",
-        "docs/agents/developer.md",
+        "runner/instructions/lead.md",
+        "runner/instructions/author/owner.md",
+        ".softfield/developer.md",
         "AGENTS.md",
     ]
     assert touching_protected(guarded, read_protected(REPO)) == sorted(guarded)

@@ -39,7 +39,7 @@ The owner has two free allowances beyond Claude Pro and the local GPU, and wants
 ## Decisions (⚑ = deviates from an earlier decision)
 
 ### A. Names and agents
-1. ⚑ **"Junior" becomes "developer"**, in AGENTS.md, `docs/agents/junior.md` (renamed `developer.md`), `docs/task-format.md`, `docs/task-writing.md`, lead.md, and the runner's prompts and reports.
+1. ⚑ **"Junior" becomes "developer"**, in AGENTS.md, `runner/instructions/junior.md` (renamed `developer.md`), `runner/instructions/task-format.md`, `runner/instructions/task-writing.md`, lead.md, and the runner's prompts and reports.
    - With stronger cloud models joining, "junior" stops being accurate.
    - The ticket field becomes `agent: lead | developer`; `junior` stays accepted for old tickets.
 2. **An agent is a harness plus a model.** Its id is `<harness>-<model>`: `local-qwen3.6-35b-a3b`, `ollama-gpt-oss-120b`, `claude-sonnet`, `claude-opus`, `copilot-<model>`.
@@ -72,7 +72,7 @@ The owner has two free allowances beyond Claude Pro and the local GPU, and wants
    - `runner/claude.py` becomes one adapter among three. This is the ground a swappable lead stands on (item 15).
 
 ### B. Difficulty and ratings
-5. **Every ticket gets `difficulty:` from 1 to 10,** set by the lead at plan time from a short rubric in `docs/task-writing.md`: concepts, files to read and change, dependencies, new patterns, UI, i18n and offline. Difficulty 10 means "only the lead should do this".
+5. **Every ticket gets `difficulty:` from 1 to 10,** set by the lead at plan time from a short rubric in `runner/instructions/task-writing.md`: concepts, files to read and change, dependencies, new patterns, UI, i18n and offline. Difficulty 10 means "only the lead should do this".
 6. **Two ratings per agent, from 1 to 10, kept simple.**
    - **Coding** is Elo-style: each ticket is a game against its difficulty.
      - The result:

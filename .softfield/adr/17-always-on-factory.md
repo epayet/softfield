@@ -3,7 +3,7 @@
 - **Status:** Accepted (by the owner, 2026-10-02)
 - **Date:** 2026-10-02
 - **Deciders:** project owner (accepts), Claude (drafts)
-- **Amends:** [ADR 15](15-allowance-aware-routing.md) item 6 and [ADR 16](16-claude-window-and-named-milestones.md) item 2 (who develops); `docs/task-format.md` (a `later/` folder); `docs/workflow.md` (the review loop, gates); lead.md's Review
+- **Amends:** [ADR 15](15-allowance-aware-routing.md) item 6 and [ADR 16](16-claude-window-and-named-milestones.md) item 2 (who develops); `runner/instructions/task-format.md` (a `later/` folder); `docs/workflow.md` (the review loop, gates); lead.md's Review
 - **Evidence:** [`.softfield/reviews/f2.md`](../reviews/f2.md) and the metrics database (jobs 174–200); the owner's notes after F2 (`docs/roadmap.md`, "Owner's notes after F2").
 
 ## Context
@@ -24,7 +24,7 @@
 2. **⚑ The runner formats before the gates.**
    - After a developer attempt and before its gates, the runner runs `uv run ruff format` and `uv run ruff check --fix` on the Python files the branch changed, and commits the result into the attempt.
    - The ruff gate then judges what's left. It's deterministic and costs nothing, so a developer never loses an attempt to formatting alone.
-3. **⚑ `.softfield/tasks/later/`: tickets set aside** (amends `docs/task-format.md`).
+3. **⚑ `.softfield/tasks/later/`: tickets set aside** (amends `runner/instructions/task-format.md`).
    - The runner never takes a ticket from it, and records its tickets with the state `later`.
    - `uv run runner queue <ticket>` moves one to `ready/` and commits.
    - The dashboard lists them; a button follows with [ADR 18](18-dashboard-writes.md).
@@ -36,7 +36,7 @@
    - **The review fixes it itself** when the fix is small (about 20 lines in one file), touches protected or security code, or a developer already failed that fix once.
    - Fix tickets get the usual checkpoint, not another review round; the review closes when they merge. The loop stays bounded by `review_rounds` and the third-return stop.
 
-6. **⚑ Every ticket leaves main shippable** (owner, 2026-10-02; amends `docs/task-writing.md`). Milestones may be reprioritised and interleaved, so main can sit between two tickets of a feature for days.
+6. **⚑ Every ticket leaves main shippable** (owner, 2026-10-02; amends `runner/instructions/task-writing.md`). Milestones may be reprioritised and interleaved, so main can sit between two tickets of a feature for days.
    - A ticket either completes a usable slice, or adds code nobody can reach yet (no link, no route in the menu, no button). It never leaves something visible and half-working.
    - The lead plans for this, and each ticket's Done when says what a person sees after it, or "nothing visible yet".
    - No feature-flag system until a real case needs one.

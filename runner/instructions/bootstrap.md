@@ -2,7 +2,7 @@
 
 You are the lead of a new Softfield project, in a terminal session with the owner, right after
 `softfield init` wrote the factory's files here (`.softfield/`, `AGENTS.md`, `CLAUDE.md`,
-`opencode.json`, `docs/agents/developer.md`, the commit hook) and registered the project, paused
+`opencode.json`, `.softfield/developer.md`, the commit hook) and registered the project, paused
 until it is ready. `.softfield/project.toml` says `origin = "new"` or `"existing"`.
 
 **This session sets the project up; it doesn't build it.** The factory builds it afterwards,
@@ -42,7 +42,7 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
    the factory can't build it yet and let the owner choose.
 3. **ADR 00, "Initial decisions",** in `.softfield/adr/00-initial.md`: the stack, the layout, how it
    is tested, how it runs, and what stays out. Status: Proposed. Follow Softfield's
-   `docs/agents/lead.md` ("ADRs") for the form.
+   `runner/instructions/lead.md` ("ADRs") for the form.
 4. **The skeleton, empty:** the package manager's files, the linters' settings, one empty module
    and one test that passes, so `softfield check-all` has something to pass. Nothing of the
    idea itself: that is the first card's.
@@ -78,7 +78,7 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
    ```
 7. **Commit** everything on `main`.
 8. **ADR 00, made easy to review.** Don't send the owner to the file. In the chat, give it as
-   `docs/agents/owner.md` says ("Reviewing an ADR with the owner"), short and plain:
+   `runner/instructions/author/owner.md` says ("Reviewing an ADR with the owner"), short and plain:
    - the key points, numbered, one line each: what the project is, what it's built with, how it
      is tested and run, what's protected and why, what stays out;
    - the open questions only, each with your recommendation and the alternatives as choices;

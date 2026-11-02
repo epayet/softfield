@@ -19,10 +19,9 @@ DEFAULT_MACHINE = "~/.config/softfield/factory.toml"
 MACHINE_ENV = "SOFTFIELD_CONFIG"  # another machine file; tests point it at none
 PROJECT_TOML = Path(".softfield") / "project.toml"
 PROJECT_MD = Path(".softfield") / "project.md"  # the rules that hold for this project only
-# The Softfield checkout this code runs from (``live``, ADR 30 item 5) and its shared docs:
-# lead.md, owner.md, task-format.md, task-writing.md, workflow.md (item 4)
+# The Softfield this code runs from, and what it injects into every job it starts (ADR 41)
 HOME = Path(__file__).resolve().parents[1]
-DOCS = HOME / "docs"
+INSTRUCTIONS = Path(__file__).resolve().parent / "instructions"
 PROTECTED = Path(".softfield") / "protected-paths.txt"
 
 
@@ -143,6 +142,11 @@ def _read(repo: Path) -> dict[str, Any]:
         both = isinstance(table, dict) and isinstance(data.get(name), dict)
         data[name] = {**data[name], **table} if both else table
     return data
+
+
+def author_override(name: str) -> Path:
+    """This machine's file replacing one of the package's author's (ADR 41 item 4)."""
+    return machine_file().parent / name
 
 
 def machine_metrics_db() -> Path:

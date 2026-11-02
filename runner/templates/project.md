@@ -1,6 +1,5 @@
 # {name}: the rules that hold here only
 
-The rules every project shares are Softfield's (`docs/agents/` in `~/.local/share/softfield/live/`,
-ADR 30 item 4). These are this project's own, for the lead and every job that plans or reviews it.
+Softfield's own rules reach every job it starts, in its system prompt. These are this project's, for every role, and they win over Softfield's (ADR 41), except a rule a gate enforces.
 
 - (The setup writes them: the product's taste, its languages, its code rules.)

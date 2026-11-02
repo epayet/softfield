@@ -52,6 +52,7 @@ class ClaudeJob:
     allowed_tools: tuple[str, ...]
     permission_mode: str = "dontAsk"  # anything not in allowed_tools is denied, no prompts
     model: str = ""  # empty: Claude Code's default
+    system: str = ""  # the factory's context, appended to the system prompt (ADR 41 item 2)
     # Gets the job's progress every LIVE_EVERY seconds while it runs; called from the thread
     # that runs the job.
     on_progress: Callable[[Progress], None] | None = field(default=None, compare=False)
@@ -290,15 +291,6 @@ def _usage(data: dict[str, Any]) -> dict[str, int]:
 _BASH_RULE_RE = re.compile(r"^Bash\((.+?):\*\)$")
 
 
-def imports(repo: Path, doc: str) -> bool:
-    """Whether ``repo``'s CLAUDE.md imports ``doc`` (``@doc`` on a line of its own): Claude
-    Code then loads it into every session, a headless one too (F21 review, F1)."""
-    path = repo / "CLAUDE.md"
-    if not path.is_file():
-        return False
-    return f"@{doc}" in (line.strip() for line in path.read_text(encoding="utf-8").splitlines())
-
-
 def shell_note(allowed_tools: tuple[str, ...]) -> str:
     """How a job may call Bash: the rules match a command's prefix, so `cd …;`, `git -C`,
     pipes and chains are denied (every Bash denial in the f0 rehearsal was one of those)."""
@@ -333,8 +325,11 @@ def run_claude(
         job.permission_mode,
         *(("--model", job.model) if job.model else ()),
         *(("--resume", resume) if resume else ()),
+        *(("--append-system-prompt", job.system) if job.system else ()),  # ADR 41 item 2
+        "--add-dir",
+        str(config.INSTRUCTIONS),
+        *(("--add-dir", str(docs)) if (docs := config.HOME / "docs").is_dir() else ()),
         *(("--allowedTools", *job.allowed_tools) if job.allowed_tools else ()),
-        *(("--add-dir", str(docs)) if (docs := config.HOME / "docs").is_dir() else ()),  # shared
     ]
     started = time.monotonic()
     log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -429,7 +424,12 @@ class ClaudeAdapter:
         on_progress: Callable[[Progress], None] | None = None,
     ) -> JobResult:
         job = ClaudeJob(
-            spec.role, spec.prompt, allowed_tools(spec), model=agent.model, on_progress=on_progress
+            spec.role,
+            spec.prompt,
+            allowed_tools(spec),
+            model=agent.model,
+            system=spec.system,
+            on_progress=on_progress,
         )
         try:
             return run_claude(job, repo, spec.timeout, log_path, now, resume=spec.resume)

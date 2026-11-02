@@ -2,7 +2,8 @@
 
 ``init`` writes the factory's files into the folder it runs in, new or existing, registers the
 project and hands over to an interactive Claude session that sets the rest up with the owner
-(``docs/bootstrap.md``). ``doctor`` says whether a project is ready for the web. ``service``
+(``runner/instructions/bootstrap.md``). ``doctor`` says whether a project is ready for the web.
+``service``
 writes the systemd user units that keep the runner and the dashboard up.
 """
 
@@ -14,7 +15,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from runner import checks, config, metrics
+from runner import checks, config, metrics, prompts
 from runner.config import PROJECT_TOML, ConfigError, load_config
 from runner.gitops import Git, GitError
 from runner.tasks import TaskError, milestone_key
@@ -31,18 +32,16 @@ FACTORY_DIRS = (
     "tasks/escalated",
 )
 # What `init` writes, from `templates/`: (template, path in the project). An existing file
-# stays as it is: the setup session merges what it needs (docs/bootstrap.md).
+# stays as it is: the setup session merges what it needs (runner/instructions/bootstrap.md).
 FILES = (
     ("project.toml", ".softfield/project.toml"),
     ("protected-paths.txt", ".softfield/protected-paths.txt"),
     ("project.md", ".softfield/project.md"),
     ("pre-commit", ".softfield/hooks/pre-commit"),
-    ("AGENTS.md", "AGENTS.md"),
-    ("CLAUDE.md", "CLAUDE.md"),
-    ("opencode.json", "opencode.json"),
-    ("developer.md", "docs/agents/developer.md"),
+    ("README.md", ".softfield/README.md"),
+    ("gitignore", ".softfield/.gitignore"),
+    ("developer.md", ".softfield/developer.md"),
 )
-IGNORED = (".softfield/var/", "BLOCKED.md")
 _STATUS_RE = re.compile(r"^- \*\*Status:\*\*\s*(\w+)", re.MULTILINE)
 
 
@@ -90,12 +89,12 @@ def init(folder: Path, db: Path) -> tuple[str, list[str]]:
         path.write_text(text.replace("{name}", name).replace("{origin}", origin), encoding="utf-8")
         written.append(rel)
     (folder / ".softfield/hooks/pre-commit").chmod(0o755)
-    ignore = folder / ".gitignore"
-    lines = ignore.read_text(encoding="utf-8").splitlines() if ignore.is_file() else []
-    missing = [line for line in IGNORED if line not in lines]
-    if missing:
-        ignore.write_text("\n".join([*lines, *missing]) + "\n", encoding="utf-8")
-        written.append(".gitignore")
+    # A developer's BLOCKED.md stays out of git without touching the repo's own .gitignore
+    exclude = Path(folder, git.run("rev-parse", "--git-path", "info/exclude").strip())
+    exclude.parent.mkdir(parents=True, exist_ok=True)
+    kept = exclude.read_text(encoding="utf-8") if exclude.is_file() else ""
+    if "BLOCKED.md" not in kept.splitlines():
+        exclude.write_text(kept + "BLOCKED.md\n", encoding="utf-8")
     git.run("config", "core.hooksPath", ".softfield/hooks")
     git.run("add", "-A")
     git.run(
@@ -199,13 +198,20 @@ def plan_first_card(name: str, card: str, db: Path, at: str) -> bool:
 
 def bootstrap() -> Path:
     """The setup session's guide, in the Softfield checkout this runs from."""
-    return config.HOME / "docs" / "bootstrap.md"
+    return config.INSTRUCTIONS / "bootstrap.md"
 
 
 NEXT = """What happens now: Claude asks for your idea and how to build it, keeps your words as
 the project's seed, drafts ADR 00 (the starting decisions) for your yes, and puts the first
 piece of work on a card. It doesn't build the idea: the factory does, from the card, and you
 plan and follow it on the dashboard. Claude ends by saying where."""
+
+
+def lead_command(folder: Path, args: list[str]) -> list[str]:
+    """A terminal lead session in ``folder``: a plain ``claude`` stays plain (ADR 41 item 3)."""
+    system = prompts.lead_session(config.HOME, folder / config.PROJECT_MD)
+    add = ["--add-dir", str(config.INSTRUCTIONS)]
+    return ["claude", *add, "--append-system-prompt", system, *args]
 
 
 def claude_command(folder: Path, origin: str) -> list[str]:
@@ -221,7 +227,7 @@ def claude_command(folder: Path, origin: str) -> list[str]:
     return [
         "claude",
         "--add-dir",
-        str(config.HOME / "docs"),
+        str(config.INSTRUCTIONS),
         "--append-system-prompt",
         guide,
         opening,

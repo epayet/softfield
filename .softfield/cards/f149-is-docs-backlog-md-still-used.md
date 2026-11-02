@@ -23,7 +23,7 @@ No review in any project writes a backlog file again; Softfield's is gone, each 
 
 ## Decisions
 - **D1. ADR 35** (`.softfield/adr/35-no-backlog-file.md`): routes `later` (a set-aside bug ticket, `finding:` in its frontmatter) and `report` (said in the review report only) replace `backlog`; `ROUTES` keeps `backlog` readable for old files, and a missing route reads as `report`.
-- **D2. Which file owns what.** `runner/prompts.py` (`REVIEW`, the three checkpoint prompts), `runner/milestone.py` (`_fix_scope`), `runner/review.py` (`ROUTES`, the default), `docs/workflow.md` (Milestone review loop, Discoveries, Report), `docs/how-it-works.md`, `docs/agents/lead.md` ("Left for later"), `docs/agents/owner.md` (the "parked backlog item" line), `.softfield/cards/bugs.md` ("Where bugs come from").
+- **D2. Which file owns what.** `runner/prompts.py` (`REVIEW`, the three checkpoint prompts), `runner/milestone.py` (`_fix_scope`), `runner/review.py` (`ROUTES`, the default), `docs/workflow.md` (Milestone review loop, Discoveries, Report), `docs/how-it-works.md`, `runner/instructions/lead.md` ("Left for later"), `runner/instructions/author/owner.md` (the "parked backlog item" line), `.softfield/cards/bugs.md` ("Where bugs come from").
 - **D3. A bug seed** is a ticket shaped like `.softfield/tasks/later/bug-43-remove-the-dead-line-page.md`: `milestone: bugs`, `area:`, `finding:`, the next free `bug-<nn>`, no `priority:` (the board's drag places it).
 - **D4. Softfield's items**, decided on 2026-10-27:
   - Bug seeds: f90-F2 (two timing tests in `tests/runner/test_loop.py`, lead: protected tests); f151-F2 (`note_merge` unparks the checkpoint on every merge past `checkpoint_every`, lead); f158-F3 (one dashboard test opens every page on the test data and fails on escaped `&lt;ul&gt;`, `&lt;li&gt;` or `&lt;p&gt;`, developer).
@@ -32,7 +32,7 @@ No review in any project writes a backlog file again; Softfield's is gone, each 
   - Dropped, not worth a run (seconds-wide races never seen, harmless leftovers, a gate turned down for low ceremony; each stays in its review report): f12-F11, f104-F3, f17-F5, f153-F3, f3 (SIGKILL), f4-F4, f3-C310-2, f114-F7, f2 (the two gates).
   - The "Coucou" section and m2-F6: Coucou's own `docs/backlog.md` holds them (D5).
 - **D5. The other projects.** Each gets a card on its own board, from the owner's Plant box, whose lead drafts one lead ticket that does what f149-02 does there, its bug seeds set aside (Coucou's product work is on hold: none queued).
-- **D6. Who builds.** Both lead: `runner/` and `docs/agents/` are protected, and f149-02 deletes a file.
+- **D6. Who builds.** Both lead: `runner/` and `runner/instructions/` are protected, and f149-02 deletes a file.
 
 ## Tickets
 - f149-01-reviews-stop-writing-a-backlog (lead)

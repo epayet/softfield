@@ -9,7 +9,7 @@ does in a repo that already has AGENTS.md and CLAUDE.md, and whether it works wi
 
 Today: `setup.init` writes a template only where no file exists (`if path.exists(): continue`
 over `setup.FILES`), so the repo's own AGENTS.md, CLAUDE.md, opencode.json and
-docs/agents/developer.md stay as they are, and docs/bootstrap.md never says to bring the
+.softfield/developer.md stay as they are, and runner/instructions/bootstrap.md never says to bring the
 factory's parts into them (seen on the fact-printer trial).
 
 What still works: the runner's gates (protected paths, diff size, tests: they read .softfield/),
@@ -25,11 +25,11 @@ What doesn't:
   surface late, as failed attempts.
 
 Proposed:
-1. The setup session merges instead of replacing (docs/bootstrap.md, "An existing project"):
+1. The setup session merges instead of replacing (runner/instructions/bootstrap.md, "An existing project"):
    a short "Softfield" section in AGENTS.md with the factory's rules (scope, protected paths,
    no new dependencies, BLOCKED.md, discoveries; from runner/templates/AGENTS.md); the two
-   import lines in CLAUDE.md (`@~/.local/share/softfield/live/docs/agents/owner.md`,
-   `@.softfield/project.md`); in opencode.json, AGENTS.md and docs/agents/developer.md among
+   import lines in CLAUDE.md (`@~/.local/share/softfield/live/runner/instructions/author/owner.md`,
+   `@.softfield/project.md`); in opencode.json, AGENTS.md and .softfield/developer.md among
    `instructions` and `softfield check-all*` allowed. What the repo already says stays.
 2. `softfield doctor` checks each of those and names the missing one.
 Related: the planted card about shared rules staying shared (AGENTS.md drift).

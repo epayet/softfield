@@ -3,7 +3,7 @@
 - **Status:** Accepted (by the owner, 2026-10-28)
 - **Date:** 2026-10-27
 - **Deciders:** project owner (accepts), Claude (drafts)
-- **Amends:** [ADR 28](28-lead-jobs-can-look.md) item 5 for review jobs only; the "Review" section of `docs/agents/lead.md` and the review job's brief (`REVIEW` in `runner/prompts.py`).
+- **Amends:** [ADR 28](28-lead-jobs-can-look.md) item 5 for review jobs only; the "Review" section of `runner/instructions/lead.md` and the review job's brief (`REVIEW` in `runner/prompts.py`).
 - **Card:** [F144](../cards/f144-a-review-should-open-the-real.md)
 - **Evidence:** four milestones in a row where the tests passed on made-up data and the real data showed the bug:
   - F109: the merge tests left a merged card's doc and no milestone row; a real merge does the opposite, where both worst bugs were. Found by reading the 19 real merge headings.
@@ -29,5 +29,5 @@
 
 ## Alternatives turned down
 - **Checkpoints look too** (ADR 02's F94 entry suggested it): they run every two developer merges, mostly on Sonnet, and most merges change no page. Four bugs out of four were caught at the review; wait for one that a review catches too late.
-- **A rule in the developers' notes** ("test on realistic data"): developers drop instructions from long prompts (`docs/agents/lead.md`, "Developers' notes"), and this is the reviewer's check to make.
+- **A rule in the developers' notes** ("test on realistic data"): developers drop instructions from long prompts (`runner/instructions/lead.md`, "Developers' notes"), and this is the reviewer's check to make.
 - **Screenshots** (ADR 28 "Later"): would show layout too, but none of the four bugs needed a picture.

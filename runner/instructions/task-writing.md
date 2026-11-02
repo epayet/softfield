@@ -1,6 +1,6 @@
 # Writing tasks for the local model: what works
 
-Practical guidance for whoever writes tickets: the lead, whichever frontier model that is ([`docs/agents/lead.md`](agents/lead.md)). The **rules** are in [`task-format.md`](task-format.md) and [ADR 01](../.softfield/adr/01-calibration-fixes.md); this page is the craft behind them, learned from calibration and M1 (see `.softfield/sessions/` and `.softfield/reviews/m1.md`).
+Practical guidance for whoever writes tickets: the lead, whichever frontier model that is ([`runner/instructions/lead.md`](agents/lead.md)). The **rules** are in [`task-format.md`](task-format.md) and [ADR 01](../../.softfield/adr/01-calibration-fixes.md); this page is the craft behind them, learned from calibration and M1 (see `.softfield/sessions/` and `.softfield/reviews/m1.md`).
 
 **Evidence so far:** 5 tasks. 3/3 passed on the first attempt once these practices were in place. The 2 failures before that were both spec errors, not model errors.
 
@@ -69,7 +69,7 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 - **Which modules:** the local model gets UI modules (rendering, transitions, screen state). Crypto, auth, pairing, the outbox, the live stream, the service worker and `display.js` are protected.
 - **Layout:** UI tests call `layout_problems(page)` at `PHONE` and `DISPLAY` sizes (`tests/browser/conftest.py`).
 - **Strings:** Preact components (ADR 11) use `gettext()` in the JS, with the French in `djangojs.po`; list `djangojs.po` and `.mo` in `files:`. The display (plain modules until its port) keeps its text in the template.
-- **Components:** point at `docs/agents/preact.md` and the worked example `name_form.js`; the ticket gives the props and the callbacks (the milestone's decisions), never the markup.
+- **Components:** point at the project's own guide (Coucou's `docs/agents/preact.md`) and the worked example `name_form.js`; the ticket gives the props and the callbacks (the milestone's decisions), never the markup.
 
 ## Lessons from M2
 
@@ -108,11 +108,11 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 
 ## Lessons from F4
 
-- **A test-only fix can't go to a developer.** The `tests-fail-on-main` gate puts back main's code and needs the changed test to fail there; when `files:` holds only tests and main already behaves (a finding like "the test doesn't assert X"), no correct test can fail, so the ticket burns three attempts and an escalation (f4-23, f4-24, f4-28). Since f8-09, mark such a ticket `tests_only: true` ([`docs/task-format.md`](task-format.md)): the gate is skipped and a developer can do it; spell out in Done when what each assertion must reject.
+- **A test-only fix can't go to a developer.** The `tests-fail-on-main` gate puts back main's code and needs the changed test to fail there; when `files:` holds only tests and main already behaves (a finding like "the test doesn't assert X"), no correct test can fail, so the ticket burns three attempts and an escalation (f4-23, f4-24, f4-28). Since f8-09, mark such a ticket `tests_only: true` ([`runner/instructions/task-format.md`](task-format.md)): the gate is skipped and a developer can do it; spell out in Done when what each assertion must reject.
 
 ## Lessons from F109
 
-- **A finding on a planning page goes to the developer when it stays within one page's module, its test file and its template (F143 D6, 2026-10-28); one that spans two pages' modules, or a protected path, is a lead ticket.** Before the split, any finding naming `tests/factory_dashboard/test_planning.py` (3,500 lines) was the lead's, since F14. f109-04, a checkpoint's finding, went to the developer: its first attempt did most of it, then the next two re-read the test file for 10 minutes and stopped with no edit, the second under a direction that said "don't read the test file again". Writing a finding ticket, check its `files:` and `tests:` against the Known range in `docs/agents/lead.md` before routing it.
+- **A finding on a planning page goes to the developer when it stays within one page's module, its test file and its template (F143 D6, 2026-10-28); one that spans two pages' modules, or a protected path, is a lead ticket.** Before the split, any finding naming `tests/factory_dashboard/test_planning.py` (3,500 lines) was the lead's, since F14. f109-04, a checkpoint's finding, went to the developer: its first attempt did most of it, then the next two re-read the test file for 10 minutes and stopped with no edit, the second under a direction that said "don't read the test file again". Writing a finding ticket, check its `files:` and `tests:` against the Known range in `runner/instructions/lead.md` before routing it.
 - **A ticket whose tests build records by hand names the real record to copy.** F109's tests kept a merged card's doc on main and gave it no milestones row; a real merge `git rm`s the doc and keeps the row, marked removed. Every test passed while each merged card's header was wrong twice over (the review's F1, F2). Say in Context what the record looks like on main ("a merge removes the doc, keeps the row as `removed`; a card's doc opens `# Milestone F95: <title>`").
 
 ## Lessons from F94

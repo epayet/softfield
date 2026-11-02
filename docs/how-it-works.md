@@ -32,7 +32,7 @@ flowchart TD
 
 - **Checkpoints** run after every 2 *developer* merges, counted across all milestones (`checkpoint_every` in `.softfield/project.toml`). Lead-ticket merges don't count.
 - **Reviews** run when every ticket of a milestone is in `done/` (set-aside ones in `later/` don't count), before the runner's next ticket ([ADR 17](../.softfield/adr/17-always-on-factory.md)).
-- **A replan is a lead ticket,** written at planning after a chain of three or more lead tickets that later ones rely on (`docs/agents/lead.md`, "Replans"). The runner never makes one itself.
+- **A replan is a lead ticket,** written at planning after a chain of three or more lead tickets that later ones rely on (`runner/instructions/lead.md`, "Replans"). The runner never makes one itself.
 - **Owner questions:** ADRs and sign-off. The reserve switches replace the console's y/N once F8 lands ([ADR 22](../.softfield/adr/22-one-visible-queue.md)).
 
 **The idea** ([ADR 07](../.softfield/adr/07-spend-less-frontier.md)): the frontier model is the tech lead and the local models are its developers. The lead designs, decides how the pieces connect, writes short tickets and builds the security-critical parts. The developers write the rest, tests included. Deterministic gates check every change, and the lead reviews once per milestone. Until M3 the lead also wrote a working solution for every task, which cost more than doing the task; that's gone.
@@ -84,7 +84,7 @@ Everything is plain git and files, so a bad run is easy to inspect (logs go in `
 
 A goal, the files to read, the worked example to follow, and acceptance criteria as bullets, including the edges. No pasted code and no working solution: the developer reads the code and writes the tests itself. Security work is the exception: the lead writes those tests first, on main. Details: [`task-format.md`](task-format.md).
 
-What the developers learn stays in the repo, since they have no memory: a check where possible, else a worked example, else one line in [`docs/agents/developer.md`](agents/developer.md) (15 lines at most).
+What the developers learn stays in the repo, since they have no memory: a check where possible, else a worked example, else one line in [`.softfield/developer.md`](agents/developer.md) (15 lines at most).
 
 ## Results so far
 

@@ -3,6 +3,7 @@
 import json
 import re
 import sqlite3
+import tempfile
 import threading
 import time
 from collections.abc import Callable
@@ -12,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from runner import checks, claude, gates, local_model, loop, metrics, ratings
+from runner import checks, claude, gates, local_model, loop, metrics, prompts, ratings
 from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
 from runner.claude import ClaudeJob, Progress, TransientError, UsageLimited
 from runner.config import Config
@@ -1548,7 +1549,7 @@ def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fa
     # f1-36, f1-37: a checkpoint queued bare file names; its commit skips the hook, so it
     # must be able to run the pre-flight test itself.
     assert "Bash(uv run pytest:*)" in jobs[0].allowed_tools
-    assert "Edit(docs/agents/developer.md)" in jobs[0].allowed_tools  # ADR 14 item 1
+    assert "Edit(.softfield/developer.md)" in jobs[0].allowed_tools  # ADR 14 item 1
     assert LOOK not in jobs[0].allowed_tools  # ADR 28 item 4: planner and review jobs only
     assert "Bash(softfield check-tickets:*)" in jobs[0].allowed_tools  # any project, not ours
     assert "softfield check-tickets <its files>" in jobs[0].prompt
@@ -2411,7 +2412,7 @@ def _limited_then(monkeypatch, *outcomes):
     calls: list[tuple[str, str | None]] = []
 
     def run_claude(job, repo, timeout, log_path, now, resume=None):
-        calls.append((job.prompt, resume))
+        calls.append((job.system + job.prompt, resume))
         outcome = outcomes[len(calls) - 1]
         if isinstance(outcome, Exception):
             raise outcome
@@ -2477,14 +2478,15 @@ ROLE_SECTIONS = {
 }
 
 
-def _lead_docs(repo: Path, without: str | None = None) -> None:
-    """The owner's preferences and a lead.md with every real heading (but ``without``)."""
-    (repo / "docs" / "agents").mkdir(parents=True)
-    (repo / "docs" / "agents" / "owner.md").write_text(OWNER_MD)
+def _lead_docs(repo: Path, monkeypatch, without: str | None = None) -> None:
+    """The factory's files, under a stand-in Softfield: the owner's preferences and a lead.md
+    with every real heading (but ``without``)."""
+    home = Path(tempfile.mkdtemp(dir=repo.parent))
+    (home / prompts.OWNER_DOC).parent.mkdir(parents=True)
+    (home / prompts.OWNER_DOC).write_text(OWNER_MD)
     body = "".join(f"## {h}\nWhat {h} says.\n\n" for h in LEAD_HEADINGS if h != without)
-    (repo / "docs" / "agents" / "lead.md").write_text("# The lead\n\nThe model.\n\n" + body)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "the lead's docs")
+    (home / prompts.LEAD_DOC).write_text("# The lead\n\nThe model.\n\n" + body)
+    monkeypatch.setattr("runner.config.HOME", home)
 
 
 def _headings(prompt: str) -> list[str]:
@@ -2494,7 +2496,7 @@ def _headings(prompt: str) -> list[str]:
 @pytest.mark.parametrize("role", sorted(ROLE_SECTIONS))
 def test_a_lead_job_starts_with_owner_md_and_exactly_its_roles_sections(repo, monkeypatch, role):
     """f21 D2: pasted in, first, the same text for every job of the role."""
-    _lead_docs(repo)
+    _lead_docs(repo, monkeypatch)
     done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     calls = _limited_then(monkeypatch, done, done)
     s = loop.open_session(_config(repo))
@@ -2512,16 +2514,19 @@ def test_a_lead_job_starts_with_owner_md_and_exactly_its_roles_sections(repo, mo
 
 
 def test_a_job_that_is_not_the_leads_gets_no_sections(repo, monkeypatch):
-    _lead_docs(repo)
+    _lead_docs(repo, monkeypatch)
     calls = _limited_then(monkeypatch, JobResult(ok=True, text="", duration_s=1.0))
     s = loop.open_session(_config(repo))
     loop.call_claude(s, JobSpec("narrative", "Tell it.", timeout=1), "m1", "narrative")
     assert calls[0][0] == "Tell it."
 
 
-def test_a_resumed_session_gets_no_sections_and_one_that_cant_resume_gets_them(repo, monkeypatch):
-    """f21 D2: the session has them. Lost, it starts again as a new one would."""
-    _lead_docs(repo)
+def test_a_resumed_session_keeps_its_system_prompt_and_one_that_cant_resume_starts_again(
+    repo, monkeypatch
+):
+    """ADR 41 item 2: a system prompt isn't in the session's history, so each run sends it, the
+    same text. Lost, the session starts again as a new one would."""
+    _lead_docs(repo, monkeypatch)
     lost = JobResult(ok=False, text="No conversation found", duration_s=1.0, num_turns=0)
     done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     calls = _limited_then(monkeypatch, done, lost, done)
@@ -2529,15 +2534,16 @@ def test_a_resumed_session_gets_no_sections_and_one_that_cant_resume_gets_them(r
     job = JobSpec("planner", "The owner's message.", timeout=1, resume="s1")
     loop.call_claude(s, job, "m1", "f7:1")
     loop.call_claude(s, job, "m1", "f7:2")
-    assert calls[0] == ("The owner's message.", "s1")
-    assert calls[1] == ("The owner's message.", "s1")
+    assert calls[0][1] == calls[1][1] == "s1"
+    assert calls[0][0] == calls[1][0] and calls[0][0].endswith("The owner's message.")
+    assert calls[0][0].startswith(OWNER_MD)
     prompt, resume = calls[2]
     assert resume is None and prompt.startswith(OWNER_MD)
     assert _headings(prompt) == ROLE_SECTIONS["planner"]
 
 
 def test_a_heading_missing_from_lead_md_is_a_report_note_and_the_job_runs(repo, monkeypatch):
-    _lead_docs(repo, without="Tickets")
+    _lead_docs(repo, monkeypatch, without="Tickets")
     done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
     calls = _limited_then(monkeypatch, done, done)
     s = loop.open_session(_config(repo))
@@ -2551,60 +2557,39 @@ def test_a_heading_missing_from_lead_md_is_a_report_note_and_the_job_runs(repo, 
     assert "lead-ticket" in notes[0] and "Tickets" in notes[0]
 
 
-def test_owner_md_is_not_pasted_again_when_claude_md_already_loads_it(repo, monkeypatch):
-    """F21 review F1: CLAUDE.md's `@docs/agents/owner.md` loads it into every session, a
-    headless one too, so the brief goes with lead.md's sections alone."""
-    _lead_docs(repo)
-    (repo / "CLAUDE.md").write_text("# Claude\n\nMentions @docs/agents/owner.md inline.\n")
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", "a CLAUDE.md")
-    done = JobResult(ok=True, text="", duration_s=1.0, num_turns=4)
-    calls = _limited_then(monkeypatch, done, done)
-    s = loop.open_session(_config(repo))
-    loop.call_claude(s, _job(), "m1", "m1-01-lead")
-    assert calls[0][0].startswith(OWNER_MD)  # only an import on its own line counts
-    (repo / "CLAUDE.md").write_text("# Claude\n\n@docs/agents/owner.md\n")
-    loop.call_claude(s, _job(), "m1", "m1-02-lead")
-    prompt, _ = calls[1]
-    assert "Low ceremony" not in prompt and _headings(prompt) == ROLE_SECTIONS["lead-ticket"]
-    assert prompt.startswith("From docs/agents/lead.md") and prompt.endswith("Do the ticket.")
-    assert not [note for note in s.report.notes if "went without" in note]
-
-
 def test_a_lead_tickets_prompt_starts_with_the_brief_then_names_its_ticket(
     repo, fake_model, fake_lead, monkeypatch
 ):
-    _lead_docs(repo)
+    _lead_docs(repo, monkeypatch)
     _lead_task(repo, "m1-01-lead")
     script, jobs = fake_lead
     script.append(_lead_implements)
     _passes(monkeypatch)
     _run(repo)
-    prompt = jobs[0].prompt
-    assert prompt.startswith(OWNER_MD) and _headings(prompt) == ROLE_SECTIONS["lead-ticket"]
-    after = prompt.split("## Tickets\nWhat Tickets says.", 1)[1]
-    assert ".softfield/tasks/ready/m1-01-lead.md" in after and '"Your own work" above' in after
+    system, prompt = jobs[0].system, jobs[0].prompt
+    assert system.startswith(OWNER_MD) and _headings(system) == ROLE_SECTIONS["lead-ticket"]
+    assert _headings(prompt) == [] and OWNER_MD not in prompt  # ADR 41 item 2: not the message
+    assert ".softfield/tasks/ready/m1-01-lead.md" in prompt and '"Your own work" above' in prompt
 
 
-def test_a_planners_first_job_gets_the_sections_and_the_next_on_its_session_none(
-    repo, fake_model, monkeypatch
-):
-    """f21 D2: owner.md, then Authority, Plan, Planning room and Tickets, once per session."""
-    _lead_docs(repo)
+def test_a_planners_jobs_carry_the_sections_as_their_system_prompt(repo, fake_model, monkeypatch):
+    """owner.md, then Authority, Plan, Planning room and Tickets, in the system prompt of every
+    run of the session, never in its messages (ADR 41 item 2)."""
+    _lead_docs(repo, monkeypatch)
     _plan_message(repo, "f7", "Why one queue?")
     _plan_message(repo, "f7", "And the switches?")
-    prompts: list[tuple[str | None, str]] = []
+    seen: list[tuple[str | None, str, str]] = []
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
-        prompts.append((resume, job.prompt))
+        seen.append((resume, job.system, job.prompt))
         return JobResult(ok=True, text="Yes.", duration_s=1.0, session_id="s1")
 
     monkeypatch.setattr(claude, "run_claude", run_claude)
     _run(repo)
-    [(new, first), (resumed, second)] = prompts
-    assert new is None and first.startswith(OWNER_MD)
-    assert _headings(first) == ["Authority", "Plan", "Planning room", "Tickets"]
-    assert first.index("## Tickets") < first.index("Why one queue?")
+    [(new, system, first), (resumed, again, second)] = seen
+    assert new is None and system.startswith(OWNER_MD) and again == system
+    assert _headings(system) == ["Authority", "Plan", "Planning room", "Tickets"]
+    assert "Why one queue?" in first and _headings(first) == []
     assert resumed == "s1" and "And the switches?" in second
     assert _headings(second) == [] and "Low ceremony" not in second
 

@@ -86,8 +86,8 @@ card today; fact-printer, the one that did, was a trial copy.
   `softfield check-all`: unchanged.
 
 - **D7. One guide per language** (owner, 2026-10-27: "would language preferences be better
-  managed in their own files? python.md"). Each guide is `docs/agents/stacks/<name>.md` in Softfield,
-  shaped like `docs/agents/preact.md`: how to write and test code in that language, then the
+  managed in their own files? python.md"). Each guide is `runner/instructions/stacks/<name>.md` in Softfield,
+  shaped like Coucou's Preact guide: how to write and test code in that language, then the
   `[checks]` lines a project in it starts from, which the setup session copies. A project names its
   guides in `[project] stacks` (`["python"]` when missing). The commands themselves stay in
   `project.toml`, the one place the runner reads, so a project can still differ (jest or vitest).

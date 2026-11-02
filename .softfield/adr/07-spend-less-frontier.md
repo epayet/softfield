@@ -28,13 +28,13 @@ The owner asked whether the local model really saves their Claude Pro allowance.
 Plan, tickets, the lead's own work, escalations and review each run in a fresh session, started from the repo's state (milestone doc, ADRs, tasks, reports). The lead says when a phase ends. Evidence: runner sessions ran at ≈16–20k a step after the M3 handoff (`0a71f09`), against ≈34k before.
 
 ### 2. ⚑ Tickets, not solutions
-Changes `docs/task-writing.md` (the skeleton and the reference implementation) and CLAUDE.md ("paste every signature…; must never need to explore").
+Changes `runner/instructions/task-writing.md` (the skeleton and the reference implementation) and CLAUDE.md ("paste every signature…; must never need to explore").
 - A ticket is a goal, the files to read (paths, not pastes) and acceptance criteria as bullets. Paste only a fact no file holds.
 - No throwaway reference implementation and no stubs for junior work.
 - Budget: about 1–2 lead steps per ticket. A milestone's tickets are written in one pass.
 
 ### 3. ⚑ Worked examples, once per kind of task
-The first task of a new kind (a new language, layer or pattern) is built by the lead and listed as the example in `docs/agents/junior.md`. Later tickets say "follow X". This replaces per-task reference implementations.
+The first task of a new kind (a new language, layer or pattern) is built by the lead and listed as the example in `runner/instructions/junior.md`. Later tickets say "follow X". This replaces per-task reference implementations.
 
 ### 4. ⚑ Juniors write and change tests
 Changes `docs/testing.md` ("existing test files are immutable") and the gates.
@@ -52,14 +52,14 @@ Changes `docs/testing.md` ("existing test files are immutable") and the gates.
 
 ### 6. ⚑ Feedback
 - **In a task:** on a retry, each gate says what to do, not only what failed (`HINTS` in `runner/gates.py`).
-- **Across tasks:** a lesson becomes a check first, a worked example second, and a line in `docs/agents/junior.md` last.
+- **Across tasks:** a lesson becomes a check first, a worked example second, and a line in `runner/instructions/junior.md` last.
 - `junior.md` has a hard budget of **15 one-line notes**, because local models drop instructions from long prompts. When it's full, a line is replaced or becomes a check. The lead edits it without an ADR. Gates, caps and the task format still need one.
 
 ### 7. No per-task checks by the lead
 The gates merge. The milestone review, which already reads the whole milestone's diff, also reads the tests for missing edge cases, reads every test a junior changed, and checks the French. Screenshots when the lead has a browser at hand.
 
 ### 8. ⚑ Size by concept, not lines
-Changes `docs/task-format.md` and `.softfield/project.toml`.
+Changes `runner/instructions/task-format.md` and `.softfield/project.toml`.
 - A task is **one concept**, touching as many files as it needs. The "1–3 files" guideline and per-task `max_diff` go.
 - The only line limit is a very generous backstop of **1000 lines**, to catch a file rewritten from scratch (a timeout wouldn't: a rewrite takes minutes). Reassess at the M4 review.
 - Evidence: max-diff fired 3 times in M1–M3, all false alarms on m3-12. The largest local diffs passed at the first attempt at 112 and 119 lines.
@@ -67,7 +67,7 @@ Changes `docs/task-format.md` and `.softfield/project.toml`.
   - no open design decisions in a ticket; the lead makes them and writes them in
   - is there a worked example to follow? If not, the lead builds the first one
   - how much the junior must read, since its context (about 180k tokens) is the real ceiling
-  - a **known range** in `docs/agents/lead.md`, updated at each milestone review from the results. The runner reports diff size, attempts and local tokens per task.
+  - a **known range** in `runner/instructions/lead.md`, updated at each milestone review from the results. The runner reports diff size, attempts and local tokens per task.
 
 ### 9. ⚑ `files:` is a pointer, not a gate
 The `allowed-files` gate never fired in M1–M3 and is dropped. Tickets still say where to work, and the session report lists files changed outside `files:` and `tests:`. The hard limits stay: protected paths, no new skips, no new dependencies, all tests passing.
@@ -94,8 +94,8 @@ Changes AGENTS.md, CLAUDE.md and `opencode.json`.
 | File | Read by | Holds |
 |---|---|---|
 | `AGENTS.md` | everyone; OpenCode loads it for juniors | Shared rules for anyone writing code here. Its first lines route each role. |
-| `docs/agents/junior.md` | juniors; OpenCode loads it too | The 15-line notes and the worked examples |
-| `docs/agents/lead.md` | any frontier lead | The process, the owner's standing preferences, the known range |
+| `runner/instructions/junior.md` | juniors; OpenCode loads it too | The 15-line notes and the worked examples |
+| `runner/instructions/lead.md` | any frontier lead | The process, the owner's standing preferences, the known range |
 | `CLAUDE.md` | Claude only | "You are the lead", plus Claude-only details |
 
 Owner preferences live in `lead.md`, not in a vendor's memory, so a different frontier inherits them.

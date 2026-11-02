@@ -1,7 +1,6 @@
 """The developer's prompt (ADR 12 item 1): one finish line, last before any retry text."""
 
 import inspect
-import json
 import re
 from pathlib import Path
 
@@ -90,7 +89,7 @@ LEAD_PROMPTS = {
 
 
 def _lead_doc(repo: Path, headings: tuple[str, ...]) -> None:
-    (repo / "docs" / "agents").mkdir(parents=True, exist_ok=True)
+    (repo / prompts.OWNER_DOC).parent.mkdir(parents=True, exist_ok=True)
     (repo / prompts.OWNER_DOC).write_text("# The owner\n\n- Low ceremony.\n")
     body = "".join(f"## {h}\nWhat {h} says.\n- ### not a section\n\n" for h in headings)
     (repo / prompts.LEAD_DOC).write_text("# The lead\n\nThe model.\n\n" + body)
@@ -100,6 +99,7 @@ def test_every_section_a_lead_role_needs_is_a_heading_of_the_real_lead_md():
     """f21 D2: a renamed section fails here, at commit, not in a run."""
     assert set(prompts.SECTIONS) == set(LEAD_PROMPTS)
     headings = set(prompts.sections((ROOT / prompts.LEAD_DOC).read_text(encoding="utf-8")))
+    headings |= set(prompts.sections((ROOT / prompts.KNOWN_RANGE_DOC).read_text(encoding="utf-8")))
     for role, names in prompts.SECTIONS.items():
         assert names and set(names) <= headings, role
         text, missing = prompts.brief(ROOT, role)
@@ -150,20 +150,11 @@ def test_a_role_without_sections_or_a_repo_without_lead_md_gets_no_brief(tmp_pat
     assert prompts.brief(tmp_path, "checkpoint-shadow") == ("", [])
 
 
-def test_a_brief_without_owner_md_when_the_agent_loads_it_itself(tmp_path: Path):
-    _lead_doc(tmp_path, ("Your own work", "Tickets"))
-    text, missing = prompts.brief(tmp_path, "lead-ticket", owner=False)
-    assert missing == [] and "Low ceremony" not in text and text.count("\n## ") == 2
-    (tmp_path / prompts.OWNER_DOC).unlink()
-    assert prompts.brief(tmp_path, "lead-ticket", owner=False) == (text, [])  # not missed
-
-
 @pytest.mark.parametrize("role", sorted(LEAD_PROMPTS))
 def test_the_lead_prompts_no_longer_point_at_lead_md_or_owner_md(role):
-    """f21 D2: the text is in the prompt. One pointer stays, to a section no role is given."""
-    kept = 'docs/agents/lead.md ("Developers\' notes")'
+    """f21 D2: the text is in the prompt."""
     for text in LEAD_PROMPTS[role]:
-        assert "lead.md" not in text.replace(kept, "") and "owner.md" not in text
+        assert "lead.md" not in text and "owner.md" not in text
         for name in re.findall(r'"([^"\n]+)"[ \n]+above', text):
             assert any(h == name or h.startswith(name + " (") for h in prompts.SECTIONS[role])
 
@@ -272,12 +263,12 @@ def test_no_prompt_says_junior(tmp_path: Path):
 
 def test_nothing_in_the_runner_or_opencode_names_junior_md():
     root = Path(__file__).resolve().parents[2]
-    assert not (root / "docs/agents/junior.md").exists()
-    assert (root / "docs/agents/developer.md").is_file()
+    assert not (root / "runner/instructions/junior.md").exists()
+    assert (root / ".softfield/developer.md").is_file()
     named = [p for p in sorted((root / "runner").rglob("*.py")) if "junior.md" in p.read_text()]
     assert named == []
-    instructions = json.loads((root / "opencode.json").read_text())["instructions"]
-    assert "docs/agents/developer.md" in instructions
+    instructions = prompts.developer_instructions(root, root)
+    assert str(root / ".softfield/developer.md") in instructions
     assert not [i for i in instructions if "junior" in i]
 
 
@@ -297,3 +288,51 @@ def test_no_prompt_or_re_review_names_a_backlog():
     texts = [v for k, v in vars(prompts).items() if k.isupper() and isinstance(v, str)]
     assert texts and not [t for t in texts if "backlog" in t.lower()]
     assert "backlog" not in inspect.getsource(milestone._fix_scope).lower()
+
+
+def test_the_machines_file_replaces_the_authors(tmp_path: Path, monkeypatch):
+    """ADR 41 item 4: the author's opinions ship with the package; a user's replace them."""
+    _lead_doc(tmp_path, ("Your own work", "Tickets"))
+    monkeypatch.setenv("SOFTFIELD_CONFIG", str(tmp_path / "machine" / "factory.toml"))
+    (tmp_path / "machine").mkdir()
+    assert "- Low ceremony." in prompts.brief(tmp_path, "lead-ticket")[0]
+    (tmp_path / "machine" / "owner.md").write_text("# Me\n\n- Lots of ceremony.\n")
+    text = prompts.brief(tmp_path, "lead-ticket")[0]
+    assert "- Lots of ceremony." in text and "Low ceremony" not in text
+
+
+def test_known_range_is_read_from_the_authors_file(tmp_path: Path):
+    _lead_doc(tmp_path, ("Authority",))
+    known = tmp_path / prompts.KNOWN_RANGE_DOC
+    known.write_text("## Known range\nQwen does this.\n")
+    assert "Qwen does this." in prompts.brief(tmp_path, "escalation")[0]
+
+
+def test_a_developer_gets_the_factorys_files_then_the_projects(tmp_path: Path):
+    """ADR 41 items 2 and 4: a later file wins, so the project's come last."""
+    home, repo = tmp_path / "home", tmp_path / "repo"
+    for path in (
+        home / "runner/instructions/rules.md",
+        home / "runner/instructions/developer.md",
+        repo / ".softfield/project.md",
+        repo / ".softfield/developer.md",
+    ):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x")
+    assert prompts.developer_instructions(home, repo) == [
+        str(home / "runner/instructions/rules.md"),
+        str(home / "runner/instructions/developer.md"),
+        str(repo / ".softfield/project.md"),
+        str(repo / ".softfield/developer.md"),
+    ]
+
+
+def test_a_terminal_lead_session_holds_everything_a_lead_needs(tmp_path: Path):
+    _lead_doc(tmp_path, ("Plan", "Tickets"))
+    (tmp_path / prompts.KNOWN_RANGE_DOC).write_text("## Known range\nQwen.\n")
+    (tmp_path / prompts.CLAUDE_DOC).write_text("# When the lead is Claude\n")
+    rules = tmp_path / "project.md"
+    rules.write_text("# This project\n")
+    text = prompts.lead_session(tmp_path, rules)
+    for said in ("Low ceremony", "## Plan", "Qwen.", "When the lead is Claude", "# This project"):
+        assert said in text

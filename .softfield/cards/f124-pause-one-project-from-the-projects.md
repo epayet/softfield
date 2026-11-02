@@ -43,6 +43,6 @@ Each project on the Projects page has its own Pause and Resume. A project paused
 | 02 | pause-on-the-projects-page | D | 3 | 01 | D5 |
 | 03 | next-in-line-says-paused | D | 2 | 01, f132-02 | stretch: F132's Next in line says "Paused by you" for a paused project instead of listing its tickets as next |
 
-01 is the lead's: `runner/` and `factory_dashboard/requests.py` are protected, and it changes which projects keep a session. 02 follows the Projects page's own order form, a button that asks the runner (`docs/agents/developer.md`).
+01 is the lead's: `runner/` and `factory_dashboard/requests.py` are protected, and it changes which projects keep a session. 02 follows the Projects page's own order form, a button that asks the runner (`.softfield/developer.md`).
 
 The mock-up: `.softfield/cards/f124-mockup/projects.html` (Today and Proposed, the real projects and counts of 2026-10-27).

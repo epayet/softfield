@@ -254,6 +254,9 @@ def _machine_command(args: argparse.Namespace) -> int:
         print("\n" + setup.NEXT + "\n")
         command = setup.claude_command(folder, origin)
         os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
+    if args.command == "lead":
+        command = setup.lead_command(Path.cwd(), args.claude_args)
+        os.execvp(command[0], command)  # noqa: S606 - the owner's Claude, in their terminal
     if args.command == "forget":
         return _forget(args.name, db, ask=not args.yes)
     if args.command == "notify":
@@ -407,6 +410,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     reserve.add_argument("window", choices=("week", "five-hour"))
     reserve.add_argument("value", choices=("on", "off"))
+    lead = sub.add_parser("lead", help="a terminal lead session with the factory's context")
+    lead.add_argument("claude_args", nargs="*", help="passed on to claude, after --")
     sub.add_parser("pause", help="the owner: hold the factory after the job it is on (f5-18)")
     sub.add_parser("resume", help="the owner: let a paused factory go on")
     milestone = sub.add_parser(

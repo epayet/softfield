@@ -30,7 +30,7 @@ The picture: [`f81-mockup/theme-pass.html`](f81-mockup/theme-pass.html) (Today a
 - **D3 Ornament is ink and hazard only, never moves** (F88 D3): no ticks, stripes or grid in an agent's or a status colour, no new animation. The faint 32 px grid on the floor is `--grid`.
 - **D4 No invented labels.** The game's look leans on serial codes and decorative captions; here every word on a page says something (owner, 2026-10-02), so plates carry the panel's own title and nothing else.
 - **D5 One button set:** `.btn.go` (hazard plate, cut corner) and `.btn.plain` (outlined) in `dashboard.css`; the inline buttons in the three planning templates and the existing go-buttons (`.aside .go`, `.order-bar .go`, `.projects-page .send-order`) use them.
-- **D6 The planning templates move to classes** (`.desk`, `.desk-item`, `.group-head`, `.tiles`, `.plant`, and the thread's and proposal's own), keeping every id, `hx-*` attribute and word; only a meter's computed `width`/`left` stays inline. `docs/agents/developer.md` says so for new markup, and a test holds it (f81-07).
+- **D6 The planning templates move to classes** (`.desk`, `.desk-item`, `.group-head`, `.tiles`, `.plant`, and the thread's and proposal's own), keeping every id, `hx-*` attribute and word; only a meter's computed `width`/`left` stays inline. `.softfield/developer.md` says so for new markup, and a test holds it (f81-07).
 - **D7 After the desk work.** F81 sits after F132, F42, F73, F26, F63, F51, F74 and F75 on the board, which reshape the same pages: it themes their final markup. Moving F81 up means redoing those tickets' inline styles later.
 
 ## Tickets

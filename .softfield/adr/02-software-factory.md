@@ -471,7 +471,7 @@ _(to fill in at the M3 review)_
 
 ### F28 (2026-10-21): Pause and Resume hold what you asked through the 5 s refresh ([review](../reviews/f28-the-first-time-i-clicked-on.md))
 
-- **Q1:** two developer tickets. f28-01 (the top bar's script) merged on its third attempt after a direction (a no-edit stop, a timeout); f28-02 escalated after three attempts and the lead built it, because the ticket asked to remove buttons that a protected test asserted (the lead's ticket at fault; lesson in `docs/task-writing.md`). One checkpoint, no findings. The review fixed four findings itself (two should-fix, two nits) and filed no ticket.
+- **Q1:** two developer tickets. f28-01 (the top bar's script) merged on its third attempt after a direction (a no-edit stop, a timeout); f28-02 escalated after three attempts and the lead built it, because the ticket asked to remove buttons that a protected test asserted (the lead's ticket at fault; lesson in `runner/instructions/task-writing.md`). One checkpoint, no findings. The review fixed four findings itself (two should-fix, two nits) and filed no ticket.
 - **Q3:** Qwen 0/2 first time, 13.4M tokens and about 2 hours of model for 48 lines of script.
 - **Q5:** see the review's numbers.
 - **Anything else:** f28-01's stale-poll tests passed without the fix: they waited for the final state within two polls, so a stale bar swapped in and then replaced still ended right. The checkpoint read them and called them sound. "Fail without the change" is in every ticket and checked by nobody for each test; a test of a race must assert in the window the race opens, not after it.
@@ -506,7 +506,7 @@ _(to fill in at the M3 review)_
 - **Q1:** one lead ticket (a stage list read by three pages, a script and many tests, D5), merged first time in 22 minutes; no checkpoint. Review round 1: two nits (a narrowed test, two stale comments), both fixed by the review.
 - **Q3:** Claude only: $4.69 planning, $3.38 building; no local tokens.
 - **Q5:** see the review's numbers.
-- **Anything else:** the card waited two days on f152-01, whose local developer took four hours before the lead's escalation; a ticket touching the same lines as a lead ticket might as well be the lead's. "An edited test cut to its first rows" recurred (F173, F154) and is now in `docs/agents/developer.md` rule 13.
+- **Anything else:** the card waited two days on f152-01, whose local developer took four hours before the lead's escalation; a ticket touching the same lines as a lead ticket might as well be the lead's. "An edited test cut to its first rows" recurred (F173, F154) and is now in `.softfield/developer.md` rule 13.
 - **Decisions affected:** none.
 
 ### F114 (2026-10-23): one notification per look, named after its card, opening its page ([review](../reviews/f114-i-want-to-be-notified-only.md))
@@ -514,7 +514,7 @@ _(to fill in at the M3 review)_
 - **Q1:** two developer tickets, both merged on the second attempt after a timeout; then eight fix tickets from three checkpoints (two by Copilot standing in for Claude), six of them on the same browser tests, over six days. f114-07 took three attempts and a direction. Review round 1: three should-fix and three nits fixed by the review, one nit to the backlog.
 - **Q3:** Qwen only for the building, about 15 hours of model for roughly 200 lines of code: 5 hours on the two feature tickets, 10 on fixes; Claude $4.82 (planning, one direction, one checkpoint) before the review.
 - **Q5:** see the review's numbers.
-- **Anything else:** a chain of fix tickets on tests is a sign the cause is elsewhere. Here the stand-in service workers broke `notify.js` on load, and the developer hid that behind test hooks in production code; each checkpoint judged the newest test and missed the hook. Lesson in `docs/agents/lead.md` (Known range, F114): a second finding on tests a fix ticket of the same card already rewrote is the lead's to fix.
+- **Anything else:** a chain of fix tickets on tests is a sign the cause is elsewhere. Here the stand-in service workers broke `notify.js` on load, and the developer hid that behind test hooks in production code; each checkpoint judged the newest test and missed the hook. Lesson in `runner/instructions/lead.md` (Known range, F114): a second finding on tests a fix ticket of the same card already rewrote is the lead's to fix.
 - **Decisions affected:** none.
 
 ### F142 (2026-10-23): notifications from every project, and to a closed phone through ntfy ([review](../reviews/f142-why-am-i-not-getting-notifications.md))
@@ -571,7 +571,7 @@ _(to fill in at the M3 review)_
 - **Q1:** one developer ticket (difficulty 3) that Qwen failed three times (33 min failed, 78 min timeout, 20 min with no edit under an Opus direction), then about 16 hours parked before the direction. An Opus escalation built it in 43 minutes, about 120 lines and 7 tests. No checkpoint (lead work). Review round 1: two should-fix (Coming put a held reply before a message not yet picked up, against D4; the new "Writing now" words were hard to read in the light theme), both fixed by the review, and one nit to the backlog.
 - **Q3:** Claude $1.51 for the plan, $0.64 for the direction, $3.79 for the escalation; Qwen about 2.2 hours of model with nothing merged.
 - **Q5:** see the review's numbers.
-- **Anything else:** the third time (F30, F172, F84) a plan routed a ticket touching `test_planning.py` and several functions of one page to the developer after the Known range said it was the lead's: a rule only in `docs/agents/lead.md` doesn't reach the planner's routing. F143 rewrites the rule after splitting the file; the rule it ends on wants a pre-flight check, not another line.
+- **Anything else:** the third time (F30, F172, F84) a plan routed a ticket touching `test_planning.py` and several functions of one page to the developer after the Known range said it was the lead's: a rule only in `runner/instructions/lead.md` doesn't reach the planner's routing. F143 rewrites the rule after splitting the file; the rule it ends on wants a pre-flight check, not another line.
 - **Decisions affected:** none.
 
 ### F51 (2026-10-28): the desk counts only what waits on you ([review](../reviews/f51-when-a-plan-depends-on-an.md))
@@ -659,7 +659,7 @@ _(to fill in at the M3 review)_
 - **Q1:** one developer ticket at difficulty 2 (swap two `DeskGroup` lines, reverse one loop). Qwen 0/3, all "no edit after 20 min", the third under a direction; an Opus escalation did it on main in 18 minutes. No checkpoint. Review round 1: no findings.
 - **Q3:** Opus $1.82 on the ticket (direction $0.59, escalation $1.23); Qwen 1 hour of model with nothing merged.
 - **Q5:** see the review's numbers.
-- **Anything else:** the ticket named the group-order tests but not three others that pinned the old order (inside the group, Previous and Next, Needs you), so even correct code would have failed the gates; now a line in `docs/task-writing.md`. The sixth no-edit night ticket; bug-48 is the fix.
+- **Anything else:** the ticket named the group-order tests but not three others that pinned the old order (inside the group, Previous and Next, Needs you), so even correct code would have failed the gates; now a line in `runner/instructions/task-writing.md`. The sixth no-edit night ticket; bug-48 is the fix.
 - **Decisions affected:** none.
 
 ## 10. For the owner to decide at review time (each item can be accepted on its own)

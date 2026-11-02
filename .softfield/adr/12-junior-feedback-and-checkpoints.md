@@ -83,7 +83,7 @@ M4 was the first milestone run the ADR 07 way (tickets, not solutions; juniors w
 ### E. The lead
 15. **A pre-commit hook runs `runner check-all`** before every commit. It skips commits that only touch `docs/` or `.softfield/tasks/`; the runner's merge commits bypass it, since they already passed the gates.
 16. **The lead reads the junior's thinking when something went wrong:** always at directions and escalations; at checkpoints and reviews only when a finding needs explaining.
-17. **Dropped: plan depth.** Checkpoints steer instead. `docs/task-writing.md` gets one ticket rule: a junior ticket depends on at most two other junior tickets; past that, split it or make it a lead ticket.
+17. **Dropped: plan depth.** Checkpoints steer instead. `runner/instructions/task-writing.md` gets one ticket rule: a junior ticket depends on at most two other junior tickets; past that, split it or make it a lead ticket.
 
 ## Consequences
 - **Juniors:** one extra command at the end of each attempt, and fewer failed attempts on checks they can now run.

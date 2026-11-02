@@ -8,7 +8,7 @@
 - The answer is ``_partials/request.html``: "Asked", polling ``GET /requests/{id}`` every 5 s
   until the runner finishes the request, then its result.
 
-The worked example for a button that asks the runner (``docs/agents/developer.md``).
+The worked example for a button that asks the runner (``.softfield/developer.md``).
 """
 
 import sqlite3

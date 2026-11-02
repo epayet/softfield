@@ -12,7 +12,7 @@ When the owner plants or writes on a card that changes how a page looks, the lea
 
 ## Done when
 - The planner's brief (`PLANNER` in `runner/prompts.py`) says when a mock-up is due, what it shows and that the tickets point at it.
-- `docs/agents/lead.md` (Planning room) and `docs/agents/owner.md` ("Mock-ups before UI tickets") say the same, so a session in the terminal does it too.
+- `runner/instructions/lead.md` (Planning room) and `runner/instructions/author/owner.md` ("Mock-ups before UI tickets") say the same, so a session in the terminal does it too.
 - The next frontend card planned after the merge gets a Today/Proposed mock-up without being asked.
 
 ## Decisions

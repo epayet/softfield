@@ -97,7 +97,13 @@ from runner.tasks import _FOOTER_BLOCK_RE, Task, parse_task
 
 ROLE = BENCH
 # Today's workflow, laid over the old tree so every agent works to the same rules.
-OVERLAY = ("AGENTS.md", "docs/agents", "opencode.json", "workflow")
+OVERLAY = (
+    "AGENTS.md",
+    ".softfield/project.md",
+    ".softfield/developer.md",
+    ".softfield/opencode.json",
+    "workflow",
+)
 WOULD_ESCALATE = "would escalate"
 VOID = "void"
 

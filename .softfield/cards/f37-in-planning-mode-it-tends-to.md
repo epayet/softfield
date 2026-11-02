@@ -18,7 +18,7 @@ On 2026-10-26: I prefer small summaries next to the number whenever mentioned, a
 The planner's brief already says "name a card with its title" (`runner/prompts.py`, the line F31 D6 added), but only for cards, and only in the planner. On F173's reply of 26 Oct, F15 had its name and F73, F42, F26, F63 and F132 didn't; tickets (`f5-13`) and ADRs have no rule. The page links `/planning/<key>` paths only, and only in a lead message without points (`_text_with_links` in `factory_dashboard/planning.py`). F31's ticket that would have linked card numbers (`f31-04-what-to-do-now`, waiting in `.softfield/tasks/later/`) never ran.
 
 ## Decisions
-- **D1 The lead writes the words.** A new line in `docs/agents/owner.md` (dated 2026-10-26), which every lead job reads: every card, ticket, ADR or decision the owner reads comes with a few words saying what it is, and a card with its title ("F22, Archive at the bottom"); a decision ("D2") is said in words, never alone. The planner's line in `runner/prompts.py` grows to the same rule.
+- **D1 The lead writes the words.** A new line in `runner/instructions/author/owner.md` (dated 2026-10-26), which every lead job reads: every card, ticket, ADR or decision the owner reads comes with a few words saying what it is, and a card with its title ("F22, Archive at the bottom"); a decision ("D2") is said in words, never alone. The planner's line in `runner/prompts.py` grows to the same rule.
 - **D2 The page adds the links, and the names the lead left out.** One function in `factory_dashboard/planning.py`, grown from `_text_with_links`: escape the text first, then
   - a card number (`F37`, a card on main or in `_card_titles`) becomes a link to `/planning/f37` (with the page's `?project=`). When the words right after it aren't already its title (", " then the title's first 12 letters, ignoring case), the link also carries ", <title>" in muted ink, cut to 40 letters at a word with "…", the whole title as the link's `title`;
   - a ticket id (`f15-06-card-actions`, `bug-31-…`) with a ticket in the metrics database becomes a link to `/tickets/<id>`; a short one (`f63-01`) that names exactly one ticket links there and gains its slug's words (", desk order");
@@ -30,7 +30,7 @@ The planner's brief already says "name a card with its title" (`runner/prompts.p
 ## Tickets
 | # | Ticket | Who | d | Depends on | What |
 |---|---|---|---|---|---|
-| 01 | names-beside-numbers | L | 2 | | D1: owner.md and the planner's line (protected: `docs/agents/`, `runner/`) |
+| 01 | names-beside-numbers | L | 2 | | D1: owner.md and the planner's line (protected: `runner/instructions/`, `runner/`) |
 | 02 | thread-links-numbers | D | 5 | | D2, D3 on a thread |
 | 03 | proposal-links-numbers | D | 3 | 02, f67-02 | D3 on a proposal's key points |
 

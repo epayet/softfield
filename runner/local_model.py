@@ -1,6 +1,7 @@
 """Headless OpenCode runs, the ``opencode`` harness's adapter, and LM Studio's warm-up.
 
-The agent's model picks the provider in opencode.json: ``lmstudio/…`` is the local model,
+The agent's model picks the provider in the run's config (`opencode_config`): ``lmstudio/…`` is the
+local model,
 ``ollama/<tag>`` an Ollama Cloud model through the local daemon (f1-18's probe). Both stream
 the same events, so tokens and facts are read alike; only the local model is warmed up.
 """
@@ -20,14 +21,41 @@ from typing import Any
 from runner import sandbox
 from runner.agents import Agent, JobResult, JobSpec, Refusal
 from runner.claude import usage_limit_reset
+from runner.config import HOME
 
 # Shared with Claude's adapter since f1-51; loop and the tests still find them here.
 from runner.procs import LIVE_EVERY as LIVE_EVERY
 from runner.procs import run_streaming as run_streaming
+from runner.prompts import developer_instructions
 
 LOCAL_PROVIDER = "lmstudio"
 # f4-05: OpenCode killed a shell call at 120 s, check-all included; 20 min is [timeouts] gate
 SHELL_TIMEOUT_ENV = {"OPENCODE_EXPERIMENTAL_BASH_DEFAULT_TIMEOUT_MS": "1200000"}
+# Beats a repo's own opencode.json, where OPENCODE_CONFIG doesn't (probed, ADR 41)
+CONFIG_ENV = "OPENCODE_CONFIG_CONTENT"
+_BASE_CONFIG = Path(__file__).parent / "templates" / "opencode.json"
+PROJECT_CONFIG = ".softfield/opencode.json"
+
+
+def _merged(base: dict[str, Any], over: dict[str, Any]) -> dict[str, Any]:
+    both = dict(base)
+    for key, value in over.items():
+        old = both.get(key)
+        both[key] = (
+            _merged(old, value) if isinstance(old, dict) and isinstance(value, dict) else value
+        )
+    return both
+
+
+def opencode_config(repo: Path) -> str:
+    """The run's config, a project needing no opencode.json (ADR 41 item 2): providers and
+    permissions, a project's own additions in its dot folder, and the factory's context."""
+    settings = json.loads(_BASE_CONFIG.read_text(encoding="utf-8"))
+    own = repo / PROJECT_CONFIG
+    if own.is_file():
+        settings = _merged(settings, json.loads(own.read_text(encoding="utf-8")))
+    settings["instructions"] = developer_instructions(HOME, repo)
+    return json.dumps(settings)
 
 
 @dataclass(frozen=True)
@@ -250,7 +278,7 @@ def run_opencode(
         stopped = stuck(lines, reasoning, clock() - begun)
         return bool(stopped)
 
-    env = {**os.environ, **SHELL_TIMEOUT_ENV}
+    env = {**os.environ, **SHELL_TIMEOUT_ENV, CONFIG_ENV: opencode_config(repo)}
     stderr, exit_code = run_streaming(cmd, repo, timeout, log_path, tick, clock=clock, env=env)
     lines = read()
     if stopped:
@@ -310,7 +338,7 @@ def classify(run: OpencodeRun, local: bool, now: datetime) -> tuple[Refusal | No
 
 class OpencodeAdapter:
     """A `JobSpec` as an ``opencode run`` on the agent's model. Its permissions are
-    opencode.json's: edits anywhere in the repo and the check commands, the developer's.
+    `opencode_config`'s: edits anywhere in the repo and the check commands, the developer's.
     ``on_progress`` gets the tokens so far every ``LIVE_EVERY`` seconds (f1 D3)."""
 
     def run(
@@ -327,7 +355,7 @@ class OpencodeAdapter:
             repo,
             agent.model,
             title,
-            spec.prompt,
+            spec.whole_prompt,
             spec.timeout,
             log_path,
             on_progress=on_progress,

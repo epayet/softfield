@@ -10,7 +10,6 @@ factory_dashboard/requests.py
 # The workflow itself
 runner/**
 .softfield/**
-opencode.json
 AGENTS.md
 CLAUDE.md
 pyproject.toml
@@ -20,5 +19,3 @@ uv.lock
 tests/runner/test_report.py
 tests/factory_dashboard/test_requests.py
 
-# The lead's instructions, and the developers' notes it curates (ADR 07 items 6 and 14)
-docs/agents/**
