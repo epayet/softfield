@@ -1,6 +1,6 @@
 # Review: F21, the lead's briefs
 
-- **Status:** review round 2 done (2026-10-29): both round 1 fixes hold, nothing left to fix; waiting for the owner's sign-off.
+- **Status:** done, signed off by the owner on 2026-11-02.
 
 ## Sign-off sheet
 
