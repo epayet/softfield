@@ -33,7 +33,7 @@ PROPOSAL = {
     "id": "adr-23",
     "kind": "adr",
     "title": "Parallel planners",
-    "path": ".factory/adr/23-parallel-planners.md",
+    "path": ".softfield/adr/23-parallel-planners.md",
     "key_points": [{"n": 1, "title": "Two at once", "text": "Beside developers.", "flag": None}],
 }
 
@@ -70,17 +70,17 @@ def test_a_cards_state_is_set_to_ready_in_its_header_only(doc, expected):
 @pytest.mark.parametrize(
     ("text", "adrs"),
     [
-        ("Build on `.factory/adr/23-parallel-planners.md` items 2-3.", {23}),
+        ("Build on `.softfield/adr/23-parallel-planners.md` items 2-3.", {23}),
         ("As ADR 7 item 2 and ADR 20 say.", {7, 20}),
-        ("Read .factory/adr/README.md and the address 23-a.", set()),
+        ("Read .softfield/adr/README.md and the address 23-a.", set()),
     ],
 )
 def test_the_adrs_a_ticket_relies_on_are_the_ones_it_names(text, adrs):
     assert planner.named_adrs(text) == adrs
 
 
-PAGE = ".factory/cards/f9-mockup/a.html"
-PLAN = {**PROPOSAL, "id": "plan-9", "kind": "plan", "path": ".factory/cards/f9-x.md"}
+PAGE = ".softfield/cards/f9-mockup/a.html"
+PLAN = {**PROPOSAL, "id": "plan-9", "kind": "plan", "path": ".softfield/cards/f9-x.md"}
 
 
 def test_a_mockup_the_reply_did_not_list_is_listed_by_the_runner():
@@ -107,14 +107,14 @@ def test_a_mockup_a_proposal_names_is_not_listed_twice():
 
 
 def test_two_cards_mockups_of_one_name_get_two_ids():
-    other = ".factory/cards/f8-mockup/a.html"
+    other = ".softfield/cards/f8-mockup/a.html"
     listed = planner.with_mockups(planner.parse_reply("All text."), {PAGE: "", other: ""})
     assert [p["id"] for p in listed.proposals] == ["a-mockup", f"{PAGE}-mockup"]
 
 
 @pytest.mark.parametrize(
     "path",
-    [".factory/cards/f9-mockup/a.css", ".factory/cards/f9/a.html", "docs/a.html"],
+    [".softfield/cards/f9-mockup/a.css", ".softfield/cards/f9/a.html", "docs/a.html"],
 )
 def test_only_mockup_pages_are_listed(path):
     reply = planner.parse_reply(_reply({"points": POINTS}))
@@ -288,7 +288,7 @@ MERGE = {
     "id": "merge-f12",
     "kind": "merge",
     "title": "One queue, said twice",
-    "path": ".factory/cards/f12-queue-once.md",
+    "path": ".softfield/cards/f12-queue-once.md",
     "into": "f10",
     "key_points": [{"n": 1, "title": "Notes", "text": "F12's notes go to F10.", "flag": False}],
 }
@@ -309,9 +309,9 @@ def test_a_merge_proposal_names_the_duplicates_doc_and_the_card_it_joins():
         ({"into": "f99"}, "f99 is no card"),
         ({"into": "general"}, "into"),
         ({"into": "f12"}, "into itself"),
-        ({"path": ".factory/cards/f99-gone.md"}, "f99 is no card"),
-        ({"path": ".factory/adr/23-x.md"}, "a card's doc"),
-        ({"path": ".factory/cards/../adr/f12-x.md"}, "a card's doc"),
+        ({"path": ".softfield/cards/f99-gone.md"}, "f99 is no card"),
+        ({"path": ".softfield/adr/23-x.md"}, "a card's doc"),
+        ({"path": ".softfield/cards/../adr/f12-x.md"}, "a card's doc"),
         ({"path": None}, "a card's doc"),
     ],
 )
@@ -372,7 +372,7 @@ def test_a_summary_cant_sign_the_card_off_or_make_a_heading_of_its_own():
 
 
 def test_the_cards_are_the_milestone_docs_short_keys(tmp_path):
-    docs = tmp_path / ".factory" / "cards"
+    docs = tmp_path / ".softfield" / "cards"
     (docs / "f6-mockup").mkdir(parents=True)
     for name in ("f6-planning-room", "m4", "bugs", "README"):
         (docs / f"{name}.md").write_text("# x\n")
@@ -464,9 +464,9 @@ def test_a_look_is_the_runners_message_by_its_own_subject():
     assert planner.look_of(planner.row_subject("f7", 12)) is None  # an owner's message
     with pytest.raises(planner.PlannerError):
         planner.request_of(subject)
-    text = planner.look_text("f7-02-x", "check-all failed", "task/f7-02-x", ".factory/var/runs/r")
+    text = planner.look_text("f7-02-x", "check-all failed", "task/f7-02-x", ".softfield/var/runs/r")
     assert "f7-02-x blocked: check-all failed." in text and "task/f7-02-x" in text
-    assert ".factory/var/runs/r" in text and "replan" in text
+    assert ".softfield/var/runs/r" in text and "replan" in text
     assert "left no branch" in planner.look_text("f7-02-x", "why", None, "logs")
     said = [{"author": "runner", "text": text, "points": None, "proposals": None}]
     assert planner.history(said).startswith(
@@ -489,9 +489,9 @@ def test_a_looks_prompt_says_what_a_look_is_and_a_message_doesnt():
 def test_a_planners_prompt_says_a_replan_brings_back_its_cards_blocked_tickets():
     """ADR 29 item 3: written at the new path, the blocked copy left for the runner."""
     said = planner.prompt("f7", "Go on.", {})
-    assert ".factory/tasks/blocked/f7-*.md" in said
+    assert ".softfield/tasks/blocked/f7-*.md" in said
     assert "removes the blocked copy when the owner approves" in said
-    assert planner.drafts("f7") == (*planner.DRAFTS, ".factory/tasks/ready/f7-*")  # not blocked/
+    assert planner.drafts("f7") == (*planner.DRAFTS, ".softfield/tasks/ready/f7-*")  # not blocked/
 
 
 def test_a_merged_threads_history_says_whose_it_was():
@@ -595,7 +595,7 @@ def test_the_prompt_names_the_other_threads_to_check_for_duplicates():
 
 def test_a_cards_prompt_names_its_branch_and_the_general_one_none():
     card = planner.prompt("f7", "Draft it.", {})
-    assert "plan/f7 only, never main" in card and ".factory/cards/f7-mockup/" in card
+    assert "plan/f7 only, never main" in card and ".softfield/cards/f7-mockup/" in card
     assert "{" not in card.split("```json")[0]  # every field filled
     general = planner.prompt("general", "An idea.", {})
     assert "plan/" not in general and "change nothing" in general
@@ -604,11 +604,11 @@ def test_a_cards_prompt_names_its_branch_and_the_general_one_none():
 
 def test_a_cards_prompt_says_what_a_replan_may_change_and_when_to_suggest_a_pause():
     card = planner.prompt("f7", "Redirect it.", {})
-    assert "`replan`" in card and ".factory/tasks/ready/f7-*.md" in card
-    assert "move it to .factory/tasks/later/" in card and "never .factory/tasks/done/" in card
+    assert "`replan`" in card and ".softfield/tasks/ready/f7-*.md" in card
+    assert "move it to .softfield/tasks/later/" in card and "never .softfield/tasks/done/" in card
     assert "in progress" in card and "suggest the owner pause" in card
     general = planner.prompt("general", "An idea.", {})
-    assert ".factory/tasks/ready/f" not in general and "suggest the owner pause" not in general
+    assert ".softfield/tasks/ready/f" not in general and "suggest the owner pause" not in general
 
 
 @pytest.mark.parametrize("thread", ["f7", "general"])
@@ -626,10 +626,10 @@ def test_the_prompt_puts_everything_in_the_points_and_no_empty_checks(thread):
 @pytest.mark.parametrize(
     ("path", "draft"),
     [
-        (".factory/adr/21-room.md", True),
-        (".factory/cards/f7-mockup/index.html", True),
-        (".factory/tasks/later/f7-01-x.md", True),
-        (".factory/tasks/ready/f7-01-x.md", False),
+        (".softfield/adr/21-room.md", True),
+        (".softfield/cards/f7-mockup/index.html", True),
+        (".softfield/tasks/later/f7-01-x.md", True),
+        (".softfield/tasks/ready/f7-01-x.md", False),
         ("runner/loop.py", False),
         ("docs/../runner/loop.py", False),
         ("documents/x.md", False),
@@ -642,21 +642,21 @@ def test_a_draft_is_in_docs_or_the_later_tickets(path, draft):
 @pytest.mark.parametrize(
     ("path", "draft"),
     [
-        (".factory/tasks/ready/f7-01-x.md", True),
-        (".factory/tasks/later/f7-01-x.md", True),
-        (".factory/adr/21-room.md", True),
-        (".factory/tasks/ready/f5-01-x.md", False),  # another milestone's
-        (".factory/tasks/ready/f70-01-x.md", False),
-        (".factory/tasks/ready/f7-notes.md", False),
-        (".factory/tasks/ready/f7-01-x.txt", False),
-        (".factory/tasks/ready/f7-01/x.md", False),
-        (".factory/tasks/ready/f7-01-../x.md", False),
-        (".factory/tasks/done/f7-01-x.md", False),
+        (".softfield/tasks/ready/f7-01-x.md", True),
+        (".softfield/tasks/later/f7-01-x.md", True),
+        (".softfield/adr/21-room.md", True),
+        (".softfield/tasks/ready/f5-01-x.md", False),  # another milestone's
+        (".softfield/tasks/ready/f70-01-x.md", False),
+        (".softfield/tasks/ready/f7-notes.md", False),
+        (".softfield/tasks/ready/f7-01-x.txt", False),
+        (".softfield/tasks/ready/f7-01/x.md", False),
+        (".softfield/tasks/ready/f7-01-../x.md", False),
+        (".softfield/tasks/done/f7-01-x.md", False),
         ("runner/loop.py", False),
     ],
 )
 def test_a_replans_drafts_take_its_own_cards_ready_tickets_too(path, draft):
-    """f6-13: given the card, its tickets in .factory/tasks/ready/ are drafts; never another's or
+    """f6-13: given the card, its tickets in .softfield/tasks/ready/ are drafts; never another's or
     done."""
     assert planner.is_draft(path, "f7") is draft
 
@@ -664,17 +664,17 @@ def test_a_replans_drafts_take_its_own_cards_ready_tickets_too(path, draft):
 def test_a_cards_planner_job_may_edit_its_own_ready_tickets():
     assert planner.drafts("f7") == (
         "docs/**",
-        ".factory/cards/**",
-        ".factory/adr/**",
-        ".factory/tasks/later/**",
-        ".factory/tasks/ready/f7-*",
+        ".softfield/cards/**",
+        ".softfield/adr/**",
+        ".softfield/tasks/later/**",
+        ".softfield/tasks/ready/f7-*",
     )
 
 
 # --- reading a card's draft from git, for the dashboard (f6 D4) --------------------------------
 
-ADR = ".factory/adr/21-room.md"
-MOCKUP = ".factory/cards/f7-mockup/index.html"
+ADR = ".softfield/adr/21-room.md"
+MOCKUP = ".softfield/cards/f7-mockup/index.html"
 
 
 def _write(repo: Path, rel: str, text: str) -> None:
@@ -726,8 +726,8 @@ def test_another_cards_plan_branch_is_not_read(drafted):
         ("f7", "docs/../x"),
         ("f7", "docs/./adr/21-room.md"),
         ("f7", "docs//adr/21-room.md"),
-        ("f7", ".factory/adr"),  # a folder, not a file
-        ("f7", ".factory/adr/22-none.md"),
+        ("f7", ".softfield/adr"),  # a folder, not a file
+        ("f7", ".softfield/adr/22-none.md"),
         ("f7", "docs/a\0b"),
         ("../x", ADR),
         ("f7/../main", ADR),
@@ -742,18 +742,18 @@ def test_nothing_but_a_draft_of_a_thread_is_read(drafted, thread, path):
 
 # --- what approving a plan branch changes (f6-24) ------------------------------------------------
 
-READY_A = ".factory/tasks/ready/f7-01-a.md"
-READY_B = ".factory/tasks/ready/f7-02-b.md"
-READY_C = ".factory/tasks/ready/f7-03-c.md"
-LATER_B = ".factory/tasks/later/f7-02-b.md"
-OTHER = ".factory/tasks/ready/f8-01-x.md"
-DONE = ".factory/tasks/done/f7-00-z.md"
+READY_A = ".softfield/tasks/ready/f7-01-a.md"
+READY_B = ".softfield/tasks/ready/f7-02-b.md"
+READY_C = ".softfield/tasks/ready/f7-03-c.md"
+LATER_B = ".softfield/tasks/later/f7-02-b.md"
+OTHER = ".softfield/tasks/ready/f8-01-x.md"
+DONE = ".softfield/tasks/done/f7-00-z.md"
 
 
 @pytest.fixture
 def replanned(repo: Path) -> Path:
     """main holds f7-01-a, f7-02-b, another card's f8-01-x and a done ticket; ``plan/f7`` changes
-    f7-01-a, adds f7-03-c, sets f7-02-b aside in .factory/tasks/later/, drops ADR 21 and edits the
+    f7-01-a, adds f7-03-c, sets f7-02-b aside in .softfield/tasks/later/, drops ADR 21 and edits the
     others it may not. The working tree is back on main."""
     for rel in (READY_A, READY_B, OTHER, DONE, ADR):
         _write(repo, rel, f"main's {rel}\n")
@@ -774,8 +774,8 @@ def replanned(repo: Path) -> Path:
 
 
 def test_a_plan_branchs_changes_are_listed_with_their_words(replanned):
-    """A ticket set aside shows once, under its .factory/tasks/ready/ path, read from
-    .factory/tasks/later/."""
+    """A ticket set aside shows once, under its .softfield/tasks/ready/ path, read from
+    .softfield/tasks/later/."""
     assert planner.plan_changes(replanned, "f7") == [
         planner.Change(ADR, "removed", None),
         planner.Change(DONE, "changed", DONE),
@@ -793,7 +793,7 @@ def test_a_set_aside_ticket_reads_from_the_branch_not_main(replanned):
     assert planner.draft(replanned, "f7", READY_A) == b"the replan's a\n"
     assert planner.draft(replanned, "f7", READY_C) == b"the replan's c\n"
     assert planner.draft(replanned, "f7", LATER_B) == f"main's {READY_B}\n".encode()
-    assert planner.draft(replanned, "f7", READY_B) is None  # gone from .factory/tasks/ready/
+    assert planner.draft(replanned, "f7", READY_B) is None  # gone from .softfield/tasks/ready/
 
 
 def test_no_branch_and_the_general_thread_have_no_changes(replanned):
@@ -810,8 +810,8 @@ def test_no_branch_and_the_general_thread_have_no_changes(replanned):
         ("f7", OTHER),  # another card's ready ticket, changed on this branch
         ("f8", READY_A),  # this card's ticket, read as another card's
         ("f7", DONE),
-        ("f7", ".factory/tasks/ready/f7-01-a.md/../../done/f7-00-z.md"),
-        ("f7", ".factory/tasks/ready/f70-01-a.md"),
+        ("f7", ".softfield/tasks/ready/f7-01-a.md/../../done/f7-00-z.md"),
+        ("f7", ".softfield/tasks/ready/f70-01-a.md"),
         ("general", READY_A),
         ("f7", "/etc/passwd"),
         ("f7", "../outside/tasks/ready/f7-01-a.md"),
@@ -883,11 +883,11 @@ def test_a_cards_slug_comes_from_its_title(title, slug):
 
 
 def test_the_next_key_is_the_one_after_the_highest_in_the_areas_series(tmp_path):
-    docs = tmp_path / ".factory" / "cards"
+    docs = tmp_path / ".softfield" / "cards"
     docs.mkdir(parents=True)
     for name in ("f2", "f6-planning-room", "m4", "bugs", "README"):
         (docs / f"{name}.md").write_text("# x\n")
-    write_task(tmp_path / ".factory" / "tasks" / "later", "m9-01-later")
+    write_task(tmp_path / ".softfield" / "tasks" / "later", "m9-01-later")
     assert planner.next_key(tmp_path, "factory") == "f7"
     assert planner.next_key(tmp_path, "product") == "m10"  # a ticket's milestone counts too
     assert planner.next_key(tmp_path / "empty", "factory") == "f1"
@@ -997,9 +997,9 @@ F6_DOC = "# Milestone F6: the planning room\n\n> **State:** ready · **Priority:
 
 
 def _f6(repo: Path) -> None:
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f6-planning-room.md").write_text(F6_DOC)
-    (repo / ".factory" / "cards" / "m4.md").write_text("# Milestone M4: product\n")
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f6-planning-room.md").write_text(F6_DOC)
+    (repo / ".softfield" / "cards" / "m4.md").write_text("# Milestone M4: product\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "f6")
 
@@ -1046,10 +1046,10 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     (repo / "coucou" / "thing.py").write_text("# the owner's edit, left alone\n")
     head = git(repo, "rev-parse", "HEAD").strip()
     asked = _ask(repo, "plant", None, _plant("Parallel planners", "Two at once?\nMaybe.", ask=True))
-    result = "planted .factory/cards/f7-parallel-planners.md, queued for the lead"
+    result = "planted .softfield/cards/f7-parallel-planners.md, queued for the lead"
     assert _apply(repo, parked) == [f"plant: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
-    doc = (repo / ".factory" / "cards" / "f7-parallel-planners.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f7-parallel-planners.md").read_text()
     assert "## Notes\nTwo at once?\nMaybe.\n" in doc
     assert milestone.card("f7-parallel-planners", doc) == milestone.Card("idea", 100, "factory")
     # one commit by the runner, of the card alone
@@ -1057,7 +1057,7 @@ def test_a_plant_request_writes_and_commits_an_idea_card_with_the_owners_words(r
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
     assert git(repo, "log", "-1", "--format=%an").strip() == "Softfield runner"
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == [".factory/cards/f7-parallel-planners.md"]
+    assert changed == [".softfield/cards/f7-parallel-planners.md"]
     assert git(repo, "status", "--porcelain").strip() == "M coucou/thing.py"
     assert _board(repo)["f7-parallel-planners"] == ("Parallel planners", "idea", 100, "factory")
     # the owner's words are also F7's first message, for the lead to answer (2026-10-07)
@@ -1073,8 +1073,8 @@ def test_a_one_box_note_plants_its_text_whole(repo):
     _ask(repo, "plant", None, json.dumps({"text": note, "ask": True}))
     [line] = _apply(repo)
     stem = "f7-parallel-planners-two-at-once-maybe"
-    assert line == f"plant: planted .factory/cards/{stem}.md, queued for the lead"
-    doc = (repo / ".factory" / "cards" / f"{stem}.md").read_text()
+    assert line == f"plant: planted .softfield/cards/{stem}.md, queued for the lead"
+    doc = (repo / ".softfield" / "cards" / f"{stem}.md").read_text()
     assert doc.startswith(
         "# Milestone F7: Parallel planners: two at once? Maybe, if they each get…\n"
     )
@@ -1087,13 +1087,13 @@ def test_a_plant_not_asked_about_waits_as_a_seed(repo):
     the card; nothing goes to the lead until the owner writes on its thread."""
     _f6(repo)
     asked = _ask(repo, "plant", None, _plant("Parallel planners", "Two at once?"))
-    result = "planted .factory/cards/f7-parallel-planners.md"
+    result = "planted .softfield/cards/f7-parallel-planners.md"
     assert _apply(repo) == [f"plant: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
     assert _for_the_lead(repo) == []
     old = _ask(repo, "plant", None, json.dumps({"title": "Older form"}))  # no ask: a seed
     _apply(repo)
-    assert _request(repo, old)[1] == "planted .factory/cards/f8-older-form.md"
+    assert _request(repo, old)[1] == "planted .softfield/cards/f8-older-form.md"
     assert _for_the_lead(repo) == []
 
 
@@ -1101,7 +1101,7 @@ def test_a_product_idea_takes_the_next_product_key(repo):
     _f6(repo)
     _ask(repo, "plant", None, _plant("Rubber ducks", area="product"))
     _apply(repo)
-    doc = (repo / ".factory" / "cards" / "m5-rubber-ducks.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "m5-rubber-ducks.md").read_text()
     assert milestone.card("m5-rubber-ducks", doc).area == "product"
 
 
@@ -1110,7 +1110,7 @@ def test_two_ideas_planted_at_one_pick_take_two_keys(repo):
     _ask(repo, "plant", None, _plant("One"))
     _ask(repo, "plant", None, _plant("Two"))
     _apply(repo)
-    found = sorted(p.name for p in (repo / ".factory" / "cards").glob("f*.md"))
+    found = sorted(p.name for p in (repo / ".softfield" / "cards").glob("f*.md"))
     assert found == ["f6-planning-room.md", "f7-one.md", "f8-two.md"]
 
 
@@ -1153,7 +1153,7 @@ def test_a_plant_waits_for_the_repo_to_be_on_main(repo):
     asked = _ask(repo, "plant", None, _plant("One"))
     assert _apply(repo) == ["plant: waits for the repo to be on main"]
     assert _request(repo, asked) == (None, None)
-    assert not (repo / ".factory" / "cards" / "f7-one.md").exists()
+    assert not (repo / ".softfield" / "cards" / "f7-one.md").exists()
 
 
 def _seeded(repo: Path) -> None:
@@ -1180,10 +1180,10 @@ def test_approving_a_general_threads_seed_plants_it_the_same_way(repo):
     _f6(repo)
     _seeded(repo)
     asked = _ask(repo, "plant", "general/seed-1", json.dumps({"area": "factory"}))
-    result = "planted .factory/cards/f7-parallel-planners.md"
+    result = "planted .softfield/cards/f7-parallel-planners.md"
     assert _apply(repo) == [f"plant general/seed-1: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
-    doc = (repo / ".factory" / "cards" / "f7-parallel-planners.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f7-parallel-planners.md").read_text()
     assert "## Notes\n1. Two at once: Beside developers.\n" in doc
     assert "the general thread's seed-1" in doc
     assert milestone.card("f7-parallel-planners", doc).state == "idea"
@@ -1191,7 +1191,7 @@ def test_approving_a_general_threads_seed_plants_it_the_same_way(repo):
     assert _for_the_lead(repo) == []  # the lead wrote the seed: nothing to answer
     again = _ask(repo, "plant", "general/seed-1")
     _apply(repo)  # F48 D1: the card holds the seed's words, so nothing is written
-    assert _request(repo, again)[1] == "planted already: .factory/cards/f7-parallel-planners.md"
+    assert _request(repo, again)[1] == "planted already: .softfield/cards/f7-parallel-planners.md"
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 planted by the owner"
 
 
@@ -1333,7 +1333,7 @@ def _older_database(repo: Path) -> None:
 
 
 def _card_in(repo: Path, key: str, state: str) -> None:
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / f"{key}-x.md").write_text(f"# Milestone {key.upper()}: x\n\n> **State:** {state}\n")
 
@@ -1386,7 +1386,7 @@ def test_the_clear_out_reads_the_owners_approvals_of_the_latest_proposals(repo):
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
     plan = {**SEED_2, "id": "plan-1", "kind": "plan"}
-    adr = {**SEED_2, "id": "adr-1", "kind": "adr", "path": ".factory/adr/30-x.md"}
+    adr = {**SEED_2, "id": "adr-1", "kind": "adr", "path": ".softfield/adr/30-x.md"}
     conn = metrics.open_db(_db(repo))
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
@@ -1435,8 +1435,8 @@ def test_an_archive_the_runner_cant_apply_says_why(repo, subject, value, result)
 
 # --- the thread committed with its approved plan (f20 D2) ------------------------------------
 
-EXPORT = ".factory/planning/f7-one-queue.md"
-MARKDOWN = "# x\n```\nAgreed otherwise, see `.factory/tasks/`.\nA line\n---"
+EXPORT = ".softfield/planning/f7-one-queue.md"
+MARKDOWN = "# x\n```\nAgreed otherwise, see `.softfield/tasks/`.\nA line\n---"
 EXPORTED = """\
 # F7: one queue
 
@@ -1462,7 +1462,7 @@ The planning thread behind F7's plan, oldest first, as it was when the owner app
 
 > # x
 > ```
-> Agreed otherwise, see `.factory/tasks/`.
+> Agreed otherwise, see `.softfield/tasks/`.
 > A line
 > ---
 >
@@ -1496,7 +1496,7 @@ def _committed(repo: Path) -> list[str]:
 
 def test_approving_a_plan_commits_its_thread_with_its_drafts(repo):
     _card(repo)
-    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
     _talked_through(repo)
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
@@ -1504,16 +1504,16 @@ def test_approving_a_plan_commits_its_thread_with_its_drafts(repo):
     assert (repo / EXPORT).read_text() == EXPORTED
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
     assert _committed(repo) == [
-        ".factory/cards/f7-one-queue.md",
+        ".softfield/cards/f7-one-queue.md",
         EXPORT,
-        ".factory/tasks/ready/f7-01-a.md",
+        ".softfield/tasks/ready/f7-01-a.md",
     ]
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
 
 
 def test_a_messages_markdown_cant_make_a_heading_of_the_export(repo):
     _card(repo)
-    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
     _talked_through(repo)
     _ask(repo, "approve_plan", "f7")
     _apply(repo)
@@ -1530,12 +1530,12 @@ def test_a_messages_markdown_cant_make_a_heading_of_the_export(repo):
 
 def test_a_second_approval_rewrites_the_export_with_the_whole_thread(repo):
     _card(repo)
-    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
     _talked_through(repo)
     _ask(repo, "approve_plan", "f7")
     _apply(repo)
     _said(repo, "f7", "owner", 20, "One more ticket, please.")
-    _plan(repo, {".factory/tasks/later/f7-02-b.md": _ticket("f7-02-b")})
+    _plan(repo, {".softfield/tasks/later/f7-02-b.md": _ticket("f7-02-b")})
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f7: queued f7-02-b"
@@ -1546,19 +1546,19 @@ def test_a_second_approval_rewrites_the_export_with_the_whole_thread(repo):
 
 def test_a_refused_approval_writes_no_export(repo):
     _card(repo)
-    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`.")})
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`.")})
     _talked_through(repo)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert str(_request(repo, asked)[1]).startswith("not approved: f7-01-a:")
     _main_unchanged(repo, head)
-    assert not (repo / ".factory" / "planning").exists()
+    assert not (repo / ".softfield" / "planning").exists()
 
 
 def test_a_commit_that_fails_after_the_export_leaves_no_file(repo, monkeypatch):
     _card(repo)
-    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})
     _talked_through(repo)
     head = git(repo, "rev-parse", "HEAD")
 
@@ -1579,8 +1579,8 @@ def test_the_general_threads_approved_merges_export_nothing(repo):
     asked = _ask(repo, "approve_plan", "general")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved: merged F12 into F10"
-    assert not (repo / ".factory" / "planning").exists()
-    assert ".factory/planning" not in git(repo, "show", "--name-only", "--format=", "HEAD")
+    assert not (repo / ".softfield" / "planning").exists()
+    assert ".softfield/planning" not in git(repo, "show", "--name-only", "--format=", "HEAD")
 
 
 # --- proposal_state (F31 D3) --------------------------------------------------------------------
@@ -1599,7 +1599,7 @@ def _row(
 
 
 PLAN_P = {"id": "plan-f7", "kind": "plan"}
-ADR_P = {"id": "adr-30", "kind": "adr", "path": ".factory/adr/30-one-queue.md"}
+ADR_P = {"id": "adr-30", "kind": "adr", "path": ".softfield/adr/30-one-queue.md"}
 SEED_P = {"id": "seed-1", "kind": "seed"}
 
 
@@ -1676,7 +1676,7 @@ def test_a_proposals_state_comes_from_the_owners_requests(proposal, card, rows, 
 def test_a_key_that_has_a_thread_is_never_given_again(tmp_path):
     """f109-02: F64 was planted and merged three times, F73 and F107 twice: the merged card's
     doc left main and the next plant took its key, and its thread with it."""
-    docs = tmp_path / ".factory" / "cards"
+    docs = tmp_path / ".softfield" / "cards"
     docs.mkdir(parents=True)
     for name in ("f2", "f8-one-queue", "m4"):
         (docs / f"{name}.md").write_text("# x\n")
@@ -1699,5 +1699,5 @@ def test_a_plant_passes_over_the_key_of_a_card_merged_away(repo):
     _ask(repo, "plant", None, _plant("One"))
     _ask(repo, "plant", None, _plant("Two"))
     _apply(repo)
-    found = sorted(p.name for p in (repo / ".factory" / "cards").glob("f*.md"))
+    found = sorted(p.name for p in (repo / ".softfield" / "cards").glob("f*.md"))
     assert found == ["f6-planning-room.md", "f8-one.md", "f9-two.md"]

@@ -616,7 +616,7 @@ def test_a_refused_send_back_tries_again_on_its_thread(planning, db_path, serve)
 @pytest.mark.parametrize(
     ("kind", "subject", "value", "result"),
     [
-        ("plant", None, DUCKS, "planted .factory/cards/f12-rubber-ducks.md, queued for the lead"),
+        ("plant", None, DUCKS, "planted .softfield/cards/f12-rubber-ducks.md, queued for the lead"),
         ("plant", None, DUCKS, None),
         ("approve_plan", "f6", None, "there is no plan/f6 to approve"),
         ("pause", None, None, "already paused, since 12:00"),

@@ -15,7 +15,7 @@ def test_a_merge_whose_card_left_main_shows_both_ways(planning, db_path, serve, 
     merged card's h2 shows the heading's title, not its bare key."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
@@ -53,7 +53,7 @@ def test_a_merged_card_with_its_removed_row_says_merged_into(planning, db_path, 
     page still says 'Merged into F95', not 'An earlier F107', and keeps the row's title."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
     f95_doc = planner.merged_card(
         "# Milestone F95: Plans get merged\n\n## Notes\n",
@@ -90,7 +90,7 @@ def test_merge_links_function_returns_correct_links(checkout):
     from factory_dashboard.merges import _merge_links
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     f95_doc = "# Milestone F95: Plans\n\n## Notes\n"
@@ -118,7 +118,7 @@ def test_merged_on_shows_link_to_kept_card(planning, db_path, serve, checkout):
     with a link to /planning/f95 and F95's title, and no message form."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
@@ -159,7 +159,7 @@ def test_merged_on_lists_open_proposals(planning, db_path, serve, checkout):
     linking to its review page; an applied or rejected one is not."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
@@ -206,7 +206,7 @@ def test_merged_on_leaves_out_a_rejected_plan(planning, db_path, serve, checkout
     """A plan the owner rejected on F95's thread is not listed on /planning/f107."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
     f95_doc = planner.merged_card(
         "# Milestone F95: Plans get merged\n\n## Notes\n",
@@ -241,7 +241,7 @@ def test_merged_on_shows_ticket_count(planning, db_path, serve, checkout):
     a kept card with no ticket shows no such link."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
@@ -292,7 +292,7 @@ def test_merged_on_counts_done_across_two_milestones(planning, db_path, serve, c
     in the first, shows 'Planned: 4 tickets, 3 done'."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
@@ -354,7 +354,7 @@ def test_merged_on_two_kept_cards(planning, db_path, serve, checkout):
     own card's links, and keeps its message form."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
@@ -397,7 +397,7 @@ def test_merged_on_card_on_main_no_block(planning, db_path, serve, checkout):
     """A key that has a card on main again has no #merged-on and keeps its message form."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F95's doc holds F107's merge
@@ -461,7 +461,7 @@ def test_two_merges_on_one_kept_card(planning, db_path, serve, checkout):
     """A kept card with two merges lists both."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     f95_doc = "# Milestone F95: Plans get merged\n\n## Notes\n"
@@ -491,7 +491,7 @@ def test_key_merged_into_two_cards(planning, db_path, serve, checkout):
     """A key merged into two cards (F64 into F13 and F42) lists both on its thread."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     f13_doc = "# Milestone F13: Line\n\n## Notes\n"
@@ -524,7 +524,7 @@ def test_chain_f107_to_f10(planning, db_path, serve, checkout):
     """F107's notes moved from F95 into F10: links to F10 and back."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     # F10's doc has both the original heading (from F95) and the chain heading (from F107)
@@ -560,7 +560,7 @@ def test_key_reused_says_an_earlier(planning, db_path, serve, checkout):
     """A key that has a card again on main says 'An earlier F73 was merged into F43'."""
     from runner import planner
 
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
 
     f43_doc = "# Milestone f43-review: Review\n\n## Notes\n"

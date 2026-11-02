@@ -16,8 +16,8 @@ TODAY = date(2026, 10, 1)
 
 
 def _review(repo: Path) -> None:
-    (repo / ".factory" / "reviews").mkdir(parents=True, exist_ok=True)
-    (repo / ".factory" / "reviews" / "m1.md").write_text(
+    (repo / ".softfield" / "reviews").mkdir(parents=True, exist_ok=True)
+    (repo / ".softfield" / "reviews" / "m1.md").write_text(
         "# Milestone 1\n\n- **Status:** review done, waiting for sign-off.\n\n"
         "## Sign-off sheet\n\n### 2. How to test it yourself\n1. Pair a phone.\n2. Send.\n\n"
         "### 3. Left for later\n- nothing\n"
@@ -34,15 +34,17 @@ def test_a_clean_milestone_is_ready_for_sign_off(repo: Path):
 
 
 def test_a_decision_for_the_owner_says_what_and_what_next(repo: Path):
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-02-photos")
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-03-gallery", "[m1-02-photos]")
-    blocked = write_task(repo / ".factory" / "tasks" / "blocked", "m1-04-thing")
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-03-gallery", "[m1-02-photos]")
+    blocked = write_task(repo / ".softfield" / "tasks" / "blocked", "m1-04-thing")
     append_footer(blocked, {"result": "blocked", "reason": "2 escalations used"})
-    state = State(owner={"m1-02-photos": {"adr": ".factory/adr/14-photos.md", "question": "Keep?"}})
+    state = State(
+        owner={"m1-02-photos": {"adr": ".softfield/adr/14-photos.md", "question": "Keep?"}}
+    )
     code, text = owner.verdict(repo, "m1", state, "clean")
     assert code == 2
     assert text.startswith("⚠ NEEDS YOU")
-    assert ".factory/adr/14-photos.md: Keep?" in text
+    assert ".softfield/adr/14-photos.md: Keep?" in text
     assert "paused behind it: m1-03-gallery" in text
     assert "m1-04-thing blocked: 2 escalations used" in text
     assert "then rerun  softfield milestone 1" in text
@@ -54,8 +56,8 @@ def test_a_review_that_stopped_for_the_owner_needs_you(repo: Path):
 
 
 def _milestone(repo: Path) -> None:
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "m1.md").write_text(
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "m1.md").write_text(
         "# Milestone 1\n\n> **Status: in review** (2026-09-30). Base: git tag `m1-start`.\n>\n"
         "> **Progress:** all done.\n\n## Outcome\n"
     )
@@ -67,10 +69,10 @@ def _milestone(repo: Path) -> None:
 def test_signoff_marks_the_milestone_done_and_tags_it(repo: Path):
     _milestone(repo)
     owner.signoff(repo, "m1", TODAY)
-    milestone = (repo / ".factory" / "cards" / "m1.md").read_text()
+    milestone = (repo / ".softfield" / "cards" / "m1.md").read_text()
     assert "> **Status: done.** Signed off by the owner on 2026-10-01." in milestone
     assert "in review" not in milestone
-    review = (repo / ".factory" / "reviews" / "m1.md").read_text()
+    review = (repo / ".softfield" / "reviews" / "m1.md").read_text()
     assert "- **Status:** done, signed off by the owner on 2026-10-01." in review
     assert git(repo, "tag").split() == ["m1-done"]
     assert git(repo, "log", "-1", "--format=%s").strip() == "M1 signed off by the owner"
@@ -80,14 +82,14 @@ def test_signoff_marks_the_milestone_done_and_tags_it(repo: Path):
 def test_signoff_takes_a_planning_room_card_and_a_review_with_no_status_line(repo: Path):
     """2026-10-08: F41 and F55 (a `State:` line, no `Status:`) and F20's review (sheet first,
     no status line) couldn't be signed off."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    card = repo / ".factory" / "cards" / "f7-one-queue.md"
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    card = repo / ".softfield" / "cards" / "f7-one-queue.md"
     card.write_text(
         "# Milestone F7: one queue\n\n> **State:** ready · **Priority:** 2 · **Area:** factory\n"
         "> Planted by the owner on 2026-10-01.\n\n## Notes\nx\n"
     )
-    (repo / ".factory" / "reviews").mkdir(parents=True)
-    review = repo / ".factory" / "reviews" / "f7-one-queue.md"
+    (repo / ".softfield" / "reviews").mkdir(parents=True)
+    review = repo / ".softfield" / "reviews" / "f7-one-queue.md"
     review.write_text("# Review: F7 one queue\n\n## Sign-off sheet\n\n### 1. What changed\n- x\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "docs")
@@ -126,8 +128,8 @@ def test_signoff_takes_a_planning_room_card_and_a_review_with_no_status_line(rep
 )
 def test_a_card_signed_off_drops_its_reserve_mark(repo: Path, header: str, signed: str):
     """F172 D5: the mark ends with the work."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    card = repo / ".factory" / "cards" / "f7-one-queue.md"
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    card = repo / ".softfield" / "cards" / "f7-one-queue.md"
     card.write_text(
         f"# Milestone F7: one queue\n\n{header}\n"
         "> Planted by the owner on 2026-10-01.\n\n## Notes\n**Reserve:** stays here\n"
@@ -145,8 +147,8 @@ def test_a_card_signed_off_drops_its_reserve_mark(repo: Path, header: str, signe
 
 
 def test_a_refused_signoff_writes_nothing(repo: Path):
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    card = repo / ".factory" / "cards" / "f7-one-queue.md"
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    card = repo / ".softfield" / "cards" / "f7-one-queue.md"
     card.write_text("# Milestone F7: one queue\n\nNo header at all.\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "docs")
@@ -157,7 +159,7 @@ def test_a_refused_signoff_writes_nothing(repo: Path):
 
 def test_signoff_refuses_while_work_is_left(repo: Path):
     _milestone(repo)
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-02-photos")
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")
     with pytest.raises(owner.OwnerError, match="m1-02-photos"):
         owner.signoff(repo, "m1", TODAY)
     owner.signoff(repo, "m1", TODAY, force=True)
@@ -173,14 +175,14 @@ def _in_milestone(path: Path, milestone: str) -> Path:
 def test_signoff_counts_a_ticket_for_the_milestone_its_frontmatter_names(repo: Path):
     """f3-08-field-cards moved to F5 keeps its id: it blocks F5's sign-off, not F3's."""
     for key in ("f3-factory-line", "f5"):
-        (repo / ".factory" / "cards").mkdir(parents=True, exist_ok=True)
-        (repo / ".factory" / "cards" / f"{key}.md").write_text(
+        (repo / ".softfield" / "cards").mkdir(parents=True, exist_ok=True)
+        (repo / ".softfield" / "cards" / f"{key}.md").write_text(
             f"# {key}\n\n> **Status: in review** (2026-10-04).\n"
         )
     _in_milestone(
-        write_task(repo / ".factory" / "tasks" / "ready", "f3-08-field-cards"), "f5-board"
+        write_task(repo / ".softfield" / "tasks" / "ready", "f3-08-field-cards"), "f5-board"
     )
-    _in_milestone(write_task(repo / ".factory" / "tasks" / "blocked", "f9-01-rehomed"), "f3")
+    _in_milestone(write_task(repo / ".softfield" / "tasks" / "blocked", "f9-01-rehomed"), "f3")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "docs")
     with pytest.raises(owner.OwnerError, match="f9-01-rehomed") as raised:
@@ -188,7 +190,7 @@ def test_signoff_counts_a_ticket_for_the_milestone_its_frontmatter_names(repo: P
     assert "f3-08-field-cards" not in str(raised.value)
     with pytest.raises(owner.OwnerError, match=r"f3-08-field-cards \(ready\)"):
         owner.signoff(repo, "f5", TODAY)
-    (repo / ".factory" / "tasks" / "blocked" / "f9-01-rehomed.md").unlink()
+    (repo / ".softfield" / "tasks" / "blocked" / "f9-01-rehomed.md").unlink()
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "re-homed")
     owner.signoff(repo, "f3-factory-line", TODAY)
@@ -196,7 +198,7 @@ def test_signoff_counts_a_ticket_for_the_milestone_its_frontmatter_names(repo: P
 
 
 def test_accept_and_reject_set_an_adrs_status(repo: Path):
-    adr = repo / ".factory" / "adr" / "14-photos.md"
+    adr = repo / ".softfield" / "adr" / "14-photos.md"
     adr.parent.mkdir(parents=True)
     adr.write_text("# ADR 14\n\n- **Status:** Proposed (to explore)\n- **Date:** x\n")
     git(repo, "add", "-A")
@@ -232,11 +234,13 @@ def _open(repo: Path) -> dict[tuple[str, str], dict[str, object]]:
 
 
 def _needs_you(repo: Path) -> State:
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-02-photos")
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-05-other")
-    blocked = write_task(repo / ".factory" / "tasks" / "blocked", "m1-04-thing")
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-05-other")
+    blocked = write_task(repo / ".softfield" / "tasks" / "blocked", "m1-04-thing")
     append_footer(blocked, {"result": "blocked", "reason": "2 escalations used"})
-    return State(owner={"m1-02-photos": {"adr": ".factory/adr/14-photos.md", "question": "Keep?"}})
+    return State(
+        owner={"m1-02-photos": {"adr": ".softfield/adr/14-photos.md", "question": "Keep?"}}
+    )
 
 
 def test_the_verdicts_items_are_open_owner_items_with_a_command(repo: Path):
@@ -244,12 +248,12 @@ def test_the_verdicts_items_are_open_owner_items_with_a_command(repo: Path):
     owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
     items = _open(repo)
     assert set(items) == {
-        ("adr", ".factory/adr/14-photos.md"),
+        ("adr", ".softfield/adr/14-photos.md"),
         ("escalated", "m1-05-other"),
         ("blocked", "m1-04-thing"),
         ("review-stop", "m1"),
     }
-    adr = items[("adr", ".factory/adr/14-photos.md")]
+    adr = items[("adr", ".softfield/adr/14-photos.md")]
     assert adr["text"] == "Keep?" and adr["command"] == "softfield accept 14"
     blocked = items[("blocked", "m1-04-thing")]
     assert "2 escalations used" in str(blocked["text"])
@@ -262,7 +266,7 @@ def test_the_verdicts_items_are_open_owner_items_with_a_command(repo: Path):
 def test_the_verdicts_blocked_item_says_what_block_said(repo: Path):
     """F106 D1: a rerun's verdict doesn't change the item ``block`` stored, nor its count."""
     state = _needs_you(repo)
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-06-after", "[m1-04-thing]")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-06-after", "[m1-04-thing]")
     owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
     said = loop.blocked_text("m1-04-thing", "2 escalations used", 1)
     assert _open(repo)[("blocked", "m1-04-thing")]["text"] == said
@@ -282,7 +286,7 @@ def _reserve(text: str = RESERVE_TEXT) -> State:
 
 
 def test_a_ticket_waiting_for_the_reserve_needs_you_until_a_rerun_runs_it(repo: Path):
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-03-lead")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-03-lead")
     code, text = owner.verdict(repo, "m1", _reserve(), "tickets paused: m1-03-lead", db=_db(repo))
     assert code == 2 and f"  • {RESERVE_TEXT}" in text
     assert "later" not in text  # another milestone's
@@ -297,14 +301,14 @@ def test_a_rerun_resolves_the_milestones_rerun_items_at_once(repo: Path):
     restarted before reaching one (2026-10-01)."""
     state = _needs_you(repo)
     state.parked = _reserve().parked
-    _in_milestone(write_task(repo / ".factory" / "tasks" / "escalated", "m2-01-later"), "2")
+    _in_milestone(write_task(repo / ".softfield" / "tasks" / "escalated", "m2-01-later"), "2")
     owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
     owner.verdict(repo, "m2", State(), "clean", db=_db(repo))
     assert ("reserve", "m1-03-lead") in _open(repo)
 
     owner.rerun_started(repo, "m1", db=_db(repo))
     assert set(_open(repo)) == {
-        ("adr", ".factory/adr/14-photos.md"),  # an ADR is the owner's to accept, not a rerun's
+        ("adr", ".softfield/adr/14-photos.md"),  # an ADR is the owner's to accept, not a rerun's
         ("escalated", "m2-01-later"),  # another milestone's
     }
     assert _items(repo)[("review-stop", "m1")]["resolved"]
@@ -333,10 +337,10 @@ def test_the_same_verdict_twice_leaves_the_same_rows(repo: Path):
 def test_a_rerun_that_clears_a_blocked_ticket_resolves_its_item(repo: Path):
     state = _needs_you(repo)
     owner.verdict(repo, "m1", state, "clean", db=_db(repo))
-    (repo / ".factory" / "tasks" / "blocked" / "m1-04-thing.md").unlink()
-    write_task(repo / ".factory" / "tasks" / "done", "m1-04-thing")
+    (repo / ".softfield" / "tasks" / "blocked" / "m1-04-thing.md").unlink()
+    write_task(repo / ".softfield" / "tasks" / "done", "m1-04-thing")
     write_task(
-        repo / ".factory" / "tasks" / "escalated", "m2-01-later"
+        repo / ".softfield" / "tasks" / "escalated", "m2-01-later"
     )  # another milestone's: untouched
     owner.verdict(repo, "m2", State(), "clean", db=_db(repo))
     assert ("blocked", "m1-04-thing") in _open(repo)
@@ -428,7 +432,7 @@ def test_the_verdict_is_on_the_milestone_row(repo: Path):
 
 
 def _adr(repo: Path, name: str, status: str = "Proposed") -> Path:
-    adr = repo / ".factory" / "adr" / name
+    adr = repo / ".softfield" / "adr" / name
     adr.parent.mkdir(parents=True, exist_ok=True)
     adr.write_text(f"# ADR\n\n- **Status:** {status}\n- **Date:** x\n")
     git(repo, "add", "-A")
@@ -460,14 +464,14 @@ def test_decide_adr_takes_the_exact_file_when_told(repo: Path):
 
 
 def test_accept_and_reject_resolve_the_adrs_item(repo: Path):
-    adr = repo / ".factory" / "adr" / "14-photos.md"
+    adr = repo / ".softfield" / "adr" / "14-photos.md"
     adr.parent.mkdir(parents=True)
     adr.write_text("# ADR 14\n\n- **Status:** Proposed\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "adr")
     owner.verdict(repo, "m1", _needs_you(repo), "clean", db=_db(repo))
     owner.decide_adr(repo, 14, "Accepted", TODAY, db=_db(repo))
-    assert ("adr", ".factory/adr/14-photos.md") not in _open(repo)
+    assert ("adr", ".softfield/adr/14-photos.md") not in _open(repo)
     assert ("blocked", "m1-04-thing") in _open(repo)
 
 
@@ -482,38 +486,38 @@ def test_a_database_that_cant_be_opened_leaves_the_owners_commands_working(repo:
 def test_a_factory_milestone_uses_its_key_everywhere(repo: Path):
     """f1's tickets, docs, commands and tag are named f1, not m1 (the f1 plan)."""
     write_task(
-        repo / ".factory" / "tasks" / "escalated", "m1-02-photos"
+        repo / ".softfield" / "tasks" / "escalated", "m1-02-photos"
     )  # another milestone's: not f1's
     blocked = _in_milestone(
-        write_task(repo / ".factory" / "tasks" / "blocked", "f1-02-report"), "f1"
+        write_task(repo / ".softfield" / "tasks" / "blocked", "f1-02-report"), "f1"
     )
     append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
     code, text = owner.verdict(repo, "f1", State(), "clean")
     assert code == 2 and "f1-02-report blocked" in text and "m1-02-photos" not in text
     assert "softfield milestone f1" in text
     blocked.unlink()
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f1.md").write_text(
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f1.md").write_text(
         "# Factory 1\n\n> **Status: in review** (2026-10-01).\n"
     )
-    (repo / ".factory" / "reviews").mkdir(parents=True)
-    (repo / ".factory" / "reviews" / "f1.md").write_text("# F1\n\n- **Status:** review done.\n")
+    (repo / ".softfield" / "reviews").mkdir(parents=True)
+    (repo / ".softfield" / "reviews" / "f1.md").write_text("# F1\n\n- **Status:** review done.\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "docs")
     code, text = owner.verdict(repo, "f1", State(), "clean")
-    assert code == 0 and "Review: .factory/reviews/f1.md" in text
+    assert code == 0 and "Review: .softfield/reviews/f1.md" in text
     assert text.rstrip().endswith("softfield signoff f1")
     owner.signoff(repo, "f1", TODAY, force=True)
-    assert "git tag `f1-start`" in (repo / ".factory" / "cards" / "f1.md").read_text()
+    assert "git tag `f1-start`" in (repo / ".softfield" / "cards" / "f1.md").read_text()
     assert git(repo, "tag").split() == ["f1-done"]
     assert git(repo, "log", "-1", "--format=%s").strip() == "F1 signed off by the owner"
 
 
 def test_a_named_milestone_finds_its_short_tickets_and_its_docs(repo: Path):
     """ADR 16 item 6: f3-factory-line's tickets are f3-01-…; its docs use the full key."""
-    write_task(repo / ".factory" / "tasks" / "escalated", "f30-02-other")  # f30's, not f3's
+    write_task(repo / ".softfield" / "tasks" / "escalated", "f30-02-other")  # f30's, not f3's
     blocked = _in_milestone(
-        write_task(repo / ".factory" / "tasks" / "blocked", "f3-02-report"), "f3"
+        write_task(repo / ".softfield" / "tasks" / "blocked", "f3-02-report"), "f3"
     )
     append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
     state = State(parked={"f3-03-wait": {"kind": "reserve", "text": "f3-03 waits"}})
@@ -524,23 +528,23 @@ def test_a_named_milestone_finds_its_short_tickets_and_its_docs(repo: Path):
     with pytest.raises(owner.OwnerError, match="f3-02-report"):
         owner.signoff(repo, "f3-factory-line", TODAY)
     blocked.unlink()
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f3-factory-line.md").write_text(
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f3-factory-line.md").write_text(
         "# Factory 3\n\n> **Status: in review** (2026-10-01).\n"
     )
-    (repo / ".factory" / "reviews").mkdir(parents=True)
-    (repo / ".factory" / "reviews" / "f3-factory-line.md").write_text(
+    (repo / ".softfield" / "reviews").mkdir(parents=True)
+    (repo / ".softfield" / "reviews" / "f3-factory-line.md").write_text(
         "# F3\n\n- **Status:** review done.\n"
     )
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "docs")
     code, text = owner.verdict(repo, "f3-factory-line", State(), "clean")
-    assert code == 0 and "Review: .factory/reviews/f3-factory-line.md" in text
+    assert code == 0 and "Review: .softfield/reviews/f3-factory-line.md" in text
     owner.signoff(repo, "f3-factory-line", TODAY, force=True)
-    doc = (repo / ".factory" / "cards" / "f3-factory-line.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f3-factory-line.md").read_text()
     assert "git tag `f3-factory-line-start`" in doc
-    assert "[`.factory/reviews/f3-factory-line.md`](../reviews/f3-factory-line.md)" in doc
-    assert "signed off" in (repo / ".factory" / "reviews" / "f3-factory-line.md").read_text()
+    assert "[`.softfield/reviews/f3-factory-line.md`](../reviews/f3-factory-line.md)" in doc
+    assert "signed off" in (repo / ".softfield" / "reviews" / "f3-factory-line.md").read_text()
     assert git(repo, "tag").split() == ["f3-factory-line-done"]
 
 
@@ -553,10 +557,10 @@ def test_a_rerun_of_a_named_milestone_clears_its_short_tickets_items(repo: Path)
 def test_the_verdict_lists_a_rehomed_ticket_under_the_milestone_it_names(repo: Path):
     """f7 review: f3-25 re-homed to F9 keeps its id, so F9's verdict and rerun own it."""
     blocked = _in_milestone(
-        write_task(repo / ".factory" / "tasks" / "blocked", "f3-25-rehomed"), "f9"
+        write_task(repo / ".softfield" / "tasks" / "blocked", "f3-25-rehomed"), "f9"
     )
     append_footer(blocked, {"result": "blocked", "reason": "check-all failed"})
-    _in_milestone(write_task(repo / ".factory" / "tasks" / "ready", "f3-26-waits"), "f9")
+    _in_milestone(write_task(repo / ".softfield" / "tasks" / "ready", "f3-26-waits"), "f9")
     state = State(parked={"f3-26-waits": {"kind": "reserve", "text": "f3-26 waits"}})
     _, text = owner.verdict(repo, "f3-factory-line", state, "clean")
     assert "f3-25" not in text and "f3-26" not in text
@@ -567,24 +571,24 @@ def test_the_verdict_lists_a_rehomed_ticket_under_the_milestone_it_names(repo: P
 
 
 def test_a_named_milestone_keeps_its_short_key_docs(repo: Path):
-    """f2 was planned before named keys: its docs stay .factory/cards/f2.md."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f2.md").write_text("# F2\n\n> **Status: in review**.\n")
-    (repo / ".factory" / "reviews").mkdir(parents=True)
-    (repo / ".factory" / "reviews" / "f2.md").write_text("# F2\n\n- **Status:** review done.\n")
+    """f2 was planned before named keys: its docs stay .softfield/cards/f2.md."""
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f2.md").write_text("# F2\n\n> **Status: in review**.\n")
+    (repo / ".softfield" / "reviews").mkdir(parents=True)
+    (repo / ".softfield" / "reviews" / "f2.md").write_text("# F2\n\n- **Status:** review done.\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "docs")
     code, text = owner.verdict(repo, "f2-cloud-first", State(), "clean")
-    assert code == 0 and "Review: .factory/reviews/f2.md" in text
+    assert code == 0 and "Review: .softfield/reviews/f2.md" in text
     owner.signoff(repo, "f2-cloud-first", TODAY)
-    assert "Signed off" in (repo / ".factory" / "cards" / "f2.md").read_text()
+    assert "Signed off" in (repo / ".softfield" / "cards" / "f2.md").read_text()
 
 
 def test_signoff_leaves_another_milestones_ticket_item_alone(repo: Path):
     """2026-10-06: F7's sign-off met "reserve f8-03-support-jobs-queued", read the ticket id
     as a milestone key, and the failure rolled back F7's done row."""
     _milestone(repo)
-    _in_milestone(write_task(repo / ".factory" / "tasks" / "ready", "m2-01-lead"), "2")
+    _in_milestone(write_task(repo / ".softfield" / "tasks" / "ready", "m2-01-lead"), "2")
     owner.verdict(repo, "m2", _reserve(), "tickets paused: m2-01-lead", db=_db(repo))
     assert ("reserve", "m2-01-lead") in _open(repo)
     owner.signoff(repo, "m1", TODAY, db=_db(repo))

@@ -1,6 +1,6 @@
 # Notifications on your phone
 
-The runner tells your phone the moment something needs you, screen off and browser closed, through the free ntfy app and the public ntfy.sh ([ADR 31](../.factory/adr/31-notifications-to-a-closed-phone.md)). These steps are for an Android phone. You do them once per machine; `softfield doctor` says whether they're done.
+The runner tells your phone the moment something needs you, screen off and browser closed, through the free ntfy app and the public ntfy.sh ([ADR 31](../.softfield/adr/31-notifications-to-a-closed-phone.md)). These steps are for an Android phone. You do them once per machine; `softfield doctor` says whether they're done.
 
 ## Set it up
 1. On the machine the runner runs on, run `softfield notify setup` once. It writes `[notify] ntfy` in `~/.config/softfield/factory.toml` with a long random topic and prints it: "In the ntfy app, subscribe to the topic: …". Note the topic.

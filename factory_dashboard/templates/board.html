@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Board · {{ project }}{% endblock %}
-{# The board (f5-16, after .factory/cards/f5-board-mockup/). The columns come in growth order;
+{# The board (f5-16, after .softfield/cards/f5-board-mockup/). The columns come in growth order;
    under 900 px board.js shows one at a time, and without it dashboard.css stacks them, what
    needs the owner and what runs first. board.js also gives each card of a stage the owner
    orders a grip and a ⋯ menu, holds the moves in the bar and sends them as one reorder
-   (F15 D1, D3, after .factory/cards/f15-mockup/board-edit.html). #}
+   (F15 D1, D3, after .softfield/cards/f15-mockup/board-edit.html). #}
 
 {% from "_partials/stage_icon.html" import icon, plant %}
 

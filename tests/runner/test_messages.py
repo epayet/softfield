@@ -29,7 +29,7 @@ def test_merge_message_tells_the_story(tmp_path: Path):
     assert "Model 2.0 min, gates 7 s; 62,765 tokens in / 2,165 out." in body
     assert "  coucou/thing.py     +3 -1" in body and "coucou/locale/x.mo  (binary)" in body
     assert "Defined by: tests/unit/test_thing.py (all gates green)" in body
-    assert "Spec: .factory/tasks/done/m1-01-thing.md" in body
+    assert "Spec: .softfield/tasks/done/m1-01-thing.md" in body
 
 
 def test_long_subjects_are_shortened(tmp_path: Path):
@@ -63,9 +63,9 @@ def test_session_message_summarises():
         _record(tokens_in=1000),
         _record(id="m1-02-x", result="escalated", attempts=3, tokens_in=500),
     ]
-    message = session_message(report, ".factory/sessions/2026-09-28-1549.md")
+    message = session_message(report, ".softfield/sessions/2026-09-28-1549.md")
     assert message.splitlines()[0] == (
         "runner: session report: 1 merged, 1 not, 1,500 local tokens in"
     )
     assert "  m1-02-x: escalated after 3 attempt(s)" in message
-    assert message.endswith("Report: .factory/sessions/2026-09-28-1549.md")
+    assert message.endswith("Report: .softfield/sessions/2026-09-28-1549.md")

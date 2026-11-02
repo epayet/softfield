@@ -482,7 +482,7 @@ def write_milestone_detail(conn: sqlite3.Connection) -> None:
         status="done",
         outcome="The factory now measures itself end-to-end.",
         done_when=(
-            "- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`,\n"
+            "- All tickets in `.softfield/tasks/done/`, `check-all` passes on `main`,\n"
             "- `backfill` run twice gives identical row counts."
         ),
         signoff={
@@ -551,7 +551,7 @@ def write_milestone_detail_with_scores(conn: sqlite3.Connection) -> None:
         owner_score=8.5,
         outcome="The factory now measures itself end-to-end.",
         done_when=(
-            "- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`,\n"
+            "- All tickets in `.softfield/tasks/done/`, `check-all` passes on `main`,\n"
             "- `backfill` run twice gives identical row counts."
         ),
         signoff={
@@ -1628,10 +1628,10 @@ def line_db(db_path: Path, tmp_path: Path) -> Path:
     repo's project.toml over the machine fixture (``MACHINE``), with the developers the rows
     were written for (Qwen and gpt-oss-120b)."""
     repo = tmp_path / "repo"
-    (repo / ".factory").mkdir(parents=True)
-    toml = Path(__file__).resolve().parents[2] / ".factory" / "project.toml"
+    (repo / ".softfield").mkdir(parents=True)
+    toml = Path(__file__).resolve().parents[2] / ".softfield" / "project.toml"
     roles = '\n[roles]\ndeveloper = ["local-qwen3.6-35b-a3b", "ollama-gpt-oss-120b"]\n'
-    (repo / ".factory" / "project.toml").write_text(toml.read_text(encoding="utf-8") + roles)
+    (repo / ".softfield" / "project.toml").write_text(toml.read_text(encoding="utf-8") + roles)
     conn = metrics.open_db(db_path)
     try:
         write_line(conn, str(repo))
@@ -1861,7 +1861,7 @@ PLANNING_ADR = {
     "id": "adr-20",
     "kind": "adr",
     "title": "ADR 20: the planning room",
-    "path": ".factory/adr/20-planning-room.md",
+    "path": ".softfield/adr/20-planning-room.md",
     "key_points": [{"n": 1, "title": "Planning goes first"}, {"n": 2, "title": "Opus plans"}],
 }
 PLANNING_PLAN = {"id": "plan", "kind": "plan", "title": "F6 plan: 7 tickets", "path": None}
@@ -1974,7 +1974,7 @@ def write_signoff_button(conn: sqlite3.Connection) -> None:
 def mark_reserve(db: Path, repo: Path, *keys: str) -> None:
     """The project's checkout at ``repo``, with a card doc for each full key in ``keys`` whose
     header says ``**Reserve:** yes`` (F172 D1), as the runner writes it."""
-    cards = repo / ".factory" / "cards"
+    cards = repo / ".softfield" / "cards"
     cards.mkdir(parents=True, exist_ok=True)
     for key in keys:
         (cards / f"{key}.md").write_text(

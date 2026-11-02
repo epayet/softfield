@@ -505,11 +505,11 @@ def allowance_client_with(db_path: Path, tmp_path: Path, switches: dict[str, str
     from tests.factory_dashboard.conftest import write_allowance
 
     repo = tmp_path / "repo"
-    (repo / ".factory").mkdir(parents=True)
-    toml = Path(__file__).resolve().parents[2] / ".factory" / "project.toml"
-    (repo / ".factory" / "project.toml").write_text(toml.read_text(encoding="utf-8"))
-    (repo / ".factory" / "var" / "runs").mkdir(parents=True)
-    (repo / ".factory" / "var" / "runs" / "state.json").write_text(
+    (repo / ".softfield").mkdir(parents=True)
+    toml = Path(__file__).resolve().parents[2] / ".softfield" / "project.toml"
+    (repo / ".softfield" / "project.toml").write_text(toml.read_text(encoding="utf-8"))
+    (repo / ".softfield" / "var" / "runs").mkdir(parents=True)
+    (repo / ".softfield" / "var" / "runs" / "state.json").write_text(
         json.dumps({"switches": switches})
     )
     conn = metrics.open_db(db_path)

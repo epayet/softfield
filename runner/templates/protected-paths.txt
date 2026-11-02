@@ -3,7 +3,7 @@
 # The setup adds this project's sensitive code (security, privacy, data loss, deploy, settings).
 
 # The factory's own files: tickets, cards, ADRs, settings, and these rules
-.factory/**
+.softfield/**
 AGENTS.md
 CLAUDE.md
 opencode.json

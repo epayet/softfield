@@ -708,8 +708,8 @@ def test_a_lead_only_card_and_the_other_stages_look_none(db_path):
 
 
 def test_a_ticket_under_a_protected_path_is_the_lead_s_with_a_checkout(db_path, tmp_path):
-    (tmp_path / ".factory").mkdir()
-    (tmp_path / ".factory" / "protected-paths.txt").write_text("runner/**\n", encoding="utf-8")
+    (tmp_path / ".softfield").mkdir()
+    (tmp_path / ".softfield" / "protected-paths.txt").write_text("runner/**\n", encoding="utf-8")
     FILES["f66-01"] = ["runner/x.py"]
     try:
         write(db_path, _tickets(("f66-a", "f66-01", "developer", "ready", ())))
@@ -1992,7 +1992,7 @@ def test_waits_populated_only_for_planted_cards(board_db):
     assert f22.waits == ()
 
 
-# --- the developer's view (f146-02, after .factory/cards/f146-mockup/developers-only.html) ------
+# --- the developer's view (f146-02, after .softfield/cards/f146-mockup/developers-only.html) ------
 
 
 def _lever(html: str) -> tuple[str, str]:

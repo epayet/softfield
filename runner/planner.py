@@ -31,12 +31,12 @@ from runner.tasks import (
 
 PLANNER = "planner"  # the role, and the queued job's kind (`dispatch.PLANNER`)
 # what a card's planner job may edit (f6 D4): docs, cards, ADRs and set-aside tickets
-DRAFT_DIRS = ("docs/", ".factory/cards/", ".factory/adr/", ".factory/tasks/later/")
+DRAFT_DIRS = ("docs/", ".softfield/cards/", ".softfield/adr/", ".softfield/tasks/later/")
 DRAFTS = tuple(f"{d}**" for d in DRAFT_DIRS)
-READY_DIR = ".factory/tasks/ready/"
+READY_DIR = ".softfield/tasks/ready/"
 # A replan brings its card's blocked tickets back (ADR 29 item 3): the planner writes one in ready/
 # or later/, and the runner removes the blocked copy at the approval, as a job can't remove a file
-BLOCKED_DIR = ".factory/tasks/blocked/"
+BLOCKED_DIR = ".softfield/tasks/blocked/"
 PLAN_MESSAGE = "plan_message"  # the request kind: subject the thread, value `message`'s JSON
 PLANNING = "planning"  # the owner item a reply raises, about its thread (ADR 20 item 9)
 GENERAL = "general"
@@ -175,8 +175,9 @@ def drafts(card: str) -> tuple[str, ...]:
 
 def is_draft(path: str, card: str | None = None) -> bool:
     """Whether a planner job may change ``path`` on its plan branch (f6 D4): docs and the tickets in
-    ``.factory/tasks/later/``, never code or ``.factory/tasks/done/``. Given its ``card``, the
-    card's own tickets in ``.factory/tasks/ready/`` too, which only a ``replan`` may change (f6-13).
+    ``.softfield/tasks/later/``, never code or ``.softfield/tasks/done/``. Given its ``card``, the
+    card's own tickets in ``.softfield/tasks/ready/`` too, which only a ``replan`` may change
+    (f6-13).
     """
     if ".." in path.split("/"):
         return False
@@ -184,7 +185,7 @@ def is_draft(path: str, card: str | None = None) -> bool:
 
 
 def is_ready_ticket(path: str, card: str, folder: str = READY_DIR) -> bool:
-    """Whether ``path`` is one of ``card``'s ready tickets (``.factory/tasks/ready/f7-01-….md``),
+    """Whether ``path`` is one of ``card``'s ready tickets (``.softfield/tasks/ready/f7-01-….md``),
     or its tickets in another ``folder`` (``BLOCKED_DIR``)."""
     pattern = rf"{re.escape(folder)}{re.escape(card)}-\d[\w.-]*\.md"
     return re.fullmatch(pattern, path) is not None
@@ -211,7 +212,7 @@ def draft(repo: Path, thread: str, path: str) -> bytes | None:
 
 
 _MAIN = "refs/heads/main"  # loop.MAIN; loop imports this module
-_LATER_DIR = ".factory/tasks/later/"
+_LATER_DIR = ".softfield/tasks/later/"
 _WORDS = {"A": "added", "D": "removed"}  # any other status is "changed"
 
 
@@ -228,8 +229,9 @@ class Change:
 
 def plan_changes(repo: Path, thread: str) -> list[Change]:
     """What approving the card's plan branch changes (f6-24): each path it changed since it left
-    main, by path; a ready ticket removed and moved to .factory/tasks/later/ is "set aside", once,
-    under its .factory/tasks/ready/ path. Empty with no branch, or for the general thread. Git only,
+    main, by path; a ready ticket removed and moved to .softfield/tasks/later/ is "set aside", once,
+    under its .softfield/tasks/ready/ path. Empty with no branch, or for the general thread. Git
+    only,
     as ``draft``: ``runner.requests._drafts`` reads the same diff."""
     try:
         branch = plan_branch(thread_key(thread))
@@ -297,7 +299,7 @@ def sent_back(proposal: Mapping[str, Any], text: str, comments: Mapping[int, str
 
 
 # A ticket relies on an ADR it names: by its path, or as "ADR 20".
-_ADR_NAMED_RE = re.compile(r"(?<![\w/])\.factory/adr/(\d+)-[\w.-]*\.md\b|\bADR (\d+)\b")
+_ADR_NAMED_RE = re.compile(r"(?<![\w/])\.softfield/adr/(\d+)-[\w.-]*\.md\b|\bADR (\d+)\b")
 _PROPOSED_RE = re.compile(r"^- \*\*Status:\*\*[ \t]*Proposed\b", re.MULTILINE)
 READY = "ready"  # the card's state once its plan is approved (f5 D4)
 _STATE_RE = re.compile(r"\*\*State:\*\*[ \t]*[^·*\n]*?(?=[ \t]*(?:·|\*|$))", re.MULTILINE)
@@ -353,9 +355,9 @@ def next_key(repo: Path, area: str, taken: Iterable[str] = ()) -> str:
     ticket or ``taken`` uses (``f7`` after ``f6-planning-room``). ``taken`` is the threads'
     cards (f109-02): a card merged away keeps its key, and its thread, to itself."""
     prefix = SERIES[area]
-    keys = [path.stem for path in (repo / ".factory" / "cards").glob("*.md")]
+    keys = [path.stem for path in (repo / ".softfield" / "cards").glob("*.md")]
     keys += [key for key in taken if key != GENERAL]
-    for path in (repo / ".factory" / "tasks").glob("*/*.md"):
+    for path in (repo / ".softfield" / "tasks").glob("*/*.md"):
         if found := _TICKET_KEY_RE.match(path.stem):
             keys.append(found[1])
     highest = 0
@@ -371,7 +373,7 @@ def next_key(repo: Path, area: str, taken: Iterable[str] = ()) -> str:
 
 def card_named(repo: Path, name: str) -> str | None:
     """The milestone doc whose slug is ``name``, in any series, if there is one."""
-    for path in sorted((repo / ".factory" / "cards").glob(f"*-{name}.md")):
+    for path in sorted((repo / ".softfield" / "cards").glob(f"*-{name}.md")):
         if path.stem.partition("-")[2] == name:
             return path.stem
     return None
@@ -501,7 +503,7 @@ def seed_card(key: str, title: str, thoughts: str, area: str, note: str) -> str:
 def cards(repo: Path) -> set[str]:
     """Every card's short key, from its milestone doc: the cards a ``merge`` may name."""
     found = set()
-    for path in (repo / ".factory" / "cards").glob("*.md"):
+    for path in (repo / ".softfield" / "cards").glob("*.md"):
         try:
             key = milestone_key(path.stem)
         except TaskError:  # a README
@@ -513,7 +515,7 @@ def cards(repo: Path) -> set[str]:
 
 # --- merging a duplicate card into the card it repeats (f6-12, D2 and D4) ---------------------
 
-_CARD_DOC_RE = re.compile(r"\.factory/cards/([a-z][a-z0-9-]*)\.md")
+_CARD_DOC_RE = re.compile(r"\.softfield/cards/([a-z][a-z0-9-]*)\.md")
 _HEADING_RE = re.compile(r"^(#{1,4}) ", re.MULTILINE)
 
 
@@ -528,7 +530,9 @@ def merge_cards(proposal: Mapping[str, Any]) -> tuple[str, str]:
     except TaskError:
         duplicate = None
     if duplicate is None or duplicate == BUGS:
-        raise PlannerError(f"merge {name}'s path is a card's doc in .factory/cards/, not {path!r}")
+        raise PlannerError(
+            f"merge {name}'s path is a card's doc in .softfield/cards/, not {path!r}"
+        )
     into = proposal.get("into")
     try:
         kept = thread_key(into)
@@ -760,7 +764,7 @@ _LOOK = (
 _BLOCKED = (
     "\nThis message is the runner's, not the owner's: it blocked a ticket of this card. Read its"
     " branch and logs, then say what went wrong and propose the fix as a `replan` that brings"
-    " the ticket back from .factory/tasks/blocked/, reworked or set aside.\n"
+    " the ticket back from .softfield/tasks/blocked/, reworked or set aside.\n"
 )
 
 
@@ -815,7 +819,7 @@ def parse_reply(text: str, known: Collection[str] = ()) -> Reply:
     return Reply(said, points, proposals, title=title, ignored=ignored)
 
 
-_MOCKUP_FILE_RE = re.compile(r"\.factory/cards/[^/]+-mockup/[^/]+\.html")
+_MOCKUP_FILE_RE = re.compile(r"\.softfield/cards/[^/]+-mockup/[^/]+\.html")
 _PAGE_TITLE_RE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
 
 
@@ -986,7 +990,7 @@ REJECTED = "rejected"  # won't do (F31 D2)
 WORKED = ("queued for the lead", "approved", "accepted ", "planted ", REJECTED)  # its start
 DRAFTED = ("adr", "mockup", "plan", REPLAN)  # drafts on the plan branch: rejected together
 REJECTED_DRAFTS = "rejected the drafts on "  # a reject's result when the branch went
-_ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
+_ADR_NUMBER = re.compile(r"\.softfield/adr/(\d+)-")
 
 
 def _about(proposal: Mapping[str, Any], card: str) -> list[tuple[str, str, str | None]]:

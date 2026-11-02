@@ -128,7 +128,7 @@ def test_dependants_of_escalated_tasks_are_paused(tmp_path):
 
 
 def test_preflight(repo):
-    task = parse_task(write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing"), 150)
+    task = parse_task(write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing"), 150)
     assert preflight(task, repo) == []
     (repo / "coucou" / "thing.py").write_text("x = 1\n")
     assert preflight(task, repo) == ["symbol not found in the task's files: thing"]
@@ -142,7 +142,7 @@ def test_preflight(repo):
 
 
 def _with_context(repo: Path, context: str):
-    path = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     text = path.read_text().replace("`coucou/thing.py` has `def thing() -> int`.", context)
     path.write_text(text)
     return parse_task(path, 150)
@@ -182,7 +182,7 @@ def test_preflight_takes_a_listed_files_bare_name(repo):
 def test_preflight_allows_new_files_and_unwritten_tests(repo):
     """Files listed in `files:` may be created by the task, and developers write their own
     tests, so neither has to exist yet (ADR 07 items 2 and 4)."""
-    path = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     # m4-07: a Context naming its own (unwritten) test file failed pre-flight.
     path.write_text(
         path.read_text().replace(
@@ -199,7 +199,7 @@ def test_preflight_allows_new_files_and_unwritten_tests(repo):
 def test_preflight_sends_a_tests_only_ticket_to_the_lead(repo):
     """f4-36: a ticket that changes only tests can't pass tests-fail-on-main, so it escalates
     before any attempt rather than after three and a direction."""
-    path = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     path.write_text(path.read_text().replace("- coucou/thing.py\n", "- tests/unit/test_thing.py\n"))
     task = parse_task(path, 150)
     assert task.files == ("tests/unit/test_thing.py",)
@@ -207,7 +207,7 @@ def test_preflight_sends_a_tests_only_ticket_to_the_lead(repo):
 
 
 def _tests_only(repo: Path, files: str) -> Task:
-    path = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     text = path.read_text().replace("- coucou/thing.py\n", files)
     path.write_text(text.replace("milestone: 1\n", "milestone: 1\ntests_only: true\n"))
     return parse_task(path, 150)
@@ -220,7 +220,7 @@ def test_a_test_only_ticket_passes_preflight_for_a_developer(repo):
     assert task.tests_only and task.agent == "developer"
     assert preflight(task, repo) == []
     assert not parse_task(
-        write_task(repo / ".factory" / "tasks" / "done", "m1-02-other"), 150
+        write_task(repo / ".softfield" / "tasks" / "done", "m1-02-other"), 150
     ).tests_only
 
 
@@ -390,9 +390,9 @@ def test_a_named_key_orders_like_its_short_form():
 
 
 def _docs(repo: Path, *names: str) -> None:
-    (repo / ".factory" / "cards").mkdir(parents=True, exist_ok=True)
+    (repo / ".softfield" / "cards").mkdir(parents=True, exist_ok=True)
     for name in names:
-        (repo / ".factory" / "cards" / f"{name}.md").write_text(f"# {name}\n")
+        (repo / ".softfield" / "cards" / f"{name}.md").write_text(f"# {name}\n")
 
 
 def test_the_full_key_comes_from_the_milestone_doc(tmp_path):
@@ -406,16 +406,16 @@ def test_the_full_key_comes_from_the_milestone_doc(tmp_path):
 
 def test_a_milestone_file_is_the_full_keys_or_else_the_short_keys(tmp_path):
     _docs(tmp_path, "f2", "f3-factory-line")
-    docs = tmp_path / ".factory" / "cards"
+    docs = tmp_path / ".softfield" / "cards"
     assert milestone_file(tmp_path, "cards", "f3-factory-line") == docs / "f3-factory-line.md"
     assert milestone_file(tmp_path, "cards", "f2") == docs / "f2.md"
     assert milestone_file(tmp_path, "cards", "f2-cloud-first") == docs / "f2.md"
-    reviews = tmp_path / ".factory" / "reviews"
+    reviews = tmp_path / ".softfield" / "reviews"
     assert milestone_file(tmp_path, "reviews", "f3-factory-line") == reviews / "f3-factory-line.md"
 
 
 def _ticket_of(repo: Path, folder: str, task_id: str, milestone: str) -> Path:
-    path = write_task(repo / ".factory" / "tasks" / folder, task_id)
+    path = write_task(repo / ".softfield" / "tasks" / folder, task_id)
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {milestone}\n"))
     return path
 
@@ -434,7 +434,7 @@ def test_the_command_takes_either_form(tmp_path):
     """`runner milestone f3` is f3-factory-line when its tickets say so, even with no doc."""
     _ticket_of(tmp_path, "ready", "f3-01-a", "f3-factory-line")
     _ticket_of(tmp_path, "done", "m4-01-b", "4")
-    (tmp_path / ".factory" / "tasks" / "done" / "broken.md").write_text("no frontmatter\n")
+    (tmp_path / ".softfield" / "tasks" / "done" / "broken.md").write_text("no frontmatter\n")
     assert milestone_arg(tmp_path, "f3") == "f3-factory-line"
     assert milestone_arg(tmp_path, "f3-factory-line") == "f3-factory-line"
     assert milestone_arg(tmp_path, "4") == "m4" and milestone_arg(tmp_path, "f1") == "f1"
@@ -452,7 +452,7 @@ def _bug(directory: Path, task_id: str = "bug-01-x", extra: str = "area: factory
 
 def test_a_bug_ticket_belongs_to_the_standing_bugs_key(repo):
     """ADR 19 item 2: `bug-<nn>-<slug>`, `milestone: bugs`, with its area and priority 50."""
-    task = parse_task(_bug(repo / ".factory" / "tasks" / "ready"), 150)
+    task = parse_task(_bug(repo / ".softfield" / "tasks" / "ready"), 150)
     assert (task.id, task.milestone, task.priority, task.area) == (
         "bug-01-x",
         "bugs",
@@ -495,7 +495,7 @@ def test_a_bug_id_and_the_bugs_key_go_together(tmp_path, task_id, milestone):
 
 
 def test_a_bug_without_an_area_fails_preflight(repo):
-    task = parse_task(_bug(repo / ".factory" / "tasks" / "ready", extra=""), 150)
+    task = parse_task(_bug(repo / ".softfield" / "tasks" / "ready", extra=""), 150)
     assert task.area is None
     assert preflight(task, repo) == [AREA_MISSING]
 
@@ -590,7 +590,7 @@ def test_inside_a_card_tickets_go_by_what_they_wait_for_then_id(tmp_path):
 
 def test_preflight_refuses_a_feature_tickets_priority_and_passes_a_bugs(repo):
     """F173 D2: the board orders the work."""
-    ready = repo / ".factory" / "tasks" / "ready"
+    ready = repo / ".softfield" / "tasks" / "ready"
     assert preflight(_in(ready, "m1-01-a", "1", "priority: 3\n"), repo) == [FEATURE_PRIORITY]
     assert "the board orders the work" in FEATURE_PRIORITY
     assert preflight(_in(ready, "m1-02-b", "1"), repo) == []
@@ -599,7 +599,7 @@ def test_preflight_refuses_a_feature_tickets_priority_and_passes_a_bugs(repo):
 
 def test_preflight_sends_a_fix_of_a_fix_to_the_lead(repo):
     """f68-08: F68's fifth developer fix ticket on one test; the check holds the F114 rule."""
-    tasks = repo / ".factory" / "tasks"
+    tasks = repo / ".softfield" / "tasks"
     _in(tasks / "done", "f1-01-fixed", "f1", "finding: f1-C1-1\n")
     _in(tasks / "done", "f1-02-plain", "f1")
 
@@ -609,7 +609,7 @@ def test_preflight_sends_a_fix_of_a_fix_to_the_lead(repo):
         path.write_text(
             path.read_text().replace(
                 "### Context\n",
-                f"### Context\nOn the merge of `.factory/tasks/done/{at_fault}.md`.\n",
+                f"### Context\nOn the merge of `.softfield/tasks/done/{at_fault}.md`.\n",
             )
         )
         return parse_task(path, 150)
@@ -623,7 +623,7 @@ def test_preflight_sends_a_fix_of_a_fix_to_the_lead(repo):
 
 def test_preflight_refuses_a_branch_so_far_with_no_branch_work(repo):
     """f32-01, as F17: a requeue's "The branch so far" after the branch went back to main."""
-    ready = repo / ".factory" / "tasks" / "ready"
+    ready = repo / ".softfield" / "tasks" / "ready"
     plain = _in(ready, "f1-01-plain", "f1")
     task = _in(ready, "f1-02-requeued", "f1")
     task.path.write_text(
@@ -791,11 +791,11 @@ def test_queued_tickets_name_only_what_exists_or_an_earlier_ticket_creates():
     queued = {
         task.id: task
         for folder in ("ready", *STOPPED)
-        for task in load_dir(repo / ".factory" / "tasks" / folder, 150)
+        for task in load_dir(repo / ".softfield" / "tasks" / folder, 150)
     }
     # An escalated ticket never runs as written: the lead rewrites or implements it, and its
     # escalation's check-all runs while it still sits in escalated/ (f1-50).
-    escalated = task_ids(repo / ".factory" / "tasks" / "escalated")
+    escalated = task_ids(repo / ".softfield" / "tasks" / "escalated")
     problems = []
     for task in queued.values():
         if task.id in escalated:

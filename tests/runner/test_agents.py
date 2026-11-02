@@ -19,7 +19,9 @@ RESETS = datetime(2026, 10, 5, 16, 0, tzinfo=UTC)
 
 def test_a_spec_without_edit_globs_is_read_only():
     assert JobSpec("review", "Review.", timeout=1).read_only
-    assert not JobSpec("direction", "Direct.", timeout=1, edit=(".factory/var/runs/**",)).read_only
+    assert not JobSpec(
+        "direction", "Direct.", timeout=1, edit=(".softfield/var/runs/**",)
+    ).read_only
 
 
 def test_a_results_error_is_one_of_three_classes():

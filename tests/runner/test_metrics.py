@@ -140,14 +140,14 @@ def test_a_version_3_database_keeps_its_jobs_and_gains_an_empty_model(tmp_path):
     old.execute("INSERT INTO runs (project_id, run_dir) VALUES (1, 'r1')")
     old.execute(
         "INSERT INTO jobs (run_id, role, agent, attempt, log_path)"
-        " VALUES (1, 'review', 'claude-opus', 1, '.factory/var/runs/r1/claude-review-f1.log')"
+        " VALUES (1, 'review', 'claude-opus', 1, '.softfield/var/runs/r1/claude-review-f1.log')"
     )
     old.close()
 
     conn = metrics.open_db(path)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == len(metrics.MIGRATIONS)
     row = conn.execute("SELECT agent, log_path, model FROM jobs").fetchone()
-    assert tuple(row) == ("claude-opus", ".factory/var/runs/r1/claude-review-f1.log", None)
+    assert tuple(row) == ("claude-opus", ".softfield/var/runs/r1/claude-review-f1.log", None)
     conn.close()
 
 
@@ -483,7 +483,9 @@ def test_a_milestone_wide_job_twice_is_one_row(db, ids):
 
 def test_finish_job_sets_the_end_the_outcome_and_the_rest(db, ids):
     job = _job(db, ids)
-    gates = [{"name": "tests", "ok": True, "seconds": 12.5, "log": ".factory/var/runs/x/tests.log"}]
+    gates = [
+        {"name": "tests", "ok": True, "seconds": 12.5, "log": ".softfield/var/runs/x/tests.log"}
+    ]
     metrics.finish_job(
         db,
         job,
@@ -502,7 +504,7 @@ def test_finish_job_sets_the_end_the_outcome_and_the_rest(db, ids):
         gates=gates,
         note="ran the tests early",
         session_id="abc",
-        log_path=".factory/var/runs/x/opencode-1.log",
+        log_path=".softfield/var/runs/x/opencode-1.log",
     )
     row = db.execute("SELECT * FROM jobs WHERE id = ?", (job,)).fetchone()
     assert (row["ended"], row["outcome"], row["started"]) == (T1, "passed", T0)
@@ -514,7 +516,7 @@ def test_finish_job_sets_the_end_the_outcome_and_the_rest(db, ids):
         "ran the tests early",
         "abc",
     )
-    assert row["log_path"] == ".factory/var/runs/x/opencode-1.log"
+    assert row["log_path"] == ".softfield/var/runs/x/opencode-1.log"
     assert json.loads(row["gates"]) == gates
 
 
@@ -561,7 +563,7 @@ def test_ratings_usage_and_owner_items_are_idempotent(db, ids):
         )
         metrics.add_usage_event(db, "claude-opus", T0, "refusal", resets_at=T1)
         item = metrics.upsert_owner_item(
-            db, ids["project"], "adr", ".factory/adr/15-x.md", text="Accept?", created=T0
+            db, ids["project"], "adr", ".softfield/adr/15-x.md", text="Accept?", created=T0
         )
     assert [_count(db, t) for t in ("rating_changes", "usage_events", "owner_items")] == [1, 1, 1]
 

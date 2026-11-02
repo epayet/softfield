@@ -1,6 +1,6 @@
 # Vendored files
 
-Pinned copies for the factory dashboard, never edited by hand ([ADR 13](../../../.factory/adr/13-factory-dashboard.md)). Protected: only the lead changes them.
+Pinned copies for the factory dashboard, never edited by hand ([ADR 13](../../../.softfield/adr/13-factory-dashboard.md)). Protected: only the lead changes them.
 
 | File | From | Version | sha256 |
 |---|---|---|---|

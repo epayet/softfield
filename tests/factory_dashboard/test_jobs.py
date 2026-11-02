@@ -222,9 +222,9 @@ def client_with_backfilled_job(db_path: Path):
             agent="local-qwen3.6-35b-a3b",
             attempt=1,
             started="2026-08-01T10:00:00+02:00",
-            log_path=".factory/var/runs/20260801-100000/m4-01-old/opencode-1.jsonl",
+            log_path=".softfield/var/runs/20260801-100000/m4-01-old/opencode-1.jsonl",
         )
-        log = ".factory/var/runs/20260801-100000/m4-01-old/gates-1.txt"
+        log = ".softfield/var/runs/20260801-100000/m4-01-old/gates-1.txt"
         metrics.finish_job(
             conn,
             job_id,
@@ -258,7 +258,7 @@ def test_job_log_path_is_shown_not_linked(client_with_backfilled_job):
     """The dashboard serves no logs, so the path is text, not a dead link."""
     client, job_id = client_with_backfilled_job
     html = client.get(f"/jobs/{job_id}").text
-    assert ".factory/var/runs/20260801-100000/m4-01-old/opencode-1.jsonl" in section(
+    assert ".softfield/var/runs/20260801-100000/m4-01-old/opencode-1.jsonl" in section(
         html, "session"
     )
     assert "/static/logs/" not in html

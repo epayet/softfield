@@ -52,14 +52,14 @@ from runner.tasks import TaskError, milestone_arg
 
 
 def _here() -> Path | None:
-    """The project this folder is in: the nearest with a ``.factory/project.toml``."""
+    """The project this folder is in: the nearest with a ``.softfield/project.toml``."""
     here = Path.cwd()
     return next((c for c in (here, *here.parents) if (c / PROJECT_TOML).is_file()), None)
 
 
 def _repo() -> Path:
     if (repo := _here()) is None:
-        raise SystemExit("run this inside a project: no .factory/project.toml here or above")
+        raise SystemExit("run this inside a project: no .softfield/project.toml here or above")
     return repo
 
 
@@ -113,7 +113,7 @@ _UNLOADED: set[str] = set()  # projects whose project.toml didn't load, said onc
 
 def _project_configs() -> list[Config]:
     """The registered projects the runner works on, in the owner's order: not paused, with a
-    ``.factory/project.toml`` that loads (ADR 30 item 6). One that doesn't load is said."""
+    ``.softfield/project.toml`` that loads (ADR 30 item 6). One that doesn't load is said."""
     db = machine_metrics_db()
     if not db.is_file():
         return []
@@ -421,7 +421,7 @@ def main(argv: list[str] | None = None) -> int:
         "--score", type=int, help="optional, 1-10: how the result felt on the devices"
     )
     queue = sub.add_parser(
-        "queue", help="the owner: move a ticket from .factory/tasks/later to ready"
+        "queue", help="the owner: move a ticket from .softfield/tasks/later to ready"
     )
     queue.add_argument("ticket", help="its id, or a unique prefix like m4-12")
     for name in ("accept", "reject"):
@@ -445,7 +445,7 @@ def main(argv: list[str] | None = None) -> int:
         "check-tickets", help="what Approve would refuse in drafted tickets (read-only)"
     )
     check_tickets.add_argument(
-        "tickets", nargs="*", help="ticket files (default: every one in .factory/tasks/later/)"
+        "tickets", nargs="*", help="ticket files (default: every one in .softfield/tasks/later/)"
     )
     look_cmd = sub.add_parser(
         "look",
@@ -501,7 +501,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     ratings_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
     report_cmd = sub.add_parser(
-        "report", help="write a milestone's numbers into .factory/reviews/<key>.md"
+        "report", help="write a milestone's numbers into .softfield/reviews/<key>.md"
     )
     report_cmd.add_argument("number", help="4 for M4, or a key like f1")
     report_cmd.add_argument("--db", type=Path, help="the database (default: [metrics] db)")
@@ -602,7 +602,7 @@ def main(argv: list[str] | None = None) -> int:
             )
             print(f"{key.upper()} signed off and tagged {key}-done.")
         elif args.command == "queue":
-            print(f"{loop.queue_ticket(cfg, args.ticket)}: back in .factory/tasks/ready/.")
+            print(f"{loop.queue_ticket(cfg, args.ticket)}: back in .softfield/tasks/ready/.")
         elif args.command == "reserve":
             if loop.live_run(cfg) is not None:  # `_apply_requests` left it to the run
                 print(f"runner: a run is live: the run turns it {args.value} at its next pick.")
@@ -747,7 +747,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "check-tickets":
             given = args.tickets or sorted(
                 p.relative_to(repo).as_posix()
-                for p in (repo / ".factory" / "tasks" / "later").glob("*.md")
+                for p in (repo / ".softfield" / "tasks" / "later").glob("*.md")
             )
             problems = ticket_problems(repo, given)
             print("\n".join(problems) or "tickets OK")
@@ -756,7 +756,7 @@ def main(argv: list[str] | None = None) -> int:
             if args.what == "sql":
                 print(look.sql(cfg.metrics_db, args.query))
             elif args.what == "disk":
-                runs = repo / ".factory" / "var" / "runs"
+                runs = repo / ".softfield" / "var" / "runs"
                 print(look.disk(cfg.metrics_db, bench.bench_dir(cfg), runs))
             else:
                 print(look.page(cfg.metrics_db, project_name(repo), args.address))

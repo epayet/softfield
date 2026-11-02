@@ -746,7 +746,7 @@ tr.few .gauge { opacity: .35; }
 main:has(.board) { max-width: 1360px; }
 .board-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; }
 .board-head p { margin: 0; color: var(--muted); font-size: 13px; max-width: 80ch; }
-/* The plots (after .factory/cards/f15-mockup/board-edit.html): six in growth order, three to a
+/* The plots (after .softfield/cards/f15-mockup/board-edit.html): six in growth order, three to a
    row under 900 px, each its plant, its count and its name; a › leads from one to the next */
 .plots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding: 12px;
   background: var(--bay) repeating-linear-gradient(135deg, transparent 0 10px,
@@ -847,7 +847,7 @@ main:has(.board) { max-width: 1360px; }
 #field .card.on-its-way { border-style: dashed; border-color: var(--hazard); border-left-style: solid;
   border-left-color: var(--c, var(--muted)); }
 .card-way { font: 600 11.5px/1.35 var(--mono); color: var(--hazard); }
-/* Moving cards (F15 D1, D3, after .factory/cards/f15-mockup/board-edit.html): board.js gives a
+/* Moving cards (F15 D1, D3, after .softfield/cards/f15-mockup/board-edit.html): board.js gives a
    card of a stage the owner orders a grip to drag it by (it alone keeps the page from
    scrolling under a finger) and a ⋯ for the same moves. A card moved and not sent has the
    same dashed edge; the bar holds the moves until they are sent */
@@ -865,7 +865,7 @@ main:has(.board) { max-width: 1360px; }
   border-left-color: var(--c, var(--muted)); }
 @media (prefers-reduced-motion: no-preference) { .slot .card { transition: border-color .15s; } }
 .slot.dragging .card { transition: none; }
-/* The developer's view (F146 D3, after .factory/cards/f146-mockup/developers-only.html): lit when
+/* The developer's view (F146 D3, after .softfield/cards/f146-mockup/developers-only.html): lit when
    developers can take a ticket, half-dark when their work waits for the lead, faded when lead
    only. Each card says which in words; a faded one comes back under the pointer or focus */
 .stage-head .dev-sum { display: block; margin-top: 4px; color: var(--fg); }
@@ -1012,7 +1012,7 @@ body.has-order-bar main { padding-bottom: 120px; }
 .readable details { margin-top: 10px; color: var(--ink-2); font-size: 13.5px; }
 .readable summary { color: var(--accent); }
 
-/* The Projects page (ADR 30 item 6, .factory/cards/projects-page-mockup/projects.html) */
+/* The Projects page (ADR 30 item 6, .softfield/cards/projects-page-mockup/projects.html) */
 .projects-page .rank { list-style: none; margin: 0; padding: 0; }
 .projects-page .muted { color: var(--muted); }
 .projects-page .proj { display: grid; grid-template-columns: 52px 1fr; gap: 4px 12px; padding: 12px 0;

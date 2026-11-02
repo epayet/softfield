@@ -155,9 +155,9 @@ def projects_client(serve, db_path, tmp_path):
     """The fixture's project, a second one first in the order with two ready tickets in its
     repo, and the fixture's live job running in the first."""
     repo = tmp_path / "softfield"
-    (repo / ".factory" / "tasks" / "ready").mkdir(parents=True)
+    (repo / ".softfield" / "tasks" / "ready").mkdir(parents=True)
     for name in ("f1-01-a.md", "f1-02-b.md"):
-        (repo / ".factory" / "tasks" / "ready" / name).write_text("x")
+        (repo / ".softfield" / "tasks" / "ready" / name).write_text("x")
     conn = metrics.open_db(db_path)
     try:
         metrics.upsert_project(conn, "softfield", repo=str(repo), description="The factory.")

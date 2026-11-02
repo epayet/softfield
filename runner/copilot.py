@@ -56,9 +56,9 @@ def github_get_command(path: str) -> list[str]:
 
 
 def probe_review(repo: Path, prompt: str, model: str | None, today: date) -> str:
-    """One read-only review, counted against a daily cap kept in .factory/var/."""
+    """One read-only review, counted against a daily cap kept in .softfield/var/."""
     cmd = review_command(prompt, model)
-    counts_path = repo / ".factory" / "var" / "copilot-probe-reviews.json"
+    counts_path = repo / ".softfield" / "var" / "copilot-probe-reviews.json"
     try:
         counts = json.loads(counts_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):

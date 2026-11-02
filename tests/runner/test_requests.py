@@ -74,8 +74,8 @@ def _item(repo: Path, kind: str, subject: str) -> None:
 
 def _later(repo: Path, *ids: str) -> None:
     for task_id in ids:
-        write_task(repo / ".factory" / "tasks" / "later", task_id)
-    git(repo, "add", ".factory/tasks")
+        write_task(repo / ".softfield" / "tasks" / "later", task_id)
+    git(repo, "add", ".softfield/tasks")
     git(repo, "commit", "-q", "-m", "set aside")
 
 
@@ -85,18 +85,18 @@ def test_a_signoff_request_signs_off_as_the_command_does(repo):
     assert _apply(repo) == ["signoff m1: signed off m1"]
     assert git(repo, "tag").split() == ["m1-done"]
     assert git(repo, "log", "-1", "--format=%s").strip() == "M1 signed off by the owner"
-    assert "Status: done." in (repo / ".factory" / "cards" / "m1.md").read_text()
+    assert "Status: done." in (repo / ".softfield" / "cards" / "m1.md").read_text()
     assert _request(repo, asked) == (NOW.isoformat(), "signed off m1")
     assert _apply(repo) == []  # finished once
 
 
 def test_a_signoff_request_with_work_left_is_finished_with_the_commands_error(repo):
     _milestone(repo)
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-02-photos")
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "escalated")
     head = git(repo, "rev-parse", "HEAD")
-    doc = (repo / ".factory" / "cards" / "m1.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "m1.md").read_text()
     asked = _ask(repo, "signoff", "m1")
     error = "work is left: m1-02-photos (escalated). Finish it, or sign off with --force."
     assert _apply(repo) == [f"signoff m1: {error}"]
@@ -104,7 +104,7 @@ def test_a_signoff_request_with_work_left_is_finished_with_the_commands_error(re
     # Nothing changed: no commit, no tag, the doc as it was, a clean tree.
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "tag") == "" and git(repo, "status", "--porcelain") == ""
-    assert (repo / ".factory" / "cards" / "m1.md").read_text() == doc
+    assert (repo / ".softfield" / "cards" / "m1.md").read_text() == doc
     assert _apply(repo) == []  # never retried
 
 
@@ -121,18 +121,18 @@ def test_a_queue_request_moves_the_ticket_and_commits_as_the_command_does(repo):
     _later(repo, "m4-12-send-recovers", "f3-01-other")
     asked = _ask(repo, "queue", "m4-12-send-recovers")
     assert _apply(repo) == ["queue m4-12-send-recovers: queued m4-12-send-recovers"]
-    assert (repo / ".factory" / "tasks" / "ready" / "m4-12-send-recovers.md").is_file()
-    assert not (repo / ".factory" / "tasks" / "later" / "m4-12-send-recovers.md").exists()
+    assert (repo / ".softfield" / "tasks" / "ready" / "m4-12-send-recovers.md").is_file()
+    assert not (repo / ".softfield" / "tasks" / "later" / "m4-12-send-recovers.md").exists()
     assert (
-        repo / ".factory" / "tasks" / "later" / "f3-01-other.md"
+        repo / ".softfield" / "tasks" / "later" / "f3-01-other.md"
     ).is_file()  # only the one asked for
     assert git(repo, "log", "-1", "--format=%s").strip() == (
         "queue m4-12-send-recovers (by the owner)"
     )
     changed = git(repo, "show", "--name-only", "--no-renames", "--format=", "HEAD").split()
     assert sorted(changed) == [
-        ".factory/tasks/later/m4-12-send-recovers.md",
-        ".factory/tasks/ready/m4-12-send-recovers.md",
+        ".softfield/tasks/later/m4-12-send-recovers.md",
+        ".softfield/tasks/ready/m4-12-send-recovers.md",
     ]
     assert git(repo, "status", "--porcelain") == ""
     assert _request(repo, asked) == (NOW.isoformat(), "queued m4-12-send-recovers")
@@ -143,7 +143,7 @@ def test_a_queue_request_for_a_missing_ticket_is_finished_with_the_error(repo):
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "queue", "m9-01-nothing")
     [line] = _apply(repo)
-    error = "m9-01-nothing matches no ticket in .factory/tasks/later/. Choices: m4-12-a"
+    error = "m9-01-nothing matches no ticket in .softfield/tasks/later/. Choices: m4-12-a"
     assert line == f"queue m9-01-nothing: {error}"
     assert _request(repo, asked)[1] == line.split(": ", 1)[1]
     assert git(repo, "rev-parse", "HEAD") == head
@@ -162,9 +162,9 @@ def _blocked(repo: Path, task_id: str, work: str | None = None) -> None:
         git(repo, "add", "work.txt")
         git(repo, "commit", "-q", "-m", f"wip {task_id}")
         git(repo, "checkout", "-q", "main")
-    path = write_task(repo / ".factory" / "tasks" / "blocked", task_id)
+    path = write_task(repo / ".softfield" / "tasks" / "blocked", task_id)
     append_footer(path, {"result": "blocked", "reason": "check-all failed"})
-    git(repo, "add", ".factory/tasks")
+    git(repo, "add", ".softfield/tasks")
     git(repo, "commit", "-q", "-m", f"runner: {task_id} blocked")
     _item(repo, "blocked", task_id)
 
@@ -172,10 +172,10 @@ def _blocked(repo: Path, task_id: str, work: str | None = None) -> None:
 def _moved_alone(repo: Path, task_id: str, src: str, dst: str) -> None:
     changed = git(repo, "show", "--name-only", "--no-renames", "--format=", "HEAD").split()
     assert sorted(changed) == sorted(
-        [f".factory/tasks/{src}/{task_id}.md", f".factory/tasks/{dst}/{task_id}.md"]
+        [f".softfield/tasks/{src}/{task_id}.md", f".softfield/tasks/{dst}/{task_id}.md"]
     )
     assert git(repo, "status", "--porcelain") == ""
-    moved = (repo / ".factory" / "tasks" / dst / f"{task_id}.md").read_text()
+    moved = (repo / ".softfield" / "tasks" / dst / f"{task_id}.md").read_text()
     assert "result: blocked" in moved and "reason: check-all failed" in moved  # footers kept
 
 
@@ -184,8 +184,8 @@ def test_a_queue_request_tries_a_blocked_ticket_again_keeping_its_failed_work(re
     held = git(repo, "rev-parse", "task/f9-01-lead").strip()
     asked = _ask(repo, "queue", "f9-01-lead")
     assert _apply(repo) == ["queue f9-01-lead: queued f9-01-lead"]
-    assert (repo / ".factory" / "tasks" / "ready" / "f9-01-lead.md").is_file()
-    assert not (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead.md").exists()
+    assert (repo / ".softfield" / "tasks" / "ready" / "f9-01-lead.md").is_file()
+    assert not (repo / ".softfield" / "tasks" / "blocked" / "f9-01-lead.md").exists()
     assert git(repo, "log", "-1", "--format=%s").strip() == "queue f9-01-lead (by the owner)"
     _moved_alone(repo, "f9-01-lead", "blocked", "ready")
     assert git(repo, "rev-parse", "blocked/f9-01-lead").strip() == held
@@ -214,7 +214,7 @@ def test_a_queue_request_takes_later_first(repo):
     _blocked(repo, "f9-01-lead-again")
     _ask(repo, "queue", "f9-01-lead")
     assert _apply(repo) == ["queue f9-01-lead: queued f9-01-lead"]
-    assert (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead-again.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "f9-01-lead-again.md").is_file()
     assert _items(repo) == [("blocked", "f9-01-lead-again", "x", True)]
 
 
@@ -224,8 +224,8 @@ def test_a_set_aside_request_moves_a_blocked_ticket_to_later_alone(repo):
     held = git(repo, "rev-parse", "task/f9-01-lead").strip()
     asked = _ask(repo, "set_aside", "f9-01-lead")
     assert _apply(repo) == ["set_aside f9-01-lead: set aside f9-01-lead"]
-    assert (repo / ".factory" / "tasks" / "later" / "f9-01-lead.md").is_file()
-    assert not (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead.md").exists()
+    assert (repo / ".softfield" / "tasks" / "later" / "f9-01-lead.md").is_file()
+    assert not (repo / ".softfield" / "tasks" / "blocked" / "f9-01-lead.md").exists()
     assert git(repo, "log", "-1", "--format=%s").strip() == "set aside f9-01-lead (by the owner)"
     _moved_alone(repo, "f9-01-lead", "blocked", "later")
     assert _items(repo) == [
@@ -241,9 +241,9 @@ def test_a_set_aside_request_moves_a_blocked_ticket_to_later_alone(repo):
 @pytest.mark.parametrize(
     ("folder", "subject", "said"),
     [
-        ("ready", "f9-03-ticket", "isn't in .factory/tasks/blocked/"),
-        ("done", "f9-03-ticket", "isn't in .factory/tasks/blocked/"),
-        (None, "f9-09-nothing", "matches no ticket in .factory/tasks/blocked/"),
+        ("ready", "f9-03-ticket", "isn't in .softfield/tasks/blocked/"),
+        ("done", "f9-03-ticket", "isn't in .softfield/tasks/blocked/"),
+        (None, "f9-09-nothing", "matches no ticket in .softfield/tasks/blocked/"),
         (None, "", "a set_aside request names its ticket"),
         (None, None, "a set_aside request names its ticket"),
     ],
@@ -253,8 +253,8 @@ def test_a_set_aside_request_for_a_ticket_not_blocked_is_refused_and_moves_nothi
 ):
     _blocked(repo, "f9-01-lead")
     if folder is not None:
-        write_task(repo / ".factory" / "tasks" / folder, "f9-03-ticket")
-        git(repo, "add", ".factory/tasks")
+        write_task(repo / ".softfield" / "tasks" / folder, "f9-03-ticket")
+        git(repo, "add", ".softfield/tasks")
         git(repo, "commit", "-q", "-m", folder)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "set_aside", subject)
@@ -262,7 +262,7 @@ def test_a_set_aside_request_for_a_ticket_not_blocked_is_refused_and_moves_nothi
     assert said in line
     assert _request(repo, asked)[1] == line.split(": ", 1)[1]
     assert git(repo, "rev-parse", "HEAD") == head and git(repo, "status", "--porcelain") == ""
-    assert (repo / ".factory" / "tasks" / "blocked" / "f9-01-lead.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "f9-01-lead.md").is_file()
     assert _items(repo) == [("blocked", "f9-01-lead", "x", True)]
 
 
@@ -392,7 +392,7 @@ def test_another_projects_requests_are_left_alone(repo):
     conn.close()
     assert _apply(repo) == []
     assert _request(repo, theirs) == (None, None)
-    assert (repo / ".factory" / "tasks" / "later" / "m4-12-a.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "later" / "m4-12-a.md").is_file()
 
 
 def test_without_a_database_there_is_nothing_to_apply_and_none_is_made(repo):
@@ -429,16 +429,16 @@ MARKED_CARD = (
 
 
 def _marked_doc(repo: Path) -> str:
-    return (repo / ".factory" / "cards" / f"{MARKED}.md").read_text()
+    return (repo / ".softfield" / "cards" / f"{MARKED}.md").read_text()
 
 
 def _reserve_card(repo: Path, card: str = MARKED_CARD) -> str:
     """F142's card on main with two ready tickets, F9's with one; main's head."""
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / f"{MARKED}.md").write_text(card)
     (docs / "f9-other.md").write_text(card.replace("F142", "F9"))
-    ready = repo / ".factory" / "tasks" / "ready"
+    ready = repo / ".softfield" / "tasks" / "ready"
     ready.mkdir(parents=True, exist_ok=True)
     for task_id, key in (("f142-01-a", MARKED), ("f142-02-b", MARKED), ("f9-01-c", "f9-other")):
         text = _ticket(task_id).replace("milestone: f7", f"milestone: {key}")
@@ -459,7 +459,7 @@ def test_a_reserve_request_on_a_card_marks_its_header_and_commits_it(repo):
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == ("F142 in the fast lane, by the owner")
     assert git(repo, "show", "--name-only", "--format=", "HEAD").split() == [
-        f".factory/cards/{MARKED}.md"
+        f".softfield/cards/{MARKED}.md"
     ]
     assert git(repo, "status", "--porcelain") == ""
     _ask(repo, "reserve", "f142", "off")
@@ -504,7 +504,7 @@ def test_a_card_without_an_area_is_marked_after_its_priority(repo):
 @pytest.mark.parametrize(
     ("card", "subject", "value", "error"),
     [
-        (MARKED_CARD, "f143", "on", "F143 has no card in .factory/cards/: not marked"),
+        (MARKED_CARD, "f143", "on", "F143 has no card in .softfield/cards/: not marked"),
         (
             MARKED_CARD.replace("ready", "idea"),
             "f142",
@@ -732,9 +732,9 @@ ADR = "# ADR 23: Parallel planners\n\n- **Status:** Proposed\n- **Date:** 2026-1
 
 def _card(repo: Path) -> None:
     """F7's card on main, and a ticket set aside for another milestone."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f7-one-queue.md").write_text(CARD)
-    git(repo, "add", ".factory")
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f7-one-queue.md").write_text(CARD)
+    git(repo, "add", ".softfield")
     _later(repo, "f3-09-old")
 
 
@@ -760,7 +760,7 @@ def _main_unchanged(repo: Path, head: str) -> None:
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    assert sorted(p.name for p in (repo / ".factory" / "tasks" / "ready").glob("*.md")) == []
+    assert sorted(p.name for p in (repo / ".softfield" / "tasks" / "ready").glob("*.md")) == []
 
 
 def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_card(repo):
@@ -768,10 +768,10 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     _plan(
         repo,
         {
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
-            ".factory/tasks/later/f7-02-b.md": _ticket("f7-02-b"),
-            ".factory/cards/f7-one-queue.md": CARD + "- The plan, drafted.\n",
-            ".factory/cards/f7-mockup/index.html": "<p>queue</p>\n",
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            ".softfield/tasks/later/f7-02-b.md": _ticket("f7-02-b"),
+            ".softfield/cards/f7-one-queue.md": CARD + "- The plan, drafted.\n",
+            ".softfield/cards/f7-mockup/index.html": "<p>queue</p>\n",
         },
     )
     head = git(repo, "rev-parse", "HEAD")
@@ -779,14 +779,14 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
     result = "approved plan/f7: queued f7-01-a, f7-02-b"
     assert _apply(repo) == [f"approve_plan f7-one-queue: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
-    ready = sorted(p.name for p in (repo / ".factory" / "tasks" / "ready").glob("*.md"))
+    ready = sorted(p.name for p in (repo / ".softfield" / "tasks" / "ready").glob("*.md"))
     assert ready == ["f7-01-a.md", "f7-02-b.md"]
-    later = sorted(p.name for p in (repo / ".factory" / "tasks" / "later").glob("*.md"))
+    later = sorted(p.name for p in (repo / ".softfield" / "tasks" / "later").glob("*.md"))
     assert later == ["f3-09-old.md"]  # set aside by the owner: not this plan's to queue
-    doc = (repo / ".factory" / "cards" / "f7-one-queue.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
     assert milestone.card("f7-one-queue", doc).state == "ready"
     assert "- The plan, drafted." in doc and "**Priority:** 3" in doc
-    assert (repo / ".factory" / "cards" / "f7-mockup" / "index.html").is_file()
+    assert (repo / ".softfield" / "cards" / "f7-mockup" / "index.html").is_file()
     # one commit on main, by the owner's request; the branch is gone, its drafts merged
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
@@ -796,22 +796,22 @@ def test_approving_a_plan_merges_its_drafts_queues_its_tickets_and_readies_the_c
 
 
 @pytest.mark.parametrize(
-    "stray", ["runner/loop.py", ".factory/tasks/done/f7-09-sneak.md", "AGENTS.md"]
+    "stray", ["runner/loop.py", ".softfield/tasks/done/f7-09-sneak.md", "AGENTS.md"]
 )
 def test_a_plan_touching_anything_but_drafts_is_refused_and_main_is_unchanged(repo, stray):
     _card(repo)
-    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"), stray: "x = 1\n"})
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"), stray: "x = 1\n"})
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     [line] = _apply(repo)
     _, result = _request(repo, asked)
     assert line == f"approve_plan f7: {result}"
     assert result == (
-        f"plan/f7 changes {stray}, outside docs/, .factory/cards/, .factory/adr/"
-        " and .factory/tasks/later/: not approved"
+        f"plan/f7 changes {stray}, outside docs/, .softfield/cards/, .softfield/adr/"
+        " and .softfield/tasks/later/: not approved"
     )
     _main_unchanged(repo, head)
-    assert not (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").exists()
+    assert not (repo / ".softfield" / "tasks" / "later" / "f7-01-a.md").exists()
     assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"  # kept, to fix
 
 
@@ -821,26 +821,26 @@ ACCEPTED = ADR.replace("Proposed", "Accepted (by the owner, 2026-10-06)")
 @pytest.mark.parametrize(
     ("on_main", "drafted", "gone"),
     [
-        ({}, {".factory/adr/23-parallel-planners.md": ACCEPTED}, ()),  # a new ADR, accepted
+        ({}, {".softfield/adr/23-parallel-planners.md": ACCEPTED}, ()),  # a new ADR, accepted
         (
-            {".factory/adr/23-parallel-planners.md": ADR},
-            {".factory/adr/23-parallel-planners.md": ACCEPTED},
+            {".softfield/adr/23-parallel-planners.md": ADR},
+            {".softfield/adr/23-parallel-planners.md": ACCEPTED},
             (),
         ),  # a Proposed one accepted
         (
-            {".factory/adr/23-parallel-planners.md": ACCEPTED},
-            {".factory/adr/23-parallel-planners.md": ACCEPTED.replace("Accepted", "Superseded")},
+            {".softfield/adr/23-parallel-planners.md": ACCEPTED},
+            {".softfield/adr/23-parallel-planners.md": ACCEPTED.replace("Accepted", "Superseded")},
             (),
         ),
         (
-            {".factory/adr/23-parallel-planners.md": ACCEPTED},
+            {".softfield/adr/23-parallel-planners.md": ACCEPTED},
             {},
-            (".factory/adr/23-parallel-planners.md",),
+            (".softfield/adr/23-parallel-planners.md",),
         ),
         (
             {},
             {
-                ".factory/cards/f7-one-queue.md": CARD.replace(
+                ".softfield/cards/f7-one-queue.md": CARD.replace(
                     "> **State:** planning", "> **State:** done"
                 )
             },
@@ -858,7 +858,7 @@ def test_a_plan_setting_what_only_the_owner_sets_is_refused(
         (repo / rel).write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "--allow-empty", "-m", "on main")
-    _plan(repo, {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"), **drafted}, gone=gone)
+    _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"), **drafted}, gone=gone)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
@@ -872,11 +872,11 @@ def test_a_plan_setting_what_only_the_owner_sets_is_refused(
 
 def test_a_plan_editing_an_adr_but_not_its_status_is_approved(repo):
     _card(repo)
-    (repo / ".factory" / "adr").mkdir()
-    (repo / ".factory" / "adr" / "23-parallel-planners.md").write_text(ACCEPTED)
+    (repo / ".softfield" / "adr").mkdir()
+    (repo / ".softfield" / "adr" / "23-parallel-planners.md").write_text(ACCEPTED)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "adr")
-    _plan(repo, {".factory/adr/23-parallel-planners.md": ACCEPTED + "\nAs built: one planner.\n"})
+    _plan(repo, {".softfield/adr/23-parallel-planners.md": ACCEPTED + "\nAs built: one planner.\n"})
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
@@ -905,18 +905,18 @@ def test_a_plan_that_clashes_with_main_is_refused_and_main_is_unchanged(repo):
     _plan(
         repo,
         {
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
-            ".factory/cards/f7-one-queue.md": CARD.replace("one queue", "two queues"),
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            ".softfield/cards/f7-one-queue.md": CARD.replace("one queue", "two queues"),
         },
     )
-    (repo / ".factory" / "cards" / "f7-one-queue.md").write_text(CARD.replace("one", "a"))
+    (repo / ".softfield" / "cards" / "f7-one-queue.md").write_text(CARD.replace("one", "a"))
     git(repo, "commit", "-q", "-am", "the owner's edit")
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "plan/f7 clashes with main: not approved"
     _main_unchanged(repo, head)
-    assert not (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").exists()
+    assert not (repo / ".softfield" / "tasks" / "later" / "f7-01-a.md").exists()
     assert not Path(repo, git(repo, "rev-parse", "--git-path", "SQUASH_MSG").strip()).exists()
 
 
@@ -925,9 +925,9 @@ def test_a_ticket_with_a_bare_path_refuses_the_approval_with_the_problem_named(r
     _plan(
         repo,
         {
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
-            ".factory/tasks/later/f7-02-b.md": _ticket("f7-02-b"),
-            ".factory/tasks/later/f7-03-c.md": "no frontmatter\n",
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
+            ".softfield/tasks/later/f7-02-b.md": _ticket("f7-02-b"),
+            ".softfield/tasks/later/f7-03-c.md": "no frontmatter\n",
         },
     )
     head = git(repo, "rev-parse", "HEAD")
@@ -938,18 +938,18 @@ def test_a_ticket_with_a_bare_path_refuses_the_approval_with_the_problem_named(r
         " f7-03-c: task file must start with YAML frontmatter (---)"
     )
     _main_unchanged(repo, head)
-    assert not (repo / ".factory" / "tasks" / "later" / "f7-02-b.md").exists()  # nothing merged
+    assert not (repo / ".softfield" / "tasks" / "later" / "f7-02-b.md").exists()  # nothing merged
     assert git(repo, "branch", "--list", "plan/f7").strip() == "plan/f7"
 
 
 def test_accept_adr_merges_the_draft_and_the_plan_waits_for_it(repo):
     _card(repo)
-    relies = "Build on `.factory/adr/23-parallel-planners.md`."
+    relies = "Build on `.softfield/adr/23-parallel-planners.md`."
     _plan(
         repo,
         {
-            ".factory/adr/23-parallel-planners.md": ADR,
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
+            ".softfield/adr/23-parallel-planners.md": ADR,
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
         },
     )
     head = git(repo, "rev-parse", "HEAD")
@@ -961,26 +961,26 @@ def test_accept_adr_merges_the_draft_and_the_plan_waits_for_it(repo):
     _main_unchanged(repo, head)
 
     accepted = _ask(repo, "accept_adr", "f7", "23")
-    assert _apply(repo) == ["accept_adr f7: accepted .factory/adr/23-parallel-planners.md"]
-    assert _request(repo, accepted)[1] == "accepted .factory/adr/23-parallel-planners.md"
-    adr = repo / ".factory" / "adr" / "23-parallel-planners.md"
+    assert _apply(repo) == ["accept_adr f7: accepted .softfield/adr/23-parallel-planners.md"]
+    assert _request(repo, accepted)[1] == "accepted .softfield/adr/23-parallel-planners.md"
+    adr = repo / ".softfield" / "adr" / "23-parallel-planners.md"
     assert "- **Status:** Accepted (by the owner, 2026-10-01)\n" in adr.read_text()
     assert git(repo, "log", "-1", "--format=%s").strip() == "ADR 23 accepted by the owner"
     assert git(repo, "rev-parse", "HEAD~1") == head
-    assert not (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").exists()  # the ADR alone
+    assert not (repo / ".softfield" / "tasks" / "later" / "f7-01-a.md").exists()  # the ADR alone
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain") == ""
 
     second = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, second)[1] == "approved plan/f7: queued f7-01-a"
-    assert (repo / ".factory" / "tasks" / "ready" / "f7-01-a.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "ready" / "f7-01-a.md").is_file()
     assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
 
 
 def test_a_plan_whose_adr_is_still_proposed_is_refused_and_main_is_unchanged(repo):
     _card(repo)
-    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
+    _plan(repo, {".softfield/adr/23-parallel-planners.md": ADR})
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
@@ -995,7 +995,7 @@ def test_a_plan_whose_adr_is_still_proposed_is_refused_and_main_is_unchanged(rep
 def test_a_plan_may_edit_an_adr_main_already_holds_as_proposed(repo):
     """F51 D3 holds for an ADR the branch drafted, not one on main the owner reviews later."""
     _card(repo)
-    adr = repo / ".factory" / "adr" / "23-parallel-planners.md"
+    adr = repo / ".softfield" / "adr" / "23-parallel-planners.md"
     adr.parent.mkdir(parents=True)
     adr.write_text(ADR)
     git(repo, "add", "-A")
@@ -1009,36 +1009,36 @@ def test_a_plan_may_edit_an_adr_main_already_holds_as_proposed(repo):
 
 def test_accept_then_approve_in_one_pick_accepts_the_adr_and_merges_the_plan(repo):
     _card(repo)
-    relies = "Build on `.factory/adr/23-parallel-planners.md`."
+    relies = "Build on `.softfield/adr/23-parallel-planners.md`."
     _plan(
         repo,
         {
-            ".factory/adr/23-parallel-planners.md": ADR,
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
+            ".softfield/adr/23-parallel-planners.md": ADR,
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a", relies),
         },
     )
     accepted = _ask(repo, "accept_adr", "f7", "23")
     approved = _ask(repo, "approve_plan", "f7")
     _apply(repo)
-    assert _request(repo, accepted)[1] == "accepted .factory/adr/23-parallel-planners.md"
+    assert _request(repo, accepted)[1] == "accepted .softfield/adr/23-parallel-planners.md"
     assert _request(repo, approved)[1] == "approved plan/f7: queued f7-01-a"
-    adr = repo / ".factory" / "adr" / "23-parallel-planners.md"
+    adr = repo / ".softfield" / "adr" / "23-parallel-planners.md"
     assert "Accepted (by the owner, 2026-10-01)" in adr.read_text()
-    assert (repo / ".factory" / "tasks" / "ready" / "f7-01-a.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "ready" / "f7-01-a.md").is_file()
 
 
 def test_accept_adr_resolves_the_owner_items_that_ask_about_it(repo):
     _card(repo)
-    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
-    _item(repo, "adr", ".factory/adr/23-parallel-planners.md")
+    _plan(repo, {".softfield/adr/23-parallel-planners.md": ADR})
+    _item(repo, "adr", ".softfield/adr/23-parallel-planners.md")
     _ask(repo, "accept_adr", "f7", "23")
     _apply(repo)
     assert _items(repo)[0][3] is False
 
 
 def _main_adr(repo, name: str, text: str = ADR) -> None:
-    (repo / ".factory" / "adr").mkdir(exist_ok=True)
-    (repo / ".factory" / "adr" / name).write_text(text)
+    (repo / ".softfield" / "adr").mkdir(exist_ok=True)
+    (repo / ".softfield" / "adr" / name).write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", name)
 
@@ -1049,8 +1049,8 @@ def test_accept_adr_takes_the_branchs_own_draft_when_main_has_that_number(repo):
     _plan(
         repo,
         {
-            ".factory/adr/23-parallel-planners.md": ADR,
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Builds on ADR 23."),
+            ".softfield/adr/23-parallel-planners.md": ADR,
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a", "Builds on ADR 23."),
         },
     )
     _main_adr(repo, "23-another.md")
@@ -1058,16 +1058,16 @@ def test_accept_adr_takes_the_branchs_own_draft_when_main_has_that_number(repo):
     _apply(repo)
     result = _request(repo, asked)[1]
     assert result == (
-        "accepted .factory/adr/24-parallel-planners.md (number 23 was taken, so it is ADR 24)"
+        "accepted .softfield/adr/24-parallel-planners.md (number 23 was taken, so it is ADR 24)"
     )
-    adr = repo / ".factory" / "adr"
+    adr = repo / ".softfield" / "adr"
     assert "Proposed" in (adr / "23-another.md").read_text()
     assert not (adr / "23-parallel-planners.md").exists()
     moved = (adr / "24-parallel-planners.md").read_text()
     assert moved.startswith("# ADR 24:") and "Accepted (by the owner" in moved
 
     git(repo, "checkout", "-q", "plan/f7")
-    assert "ADR 24" in (repo / ".factory" / "tasks" / "later" / "f7-01-a.md").read_text()
+    assert "ADR 24" in (repo / ".softfield" / "tasks" / "later" / "f7-01-a.md").read_text()
     assert not (adr / "23-parallel-planners.md").exists()
     git(repo, "checkout", "-q", "main")
     second = _ask(repo, "approve_plan", "f7")
@@ -1077,7 +1077,7 @@ def test_accept_adr_takes_the_branchs_own_draft_when_main_has_that_number(repo):
 
 def test_accepting_an_adr_on_a_card_with_no_tickets_asks_its_lead_for_the_plan(repo):
     _card(repo)
-    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
+    _plan(repo, {".softfield/adr/23-parallel-planners.md": ADR})
     _ask(repo, "accept_adr", "f7", "23")
     _apply(repo)
     conn = metrics.open_db(_db(repo))
@@ -1098,8 +1098,8 @@ def test_accepting_an_adr_on_a_card_with_tickets_asks_nothing(repo):
     _plan(
         repo,
         {
-            ".factory/adr/23-parallel-planners.md": ADR,
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            ".softfield/adr/23-parallel-planners.md": ADR,
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
         },
     )
     _ask(repo, "accept_adr", "f7", "23")
@@ -1114,13 +1114,13 @@ def test_accepting_an_adr_on_a_card_with_tickets_asks_nothing(repo):
 
 def test_accept_adr_of_an_adr_already_on_main_accepts_it(repo):
     _card(repo)
-    (repo / ".factory" / "adr").mkdir()
-    (repo / ".factory" / "adr" / "23-parallel-planners.md").write_text(ADR)
+    (repo / ".softfield" / "adr").mkdir()
+    (repo / ".softfield" / "adr" / "23-parallel-planners.md").write_text(ADR)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "adr")
     asked = _ask(repo, "accept_adr", "f7", "23")
     _apply(repo)
-    assert _request(repo, asked)[1] == "accepted .factory/adr/23-parallel-planners.md"
+    assert _request(repo, asked)[1] == "accepted .softfield/adr/23-parallel-planners.md"
 
 
 @pytest.mark.parametrize(
@@ -1130,7 +1130,7 @@ def test_accept_adr_of_an_adr_already_on_main_accepts_it(repo):
         ("approve_plan", "f9", None, "there is no plan/f9 to approve"),
         ("approve_plan", "../x", None, "a thread is a card's key or general, not '../x'"),
         ("accept_adr", "f7", "x", "an ADR is named by its number, not 'x'"),
-        ("accept_adr", "f7", "99", "ADR 99 not found in .factory/adr/"),
+        ("accept_adr", "f7", "99", "ADR 99 not found in .softfield/adr/"),
         ("send_back", "f7/nothing", _message("Hi."), "F7 has no proposal nothing"),
         ("send_back", "f7", _message("Hi."), "a proposal is <thread>/<id>, not 'f7'"),
     ],
@@ -1147,7 +1147,7 @@ def test_an_approval_the_runner_cant_apply_is_finished_with_why(repo, kind, subj
 @pytest.mark.parametrize("kind", ["approve_plan", "accept_adr"])
 def test_an_approval_waits_for_a_clean_main(repo, kind):
     _card(repo)
-    _plan(repo, {".factory/adr/23-parallel-planners.md": ADR})
+    _plan(repo, {".softfield/adr/23-parallel-planners.md": ADR})
     asked = _ask(repo, kind, "f7", "23")
     (repo / "coucou" / "thing.py").write_text("# the owner's edit\n")
     assert _apply(repo) == [f"{kind} f7: waits for a clean main: an approval commits on it"]
@@ -1167,7 +1167,7 @@ def _proposed(repo: Path) -> None:
             "id": "adr-23",
             "kind": "adr",
             "title": "Parallel planners",
-            "path": ".factory/adr/23-parallel-planners.md",
+            "path": ".softfield/adr/23-parallel-planners.md",
             "key_points": [
                 {"n": 1, "title": "Two at once", "text": "Beside developers.", "flag": False},
                 {"n": 2, "title": "One branch", "text": "Each card's own.", "flag": False},
@@ -1219,7 +1219,7 @@ MERGE = {
     "id": "merge-f12",
     "kind": "merge",
     "title": "One queue, said twice",
-    "path": ".factory/cards/f12-queue-once.md",
+    "path": ".softfield/cards/f12-queue-once.md",
     "into": "f10",
     "key_points": [{"n": 1, "title": "Notes", "text": "F12's notes go to F10.", "flag": False}],
 }
@@ -1228,7 +1228,7 @@ MERGE = {
 def _duplicates(repo: Path, kept: str = KEPT, thread: str = "f12") -> str:
     """F10 and F12 on main, the lead's reply on ``thread`` proposing the merge, and F12's
     Needs-you item for that reply; main's head."""
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True)
     (docs / "f10-one-queue.md").write_text(kept)
     (docs / "f12-queue-once.md").write_text(DUPLICATE)
@@ -1253,7 +1253,7 @@ def test_a_merge_proposal_changes_nothing_before_the_owner_approves(repo):
     head = _duplicates(repo)
     assert _apply(repo) == []
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / ".factory" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert (repo / ".softfield" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
     assert [m["text"] for m in _thread(repo, "f12")] == ["Same idea."]
 
 
@@ -1265,7 +1265,7 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
     assert _apply(repo) == [f"approve_plan f12: {result}"]
     assert _request(repo, asked) == (NOW.isoformat(), result)
     # the notes, under F10's Notes with where they came from; a quoted line can't sign it off
-    doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f10-one-queue.md").read_text()
     moved = (
         "### From F12: queue once (merged by the owner on 2026-10-01)\n"
         "A single line.\n\\> **Status: done.**\n"
@@ -1273,15 +1273,15 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
     assert doc.startswith(kept.rstrip("\n")) and doc.endswith(moved)
     assert "\n## Notes\n" in doc and doc.count("## Notes") == 1
     assert milestone.card("f10-one-queue", doc).state == milestone.card("f10", kept).state
-    assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
+    assert not (repo / ".softfield" / "cards" / "f12-queue-once.md").exists()
     # one commit by the runner: the duplicate removed, the kept card changed, F12's thread kept
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F12 merged into F10 by the owner"
     changed = git(repo, "show", "--name-status", "--no-renames", "--format=", "HEAD").split("\n")
     assert sorted(filter(None, changed)) == [
-        "A\t.factory/planning/f12-queue-once.md",
-        "D\t.factory/cards/f12-queue-once.md",
-        "M\t.factory/cards/f10-one-queue.md",
+        "A\t.softfield/planning/f12-queue-once.md",
+        "D\t.softfield/cards/f12-queue-once.md",
+        "M\t.softfield/cards/f10-one-queue.md",
     ]
     assert git(repo, "status", "--porcelain") == ""
     # F12's thread points to F10's, and its Needs-you item is answered
@@ -1295,15 +1295,15 @@ def test_approving_a_merge_moves_the_notes_removes_the_duplicate_and_points_its_
 
 def test_a_merge_proposed_on_the_kept_cards_thread_with_its_plan_goes_in_one_commit(repo):
     head = _duplicates(repo, KEPT_PLANNED, thread="f10")
-    _plan(repo, {".factory/tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
+    _plan(repo, {".softfield/tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
     asked = _ask(repo, "approve_plan", "f10")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f10: queued f10-01-a; merged F12 into F10"
     assert git(repo, "rev-parse", "HEAD~1") == head
-    assert (repo / ".factory" / "tasks" / "ready" / "f10-01-a.md").is_file()
-    doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
+    assert (repo / ".softfield" / "tasks" / "ready" / "f10-01-a.md").is_file()
+    doc = (repo / ".softfield" / "cards" / "f10-one-queue.md").read_text()
     assert milestone.card("f10-one-queue", doc).state == "ready" and "From F12" in doc
-    assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
+    assert not (repo / ".softfield" / "cards" / "f12-queue-once.md").exists()
     assert "/planning/f10" in str(_thread(repo, "f12")[-1]["text"])  # a thread made for it
     # F31 D1: its plan and its merge, all the reply proposed, are settled: the thread closes
     assert _items(repo) == [(planner.PLANNING, "f10", None, False)]
@@ -1317,9 +1317,9 @@ def test_a_merge_proposed_on_the_general_thread_is_approved_there(repo):
     asked = _ask(repo, "approve_plan", "general")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved: merged F12 into F10"
-    assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
+    assert not (repo / ".softfield" / "cards" / "f12-queue-once.md").exists()
     # F12 had no thread: nothing to export; the kept thread's line names it by its title
-    assert not (repo / ".factory" / "planning").exists()
+    assert not (repo / ".softfield" / "planning").exists()
     assert "Merged F12 here: queue once" in [m["text"] for m in _thread(repo, "f10")]
 
 
@@ -1340,9 +1340,9 @@ def _merged_with_summary(repo: Path) -> None:
 
 def test_a_merge_keeps_the_duplicates_words_then_the_leads_summary_of_its_thread(repo):
     """F49 D3, D4: F12's notes as they were, then what was said on its thread; its whole
-    thread in .factory/planning/, in the merge's commit; a line on F10's thread."""
+    thread in .softfield/planning/, in the merge's commit; a line on F10's thread."""
     _merged_with_summary(repo)
-    doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f10-one-queue.md").read_text()
     assert doc.endswith(
         "### From F12: queue once (merged by the lead on 2026-10-01)\n"
         "A single line.\n\\> **Status: done.**\n\n"
@@ -1350,9 +1350,9 @@ def test_a_merge_keeps_the_duplicates_words_then_the_leads_summary_of_its_thread
     )
     assert git(repo, "log", "-1", "--format=%s").strip() == "F12 merged into F10 by the lead"
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert ".factory/planning/f12-queue-once.md" in changed
+    assert ".softfield/planning/f12-queue-once.md" in changed
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    export = (repo / ".factory" / "planning" / "f12-queue-once.md").read_text()
+    export = (repo / ".softfield" / "planning" / "f12-queue-once.md").read_text()
     assert export.startswith("# F12: queue once\n")
     assert "merged into F10" in export
     assert export.index("> Same idea.") < export.index("> Is it F10?")
@@ -1387,7 +1387,7 @@ def _with(repo: Path, rel: str, text: str) -> None:
 
 
 def _kept_gone(repo: Path) -> None:
-    git(repo, "rm", "-q", ".factory/cards/f10-one-queue.md")
+    git(repo, "rm", "-q", ".softfield/cards/f10-one-queue.md")
     git(repo, "commit", "-q", "-m", "gone")
 
 
@@ -1395,12 +1395,12 @@ def _kept_gone(repo: Path) -> None:
     ("before", "error"),
     [
         (
-            lambda repo: _with(repo, ".factory/tasks/later/f12-01-a.md", _ticket("f12-01-a")),
-            "F12 has tickets (.factory/tasks/later/f12-01-a.md): it can't be merged away",
+            lambda repo: _with(repo, ".softfield/tasks/later/f12-01-a.md", _ticket("f12-01-a")),
+            "F12 has tickets (.softfield/tasks/later/f12-01-a.md): it can't be merged away",
         ),
-        (_kept_gone, "F10 has no card in .factory/cards/: not merged"),
+        (_kept_gone, "F10 has no card in .softfield/cards/: not merged"),
         (
-            lambda repo: _plan(repo, {".factory/cards/f12-queue-once.md": KEPT}, card="f12"),
+            lambda repo: _plan(repo, {".softfield/cards/f12-queue-once.md": KEPT}, card="f12"),
             "plan/f12 has drafts for F12, which merges into F10: send it back",
         ),
     ],
@@ -1422,7 +1422,7 @@ def test_approving_a_merge_whose_duplicate_is_gone_already_settles_it(repo):
     """F24, F45 and F47 (2026-10-08): merged once, their threads' Approve was refused as "has
     no card" at every press, and they stayed on Needs you."""
     _duplicates(repo)
-    git(repo, "rm", "-q", ".factory/cards/f12-queue-once.md")
+    git(repo, "rm", "-q", ".softfield/cards/f12-queue-once.md")
     git(repo, "commit", "-q", "-m", "F12 merged into F10 by the owner")
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "approve_plan", "f12")
@@ -1465,7 +1465,7 @@ SEED_CARD = (
 def _seeded(repo: Path, card: str = SEED_CARD) -> str:
     """F11's card on main and on the board, a thread with a pending message and a reply the
     owner hasn't answered; main's head."""
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "f11-test.md").write_text(card)
     git(repo, "add", "-A")
@@ -1494,13 +1494,13 @@ def _seeded_with_a_ticket(repo: Path) -> None:
 def test_dropping_a_seed_removes_its_card_in_one_commit_and_closes_its_thread(repo):
     head = _seeded(repo)
     asked = _ask(repo, "drop_seed", "f11")
-    assert _apply(repo) == ["drop_seed f11: removed .factory/cards/f11-test.md"]
-    assert _request(repo, asked) == (NOW.isoformat(), "removed .factory/cards/f11-test.md")
-    assert not (repo / ".factory" / "cards" / "f11-test.md").exists()
+    assert _apply(repo) == ["drop_seed f11: removed .softfield/cards/f11-test.md"]
+    assert _request(repo, asked) == (NOW.isoformat(), "removed .softfield/cards/f11-test.md")
+    assert not (repo / ".softfield" / "cards" / "f11-test.md").exists()
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F11 removed by the owner"
     changed = git(repo, "show", "--name-status", "--format=", "HEAD").split("\n")
-    assert list(filter(None, changed)) == ["D\t.factory/cards/f11-test.md"]
+    assert list(filter(None, changed)) == ["D\t.softfield/cards/f11-test.md"]
     assert git(repo, "status", "--porcelain") == ""
     assert [(m["author"], m["text"]) for m in _thread(repo, "f11")][-1] == (
         "lead",
@@ -1520,13 +1520,13 @@ def test_dropping_a_seed_removes_its_card_in_one_commit_and_closes_its_thread(re
 
 
 def test_dropping_a_seed_with_no_thread_makes_none(repo):
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f11-test.md").write_text(SEED_CARD)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f11-test.md").write_text(SEED_CARD)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "a seed")
     asked = _ask(repo, "drop_seed", "f11-test")
     _apply(repo)
-    assert _request(repo, asked)[1] == "removed .factory/cards/f11-test.md"
+    assert _request(repo, asked)[1] == "removed .softfield/cards/f11-test.md"
     conn = metrics.open_db(_db(repo))
     try:
         assert conn.execute("SELECT count(*) FROM planner_threads").fetchone()[0] == 0
@@ -1545,9 +1545,9 @@ def test_dropping_a_seed_with_no_thread_makes_none(repo):
         (
             _seeded_with_a_ticket,
             "f11",
-            "F11 has tickets (.factory/tasks/later/f11-01-a.md): not removed",
+            "F11 has tickets (.softfield/tasks/later/f11-01-a.md): not removed",
         ),
-        (_seeded, "f13", "F13 has no card in .factory/cards/: not removed"),
+        (_seeded, "f13", "F13 has no card in .softfield/cards/: not removed"),
         (_seeded, "general", "the general thread is not a seed: not removed"),
         (_seeded, "../x", "a thread is a card's key or general, not '../x'"),
     ],
@@ -1562,7 +1562,7 @@ def test_a_drop_the_runner_cant_apply_is_refused_and_main_is_unchanged(
     assert _request(repo, asked) == (NOW.isoformat(), error)
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    assert (repo / ".factory" / "cards" / "f11-test.md").is_file()
+    assert (repo / ".softfield" / "cards" / "f11-test.md").is_file()
     assert [m["text"] for m in _thread(repo, "f11")] == ["Noted."]
     assert all(done is None for *_, done in _queued(repo))
     assert _card_state(repo, "f11-test") == "idea"
@@ -1587,7 +1587,7 @@ def test_sending_a_merge_back_works_as_for_any_proposal(repo):
         "- On its key point 1 (Notes): Not the same.\n\nKeep F12."
     ]
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / ".factory" / "cards" / "f12-queue-once.md").is_file()
+    assert (repo / ".softfield" / "cards" / "f12-queue-once.md").is_file()
 
 
 # --- `priority`: the owner reorders the work from the dashboard (f6-18) ------------------------
@@ -1597,14 +1597,14 @@ def _two_ready(repo: Path) -> str:
     """m1-01-a and m1-02-b ready, both at the default priority, each with its row; main's
     head."""
     for task_id in ("m1-01-a", "m1-02-b"):
-        write_task(repo / ".factory" / "tasks" / "ready", task_id)
+        write_task(repo / ".softfield" / "tasks" / "ready", task_id)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "two ready")
     conn = metrics.open_db(_db(repo))
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
         for task_id in ("m1-01-a", "m1-02-b"):
-            text = (repo / ".factory" / "tasks" / "ready" / f"{task_id}.md").read_text()
+            text = (repo / ".softfield" / "tasks" / "ready" / f"{task_id}.md").read_text()
             metrics.upsert_ticket(conn, project, task_id, state="ready", body=text)
     finally:
         conn.close()
@@ -1613,7 +1613,7 @@ def _two_ready(repo: Path) -> str:
 
 def _pick_order(repo: Path) -> list[str]:
     """The ready tickets in the order `dispatch.plan` runs them, as the run builds them."""
-    ready = load_dir(repo / ".factory" / "tasks" / "ready", 400)
+    ready = load_dir(repo / ".softfield" / "tasks" / "ready", 400)
     tickets = loop._dispatch_tickets(repo, ready, set(), set(), {}, NOW)
     return [line.pick.subject for line in dispatch.plan([], tickets, dispatch.Windows(), NOW)]
 
@@ -1633,7 +1633,7 @@ BUG_A, BUG_B = "bug-01-a", "bug-02-b"
 def _two_bugs(repo: Path) -> str:
     """bug-01-a and bug-02-b ready, both at a bug's default priority, each with its row;
     main's head."""
-    ready = repo / ".factory" / "tasks" / "ready"
+    ready = repo / ".softfield" / "tasks" / "ready"
     for task_id in (BUG_A, BUG_B):
         path = write_task(ready, task_id)
         path.write_text(
@@ -1660,7 +1660,7 @@ def test_a_priority_request_sets_a_ready_bugs_priority_in_one_commit_and_the_pic
     asked = _ask(repo, "priority", BUG_B, "4")
     assert _apply(repo) == [f"priority {BUG_B}: priority of {BUG_B} set to 4"]
     assert _request(repo, asked) == (NOW.isoformat(), f"priority of {BUG_B} set to 4")
-    path = repo / ".factory" / "tasks" / "ready" / f"{BUG_B}.md"
+    path = repo / ".softfield" / "tasks" / "ready" / f"{BUG_B}.md"
     assert parse_task(path, 400).priority == 4
     assert path.read_text().count("priority:") == 1
     assert _pick_order(repo) == [BUG_B, BUG_A]
@@ -1670,7 +1670,7 @@ def test_a_priority_request_sets_a_ready_bugs_priority_in_one_commit_and_the_pic
         f"{BUG_B}: priority 50 → 4, by the owner"
     )
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == [f".factory/tasks/ready/{BUG_B}.md"]
+    assert changed == [f".softfield/tasks/ready/{BUG_B}.md"]
     assert git(repo, "status", "--porcelain") == ""
     # the dashboard's row has the new text at once; the other ticket's is as it was
     assert "priority: 4" in str(_body(repo, BUG_B))
@@ -1679,17 +1679,17 @@ def test_a_priority_request_sets_a_ready_bugs_priority_in_one_commit_and_the_pic
 
 
 def test_a_priority_request_replaces_a_set_aside_bugs_own_priority(repo):
-    (repo / ".factory" / "tasks" / "later").mkdir(parents=True)
+    (repo / ".softfield" / "tasks" / "later").mkdir(parents=True)
     text = TICKET.format(id=BUG_A, context="x").replace(
         "milestone: f7\n", "milestone: bugs\narea: factory\npriority: 7\n"
     )
     assert "priority: 7" in text
-    (repo / ".factory" / "tasks" / "later" / f"{BUG_A}.md").write_text(text)
+    (repo / ".softfield" / "tasks" / "later" / f"{BUG_A}.md").write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "set aside")
     _ask(repo, "priority", BUG_A, "2")
     assert _apply(repo) == [f"priority {BUG_A}: priority of {BUG_A} set to 2"]
-    after = (repo / ".factory" / "tasks" / "later" / f"{BUG_A}.md").read_text()
+    after = (repo / ".softfield" / "tasks" / "later" / f"{BUG_A}.md").read_text()
     assert after == text.replace("priority: 7", "priority: 2")
     assert git(repo, "log", "-1", "--format=%s").strip() == f"{BUG_A}: priority 7 → 2, by the owner"
 
@@ -1704,7 +1704,7 @@ def test_a_priority_request_on_a_feature_ticket_is_refused_for_its_cards_place(r
         "a ticket runs in its card's place: move the card on the board",
     )
     assert git(repo, "rev-parse", "HEAD") == head
-    assert "priority:" not in (repo / ".factory" / "tasks" / "ready" / "m1-02-b.md").read_text()
+    assert "priority:" not in (repo / ".softfield" / "tasks" / "ready" / "m1-02-b.md").read_text()
 
 
 def _priority_of(repo: Path, key: str) -> object:
@@ -1722,13 +1722,13 @@ def test_a_priority_request_on_a_card_sets_its_headers_priority(repo):
     asked = _ask(repo, "priority", "f7", "1")
     assert _apply(repo) == ["priority f7: priority of F7 set to 1"]
     assert _request(repo, asked)[1] == "priority of F7 set to 1"
-    doc = (repo / ".factory" / "cards" / "f7-one-queue.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
     assert doc == CARD.replace("**Priority:** 3", "**Priority:** 1")
     assert milestone.card("f7-one-queue", doc) == milestone.Card("planning", 1, "factory")
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7: priority 3 → 1, by the owner"
     changed = git(repo, "show", "--name-only", "--format=", "HEAD").split()
-    assert changed == [".factory/cards/f7-one-queue.md"]
+    assert changed == [".softfield/cards/f7-one-queue.md"]
     assert git(repo, "status", "--porcelain") == ""
     assert _priority_of(repo, "f7-one-queue") == 1  # the board's row, at once
 
@@ -1745,7 +1745,7 @@ def test_a_card_without_a_priority_gets_one_in_its_header(repo, card, header):
     _seeded(repo, card)
     _ask(repo, "priority", "f11-test", "0")
     assert _apply(repo) == ["priority f11-test: priority of F11 set to 0"]
-    doc = (repo / ".factory" / "cards" / "f11-test.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f11-test.md").read_text()
     assert header in doc and doc.endswith("## Notes\nA test.\n")
     assert milestone.card("f11-test", doc).priority == 0
     assert git(repo, "log", "-1", "--format=%s").strip() == "F11: priority 100 → 0, by the owner"
@@ -1753,7 +1753,7 @@ def test_a_card_without_a_priority_gets_one_in_its_header(repo, card, header):
 
 def _done_ticket(repo: Path) -> None:
     _two_ready(repo)
-    write_task(repo / ".factory" / "tasks" / "done", "m1-00-old")
+    write_task(repo / ".softfield" / "tasks" / "done", "m1-00-old")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "done")
 
@@ -1770,7 +1770,7 @@ def _done_card(repo: Path) -> None:
             _done_ticket,
             "m1-00-old",
             "1",
-            "m1-00-old is in .factory/tasks/done/: its priority stays",
+            "m1-00-old is in .softfield/tasks/done/: its priority stays",
         ),
         (_two_ready, "m1-01-a", "1", "m1-01-a is running: its priority stays"),
         (_done_card, "f11", "1", "F11 is done: its priority stays"),
@@ -1788,9 +1788,9 @@ def _done_card(repo: Path) -> None:
             _two_ready,
             "m1-02",
             "1",
-            "m1-02 is no ticket in .factory/tasks/ready/ or .factory/tasks/later/",
+            "m1-02 is no ticket in .softfield/tasks/ready/ or .softfield/tasks/later/",
         ),
-        (_two_ready, "f13", "1", "F13 has no card in .factory/cards/: its priority stays"),
+        (_two_ready, "f13", "1", "F13 has no card in .softfield/cards/: its priority stays"),
         (_two_ready, "general", "1", "the general thread has no priority"),
         (_two_ready, "../x", "1", "a thread is a card's key or general, not '../x'"),
         (_two_ready, None, "1", "a priority request names a ticket or a card"),
@@ -1831,9 +1831,9 @@ BUG = "bug-07-queue-order"
 def _board(repo: Path, cards: dict[str, object], bug: bool = False) -> str:
     """Each card on main with its priority and one ready ticket (or its state alone, for one
     not open), with a ready bug ticket when asked; main's head."""
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
-    ready = repo / ".factory" / "tasks" / "ready"
+    ready = repo / ".softfield" / "tasks" / "ready"
     ready.mkdir(parents=True, exist_ok=True)
     for key, priority in cards.items():
         header = f"**State:** ready · **Priority:** {priority}"
@@ -1854,7 +1854,7 @@ def _board(repo: Path, cards: dict[str, object], bug: bool = False) -> str:
 
 
 def _card_priorities(repo: Path) -> dict[str, int]:
-    docs = sorted((repo / ".factory" / "cards").glob("*-card.md"))
+    docs = sorted((repo / ".softfield" / "cards").glob("*-card.md"))
     return {p.stem.split("-")[0]: milestone.card(p.stem, p.read_text()).priority for p in docs}
 
 
@@ -1873,7 +1873,7 @@ def test_a_reorder_sets_the_cards_priorities_in_one_commit_and_the_pick_follows(
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "the board's order, by the owner"
     assert git(repo, "log", "-1", "--format=%an").strip() == "Softfield runner"
-    assert _changed(repo) == [".factory/cards/f8-card.md"]
+    assert _changed(repo) == [".softfield/cards/f8-card.md"]
     assert _card_priorities(repo) == {"f7": 100, "f8": 0, "f9": 2}
     assert git(repo, "status", "--porcelain") == ""
     assert _priority_of(repo, "f8-card") == 0  # the board's row, at once
@@ -1892,21 +1892,21 @@ def test_a_reorder_to_the_order_the_cards_have_changes_nothing(repo):
 def test_a_reorder_sets_a_bug_tickets_priority_and_a_cards_tickets_follow_the_card(repo):
     """F173: a feature ticket's own number, left from before, doesn't beat its card's place."""
     _board(repo, {"f7": 3, "f8": 5}, bug=True)
-    own = repo / ".factory" / "tasks" / "ready" / "f8-01-a.md"
+    own = repo / ".softfield" / "tasks" / "ready" / "f8-01-a.md"
     own.write_text(own.read_text().replace("depends_on", "priority: 1\ndepends_on"))
     git(repo, "commit", "-q", "-am", "its own priority")
     conn = metrics.open_db(_db(repo))
     try:
         project = metrics.upsert_project(conn, repo.name, repo=str(repo))
-        text = (repo / ".factory" / "tasks" / "ready" / f"{BUG}.md").read_text()
+        text = (repo / ".softfield" / "tasks" / "ready" / f"{BUG}.md").read_text()
         metrics.upsert_ticket(conn, project, BUG, state="ready", body=text)
     finally:
         conn.close()
     assert _pick_order(repo) == ["f7-01-a", "f8-01-a", BUG]
     _ask(repo, "reorder", None, json.dumps([BUG, "f7", "f8"]))
     assert _apply(repo) == ["reorder: reordered: 1 card changed"]
-    assert _changed(repo) == [f".factory/tasks/ready/{BUG}.md"]
-    assert parse_task(repo / ".factory" / "tasks" / "ready" / f"{BUG}.md", 400).priority == 0
+    assert _changed(repo) == [f".softfield/tasks/ready/{BUG}.md"]
+    assert parse_task(repo / ".softfield" / "tasks" / "ready" / f"{BUG}.md", 400).priority == 0
     assert "priority: 0" in str(_body(repo, BUG))  # the dashboard's row, at once
     # the ticket's file is not touched; its card's place orders it
     assert parse_task(own, 400).priority == 1
@@ -1915,13 +1915,13 @@ def test_a_reorder_sets_a_bug_tickets_priority_and_a_cards_tickets_follow_the_ca
 
 def test_a_reorder_puts_an_unlisted_card_last_and_names_what_it_skipped(repo):
     _board(repo, {"f7": 100, "f8": 100, "f9": 2, "f11": "done"})
-    done = (repo / ".factory" / "cards" / "f11-card.md").read_text()
+    done = (repo / ".softfield" / "cards" / "f11-card.md").read_text()
     value = json.dumps(["f8", "f11", "general", "f13", "../x", "f7"])
     _ask(repo, "reorder", None, value)
     result = "reordered: 2 cards changed, skipped F11, general, F13, ../x"
     assert _apply(repo) == [f"reorder: {result}"]
     assert _pick_order(repo) == ["f8-01-a", "f7-01-a", "f9-01-a"]
-    assert (repo / ".factory" / "cards" / "f11-card.md").read_text() == done
+    assert (repo / ".softfield" / "cards" / "f11-card.md").read_text() == done
     assert len(_changed(repo)) == 2
     assert git(repo, "status", "--porcelain") == ""
 
@@ -2030,7 +2030,7 @@ def test_a_pause_request_holds_the_runner_until_a_resume_request(repo):
 
 def test_a_pause_outlives_the_state_files_reload(repo):
     """A restart reads state.json again: the pause is in it, so the runner stays paused."""
-    path = repo / ".factory" / "var" / "runs" / "state.json"
+    path = repo / ".softfield" / "var" / "runs" / "state.json"
     state = load_state(path)
     _ask(repo, "pause")
     _apply(repo, state)
@@ -2091,7 +2091,7 @@ def test_a_refused_plant_is_dismissed_once_and_keeps_its_words(repo):
     [
         # worked: nothing to dismiss
         ("plan_message", "f7", _message("Go."), "queued for the lead", "wasn't refused"),
-        ("plant", None, BAD_AREA, "planted .factory/cards/f12-ducks.md", "wasn't refused"),
+        ("plant", None, BAD_AREA, "planted .softfield/cards/f12-ducks.md", "wasn't refused"),
         # not done yet
         ("plant", None, BAD_AREA, None, "wasn't refused"),
         # refused, but no words of the owner's: they show elsewhere
@@ -2171,8 +2171,8 @@ def test_the_owners_words_a_request_carries(kind, subject, value, words):
     ("kind", "done", "result", "dismissed", "refused"),
     [
         ("plant", True, "an idea's area is factory or product, not 'garden'", None, True),
-        ("plant", True, "planted .factory/cards/f12-ducks.md", None, False),
-        ("plant", True, "planted .factory/cards/f12-ducks.md, queued for the lead", None, False),
+        ("plant", True, "planted .softfield/cards/f12-ducks.md", None, False),
+        ("plant", True, "planted .softfield/cards/f12-ducks.md, queued for the lead", None, False),
         ("plant", None, None, None, False),
         ("plant", True, "ducks is a card already: f3-ducks", NOW.isoformat(), False),
         ("plant", True, "cancelled by you", None, False),  # F14: their own cancel, no refusal
@@ -2207,9 +2207,9 @@ SAME_DUCKS = "Yellow  ones.\n\nFor Mum.\n> not a sign-off"  # as the owner typed
 
 def _ducks(repo: Path) -> str:
     """F3's card on main, planned since its note was planted; main's head."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f3-rubber-ducks.md").write_text(DUCKS_CARD)
-    git(repo, "add", ".factory")
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f3-rubber-ducks.md").write_text(DUCKS_CARD)
+    git(repo, "add", ".softfield")
     git(repo, "commit", "-q", "-m", "f3")
     return git(repo, "rev-parse", "HEAD")
 
@@ -2224,12 +2224,12 @@ def test_a_note_whose_slug_a_card_has_with_other_words_plants_a_second_card(repo
     second = _ask(repo, "plant", None, _idea("Rubber ducks", "Blue ones this time."))
     third = _ask(repo, "plant", None, _idea("Rubber ducks", "And a red one?", ask=True))
     _apply(repo)
-    assert _request(repo, second)[1] == "planted .factory/cards/f4-rubber-ducks-2.md"
+    assert _request(repo, second)[1] == "planted .softfield/cards/f4-rubber-ducks-2.md"
     assert _request(repo, third)[1] == (
-        "planted .factory/cards/f5-rubber-ducks-3.md, queued for the lead"
+        "planted .softfield/cards/f5-rubber-ducks-3.md, queued for the lead"
     )
     assert not requests.refused(_row(repo, second)) and not requests.refused(_row(repo, third))
-    milestones = repo / ".factory" / "cards"
+    milestones = repo / ".softfield" / "cards"
     assert (milestones / "f3-rubber-ducks.md").read_text() == DUCKS_CARD  # the taken card stays
     assert (
         (milestones / "f4-rubber-ducks-2.md")
@@ -2257,12 +2257,15 @@ def test_the_same_words_again_are_planted_already_and_write_nothing(repo, value,
     _apply(repo)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "plant", None, value)
-    assert _apply(repo) == [f"plant: planted already: .factory/cards/{stem}.md"]
-    assert _request(repo, asked) == (NOW.isoformat(), f"planted already: .factory/cards/{stem}.md")
+    assert _apply(repo) == [f"plant: planted already: .softfield/cards/{stem}.md"]
+    assert _request(repo, asked) == (
+        NOW.isoformat(),
+        f"planted already: .softfield/cards/{stem}.md",
+    )
     assert not requests.refused(_row(repo, asked))
     assert git(repo, "rev-parse", "HEAD") == head
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
-    assert sorted(p.name for p in (repo / ".factory" / "cards").glob("*.md")) == [
+    assert sorted(p.name for p in (repo / ".softfield" / "cards").glob("*.md")) == [
         "f3-rubber-ducks.md",
         "f4-rubber-ducks-2.md",
     ]
@@ -2294,7 +2297,7 @@ def test_the_runner_reads_nothing_from_again(repo):
     planted = _ask(repo, "plant", None, _idea("Parallel planners", again="7"))
     said = _ask(repo, "plan_message", "f3", json.dumps({"text": "Go.", "again": "8"}))
     _apply(repo)
-    assert _request(repo, planted)[1] == "planted .factory/cards/f4-parallel-planners.md"
+    assert _request(repo, planted)[1] == "planted .softfield/cards/f4-parallel-planners.md"
     assert _request(repo, said)[1] == "queued for the lead"
     assert [m["text"] for m in _thread(repo, "f3")] == ["Go."]
 
@@ -2316,12 +2319,12 @@ LATER_ON = NOW + timedelta(minutes=30)
 def _running(repo: Path, kind: str = "replan") -> str:
     """F7 building on main with f7-01-a and f7-02-b ready, and f5-01-x of another milestone;
     the lead's reply on F7 proposing a ``kind``; main's head."""
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True)
     (docs / "f7-one-queue.md").write_text(BUILDING)
-    (repo / ".factory" / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
+    (repo / ".softfield" / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
     for task_id in ("f7-01-a", "f7-02-b", "f5-01-x"):
-        (repo / ".factory" / "tasks" / "ready" / f"{task_id}.md").write_text(_ticket(task_id))
+        (repo / ".softfield" / "tasks" / "ready" / f"{task_id}.md").write_text(_ticket(task_id))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "F7 running")
     conn = metrics.open_db(_db(repo))
@@ -2346,7 +2349,8 @@ def _paused(repo: Path) -> State:
 
 def _ready(repo: Path) -> dict[str, str]:
     return {
-        p.stem: p.read_text() for p in sorted((repo / ".factory" / "tasks" / "ready").glob("*.md"))
+        p.stem: p.read_text()
+        for p in sorted((repo / ".softfield" / "tasks" / "ready").glob("*.md"))
     }
 
 
@@ -2355,9 +2359,9 @@ def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_paus
     _plan(
         repo,
         {
-            ".factory/tasks/ready/f7-01-a.md": LESS,
-            ".factory/tasks/ready/f7-04-d.md": _ticket("f7-04-d"),
-            ".factory/tasks/later/f7-03-c.md": _ticket("f7-03-c"),
+            ".softfield/tasks/ready/f7-01-a.md": LESS,
+            ".softfield/tasks/ready/f7-04-d.md": _ticket("f7-04-d"),
+            ".softfield/tasks/later/f7-03-c.md": _ticket("f7-03-c"),
         },
     )
     state = _paused(repo)
@@ -2369,7 +2373,7 @@ def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_paus
     assert sorted(ready) == ["f5-01-x", "f7-01-a", "f7-02-b", "f7-03-c", "f7-04-d"]
     assert ready["f7-01-a"] == LESS
     # the card keeps building: a replan redirects it, it doesn't start it again
-    doc = (repo / ".factory" / "cards" / "f7-one-queue.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f7-one-queue.md").read_text()
     assert milestone.card("f7-one-queue", doc).state == "building"
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 plan approved by the owner"
@@ -2382,7 +2386,7 @@ def test_approving_a_replan_changes_its_ready_tickets_on_main_and_lifts_the_paus
 
 def test_a_replan_approved_without_a_pause_still_applies(repo):
     _running(repo)
-    _plan(repo, {".factory/tasks/ready/f7-01-a.md": LESS})
+    _plan(repo, {".softfield/tasks/ready/f7-01-a.md": LESS})
     state = State()
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo, state)
@@ -2395,14 +2399,14 @@ def test_a_replan_sets_a_ready_ticket_aside_in_later(repo):
     _running(repo)
     _plan(
         repo,
-        {".factory/tasks/later/f7-02-b.md": _ticket("f7-02-b")},
-        gone=(".factory/tasks/ready/f7-02-b.md",),
+        {".softfield/tasks/later/f7-02-b.md": _ticket("f7-02-b")},
+        gone=(".softfield/tasks/ready/f7-02-b.md",),
     )
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; set aside f7-02-b"
     assert sorted(_ready(repo)) == ["f5-01-x", "f7-01-a"]
-    assert (repo / ".factory" / "tasks" / "later" / "f7-02-b.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "later" / "f7-02-b.md").is_file()
 
 
 def _replan_refused(repo: Path, head: str, state: State, asked: int) -> str:
@@ -2420,44 +2424,44 @@ def _replan_refused(repo: Path, head: str, state: State, asked: int) -> str:
     ("files", "gone", "kind", "error"),
     [
         (
-            {".factory/tasks/ready/f5-01-x.md": LESS},
+            {".softfield/tasks/ready/f5-01-x.md": LESS},
             (),
             "replan",
-            "plan/f7 changes .factory/tasks/ready/f5-01-x.md, another milestone's ticket:"
+            "plan/f7 changes .softfield/tasks/ready/f5-01-x.md, another milestone's ticket:"
             " not approved",
         ),
         (
-            {".factory/tasks/ready/f7-01-a.md": LESS},
+            {".softfield/tasks/ready/f7-01-a.md": LESS},
             (),
             "replan",
-            "plan/f7 changes .factory/tasks/ready/f7-01-a.md, the running ticket: not approved",
+            "plan/f7 changes .softfield/tasks/ready/f7-01-a.md, the running ticket: not approved",
         ),
         (
-            {".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a")},
-            (".factory/tasks/ready/f7-01-a.md",),
+            {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")},
+            (".softfield/tasks/ready/f7-01-a.md",),
             "replan",
-            "plan/f7 changes .factory/tasks/ready/f7-01-a.md, the running ticket: not approved",
+            "plan/f7 changes .softfield/tasks/ready/f7-01-a.md, the running ticket: not approved",
         ),
         (
             {},
-            (".factory/tasks/ready/f7-02-b.md",),
+            (".softfield/tasks/ready/f7-02-b.md",),
             "replan",
-            "plan/f7 changes .factory/tasks/ready/f7-02-b.md,"
-            " a ready ticket removed, not set aside in .factory/tasks/later/: not approved",
+            "plan/f7 changes .softfield/tasks/ready/f7-02-b.md,"
+            " a ready ticket removed, not set aside in .softfield/tasks/later/: not approved",
         ),
         (
-            {".factory/tasks/ready/f7-02-b.md": LESS},
+            {".softfield/tasks/ready/f7-02-b.md": LESS},
             (),
             "plan",
-            "plan/f7 changes .factory/tasks/ready/f7-02-b.md,"
+            "plan/f7 changes .softfield/tasks/ready/f7-02-b.md,"
             " a ready ticket only a replan changes: not approved",
         ),
         (
-            {".factory/tasks/done/f7-00-z.md": LESS},
+            {".softfield/tasks/done/f7-00-z.md": LESS},
             (),
             "replan",
-            "plan/f7 changes .factory/tasks/done/f7-00-z.md, outside docs/, .factory/cards/,"
-            " .factory/adr/ and .factory/tasks/later/: not approved",
+            "plan/f7 changes .softfield/tasks/done/f7-00-z.md, outside docs/, .softfield/cards/,"
+            " .softfield/adr/ and .softfield/tasks/later/: not approved",
         ),
     ],
 )
@@ -2478,8 +2482,8 @@ def test_a_changed_ticket_failing_pre_flight_refuses_the_replan(repo):
     _plan(
         repo,
         {
-            ".factory/tasks/ready/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
-            ".factory/tasks/later/f7-03-c.md": _ticket("f7-03-c"),
+            ".softfield/tasks/ready/f7-01-a.md": _ticket("f7-01-a", "Fix `conftest.py`."),
+            ".softfield/tasks/later/f7-03-c.md": _ticket("f7-03-c"),
         },
     )
     state = _paused(repo)
@@ -2488,12 +2492,12 @@ def test_a_changed_ticket_failing_pre_flight_refuses_the_replan(repo):
     assert _replan_refused(repo, head, state, asked) == (
         "not approved: f7-01-a: referenced path does not exist: conftest.py"
     )
-    assert not (repo / ".factory" / "tasks" / "later" / "f7-03-c.md").exists()
+    assert not (repo / ".softfield" / "tasks" / "later" / "f7-03-c.md").exists()
 
 
 # --- a replan brings back its card's blocked tickets (ADR 29 item 3, f106-05) ----------------
 
-BLOCKED_C = ".factory/tasks/blocked/f7-03-c.md"
+BLOCKED_C = ".softfield/tasks/blocked/f7-03-c.md"
 REWORKED = _ticket("f7-03-c").replace("Make the thing work.", "Make the thing work, smaller.")
 
 
@@ -2502,7 +2506,7 @@ def _blocked_too(repo: Path, kind: str = "replan") -> str:
     blocked, their items open; main's head."""
     _running(repo, kind)
     for task_id in ("f7-03-c", "f5-02-y"):
-        path = repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md"
+        path = repo / ".softfield" / "tasks" / "blocked" / f"{task_id}.md"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(_ticket(task_id))
         append_footer(path, {"result": "blocked", "reason": "check-all failed"})
@@ -2517,7 +2521,7 @@ def test_approving_a_replan_brings_a_reworked_blocked_ticket_back_to_ready(repo,
     """The planner writes the reworked ticket in ready/; the approval removes the blocked copy
     (or applies the branch's removal), keeping its footers on the ticket."""
     _blocked_too(repo)
-    _plan(repo, {".factory/tasks/ready/f7-03-c.md": REWORKED}, gone=gone)
+    _plan(repo, {".softfield/tasks/ready/f7-03-c.md": REWORKED}, gone=gone)
     state = _paused(repo)
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo, state, LATER_ON)
@@ -2526,7 +2530,7 @@ def test_approving_a_replan_brings_a_reworked_blocked_ticket_back_to_ready(repo,
     assert back.startswith(REWORKED.rstrip("\n"))
     assert "result: blocked" in back and "reason: check-all failed" in back  # its old footers
     assert not (repo / BLOCKED_C).exists()
-    assert (repo / ".factory" / "tasks" / "blocked" / "f5-02-y.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "f5-02-y.md").is_file()
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
     assert _items(repo) == [
         ("blocked", "f7-03-c", "x", False),
@@ -2545,7 +2549,7 @@ def test_a_blocked_ticket_brought_back_keeps_its_failed_work(repo):
     git(repo, "commit", "-q", "-m", "wip f7-03-c")
     git(repo, "checkout", "-q", "main")
     held = git(repo, "rev-parse", "task/f7-03-c").strip()
-    _plan(repo, {".factory/tasks/ready/f7-03-c.md": REWORKED})
+    _plan(repo, {".softfield/tasks/ready/f7-03-c.md": REWORKED})
     state = _paused(repo)
     _ask(repo, "approve_plan", "f7")
     _apply(repo, state, LATER_ON)
@@ -2555,11 +2559,11 @@ def test_a_blocked_ticket_brought_back_keeps_its_failed_work(repo):
 
 def test_approving_a_replan_sets_a_blocked_ticket_aside_in_later(repo):
     _blocked_too(repo)
-    _plan(repo, {".factory/tasks/later/f7-03-c.md": REWORKED})
+    _plan(repo, {".softfield/tasks/later/f7-03-c.md": REWORKED})
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo)
     assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; set aside f7-03-c"
-    aside = (repo / ".factory" / "tasks" / "later" / "f7-03-c.md").read_text()
+    aside = (repo / ".softfield" / "tasks" / "later" / "f7-03-c.md").read_text()
     assert aside.startswith(REWORKED.rstrip("\n")) and "result: blocked" in aside
     assert "f7-03-c" not in _ready(repo)
     assert not (repo / BLOCKED_C).exists()
@@ -2569,7 +2573,7 @@ def test_approving_a_replan_sets_a_blocked_ticket_aside_in_later(repo):
 def _blocked_kept(repo: Path, head: str, state: State, asked: int) -> str:
     """``_replan_refused``, the blocked tickets and their items as they were too."""
     for task_id in ("f7-03-c", "f5-02-y"):
-        assert (repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md").is_file()
+        assert (repo / ".softfield" / "tasks" / "blocked" / f"{task_id}.md").is_file()
     assert _items(repo) == [("blocked", "f7-03-c", "x", True), ("blocked", "f5-02-y", "x", True)]
     return _replan_refused(repo, head, state, asked)
 
@@ -2578,10 +2582,10 @@ def _blocked_kept(repo: Path, head: str, state: State, asked: int) -> str:
     ("files", "gone", "kind", "error"),
     [
         (
-            {".factory/tasks/later/f5-02-y.md": _ticket("f5-02-y")},
-            (".factory/tasks/blocked/f5-02-y.md",),
+            {".softfield/tasks/later/f5-02-y.md": _ticket("f5-02-y")},
+            (".softfield/tasks/blocked/f5-02-y.md",),
             "replan",
-            "plan/f7 changes .factory/tasks/blocked/f5-02-y.md, another card's blocked ticket:"
+            "plan/f7 changes .softfield/tasks/blocked/f5-02-y.md, another card's blocked ticket:"
             " not approved",
         ),
         (
@@ -2595,10 +2599,10 @@ def _blocked_kept(repo: Path, head: str, state: State, asked: int) -> str:
             (),
             "replan",
             f"plan/f7 changes {BLOCKED_C}, a blocked ticket edited but left in"
-            " .factory/tasks/blocked/: not approved",
+            " .softfield/tasks/blocked/: not approved",
         ),
         (
-            {".factory/tasks/later/f7-03-c.md": REWORKED},
+            {".softfield/tasks/later/f7-03-c.md": REWORKED},
             (BLOCKED_C,),
             "plan",
             f"plan/f7 changes {BLOCKED_C}, a blocked ticket only a replan brings back:"
@@ -2619,7 +2623,7 @@ def test_a_replan_reaching_past_its_cards_blocked_tickets_is_refused(
 
 def test_a_reworked_blocked_ticket_failing_pre_flight_refuses_the_replan(repo):
     head = _blocked_too(repo)
-    _plan(repo, {".factory/tasks/ready/f7-03-c.md": _ticket("f7-03-c", "Fix `conftest.py`.")})
+    _plan(repo, {".softfield/tasks/ready/f7-03-c.md": _ticket("f7-03-c", "Fix `conftest.py`.")})
     state = _paused(repo)
     asked = _ask(repo, "approve_plan", "f7")
     _apply(repo, state, LATER_ON)
@@ -2637,14 +2641,14 @@ def at_now(monkeypatch):
 
 
 def _switches(repo: Path) -> dict[str, str]:
-    return load_state(repo / ".factory" / "var" / "runs" / "state.json").switches
+    return load_state(repo / ".softfield" / "var" / "runs" / "state.json").switches
 
 
 def test_runner_reserve_records_the_same_as_the_request(in_repo, at_now, capsys):  # noqa: F811
     _ask(in_repo, "reserve", "week", "on")
     assert cli.main(["accept", "99"]) == 1  # any command applies the dashboard's request
     by_request = _switches(in_repo)
-    (in_repo / ".factory" / "var" / "runs" / "state.json").unlink()
+    (in_repo / ".softfield" / "var" / "runs" / "state.json").unlink()
     assert cli.main(["reserve", "week", "on"]) == 0
     assert _switches(in_repo) == by_request == {"week": NOW.isoformat()}
     assert "on until Fri 12:00" in capsys.readouterr().out
@@ -2701,7 +2705,7 @@ def test_use_reserve_turns_the_switches_on_for_24_hours(
 
 def test_a_restart_doesnt_turn_the_switches_on_again(in_repo, at_now, monkeypatch):  # noqa: F811
     """A restart runs the same arguments: `--use-reserve` keeps its first 24 hours."""
-    state_path = in_repo / ".factory" / "var" / "runs" / "state.json"
+    state_path = in_repo / ".softfield" / "var" / "runs" / "state.json"
     save_state(State(switches={"week": (NOW - timedelta(hours=10)).isoformat()}), state_path)
     monkeypatch.setattr(cli, "run_session", lambda cfg, **kw: None)
     monkeypatch.setenv(cli.RESTARTED_ENV, "1")
@@ -2717,8 +2721,8 @@ def test_a_request_made_while_nothing_runs_is_applied_by_the_next_command(in_rep
     _later(in_repo, "m4-12-a", "m4-13-b")
     asked = _ask(in_repo, "queue", "m4-12-a")
     assert cli.main(["queue", "m4-13"]) == 0
-    assert (in_repo / ".factory" / "tasks" / "ready" / "m4-12-a.md").is_file()
-    assert (in_repo / ".factory" / "tasks" / "ready" / "m4-13-b.md").is_file()
+    assert (in_repo / ".softfield" / "tasks" / "ready" / "m4-12-a.md").is_file()
+    assert (in_repo / ".softfield" / "tasks" / "ready" / "m4-13-b.md").is_file()
     subjects = git(in_repo, "log", "-2", "--format=%s").splitlines()
     assert subjects == ["queue m4-13-b (by the owner)", "queue m4-12-a (by the owner)"]
     assert _request(in_repo, asked)[1] == "queued m4-12-a"
@@ -2735,7 +2739,7 @@ def test_a_live_run_applies_its_own_requests_not_another_command(in_repo):  # no
     conn.close()
     assert cli.main(["accept", "99"]) == 1  # any command; this one changes nothing
     assert _request(in_repo, asked) == (None, None)
-    assert (in_repo / ".factory" / "tasks" / "later" / "m4-12-a.md").is_file()
+    assert (in_repo / ".softfield" / "tasks" / "later" / "m4-12-a.md").is_file()
 
 
 def test_a_live_bench_doesnt_hold_the_requests_back(in_repo):  # noqa: F811
@@ -2750,7 +2754,7 @@ def test_a_live_bench_doesnt_hold_the_requests_back(in_repo):  # noqa: F811
     )
     conn.close()
     cli.main(["accept", "99"])
-    assert (in_repo / ".factory" / "tasks" / "ready" / "m4-12-a.md").is_file()
+    assert (in_repo / ".softfield" / "tasks" / "ready" / "m4-12-a.md").is_file()
     assert _request(in_repo, asked)[1] == "queued m4-12-a"
 
 
@@ -2769,7 +2773,7 @@ ADR_30: dict[str, Any] = {
     "id": "adr-30",
     "kind": "adr",
     "title": "One queue",
-    "path": ".factory/adr/30-one-queue.md",
+    "path": ".softfield/adr/30-one-queue.md",
 }
 PLAN_F7: dict[str, Any] = {"id": "plan-f7", "kind": "plan", "title": "F7 plan", "path": None}
 REPLAN_F7: dict[str, Any] = {
@@ -2814,8 +2818,8 @@ def test_rejecting_a_plan_drops_its_drafts_and_an_unbuilt_card(repo):
     _plan(
         repo,
         {
-            ".factory/adr/30-one-queue.md": "# ADR 30\n",
-            ".factory/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
+            ".softfield/adr/30-one-queue.md": "# ADR 30\n",
+            ".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a"),
         },
     )
     _reply(repo, "f7", ADR_30, PLAN_F7)
@@ -2825,7 +2829,7 @@ def test_rejecting_a_plan_drops_its_drafts_and_an_unbuilt_card(repo):
     result = _request(repo, asked)[1]
     assert result == "rejected the drafts on plan/f7 (adr-30, plan-f7); F7 removed"
     assert git(repo, "branch", "--list", "plan/f7") == ""
-    assert not (repo / ".factory" / "cards" / "f7-one-queue.md").exists()
+    assert not (repo / ".softfield" / "cards" / "f7-one-queue.md").exists()
     assert git(repo, "rev-parse", "HEAD~1") == head
     assert git(repo, "log", "-1", "--format=%s").strip() == "F7 rejected by the owner"
     assert git(repo, "status", "--porcelain") == ""
@@ -2836,12 +2840,12 @@ def test_rejecting_a_plan_drops_its_drafts_and_an_unbuilt_card(repo):
 
 def test_rejecting_a_replan_keeps_a_building_card_and_its_tickets(repo):
     _card(repo)
-    doc = repo / ".factory" / "cards" / "f7-one-queue.md"
+    doc = repo / ".softfield" / "cards" / "f7-one-queue.md"
     doc.write_text(CARD.replace("planning", "building"))
-    write_task(repo / ".factory" / "tasks" / "ready", "f7-01-a")
+    write_task(repo / ".softfield" / "tasks" / "ready", "f7-01-a")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "building")
-    _plan(repo, {".factory/tasks/ready/f7-01-a.md": "changed\n"})
+    _plan(repo, {".softfield/tasks/ready/f7-01-a.md": "changed\n"})
     _reply(repo, "f7", REPLAN_F7)
     head = git(repo, "rev-parse", "HEAD")
     asked = _ask(repo, "reject", "f7/replan-f7")
@@ -2849,7 +2853,7 @@ def test_rejecting_a_replan_keeps_a_building_card_and_its_tickets(repo):
     assert _request(repo, asked)[1] == "rejected the drafts on plan/f7 (replan-f7)"
     assert git(repo, "branch", "--list", "plan/f7") == ""
     assert git(repo, "rev-parse", "HEAD") == head  # nothing committed
-    assert doc.is_file() and (repo / ".factory" / "tasks" / "ready" / "f7-01-a.md").is_file()
+    assert doc.is_file() and (repo / ".softfield" / "tasks" / "ready" / "f7-01-a.md").is_file()
     assert _why(repo, "f7") == "rejected"
 
 
@@ -2859,7 +2863,7 @@ def test_rejecting_a_merge_commits_nothing_and_settles_it(repo):
     _apply(repo)
     assert _request(repo, asked)[1] == "rejected merge-f12"
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / ".factory" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert (repo / ".softfield" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
     assert _why(repo, "f12") == "rejected"
 
 
@@ -2922,17 +2926,17 @@ def test_approving_a_plan_leaves_a_rejected_merge_alone(repo):
     _apply(repo)
     assert _request(repo, asked)[1] == "there is no plan/f12 to approve"
     assert git(repo, "rev-parse", "HEAD") == head
-    assert (repo / ".factory" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
+    assert (repo / ".softfield" / "cards" / "f12-queue-once.md").read_text() == DUPLICATE
 
 
 def test_approving_a_plan_still_applies_the_merges_not_rejected(repo):
     """The general thread lists two merges: the rejected one stays, the other is applied."""
     _duplicates(repo, thread="general")
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     (docs / "f13-queue-twice.md").write_text(DUPLICATE.replace("F12: queue once", "F13: twice"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "f13")
-    other = {**MERGE, "id": "merge-f13", "path": ".factory/cards/f13-queue-twice.md"}
+    other = {**MERGE, "id": "merge-f13", "path": ".softfield/cards/f13-queue-twice.md"}
     _reply(repo, "general", MERGE, other)
     _ask(repo, "reject", "general/merge-f12")
     asked = _ask(repo, "approve_plan", "general")
@@ -2969,7 +2973,7 @@ def test_after_a_merge_the_lead_carries_on_on_the_kept_card(repo):
 def test_a_merge_proposed_on_the_kept_cards_thread_queues_nothing_more(repo):
     """f49-03: the lead is already on the kept card, with the plan the owner approved."""
     _duplicates(repo, KEPT_PLANNED, thread="f10")
-    _plan(repo, {".factory/tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
+    _plan(repo, {".softfield/tasks/later/f10-01-a.md": _ticket("f10-01-a")}, card="f10")
     _ask(repo, "approve_plan", "f10")
     _apply(repo)
     assert _queued(repo) == [] and _owner_said(repo, "f10") == []
@@ -3010,7 +3014,7 @@ def test_a_message_on_a_key_merged_into_two_cards_or_planted_again_stays_there(r
     """Before f109-02 a key was reused (F64, F73, F107): with two kept cards the runner can't
     tell which the owner means, and a key with a card again is that card's thread."""
     _merged_away(repo)
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     other = planner.merged_card(
         KEPT.replace("F10", "F11"), "x", "From F12: y (merged by the lead on 2026-10-02)"
     )
@@ -3054,7 +3058,7 @@ CANCEL = json.dumps({"cancel": True})
 
 
 def _cards(repo: Path) -> list[str]:
-    return sorted(p.name for p in (repo / ".factory" / "cards").glob("*.md"))
+    return sorted(p.name for p in (repo / ".softfield" / "cards").glob("*.md"))
 
 
 def test_cancelling_a_waiting_plant_makes_no_card_no_commit_and_no_planner_row(repo):
@@ -3104,12 +3108,12 @@ def test_an_edited_plant_is_planted_with_the_new_words_in_the_same_pick(
     _ducks(repo)
     plant = _ask(repo, "plant", None, before)
     change = _ask(repo, "change", str(plant), json.dumps(after))
-    planted = f"planted .factory/cards/{stem}.md, queued for the lead"
+    planted = f"planted .softfield/cards/{stem}.md, queued for the lead"
     assert _apply(repo) == [f"change {plant}: changed", f"plant: {planted}"]
     assert _request(repo, change) == (NOW.isoformat(), "changed")
     assert _request(repo, plant) == (NOW.isoformat(), planted)
     assert _cards(repo) == ["f3-rubber-ducks.md", f"{stem}.md"]
-    doc = (repo / ".factory" / "cards" / f"{stem}.md").read_text()
+    doc = (repo / ".softfield" / "cards" / f"{stem}.md").read_text()
     assert "Blue" not in doc and "bath" not in doc
     assert [m["text"] for m in _thread(repo, "f4")] == [said]
     assert json.loads(_row(repo, plant)["value"])["ask"] is True
@@ -3236,7 +3240,7 @@ def test_a_change_with_a_bad_value_says_why_and_the_plant_goes_as_it_was(repo, v
     lines = _apply(repo)
     done, said = _request(repo, asked)
     assert done == NOW.isoformat() and said not in (None, "", "changed", "cancelled")
-    assert lines == [f"change {plant}: {said}", "plant: planted .factory/cards/f4-blue-ducks.md"]
+    assert lines == [f"change {plant}: {said}", "plant: planted .softfield/cards/f4-blue-ducks.md"]
     assert _row(repo, plant)["value"] == words
 
 
@@ -3261,7 +3265,7 @@ def test_two_edits_apply_oldest_first_and_the_last_wins(repo):
     assert _apply(repo) == [
         f"change {plant}: changed",
         f"change {plant}: changed",
-        "plant: planted .factory/cards/f4-green-ducks.md",
+        "plant: planted .softfield/cards/f4-green-ducks.md",
     ]
     assert _cards(repo) == ["f3-rubber-ducks.md", "f4-green-ducks.md"]
 

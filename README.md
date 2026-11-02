@@ -3,7 +3,7 @@
 A software factory for the projects on this machine. A frontier lead (Claude) plans with the
 owner and writes tickets; local and cloud developers build them; one runner gates, merges and
 reports, for every project in the owner's order; a dashboard shows it all, on a phone too.
-Why it looks like this: [ADR 30](.factory/adr/30-many-projects-one-factory.md).
+Why it looks like this: [ADR 30](.softfield/adr/30-many-projects-one-factory.md).
 
 ## Every day
 
@@ -25,7 +25,7 @@ Why it looks like this: [ADR 30](.factory/adr/30-many-projects-one-factory.md).
 In the project's folder (an empty one for a new project):
 
 ```sh
-softfield init      # the factory's files in .factory/, committed on main, the project registered,
+softfield init      # the factory's files in .softfield/, committed on main, the project registered,
                     # then Claude opens to finish with you (docs/bootstrap.md):
                     # the idea or a look at the repo, ADR 00, the checks, the first card
 softfield doctor    # asks to accept ADR 00, then what the web still needs; when it passes,
@@ -49,10 +49,10 @@ loginctl enable-linger $USER                                 # keep them up whil
 
 | What | Where |
 |---|---|
-| A project's tickets, cards, ADRs, planning, reviews, reports | its `.factory/` (run logs in `.factory/var/`, not in git) |
-| A project's checks, caps and timeouts | its `.factory/project.toml` |
-| A project's own rules (taste, languages, code) | its `.factory/project.md` |
-| What the developers may not touch | its `.factory/protected-paths.txt` |
+| A project's tickets, cards, ADRs, planning, reviews, reports | its `.softfield/` (run logs in `.softfield/var/`, not in git) |
+| A project's checks, caps and timeouts | its `.softfield/project.toml` |
+| A project's own rules (taste, languages, code) | its `.softfield/project.md` |
+| What the developers may not touch | its `.softfield/protected-paths.txt` |
 | This machine's agents, roles, Claude's reserves, backup | `~/.config/softfield/factory.toml` (a copy: `tests/fixtures/softfield-machine.toml`) |
 | Every project's runs, jobs, requests and threads | `~/.local/share/software-factory/factory-metrics.sqlite`, copied daily to `~/Dropbox/software-factory-backups` |
 | The owner's preferences, the lead's craft, how tickets are written | this repo's `docs/agents/owner.md`, `docs/agents/lead.md`, `docs/task-writing.md` |
@@ -75,7 +75,7 @@ uv run pytest tests/runner      # or one folder
 ```
 
 `uv run softfield` runs this work tree's code; plain `softfield` runs `live`'s. Commits go
-through `softfield check-all` (the hook in `.factory/hooks/`). While the runner runs, work in a
+through `softfield check-all` (the hook in `.softfield/hooks/`). While the runner runs, work in a
 worktree: it checks out task branches here.
 
 How it works: [docs/how-it-works.md](docs/how-it-works.md) and [docs/workflow.md](docs/workflow.md).

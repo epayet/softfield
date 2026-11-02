@@ -1,5 +1,5 @@
 # This machine's settings for every project (ADR 30 item 3): agents, roles, Claude's reserves,
-# the local model, the metrics database and its backup. A project's .factory/project.toml
+# the local model, the metrics database and its backup. A project's .softfield/project.toml
 # can override a table's keys. Changing rules needs an Accepted ADR.
 
 [local_model]

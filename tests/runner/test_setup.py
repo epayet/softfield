@@ -32,16 +32,16 @@ def test_init_sets_up_an_empty_folder_as_a_new_project_on_main(tmp_path, machine
     folder.mkdir()
     origin, written = setup.init(folder, db)
     assert origin == "new"
-    for rel in (".factory/project.toml", "AGENTS.md", "CLAUDE.md", "opencode.json", ".gitignore"):
+    for rel in (".softfield/project.toml", "AGENTS.md", "CLAUDE.md", "opencode.json", ".gitignore"):
         assert rel in written and (folder / rel).is_file()
-    assert (folder / ".factory/tasks/ready").is_dir() and (folder / ".factory/cards").is_dir()
-    assert 'name = "ducks"' in (folder / ".factory/project.toml").read_text()
-    assert 'origin = "new"' in (folder / ".factory/project.toml").read_text()
+    assert (folder / ".softfield/tasks/ready").is_dir() and (folder / ".softfield/cards").is_dir()
+    assert 'name = "ducks"' in (folder / ".softfield/project.toml").read_text()
+    assert 'origin = "new"' in (folder / ".softfield/project.toml").read_text()
     assert load_config(folder).project_name == "ducks"  # it loads, caps and timeouts included
     assert git(folder, "branch", "--show-current").strip() == "main"
     assert git(folder, "status", "--porcelain") == ""
-    assert git(folder, "config", "core.hooksPath").strip() == ".factory/hooks"
-    assert (folder / ".factory/hooks/pre-commit").stat().st_mode & 0o111
+    assert git(folder, "config", "core.hooksPath").strip() == ".softfield/hooks"
+    assert (folder / ".softfield/hooks/pre-commit").stat().st_mode & 0o111
     assert _projects(db) == [("softfield", "/r/softfield", 1), ("ducks", str(folder), 2)]
     conn = metrics.open_db(db)
     try:  # the runner leaves it alone until `softfield doctor` passes
@@ -65,7 +65,7 @@ def test_init_keeps_what_an_existing_repo_has_and_says_existing(tmp_path):
     origin, written = setup.init(folder, tmp_path / "m.sqlite")
     assert origin == "existing" and "AGENTS.md" not in written
     assert (folder / "AGENTS.md").read_text() == "our own rules\n"
-    assert (folder / ".gitignore").read_text() == "node_modules/\n.factory/var/\nBLOCKED.md\n"
+    assert (folder / ".gitignore").read_text() == "node_modules/\n.softfield/var/\nBLOCKED.md\n"
     assert git(folder, "log", "--format=%an", "-1").strip() == "Softfield runner"
 
 
@@ -110,16 +110,16 @@ def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
     setup.init(folder, db)
     assert _missing(folder, db) == [
         "a one-line description in [project]",
-        "the idea in .factory/seed.md",
-        "ADR 00 accepted: none in .factory/adr/",
-        "a first card in .factory/cards/",
+        "the idea in .softfield/seed.md",
+        "ADR 00 accepted: none in .softfield/adr/",
+        "a first card in .softfield/cards/",
     ]
-    toml = folder / ".factory/project.toml"
+    toml = folder / ".softfield/project.toml"
     toml.write_text(toml.read_text().replace('description = ""', 'description = "Ducks."'))
-    (folder / ".factory/seed.md").write_text("# Seed\n\nA duck counter.\n")
+    (folder / ".softfield/seed.md").write_text("# Seed\n\nA duck counter.\n")
     adr = "# ADR 00: Initial decisions\n\n- **Status:** Accepted (by the owner, 2026-10-14)\n"
-    (folder / ".factory/adr/00-initial.md").write_text(adr)  # written Accepted by hand
-    (folder / ".factory/cards/m1-count.md").write_text("# Milestone M1: Count\n")
+    (folder / ".softfield/adr/00-initial.md").write_text(adr)  # written Accepted by hand
+    (folder / ".softfield/cards/m1-count.md").write_text("# Milestone M1: Count\n")
     git(folder, "config", "user.email", "t@example.com")
     git(folder, "config", "user.name", "Test")
     git(folder, "add", "-A")
@@ -127,7 +127,7 @@ def test_doctor_says_what_the_web_still_needs_then_passes(tmp_path, machine):
     assert _missing(folder, db) == [
         "ADR 00 accepted: only `softfield accept 0` accepts it, on your yes"
     ]
-    (folder / ".factory/adr/00-initial.md").write_text(
+    (folder / ".softfield/adr/00-initial.md").write_text(
         adr.replace("Accepted (by the owner, 2026-10-14)", "Proposed")
     )
     git(folder, "commit", "-qam", "proposed", "--no-verify")
@@ -166,7 +166,7 @@ def test_doctor_says_whether_the_phones_notifications_are_set_up(tmp_path, monke
     assert not off.ok
     assert "softfield notify setup" in off.what
     assert "docs/notifications-on-the-phone.md" in off.what
-    toml = folder / ".factory/project.toml"
+    toml = folder / ".softfield/project.toml"
     toml.write_text(toml.read_text() + f'\n[metrics]\ndb = "{db}"\n')
     machine.write_text(MACHINE.read_text() + '\n[notify]\nntfy = "https://ntfy.sh/abc123"\n')
     on = phone()
@@ -296,12 +296,12 @@ def test_doctor_offers_to_accept_adr_00_first(tmp_path, monkeypatch, machine, ca
     setup.init(folder, db)
     git(folder, "config", "user.email", "t@example.com")
     git(folder, "config", "user.name", "Test")
-    adr = folder / ".factory/adr/00-initial.md"
+    adr = folder / ".softfield/adr/00-initial.md"
     adr.write_text("# ADR 00: Initial decisions\n\n- **Status:** Proposed\n")
     git(folder, "add", "-A")
     git(folder, "commit", "-q", "--no-verify", "-m", "ADR 00")
     assert setup.proposed_adr_00(folder) == adr
-    toml = folder / ".factory/project.toml"
+    toml = folder / ".softfield/project.toml"
     toml.write_text(toml.read_text() + f'\n[metrics]\ndb = "{db}"\n')
     git(folder, "commit", "-qam", "db", "--no-verify")
     monkeypatch.chdir(folder)
@@ -309,7 +309,7 @@ def test_doctor_offers_to_accept_adr_00_first(tmp_path, monkeypatch, machine, ca
     monkeypatch.setattr("builtins.input", lambda prompt: "y")
     cli.main(["doctor", "--quick"])
     out = capsys.readouterr().out
-    assert "ADR 00 waits for you: .factory/adr/00-initial.md" in out
+    assert "ADR 00 waits for you: .softfield/adr/00-initial.md" in out
     assert "- **Status:** Accepted" in adr.read_text()
     assert setup.proposed_adr_00(folder) is None
     assert "ok  ADR 00 accepted" in out
@@ -323,7 +323,7 @@ def test_doctor_puts_the_first_card_on_the_desk_at_once(tmp_path):
     folder.mkdir()
     setup.init(folder, db)
     card = "# Milestone M1: Say hi\n\n> **State:** idea · **Priority:** 1 · **Area:** product\n"
-    (folder / ".factory/cards/m1-say-hi.md").write_text(card)
+    (folder / ".softfield/cards/m1-say-hi.md").write_text(card)
     assert setup.publish_cards(folder, "hello", db) == ["m1-say-hi"]
     conn = metrics.open_db(db)
     try:

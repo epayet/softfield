@@ -32,7 +32,7 @@ router = APIRouter()
 @router.get("/planning/mockups/{thread}/{path:path}", response_class=HTMLResponse)
 def mockup_file(thread: str, path: str, conn: Db, project: Project) -> HTMLResponse:
     """A mock-up's file from the card's plan branch (``planner.draft``), for a sandboxed
-    ``<iframe>``; anything outside ``.factory/cards/*-mockup/`` is 404. Its CSP sandboxes it
+    ``<iframe>``; anything outside ``.softfield/cards/*-mockup/`` is 404. Its CSP sandboxes it
     when opened on its own too: an origin of its own, so it can't post to ``/requests``."""
     repo = _repo(conn, project)
     content = draft(repo, thread, path) if repo and _MOCKUP_RE.fullmatch(path) else None
@@ -78,7 +78,7 @@ _WORD_COLOR = {"added": "--good", "changed": "--a7"}  # set aside and removed: -
 def _who(path: str, text: str | None) -> tuple[str, str]:
     """A ticket's builder and difficulty from its frontmatter (F31 D8); ("", "") for any other
     file, or a ticket that won't read."""
-    if text is None or not path.startswith(".factory/tasks/"):
+    if text is None or not path.startswith(".softfield/tasks/"):
         return "", ""
     try:
         meta, _ = split_frontmatter(text)

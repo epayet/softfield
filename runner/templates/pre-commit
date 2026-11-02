@@ -1,5 +1,5 @@
 #!/bin/sh
 # Every commit passes `softfield check-all` first (ADR 12 item 15). Commits that only touch
-# docs/ or .factory/ skip it; the runner's own commits use --no-verify.
-# Installed with: git config core.hooksPath .factory/hooks
+# docs/ or .softfield/ skip it; the runner's own commits use --no-verify.
+# Installed with: git config core.hooksPath .softfield/hooks
 exec softfield check-all --hook

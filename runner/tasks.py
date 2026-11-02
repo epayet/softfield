@@ -109,9 +109,9 @@ def milestone_order(key: str) -> tuple[str, int]:
 
 
 def _doc_keys(repo: Path) -> dict[str, str]:
-    """Short key -> full key, from each ``.factory/cards/<full key>.md``."""
+    """Short key -> full key, from each ``.softfield/cards/<full key>.md``."""
     found: dict[str, str] = {}
-    for path in sorted((repo / ".factory" / "cards").glob("*-*.md")):
+    for path in sorted((repo / ".softfield" / "cards").glob("*-*.md")):
         if _KEY_RE.fullmatch(path.stem):
             found.setdefault(short_key(path.stem), path.stem)
     return found
@@ -119,14 +119,14 @@ def _doc_keys(repo: Path) -> dict[str, str]:
 
 def full_key(repo: Path, key: str) -> str:
     """A key in either form, as its doc names it: ``f3`` is ``f3-factory-line`` once
-    ``.factory/cards/f3-factory-line.md`` exists; otherwise the key as given."""
+    ``.softfield/cards/f3-factory-line.md`` exists; otherwise the key as given."""
     return key if _named(key) else _doc_keys(repo).get(key, key)
 
 
 def named_keys(repo: Path) -> dict[str, str]:
     """Short key -> full key, from the tickets' frontmatter and then the docs (which win)."""
     found: dict[str, str] = {}
-    for path in sorted((repo / ".factory" / "tasks").glob("*/*.md")):
+    for path in sorted((repo / ".softfield" / "tasks").glob("*/*.md")):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
             key = milestone_key(meta.get("milestone"))
@@ -147,9 +147,9 @@ def milestone_arg(repo: Path, value: object) -> str:
 
 
 def milestone_file(repo: Path, folder: str, key: str) -> Path:
-    """``.factory/<folder>/<full key>.md``, or an existing one named by the short key (f2's)."""
-    path = repo / ".factory" / folder / f"{key}.md"
-    short = repo / ".factory" / folder / f"{short_key(key)}.md"
+    """``.softfield/<folder>/<full key>.md``, or an existing one named by the short key (f2's)."""
+    path = repo / ".softfield" / folder / f"{key}.md"
+    short = repo / ".softfield" / folder / f"{short_key(key)}.md"
     return short if not path.is_file() and short.is_file() else path
 
 
@@ -286,7 +286,7 @@ def parse_task(path: Path, default_max_diff: int) -> Task:
         raise TaskError(f"a bug ticket is bug-<nn>-<slug> with 'milestone: {BUGS}', and only it")
     if (
         path.parent.parent.name == "tasks"
-    ):  # .factory/tasks/<folder>/<id>.md: its repo has the cards
+    ):  # .softfield/tasks/<folder>/<id>.md: its repo has the cards
         milestone = full_key(path.parents[3], milestone)
     sections = parse_sections(body)
     missing = [name for name in SECTIONS if not sections.get(name)]
@@ -343,15 +343,17 @@ def find_ticket(tasks_dir: Path, folder: str, wanted: str) -> Path:
         return matches[0]
     if not matches:
         elsewhere = sorted(
-            f".factory/tasks/{p.parent.name}/{p.name}"
+            f".softfield/tasks/{p.parent.name}/{p.name}"
             for p in tasks_dir.glob("*/*.md")
             if p.parent.name != folder and p.stem.startswith(wanted)
         )
         if elsewhere:
-            raise TaskError(f"{wanted} isn't in .factory/tasks/{folder}/: " + ", ".join(elsewhere))
+            raise TaskError(
+                f"{wanted} isn't in .softfield/tasks/{folder}/: " + ", ".join(elsewhere)
+            )
     choices = ", ".join(p.stem for p in matches or paths) or "none"
     found = "matches several tickets" if matches else "matches no ticket"
-    raise TaskError(f"{wanted} {found} in .factory/tasks/{folder}/. Choices: {choices}")
+    raise TaskError(f"{wanted} {found} in .softfield/tasks/{folder}/. Choices: {choices}")
 
 
 def stopped_ids(tasks_dir: Path) -> set[str]:
@@ -468,7 +470,7 @@ STALE_BRANCH = (
     '"The branch so far" describes work that `task/<id>` no longer holds (no diff from main):'
     " rewrite the ticket from main (f32-01)"
 )
-_AT_FAULT_RE = re.compile(r"\.factory/tasks/done/([A-Za-z0-9][A-Za-z0-9_.-]*?)\.md")
+_AT_FAULT_RE = re.compile(r"\.softfield/tasks/done/([A-Za-z0-9][A-Za-z0-9_.-]*?)\.md")
 
 
 def _misplaced(repo: Path, context: str) -> list[str]:
@@ -499,7 +501,7 @@ def _fix_of_fix(task: Task, repo: Path, context: str) -> bool:
         return False
     for ticket in _AT_FAULT_RE.findall(context):
         try:
-            if parse_task(repo / ".factory" / "tasks" / "done" / f"{ticket}.md", 1).finding:
+            if parse_task(repo / ".softfield" / "tasks" / "done" / f"{ticket}.md", 1).finding:
                 return True
         except (OSError, ValueError, yaml.YAMLError):
             continue

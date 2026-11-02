@@ -10,7 +10,7 @@
 db.sqlite3*
 media/
 var/
-.factory/var/
+.softfield/var/
 
 # Python / tooling
 .venv/

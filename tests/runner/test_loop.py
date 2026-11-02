@@ -137,7 +137,7 @@ def _implement(repo: Path, prompt: str) -> None:
 
 
 def _add_task(repo: Path, task_id: str, deps: str = "[]") -> None:
-    write_task(repo / ".factory" / "tasks" / "ready", task_id, deps)
+    write_task(repo / ".softfield" / "tasks" / "ready", task_id, deps)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", f"add {task_id}")
 
@@ -148,10 +148,10 @@ def test_task_merges_on_first_attempt(repo, fake_model):
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["done"]
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
-    done = repo / ".factory" / "tasks" / "done" / "m1-01-thing.md"
+    done = repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md"
     assert "result: done" in done.read_text()
     assert "task/m1-01-thing" not in git(repo, "branch")
-    assert list((repo / ".factory" / "sessions").glob("*.md"))
+    assert list((repo / ".softfield" / "sessions").glob("*.md"))
     assert git(repo, "status", "--porcelain") == ""
     # Who did what is visible in the log (ADR 00 A4).
     merge = report.tasks[0].commit
@@ -163,7 +163,7 @@ def test_task_merges_on_first_attempt(repo, fake_model):
         "Softfield runner\nrunner: session"
     )
     # The session report is a summary (f1-06); the commits are on the run's dashboard page.
-    session = next((repo / ".factory" / "sessions").glob("*.md")).read_text()
+    session = next((repo / ".softfield" / "sessions").glob("*.md")).read_text()
     assert "`m1-01-thing`" in session and "/runs/" in session
     body = git(repo, "log", "-1", "--format=%B", merge)
     assert "Changed:\n  coucou/thing.py  +1 -1" in body
@@ -176,7 +176,7 @@ def test_a_named_milestones_queue_takes_tickets_written_with_either_key(repo, mo
     """ADR 16 item 6: frontmatter may give `f3` or `f3-factory-line`. With no doc to resolve
     `f3`, the command's full key (from the other ticket) still runs both (f2 review)."""
     for task_id, key in (("f3-01-a", "f3-factory-line"), ("f3-02-b", "f3")):
-        path = write_task(repo / ".factory" / "tasks" / "ready", task_id)
+        path = write_task(repo / ".softfield" / "tasks" / "ready", task_id)
         path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "tickets")
@@ -184,7 +184,7 @@ def test_a_named_milestones_queue_takes_tickets_written_with_either_key(repo, mo
 
     def run_task(s, task):
         ran.append(task.id)
-        task.path.rename(repo / ".factory" / "tasks" / "done" / task.path.name)
+        task.path.rename(repo / ".softfield" / "tasks" / "done" / task.path.name)
         return TaskRecord(id=task.id, milestone=task.milestone, result="done")
 
     monkeypatch.setattr(loop, "run_task", run_task)
@@ -224,12 +224,12 @@ def test_skipped_tests_are_rejected_then_escalated(repo, fake_model):
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["escalated"]
     assert report.tasks[0].gate_failures == ["no-new-skips"] * 3
-    escalated = (repo / ".factory" / "tasks" / "escalated" / "m1-01-thing.md").read_text()
+    escalated = (repo / ".softfield" / "tasks" / "escalated" / "m1-01-thing.md").read_text()
     assert "gates failed 3x" in escalated
     message = git(repo, "log", "-1", "--format=%B", "--grep=^runner: escalate")
     assert "Last output:" in message and "@pytest.mark.skip" in message
     # The dependant is paused, not attempted.
-    assert (repo / ".factory" / "tasks" / "ready" / "m1-02-next.md").exists()
+    assert (repo / ".softfield" / "tasks" / "ready" / "m1-02-next.md").exists()
     assert "Paused (dependency escalated): m1-02-next" in report.notes
     assert "skip" not in (repo / "tests" / "unit" / "test_thing.py").read_text()
 
@@ -252,13 +252,13 @@ def test_developers_may_edit_tests_and_touch_other_files_and_the_report_says_so(
     assert task.result == "done"
     assert task.outside_files == ["coucou/helper.py"]
     assert task.changed_tests == ["tests/unit/test_thing.py"]
-    text = next((repo / ".factory" / "sessions").glob("*.md")).read_text()
+    text = next((repo / ".softfield" / "sessions").glob("*.md")).read_text()
     assert "edited existing tests (review these): tests/unit/test_thing.py" in text
 
 
 def test_dry_run_shows_preflight_problems(repo, capsys):
     _add_task(repo, "m1-01-thing")
-    task = repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md"
+    task = repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md"
     task.write_text(
         task.read_text().replace(
             "### Pattern to follow\n`coucou/thing.py`", "### Pattern to follow\n`render.js`"
@@ -275,10 +275,10 @@ def test_dry_run_works_on_a_dirty_branch_and_creates_nothing(repo, capsys):
     """f1-33: the replans run `--dry-run` on their own branch, mid-edit."""
     _add_task(repo, "m1-01-thing")
     git(repo, "checkout", "-q", "-b", "task/m1-00-replan")
-    (repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md").write_text(
-        (repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md").read_text() + "\nEdited.\n"
+    (repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md").write_text(
+        (repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md").read_text() + "\nEdited.\n"
     )
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-02-new", "[m1-01-thing]")  # untracked
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-02-new", "[m1-01-thing]")  # untracked
     cfg = _config(repo)
     assert loop.run_session(cfg, once=False, dry_run=True, escalate=False) is None
     out = capsys.readouterr().out
@@ -289,9 +289,9 @@ def test_dry_run_works_on_a_dirty_branch_and_creates_nothing(repo, capsys):
 
 
 def test_dry_run_never_lists_a_ticket_set_aside_for_later(repo, capsys):
-    """ADR 17 item 3: .factory/tasks/later/ waits aside."""
+    """ADR 17 item 3: .softfield/tasks/later/ waits aside."""
     _add_task(repo, "m1-01-thing")
-    write_task(repo / ".factory" / "tasks" / "later", "m1-02-aside")
+    write_task(repo / ".softfield" / "tasks" / "later", "m1-02-aside")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "aside")
     assert loop.run_session(_config(repo), once=False, dry_run=True, escalate=False) is None
@@ -301,7 +301,7 @@ def test_dry_run_never_lists_a_ticket_set_aside_for_later(repo, capsys):
 
 
 def _milestone_doc(repo: Path, key: str, header: str) -> None:
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / f"{key}.md").write_text(
         f"# Milestone {key.upper()}: a theme\n\n{header}\n\n## Outcome\n"
@@ -316,7 +316,7 @@ def _waiting_milestones(repo: Path) -> None:
     )
     _milestone_doc(repo, "m3", "> **Status: planned** (2026-10-02).")
     for task_id in ("m2-01-held", "m3-01-free"):
-        path = write_task(repo / ".factory" / "tasks" / "ready", task_id)
+        path = write_task(repo / ".softfield" / "tasks" / "ready", task_id)
         path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {task_id[1]}\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "milestones")
@@ -339,7 +339,7 @@ def test_dry_run_picks_by_card_priority_and_prints_each(repo, capsys):
     """f5 D6: m3's card at priority 1 goes before m1's ticket (no card: 100)."""
     _milestone_doc(repo, "m3", "> **State:** ready · **Priority:** 1")
     _add_task(repo, "m1-01-thing")
-    path = write_task(repo / ".factory" / "tasks" / "ready", "m3-01-first")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "m3-01-first")
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 3\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
@@ -354,7 +354,7 @@ def _on_card(repo: Path, task_id: str, place: int, deps: str = "[]", agent: str 
     """A ticket of the card ``task_id`` names, that card at ``place`` on the board."""
     key = task_id.split("-")[0]
     _milestone_doc(repo, key, f"> **State:** ready · **Priority:** {place}")
-    path = write_task(repo / ".factory" / "tasks" / "ready", task_id, deps)
+    path = write_task(repo / ".softfield" / "tasks" / "ready", task_id, deps)
     extra = f"agent: {agent}\n" if agent else ""
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n{extra}"))
 
@@ -387,7 +387,7 @@ def test_a_developer_ticket_a_lead_ticket_waits_for_is_pulled_in_the_developer_p
     s = loop.open_session(_config(repo), None)
     monkeypatch.setattr(loop, "_limits_ahead", lambda *a, **k: [])
     monkeypatch.setattr(loop, "_waits_for_the_owner", lambda *a: True)
-    ready = load_dir(repo / ".factory" / "tasks" / "ready", 150)
+    ready = load_dir(repo / ".softfield" / "tasks" / "ready", 150)
     task = loop._next_task(s, ready, set(), set())
     assert task is not None and task.id == "f9-01-pulled"
     loop.close_session(s)
@@ -405,7 +405,7 @@ def _regate_session(repo: Path, monkeypatch, *, limited: bool = False, **tickets
     s.state.regate["f9-01-gates"] = {"attempt": 1, "agent": "local"}
     monkeypatch.setattr(loop, "_limits_ahead", lambda *a, **k: [object()] if limited else [])
     monkeypatch.setattr(loop, "_waits_for_the_owner", lambda *a: limited)
-    return s, load_dir(repo / ".factory" / "tasks" / "ready", 150)
+    return s, load_dir(repo / ".softfield" / "tasks" / "ready", 150)
 
 
 def test_a_ticket_waiting_only_for_its_gates_is_picked_before_better_tickets(repo, monkeypatch):
@@ -461,7 +461,7 @@ def _lane_session(repo: Path, monkeypatch, *, limited: bool = False):
     }
     monkeypatch.setattr(loop, "_limits_ahead", lambda *a, **k: [object()] if limited else [])
     monkeypatch.setattr(loop, "_waits_for_the_owner", lambda *a: limited)
-    return s, load_dir(repo / ".factory" / "tasks" / "ready", 150)
+    return s, load_dir(repo / ".softfield" / "tasks" / "ready", 150)
 
 
 def test_the_fast_lane_goes_before_a_due_parked_ticket_and_the_board(repo, monkeypatch):
@@ -499,7 +499,7 @@ def test_dry_run_lists_the_fast_lane_first(repo, capsys):
 
 def test_a_signed_off_milestone_releases_the_tickets_waiting_for_it(repo, capsys):
     _waiting_milestones(repo)
-    (repo / ".factory" / "cards" / "m1-first.md").write_text(
+    (repo / ".softfield" / "cards" / "m1-first.md").write_text(
         "# Milestone M1: a theme\n\n> **Status: done.** Signed off by the owner on 2026-10-03.\n"
     )
     out = _dry_run(repo, capsys)
@@ -518,7 +518,7 @@ def test_the_queue_goes_on_with_other_milestones_while_one_waits(repo, monkeypat
 
     def run_task(s, task):
         ran.append(task.id)
-        task.path.rename(repo / ".factory" / "tasks" / "done" / task.path.name)
+        task.path.rename(repo / ".softfield" / "tasks" / "done" / task.path.name)
         return TaskRecord(id=task.id, milestone=task.milestone, result="done")
 
     monkeypatch.setattr(loop, "run_task", run_task)
@@ -531,7 +531,7 @@ def test_the_queue_goes_on_with_other_milestones_while_one_waits(repo, monkeypat
 def test_a_ready_ticket_that_does_not_parse_is_set_aside_and_the_queue_goes_on(repo, monkeypatch):
     """F6's review wrote a ticket with `tests: []`: every read of ready/ raised and the run
     died at each start (2026-10-22)."""
-    tasks = repo / ".factory" / "tasks"
+    tasks = repo / ".softfield" / "tasks"
     write_task(tasks / "ready", "m1-01-good")
     broken = write_task(tasks / "ready", "m1-02-broken")
     broken.write_text(re.sub(r"tests:\n(  - .*\n)+", "tests: []\n", broken.read_text()))
@@ -554,7 +554,7 @@ def _two_milestones(repo: Path) -> None:
         ("ready", "f9-02-last"),
         ("ready", "f10-01-next"),
     ):
-        path = write_task(repo / ".factory" / "tasks" / folder, task_id)
+        path = write_task(repo / ".softfield" / "tasks" / folder, task_id)
         key = task_id.split("-")[0]
         path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n"))
     git(repo, "add", "-A")
@@ -567,8 +567,8 @@ def _merge_any(repo: Path, ran: list[str]) -> Callable[[loop.Session, object], T
         git(
             repo,
             "mv",
-            f".factory/tasks/ready/{task.path.name}",
-            f".factory/tasks/done/{task.path.name}",
+            f".softfield/tasks/ready/{task.path.name}",
+            f".softfield/tasks/done/{task.path.name}",
         )
         git(repo, "commit", "-q", "-m", f"{task.id} done")
         return TaskRecord(id=task.id, milestone=task.milestone, result="done")
@@ -606,7 +606,7 @@ def test_a_milestone_queue_starts_no_review_of_its_own(repo, monkeypatch):
 
 def test_dry_run_lists_a_due_review_first(repo, capsys):
     _two_milestones(repo)
-    git(repo, "mv", ".factory/tasks/ready/f9-02-last.md", ".factory/tasks/done/f9-02-last.md")
+    git(repo, "mv", ".softfield/tasks/ready/f9-02-last.md", ".softfield/tasks/done/f9-02-last.md")
     git(repo, "commit", "-q", "-m", "f9 done")
     out = _dry_run(repo, capsys)
     assert "-> review F9: runnable, F9's tickets are all done" in out
@@ -687,7 +687,7 @@ def test_dry_run_shows_the_planner_next_while_paused(repo, capsys):
 
 def test_dry_run_lists_no_review_once_its_done(repo, capsys):
     _two_milestones(repo)
-    git(repo, "mv", ".factory/tasks/ready/f9-02-last.md", ".factory/tasks/done/f9-02-last.md")
+    git(repo, "mv", ".softfield/tasks/ready/f9-02-last.md", ".softfield/tasks/done/f9-02-last.md")
     git(repo, "commit", "-q", "-m", "f9 done")
     cfg = _config(repo)
     save_state(
@@ -709,7 +709,7 @@ def test_blocked_escalates_immediately(repo, fake_model):
     report = _run(repo)
     task = report.tasks[0]
     assert (task.result, task.blocked, task.attempts) == ("blocked", "needs-info", 1)
-    assert (repo / ".factory" / "tasks" / "escalated" / "m1-01-thing.md").exists()
+    assert (repo / ".softfield" / "tasks" / "escalated" / "m1-01-thing.md").exists()
     assert not (repo / "BLOCKED.md").exists()
 
 
@@ -750,8 +750,8 @@ def test_session_stops_when_an_escalation_changes_the_runner(repo, fake_model, m
         git(
             repo,
             "mv",
-            ".factory/tasks/escalated/m1-01-thing.md",
-            ".factory/tasks/ready/m1-01-thing.md",
+            ".softfield/tasks/escalated/m1-01-thing.md",
+            ".softfield/tasks/ready/m1-01-thing.md",
         )
         git(repo, "add", "-A")
         git(repo, "commit", "-qm", "escalation: requeue")
@@ -782,13 +782,13 @@ def test_a_requeued_task_gets_its_own_log_folder(tmp_path):
 
 
 def test_retry_prompt_ends_with_the_gate_output(repo: Path):
-    task = parse_task(write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing"), 150)
+    task = parse_task(write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing"), 150)
     first = loop._prompt(task, None)
     assert "softfield check-all --fix --task m1-01-thing" in first
-    retry = loop._prompt(task, GateResult("ruff", False, ".factory/tasks/ready/m1-01-thing.md"))
+    retry = loop._prompt(task, GateResult("ruff", False, ".softfield/tasks/ready/m1-01-thing.md"))
     assert retry.index("### Goal") < retry.index("IMPORTANT")
     assert "uv run ruff check --fix" in retry  # the gate's hint
-    assert retry.rstrip().endswith(".factory/tasks/ready/m1-01-thing.md\n```")
+    assert retry.rstrip().endswith(".softfield/tasks/ready/m1-01-thing.md\n```")
     assert "CATEGORY: needs-file" in retry
 
 
@@ -844,7 +844,7 @@ def test_an_attempt_with_an_undefined_name_still_fails_ruff(repo, fake_model, ru
     report = _run(repo, once=True)
     task = report.tasks[0]
     assert (task.result, task.gate_failures) == ("escalated", ["ruff"] * 3)
-    assert "F821" in next(repo.glob(".factory/var/runs/*/m1-01-thing/gates-3.txt")).read_text()
+    assert "F821" in next(repo.glob(".softfield/var/runs/*/m1-01-thing/gates-3.txt")).read_text()
     # The formatting went into each attempt, as its developer's work.
     log = git(repo, "log", "--format=%an|%s%n%b", "task/m1-01-thing")
     assert "Softfield local model|wip m1-01-thing attempt 1 (formatted)\nAgent: local-model" in log
@@ -1001,7 +1001,7 @@ def test_the_lead_gives_direction_before_the_last_attempt(repo, fake_model, fake
     report = _run(repo, once=True)
     assert [j.kind for j in jobs] == ["direction"]
     assert (report.tasks[0].result, report.tasks[0].attempts) == ("done", 3)
-    assert ".factory/var/runs/" in jobs[0].prompt and "/thinking-1.md" in jobs[0].prompt
+    assert ".softfield/var/runs/" in jobs[0].prompt and "/thinking-1.md" in jobs[0].prompt
     rows = _rows(repo, "jobs")
     roles = ["developer", "developer", "direction", "last-attempt"]
     assert [(j["role"], j["agent"]) for j in rows] == list(
@@ -1013,7 +1013,7 @@ def test_the_lead_gives_direction_before_the_last_attempt(repo, fake_model, fake
 def test_direction_can_repair_the_ticket(repo, fake_model, fake_lead):
     _add_task(repo, "m1-01-thing")
     script, _ = fake_lead
-    ticket = repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md"
+    ticket = repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md"
 
     def repair(job, repo_):
         logs = repo_ / _logs_in(job.prompt)
@@ -1023,14 +1023,15 @@ def test_direction_can_repair_the_ticket(repo, fake_model, fake_lead):
     def follow(repo, prompt):
         assert "Fix it work." in prompt
         assert (
-            "Fix it work." in (repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md").read_text()
+            "Fix it work."
+            in (repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md").read_text()
         )
         _undo_and_implement(repo, prompt)
 
     fake_model.extend([_stray, _stray, follow])
     script.append(repair)
     _run(repo, once=True)
-    assert "Fix it work." in (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").read_text()
+    assert "Fix it work." in (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").read_text()
     assert git(repo, "log", "--format=%s", "--grep=^direction m1-01-thing").strip()
 
 
@@ -1038,7 +1039,7 @@ def test_a_repair_that_fails_preflight_is_dropped(repo, fake_model, fake_lead):
     """f1-50: the repair named a bare `ticket.html`; the developer edited the ticket to pass."""
     _add_task(repo, "m1-01-thing")
     script, _ = fake_lead
-    ticket = repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md"
+    ticket = repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md"
     original = ticket.read_text()
 
     def repair(job, repo_):
@@ -1055,13 +1056,13 @@ def test_a_repair_that_fails_preflight_is_dropped(repo, fake_model, fake_lead):
     fake_model.extend([_stray, _stray, follow])
     script.append(repair)
     _run(repo, once=True)
-    assert "a.html" not in (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").read_text()
+    assert "a.html" not in (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").read_text()
     assert not git(repo, "log", "--format=%s", "--grep=^direction m1-01-thing").strip()
 
 
 def test_a_repaired_ticket_without_max_diff_gets_the_default(repo, fake_model, fake_lead):
     """f0: the direction dropped a too-low cap, but the re-parse kept it as the default."""
-    ticket = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    ticket = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     capped = ticket.read_text()
     ticket.write_text(capped.replace("milestone: 1\n", "milestone: 1\nmax_diff: 1\n"))
     git(repo, "add", "-A")
@@ -1103,7 +1104,7 @@ def _passes(monkeypatch, ok: bool = True) -> list[str | None]:
 
 
 def _lead_task(repo: Path, task_id: str) -> None:
-    path = write_task(repo / ".factory" / "tasks" / "ready", task_id)
+    path = write_task(repo / ".softfield" / "tasks" / "ready", task_id)
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\nagent: lead\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", f"add {task_id}")
@@ -1125,13 +1126,13 @@ def test_a_lead_ticket_runs_headless_and_merges_when_check_all_passes(
     assert [t.result for t in report.tasks] == ["done"]
     assert calls == ["m1-01-lead"]
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-lead.md").exists()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-lead.md").exists()
     assert "Agent: claude-headless" in git(repo, "log", "-1", "--format=%B", report.tasks[0].commit)
 
 
 def test_a_lead_tickets_commands_join_its_tools(repo, fake_model, fake_lead, monkeypatch):
     _lead_task(repo, "m1-01-lead")
-    ticket = repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md"
+    ticket = repo / ".softfield" / "tasks" / "ready" / "m1-01-lead.md"
     ticket.write_text(
         ticket.read_text().replace("agent: lead\n", "agent: lead\ncommands: [gh api]\n")
     )
@@ -1155,11 +1156,11 @@ def test_a_lead_ticket_that_fails_check_all_is_blocked_with_its_branch_kept(
     assert [t.result for t in report.tasks] == ["stopped"]
     assert (
         "check-all failed"
-        in (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").read_text()
+        in (repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md").read_text()
     )
     assert "task/m1-01-lead" in git(repo, "branch")
     assert "raise NotImplementedError" in (repo / "coucou" / "thing.py").read_text()
-    assert (repo / ".factory" / "tasks" / "ready" / "m1-02-after.md").exists()  # paused, not run
+    assert (repo / ".softfield" / "tasks" / "ready" / "m1-02-after.md").exists()  # paused, not run
 
 
 @pytest.mark.parametrize(
@@ -1233,7 +1234,7 @@ def test_a_blocked_lead_ticket_of_a_card_gets_one_look_on_its_thread(repo, fake_
     assert (look["author"], reply["author"]) == ("runner", "lead")
     said = str(look["text"])
     assert "m1-01-lead" in said and "check-all failed" in said and "task/m1-01-lead" in said
-    assert ".factory/var/runs/" in said and "/m1-01-lead" in said  # its log folder
+    assert ".softfield/var/runs/" in said and "/m1-01-lead" in said  # its log folder
     [row] = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
     assert row["subject"] == f"m1#m{look['id']}" and row["done"] is not None
     [prompt] = prompts
@@ -1241,7 +1242,7 @@ def test_a_blocked_lead_ticket_of_a_card_gets_one_look_on_its_thread(repo, fake_
     assert reply["text"] == "It failed its tests." and reply["points"]
     [item] = [i for i in _rows(repo, "owner_items") if i["kind"] == "planning"]
     assert (item["subject"], item["resolved"]) == ("m1", None)
-    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md").is_file()
 
 
 def test_a_look_at_a_limit_parks_and_runs_after_the_reset(
@@ -1263,7 +1264,7 @@ def test_a_look_at_a_limit_parks_and_runs_after_the_reset(
 def test_a_blocked_bug_ticket_gets_no_look(repo, fake_model, monkeypatch):
     """ADR 29 item 6: a bug has no card, so no thread."""
     _add_bug(repo, "bug-01-thing")
-    path = repo / ".factory" / "tasks" / "ready" / "bug-01-thing.md"
+    path = repo / ".softfield" / "tasks" / "ready" / "bug-01-thing.md"
     path.write_text(path.read_text().replace("milestone: bugs\n", "milestone: bugs\nagent: lead\n"))
     git(repo, "commit", "-qam", "the bug is the lead's")
     prompts: list[str] = []
@@ -1271,7 +1272,7 @@ def test_a_blocked_bug_ticket_gets_no_look(repo, fake_model, monkeypatch):
     _passes(monkeypatch, ok=False)
     _run(repo)
     assert calls == [("lead-ticket", None)]
-    assert (repo / ".factory" / "tasks" / "blocked" / "bug-01-thing.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "bug-01-thing.md").is_file()
     assert _messages(repo) == [] and _rows(repo, "planner_threads") == []
     assert [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"] == []
 
@@ -1287,7 +1288,7 @@ def test_with_no_metrics_database_a_ticket_is_still_blocked(repo, fake_model, mo
     report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
     assert report is not None and [t.result for t in report.tasks] == ["stopped"]
     assert calls == [("lead-ticket", None)]
-    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md").is_file()
 
 
 def test_a_look_opens_an_archived_thread_again(repo, fake_model, monkeypatch):
@@ -1353,12 +1354,12 @@ def test_a_lead_ticket_failing_only_where_main_fails_waits_on_its_branch(
     fake_model.append(_implement)
     calls = _red_main(monkeypatch, {"m1-01-lead": ["layout"], None: ["layout"]})
     report = _run(repo)
-    ready = repo / ".factory" / "tasks" / "ready"
+    ready = repo / ".softfield" / "tasks" / "ready"
     assert (ready / "m1-01-lead.md").exists() and (ready / "m1-02-lead.md").exists()
-    assert not (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").exists()
+    assert not (repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md").exists()
     assert "return 42" in git(repo, "show", "task/m1-01-lead:coucou/thing.py")
     assert len(jobs) == 1  # no other lead ticket was taken
-    assert (repo / ".factory" / "tasks" / "done" / "m2-01-thing.md").exists()  # developers go on
+    assert (repo / ".softfield" / "tasks" / "done" / "m2-01-thing.md").exists()  # developers go on
     assert ("m1-01-lead", None) in calls and (None, ("layout",)) in calls
     [item] = _rows(repo, "owner_items")
     assert (item["kind"], item["subject"], item["resolved"]) == ("main-red", "layout", None)
@@ -1382,7 +1383,7 @@ def test_once_main_passes_the_waiting_lead_ticket_merges_from_its_branch(
     report = _run(repo)
     assert len(jobs) == 1  # its work isn't done again
     assert [t.result for t in report.tasks] == ["done"]
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-lead.md").exists()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-lead.md").exists()
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
     assert (repo / "coucou" / "mended.py").exists()
     [item] = _rows(repo, "owner_items")
@@ -1394,7 +1395,7 @@ def test_the_ticket_that_would_mend_main_is_named_and_runs(
 ):
     _lead_task(repo, "m1-01-lead")
     _lead_task(repo, "m1-02-mend")
-    mend = repo / ".factory" / "tasks" / "ready" / "m1-02-mend.md"
+    mend = repo / ".softfield" / "tasks" / "ready" / "m1-02-mend.md"
     mend.write_text(mend.read_text().replace("files:\n", f"files:\n  - {STRAY}\n"))
     (repo / STRAY).write_text("")  # the scratch file that fails the layout check
     git(repo, "add", "-A")
@@ -1434,7 +1435,7 @@ def test_a_lead_ticket_failing_a_check_main_passes_is_blocked(
     calls = _red_main(monkeypatch, {"m1-01-lead": branch, None: main})
     report = _run(repo)
     assert [t.result for t in report.tasks] == ["stopped"]
-    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").exists()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md").exists()
     assert (None, tuple(branch)) in calls
     assert [item["kind"] for item in _rows(repo, "owner_items")] == ["blocked", "planning"]
 
@@ -1467,7 +1468,7 @@ def test_a_developer_attempt_failing_only_where_main_fails_waits_on_its_branch(
     assert (task.result, task.attempts, task.gate_failures) == ("waits for main", 0, [])
     assert fake_model.models == ["lmstudio/m"]  # no second attempt
     assert calls == [(None, ("tests",))]
-    tasks = repo / ".factory" / "tasks"
+    tasks = repo / ".softfield" / "tasks"
     assert (tasks / "ready" / "m1-01-thing.md").exists()
     assert not (tasks / "escalated" / "m1-01-thing.md").exists()
     assert "return 42" in git(repo, "show", "task/m1-01-thing:coucou/thing.py")
@@ -1511,7 +1512,7 @@ def test_once_main_passes_the_waiting_developer_tickets_gates_run_again_and_it_m
     assert (task.result, task.attempts) == ("done", 1)
     assert fake_model.models == ["lmstudio/m"] and len(gate_runs) == 2
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").exists()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").exists()
     state = load_state(_config(repo).runs_dir / "state.json")
     assert state.regate == {} and state.waits_on_main == {} and state.main_red is None
     [job] = _rows(repo, "jobs")
@@ -1557,7 +1558,7 @@ def test_a_checkpoint_runs_after_every_two_developer_merges(repo, fake_model, fa
 def _checkpoint_files_a_fix(job, repo_):
     """Travel companion's f3-07: a checkpoint copied a fix ticket and put its finding's key in
     `milestone:`, and the runner stopped at its next pick on that ticket."""
-    fix = write_task(repo_ / ".factory" / "tasks" / "ready", "m1-03-fix")
+    fix = write_task(repo_ / ".softfield" / "tasks" / "ready", "m1-03-fix")
     fix.write_text(fix.read_text().replace("milestone: 1\n", "milestone: m1-C12-2\n"))
 
 
@@ -1571,7 +1572,7 @@ def test_a_ticket_the_checkpoint_wrote_failing_to_parse_gets_one_repair_turn(
 
     def repair(job, repo_):
         if repaired:
-            fix = repo_ / ".factory" / "tasks" / "ready" / "m1-03-fix.md"
+            fix = repo_ / ".softfield" / "tasks" / "ready" / "m1-03-fix.md"
             fix.write_text(fix.read_text().replace("milestone: m1-C12-2", "milestone: 1"))
 
     def change(n: int):
@@ -1586,8 +1587,8 @@ def test_a_ticket_the_checkpoint_wrote_failing_to_parse_gets_one_repair_turn(
     (_, _), (fix_turn, resumed) = calls
     assert (fix_turn.kind, resumed) == ("checkpoint", "s1")  # the checkpoint's own session
     assert "m1-C12-2" in fix_turn.prompt and "finding's key" in fix_turn.prompt
-    assert "Edit(.factory/tasks/ready/m1-03-fix.md)" in fix_turn.allowed_tools
-    tasks = repo / ".factory" / "tasks"
+    assert "Edit(.softfield/tasks/ready/m1-03-fix.md)" in fix_turn.allowed_tools
+    tasks = repo / ".softfield" / "tasks"
     if repaired:
         assert [t.result for t in report.tasks] == ["done", "done", "done"]
     else:
@@ -1598,7 +1599,7 @@ def test_a_ticket_the_checkpoint_wrote_failing_to_parse_gets_one_repair_turn(
 
 
 def _add_bug(repo: Path, task_id: str, area: str = "factory") -> None:
-    path = write_task(repo / ".factory" / "tasks" / "ready", task_id)
+    path = write_task(repo / ".softfield" / "tasks" / "ready", task_id)
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: bugs\narea: {area}\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", f"add {task_id}")
@@ -1651,7 +1652,7 @@ def test_a_ticket_without_an_area_records_none(repo, fake_model):
 
 
 def test_a_bug_without_an_area_escalates_at_preflight(repo, fake_model):
-    path = write_task(repo / ".factory" / "tasks" / "ready", "bug-01-thing")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "bug-01-thing")
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: bugs\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "a bug")
@@ -1668,7 +1669,7 @@ def _checkpoint_writes(text: str) -> Callable[[ClaudeJob, Path], None]:
     def review(job, repo_):
         out = job.prompt.split("Write ", 1)[1].split(":", 1)[0]
         (repo_ / out).write_text("Found one leak.")
-        found = re.search(r"(.factory/var/runs/\S+/checkpoint-\d+\.json)", job.prompt)
+        found = re.search(r"(.softfield/var/runs/\S+/checkpoint-\d+\.json)", job.prompt)
         assert found
         (repo_ / found[1]).write_text(text)
 
@@ -1931,13 +1932,13 @@ def test_escalations_past_the_limit_block_the_task_without_calling_claude(
     _escalate_on_protected(repo, fake_model)
     script, jobs = fake_lead
     script.append(lambda job, repo_: None)  # the direction
-    state = load_state(repo / ".factory" / "var" / "runs" / "state.json")
+    state = load_state(repo / ".softfield" / "var" / "runs" / "state.json")
     state.escalations["m1-01-thing"] = 2
-    save_state(state, repo / ".factory" / "var" / "runs" / "state.json")
+    save_state(state, repo / ".softfield" / "var" / "runs" / "state.json")
     report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     assert report is not None
     assert [j.kind for j in jobs] == ["direction"]
-    blocked = (repo / ".factory" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+    blocked = (repo / ".softfield" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
     assert "2 escalations used" in blocked
     assert any(n.startswith("Blocked m1-01-thing") for n in report.notes)
 
@@ -1961,7 +1962,7 @@ def test_an_escalation_whose_work_fails_check_all_stays_off_main(
     assert "return 'x'" in git(repo, "show", "escalation/m1-01-thing:coucou/thing.py")
     assert (
         "failed check-all"
-        in (repo / ".factory" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+        in (repo / ".softfield" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
     )
     assert git(repo, "status", "--porcelain") == ""
     [look] = [m for m in _messages(repo) if m["author"] == "runner"]
@@ -1980,7 +1981,7 @@ def test_an_escalation_with_no_decision_keeps_its_work_off_main(
     assert calls == []
     assert "raise NotImplementedError" in (repo / "coucou" / "thing.py").read_text()
     assert "return 42" in git(repo, "show", "escalation/m1-01-thing:coucou/thing.py")
-    blocked = (repo / ".factory" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+    blocked = (repo / ".softfield" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
     assert "no decision; its work is on escalation/m1-01-thing" in blocked
     assert git(repo, "status", "--porcelain") == ""
 
@@ -2030,7 +2031,7 @@ def test_an_escalation_stopped_during_its_check_all_is_kept_and_resumed_uncounte
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     escalations = [j for j in jobs if j.kind == "escalation"]
     assert len(escalations) == 2 and "interrupted/escalation-m1-01-thing" in escalations[1].prompt
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
     state = _state(repo)
     assert state.escalations["m1-01-thing"] == 2 and state.in_flight is None
@@ -2070,16 +2071,16 @@ def test_a_requeued_ticket_keeps_its_escalated_footer(repo, fake_model, fake_lea
     _escalate_on_protected(repo, fake_model)
     fake_model.extend([_undo_and_implement, _after])  # the requeue continues the branch
     script, _ = fake_lead
-    clean = (repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md").read_text()
+    clean = (repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md").read_text()
 
     def requeue(job, repo_):
         logs = repo_ / job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
-        (repo_ / ".factory" / "tasks" / "ready" / "m1-01-thing.md").write_text(clean)
+        (repo_ / ".softfield" / "tasks" / "ready" / "m1-01-thing.md").write_text(clean)
         (logs / "decision.json").write_text('{"outcome": "requeue"}')
 
     script.extend([lambda job, repo_: None, requeue, lambda job, repo_: None])  # + checkpoint
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
-    done = (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").read_text()
+    done = (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").read_text()
     assert done.count("# --- runner ---") == 2
     assert done.index("result: escalated") < done.index("result: done")
 
@@ -2111,16 +2112,16 @@ def test_a_decision_for_the_owner_is_recorded(repo, fake_model, fake_lead):
     def needs_owner(job, repo_):
         logs = repo_ / job.prompt.split("Run logs: ", 1)[1].split("/ ", 1)[0]
         (logs / "decision.json").write_text(
-            '{"outcome": "owner", "adr": ".factory/adr/14-x.md", "question": "Keep originals?"}'
+            '{"outcome": "owner", "adr": ".softfield/adr/14-x.md", "question": "Keep originals?"}'
         )
 
     script.extend([lambda job, repo_: None, needs_owner])
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
-    state = load_state(repo / ".factory" / "var" / "runs" / "state.json")
+    state = load_state(repo / ".softfield" / "var" / "runs" / "state.json")
     assert state.owner == {
-        "m1-01-thing": {"adr": ".factory/adr/14-x.md", "question": "Keep originals?"}
+        "m1-01-thing": {"adr": ".softfield/adr/14-x.md", "question": "Keep originals?"}
     }
-    assert (repo / ".factory" / "tasks" / "escalated" / "m1-01-thing.md").exists()
+    assert (repo / ".softfield" / "tasks" / "escalated" / "m1-01-thing.md").exists()
 
 
 # --- building on the work (ADR 15 items 7 and 8) -------------------------------------------
@@ -2207,7 +2208,7 @@ def test_an_escalation_can_finish_the_work_on_the_branch(repo, fake_model, fake_
         assert job.prompt.index("finish") < job.prompt.index("requeue")
         git(repo_, "checkout", "-q", "task/m1-01-thing")
         # The branch has caught up with main: the escalated ticket is there.
-        assert (repo_ / ".factory" / "tasks" / "escalated" / "m1-01-thing.md").is_file()
+        assert (repo_ / ".softfield" / "tasks" / "escalated" / "m1-01-thing.md").is_file()
         (repo_ / "coucou" / "secret.py").unlink()
         _implement(repo_, "")
         (repo_ / _logs_of(job) / "decision.json").write_text('{"outcome": "finish"}')
@@ -2220,8 +2221,8 @@ def test_an_escalation_can_finish_the_work_on_the_branch(repo, fake_model, fake_
     assert git(repo, "status", "--porcelain") == ""
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
     assert not (repo / "coucou" / "secret.py").exists()
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
-    assert not (repo / ".factory" / "tasks" / "escalated" / "m1-01-thing.md").exists()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert not (repo / ".softfield" / "tasks" / "escalated" / "m1-01-thing.md").exists()
     assert "task/m1-01-thing" not in git(repo, "branch")
     merge = git(repo, "log", "--format=%H", "--grep=^m1-01-thing: ").split()[0]
     body = git(repo, "log", "-1", "--format=%B", merge)
@@ -2233,7 +2234,9 @@ def test_an_escalation_can_finish_the_work_on_the_branch(repo, fake_model, fake_
         "claude-opus",
     )
     assert rows["m1-01-thing"]["commit"] == merge
-    assert (repo / ".factory" / "tasks" / "done" / "m1-02-after.md").is_file()  # its dependant ran
+    assert (
+        repo / ".softfield" / "tasks" / "done" / "m1-02-after.md"
+    ).is_file()  # its dependant ran
     assert [j.kind for j in jobs] == ["direction", "escalation"]
 
 
@@ -2257,15 +2260,15 @@ def test_a_finish_that_fails_check_all_is_blocked_with_the_branch_kept(
     assert "return 42" in git(repo, "show", "task/m1-01-thing:coucou/thing.py")
     assert (
         "task/m1-01-thing"
-        in (repo / ".factory" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+        in (repo / ".softfield" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
     )
 
 
 def _requeue(reset: bool) -> Callable[[ClaudeJob, Path], None]:
     def requeue(job, repo_):
-        clean = (repo_ / ".factory" / "tasks" / "escalated" / "m1-01-thing.md").read_text()
+        clean = (repo_ / ".softfield" / "tasks" / "escalated" / "m1-01-thing.md").read_text()
         ticket = clean.split("\n# --- runner ---", 1)[0].replace("Make the thing", "Requeued")
-        (repo_ / ".factory" / "tasks" / "ready" / "m1-01-thing.md").write_text(ticket + "\n")
+        (repo_ / ".softfield" / "tasks" / "ready" / "m1-01-thing.md").write_text(ticket + "\n")
         decision = {"outcome": "requeue", **({"reset": True} if reset else {})}
         (repo_ / _logs_of(job) / "decision.json").write_text(json.dumps(decision))
 
@@ -2286,7 +2289,7 @@ def test_a_requeued_ticket_continues_its_branch(repo, fake_model, fake_lead):
     fake_model.extend([build_on, _after])
     script.extend([lambda job, repo_: None, _requeue(False), lambda job, repo_: None])
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
     assert "return 42" in (repo / "coucou" / "thing.py").read_text()
     assert not (repo / "coucou" / "secret.py").exists()
     assert git(repo, "status", "--porcelain") == ""
@@ -2299,7 +2302,7 @@ def test_a_clean_requeue_gets_no_repair_turn(repo, fake_model, fake_lead):
     script.extend([lambda job, repo_: None, _requeue(False), lambda job, repo_: None])
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     assert [j.kind for j in jobs] == ["direction", "escalation", "checkpoint"]
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
 
 
 def _lead_sessions(monkeypatch):
@@ -2324,7 +2327,7 @@ def _requeue_naming(path: str) -> Callable[[ClaudeJob, Path], None]:
 
     def requeue(job, repo_):
         _requeue(False)(job, repo_)
-        ready = repo_ / ".factory" / "tasks" / "ready" / "m1-01-thing.md"
+        ready = repo_ / ".softfield" / "tasks" / "ready" / "m1-01-thing.md"
         ready.write_text(
             ready.read_text().replace(
                 "### Pattern to follow", f"See `{path}`.\n\n### Pattern to follow"
@@ -2336,7 +2339,7 @@ def _requeue_naming(path: str) -> Callable[[ClaudeJob, Path], None]:
 
 def _repair_to(path: str) -> Callable[[ClaudeJob, Path], None]:
     def repair(job, repo_):
-        ready = repo_ / ".factory" / "tasks" / "ready" / "m1-01-thing.md"
+        ready = repo_ / ".softfield" / "tasks" / "ready" / "m1-01-thing.md"
         ready.write_text(ready.read_text().replace("`conftest.py`", f"`{path}`"))
 
     return repair
@@ -2360,11 +2363,11 @@ def test_a_requeue_naming_a_missing_path_gets_one_repair_turn_and_runs(
     (_, _), (escalation, _), (repair, resumed), _ = calls
     assert resumed == "s2"  # the escalation's own session
     assert "referenced path does not exist: conftest.py" in repair.prompt
-    assert ".factory/tasks/ready/m1-01-thing.md" in repair.prompt
+    assert ".softfield/tasks/ready/m1-01-thing.md" in repair.prompt
     assert repair.allowed_tools != escalation.allowed_tools
-    assert "Edit(.factory/tasks/ready/m1-01-thing.md)" in repair.allowed_tools
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
-    assert "Requeued" in (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").read_text()
+    assert "Edit(.softfield/tasks/ready/m1-01-thing.md)" in repair.allowed_tools
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert "Requeued" in (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").read_text()
     assert git(repo, "status", "--porcelain") == ""
 
 
@@ -2376,14 +2379,14 @@ def test_a_requeue_still_failing_pre_flight_is_blocked_with_its_problems(
     script.extend([lambda job, repo_: None, _requeue_naming("conftest.py"), _repair_to("x.py")])
     report = loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     assert report is not None and len(calls) == 3  # one repair turn, no more
-    blocked = (repo / ".factory" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
+    blocked = (repo / ".softfield" / "tasks" / "blocked" / "m1-01-thing.md").read_text()
     assert "Requeued" in blocked  # the lead's rewrite, with its earlier runs' footers
     assert "result: escalated" in blocked
     assert "referenced path does not exist: x.py" in blocked.split("result: blocked", 1)[1]
-    assert not (repo / ".factory" / "tasks" / "ready" / "m1-01-thing.md").exists()
-    assert not (repo / ".factory" / "tasks" / "escalated" / "m1-01-thing.md").exists()
+    assert not (repo / ".softfield" / "tasks" / "ready" / "m1-01-thing.md").exists()
+    assert not (repo / ".softfield" / "tasks" / "escalated" / "m1-01-thing.md").exists()
     assert not (
-        repo / ".factory" / "tasks" / "done" / "m1-02-after.md"
+        repo / ".softfield" / "tasks" / "done" / "m1-02-after.md"
     ).exists()  # its dependant waits
     assert git(repo, "status", "--porcelain") == ""
 
@@ -2400,7 +2403,7 @@ def test_a_requeue_that_says_reset_starts_from_main(repo, fake_model, fake_lead)
     fake_model.extend([fresh, _after])
     script.extend([lambda job, repo_: None, _requeue(True), lambda job, repo_: None])
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
 
 
 def _limited_then(monkeypatch, *outcomes):
@@ -2580,7 +2583,7 @@ def test_a_lead_tickets_prompt_starts_with_the_brief_then_names_its_ticket(
     prompt = jobs[0].prompt
     assert prompt.startswith(OWNER_MD) and _headings(prompt) == ROLE_SECTIONS["lead-ticket"]
     after = prompt.split("## Tickets\nWhat Tickets says.", 1)[1]
-    assert ".factory/tasks/ready/m1-01-lead.md" in after and '"Your own work" above' in after
+    assert ".softfield/tasks/ready/m1-01-lead.md" in after and '"Your own work" above' in after
 
 
 def test_a_planners_first_job_gets_the_sections_and_the_next_on_its_session_none(
@@ -3066,14 +3069,14 @@ def test_a_database_that_cant_be_opened_does_not_stop_the_session(repo, fake_mod
 
 
 def test_a_session_records_its_project_and_every_ticket_with_its_folder(repo, fake_model):
-    lead = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-lead", "[m1-00-missing]")
+    lead = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-lead", "[m1-00-missing]")
     lead.write_text(
         lead.read_text()
         .replace("milestone: 1\n", "milestone: 1\nagent: lead\ndifficulty: 6\n")
         .replace("difficulty: 6\n", "difficulty: 6\ndifficulty_corrected: 7\n")
     )
-    write_task(repo / ".factory" / "tasks" / "done", "m1-00-old")
-    stuck = write_task(repo / ".factory" / "tasks" / "blocked", "f1-02-stuck")
+    write_task(repo / ".softfield" / "tasks" / "done", "m1-00-old")
+    stuck = write_task(repo / ".softfield" / "tasks" / "blocked", "f1-02-stuck")
     stuck.write_text(stuck.read_text().replace("milestone: 1\n", "milestone: f1\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "tickets")
@@ -3108,7 +3111,7 @@ def test_a_session_records_its_project_and_every_ticket_with_its_folder(repo, fa
 
 def test_the_same_session_twice_leaves_the_same_ticket_rows(repo, fake_model):
     _add_task(repo, "m1-01-thing", "[m1-00-missing]")
-    write_task(repo / ".factory" / "tasks" / "done", "m1-00-old")
+    write_task(repo / ".softfield" / "tasks" / "done", "m1-00-old")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "tickets")
     _run(repo)
@@ -3128,7 +3131,7 @@ def test_a_merge_records_who_merged_the_commit_and_the_lines(repo, fake_model):
 
 
 def test_a_merge_rates_its_developer(repo, fake_model):
-    path = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: 1\ndifficulty: 5\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "add m1-01-thing")
@@ -3176,7 +3179,7 @@ def test_a_lead_ticket_runs_on_the_agent_its_difficulty_routes_to(
     """ADR 32 items 1 and 4 (F153 D1, D4): the job, the ticket's record and the merged line
     name the routed agent; the commit trailer stays claude-headless."""
     _lead_task(repo, "m1-01-lead")
-    path = repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md"
+    path = repo / ".softfield" / "tasks" / "ready" / "m1-01-lead.md"
     path.write_text(
         path.read_text().replace("agent: lead\n", f"agent: lead\ndifficulty: {difficulty}\n")
     )
@@ -3202,7 +3205,7 @@ def test_an_interrupted_lead_ticket_resumes_on_the_agent_whose_session_it_was(
 ):
     """Its difficulty 3 routes to Sonnet now, but Opus's session resumes, on Opus."""
     _lead_task(repo, "m1-01-lead")
-    path = repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md"
+    path = repo / ".softfield" / "tasks" / "ready" / "m1-01-lead.md"
     path.write_text(path.read_text().replace("agent: lead\n", "agent: lead\ndifficulty: 3\n"))
     git(repo, "commit", "-qam", "difficulty")
     roles = {**ROLES, "lead-ticket": ("claude-sonnet", "claude-opus")}
@@ -3220,7 +3223,7 @@ def test_an_interrupted_lead_ticket_resumes_on_the_agent_whose_session_it_was(
 
 def _two_lead_agents(repo: Path, difficulty: int) -> Config:
     """Sonnet then Opus for lead tickets, Sonnet up to 4; the ticket's difficulty set."""
-    path = repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md"
+    path = repo / ".softfield" / "tasks" / "ready" / "m1-01-lead.md"
     path.write_text(
         path.read_text().replace("agent: lead\n", f"agent: lead\ndifficulty: {difficulty}\n")
     )
@@ -3276,7 +3279,7 @@ def test_a_sonnet_lead_ticket_that_fails_check_all_steps_up_to_opus_on_its_branc
         assert (repo / "coucou" / "more.py").exists()
     else:
         assert ticket["state"] == "blocked"
-        blocked = repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md"
+        blocked = repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md"
         assert "check-all failed" in blocked.read_text()
         assert "task/m1-01-lead" in git(repo, "branch")
         assert "more.py" in git(repo, "show", "--stat", "task/m1-01-lead")
@@ -3294,7 +3297,7 @@ def test_a_lead_ticket_the_last_agent_did_is_blocked_at_once(
     report = loop.run_session(cfg, once=False, dry_run=False, escalate=False)
     assert report is not None and [t.result for t in report.tasks] == ["stopped"]
     assert [j.model for j in jobs] == ["opus"]
-    assert (repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md").exists()
+    assert (repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md").exists()
 
 
 def test_a_sonnet_lead_merge_is_not_checkpointed(repo, fake_model, fake_lead, monkeypatch):
@@ -3830,7 +3833,7 @@ def test_with_the_week_switch_off_a_lead_ticket_at_the_reserve_parks_for_the_own
     report = _run(repo)
     assert jobs == []  # the reserve wasn't touched
     assert [(t.id, t.result) for t in report.tasks] == [("m1-02-thing", "done")]
-    assert (repo / ".factory" / "tasks" / "ready" / "m1-01-lead.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "ready" / "m1-01-lead.md").is_file()
     assert _state(repo).parked["m1-01-lead"]["kind"] == "reserve"
     [item] = _rows(repo, "owner_items")
     assert (item["kind"], item["subject"]) == ("reserve", "m1-01-lead")
@@ -4106,7 +4109,7 @@ def test_a_plant_while_paused_is_applied_and_answered_by_the_lead_before_the_res
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=False)
     planted = _done_at(repo, "plant")
     assert planted < _done_at(repo, "resume")
-    [card] = (repo / ".factory" / "cards").glob("*-rubber-ducks.md")
+    [card] = (repo / ".softfield" / "cards").glob("*-rubber-ducks.md")
     assert "Yellow." in card.read_text()
     assert "planted by the owner" in git(repo, "log", "-1", "--format=%s", "--", str(card))
     assert planned == [("planner", True)]
@@ -4117,7 +4120,7 @@ def test_a_plant_while_paused_is_applied_and_answered_by_the_lead_before_the_res
 
 
 def test_a_queue_request_made_during_a_run_is_applied_at_the_next_pick(repo, fake_model):
-    write_task(repo / ".factory" / "tasks" / "later", "m1-01-thing")
+    write_task(repo / ".softfield" / "tasks" / "later", "m1-01-thing")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "set aside")
     asked = _ask_from_the_dashboard(repo, "queue", "m1-01-thing")
@@ -4451,10 +4454,10 @@ def test_a_deleted_tickets_row_leaves_whatever_its_state_but_done(repo):
 def test_a_ticket_naming_its_milestone_short_sits_on_its_cards_row(repo):
     """F2's ticket said `milestone: f2`: its row was a second F2 card, waiting for a review
     that was done, while the card with the review's sheet showed no tickets (2026-10-22)."""
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "f2-a-readme.md").write_text("# Milestone F2: a readme\n\n> **State:** ready\n")
-    path = write_task(repo / ".factory" / "tasks" / "ready", "f2-01-readme")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "f2-01-readme")
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: f2\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "a card and its ticket")
@@ -4468,7 +4471,7 @@ def test_a_ticket_naming_its_milestone_short_sits_on_its_cards_row(repo):
 def test_a_card_whose_doc_is_gone_leaves_the_board(repo):
     """A card merged away or `git rm`ed stayed a seed on the desk (f6-17): its row is
     `removed`. A milestone row that was never a card (no state) is left as it is."""
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "f10-one-queue.md").write_text("# Milestone F10: one queue\n\n> **State:** idea\n")
     git(repo, "add", "-A")
@@ -4495,7 +4498,7 @@ def test_a_ticket_set_aside_is_recorded_as_later(repo):
     project = metrics.upsert_project(conn, repo.name)
     metrics.upsert_ticket(conn, project, "m1-02-aside", state="ready")
     conn.close()
-    write_task(repo / ".factory" / "tasks" / "later", "m1-02-aside")
+    write_task(repo / ".softfield" / "tasks" / "later", "m1-02-aside")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "aside")
     loop.open_session(_config(repo))
@@ -4736,7 +4739,7 @@ def _routed(repo: Path) -> SessionReport:
 
 
 def _difficulty(repo: Path, task_id: str, difficulty: int) -> None:
-    path = write_task(repo / ".factory" / "tasks" / "ready", task_id)
+    path = write_task(repo / ".softfield" / "tasks" / "ready", task_id)
     text = path.read_text().replace("milestone: 1\n", f"milestone: 1\ndifficulty: {difficulty}\n")
     path.write_text(text)
     git(repo, "add", "-A")
@@ -4883,7 +4886,7 @@ def test_a_developer_ticket_touching_protected_paths_is_the_leads(
     repo, fake_model, fake_lead, monkeypatch
 ):
     """ADR 14 item 11: protected work never routes to a developer."""
-    path = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-secret")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-secret")
     path.write_text(path.read_text().replace("coucou/thing.py\n", "coucou/secret.py\n", 1))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "add m1-01-secret")
@@ -5040,11 +5043,11 @@ def test_turning_the_5_hour_switch_on_during_the_wait_lets_the_parked_work_go(
     window; the wait takes it within a poll, and the escalation that was parked goes before
     the lead ticket (F2, 2 Oct 12:01; f4-01)."""
     _claude_at(repo, 0.80)
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-09-stuck")
-    logs = repo / ".factory" / "var" / "runs" / "earlier" / "m1-09-stuck"
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-09-stuck")
+    logs = repo / ".softfield" / "var" / "runs" / "earlier" / "m1-09-stuck"
     logs.mkdir(parents=True)
     _lead_task(repo, "m1-01-lead")  # commits the escalated ticket too
-    state_path = repo / ".factory" / "var" / "runs" / "state.json"
+    state_path = repo / ".softfield" / "var" / "runs" / "state.json"
     state = load_state(state_path)
     state.parked["escalation:m1-09-stuck"] = {
         "kind": "escalation",
@@ -5053,7 +5056,7 @@ def test_turning_the_5_hour_switch_on_during_the_wait_lets_the_parked_work_go(
         "resets_at": FIVE_RESETS.isoformat(),
         loop.FIVE_HOUR_HELD: True,
         "milestone": "1",
-        "logs": ".factory/var/runs/earlier/m1-09-stuck",
+        "logs": ".softfield/var/runs/earlier/m1-09-stuck",
         "reason": "gates failed",
     }
     save_state(state, state_path)
@@ -5111,7 +5114,7 @@ def test_the_week_switch_doesnt_lift_the_5_hour_reserve(
 
 def _card_ticket(repo: Path, task_id: str, deps: str = "[]", agent: str = "lead") -> None:
     """A ready ticket of the milestone its id names (``m2-01-…`` is m2's)."""
-    path = write_task(repo / ".factory" / "tasks" / "ready", task_id, deps)
+    path = write_task(repo / ".softfield" / "tasks" / "ready", task_id, deps)
     milestone = task_id.split("-")[0][1:]
     path.write_text(
         path.read_text().replace("milestone: 1\n", f"milestone: {milestone}\nagent: {agent}\n")
@@ -5129,7 +5132,7 @@ def _marked(repo: Path, key: str) -> None:
 def _kept_open(repo: Path, key: str) -> None:
     """A ticket of ``key`` stopped for the owner: its review won't end the run once the rest
     is done."""
-    path = write_task(repo / ".factory" / "tasks" / "blocked", f"{key}-99-stopped")
+    path = write_task(repo / ".softfield" / "tasks" / "blocked", f"{key}-99-stopped")
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key[1:]}\n"))
 
 
@@ -5206,7 +5209,7 @@ def test_reserve_cards_follows_the_ready_tickets_only(repo):
     _card_ticket(repo, "m3-01-lead", deps="[m2-01-lead]")
     _card_ticket(repo, "m3-02-thing", agent="developer")
     _card_ticket(repo, "m4-01-lead", deps="[m1-01-lead]")
-    ready = load_dir(repo / ".factory" / "tasks" / "ready", 400)
+    ready = load_dir(repo / ".softfield" / "tasks" / "ready", 400)
     assert loop.reserve_cards(repo, ready) == {
         "m1-01-lead",
         "m1-02-lead",
@@ -5392,7 +5395,7 @@ def test_an_escalation_parked_after_its_decision_keeps_it_for_the_resume(
     _passes(monkeypatch)
     loop.run_session(_config(repo), once=False, dry_run=False, escalate=True)
     assert resumes == [None, "s1"]
-    assert (repo / ".factory" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
 
 
 # --- the planning room: the owner's messages go first (ADR 20 items 1–3, f6-01) -------------
@@ -5468,7 +5471,7 @@ def _work_in_two_cards(repo: Path) -> None:
     _milestone_doc(repo, "m1-first", "> **State:** building · **Priority:** 5")
     _milestone_doc(repo, "m2", "> **State:** ready · **Priority:** 1")
     _milestone_doc(repo, "m3", "> **State:** idea")
-    ready = repo / ".factory" / "tasks" / "ready"
+    ready = repo / ".softfield" / "tasks" / "ready"
     write_task(ready, "m1-01-a")
     write_task(ready, "m1-02-b", "[m1-01-a]")
     write_task(ready, "m1-03-d")
@@ -5685,7 +5688,7 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
         "id": "f7-adr",
         "kind": "adr",
         "title": "The room",
-        "path": ".factory/adr/21-room.md",
+        "path": ".softfield/adr/21-room.md",
         "key_points": [{"n": 1, "title": "One room", "text": "Async.", "flag": False}],
     }
     block = json.dumps({"points": POINTS, "proposals": [proposal]})
@@ -5694,19 +5697,19 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
         on = git(repo_, "branch", "--show-current").strip()
         seen.append((on, job.allowed_tools))
         if job.prompt.count("Draft the room."):
-            (repo_ / ".factory" / "adr").mkdir(parents=True, exist_ok=True)
-            (repo_ / ".factory" / "adr" / "21-room.md").write_text("# ADR 21: The room\n")
+            (repo_ / ".softfield" / "adr").mkdir(parents=True, exist_ok=True)
+            (repo_ / ".softfield" / "adr" / "21-room.md").write_text("# ADR 21: The room\n")
             (repo_ / "coucou" / "thing.py").write_text("changed outside the drafts\n")
             (repo_ / "stray.py").write_text("STRAY = 1\n")
-            (repo_ / ".factory" / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
-            (repo_ / ".factory" / "tasks" / "ready" / "f5-01-other.md").write_text("another's\n")
+            (repo_ / ".softfield" / "tasks" / "ready").mkdir(parents=True, exist_ok=True)
+            (repo_ / ".softfield" / "tasks" / "ready" / "f5-01-other.md").write_text("another's\n")
         elif job.prompt.count("Now the tickets."):
-            assert (repo_ / ".factory" / "adr" / "21-room.md").is_file()  # its earlier drafts
-            later = repo_ / ".factory" / "tasks" / "later"
+            assert (repo_ / ".softfield" / "adr" / "21-room.md").is_file()  # its earlier drafts
+            later = repo_ / ".softfield" / "tasks" / "later"
             later.mkdir(parents=True, exist_ok=True)
             (later / "f7-01-room.md").write_text("a ticket\n")
             # A replan's edit to its card's own ready ticket is a draft too (f6-13)
-            (repo_ / ".factory" / "tasks" / "ready" / "f7-02-ready.md").write_text(
+            (repo_ / ".softfield" / "tasks" / "ready" / "f7-02-ready.md").write_text(
                 "a ready ticket\n"
             )
         reply = f"Drafted.\n```json\n{block}\n```"
@@ -5719,10 +5722,10 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
         f"Edit({glob})"
         for glob in (
             "docs/**",
-            ".factory/cards/**",
-            ".factory/adr/**",
-            ".factory/tasks/later/**",
-            ".factory/tasks/ready/f7-*",
+            ".softfield/cards/**",
+            ".softfield/adr/**",
+            ".softfield/tasks/later/**",
+            ".softfield/tasks/ready/f7-*",
         )
     )
     # the check Approve runs, for the drafts' tickets (2026-10-12: F75's approval was refused
@@ -5739,18 +5742,20 @@ def test_a_planner_jobs_drafts_land_on_the_cards_plan_branch_never_on_main(
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain") == ""
     # Main has none of it; the plan branch has the drafts and nothing else
-    assert not (repo / ".factory" / "adr" / "21-room.md").exists()
-    assert not (repo / ".factory" / "tasks" / "later" / "f7-01-room.md").exists()
+    assert not (repo / ".softfield" / "adr" / "21-room.md").exists()
+    assert not (repo / ".softfield" / "tasks" / "later" / "f7-01-room.md").exists()
     assert not (repo / "stray.py").exists()
-    touched = git(repo, "log", "--format=%H", f"{main_before}..main", "--", ".factory/adr", "tasks")
+    touched = git(
+        repo, "log", "--format=%H", f"{main_before}..main", "--", ".softfield/adr", "tasks"
+    )
     assert touched == ""
     changed = git(repo, "diff", "--name-only", "main...plan/f7").split()
     assert changed == [
-        ".factory/adr/21-room.md",
-        ".factory/tasks/later/f7-01-room.md",
-        ".factory/tasks/ready/f7-02-ready.md",
+        ".softfield/adr/21-room.md",
+        ".softfield/tasks/later/f7-01-room.md",
+        ".softfield/tasks/ready/f7-02-ready.md",
     ]
-    assert git(repo, "show", "plan/f7:.factory/adr/21-room.md") == "# ADR 21: The room\n"
+    assert git(repo, "show", "plan/f7:.softfield/adr/21-room.md") == "# ADR 21: The room\n"
     # Committed by the runner, one commit per job, on Claude's behalf
     commits = git(repo, "log", "--format=%s|%(trailers:key=Agent,valueonly)", "main..plan/f7")
     subjects = [line for line in commits.splitlines() if line.strip()]
@@ -5780,12 +5785,12 @@ def test_a_mockup_a_planner_job_drew_without_listing_it_reaches_the_reply(
     no proposal names; not one it removed, nor a .css beside it, nor one already listed."""
     _plan_message(repo, "f7", "Draw it.")
     _plan_message(repo, "f7", "Again.")
-    folder = repo / ".factory" / "cards" / "f7-mockup"
+    folder = repo / ".softfield" / "cards" / "f7-mockup"
     named = {
         "id": "b",
         "kind": "mockup",
         "title": "Its own",
-        "path": ".factory/cards/f7-mockup/b.html",
+        "path": ".softfield/cards/f7-mockup/b.html",
         "key_points": [{"n": 1, "title": "One page", "text": "Drawn.", "flag": False}],
     }
 
@@ -5808,7 +5813,7 @@ def test_a_mockup_a_planner_job_drew_without_listing_it_reaches_the_reply(
     first, second = [
         json.loads(str(m["proposals"])) for m in _messages(repo) if m["author"] == "lead"
     ]
-    a = ".factory/cards/f7-mockup/a.html"
+    a = ".softfield/cards/f7-mockup/a.html"
     assert [(p["path"], p["title"]) for p in first] == [
         (named["path"], "Its own"),
         (a, "The board"),
@@ -5822,14 +5827,14 @@ MERGE_F12 = {
     "id": "merge-f12",
     "kind": "merge",
     "title": "One queue, said twice",
-    "path": ".factory/cards/f12-queue-once.md",
+    "path": ".softfield/cards/f12-queue-once.md",
     "into": "f10",
     "key_points": [{"n": 1, "title": "Notes", "text": "F12's notes go to F10.", "flag": False}],
 }
 
 
 def _twin_cards(repo: Path, ticket: bool = False) -> None:
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True, exist_ok=True)
     (docs / "f10-one-queue.md").write_text(
         "# Milestone F10: one queue\n\n> **State:** idea\n\n## Notes\nOne queue for all.\n"
@@ -5838,7 +5843,7 @@ def _twin_cards(repo: Path, ticket: bool = False) -> None:
         "# Milestone F12: queue once\n\n> **State:** idea\n\n## Notes\nA single line.\n"
     )
     if ticket:
-        write_task(repo / ".factory" / "tasks" / "later", "f12-01-a")
+        write_task(repo / ".softfield" / "tasks" / "later", "f12-01-a")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "cards")
 
@@ -5859,7 +5864,7 @@ def test_a_merge_in_a_planner_reply_is_applied_at_once_by_the_lead(
     _run(repo)
     assert git(repo, "branch", "--show-current").strip() == "main"
     assert git(repo, "status", "--porcelain") == ""
-    assert not (repo / ".factory" / "cards" / "f12-queue-once.md").exists()
+    assert not (repo / ".softfield" / "cards" / "f12-queue-once.md").exists()
     # f49-03: the lead carries on on F10's thread with F12's note, in the same run
     assert [kind for kind, _, _ in events] == ["planner", "planner"]
     [kept] = [t for t in _rows(repo, "planner_threads") if t["card"] == "f10"]
@@ -5869,7 +5874,7 @@ def test_a_merge_in_a_planner_reply_is_applied_at_once_by_the_lead(
         ("owner", "From F12, merged here:\nA single line."),
         ("lead", "On F10."),
     ]
-    doc = (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
+    doc = (repo / ".softfield" / "cards" / "f10-one-queue.md").read_text()
     assert "### From F12: queue once (merged by the lead on " in doc and "A single line." in doc
     log = git(repo, "log", "--format=%s|%(trailers:key=Agent,valueonly)", f"{head}..main")
     merges = [line for line in log.splitlines() if "merged into" in line]
@@ -5929,7 +5934,7 @@ def test_a_merge_the_runner_cant_apply_waits_for_the_owner(repo, fake_model, mon
     _planner_replies(monkeypatch, [f"Yes.\n```json\n{block}\n```"], [])
     _run(repo)
     assert "merged into" not in git(repo, "log", "--format=%s", f"{head}..main")
-    assert (repo / ".factory" / "cards" / "f12-queue-once.md").is_file()
+    assert (repo / ".softfield" / "cards" / "f12-queue-once.md").is_file()
     [reply] = [m for m in _messages(repo) if m["author"] == "lead"]
     assert json.loads(str(reply["proposals"])) == [MERGE_F12]
     # F41 D2: the text folds under the points, so the runner's word is a point, not text
@@ -5939,7 +5944,7 @@ def test_a_merge_the_runner_cant_apply_waits_for_the_owner(repo, fake_model, mon
     assert "F12 has tickets" not in str(reply["text"])
 
 
-F12_DOC = ".factory/cards/f12-queue-once.md"
+F12_DOC = ".softfield/cards/f12-queue-once.md"
 
 
 def _titled(title: object) -> str:
@@ -5968,7 +5973,7 @@ def test_a_title_in_the_reply_names_an_idea_card_in_a_commit_of_its_own(
     assert doc == before.replace(
         "# Milestone F12: queue once\n", "# Milestone F12: The queue, shown once\n"
     )
-    assert sorted(p.name for p in (repo / ".factory" / "cards").glob("f12*")) == [
+    assert sorted(p.name for p in (repo / ".softfield" / "cards").glob("f12*")) == [
         "f12-queue-once.md"
     ]
     [commit] = _naming_commits(repo, head)
@@ -5977,7 +5982,7 @@ def test_a_title_in_the_reply_names_an_idea_card_in_a_commit_of_its_own(
     assert git(repo, "show", "--format=", "--name-only", sha).split() == [F12_DOC]
     assert git(repo, "show", "--format=", "--numstat", sha).split() == ["1", "1", F12_DOC]
     # No other card moved
-    cards = git(repo, "diff", "--name-only", head, "main", "--", ".factory/cards")
+    cards = git(repo, "diff", "--name-only", head, "main", "--", ".softfield/cards")
     assert cards.split() == [F12_DOC]
     [row] = [m for m in _rows(repo, "milestones") if m["key"] == "f12-queue-once"]
     assert row["title"] == "The queue, shown once"
@@ -6033,7 +6038,7 @@ def test_a_title_on_the_general_thread_or_a_card_without_a_doc_is_ignored(
     _planner_replies(monkeypatch, [_titled("A title"), _titled("A title")], [])
     _run(repo)
     assert _naming_commits(repo, head) == []
-    assert git(repo, "diff", "--name-only", head, "main", "--", ".factory/cards") == ""
+    assert git(repo, "diff", "--name-only", head, "main", "--", ".softfield/cards") == ""
 
 
 def test_a_reply_that_merges_its_card_away_names_nothing(repo, fake_model, monkeypatch):
@@ -6049,7 +6054,7 @@ def test_a_reply_that_merges_its_card_away_names_nothing(repo, fake_model, monke
     assert _naming_commits(repo, head) == []
     assert (
         "# Milestone F10: one queue\n"
-        in (repo / ".factory" / "cards" / "f10-one-queue.md").read_text()
+        in (repo / ".softfield" / "cards" / "f10-one-queue.md").read_text()
     )
 
 
@@ -6191,7 +6196,7 @@ def test_a_parked_checkpoint_survives_a_restart_as_a_row_and_runs_after_its_rese
 def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_clock):
     """f8 D3: a state.json from before f8-03 keeps its parked checkpoint, escalation and
     direction as queue rows; a ticket parked for a limit stays where it is."""
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-09-stuck")
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-09-stuck")
     _add_task(repo, "m1-02-thing")
     later = (THURSDAY + timedelta(hours=1)).isoformat()
     state_path = _config(repo).runs_dir / "state.json"
@@ -6204,7 +6209,7 @@ def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_cloc
             "session_id": "",
             "resets_at": later,
             "milestone": "m1",
-            "out": ".factory/var/runs/x/checkpoint-1.md",
+            "out": ".softfield/var/runs/x/checkpoint-1.md",
         },
         "escalation:m1-09-stuck": {
             "kind": "escalation",
@@ -6212,7 +6217,7 @@ def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_cloc
             "session_id": "",
             "resets_at": later,
             "milestone": "m1",
-            "logs": ".factory/var/runs/x/m1-09-stuck",
+            "logs": ".softfield/var/runs/x/m1-09-stuck",
             "reason": "gates failed 3x (last: tests)",
         },
         "m1-02-thing": {
@@ -6220,7 +6225,7 @@ def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_cloc
             "branch": "task/m1-02-thing",
             "session_id": "",
             "resets_at": later,
-            "logs": ".factory/var/runs/x/m1-02-thing",
+            "logs": ".softfield/var/runs/x/m1-02-thing",
             "gate": "tests",
             "output": "1 failed",
             "gate_failures": ["ruff", "tests"],
@@ -6246,9 +6251,9 @@ def test_an_old_state_files_parked_support_jobs_become_rows_once(repo, fake_cloc
     assert all(r["not_before"] is None and r["done"] is None for r in rows.values())
     after = _state(repo)
     assert set(after.parked) == {"m1-05-lead"}
-    assert after.queued["escalation:m1-09-stuck"]["logs"] == ".factory/var/runs/x/m1-09-stuck"
+    assert after.queued["escalation:m1-09-stuck"]["logs"] == ".softfield/var/runs/x/m1-09-stuck"
     assert after.queued["direction:m1-02-thing"]["gate_failures"] == ["ruff", "tests"]
-    assert after.queued["checkpoint:m1"]["out"] == ".factory/var/runs/x/checkpoint-1.md"
+    assert after.queued["checkpoint:m1"]["out"] == ".softfield/var/runs/x/checkpoint-1.md"
 
 
 def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_are_acted_on(
@@ -6324,7 +6329,7 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     assert (found[key]["route"], found[key]["agent"]) == ("local", "copilot-auto")
     assert found[f"m1-C{checkpoint['id']}-2"]["route"] == "backlog"
     # The fix ticket was written, queued and done by a developer
-    fixed = repo / ".factory" / "tasks" / "done" / "m1-03-fix-thing.md"
+    fixed = repo / ".softfield" / "tasks" / "done" / "m1-03-fix-thing.md"
     ticket = parse_task(fixed, 150)
     assert (ticket.finding, ticket.agent, ticket.files) == (key, "developer", ("coucou/part1.py",))
     assert ticket.tests == ("tests/unit/test_thing.py",)  # those of the ticket at fault
@@ -6490,8 +6495,8 @@ def test_without_a_stand_in_the_next_batch_leaves_the_checkpoint_parked_for_clau
 def _a_due_review_and_two_tickets(repo: Path) -> None:
     """F9's tickets are all done, so its review is due; F10 has two developer tickets."""
     _two_milestones(repo)
-    git(repo, "mv", ".factory/tasks/ready/f9-02-last.md", ".factory/tasks/done/f9-02-last.md")
-    path = write_task(repo / ".factory" / "tasks" / "ready", "f10-02-after")
+    git(repo, "mv", ".softfield/tasks/ready/f9-02-last.md", ".softfield/tasks/done/f9-02-last.md")
+    path = write_task(repo / ".softfield" / "tasks" / "ready", "f10-02-after")
     path.write_text(path.read_text().replace("milestone: 1\n", "milestone: f10\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "f9 done")
@@ -6608,7 +6613,7 @@ def test_a_review_parked_for_the_owners_share_keeps_no_lead_work_from_claude(rep
 
 
 def _source_ticket(repo: Path) -> None:
-    write_task(repo / ".factory" / "tasks" / "done", "m1-01-thing")
+    write_task(repo / ".softfield" / "tasks" / "done", "m1-01-thing")
 
 
 @pytest.mark.parametrize(
@@ -6637,7 +6642,7 @@ def test_a_fix_ticket_from_a_read_only_finding_stays_a_developer_ticket_in_the_r
         ticket="m1-01-thing",
     )
     path = loop.fix_ticket(repo, "m1", {"m1-C7-1": finding}, "copilot-auto")
-    assert path is not None and path.parent == repo / ".factory" / "tasks" / "ready"
+    assert path is not None and path.parent == repo / ".softfield" / "tasks" / "ready"
     task = parse_task(path, 150)
     assert (task.agent, task.finding, task.milestone, task.depends_on) == (
         "developer",
@@ -6786,12 +6791,12 @@ def _finding_on(ticket: str, file: str = "") -> Finding:
 def test_a_fix_ticket_belongs_to_the_milestone_at_fault(repo, status, expected):
     """2026-10-03: f4-21 … f4-23 fixed f3-03's findings but were filed under F4, the running
     checkpoint's milestone. A signed-off milestone takes no more tickets: the running one does."""
-    source = write_task(repo / ".factory" / "tasks" / "done", "f3-03-thing")
+    source = write_task(repo / ".softfield" / "tasks" / "done", "f3-03-thing")
     source.write_text(source.read_text().replace("milestone: 1", "milestone: f3"))
-    write_task(repo / ".factory" / "tasks" / "done", "f3-07-other")
-    write_task(repo / ".factory" / "tasks" / "ready", "f4-12-mine")
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f3.md").write_text(f"# F3\n\n> **Status: {status}**\n")
+    write_task(repo / ".softfield" / "tasks" / "done", "f3-07-other")
+    write_task(repo / ".softfield" / "tasks" / "ready", "f4-12-mine")
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f3.md").write_text(f"# F3\n\n> **Status: {status}**\n")
     path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("f3-03-thing")}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
@@ -6811,9 +6816,9 @@ def test_a_fix_ticket_is_named_by_the_ticket_at_fault(repo, at_fault, kind, expe
     """F171 D4: f1-14-fix-the-been-test-does was named by the finding's first four words,
     cut mid-phrase. It is named by the ticket at fault: four words at most, `-tests` on a test
     fix."""
-    source = write_task(repo / ".factory" / "tasks" / "done", at_fault)
+    source = write_task(repo / ".softfield" / "tasks" / "done", at_fault)
     source.write_text(source.read_text().replace("milestone: 1", "milestone: f3"))
-    write_task(repo / ".factory" / "tasks" / "done", "f3-07-other")
+    write_task(repo / ".softfield" / "tasks" / "done", "f3-07-other")
     finding = replace(_finding_on(at_fault), kind=kind)
     path = loop.fix_ticket(repo, "f3", {"f3-C7-1": finding}, "copilot-auto")
     assert path is not None
@@ -6825,13 +6830,13 @@ def test_a_fix_ticket_is_named_by_the_ticket_at_fault(repo, at_fault, kind, expe
 def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
     """A bug's fix is a bug too (`bug-<nn>-…`, `milestone: bugs`), whatever milestone's
     checkpoint found it: bugs are never signed off."""
-    source = write_task(repo / ".factory" / "tasks" / "done", "bug-03-thing")
+    source = write_task(repo / ".softfield" / "tasks" / "done", "bug-03-thing")
     source.write_text(
         source.read_text().replace(
             "milestone: 1\n", "milestone: bugs\narea: product\npriority: 7\n"
         )
     )
-    write_task(repo / ".factory" / "tasks" / "ready", "f4-12-mine")
+    write_task(repo / ".softfield" / "tasks" / "ready", "f4-12-mine")
     path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("bug-03-thing")}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
@@ -6849,9 +6854,9 @@ def test_a_fix_ticket_on_a_bug_is_a_bug_with_its_area_and_priority(repo):
 def test_a_fix_ticket_on_a_feature_ticket_drops_its_old_priority(repo):
     """F173: a done feature ticket may still carry a `priority:` from before; its fix runs in
     the card's place, so it gets none and passes pre-flight."""
-    source = write_task(repo / ".factory" / "tasks" / "done", "f4-03-thing")
+    source = write_task(repo / ".softfield" / "tasks" / "done", "f4-03-thing")
     source.write_text(source.read_text().replace("milestone: 1\n", "milestone: f4\npriority: 3\n"))
-    write_task(repo / ".factory" / "tasks" / "ready", "f4-12-mine")
+    write_task(repo / ".softfield" / "tasks" / "ready", "f4-12-mine")
     path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("f4-03-thing")}, "copilot-auto")
     assert path is not None
     task = parse_task(path, 150)
@@ -6864,14 +6869,14 @@ def test_a_fix_ticket_on_a_feature_ticket_drops_its_old_priority(repo):
 
 def test_a_fix_ticket_on_a_fix_ticket_is_the_leads(repo):
     """f68-08: a ticket at fault with `finding:` was a fix; one without stays a developer's."""
-    done = repo / ".factory" / "tasks" / "done"
+    done = repo / ".softfield" / "tasks" / "done"
     fixed = write_task(done, "f4-03-fixed")
     fixed.write_text(
         fixed.read_text().replace("milestone: 1\n", "milestone: f4\nfinding: f4-C1-1\n")
     )
     plain = write_task(done, "f4-04-plain")
     plain.write_text(plain.read_text().replace("milestone: 1\n", "milestone: f4\n"))
-    write_task(repo / ".factory" / "tasks" / "ready", "f4-12-mine")
+    write_task(repo / ".softfield" / "tasks" / "ready", "f4-12-mine")
     path = loop.fix_ticket(repo, "f4", {"f4-C7-1": _finding_on("f4-03-fixed")}, "copilot-auto")
     assert path is not None and parse_task(path, 150).agent == "lead"
     path = loop.fix_ticket(repo, "f4", {"f4-C7-2": _finding_on("f4-04-plain")}, "copilot-auto")
@@ -6934,7 +6939,7 @@ def test_three_weak_tests_and_one_bug_on_one_ticket_give_two_tickets(repo):
     assert set(paths) == {"m1-C7-1", "m1-C7-2", "m1-C7-3", "m1-C7-4"}  # never the nit
     tests_path, code_path = paths["m1-C7-1"], paths["m1-C7-2"]
     assert paths["m1-C7-3"] == paths["m1-C7-4"] == tests_path != code_path
-    assert sorted(p.name for p in (repo / ".factory" / "tasks" / "ready").glob("*.md")) == sorted(
+    assert sorted(p.name for p in (repo / ".softfield" / "tasks" / "ready").glob("*.md")) == sorted(
         [tests_path.name, code_path.name]
     )
     tests = parse_task(tests_path, 150)
@@ -7022,7 +7027,7 @@ def test_every_ticket_at_the_reserve_holds_the_run_which_says_what_waits_once(
     assert seen == [line, line, line]  # three polls: the queue didn't return
     assert jobs == [] and report.tasks == [] and not report.idle  # and it spent no Claude
     assert capsys.readouterr().out.count(line) == 1
-    assert not (repo / ".factory" / "sessions").exists()
+    assert not (repo / ".softfield" / "sessions").exists()
 
 
 def test_the_reserve_switch_turned_on_while_the_run_is_idle_runs_the_tickets(
@@ -7070,7 +7075,7 @@ def test_the_weeks_reset_while_the_run_is_idle_runs_the_ticket_by_itself(
 def test_with_nothing_ready_the_run_holds_and_picks_a_ticket_that_appears(
     repo, fake_model, fake_clock, monkeypatch, capsys
 ):
-    """An approved plan's tickets reach .factory/tasks/ready/ while the run is up."""
+    """An approved plan's tickets reach .softfield/tasks/ready/ while the run is up."""
     fake_model.append(_implement)
     seen: list[object] = []
 
@@ -7127,8 +7132,8 @@ def test_the_idle_line_is_logged_again_when_what_it_waits_for_changes(
 
 
 def test_tickets_behind_a_blocked_one_are_named_in_the_idle_line(repo, fake_clock, monkeypatch):
-    write_task(repo / ".factory" / "tasks" / "blocked", "m1-01-thing")
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-02-other", "[m1-01-thing]")
+    write_task(repo / ".softfield" / "tasks" / "blocked", "m1-01-thing")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-02-other", "[m1-01-thing]")
     _add_task(repo, "m1-03-more", "[m1-02-other]")
     seen: list[object] = []
     _idles(monkeypatch, lambda: seen.append(_says(repo)))
@@ -7170,7 +7175,7 @@ def test_an_idle_run_with_work_done_ends_its_session_at_midnight_to_report_it(
     report = _run(repo)
     assert report.idle and report.review is None
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
-    assert len(list((repo / ".factory" / "sessions").glob("*.md"))) == 1
+    assert len(list((repo / ".softfield" / "sessions").glob("*.md"))) == 1
 
 
 def test_a_ctrl_c_while_idle_ends_the_run_with_its_session_report(
@@ -7181,7 +7186,7 @@ def test_a_ctrl_c_while_idle_ends_the_run_with_its_session_report(
     report = _run(repo)
     assert not report.idle and report.review is None
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
-    assert len(list((repo / ".factory" / "sessions").glob("*.md"))) == 1
+    assert len(list((repo / ".softfield" / "sessions").glob("*.md"))) == 1
     assert "[runner] Ended by you." in capsys.readouterr().out
     assert _rows(repo, "runs")[-1]["ended"] is not None
 
@@ -7209,7 +7214,7 @@ def test_a_ctrl_c_between_two_idle_polls_ends_the_run_with_its_session_report_to
     report = _run(repo)
     assert not report.idle and not report.restart
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
-    assert len(list((repo / ".factory" / "sessions").glob("*.md"))) == 1
+    assert len(list((repo / ".softfield" / "sessions").glob("*.md"))) == 1
     assert "[runner] Ended by you." in capsys.readouterr().out
     assert _rows(repo, "runs")[-1]["ended"] is not None
 
@@ -7220,7 +7225,7 @@ def test_a_ctrl_c_while_the_run_isnt_idle_is_still_an_interrupt(repo, fake_clock
     _ctrl_c_at_the_owners_requests(monkeypatch, lambda: True)
     with pytest.raises(KeyboardInterrupt):
         _run(repo)
-    assert not (repo / ".factory" / "sessions").exists()
+    assert not (repo / ".softfield" / "sessions").exists()
     loop.end_open_runs()
     assert _rows(repo, "runs")[-1]["verdict"] == "interrupted"
 
@@ -7539,8 +7544,8 @@ def test_end_to_end_tests_run_only_where_the_project_names_them(tmp_path, monkey
 
     monkeypatch.setattr(loop, "run_bounded", bounded)
     assert loop.run_e2e(tmp_path, 60) == GateResult("e2e", True, loop.NO_E2E)
-    (tmp_path / ".factory").mkdir()
-    (tmp_path / ".factory/project.toml").write_text('[checks]\ne2e = ["tests/e2e"]\n')
+    (tmp_path / ".softfield").mkdir()
+    (tmp_path / ".softfield/project.toml").write_text('[checks]\ne2e = ["tests/e2e"]\n')
     assert loop.run_e2e(tmp_path, 60).ok
     assert ran == [
         [

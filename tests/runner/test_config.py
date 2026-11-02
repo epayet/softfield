@@ -33,8 +33,8 @@ usage_limit_backoff_max = 2
 
 
 def _repo(tmp_path, extra=""):
-    (tmp_path / ".factory").mkdir()
-    (tmp_path / ".factory" / "project.toml").write_text(MINIMAL_TOML + extra, encoding="utf-8")
+    (tmp_path / ".softfield").mkdir()
+    (tmp_path / ".softfield" / "project.toml").write_text(MINIMAL_TOML + extra, encoding="utf-8")
     return tmp_path
 
 
@@ -61,7 +61,7 @@ def test_a_review_has_its_own_timeout_or_claudes(tmp_path, machine):
     own limit; without one it keeps Claude's."""
     repo = _repo(tmp_path)
     assert load_config(repo).review_timeout == 1
-    toml = repo / ".factory" / "project.toml"
+    toml = repo / ".softfield" / "project.toml"
     toml.write_text(MINIMAL_TOML.replace("gate = 1", "gate = 1\nreview = 7"), encoding="utf-8")
     assert (load_config(repo).claude_timeout, load_config(repo).review_timeout) == (1, 7)
     assert load_config(REPO).review_timeout == 3600
@@ -75,7 +75,7 @@ def test_claudes_reserve_is_read_from_the_toml(tmp_path, machine):
     """ADR 15 item 4: 30% of Claude's week is kept for the lead's support roles."""
     assert load_config(REPO).claude_reserve == 0.3
     repo = _repo(tmp_path, "")
-    toml = repo / ".factory" / "project.toml"
+    toml = repo / ".softfield" / "project.toml"
     toml.write_text(toml.read_text().replace("reserve = 0.3", "reserve = 0.4"))
     assert load_config(repo).claude_reserve == 0.4
 
@@ -87,7 +87,7 @@ def test_the_owners_share_of_the_5_hour_window_and_the_developers_cap_are_read(t
     assert (cfg.five_hour_reserve, cfg.developer_five_hour_cap) == (0.25, 0.5)
     extra = "five_hour_reserve = 0.2\ndeveloper_five_hour_cap = 0.4\n"
     repo = _repo(tmp_path, "")
-    toml = repo / ".factory" / "project.toml"
+    toml = repo / ".softfield" / "project.toml"
     toml.write_text(toml.read_text().replace("[claude]\n", "[claude]\n" + extra))
     cfg = load_config(repo)
     assert (cfg.five_hour_reserve, cfg.developer_five_hour_cap) == (0.2, 0.4)
@@ -97,7 +97,7 @@ def test_the_first_lead_agents_limit_is_read_and_is_0_unset(tmp_path, machine):
     """ADR 32 item 1 (F153 D1): with no setting, no lead ticket goes to the first agent."""
     assert load_config(REPO).lead_first_up_to == 0
     repo = _repo(tmp_path, "")
-    toml = repo / ".factory" / "project.toml"
+    toml = repo / ".softfield" / "project.toml"
     toml.write_text(toml.read_text().replace("[claude]\n", "[claude]\nlead_first_up_to = 4\n"))
     assert load_config(repo).lead_first_up_to == 4
     toml.write_text(toml.read_text().replace("= 4\n", '= "4"\n'))
@@ -190,7 +190,7 @@ def test_security_tests_and_the_leads_docs_are_protected():
         "tests/runner/test_report.py",
         "tests/factory_dashboard/test_requests.py",
         "factory_dashboard/requests.py",
-        ".factory/project.toml",
+        ".softfield/project.toml",
         "docs/agents/lead.md",
         "docs/agents/owner.md",
         "docs/agents/developer.md",

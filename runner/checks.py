@@ -17,9 +17,12 @@ from runner.procs import run_bounded
 # Commits that touch only these skip the hook: they can't break a check.
 HOOK_SKIPS = (
     "docs/",
-    *(f".factory/{d}" for d in ("tasks/", "cards/", "adr/", "planning/", "reviews/", "sessions/")),
-    ".factory/seed.md",
-    ".factory/project.md",
+    *(
+        f".softfield/{d}"
+        for d in ("tasks/", "cards/", "adr/", "planning/", "reviews/", "sessions/")
+    ),
+    ".softfield/seed.md",
+    ".softfield/project.md",
 )
 _OUTPUT_LIMIT = 4000
 # Set by git for hooks; a test's git subprocess would inherit them and write into the

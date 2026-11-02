@@ -1,7 +1,7 @@
 """``POST /requests``: the dashboard asks the runner for something (ADR 18 items 2 and 3, f5 D3).
 
 - Its only write: one ``owner_requests`` row, which the runner applies as its console command
-  would (``runner/requests.py``). It changes nothing else, and never git or ``.factory/tasks/``.
+  would (``runner/requests.py``). It changes nothing else, and never git or ``.softfield/tasks/``.
 - The guard: htmx's ``HX-Request`` header, and an ``Origin`` (else a ``Referer``) whose host is
   the request's own, so a website open in the owner's browser can't post here. Anything else
   is 403, before the database is opened for writing.

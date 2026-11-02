@@ -1,19 +1,19 @@
 # AGENTS.md: rules for every coding agent
 
 **Who are you?**
-- **Developer** (running a task from `.factory/tasks/`): this file plus `docs/agents/developer.md` (both are in your prompt already).
-- **Lead** (planning, writing tickets, escalations, review): this file plus `.factory/project.md`, and Softfield's `docs/agents/owner.md` (the owner's preferences, first) and `docs/agents/lead.md`, in `~/.local/share/softfield/live/`.
+- **Developer** (running a task from `.softfield/tasks/`): this file plus `docs/agents/developer.md` (both are in your prompt already).
+- **Lead** (planning, writing tickets, escalations, review): this file plus `.softfield/project.md`, and Softfield's `docs/agents/owner.md` (the owner's preferences, first) and `docs/agents/lead.md`, in `~/.local/share/softfield/live/`.
 
 When a task file and this file disagree, stop and write `BLOCKED.md`.
 
 ## Scope
 1. Start from your task's `files:` and `tests:`. Change other files only when the goal needs it, and no "while I'm here" fixes.
-2. Never edit a **protected path** (`.factory/protected-paths.txt`). The gates reject it.
+2. Never edit a **protected path** (`.softfield/protected-paths.txt`). The gates reject it.
 3. Add **no dependencies** unless the task explicitly says so.
-4. Build only against ADRs whose status is **Accepted** (`.factory/adr/`). If a task relies on a Proposed ADR, write `BLOCKED.md`.
+4. Build only against ADRs whose status is **Accepted** (`.softfield/adr/`). If a task relies on a Proposed ADR, write `BLOCKED.md`.
 
 ## Code and tests
-5. The project's own code rules are in `.factory/project.md`.
+5. The project's own code rules are in `.softfield/project.md`.
 6. Write tests for what the task's "Done when" asks. They must fail without your change and pass with it.
 7. Change an existing test only when the task changes that behaviour. Never skip, xfail or delete a test to make it pass.
 8. A task is done when its `tests:` pass **and** `softfield check-all` passes.

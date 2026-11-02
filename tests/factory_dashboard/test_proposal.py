@@ -42,7 +42,7 @@ _REVIEW_MOCKUP: dict[str, Any] = {
     "id": "mockup",
     "kind": "mockup",
     "title": "The desk, drawn",
-    "path": ".factory/cards/f6-mockup/index.html",
+    "path": ".softfield/cards/f6-mockup/index.html",
     "key_points": [],
 }
 _REVIEW_SEED: dict[str, Any] = {
@@ -131,7 +131,7 @@ def test_approve_plan_waits_for_the_cards_adr_on_main(planning, db_path, serve, 
         return found[0]
 
     assert " disabled" in approve()
-    adr = checkout / ".factory" / "adr" / "20-planning-room.md"
+    adr = checkout / ".softfield" / "adr" / "20-planning-room.md"
     adr.parent.mkdir(parents=True)
     adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
     assert " disabled" in approve()
@@ -142,7 +142,7 @@ def test_approve_plan_waits_for_the_cards_adr_on_main(planning, db_path, serve, 
 def test_an_open_accept_adr_enables_approve_plan_and_says_so(planning, db_path, serve, checkout):
     """An open accept_adr for the card's ADR counts as accepted: the runner applies it first."""
     _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR, _REVIEW_PLAN))
-    adr = checkout / ".factory" / "adr" / "20-planning-room.md"
+    adr = checkout / ".softfield" / "adr" / "20-planning-room.md"
     adr.parent.mkdir(parents=True)
     adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
     client = serve()
@@ -213,7 +213,7 @@ def test_an_approved_merge_leaves_the_desk(planning, db_path, db):
 @pytest.mark.parametrize("gone", ["f9", "f7"])
 def test_a_merge_whose_card_left_main_asks_nothing(planning, db_path, db, checkout, gone):
     """F9 or F7 was merged elsewhere since the lead proposed it: nothing is left to ask."""
-    docs = checkout / ".factory" / "cards"
+    docs = checkout / ".softfield" / "cards"
     docs.mkdir(parents=True)
     for key in {"f9", "f7"} - {gone}:
         (docs / f"{key}-x.md").write_text(f"# Milestone {key.upper()}: x\n")
@@ -248,12 +248,12 @@ def test_reject_posts_a_reject_and_says_what_it_takes(
 
 def _f6_adr_plan_merge(db_path: Path, planning: int, checkout: Path) -> None:
     """F6's thread lists an ADR (Proposed on main), a plan and a merge into it."""
-    adr = checkout / ".factory" / "adr" / "20-planning-room.md"
+    adr = checkout / ".softfield" / "adr" / "20-planning-room.md"
     adr.parent.mkdir(parents=True)
     adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
     for key in ("f6", "f9"):  # a merge whose cards left main asks nothing
-        (checkout / ".factory" / "cards").mkdir(exist_ok=True)
-        (checkout / ".factory" / "cards" / f"{key}-x.md").write_text(f"# Milestone {key}: x\n")
+        (checkout / ".softfield" / "cards").mkdir(exist_ok=True)
+        (checkout / ".softfield" / "cards" / f"{key}-x.md").write_text(f"# Milestone {key}: x\n")
     merge = {**_REVIEW_MERGE, "into": "f6"}
     _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_PLAN, merge, _REVIEW_ADR))
 
@@ -262,8 +262,8 @@ def _f6_mockup_review(db_path: Path, planning: int, checkout: Path) -> None:
     """F6's thread lists a mock-up proposal whose file is on ``plan/f6``."""
     git(checkout, "checkout", "-q", "-b", "plan/f6")
     for rel, text in (
-        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
-        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+        (".softfield/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".softfield/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
     ):
         (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
         (checkout / rel).write_text(text)
@@ -365,9 +365,9 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     ``plan/f6`` and refuses any path outside a ``-mockup/`` folder, even a draft beside it."""
     git(checkout, "checkout", "-q", "-b", "plan/f6")
     for rel, text in (
-        (".factory/cards/f6-mockup/index.html", "<p>the desk</p>"),
-        (".factory/cards/f6-planning-room.md", "# F6"),
-        (".factory/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
+        (".softfield/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".softfield/cards/f6-planning-room.md", "# F6"),
+        (".softfield/adr/20-planning-room.md", ADR_ON_MAIN.format(status="Proposed")),
     ):
         (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
         (checkout / rel).write_text(text)
@@ -378,17 +378,17 @@ def test_the_mockup_route_serves_the_plan_branchs_mockup_and_nothing_else(
     client = serve()
     html = _review_page(client, "/planning/f6/proposals/mockup")
     frame = re.search(r'<iframe id="mockup" src="([^"?]+)[^"]*" sandbox="allow-scripts" ', html)
-    assert frame and frame[1] == "/planning/mockups/f6/.factory/cards/f6-mockup/index.html"
+    assert frame and frame[1] == "/planning/mockups/f6/.softfield/cards/f6-mockup/index.html"
     served = client.get(frame[1])
     assert (served.status_code, served.text) == (200, "<p>the desk</p>")
     # Opened on its own, outside the sandboxed frame, it still runs in an origin of its own,
     # so its scripts can't post to /requests as the dashboard (ADR 18 item 3)
     assert served.headers["content-security-policy"] == "sandbox allow-scripts"
     for refused in (
-        ".factory/cards/f6-planning-room.md",
-        ".factory/adr/20-planning-room.md",
-        ".factory/cards/f6-mockup/missing.html",
-        ".factory/cards/f6-mockup/",
+        ".softfield/cards/f6-planning-room.md",
+        ".softfield/adr/20-planning-room.md",
+        ".softfield/cards/f6-mockup/missing.html",
+        ".softfield/cards/f6-mockup/",
     ):
         assert client.get(f"/planning/mockups/f6/{refused}").status_code == 404, refused
 
@@ -409,7 +409,7 @@ def test_a_mockups_scripts_run_in_the_review_pages_frame_as_no_one(
     can't read the page around it or post as the dashboard. Only the browser says what a
     sandbox allows, so this runs in Chromium."""
     git(checkout, "checkout", "-q", "-b", "plan/f6")
-    mockup = checkout / ".factory" / "cards" / "f6-mockup" / "index.html"
+    mockup = checkout / ".softfield" / "cards" / "f6-mockup" / "index.html"
     mockup.parent.mkdir(parents=True, exist_ok=True)
     mockup.write_text(_MOCKUP_WITH_A_SCRIPT)
     git(checkout, "add", "-A")
@@ -429,9 +429,9 @@ def test_a_mockup_gone_shows_its_message_and_no_frame(planning, db_path, serve, 
     """A mock-up whose old path ``docs/milestones/f54-mockup/moves.html`` can't be read
     from either path: the page shows the gone message with the stored path and no iframe."""
     git(checkout, "checkout", "-q", "-b", "plan/f54")
-    (checkout / ".factory/cards/f54-mockup").mkdir(parents=True, exist_ok=True)
+    (checkout / ".softfield/cards/f54-mockup").mkdir(parents=True, exist_ok=True)
     # the mock-up file was never kept: only a placeholder so the branch exists
-    (checkout / ".factory/cards/f54-mockup/.gitkeep").write_text("")
+    (checkout / ".softfield/cards/f54-mockup/.gitkeep").write_text("")
     git(checkout, "add", "-A")
     git(checkout, "commit", "-q", "-m", "drafts")
     git(checkout, "checkout", "-q", "main")
@@ -478,7 +478,7 @@ def _changes(html: str) -> list[tuple[str, str, str | None]]:
 
 def _replanned(checkout: Path) -> None:
     """main holds f7-01-a and f7-02-b; ``plan/f7`` changes a, adds c and sets b aside."""
-    a, b = ".factory/tasks/ready/f7-01-a.md", ".factory/tasks/ready/f7-02-b.md"
+    a, b = ".softfield/tasks/ready/f7-01-a.md", ".softfield/tasks/ready/f7-02-b.md"
     for rel, text in ((a, "main's a"), (b, "<b>'s text")):
         (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
         (checkout / rel).write_text(text)
@@ -486,9 +486,9 @@ def _replanned(checkout: Path) -> None:
     git(checkout, "commit", "-q", "-m", "tickets")
     git(checkout, "checkout", "-q", "-b", "plan/f7")
     (checkout / a).write_text("the replan's a")
-    (checkout / ".factory/tasks/ready/f7-03-c.md").write_text("the replan's c")
-    (checkout / ".factory/tasks/later").mkdir()
-    git(checkout, "mv", b, ".factory/tasks/later/f7-02-b.md")
+    (checkout / ".softfield/tasks/ready/f7-03-c.md").write_text("the replan's c")
+    (checkout / ".softfield/tasks/later").mkdir()
+    git(checkout, "mv", b, ".softfield/tasks/later/f7-02-b.md")
     git(checkout, "add", "-A")
     git(checkout, "commit", "-q", "-m", "replan")
     git(checkout, "checkout", "-q", "main")
@@ -501,9 +501,9 @@ def test_a_replan_shows_what_approving_changes_with_each_text(planning, db_path,
     _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_REPLAN))
     html = _review_page(serve(), "/planning/f7/proposals/replan")
     assert _changes(html) == [
-        (".factory/tasks/ready/f7-01-a.md", "changed", "the replan's a"),
-        (".factory/tasks/ready/f7-02-b.md", "set aside", "<b>'s text"),
-        (".factory/tasks/ready/f7-03-c.md", "added", "the replan's c"),
+        (".softfield/tasks/ready/f7-01-a.md", "changed", "the replan's a"),
+        (".softfield/tasks/ready/f7-02-b.md", "set aside", "<b>'s text"),
+        (".softfield/tasks/ready/f7-03-c.md", "added", "the replan's c"),
     ]
     assert "main's a" not in html and "<b>'s text" not in html  # escaped
     colours = re.findall(r'class="word"[^>]*style="[^"]*--c:\s*var\((--[\w-]+)\)', html)
@@ -532,9 +532,9 @@ def test_a_plan_with_its_branch_shows_its_changes_too(planning, db_path, serve, 
     _write(db_path, lambda conn: _review(conn, planning, "f7", _REVIEW_PLAN))
     html = _review_page(serve(), "/planning/f7/proposals/plan")
     assert [path for path, _, _ in _changes(html)] == [
-        ".factory/tasks/ready/f7-01-a.md",
-        ".factory/tasks/ready/f7-02-b.md",
-        ".factory/tasks/ready/f7-03-c.md",
+        ".softfield/tasks/ready/f7-01-a.md",
+        ".softfield/tasks/ready/f7-02-b.md",
+        ".softfield/tasks/ready/f7-03-c.md",
     ]
     assert "resumes the line" not in html
 
@@ -544,11 +544,11 @@ def test_a_plan_with_its_branch_shows_its_changes_too(planning, db_path, serve, 
 
 def test_an_old_path_mockup_shows_its_frame_and_serves_its_file(planning, db_path, serve, checkout):
     """A mock-up whose stored path is ``docs/milestones/f67-mockup/review.html`` but the file
-    lives at ``.factory/cards/f67-mockup/review.html`` on the plan branch: the frame's ``src``
+    lives at ``.softfield/cards/f67-mockup/review.html`` on the plan branch: the frame's ``src``
     ends in the resolved path, there is no gone block, and the file is served."""
     git(checkout, "checkout", "-q", "-b", "plan/f67")
-    (checkout / ".factory/cards/f67-mockup").mkdir(parents=True, exist_ok=True)
-    (checkout / ".factory/cards/f67-mockup/review.html").write_text("<p>the desk</p>")
+    (checkout / ".softfield/cards/f67-mockup").mkdir(parents=True, exist_ok=True)
+    (checkout / ".softfield/cards/f67-mockup/review.html").write_text("<p>the desk</p>")
     git(checkout, "add", "-A")
     git(checkout, "commit", "-q", "-m", "drafts")
     git(checkout, "checkout", "-q", "main")
@@ -563,7 +563,7 @@ def test_an_old_path_mockup_shows_its_frame_and_serves_its_file(planning, db_pat
     client = serve()
     html = _review_page(client, "/planning/f67/proposals/mockup")
     frame = re.search(r'<iframe id="mockup" src="([^"?]+)[^"]*" sandbox="allow-scripts" ', html)
-    assert frame and frame[1].endswith(".factory/cards/f67-mockup/review.html")
+    assert frame and frame[1].endswith(".softfield/cards/f67-mockup/review.html")
     assert 'id="mockup"' in html
     gone = re.search(r'<div class="gone">', html)
     assert gone is None
@@ -589,7 +589,7 @@ def test_a_mockup_link_is_visible_on_a_phone(page, planning, db_path, serve, che
     assert link.is_visible()
     assert link.evaluate("e => e.offsetHeight") >= 44
     href = link.get_attribute("href")
-    assert href and "/planning/mockups/f6/.factory/cards/f6-mockup/index.html" in href
+    assert href and "/planning/mockups/f6/.softfield/cards/f6-mockup/index.html" in href
     assert link.get_attribute("target") == "_blank"
     assert link.get_attribute("rel") == "noopener"
 

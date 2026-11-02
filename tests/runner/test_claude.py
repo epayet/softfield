@@ -83,9 +83,9 @@ def test_backoff_grows_and_caps():
 def test_path_scoped_write_rules_use_edit():
     """`Write(<glob>)` grants nothing to claude -p; `Edit(<glob>)` covers Write too."""
     tools = allowed_tools(
-        JobSpec("direction", "Direct.", timeout=1, edit=(".factory/var/runs/**",))
+        JobSpec("direction", "Direct.", timeout=1, edit=(".softfield/var/runs/**",))
     )
-    assert "Edit(.factory/var/runs/**)" in tools
+    assert "Edit(.softfield/var/runs/**)" in tools
     assert not [t for t in tools if t.startswith("Write")]
 
 
@@ -105,8 +105,10 @@ _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
     ("spec", "today"),
     [
         (
-            JobSpec("direction", "", 1, edit=(".factory/var/runs/**",), commands=GIT_READ_COMMANDS),
-            (*_READ, *_GIT, "Edit(.factory/var/runs/**)"),
+            JobSpec(
+                "direction", "", 1, edit=(".softfield/var/runs/**",), commands=GIT_READ_COMMANDS
+            ),
+            (*_READ, *_GIT, "Edit(.softfield/var/runs/**)"),
         ),
         (
             JobSpec(
@@ -124,9 +126,9 @@ _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
                 "",
                 1,
                 edit=(
-                    ".factory/tasks/ready/**",
+                    ".softfield/tasks/ready/**",
                     "docs/agents/developer.md",
-                    ".factory/var/runs/**",
+                    ".softfield/var/runs/**",
                 ),
                 commands=(*GIT_READ_COMMANDS, "uv run pytest"),
             ),
@@ -134,9 +136,9 @@ _GIT = ("Bash(git diff:*)", "Bash(git log:*)", "Bash(git show:*)")
                 *_READ,
                 *_GIT,
                 "Bash(uv run pytest:*)",
-                "Edit(.factory/tasks/ready/**)",
+                "Edit(.softfield/tasks/ready/**)",
                 "Edit(docs/agents/developer.md)",
-                "Edit(.factory/var/runs/**)",
+                "Edit(.softfield/var/runs/**)",
             ),
         ),
         (

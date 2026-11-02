@@ -7,7 +7,7 @@ ticket and savings per milestone, as small charts (D5). The list has no tab sinc
 (f5-17): the board links to it.
 
 ``/milestones/{key}`` is the milestone's card's page (f5-17, after
-``.factory/cards/f5-board-mockup/Card.dc.html``): its stage on the board, priority and area,
+``.softfield/cards/f5-board-mockup/Card.dc.html``): its stage on the board, priority and area,
 how far it has grown, then what the page showed before, its tickets now in run order.
 """
 
@@ -59,7 +59,7 @@ class Idea:
 
 
 def read_card_doc(repo: Path | None, thread: str) -> AboutDoc | None:
-    """The card's Outcome, Done when and note from its doc in ``.factory/cards/``;
+    """The card's Outcome, Done when and note from its doc in ``.softfield/cards/``;
     None when there is no checkout or no doc."""
     # thread imports this module
     from factory_dashboard.thread import _note

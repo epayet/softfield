@@ -701,7 +701,7 @@ def test_pressing_approve_shows_it_on_its_way_at_once_and_after_a_reload(
         ),
         ("rejected merge-f9", ["Rejected", "The runner said: rejected merge-f9"], False),
         (
-            "F9 has no card in .factory/cards/: not merged",
+            "F9 has no card in .softfield/cards/: not merged",
             ["The runner said: F9 has no card"],
             True,
         ),
@@ -798,11 +798,11 @@ def test_a_plans_ticket_rows_say_who_builds_them_and_colour_the_word(
     git(checkout, "checkout", "-q", "-b", "plan/f7")
     for rel, text in (
         (
-            ".factory/tasks/later/f7-01-a.md",
+            ".softfield/tasks/later/f7-01-a.md",
             "---\nid: f7-01-a\nagent: lead\ndifficulty: 6\n---\nx\n",
         ),
-        (".factory/tasks/later/f7-02-b.md", "---\nid: f7-02-b\ndifficulty: 2\n---\nx\n"),
-        (".factory/cards/f7-x.md", "# Milestone F7: x\n"),
+        (".softfield/tasks/later/f7-02-b.md", "---\nid: f7-02-b\ndifficulty: 2\n---\nx\n"),
+        (".softfield/cards/f7-x.md", "# Milestone F7: x\n"),
     ):
         (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
         (checkout / rel).write_text(text)
@@ -821,9 +821,9 @@ def test_a_plans_ticket_rows_say_who_builds_them_and_colour_the_word(
         for r in rows
     }
     assert found == {
-        ".factory/cards/f7-x.md": ("--good", ""),
-        ".factory/tasks/later/f7-01-a.md": ("--good", "lead · difficulty 6"),
-        ".factory/tasks/later/f7-02-b.md": ("--good", "developer · difficulty 2"),
+        ".softfield/cards/f7-x.md": ("--good", ""),
+        ".softfield/tasks/later/f7-01-a.md": ("--good", "lead · difficulty 6"),
+        ".softfield/tasks/later/f7-02-b.md": ("--good", "developer · difficulty 2"),
     }
 
 
@@ -1094,7 +1094,7 @@ def test_a_planted_card_s_thread_has_no_lever(board_db, tmp_path, thread):
 
 
 def _doc(checkout: Path, key: str, body: str) -> None:
-    cards = checkout / ".factory" / "cards"
+    cards = checkout / ".softfield" / "cards"
     cards.mkdir(parents=True, exist_ok=True)
     (cards / f"{key}.md").write_text(f"# Milestone {key}\n\n{body}", encoding="utf-8")
 
@@ -1211,11 +1211,11 @@ def _numbers_thread(db_path: Path, project_id: int, checkout: Path) -> None:
     """F42 and F50 have docs on main, F15 and F42 milestone rows with titles; two tickets and
     ADR 29. On f6's thread: the runner's message, the owner's, the lead's plain reply, then its
     latest with ``_NUMBERS`` in its text and in one point's title, answer and action."""
-    cards = checkout / ".factory" / "cards"
+    cards = checkout / ".softfield" / "cards"
     cards.mkdir(parents=True)
     (cards / "f42-the-space.md").write_text("# Milestone F42: The space\n")
     (cards / "f50-on-main.md").write_text("# Milestone F50: On main\n")
-    adrs = checkout / ".factory" / "adr"
+    adrs = checkout / ".softfield" / "adr"
     adrs.mkdir(parents=True)
     (adrs / "29-the-lead-looks.md").write_text(f"# ADR 29: {_ADR_29}\n\n## Status\nAccepted\n")
 

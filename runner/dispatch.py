@@ -1,7 +1,7 @@
 """Which job runs next, and why (ADR 22 item 2, f8 D2). No AI in it.
 
 Pure: the queued jobs, the ready tickets, Claude's windows and the time are parameters; the
-callers read the metrics database, ``.factory/tasks/`` and ``state.json``.
+callers read the metrics database, ``.softfield/tasks/`` and ``state.json``.
 
 - A ticket whose finished attempt waits only for its gates (a regate) goes right after the
   planner's jobs: its gates need no model, and main moving on would throw its work away.

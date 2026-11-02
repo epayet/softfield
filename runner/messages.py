@@ -59,7 +59,7 @@ def merge_message(
         *_changes(changes),
         "",
         "Defined by: " + ", ".join(task.tests) + " (all gates green)",
-        f"Spec: .factory/tasks/done/{task.path.name}",
+        f"Spec: .softfield/tasks/done/{task.path.name}",
     ]
     return "\n".join(lines)
 
@@ -77,7 +77,7 @@ def finish_message(task: Task, model: str, changes: Sequence[FileChange]) -> str
         "Changed:",
         *_changes(changes),
         "",
-        f"Spec: .factory/tasks/done/{task.path.name}",
+        f"Spec: .softfield/tasks/done/{task.path.name}",
     ]
     return "\n".join(lines)
 
@@ -90,7 +90,7 @@ def done_message(task_id: str, rec: TaskRecord) -> str:
             _subject(f"runner: {task_id} done, merged as {rec.commit[:9]}"),
             "",
             f"{attempts}, {_duration(rec.model_s + rec.gates_s)} in all;"
-            f" moved the spec to .factory/tasks/done/ with its result footer.",
+            f" moved the spec to .softfield/tasks/done/ with its result footer.",
         ]
     )
 

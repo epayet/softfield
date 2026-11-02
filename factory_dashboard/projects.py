@@ -104,7 +104,7 @@ def project_page(
     )
 
 
-# --- the Projects page (ADR 30 item 6, after .factory/cards/projects-page-mockup/) ---
+# --- the Projects page (ADR 30 item 6, after .softfield/cards/projects-page-mockup/) ---
 
 
 @dataclass(frozen=True)
@@ -114,7 +114,7 @@ class ProjectCard:
     name: str
     description: str | None
     place: int
-    ready: int  # tickets in its .factory/tasks/ready/, read from its repo
+    ready: int  # tickets in its .softfield/tasks/ready/, read from its repo
     building: int
     ideas: int
     done: int
@@ -133,7 +133,7 @@ class NowJob:
 
 
 def _ready(repo: str | None) -> int:
-    folder = Path(repo) / ".factory" / "tasks" / "ready" if repo else None
+    folder = Path(repo) / ".softfield" / "tasks" / "ready" if repo else None
     return len(list(folder.glob("*.md"))) if folder and folder.is_dir() else 0
 
 

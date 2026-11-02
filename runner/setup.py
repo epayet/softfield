@@ -33,16 +33,16 @@ FACTORY_DIRS = (
 # What `init` writes, from `templates/`: (template, path in the project). An existing file
 # stays as it is: the setup session merges what it needs (docs/bootstrap.md).
 FILES = (
-    ("project.toml", ".factory/project.toml"),
-    ("protected-paths.txt", ".factory/protected-paths.txt"),
-    ("project.md", ".factory/project.md"),
-    ("pre-commit", ".factory/hooks/pre-commit"),
+    ("project.toml", ".softfield/project.toml"),
+    ("protected-paths.txt", ".softfield/protected-paths.txt"),
+    ("project.md", ".softfield/project.md"),
+    ("pre-commit", ".softfield/hooks/pre-commit"),
     ("AGENTS.md", "AGENTS.md"),
     ("CLAUDE.md", "CLAUDE.md"),
     ("opencode.json", "opencode.json"),
     ("developer.md", "docs/agents/developer.md"),
 )
-IGNORED = (".factory/var/", "BLOCKED.md")
+IGNORED = (".softfield/var/", "BLOCKED.md")
 _STATUS_RE = re.compile(r"^- \*\*Status:\*\*\s*(\w+)", re.MULTILINE)
 
 
@@ -77,9 +77,9 @@ def init(folder: Path, db: Path) -> tuple[str, list[str]]:
     name = folder.name
     written = []
     for directory in FACTORY_DIRS:
-        (folder / ".factory" / directory).mkdir(parents=True, exist_ok=True)
-        keep = folder / ".factory" / directory / ".gitkeep"
-        if not any((folder / ".factory" / directory).iterdir()):
+        (folder / ".softfield" / directory).mkdir(parents=True, exist_ok=True)
+        keep = folder / ".softfield" / directory / ".gitkeep"
+        if not any((folder / ".softfield" / directory).iterdir()):
             keep.write_text("")
     for template, rel in FILES:
         path = folder / rel
@@ -89,14 +89,14 @@ def init(folder: Path, db: Path) -> tuple[str, list[str]]:
         text = (TEMPLATES / template).read_text(encoding="utf-8")
         path.write_text(text.replace("{name}", name).replace("{origin}", origin), encoding="utf-8")
         written.append(rel)
-    (folder / ".factory/hooks/pre-commit").chmod(0o755)
+    (folder / ".softfield/hooks/pre-commit").chmod(0o755)
     ignore = folder / ".gitignore"
     lines = ignore.read_text(encoding="utf-8").splitlines() if ignore.is_file() else []
     missing = [line for line in IGNORED if line not in lines]
     if missing:
         ignore.write_text("\n".join([*lines, *missing]) + "\n", encoding="utf-8")
         written.append(".gitignore")
-    git.run("config", "core.hooksPath", ".factory/hooks")
+    git.run("config", "core.hooksPath", ".softfield/hooks")
     git.run("add", "-A")
     git.run(
         "-c", "user.name=Softfield runner", "-c", "user.email=runner@softfield.invalid",
@@ -134,7 +134,7 @@ def publish_cards(folder: Path, name: str, db: Path) -> list[str]:
     try:
         project = metrics.upsert_project(conn, name, repo=str(folder))
         published = []
-        for path in sorted((folder / ".factory" / "cards").glob("*.md")):
+        for path in sorted((folder / ".softfield" / "cards").glob("*.md")):
             try:
                 key = milestone_key(path.stem)
                 text = path.read_text(encoding="utf-8")
@@ -264,7 +264,7 @@ def _phone_finding() -> Finding:
 
 
 def _adr_00(folder: Path) -> Path | None:
-    found = sorted((folder / ".factory" / "adr").glob("00-*.md"))
+    found = sorted((folder / ".softfield" / "adr").glob("00-*.md"))
     return found[0] if found else None
 
 
@@ -276,7 +276,7 @@ def _adr_00_finding(folder: Path) -> Finding:
     A status written Accepted by hand (the setup session must not) doesn't count."""
     adr = _adr_00(folder)
     if adr is None:
-        return Finding(False, "ADR 00 accepted: none in .factory/adr/")
+        return Finding(False, "ADR 00 accepted: none in .softfield/adr/")
     status = _STATUS_RE.search(adr.read_text(encoding="utf-8"))
     if status is None or status[1] != "Accepted":
         return Finding(False, "ADR 00 accepted: it waits for your yes")
@@ -291,7 +291,7 @@ def _adr_00_finding(folder: Path) -> Finding:
 
 def first_card(folder: Path) -> str | None:
     """The project's first card's file name, without .md (``m1-hello``)."""
-    cards = sorted(p.stem for p in (folder / ".factory" / "cards").glob("*.md"))
+    cards = sorted(p.stem for p in (folder / ".softfield" / "cards").glob("*.md"))
     return cards[0] if cards else None
 
 
@@ -334,15 +334,15 @@ def doctor(
     except (OSError, KeyError, ValueError, ConfigError) as exc:
         return [Finding(False, f"{PROJECT_TOML} doesn't load: {exc}")]
     found.append(Finding(bool(project.get("description")), "a one-line description in [project]"))
-    protected = folder / ".factory" / "protected-paths.txt"
-    found.append(Finding(protected.is_file(), "protected paths in .factory/protected-paths.txt"))
+    protected = folder / ".softfield" / "protected-paths.txt"
+    found.append(Finding(protected.is_file(), "protected paths in .softfield/protected-paths.txt"))
     if project.get("origin") == "new":
         found.append(
-            Finding((folder / ".factory/seed.md").is_file(), "the idea in .factory/seed.md")
+            Finding((folder / ".softfield/seed.md").is_file(), "the idea in .softfield/seed.md")
         )
     found.append(_adr_00_finding(folder))
-    cards = [p for p in (folder / ".factory" / "cards").glob("*.md")]
-    found.append(Finding(bool(cards), "a first card in .factory/cards/"))
+    cards = [p for p in (folder / ".softfield" / "cards").glob("*.md")]
+    found.append(Finding(bool(cards), "a first card in .softfield/cards/"))
     conn = metrics.open_db(db)
     try:
         registered = metrics.find_project(conn, cfg.project_name) is not None
@@ -353,11 +353,11 @@ def doctor(
     try:
         on_main = git.run("rev-parse", "--abbrev-ref", "HEAD").strip() == "main"
         clean = git.is_clean()
-        hooked = git.run("config", "core.hooksPath", check=False).strip() == ".factory/hooks"
+        hooked = git.run("config", "core.hooksPath", check=False).strip() == ".softfield/hooks"
     except GitError:
         on_main = clean = hooked = False
     found.append(Finding(on_main and clean, "everything committed, on main"))
-    found.append(Finding(hooked, "the commit hook (git config core.hooksPath .factory/hooks)"))
+    found.append(Finding(hooked, "the commit hook (git config core.hooksPath .softfield/hooks)"))
     if run_checks and on_main:
         failed = [c.name for c in checks.check_all(folder, timeout) if not c.ok]
         found.append(Finding(not failed, "softfield check-all passes" + (

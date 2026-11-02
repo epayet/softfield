@@ -1,4 +1,4 @@
-"""Session reports in .factory/sessions/: what happened, what it cost, what to improve. And
+"""Session reports in .softfield/sessions/: what happened, what it cost, what to improve. And
 ``runner report <key>``: a milestone review's numbers from the metrics database."""
 
 import sqlite3
@@ -178,7 +178,7 @@ def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
 
 
 def write(repo: Path, report: SessionReport, claude: ClaudeUsage | None = None) -> Path:
-    path = repo / ".factory" / "sessions" / f"{report.started:%Y-%m-%d-%H%M}.md"
+    path = repo / ".softfield" / "sessions" / f"{report.started:%Y-%m-%d-%H%M}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render(report, claude), encoding="utf-8")
     return path
@@ -228,7 +228,7 @@ def _results_lines(r: MilestoneResults) -> list[str]:
 
 
 def milestone_report(conn: sqlite3.Connection, project: str, key: str) -> str:
-    """The numbers section of ``.factory/reviews/<key>.md``, between its markers."""
+    """The numbers section of ``.softfield/reviews/<key>.md``, between its markers."""
     r = milestone_results(conn, project, key)
     if r is None:
         raise ReportError(f"no milestone {key} in the metrics database")
@@ -302,7 +302,7 @@ def with_report(text: str, block: str) -> str:
 
 
 def write_milestone_report(repo: Path, db: Path, key: str) -> Path:
-    """Write ``runner report <key>`` into ``.factory/reviews/<key>.md``; returns the file."""
+    """Write ``runner report <key>`` into ``.softfield/reviews/<key>.md``; returns the file."""
     if not db.is_file():
         raise ReportError(f"no metrics database at {db}; `softfield backfill` makes one")
     conn = connect(db)
@@ -310,7 +310,7 @@ def write_milestone_report(repo: Path, db: Path, key: str) -> Path:
         block = milestone_report(conn, project_name(repo), key)
     finally:
         conn.close()
-    path = repo / ".factory" / "reviews" / f"{key}.md"
+    path = repo / ".softfield" / "reviews" / f"{key}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     text = path.read_text(encoding="utf-8") if path.is_file() else ""
     path.write_text(with_report(text, block), encoding="utf-8")

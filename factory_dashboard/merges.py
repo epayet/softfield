@@ -55,7 +55,7 @@ def _merge_links(
     latest_title: str | None = None
     latest_date: str = ""
 
-    cards_dir = repo / ".factory" / "cards"
+    cards_dir = repo / ".softfield" / "cards"
     if not cards_dir.is_dir():
         return [], [], None
 
@@ -139,11 +139,11 @@ _REF_RE = re.compile(
 
 
 def _adr_titles(repo: Path | None) -> dict[int, str]:
-    """Each ADR's title by number, from the first heading of ``.factory/adr/<NN>-*.md``."""
+    """Each ADR's title by number, from the first heading of ``.softfield/adr/<NN>-*.md``."""
     found: dict[int, str] = {}
     if repo is None:
         return found
-    for path in (repo / ".factory" / "adr").glob("[0-9]*-*.md"):
+    for path in (repo / ".softfield" / "adr").glob("[0-9]*-*.md"):
         number = path.stem.partition("-")[0]
         try:
             heading = _ADR_HEADING_RE.search(path.read_text(encoding="utf-8"))

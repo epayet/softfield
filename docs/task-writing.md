@@ -1,6 +1,6 @@
 # Writing tasks for the local model: what works
 
-Practical guidance for whoever writes tickets: the lead, whichever frontier model that is ([`docs/agents/lead.md`](agents/lead.md)). The **rules** are in [`task-format.md`](task-format.md) and [ADR 01](../.factory/adr/01-calibration-fixes.md); this page is the craft behind them, learned from calibration and M1 (see `.factory/sessions/` and `.factory/reviews/m1.md`).
+Practical guidance for whoever writes tickets: the lead, whichever frontier model that is ([`docs/agents/lead.md`](agents/lead.md)). The **rules** are in [`task-format.md`](task-format.md) and [ADR 01](../.softfield/adr/01-calibration-fixes.md); this page is the craft behind them, learned from calibration and M1 (see `.softfield/sessions/` and `.softfield/reviews/m1.md`).
 
 **Evidence so far:** 5 tasks. 3/3 passed on the first attempt once these practices were in place. The 2 failures before that were both spec errors, not model errors.
 
@@ -28,7 +28,7 @@ Until M3 the lead wrote stubs, failing tests and a throwaway reference implement
 
 - **Goal:** one sentence.
 - **Context:** the files to read (full paths) and the worked example to follow. Paste only facts no file holds: a decision from the milestone's Decisions section, an API the lead hasn't built yet. Put the one constraint that matters in **bold** (security, "admin-only: no gettext").
-  A planted card is the owner's and can go any day: don't name one as a ticket's example or reference unless the ticket is about it. bug-03 named F113 as a seed card's shape; the owner removed F113, every ready ticket's gates went red on `test_tasks.py`, and f38-01's developer spent two attempts on it (2026-10-26). When the owner removes or merges a card, grep `.factory/tasks/` for its path.
+  A planted card is the owner's and can go any day: don't name one as a ticket's example or reference unless the ticket is about it. bug-03 named F113 as a seed card's shape; the owner removed F113, every ready ticket's gates went red on `test_tasks.py`, and f38-01's developer spent two attempts on it (2026-10-26). When the owner removes or merges a card, grep `.softfield/tasks/` for its path.
 - **Done when:** acceptance criteria as bullets, including the edges ("a 280-character note", "just after midnight"). Whatever isn't written there, the developer won't test, and whatever isn't tested, it won't do. Before queueing a plan, read each of the milestone's own "Done when" lines against the tickets' and name the ticket that carries it: F14's "the dashboard shows that result" reached the plant's ticket and not the message's (2026-10-14).
 - **No stubs, no reference implementation.** A spec error now shows up as a failed attempt or a `BLOCKED.md`, and a short escalation fixes it.
 - **Security and protected work stay test-first:** the lead writes those tests on main, checks each fails for the right reason, and tests every security rule.
@@ -104,7 +104,7 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 ## Lessons from F3
 
 - **Score the ticket with the rubric, not by feel.** f3-07 (replay controls) was written as difficulty 5; the rubric gives 10 (markup, CSS, a stepping state, a timer and the htmx pause interlocked; seven files to read; four dependencies; UI; timing). Qwen re-planned it for 10 minutes three times without one edit, and a direction saying "edit early" didn't change that. Split it into the bar (f3-07) and the stepping (f3-11).
-- **Point into a long file by line numbers, not by "near `id=…`".** The split f3-07 still sent Qwen to "the `.replay` bar in `.factory/cards/f1-factory-mockup.html` (near `id="replay"`)": OpenCode's grep fails on that file ("Ripgrep JSON record exceeded 65536 bytes": line 382 is its embedded data, over 64 KB on one line) and shell `grep` is denied, so Qwen paged through 1,100 lines hunting for it in each attempt and never edited. For a file over ~300 lines, give the lines (`f1-factory-mockup.html` lines 286–289 and 327–332) or quote the few lines that matter in Context.
+- **Point into a long file by line numbers, not by "near `id=…`".** The split f3-07 still sent Qwen to "the `.replay` bar in `.softfield/cards/f1-factory-mockup.html` (near `id="replay"`)": OpenCode's grep fails on that file ("Ripgrep JSON record exceeded 65536 bytes": line 382 is its embedded data, over 64 KB on one line) and shell `grep` is denied, so Qwen paged through 1,100 lines hunting for it in each attempt and never edited. For a file over ~300 lines, give the lines (`f1-factory-mockup.html` lines 286–289 and 327–332) or quote the few lines that matter in Context.
 
 ## Lessons from F4
 

@@ -142,8 +142,8 @@ def test_while_none_is_due_a_check_does_not_list_the_folder(tmp_path, monkeypatc
 
 
 def _toml(tmp_path: Path, extra: str = "") -> Path:
-    (tmp_path / ".factory").mkdir()
-    (tmp_path / ".factory" / "project.toml").write_text(MINIMAL_TOML + extra, encoding="utf-8")
+    (tmp_path / ".softfield").mkdir()
+    (tmp_path / ".softfield" / "project.toml").write_text(MINIMAL_TOML + extra, encoding="utf-8")
     return tmp_path
 
 
@@ -232,7 +232,7 @@ def _ticket_runs(monkeypatch, then=None) -> list[str]:
 
 
 def test_once_the_copy_is_old_the_next_pick_writes_one(repo, tmp_path, fake_clock, monkeypatch):
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "ticket")
     folder = tmp_path / "Dropbox"
@@ -251,7 +251,7 @@ def test_once_the_copy_is_old_the_next_pick_writes_one(repo, tmp_path, fake_cloc
 def test_a_folder_not_writable_is_one_note_and_the_run_goes_on(
     repo, tmp_path, fake_clock, monkeypatch, capsys
 ):
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-01-thing")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-thing")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "ticket")
     folder = tmp_path / "Dropbox"

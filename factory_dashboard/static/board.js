@@ -3,7 +3,7 @@
 // 900 px dashboard.css shows every stage whatever is picked, so a plot is only a count there.
 // Without this script every stage shows, stacked.
 //
-// The board's order (F15 D1, D3, D9, after .factory/cards/f15-mockup/board-edit.html): a card
+// The board's order (F15 D1, D3, D9, after .softfield/cards/f15-mockup/board-edit.html): a card
 // of a stage the owner orders is dragged by its grip, or moved with its ⋯ menu, inside its
 // stage. What is out of place is worked out from the order, not from what was touched, and
 // shows dashed until sent. "Send new order" posts one reorder: the page's whole open line

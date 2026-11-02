@@ -40,9 +40,9 @@ def test_milestone_metrics(repo):
         ("escalated", "m1-03-c", 3),
         ("done", "m2-01-d", 1),
     ]:
-        path = write_task(repo / ".factory" / "tasks" / folder, tid)
+        path = write_task(repo / ".softfield" / "tasks" / folder, tid)
         append_footer(path, {"attempts": attempts, "tokens": 1000 * attempts})
-    requeued = repo / ".factory" / "tasks" / "done" / "m1-02-b.md"
+    requeued = repo / ".softfield" / "tasks" / "done" / "m1-02-b.md"
     requeued.write_text(
         requeued.read_text().replace("attempts: 2", "result: escalated\nattempts: 2")
     )
@@ -70,8 +70,8 @@ def test_a_milestone_stops_for_a_restart_before_the_review(repo, monkeypatch):
 def test_no_review_while_tickets_wait_behind_a_blocked_one(repo, monkeypatch):
     """f1: f1-16 was blocked with 15 tickets behind it, and the runner went on to review the
     half-built milestone, spending its one review loop (ADR 12 item 10)."""
-    write_task(repo / ".factory" / "tasks" / "blocked", "m1-01-a")
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-02-b", deps="[m1-01-a]")
+    write_task(repo / ".softfield" / "tasks" / "blocked", "m1-01-a")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-02-b", deps="[m1-01-a]")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "tickets")
     monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: False)
@@ -135,8 +135,8 @@ def _rows(repo, table):
 
 
 def _milestone_repo(repo):
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "m1.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "m1.md").write_text(MILESTONE_DOC)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "plan")
     git(repo, "tag", "m1-start")
@@ -195,11 +195,11 @@ def test_a_card_marked_reserve_yes_may_use_the_reserve():
 def test_every_milestone_doc_gets_its_card_at_session_start(repo):
     """f5 D4: an idea with no tickets yet is a card on the board too, as a ticket is in the
     queue (`sync_tickets`)."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
     idea = "# Milestone F9: a garden\n\n> **State:** idea · **Priority:** 3\n"
-    (repo / ".factory" / "cards" / "f9-garden.md").write_text(idea)
-    (repo / ".factory" / "cards" / "m1.md").write_text(MILESTONE_DOC)
-    (repo / ".factory" / "cards" / "notes.md").write_text("# Not a milestone\n")
+    (repo / ".softfield" / "cards" / "f9-garden.md").write_text(idea)
+    (repo / ".softfield" / "cards" / "m1.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "cards" / "notes.md").write_text("# Not a milestone\n")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "an idea")
     close_session(open_session(_config(repo)))
@@ -279,10 +279,10 @@ def test_a_review_written_outside_a_review_job_reaches_the_desk_at_session_start
     """The desk lists a milestone for sign-off once its sheet is stored (F50 D1). A sheet
     written by hand, or one the runner couldn't read when it was written, is stored at the
     next session's start, as the card is."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "reviews").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "m1.md").write_text(MILESTONE_DOC)
-    (repo / ".factory" / "reviews" / "m1.md").write_text(LIST_SHEET)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "reviews").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "m1.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "reviews" / "m1.md").write_text(LIST_SHEET)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "a review")
     close_session(open_session(_config(repo)))
@@ -315,8 +315,8 @@ def test_a_milestone_run_records_a_sign_off_sheet_written_outside_the_runner(rep
     """A review done interactively (f1's) reaches the dashboard at the next run, not only at
     a headless review or a backfill."""
     _milestone_repo(repo)
-    (repo / ".factory" / "reviews").mkdir(parents=True)
-    (repo / ".factory" / "reviews" / "m1.md").write_text(REVIEW_DOC)
+    (repo / ".softfield" / "reviews").mkdir(parents=True)
+    (repo / ".softfield" / "reviews" / "m1.md").write_text(REVIEW_DOC)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "review")
     monkeypatch.setattr(milestone, "review_milestone", lambda *a: "clean")
@@ -347,8 +347,8 @@ def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypat
         out = re.search(r"Write (\S+) as:", job.prompt)
         assert out
         (repo_ / out[1]).write_text(json.dumps({"findings": rounds.pop(0), "stop": None}))
-        (repo_ / ".factory" / "reviews").mkdir(parents=True, exist_ok=True)
-        (repo_ / ".factory" / "reviews" / "m1.md").write_text(REVIEW_DOC)
+        (repo_ / ".softfield" / "reviews").mkdir(parents=True, exist_ok=True)
+        (repo_ / ".softfield" / "reviews" / "m1.md").write_text(REVIEW_DOC)
         return JobResult(ok=True, text="", duration_s=1.0)
 
     monkeypatch.setattr(claude, "run_claude", run_claude)
@@ -407,7 +407,7 @@ def _checkpoint_finding(repo, key: str, ticket: str | None = None) -> None:
 def test_the_final_verdicts_move_the_reviewer_and_the_author_once(repo, monkeypatch):
     """f1-24 (ADR 15 item 9): the verdicts as the review loop stops, each rated once."""
     _milestone_repo(repo)
-    (repo / ".factory" / "reviews").mkdir()
+    (repo / ".softfield" / "reviews").mkdir()
     _checkpoint_finding(repo, "m1-C1-1", ticket="m1-01-thing")
     rounds = [
         {"findings": [], "checkpoint_verdicts": {"m1-C1-1": "confirmed"}, "score": 8},
@@ -434,7 +434,7 @@ def test_the_final_verdicts_move_the_reviewer_and_the_author_once(repo, monkeypa
 def test_the_last_rounds_verdicts_and_score_land_on_the_findings_and_milestone(repo, monkeypatch):
     """f1-23 (ADR 14 item 13): the final review judges each checkpoint finding."""
     _milestone_repo(repo)
-    (repo / ".factory" / "reviews").mkdir()
+    (repo / ".softfield" / "reviews").mkdir()
     _checkpoint_finding(repo, "m1-C1-1")
     _checkpoint_finding(repo, "m1-C1-2")
     leak = {"id": "m1-F1", "severity": "should-fix", "route": "claude", "summary": "Leak"}
@@ -481,7 +481,7 @@ def test_the_last_rounds_verdicts_and_score_land_on_the_findings_and_milestone(r
 
 def test_a_review_without_a_score_leaves_it_empty(repo, monkeypatch):
     _milestone_repo(repo)
-    (repo / ".factory" / "reviews").mkdir()
+    (repo / ".softfield" / "reviews").mkdir()
 
     def run_claude(job, repo_, timeout, log_path, now, resume=None):
         out = re.search(r"Write (\S+) as:", job.prompt)
@@ -498,7 +498,7 @@ def test_a_review_without_a_score_leaves_it_empty(repo, monkeypatch):
 
 def test_a_factory_milestones_metrics_and_summary(repo):
     for tid in ("f1-01-a", "m1-01-b"):
-        write_task(repo / ".factory" / "tasks" / "done", tid)
+        write_task(repo / ".softfield" / "tasks" / "done", tid)
     assert milestone_metrics(repo, "f1").tasks == ["a"]
     assert "Who did the work in F1" in milestone_summary(repo, "f1")
     assert "there's no `f1-start` yet" in milestone_summary(repo, "f1")
@@ -507,17 +507,17 @@ def test_a_factory_milestones_metrics_and_summary(repo):
 def test_a_named_milestone_finds_its_short_tickets(repo):
     """ADR 16 item 6: f3-factory-line's tickets are f3-01-…, not f30's or f2's."""
     for tid in ("f3-01-a", "f30-01-b", "f2-01-c"):
-        write_task(repo / ".factory" / "tasks" / "done", tid)
+        write_task(repo / ".softfield" / "tasks" / "done", tid)
     assert milestone_metrics(repo, "f3-factory-line").tasks == ["a"]
     summary = milestone_summary(repo, "f3-factory-line")
     assert "there's no `f3-factory-line-start` yet" in summary
 
 
 def test_a_named_milestone_run_records_its_doc_and_review(repo, monkeypatch):
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f3-factory-line.md").write_text(MILESTONE_DOC)
-    (repo / ".factory" / "reviews").mkdir(parents=True)
-    (repo / ".factory" / "reviews" / "f3-factory-line.md").write_text(REVIEW_DOC)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f3-factory-line.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "reviews").mkdir(parents=True)
+    (repo / ".softfield" / "reviews" / "f3-factory-line.md").write_text(REVIEW_DOC)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "plan")
     git(repo, "tag", "f3-factory-line-start")
@@ -530,10 +530,10 @@ def test_a_named_milestone_run_records_its_doc_and_review(repo, monkeypatch):
 
 
 def test_a_named_milestone_waits_for_tickets_written_with_its_short_key(repo, monkeypatch):
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f3-factory-line.md").write_text(MILESTONE_DOC)
-    write_task(repo / ".factory" / "tasks" / "blocked", "f3-01-a")
-    ready = write_task(repo / ".factory" / "tasks" / "ready", "f3-02-b", deps="[f3-01-a]")
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f3-factory-line.md").write_text(MILESTONE_DOC)
+    write_task(repo / ".softfield" / "tasks" / "blocked", "f3-01-a")
+    ready = write_task(repo / ".softfield" / "tasks" / "ready", "f3-02-b", deps="[f3-01-a]")
     ready.write_text(ready.read_text().replace("milestone: 1\n", "milestone: f3\n"))
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "tickets")
@@ -585,7 +585,7 @@ def test_milestone_after_is_none_without_the_line_or_below_the_header():
 
 
 def test_a_milestone_waits_until_its_after_is_signed_off(repo):
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True)
     (docs / "f3-factory-line.md").write_text("# F3\n\n> **Status: in review** (2026-10-02).\n")
     (docs / "f4-always-on.md").write_text("# F4\n\n> **After:** f3 signed off\n")
@@ -597,10 +597,10 @@ def test_a_milestone_waits_until_its_after_is_signed_off(repo):
 
 
 def test_the_verdict_says_what_a_waiting_milestone_waits_for(repo, monkeypatch):
-    docs = repo / ".factory" / "cards"
+    docs = repo / ".softfield" / "cards"
     docs.mkdir(parents=True)
     (docs / "m1.md").write_text("# M1\n\n> **After:** m0-base signed off\n")
-    write_task(repo / ".factory" / "tasks" / "ready", "m1-01-a")
+    write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-a")
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "tickets")
     monkeypatch.setattr(milestone, "work_queue", lambda s, milestone=None: False)
@@ -616,7 +616,7 @@ def test_the_verdict_says_what_a_waiting_milestone_waits_for(repo, monkeypatch):
 
 
 def milestone_ticket(repo, folder: str, task_id: str, key: str) -> None:
-    path = write_task(repo / ".factory" / "tasks" / folder, task_id)
+    path = write_task(repo / ".softfield" / "tasks" / folder, task_id)
     path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n"))
 
 
@@ -633,8 +633,8 @@ def test_a_milestone_whose_tickets_are_all_done_is_due_for_review(repo):
 
 
 def test_a_due_review_goes_by_the_milestones_full_key(repo):
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f9-always-on.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f9-always-on.md").write_text(MILESTONE_DOC)
     milestone_ticket(repo, "done", "f9-01-a", "f9")
     assert milestone.due_reviews(repo, State()) == ["f9-always-on"]
 
@@ -645,7 +645,7 @@ def test_a_reviewed_or_signed_off_milestone_isnt_due_again(repo):
     # A review a restart cut short carries on, from the rounds in state.json.
     restarted = State(review_counts={"f9": [2]}, review_stop={"f9": milestone.RESTART})
     assert milestone.due_reviews(repo, restarted) == ["f9"]
-    reviews = repo / ".factory" / "reviews"
+    reviews = repo / ".softfield" / "reviews"
     reviews.mkdir(parents=True)
     (reviews / "f9.md").write_text(REVIEW_DOC)  # reviewed interactively
     assert milestone.due_reviews(repo, State()) == []
@@ -662,7 +662,7 @@ def test_a_review_stopped_for_end_to_end_tests_the_project_doesnt_name_is_due_ag
     stopped = State(review_stop={"f9": milestone.E2E_STOP})
     assert milestone.due_reviews(repo, stopped) == ["f9"]
     assert milestone.due_reviews(repo, State(review_stop={"f9": "clean"})) == []
-    toml = repo / ".factory" / "project.toml"
+    toml = repo / ".softfield" / "project.toml"
     toml.write_text(toml.read_text().replace("[checks]\n", '[checks]\ne2e = ["tests/e2e"]\n'))
     assert milestone.due_reviews(repo, stopped) == []  # a real failure waits for the owner
 
@@ -691,8 +691,8 @@ def test_a_review_with_no_end_to_end_tests_goes_on_to_claudes_round(repo, monkey
 def test_a_due_review_diffs_from_the_plans_commit(repo, monkeypatch):
     """No plan session tagged F3's or F4's start: the review tags the commit that added the
     milestone's doc, where `runner milestone` would have tagged its first run."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f9.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f9.md").write_text(MILESTONE_DOC)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "plan f9")
     plan = git(repo, "rev-parse", "HEAD").strip()
@@ -717,8 +717,8 @@ def test_a_due_review_diffs_from_the_plans_commit(repo, monkeypatch):
 def test_a_replanned_milestones_review_diffs_from_its_first_merge(repo, monkeypatch):
     """f3 review (f3-F5): F3's doc dated from F1, so its review read all of F2 and F4. The
     review starts where the milestone's first ticket was merged."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f9.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f9.md").write_text(MILESTONE_DOC)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "plan f9, long ago")
     (repo / "other.txt").write_text("another milestone's work")
@@ -738,8 +738,8 @@ def test_a_replanned_milestones_review_diffs_from_its_first_merge(repo, monkeypa
 def test_a_ticket_built_in_a_terminal_session_starts_the_review_at_its_commit(repo, monkeypatch):
     """bug-01 (F104): no `Task:` trailer, the card's doc planted long before; the commit whose
     subject names the ticket (by its short id) is where the review starts."""
-    (repo / ".factory" / "cards").mkdir(parents=True)
-    (repo / ".factory" / "cards" / "f9.md").write_text(MILESTONE_DOC)
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "f9.md").write_text(MILESTONE_DOC)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "plan f9, long ago")
     (repo / "other.txt").write_text("another milestone's work")
@@ -805,7 +805,7 @@ def _review_writes(job, repo_, findings: list[dict[str, object]]) -> None:
     out = re.search(r"Write (\S+) as:", job.prompt)
     assert out
     (repo_ / out[1]).write_text(json.dumps({"findings": findings, "stop": None}))
-    (repo_ / ".factory" / "reviews").mkdir(parents=True, exist_ok=True)
+    (repo_ / ".softfield" / "reviews").mkdir(parents=True, exist_ok=True)
 
 
 LEAK: dict[str, object] = {
@@ -848,7 +848,7 @@ def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
     and its prompt names the fix merge of its own milestone only."""
     milestone_ticket(repo, "done", "f9-01-a", "f9")
     milestone_ticket(repo, "ready", "f10-01-next", "f10")
-    (repo / ".factory" / "project.toml").write_text("")  # `cli._repo` looks for it
+    (repo / ".softfield" / "project.toml").write_text("")  # `cli._repo` looks for it
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "tickets")
     events: list[str] = []
@@ -860,8 +860,8 @@ def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(
         git(
             repo,
             "mv",
-            f".factory/tasks/ready/{task.path.name}",
-            f".factory/tasks/done/{task.path.name}",
+            f".softfield/tasks/ready/{task.path.name}",
+            f".softfield/tasks/done/{task.path.name}",
         )
         git(repo, "commit", "-q", "-m", f"{task.id}: done\n\nAgent: local-m\nTask: {task.id}")
         merges[task.id] = git(repo, "rev-parse", "HEAD").strip()

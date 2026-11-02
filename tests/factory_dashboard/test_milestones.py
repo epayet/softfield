@@ -761,7 +761,7 @@ def card_doc_client(db_path, tmp_path):
     """A project whose repo points to a temp dir with a card doc that has Outcome and Notes."""
     from factory_dashboard.app import create_app, get_now
 
-    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir = tmp_path / ".softfield" / "cards"
     cards_dir.mkdir(parents=True)
     cards_dir.joinpath("f1-test.md").write_text(
         "---\n"
@@ -817,7 +817,7 @@ def card_note_only_client(db_path, tmp_path):
     that has only Notes (no Outcome)."""
     from factory_dashboard.app import create_app, get_now
 
-    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir = tmp_path / ".softfield" / "cards"
     cards_dir.mkdir(parents=True)
     note_text = (
         "milestones don't show me their descriptions, "
@@ -861,7 +861,7 @@ def card_nothing_client(db_path, tmp_path):
     that has neither Outcome nor Notes."""
     from factory_dashboard.app import create_app, get_now
 
-    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir = tmp_path / ".softfield" / "cards"
     cards_dir.mkdir(parents=True)
     cards_dir.joinpath("f1-test.md").write_text(
         "---\n"
@@ -908,7 +908,7 @@ def no_repo_client(db_path):
             "f1",
             status="done",
             outcome="The factory now measures itself end-to-end.",
-            done_when="- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`.",
+            done_when="- All tickets in `.softfield/tasks/done/`, `check-all` passes on `main`.",
             signoff={"changed": "A metrics database."},
         )
     finally:
@@ -990,7 +990,7 @@ def card_stored_outcome_client(db_path, tmp_path):
     that has neither Outcome nor Notes, but the milestone has a stored outcome."""
     from factory_dashboard.app import create_app, get_now
 
-    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir = tmp_path / ".softfield" / "cards"
     cards_dir.mkdir(parents=True)
     cards_dir.joinpath("f1-test.md").write_text(
         "---\n"
@@ -1018,7 +1018,7 @@ def card_stored_outcome_client(db_path, tmp_path):
             "f1",
             status="in progress",
             outcome="The factory now measures itself end-to-end.",
-            done_when="- All tickets in `.factory/tasks/done/`, `check-all` passes on `main`.",
+            done_when="- All tickets in `.softfield/tasks/done/`, `check-all` passes on `main`.",
         )
     finally:
         conn.close()
@@ -1033,7 +1033,7 @@ def card_done_when_only_client(db_path, tmp_path):
     that has only Done when (no Outcome, no Notes)."""
     from factory_dashboard.app import create_app, get_now
 
-    cards_dir = tmp_path / ".factory" / "cards"
+    cards_dir = tmp_path / ".softfield" / "cards"
     cards_dir.mkdir(parents=True)
     cards_dir.joinpath("f1-test.md").write_text(
         "---\n"
@@ -1263,7 +1263,7 @@ def test_no_plant_request_gives_plant_state(db_path):
 
 
 def test_done_with_planted_result_gives_planted_state(db_path):
-    """One whose ``from`` is the id and ``done`` is not NULL with \"planted .factory/cards/…\":
+    """One whose ``from`` is the id and ``done`` is not NULL with \"planted .softfield/cards/…\":
     \"planted\" with card \"f166\"."""
     from factory_dashboard.milestones import review_ideas
 
@@ -1274,7 +1274,7 @@ def test_done_with_planted_result_gives_planted_state(db_path):
         PROJECT,
         {"text": "Plans: every Done-when line of a card.", "from": "f19/1"},
         done="2026-10-01T10:00:00+00:00",
-        result="planted .factory/cards/f166-plans-every-done-when-line-of.md",
+        result="planted .softfield/cards/f166-plans-every-done-when-line-of.md",
     )
     ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f19")
     assert len(ideas) == 1
@@ -1313,7 +1313,7 @@ def test_hand_made_plant_counts_as_planted(db_path):
         PROJECT,
         {"text": "Plans: every Done-when line of a card"},  # no final full stop
         done="2026-10-01T10:00:00+00:00",
-        result="planted .factory/cards/f166-plans-every-done-when-line-of.md",
+        result="planted .softfield/cards/f166-plans-every-done-when-line-of.md",
     )
     ideas = review_ideas(metrics.open_db(db_path), PROJECT, "f19")
     assert len(ideas) == 1
@@ -1433,7 +1433,7 @@ def test_factory_idea_state_from_factory_project_requests(db_path, tmp_path):
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
                 (
                     "2026-10-01T10:00:00+00:00",
-                    "planted .factory/cards/f166-plans-every-done-when-line-of.md",
+                    "planted .softfield/cards/f166-plans-every-done-when-line-of.md",
                     last[0],
                 ),
             )
@@ -1500,7 +1500,7 @@ def test_two_ideas_each_with_own_plant_request(db_path, tmp_path):
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
                 (
                     "2026-10-01T10:00:00+00:00",
-                    "planted .factory/cards/f166-first.md",
+                    "planted .softfield/cards/f166-first.md",
                     req1[0],
                 ),
             )
@@ -1511,7 +1511,7 @@ def test_two_ideas_each_with_own_plant_request(db_path, tmp_path):
         if last and last[0]:
             conn.execute(
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
-                ("2026-10-01T10:00:00+00:00", "planted .factory/cards/f167-second.md", last[0]),
+                ("2026-10-01T10:00:00+00:00", "planted .softfield/cards/f167-second.md", last[0]),
             )
             conn.commit()
     finally:
@@ -1618,7 +1618,7 @@ def test_mixed_product_factory_ideas_match_independently(db_path, tmp_path):
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
                 (
                     "2026-10-01T10:00:00+00:00",
-                    "planted .factory/cards/f168-product.md",
+                    "planted .softfield/cards/f168-product.md",
                     req_prod[0],
                 ),
             )
@@ -1642,7 +1642,7 @@ def test_mixed_product_factory_ideas_match_independently(db_path, tmp_path):
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
                 (
                     "2026-10-01T10:00:00+00:00",
-                    "planted .factory/cards/f169-factory.md",
+                    "planted .softfield/cards/f169-factory.md",
                     req_fact[0],
                 ),
             )
@@ -1720,7 +1720,7 @@ def test_id_less_idea_matches_by_text_not_project_fallback(db_path, tmp_path):
         if req1 and req1[0]:
             conn.execute(
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
-                ("2026-10-01T10:00:00+00:00", "planted .factory/cards/f164-first.md", req1[0]),
+                ("2026-10-01T10:00:00+00:00", "planted .softfield/cards/f164-first.md", req1[0]),
             )
         # Mark request2 as planted (higher ID, so it's newer)
         last = conn.execute(
@@ -1730,7 +1730,7 @@ def test_id_less_idea_matches_by_text_not_project_fallback(db_path, tmp_path):
         if last and last[0]:
             conn.execute(
                 "UPDATE owner_requests SET done = ?, result = ? WHERE id = ?",
-                ("2026-10-01T10:00:00+00:00", "planted .factory/cards/f164-second.md", last[0]),
+                ("2026-10-01T10:00:00+00:00", "planted .softfield/cards/f164-second.md", last[0]),
             )
             conn.commit()
     finally:

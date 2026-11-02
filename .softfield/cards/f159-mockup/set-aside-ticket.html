@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F159 mock-up: a set-aside ticket says what to do, and has its button</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --fail: #ec5458;
+    --factory: #f2b10a; --accent: var(--sonnet); --warn-ink: var(--hazard);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--accent); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card changes */
+  .why { font: 12px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+  /* wide screens: Today and Proposed side by side, the switch goes */
+  @media (min-width: 1000px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [data-version] { display: block !important; }
+  }
+  .version-name { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); margin: 0 0 6px; }
+
+  /* ---- as drawn today (dashboard.css) ---- */
+  .crumbs { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .crumbs a { color: var(--ink-2); }
+  .page { display: flex; flex-direction: column; gap: 12px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .panel > p { margin: 0 0 8px; } .panel > p:last-child { margin-bottom: 0; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; padding: 1px 7px 1px 5px; border: 1px solid var(--rule); }
+  .pill::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  pre { font: 12.5px/1.45 var(--mono); }
+  .card { display: flex; flex-direction: column; gap: 5px; min-height: 44px; padding: 9px 10px 9px 14px;
+    color: var(--fg); border: 1px solid var(--rule); overflow-wrap: anywhere;
+    background: linear-gradient(var(--plate), var(--plate)) right / calc(100% - 4px) 100% no-repeat,
+      repeating-linear-gradient(-45deg, var(--fail) 0 4px, var(--plate) 4px 8px); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); } .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card-note { font-size: 12.5px; line-height: 1.35; color: var(--muted); }
+  .card-action { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px; font-size: 12px; }
+
+  /* ---- proposed: the set-aside plate (new; tokens only, ornament in hazard and ink) ---- */
+  .aside { position: relative; border-color: var(--hazard); padding-top: 0; }
+  .aside .plate { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px) left / 14px 100% no-repeat, var(--plate);
+    border-bottom: 1px solid var(--rule); padding-left: 26px; }
+  .aside .plate b { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+  .aside .plate span { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+  .aside::before, .aside::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--ink-2); }
+  .aside::before { left: -1px; bottom: -1px; border-width: 0 0 2px 2px; }
+  .aside::after { right: -1px; bottom: -1px; border-width: 0 2px 2px 0; }
+  .aside .say { font-size: 15px; margin: 0 0 6px; }
+  .aside .then { color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px; }
+  .go { font: 700 14px var(--display); letter-spacing: .08em; text-transform: uppercase; min-height: 44px; padding: 0 20px;
+    background: var(--hazard); color: var(--hazard-ink); border: 0; cursor: pointer; }
+  .way { display: none; border: 1px dashed var(--hazard); padding: 8px 10px; font: 600 12px/1.4 var(--mono); color: var(--hazard); }
+  .sent .go { display: none; } .sent .way { display: block; }
+  .readable h4 { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 10px 0 4px; }
+  .readable h4:first-child { margin-top: 0; }
+  .readable p, .readable ul { margin: 0; } .readable ul { padding-left: 18px; }
+  .readable details { margin-top: 10px; color: var(--ink-2); font-size: 13.5px; }
+  .readable summary { color: var(--accent); }
+</style>
+</head>
+<body>
+<h1>F159: a set-aside ticket says what to do</h1>
+<p class="lede">The board's Seed column, and the page its card opens, for the real ticket of the owner's note: bug-03-roadmap-items-to-seeds, set aside in <span style="font-family:var(--mono)">.softfield/tasks/later/</span> since 13 Oct. Press "Queue it" in Proposed to see it on its way.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/board.html (card_link) and templates/ticket.html -->
+<div data-version="today" hidden>
+  <p class="version-name">Today</p>
+  <h3>The board, Seed</h3>
+  <div class="phone">
+    <a class="card" href="#t">
+      <span class="card-meta"><b>#1</b> <span>bug-03-roadmap-items-to-seeds</span> <span>bug · factory</span></span>
+      <span class="card-title">Every idea the old roadmap still held is either a seed card the owner can see in the Planning room, or is named as already built or already a card, so nothing from it lives only in git history.</span>
+      <span class="card-note">ticket written, set aside</span>
+    </a>
+  </div>
+  <h3>Its page, /tickets/bug-03-roadmap-items-to-seeds</h3>
+  <div class="phone page" id="t">
+    <nav class="crumbs"><a href="#">BUGS</a><span>bug-03-roadmap-items-to-seeds</span></nav>
+    <section class="panel">
+      <h2>Goal &amp; Done when <span class="src">from the ticket body</span></h2>
+      <pre style="white-space:pre-wrap;margin:0">---
+id: bug-03-roadmap-items-to-seeds
+milestone: bugs
+difficulty: 4
+depends_on: []
+agent: lead
+area: factory
+priority: 90
+files:
+  - .softfield/cards/
+tests:
+  - tests/runner/test_tasks.py
+---
+
+### Goal
+Every idea the old roadmap still held is either a seed card the owner can see in the Planning room, or is named as already built or already a card, so nothing from it lives only in git history.
+
+### Context
+The owner removed the roadmap file on 2026-10-13 (commit `f90e764`): nothing on the dashboard showed it. Its last version is in git: run `git show 483e5a3:docs/roadmap.md` … (and 4 more long paragraphs)
+
+### Done when
+- each open item is a seed card in `.softfield/cards/` …</pre>
+    </section>
+    <section class="panel">
+      <h2>Files <span class="src">from the ticket</span></h2>
+      <code>.softfield/cards/</code>
+    </section>
+    <section class="panel">
+      <h2>Result <span class="src">state, merged by, commit, lines changed</span></h2>
+      <dl class="kv"><dt>State</dt><dd><span class="pill">later</span></dd></dl>
+    </section>
+  </div>
+  <p class="legend">Nothing says what "set aside" or "later" means, and no button is here: the only Queue button is in the Tickets page's Set aside table.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <p class="version-name">Proposed</p>
+  <h3>The board, Seed</h3>
+  <div class="phone">
+    <a class="card" href="#p">
+      <span class="card-meta"><b>#1</b> <span>bug-03-roadmap-items-to-seeds</span> <span>bug · factory</span></span>
+      <span class="card-title">Every idea the old roadmap still held is either a seed card the owner can see in the Planning room, or is named as already built or already a card, so nothing from it lives only in git history.</span>
+      <span class="card-action new">Set aside, won't run until you queue it ›</span>
+    </a>
+    <p class="why">the note says what to do, and where: the card opens its page</p>
+  </div>
+  <h3>Its page, /tickets/bug-03-roadmap-items-to-seeds</h3>
+  <div class="phone page" id="p">
+    <nav class="crumbs"><a href="#">BUGS</a><span>bug-03-roadmap-items-to-seeds</span></nav>
+    <section class="panel aside new" id="aside">
+      <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
+      <p class="say">This ticket won't run until you queue it.</p>
+      <p class="then">Queued, it joins the line at priority 90, behind the tickets that go first; move it on the board once it is there.</p>
+      <button type="button" class="go" id="queue">Queue it</button>
+      <div class="way">Queue it · on its way · at the runner's next pick</div>
+    </section>
+    <p class="why">first on the page, above the fold on a phone; the button posts the Tickets page's own "queue" request</p>
+    <section class="panel readable new">
+      <h2>Goal &amp; Done when <span class="src">from the ticket</span></h2>
+      <h4>Goal</h4>
+      <p>Every idea the old roadmap still held is either a seed card the owner can see in the Planning room, or is named as already built or already a card, so nothing from it lives only in git history.</p>
+      <h4>Done when</h4>
+      <ul>
+        <li>each open item is a seed card in <code>.softfield/cards/</code> in the shape above, or is added to the Notes of the existing card that covers it; no two cards hold the same idea</li>
+        <li>nothing but cards in <code>.softfield/cards/</code> changes: the report below goes in the job's note, not in a file</li>
+        <li>the job's note lists every roadmap section with where it went</li>
+        <li>no card for an item the code shows is built</li>
+      </ul>
+      <details><summary>The lead's notes for the agent</summary>
+        <p>The owner removed the roadmap file on 2026-10-13 (commit f90e764): nothing on the dashboard showed it. Its last version is in git…</p>
+      </details>
+    </section>
+    <p class="why">the front matter goes; Goal and Done when read as text, Context folded</p>
+    <section class="panel">
+      <h2>Files <span class="src">from the ticket</span></h2>
+      <code>.softfield/cards/</code>
+    </section>
+    <section class="panel">
+      <h2>Result <span class="src">state, merged by, commit, lines changed</span></h2>
+      <dl class="kv"><dt>State</dt><dd><span class="pill new">set aside</span></dd></dl>
+    </section>
+  </div>
+  <p class="legend"><span class="new">Dashed green</span> marks what changes. A ticket that isn't set aside has no plate. Once the runner has queued it, the page reads as any ready ticket's and the board card moves to Planted.</p>
+</div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+  document.getElementById("queue").addEventListener("click", () => document.getElementById("aside").classList.add("sent"));
+  document.querySelectorAll("a[href^='#']").forEach((a) => a.addEventListener("click", (e) => e.preventDefault()));
+</script>
+</body>
+</html>

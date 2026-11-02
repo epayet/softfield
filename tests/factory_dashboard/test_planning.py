@@ -121,7 +121,7 @@ def test_an_idea_card_with_a_thread_is_not_a_seed(planning, db):
     ("kind", "subject", "value", "done", "result", "still_open"),
     [
         # worked: the ADR is accepted, the plan isn't about it
-        ("accept_adr", "f6", "20", True, "accepted .factory/adr/20-planning-room.md", ["plan"]),
+        ("accept_adr", "f6", "20", True, "accepted .softfield/adr/20-planning-room.md", ["plan"]),
         # an ADR request with another number is about another proposal
         ("accept_adr", "f6", "21", None, None, ["adr-20", "plan"]),
         # pending: the runner hasn't done it yet
@@ -441,7 +441,7 @@ _REVIEW_ADR: dict[str, Any] = {
     "id": "adr-20",
     "kind": "adr",
     "title": "ADR 20: the planning room",
-    "path": ".factory/adr/20-planning-room.md",
+    "path": ".softfield/adr/20-planning-room.md",
     "key_points": [
         {"n": 1, "title": "Planning goes first", "text": "At the next pick.", "flag": True},
         {"n": 2, "title": "Inside the runner", "text": "One process.", "flag": False},
@@ -483,7 +483,7 @@ _REVIEW_MERGE: dict[str, Any] = {
     "id": "merge-f9",
     "kind": "merge",
     "title": "Parallel, said twice",
-    "path": ".factory/cards/f9-parallel.md",
+    "path": ".softfield/cards/f9-parallel.md",
     "into": "f7",
     "key_points": [{"n": 1, "title": "Notes", "text": "F9's notes go to F7.", "flag": False}],
 }

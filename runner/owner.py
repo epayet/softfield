@@ -53,7 +53,7 @@ class OwnerError(RuntimeError):
 def _milestone_of(repo: Path, task_id: str) -> str:
     """The short key of the milestone a ticket's ``milestone:`` names: a re-homed ticket keeps
     its old id. One with no file, or whose frontmatter won't parse, counts by its id."""
-    for path in sorted((repo / ".factory" / "tasks").glob(f"*/{task_id}.md")):
+    for path in sorted((repo / ".softfield" / "tasks").glob(f"*/{task_id}.md")):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
             return short_key(milestone_key(meta["milestone"]))
@@ -64,7 +64,7 @@ def _milestone_of(repo: Path, task_id: str) -> str:
 
 def _ids(repo: Path, folder: str, milestone: str) -> list[str]:
     """The tickets in ``folder`` that count for ``milestone`` (``_milestone_of``)."""
-    paths = sorted((repo / ".factory" / "tasks" / folder).glob("*.md"))
+    paths = sorted((repo / ".softfield" / "tasks" / folder).glob("*.md"))
     return [p.stem for p in paths if _milestone_of(repo, p.stem) == short_key(milestone)]
 
 
@@ -121,10 +121,10 @@ def owner_items(repo: Path, milestone: str, state: State, review_stop: str) -> l
         else:
             text = f"{task_id} escalated with no decision: see its logs"
             items.append(OwnerItem("escalated", task_id, text, rerun))
-    ready = load_dir(repo / ".factory" / "tasks" / "ready", 1000)
+    ready = load_dir(repo / ".softfield" / "tasks" / "ready", 1000)
     for task_id in _ids(repo, "blocked", milestone):
         # as ``block`` wrote it, with no command: the desk's buttons answer it (F106 D1, D3)
-        path = repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md"
+        path = repo / ".softfield" / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         text = blocked_text(task_id, reason, len(blocked_ids(ready, {task_id})))
         items.append(OwnerItem(BLOCKED_KIND, task_id, text, ""))
@@ -239,7 +239,7 @@ def verdict(
     items = owner_items(repo, milestone, state, review_stop)
     ready = [
         t
-        for t in load_dir(repo / ".factory" / "tasks" / "ready", 1000)
+        for t in load_dir(repo / ".softfield" / "tasks" / "ready", 1000)
         if short_key(t.milestone) == short_key(milestone)
     ]
     needs = []
@@ -252,7 +252,7 @@ def verdict(
         else:
             needs.append(f"  • {task_id} escalated with no decision: see its logs{behind}")
     for task_id in _ids(repo, "blocked", milestone):
-        path = repo / ".factory" / "tasks" / "blocked" / f"{task_id}.md"
+        path = repo / ".softfield" / "tasks" / "blocked" / f"{task_id}.md"
         reason = footer_fields(path.read_text(encoding="utf-8")).get("reason", "see its logs")
         needs.append(f"  • {task_id} blocked: {reason}")
     needs += [f"  • {text}" for _, text in _reserve_waits(repo, state, milestone)]
@@ -283,7 +283,7 @@ def verdict(
 
 def record_verdict(repo: Path, text: str) -> Path | None:
     """Append the verdict to the latest session report and commit it."""
-    reports = sorted((repo / ".factory" / "sessions").glob("*.md"))
+    reports = sorted((repo / ".softfield" / "sessions").glob("*.md"))
     if not reports:
         return None
     with reports[-1].open("a", encoding="utf-8") as fh:
@@ -381,7 +381,7 @@ def signoff(
     status = (
         f"> **Status: done.** Signed off by the owner on {today.isoformat()}."
         f" Base: git tag `{milestone}-start`."
-        f" Report: [`.factory/reviews/{review.name}`](../reviews/{review.name})."
+        f" Report: [`.softfield/reviews/{review.name}`](../reviews/{review.name})."
     )
     # Both files are checked before either is written: a refusal leaves no half sign-off
     new_doc = _signed_doc(doc, status)
@@ -411,9 +411,9 @@ def _is_adr(number: int) -> Callable[[str, str], bool]:
 def _adr_file(repo: Path, number: int) -> Path:
     """ADR N's file. Two plan branches can draft the same number, so the number alone names the
     one still undecided (2026-11-02: an Accept went to the wrong ADR 39), and refuses to guess."""
-    found = sorted((repo / ".factory" / "adr").glob(f"{number:02d}-*.md"))
+    found = sorted((repo / ".softfield" / "adr").glob(f"{number:02d}-*.md"))
     if not found:
-        raise OwnerError(f"ADR {number} not found in .factory/adr/")
+        raise OwnerError(f"ADR {number} not found in .softfield/adr/")
     open_ = [p for p in found if _PROPOSED_STATUS.search(p.read_text(encoding="utf-8"))]
     if len(found) == 1 or len(open_) == 1:
         return found[0] if len(found) == 1 else open_[0]

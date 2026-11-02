@@ -200,7 +200,7 @@ def _get_addresses() -> list[str]:
         "name": PROJECT,
         "job_id": "1",
         "thread": "f6",
-        "path:path": ".factory/cards/f6-mockup/desk.html",
+        "path:path": ".softfield/cards/f6-mockup/desk.html",
         "id": "adr-20",
         "request_id": "1",
         "key": "f1",
@@ -274,7 +274,7 @@ def test_disk_sizes_each_place_and_the_factorys_parts_of_tmp(tmp_path):
     assert "0.0 MB, 0 files" in lines["Playwright folders"]
     assert "someone-elses" not in out
     assert "0.0 MB, 1 files" in lines["the bench folder"]
-    assert "0.0 MB, 1 files" in lines[".factory/var/runs/"]
+    assert "0.0 MB, 1 files" in lines[".softfield/var/runs/"]
     assert "0.0 MB, 1 files" in lines["the metrics database"]
     assert "0.0 MB, 1 files" in lines["its write-ahead log (-wal)"]
     assert "none" in out.splitlines()[-1]
@@ -294,7 +294,7 @@ def test_disk_reads_a_missing_folder_as_zero_and_skips_what_it_cannot_read(tmp_p
     finally:
         locked.chmod(0o700)
     lines = {line[:32].strip(): line for line in out.splitlines()}
-    for place in ("the bench folder", ".factory/var/runs/", "the metrics database"):
+    for place in ("the bench folder", ".softfield/var/runs/", "the metrics database"):
         assert lines[place].endswith("0.0 MB, 0 files")
     assert lines["pytest-of-sam"].endswith("0.0 MB, 1 files")  # the locked folder is skipped
 
@@ -358,12 +358,12 @@ def test_a_test_repo_holds_no_sample_hooks(tmp_path):
 @pytest.fixture
 def in_repo(repo, monkeypatch, machine):
     """The temporary repo as the command's, its metrics database under its ``var/``."""
-    toml = (cli._repo() / ".factory" / "project.toml").read_text()
+    toml = (cli._repo() / ".softfield" / "project.toml").read_text()
     test_db = (repo / "var" / "factory-metrics.sqlite").as_posix()
     metrics_db = f'\n[metrics]\ndb = "{test_db}"\n'  # over the machine's real one
     # the project is its folder's name
     toml = re.sub(r'^name = ".*"\n', "", toml, count=1, flags=re.M)
-    (repo / ".factory" / "project.toml").write_text(toml + metrics_db)
+    (repo / ".softfield" / "project.toml").write_text(toml + metrics_db)
     monkeypatch.chdir(repo)
     conn = metrics.open_db(repo / "var" / "factory-metrics.sqlite")
     try:
@@ -413,7 +413,7 @@ def test_looking_applies_no_owner_request_and_changes_nothing(in_repo, capsys):
     """ADR 28 item 3: every other command applies the owner's requests first (here, a pause
     made from the dashboard). A look runs inside a job, and leaves them to the runner."""
     db = in_repo / "var" / "factory-metrics.sqlite"
-    state_path = in_repo / ".factory" / "var" / "runs" / "state.json"
+    state_path = in_repo / ".softfield" / "var" / "runs" / "state.json"
     before, status = db.read_bytes(), git(in_repo, "status", "--porcelain")
     head = git(in_repo, "rev-parse", "HEAD")
     assert cli.main(["look", "sql", "SELECT kind, done FROM owner_requests"]) == 0
@@ -448,8 +448,8 @@ def test_the_review_job_may_look_and_is_told_so(repo, monkeypatch):
         out = re.search(r"Write (\S+) as:", job.prompt)
         assert out
         (repo_ / out[1]).write_text(json.dumps({"findings": [], "stop": None}))
-        (repo_ / ".factory" / "reviews").mkdir(parents=True, exist_ok=True)
-        (repo_ / ".factory" / "reviews" / "m1.md").write_text(REVIEW_DOC)
+        (repo_ / ".softfield" / "reviews").mkdir(parents=True, exist_ok=True)
+        (repo_ / ".softfield" / "reviews" / "m1.md").write_text(REVIEW_DOC)
         return JobResult(ok=True, text="", duration_s=1.0)
 
     monkeypatch.setattr(claude, "run_claude", run_claude)

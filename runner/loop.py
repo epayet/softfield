@@ -244,7 +244,7 @@ class Session:
         return self.cfg.runs_dir / "state.json"
 
     def tasks_dir(self, name: str) -> Path:
-        return self.repo / ".factory" / "tasks" / name
+        return self.repo / ".softfield" / "tasks" / name
 
     def log(self, message: str) -> None:
         """One console line (`runner.console`); an empty one is a blank line."""
@@ -580,7 +580,7 @@ TICKET_FOLDERS = ("ready", "done", *STOPPED, LATER)
 
 
 def sync_tickets(s: Session) -> None:
-    """Every ticket in .factory/tasks/ with its folder's state (f1 D4): the queue the dashboard
+    """Every ticket in .softfield/tasks/ with its folder's state (f1 D4): the queue the dashboard
     reads.
     A row whose file is in no folder (deleted, like f1-30 by ADR 15, or f4-21 while blocked)
     leaves it, unless it is done."""
@@ -607,7 +607,7 @@ def sync_cards(s: Session) -> None:
     if s.project_id is None:
         return
     present = set()
-    for path in sorted((s.repo / ".factory" / "cards").glob("*.md")):
+    for path in sorted((s.repo / ".softfield" / "cards").glob("*.md")):
         try:
             key = milestone_key(path.stem)
         except TaskError:
@@ -1078,7 +1078,7 @@ def lead_work_ready(s: Session) -> bool:
     protected = tuple(read_protected(s.repo))
     ready = load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
     done = task_ids(s.tasks_dir("done"))
-    paused = blocked_ids(ready, stopped_ids(s.repo / ".factory" / "tasks"))
+    paused = blocked_ids(ready, stopped_ids(s.repo / ".softfield" / "tasks"))
     return any(
         router.lead_only(t.agent, t.files, protected)
         and t.id not in paused
@@ -1422,7 +1422,7 @@ def _brief(s: Session, role: str) -> str:
     text, missing = prompts.brief(home, role, owner=not loaded)
     rules = s.repo / config.PROJECT_MD
     if text and rules.is_file():
-        text += "This project's own rules (.factory/project.md):\n\n"
+        text += "This project's own rules (.softfield/project.md):\n\n"
         text += rules.read_text(encoding="utf-8").strip() + "\n\n" + prompts.BRIEF_END
     if missing:
         note = (
@@ -1808,7 +1808,7 @@ def give_direction(s: Session, task: Task, rec: TaskRecord, logs: Path) -> tuple
             timeouts=rec.timeouts,
         ),
         timeout=s.cfg.claude_timeout,
-        edit=(".factory/var/runs/**",),
+        edit=(".softfield/var/runs/**",),
         commands=GIT_READ_COMMANDS,
     )
     direction_file, ticket_file = logs / "direction.md", logs / "ticket.md"
@@ -3272,7 +3272,7 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
         )
         + _recheck_note(s.state),
         timeout=s.cfg.claude_timeout,
-        edit=(".factory/tasks/ready/**", "docs/agents/developer.md", ".factory/var/runs/**"),
+        edit=(".softfield/tasks/ready/**", "docs/agents/developer.md", ".softfield/var/runs/**"),
         # pytest: the tickets' pre-flight test; its commit skips the hook
         commands=(*GIT_READ_COMMANDS, "uv run pytest", CHECK_TICKETS),
     )
@@ -3357,7 +3357,7 @@ def _merge_files(s: Session, merged: Iterable[str]) -> str:
     for entry in merged:
         ticket, sha = entry.split()[:2]
         files = [f for f in s.git.run("show", "--name-only", "--format=", sha).splitlines() if f]
-        lines.append(f"- {ticket} (.factory/tasks/done/{ticket}.md): {', '.join(files)}")
+        lines.append(f"- {ticket} (.softfield/tasks/done/{ticket}.md): {', '.join(files)}")
     return "\n".join(lines)
 
 
@@ -3557,8 +3557,8 @@ def fix_tickets(
 
 def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: str) -> Path | None:
     """A ticket (the lead's when the ticket at fault was itself a fix: it has `finding:`;
-    else a developer's) in .factory/tasks/ready/ for a stand-in checkpoint's ``findings`` (by
-    key), on one ticket at fault and of one kind, from that ticket in .factory/tasks/done/: its
+    else a developer's) in .softfield/tasks/ready/ for a stand-in checkpoint's ``findings`` (by
+    key), on one ticket at fault and of one kind, from that ticket in .softfield/tasks/done/: its
     milestone (unless signed off: then ``milestone``, the running one), its tests, its difficulty,
     and the findings' files that exist (else its files). A `test` kind is `tests_only`: tests in
     `files:`, which pass on main. The findings are untrusted text: they go in the body, quoted, and
@@ -3569,7 +3569,7 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     tests_only = first.kind == "test"
     if not _TICKET_ID_RE.fullmatch(first.ticket):
         return None
-    source_path = repo / ".factory" / "tasks" / "done" / f"{first.ticket}.md"
+    source_path = repo / ".softfield" / "tasks" / "done" / f"{first.ticket}.md"
     try:
         source = parse_task(source_path, 1)
     except (OSError, ValueError, yaml.YAMLError):
@@ -3586,7 +3586,7 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     prefix = ticket_prefix(milestone)  # a bug's fix is a bug (never signed off)
     numbers = [
         int(found[1])
-        for path in (repo / ".factory" / "tasks").glob("*/*.md")
+        for path in (repo / ".softfield" / "tasks").glob("*/*.md")
         if (found := re.match(rf"{re.escape(prefix)}-(\d+)-", path.stem))
     ]
     # Named by the ticket at fault, not the finding's first words, cut mid-phrase (F171 D4)
@@ -3644,14 +3644,14 @@ def fix_ticket(repo: Path, milestone: str, findings: Mapping[str, Finding], by: 
     body = (
         f"### Goal\nFix {count} on {on}: {'; '.join(summaries.values())}\n\n"
         f"### Context\nBy {by}, standing in for the lead at a checkpoint, on the merge of"
-        f" `.factory/tasks/done/{first.ticket}.md`.{kind} What it found is under Finding:\n"
+        f" `.softfield/tasks/done/{first.ticket}.md`.{kind} What it found is under Finding:\n"
         + "\n".join(places_text)
         + "\n\n### Finding\n"
         + "\n\n".join(quotes)
         + f"\n\n### Done when\n{done}"
     )
     frontmatter = yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)
-    path = repo / ".factory" / "tasks" / "ready" / f"{task_id}.md"
+    path = repo / ".softfield" / "tasks" / "ready" / f"{task_id}.md"
     path.write_text(f"---\n{frontmatter}---\n\n{body}", encoding="utf-8")
     return path
 
@@ -3731,7 +3731,7 @@ def _repair_requeue(s: Session, task: Task, requeued: Path, session: str | None)
 
 def _written_tickets(s: Session) -> list[Path]:
     """The ready tickets a job added or changed, not yet committed."""
-    lines = s.git.run("status", "--porcelain", "-uall", "--", ".factory/tasks/ready").splitlines()
+    lines = s.git.run("status", "--porcelain", "-uall", "--", ".softfield/tasks/ready").splitlines()
     paths = [s.repo / line[3:] for line in lines if line.endswith(".md")]
     return [p for p in paths if p.is_file()]
 
@@ -4327,7 +4327,7 @@ def _all_cards(repo: Path) -> list[tuple[str, str, int]]:
     from runner.milestone import card  # runner.milestone imports this module
 
     found = []
-    for path in sorted((repo / ".factory" / "cards").glob("*.md")):
+    for path in sorted((repo / ".softfield" / "cards").glob("*.md")):
         try:
             key = milestone_key(path.stem)
             text = path.read_text(encoding="utf-8")
@@ -4345,8 +4345,8 @@ def work_stands(
     """Where the work stands, for a planner job's prompt (F21 D1), from `dry_run_plan`'s
     inputs: the job in flight, the ready tickets in run order with what each waits for
     (``behind`` its queued direction or escalation), every card, and ``minutes``
-    (`ticket_minutes`). It reads .factory/tasks/ and .factory/cards/ and writes nothing."""
-    tasks = cfg.repo / ".factory" / "tasks"
+    (`ticket_minutes`). It reads .softfield/tasks/ and .softfield/cards/ and writes nothing."""
+    tasks = cfg.repo / ".softfield" / "tasks"
     ready = load_dir(tasks / "ready", cfg.default_max_diff)
     done = task_ids(tasks / "done")
     paused = blocked_ids(ready, stopped_ids(tasks))
@@ -5103,7 +5103,8 @@ def work_queue(
     take_tickets: bool = True,
     wait: bool = True,
 ) -> bool:
-    """Work through .factory/tasks/ready (one milestone's, if given) and the queued jobs their runs
+    """Work through .softfield/tasks/ready (one milestone's, if given) and the queued jobs their
+    runs
     trigger: directions, checkpoints and escalations (ADR 22). Each turn runs what
     `dispatch.pick` returns; the next ticket is `_next_task`'s. Returns True if Claude (a lead
     ticket or an escalation) changed the runner, which needs a restart.
@@ -5150,7 +5151,7 @@ def work_queue(
         if milestone is not None:  # either form of the key (ADR 16 item 6)
             ready = [t for t in ready if short_key(t.milestone) == short_key(milestone)]
         done = task_ids(s.tasks_dir("done"))
-        paused = blocked_ids(ready, stopped_ids(s.repo / ".factory" / "tasks"))
+        paused = blocked_ids(ready, stopped_ids(s.repo / ".softfield" / "tasks"))
         held = _held(s.repo, ready)
         rows = _runnable_rows(s, ready, escalate=escalate, reviews=reviews)
         behind = waiting_rows(s, ready)
@@ -5406,7 +5407,8 @@ def live_run(cfg: Config) -> str | None:
 
 
 def queue_ticket(cfg: Config, wanted: str) -> str:
-    """Move a ticket from .factory/tasks/later/ (or blocked/, F106 D3) to .factory/tasks/ready/ in a
+    """Move a ticket from .softfield/tasks/later/ (or blocked/, F106 D3) to .softfield/tasks/ready/
+    in a
     commit of its own (ADR 17 item 3); ``wanted`` is its id or a unique prefix. Tasks only, so the
     commit skips the hook.
     Refused while a run is live: the runner commits on the same branch."""
@@ -5420,7 +5422,7 @@ def move_to_ready(repo: Path, wanted: str) -> str:
     once no run is live, or the run itself applying the owner's request (f5 D2). A ticket in
     later/ first, else one in blocked/, tried again (F106 D3): its ``task/<id>`` is copied to
     ``blocked/<id>`` first, since a lead ticket starts again from main and resets its branch."""
-    tasks = repo / ".factory" / "tasks"
+    tasks = repo / ".softfield" / "tasks"
     try:
         src = find_ticket(tasks, LATER, wanted)
     except TaskError as later:
@@ -5447,10 +5449,10 @@ def set_aside(repo: Path, wanted: str) -> str:
     """A blocked ticket moved to later/ in a commit of its own, the owner's ``set_aside``
     request (F106 D3); its branch stays as it is, copied too (``keep_blocked_work``) for when
     it is queued again from later/."""
-    src = find_ticket(repo / ".factory" / "tasks", "blocked", wanted)
+    src = find_ticket(repo / ".softfield" / "tasks", "blocked", wanted)
     git = Git(repo)
     keep_blocked_work(git, src.stem)
-    later = repo / ".factory" / "tasks" / LATER
+    later = repo / ".softfield" / "tasks" / LATER
     _move_alone(git, src, later, f"set aside {src.stem} (by the owner)")
     return src.stem
 
@@ -5565,13 +5567,14 @@ PARKED_REASON = "parked for a Claude limit"
 def dry_run_plan(cfg: Config) -> None:
     """`runner run --dry-run` (f8-02): `dispatch.plan`'s list, each job with what it waits for and
     why it is there, and each ticket's pre-flight problems (docs/task-writing.md). Reads
-    .factory/tasks/, state.json and the metrics database if there is one: any branch, any tree, and
+    .softfield/tasks/, state.json and the metrics database if there is one: any branch, any tree,
+    and
     no run folder or row (f1-33). A due review not queued yet is listed as the run would queue it,
     and a support job an older state.json parked as the row the run makes of it."""
     from runner.milestone import due_reviews  # runner.milestone imports this module
 
     at = now()
-    tasks = cfg.repo / ".factory" / "tasks"
+    tasks = cfg.repo / ".softfield" / "tasks"
     ready = load_dir(tasks / "ready", cfg.default_max_diff)
     done = task_ids(tasks / "done")
     paused = blocked_ids(ready, stopped_ids(tasks))

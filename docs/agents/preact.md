@@ -1,6 +1,6 @@
 # Preact + htm in Coucou
 
-One page, for the version we vendor ([ADR 11](../../.factory/adr/11-preact-ui.md)): `coucou/static/coucou/vendor/preact-htm.js`, htm 3.1.1 with its bundled Preact 10. No web docs: they describe newer versions. **Worked example:** `coucou/static/coucou/js/name_form.js` and `tests/browser/test_name_form.py`. Copy their shape.
+One page, for the version we vendor ([ADR 11](../../.softfield/adr/11-preact-ui.md)): `coucou/static/coucou/vendor/preact-htm.js`, htm 3.1.1 with its bundled Preact 10. No web docs: they describe newer versions. **Worked example:** `coucou/static/coucou/js/name_form.js` and `tests/browser/test_name_form.py`. Copy their shape.
 
 ## Importing
 ```js

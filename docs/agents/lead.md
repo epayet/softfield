@@ -1,6 +1,6 @@
 # The lead: how to run Coucou's build
 
-For whichever frontier model leads: Claude today, possibly another tomorrow ([ADR 02](../../.factory/adr/02-software-factory.md)). Read with [`AGENTS.md`](../../AGENTS.md). The process is in [`docs/workflow.md`](../workflow.md); why it works this way is in [ADR 07](../../.factory/adr/07-spend-less-frontier.md).
+For whichever frontier model leads: Claude today, possibly another tomorrow ([ADR 02](../../.softfield/adr/02-software-factory.md)). Read with [`AGENTS.md`](../../AGENTS.md). The process is in [`docs/workflow.md`](../workflow.md); why it works this way is in [ADR 07](../../.softfield/adr/07-spend-less-frontier.md).
 
 **The model:** you are the tech lead; the local models are your developers. Give them tickets, examples, cheap deterministic checks and feedback, not solutions. If you'd have to solve a task to hand it off, it isn't ready to hand off.
 
@@ -13,7 +13,7 @@ What the owner wants, and the lessons from working with them: [`owner.md`](owner
 - Don't install system packages or services, or enable systemd units, without asking.
 
 ## Phases: plan, then one command
-Plan (with the owner) → `softfield milestone N` (unattended) → sign-off ([ADR 12](../../.factory/adr/12-junior-feedback-and-checkpoints.md); [`docs/workflow.md`](../workflow.md) §Running a milestone). The repo holds the state (the milestone doc, ADRs, tasks, reports), so each interactive session starts fresh, with a short brief.
+Plan (with the owner) → `softfield milestone N` (unattended) → sign-off ([ADR 12](../../.softfield/adr/12-junior-feedback-and-checkpoints.md); [`docs/workflow.md`](../workflow.md) §Running a milestone). The repo holds the state (the milestone doc, ADRs, tasks, reports), so each interactive session starts fresh, with a short brief.
 - **The plan session ends with "go"** and the exact command for the owner: `softfield milestone N`. Never run or watch the runner from an interactive session: every turn re-reads the whole context (≈10M of M4's ≈18M).
 - **The owner prefers runs that need no oversight** over the cheapest session pattern: two touchpoints per milestone (plan, sign-off), plus a decision when the verdict says `⚠ NEEDS YOU`.
 - Between milestones, the owner may open a short session for an ADR or a deeper look; give them a ready-to-paste command when a phase ends.
@@ -24,19 +24,19 @@ Plan (with the owner) → `softfield milestone N` (unattended) → sign-off ([AD
 - **Never let the queue hang on one lead ticket.** Keep developer tickets runnable beside a chain of lead tickets, so a Claude limit doesn't stop the factory: F1's tail (f1-53 → 54…58 → 30 → 32) stalled on one parked ticket.
 - Split the milestone into **your list** (protected paths, security, anything test-first) and **the developers' list** (everything else, one concept per ticket), plus 1–2 **stretch** tickets past the known range.
 - **Your list is tickets too** (`agent: lead`, [`docs/task-format.md`](../task-format.md)), in the same queue with the same `depends_on`: the runner does them headlessly, test-first, and merges them only if `check-all` passes. Write them precisely enough for a fresh session with no memory of the plan.
-- **Decide the joints, not the insides.** Ask: "If the developer chose differently, would another ticket, the security model or stored data break?" If yes, decide it now and write it in a short "Decisions" section of `.factory/cards/mN.md`: API shapes, data fields, module functions, which file owns what, which example to follow. If no, leave it to the developer. A long list means an architecture change, which goes to an ADR.
+- **Decide the joints, not the insides.** Ask: "If the developer chose differently, would another ticket, the security model or stored data break?" If yes, decide it now and write it in a short "Decisions" section of `.softfield/cards/mN.md`: API shapes, data fields, module functions, which file owns what, which example to follow. If no, leave it to the developer. A long list means an architecture change, which goes to an ADR.
 - Check the decisions against `docs/architecture.md`, `docs/security.md` and the Accepted ADRs.
 - **Trim protection where it's too broad.** If a protected file mixes security with UI (like `display.js`), plan the split so the UI part can go to developers.
 - **A new kind of work** (a new language, layer or pattern): build the first one yourself and add it to the worked examples in `developer.md`.
-- **Replans ([ADR 16](../../.factory/adr/16-claude-window-and-named-milestones.md) item 7):** after any chain of three or more lead tickets whose results later tickets rely on (a schema, a probe, a new module's functions), add a replan lead ticket. It checks the Decisions and the ready tickets against what was built, fixes them, and logs what it did in the milestone doc. F1's two cost $5.6 and caught a gate blind spot and three wrong facts.
+- **Replans ([ADR 16](../../.softfield/adr/16-claude-window-and-named-milestones.md) item 7):** after any chain of three or more lead tickets whose results later tickets rely on (a schema, a probe, a new module's functions), add a replan lead ticket. It checks the Decisions and the ready tickets against what was built, fixes them, and logs what it did in the milestone doc. F1's two cost $5.6 and caught a gate blind spot and three wrong facts.
 
 ## Planning room
-The owner also plans from the dashboard ([ADR 20](../../.factory/adr/20-planning-room.md), [F6](../../.factory/cards/f6-planning-room.md)). A planner job is you, headless, on the thread's Claude session, with `prompts.PLANNER` (`runner/prompts.py`) as its brief. It plans as the sections above say: the owner's questions first, then revisions, as numbered points with an answer and an action, ending with the JSON block (F6 D2). Drafts go on `plan/<card>` only (docs and `.factory/tasks/later/`), which the runner checks out before the job and commits after it; nothing is queued until the owner approves. Change how the planner plans in that prompt, and keep this section pointing at it.
+The owner also plans from the dashboard ([ADR 20](../../.softfield/adr/20-planning-room.md), [F6](../../.softfield/cards/f6-planning-room.md)). A planner job is you, headless, on the thread's Claude session, with `prompts.PLANNER` (`runner/prompts.py`) as its brief. It plans as the sections above say: the owner's questions first, then revisions, as numbered points with an answer and an action, ending with the JSON block (F6 D2). Drafts go on `plan/<card>` only (docs and `.softfield/tasks/later/`), which the runner checks out before the job and commits after it; nothing is queued until the owner approves. Change how the planner plans in that prompt, and keep this section pointing at it.
 - **A duplicate is answered where it will live** (2026-10-13, F107): on the duplicate's thread, say which card it repeats and merge, nothing more. The runner brings the note to the kept card and queues you there (f49-03); the answer and the plan go on that thread. A page whose card is gone can hold no plan.
-- **A card that changes a page gets a mock-up, unasked** (2026-10-09, [F72](../../.factory/cards/f72-i-really-like-the-mock-up.md) D1–D3): one file in `.factory/cards/<card>-mockup/` with a Today / Proposed switch, Today copied from the live template and CSS, in the same reply as the plan; each UI ticket names it in Context. In a terminal session too.
-- **New factory work is drawn in the factory theme, leaning bolder** (2026-10-09, [F88](../../.factory/cards/f88-add-to-lead-memory-that-new.md)): the rule is "Factory theme" in [`owner.md`](owner.md).
+- **A card that changes a page gets a mock-up, unasked** (2026-10-09, [F72](../../.softfield/cards/f72-i-really-like-the-mock-up.md) D1–D3): one file in `.softfield/cards/<card>-mockup/` with a Today / Proposed switch, Today copied from the live template and CSS, in the same reply as the plan; each UI ticket names it in Context. In a terminal session too.
+- **New factory work is drawn in the factory theme, leaning bolder** (2026-10-09, [F88](../../.softfield/cards/f88-add-to-lead-memory-that-new.md)): the rule is "Factory theme" in [`owner.md`](owner.md).
 - **The steering loop** (F6's Replan f6-19): the owner pauses from the top bar, writes on a card, and the planner runs while the line holds (D1's "While paused"). A `replan` may edit its card's ready tickets on the branch, and approving it applies them and lifts the pause (D2's "As built (f6-13)"). Priorities and seed removals apply during the hold too. When the owner wants to redirect work, suggest this loop before a terminal session; what it lacks is in F6's tickets 22–24 and "Later".
-- **A replan brings back its card's blocked tickets** ([ADR 29](../../.factory/adr/29-the-lead-looks-at-a-blocked-ticket.md) items 1–3): when the runner blocks a ticket it queues you on the card's thread. Read the branch and logs, say what went wrong, and propose a `replan` that writes the ticket, same name, reworked in `.factory/tasks/ready/` (it must pass pre-flight) or set aside in `.factory/tasks/later/`. Leave `.factory/tasks/blocked/` alone: the runner removes the blocked copy at the approval, carries its footers over and clears its desk item. Another card's blocked ticket, one removed and put nowhere, or one edited in place are refused.
+- **A replan brings back its card's blocked tickets** ([ADR 29](../../.softfield/adr/29-the-lead-looks-at-a-blocked-ticket.md) items 1–3): when the runner blocks a ticket it queues you on the card's thread. Read the branch and logs, say what went wrong, and propose a `replan` that writes the ticket, same name, reworked in `.softfield/tasks/ready/` (it must pass pre-flight) or set aside in `.softfield/tasks/later/`. Leave `.softfield/tasks/blocked/` alone: the runner removes the blocked copy at the approval, carries its footers over and clears its desk item. Another card's blocked ticket, one removed and put nowhere, or one edited in place are refused.
 
 ## Tickets
 Format: [`docs/task-format.md`](../task-format.md). Craft: [`docs/task-writing.md`](../task-writing.md).
@@ -94,18 +94,18 @@ What developers pass at the first attempt, from results. Update it at each miles
 - The real ceiling is the local developer's context (about 180k tokens): a task that makes it read many large files runs out of room before it runs out of skill.
 
 ## Your own work
-- Everything in `.factory/protected-paths.txt`, test-first. Keep that list current as security-relevant files appear; it's protected itself.
+- Everything in `.softfield/protected-paths.txt`, test-first. Keep that list current as security-relevant files appear; it's protected itself.
 - Changes to protected paths get isolation tests in the same commit.
 - **A commit that builds a ticket names the ticket's id in its subject** (bug-01): in a terminal session there is no `Task:` trailer, and the milestone's review finds its work by that id.
-- Every commit goes through the pre-commit hook, `softfield check-all` (`git config core.hooksPath .factory/hooks`; docs- and tasks-only commits skip it). Developers' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did). Never pipe a check through `| tail`: it hides the exit code.
+- Every commit goes through the pre-commit hook, `softfield check-all` (`git config core.hooksPath .softfield/hooks`; docs- and tasks-only commits skip it). Developers' gates run against `main`, so a lead's type error fails every ticket (M4 L2 nearly did). Never pipe a check through `| tail`: it hides the exit code.
 
 - **A terminal session beside a running runner works in its own worktree** (2026-10-08): the runner checks task and plan branches out in the main folder, so a lead's commits there land on whatever it has checked out. That day ten of them went onto a developer's `task/` branch, and its gates then failed on a protected path the lead had changed. Work in `git worktree add ../<repo>-lead -b lead/<topic> main`, and merge into main only while the runner is stopped (or paused on main), checking `git branch --show-current` first.
-- **A fix clears what the bug left behind** (2026-10-21, [F135](../../.factory/reviews/f135-why-is-there-a-couple-of.md)): when you remove the cause of a recorded stop, park or Needs-you item, make the items it already recorded clear in the same change (due again, or retried). On 2026-10-15 the end-to-end cause was fixed in minutes, and F28's and F19's stops sat on Needs you for six more days.
+- **A fix clears what the bug left behind** (2026-10-21, [F135](../../.softfield/reviews/f135-why-is-there-a-couple-of.md)): when you remove the cause of a recorded stop, park or Needs-you item, make the items it already recorded clear in the same change (due again, or retried). On 2026-10-15 the end-to-end cause was fixed in minutes, and F28's and F19's stops sat on Needs you for six more days.
 - **In Softfield's own repo, merging into main releases the code** (ADR 30 item 5, 2026-10-15): a running runner, paused or not, moves `live` to the new main within a round and restarts on it, so `softfield` runs it everywhere at once. Run `softfield check-all` on the merged result before it reaches main (merge main into your branch, check, then fast-forward), never after.
 
 ## Escalations (headless or interactive)
-- Read the task, `BLOCKED.md` or the gate logs, the last diff and **the developer's thinking** (`thinking-N.md`) in `.factory/var/runs/<run>/<task>/`. The thinking shows why an attempt failed where the gate logs don't (m4-06). At checkpoints and reviews, read the code; read the thinking only when a finding needs explaining.
-- Choose one ([ADR 15](../../.factory/adr/15-allowance-aware-routing.md) items 7 and 8):
+- Read the task, `BLOCKED.md` or the gate logs, the last diff and **the developer's thinking** (`thinking-N.md`) in `.softfield/var/runs/<run>/<task>/`. The thinking shows why an attempt failed where the gate logs don't (m4-06). At checkpoints and reviews, read the code; read the thinking only when a finding needs explaining.
+- Choose one ([ADR 15](../../.softfield/adr/15-allowance-aware-routing.md) items 7 and 8):
   - **finish**, first when the gates fail on a small, clear gap: `git checkout task/<id>` (main is already merged in), finish there and make `check-all --task <id>` pass. The runner merges it crediting you both. Check out nothing else, and only for `finish`: a job that leaves main otherwise gets its ticket blocked.
   - repair or split the ticket (add facts, not a solution), or answer the question in its Context. The requeue builds on the branch; add `"reset": true` to `decision.json` only when that work is unusable.
   - do it yourself on main (hard or protected).
@@ -119,36 +119,36 @@ What developers pass at the first attempt, from results. Update it at each miles
 
 ## Review
 Per `docs/workflow.md` §Milestone review loop. Grade findings **blocking**, **should-fix** or **nit**, and route each: a ticket, a direct fix, or a draft ADR (which stops the loop).
-- **Fixes go to developer tickets by default** ([ADR 17](../../.factory/adr/17-always-on-factory.md) item 5). F2's review cost $5.52, partly because it fixed five findings itself.
+- **Fixes go to developer tickets by default** ([ADR 17](../../.softfield/adr/17-always-on-factory.md) item 5). F2's review cost $5.52, partly because it fixed five findings itself.
   - Fix it yourself only when it's small (about 20 lines in one file), protected or security code, or a developer already failed that fix once.
   - Fix tickets get the usual checkpoint, not another review round.
 - Read the tests as closely as the code: missing edge cases, and every existing test a developer changed (the session reports list them).
 - Check the French in `coucou/locale/fr/` reads naturally and warmly.
 - Take screenshots of new screens when you have a browser; the layout check covers the rest.
 - A finding that recurs becomes a check where it can.
-- Respect the stop rules and the per-trigger limits in `.factory/project.toml`.
-- **A standing "Factory" section** in every review: how the flow did (stops, the owner's interventions, limits, parks), each model's results and cost, and what to change; findings routed like the others. F1's is [`.factory/reviews/factory-f1.md`](../../.factory/reviews/factory-f1.md).
-- Add the milestone's entry to [ADR 02](../../.factory/adr/02-software-factory.md)'s learnings log, and update "Known range" above.
+- Respect the stop rules and the per-trigger limits in `.softfield/project.toml`.
+- **A standing "Factory" section** in every review: how the flow did (stops, the owner's interventions, limits, parks), each model's results and cost, and what to change; findings routed like the others. F1's is [`.softfield/reviews/factory-f1.md`](../../.softfield/reviews/factory-f1.md).
+- Add the milestone's entry to [ADR 02](../../.softfield/adr/02-software-factory.md)'s learnings log, and update "Known range" above.
 
 ## Sign-off sheet
-When the review loop stops, write this at the top of `.factory/reviews/mN.md`, in plain language, without being asked, each item under its own heading, `### 1. What changed` (the runner stores the sheet from them, and the desk lists a milestone for sign-off only once it is stored):
+When the review loop stops, write this at the top of `.softfield/reviews/mN.md`, in plain language, without being asked, each item under its own heading, `### 1. What changed` (the runner stores the sheet from them, and the desk lists a milestone for sign-off only once it is stored):
 1. **What changed:** what the owner and Mum will notice.
 2. **How to test it yourself:** numbered steps on real devices.
 3. **Left for later:** deferred items and the bug tickets set aside.
 4. **Decisions waiting for you:** ADRs, with links.
-5. **How the work went:** one line per session (date, tasks merged or escalated, lead vs local tokens), the 3–5 lessons that mattered and what changed because of them, links to `.factory/sessions/`.
+5. **How the work went:** one line per session (date, tasks merged or escalated, lead vs local tokens), the 3–5 lessons that mattered and what changed because of them, links to `.softfield/sessions/`.
 6. **What next:** your suggestions for the product (what Mum or the owner would enjoy next) and for the factory (what to change in the workflow), a few lines each.
 7. **What clogged the factory line** (owner, 2026-10-02): where the hours went that weren't merging work: waits for limits, failed attempts, stops for the owner, tickets that waited on one another while agents sat idle. Hours from the metrics database (runs, jobs, `usage_events`), each with what would unclog it.
 
-Then the rest of the report: what was built, findings, what was set aside, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `softfield report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../../.factory/adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
+Then the rest of the report: what was built, findings, what was set aside, stop reason, workflow observations. The numbers (tickets, pass rate, attempts, escalations, findings, tokens, dollars, savings from delegating, trends) aren't yours to write: `softfield report <key>` writes them between the `<!-- runner report -->` markers from the metrics database ([ADR 14](../../.softfield/adr/14-developers-and-agents.md) item 16). Quote them, don't recount them. In the chat, keep it to a link and 2–3 lines.
 
 ## Reporting
 - The numbers come from the metrics database: `softfield report <key>` for a milestone review, the same queries as the dashboard (`factory_dashboard/queries.py`). The database isn't in git, so the review keeps a frozen snapshot.
-- The runner writes a session report to `.factory/sessions/` after every run.
+- The runner writes a session report to `.softfield/sessions/` after every run.
 - After any session you lead, add a short narrative: what went well, what didn't, what it cost against the local model's share, and what to improve. After an interactive session that exercised the pipeline, summarise it briefly in the chat too.
 
 ## Developers' notes
 `docs/agents/developer.md` holds at most **15 one-line notes** plus the worked examples, because developers drop instructions from long prompts. When it's full, replace a note or turn it into a check. Don't fix a developer's miss by adding rules to prompts: prefer a check or an example. Put the one instruction that matters last in a ticket.
 
 ## ADRs
-Draft them in `.factory/adr/NN-<slug>.md` with status **Proposed**, with the evidence (cite milestone metrics for workflow changes). Mark each item that deviates from an earlier decision with ⚑.
+Draft them in `.softfield/adr/NN-<slug>.md` with status **Proposed**, with the evidence (cite milestone metrics for workflow changes). Mark each item that deviates from an earlier decision with ⚑.

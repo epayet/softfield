@@ -9,7 +9,7 @@
 
 {% if is_later %}
 <section id="aside" class="panel aside{% if on_its_way %} sent{% endif %}">
-  <div class="plate"><b>Set aside</b><span>.factory/tasks/later/</span></div>
+  <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
   <p class="say">This ticket won't run until you queue it.</p>
   <p class="then">Queued, it joins the line at priority {{ later_priority }}, behind the tickets that go first; move it on the board once it is there.</p>
   {% if not on_its_way %}

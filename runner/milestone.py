@@ -118,7 +118,7 @@ def milestone_metrics(repo: Path, milestone: str) -> MilestoneMetrics:
     tasks: list[str] = []
     for folder in ("done", "escalated"):
         for path in sorted(
-            (repo / ".factory" / "tasks" / folder).glob(f"{short_key(milestone)}-*.md")
+            (repo / ".softfield" / "tasks" / folder).glob(f"{short_key(milestone)}-*.md")
         ):
             text = path.read_text(encoding="utf-8")
             footers = all_footers(text)
@@ -159,7 +159,7 @@ def milestone_summary(repo: Path, milestone: str, base: str | None = None) -> st
 
 def _write_metrics(s: Session, milestone: str, base: str, rounds: list[int], stop: str) -> None:
     m = milestone_metrics(s.repo, milestone)
-    path = s.repo / ".factory" / "reviews" / f"{milestone}-metrics.md"
+    path = s.repo / ".softfield" / "reviews" / f"{milestone}-metrics.md"
     path.parent.mkdir(parents=True, exist_ok=True)  # a new project's first review
     avg = sum(m.attempts) / len(m.attempts) if m.attempts else 0
     path.write_text(
@@ -484,11 +484,12 @@ _BUILDING = ("ready", *STOPPED)
 
 
 def _ticket_milestones(repo: Path, folder: str) -> set[str]:
-    """The short keys of the milestones with a ticket in ``.factory/tasks/<folder>``; ``bugs``, and
+    """The short keys of the milestones with a ticket in ``.softfield/tasks/<folder>``; ``bugs``,
+    and
     a
     ticket that doesn't parse, are left out."""
     found = set()
-    for path in (repo / ".factory" / "tasks" / folder).glob("*.md"):
+    for path in (repo / ".softfield" / "tasks" / folder).glob("*.md"):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
             if meta.get("milestone") != BUGS:
@@ -527,7 +528,7 @@ def due_reviews(repo: Path, state: State) -> list[str]:
 def _done_tickets(repo: Path, milestone: str) -> list[str]:
     """The ids of the milestone's tickets in done/."""
     found = []
-    for path in (repo / ".factory" / "tasks" / "done").glob("*.md"):
+    for path in (repo / ".softfield" / "tasks" / "done").glob("*.md"):
         try:
             meta, _ = split_frontmatter(path.read_text(encoding="utf-8"))
         except (TaskError, yaml.YAMLError, UnicodeDecodeError):

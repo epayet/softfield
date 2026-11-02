@@ -6,7 +6,7 @@ A plain-language overview. The rules are in [`workflow.md`](workflow.md) and [`t
 
 ```mermaid
 flowchart TD
-  plan["Plan with the owner<br/>milestone doc, ADRs, tickets"] -->|"commit to .factory/tasks/ready/"| ready[".factory/tasks/ready/"]
+  plan["Plan with the owner<br/>milestone doc, ADRs, tickets"] -->|"commit to .softfield/tasks/ready/"| ready[".softfield/tasks/ready/"]
   ready -->|"softfield run"| pick{"Pick the next job<br/>support jobs first, then tickets<br/>(lead, then developer)"}
   pick -->|"developer ticket"| a1["Attempt 1<br/>local Qwen or a cloud developer"]
   a1 --> gates{"Gates<br/>runner check-all"}
@@ -30,25 +30,25 @@ flowchart TD
   pick -.->|"Claude past its line"| reserve(["Owner's switches:<br/>the week's reserve, your 25%"])
 ```
 
-- **Checkpoints** run after every 2 *developer* merges, counted across all milestones (`checkpoint_every` in `.factory/project.toml`). Lead-ticket merges don't count.
-- **Reviews** run when every ticket of a milestone is in `done/` (set-aside ones in `later/` don't count), before the runner's next ticket ([ADR 17](../.factory/adr/17-always-on-factory.md)).
+- **Checkpoints** run after every 2 *developer* merges, counted across all milestones (`checkpoint_every` in `.softfield/project.toml`). Lead-ticket merges don't count.
+- **Reviews** run when every ticket of a milestone is in `done/` (set-aside ones in `later/` don't count), before the runner's next ticket ([ADR 17](../.softfield/adr/17-always-on-factory.md)).
 - **A replan is a lead ticket,** written at planning after a chain of three or more lead tickets that later ones rely on (`docs/agents/lead.md`, "Replans"). The runner never makes one itself.
-- **Owner questions:** ADRs and sign-off. The reserve switches replace the console's y/N once F8 lands ([ADR 22](../.factory/adr/22-one-visible-queue.md)).
+- **Owner questions:** ADRs and sign-off. The reserve switches replace the console's y/N once F8 lands ([ADR 22](../.softfield/adr/22-one-visible-queue.md)).
 
-**The idea** ([ADR 07](../.factory/adr/07-spend-less-frontier.md)): the frontier model is the tech lead and the local models are its developers. The lead designs, decides how the pieces connect, writes short tickets and builds the security-critical parts. The developers write the rest, tests included. Deterministic gates check every change, and the lead reviews once per milestone. Until M3 the lead also wrote a working solution for every task, which cost more than doing the task; that's gone.
+**The idea** ([ADR 07](../.softfield/adr/07-spend-less-frontier.md)): the frontier model is the tech lead and the local models are its developers. The lead designs, decides how the pieces connect, writes short tickets and builds the security-critical parts. The developers write the rest, tests included. Deterministic gates check every change, and the lead reviews once per milestone. Until M3 the lead also wrote a working solution for every task, which cost more than doing the task; that's gone.
 
 ## The queue
 
 It's just folders of Markdown task files, with no database or server:
 
 ```
-.factory/tasks/ready/      waiting to run
-.factory/tasks/done/       merged, with a result footer the runner appends
-.factory/tasks/escalated/  the local model failed 3 times, or pre-flight failed; waiting for the frontier
-.factory/tasks/blocked/    past its limits, or waiting for the owner; the verdict names it
+.softfield/tasks/ready/      waiting to run
+.softfield/tasks/done/       merged, with a result footer the runner appends
+.softfield/tasks/escalated/  the local model failed 3 times, or pre-flight failed; waiting for the frontier
+.softfield/tasks/blocked/    past its limits, or waiting for the owner; the verdict names it
 ```
 
-The owner starts a whole milestone with `softfield milestone N` ([ADR 12](../.factory/adr/12-junior-feedback-and-checkpoints.md)): it works through the queue, runs the review, and ends with a verdict, either ready for sign-off or exactly what needs the owner. Underneath, it loops over the queue:
+The owner starts a whole milestone with `softfield milestone N` ([ADR 12](../.softfield/adr/12-junior-feedback-and-checkpoints.md)): it works through the queue, runs the review, and ends with a verdict, either ready for sign-off or exactly what needs the owner. Underneath, it loops over the queue:
 
 1. **Pick** the lowest id in `ready/` whose `depends_on` tasks are all in `done/`.
 2. **Branch** `task/<id>` from main.
@@ -74,11 +74,11 @@ The owner starts a whole milestone with `softfield milestone N` ([ADR 12](../.fa
 
    Every two developer merges, a short **checkpoint** review looks at what just merged and steers the next tickets. The lead's own tickets (`agent: lead`) run in the same queue, done headlessly and merged only when every check passes.
 7. **Escalation:** the headless frontier model, at most twice per task. It repairs or splits the spec, adds missing facts, does the task itself, or drafts an ADR for the owner. Its code must pass every check, or it stays on a branch. The runner commits its changes and moves the file.
-8. **Session report:** written to `.factory/sessions/` at the end.
+8. **Session report:** written to `.softfield/sessions/` at the end.
 
 After a milestone's tasks are done, the review loop (`softfield review --milestone N` on its own) runs the staging end-to-end tests and a headless review. Blocking and should-fix findings become fix tasks or direct fixes, and nits become set-aside bug tickets, or are said in the report. The loop stops on the rules in `workflow.md`.
 
-Everything is plain git and files, so a bad run is easy to inspect (logs go in `.factory/var/runs/`) or undo.
+Everything is plain git and files, so a bad run is easy to inspect (logs go in `.softfield/var/runs/`) or undo.
 
 ## What goes in a ticket
 
@@ -88,4 +88,4 @@ What the developers learn stays in the repo, since they have no memory: a check 
 
 ## Results so far
 
-M1 proper: 3 tasks, all passed on the first attempt, each taking about a minute of local model time and a few seconds of gates, with no frontier usage. The two calibration failures before that were spec errors, fixed by [ADR 01](../.factory/adr/01-calibration-fixes.md). See `.factory/reviews/m1.md`.
+M1 proper: 3 tasks, all passed on the first attempt, each taking about a minute of local model time and a few seconds of gates, with no frontier usage. The two calibration failures before that were spec errors, fixed by [ADR 01](../.softfield/adr/01-calibration-fixes.md). See `.softfield/reviews/m1.md`.

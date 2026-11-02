@@ -1,5 +1,5 @@
 """Runner settings: the machine's ``~/.config/softfield/factory.toml``, then the project's
-``.factory/project.toml`` over it, table by table (ADR 30 item 3)."""
+``.softfield/project.toml`` over it, table by table (ADR 30 item 3)."""
 
 import os
 import tomllib
@@ -17,13 +17,13 @@ DEFAULT_BACKUP_DIR = "~/Dropbox/software-factory-backups"
 # The machine's settings: agents, roles, Claude, the local model, metrics, backup, bench
 DEFAULT_MACHINE = "~/.config/softfield/factory.toml"
 MACHINE_ENV = "SOFTFIELD_CONFIG"  # another machine file; tests point it at none
-PROJECT_TOML = Path(".factory") / "project.toml"
-PROJECT_MD = Path(".factory") / "project.md"  # the rules that hold for this project only
+PROJECT_TOML = Path(".softfield") / "project.toml"
+PROJECT_MD = Path(".softfield") / "project.md"  # the rules that hold for this project only
 # The Softfield checkout this code runs from (``live``, ADR 30 item 5) and its shared docs:
 # lead.md, owner.md, task-format.md, task-writing.md, workflow.md (item 4)
 HOME = Path(__file__).resolve().parents[1]
 DOCS = HOME / "docs"
-PROTECTED = Path(".factory") / "protected-paths.txt"
+PROTECTED = Path(".softfield") / "protected-paths.txt"
 
 
 class ConfigError(ValueError):
@@ -81,7 +81,7 @@ class Config:
 
     @property
     def runs_dir(self) -> Path:
-        return self.repo / ".factory" / "var" / "runs"
+        return self.repo / ".softfield" / "var" / "runs"
 
     def agent_for(self, role: str) -> Agent:
         """The first agent `[roles]` names for ``role`` (f1-25 routes among them)."""
@@ -164,7 +164,7 @@ def machine_ntfy() -> str | None:
 
 
 def project_name(repo: Path) -> str:
-    """`[project] name` in the repo's ``.factory/project.toml``, else its folder's name."""
+    """`[project] name` in the repo's ``.softfield/project.toml``, else its folder's name."""
     try:
         data = tomllib.loads((repo / PROJECT_TOML).read_text(encoding="utf-8"))
     except (OSError, tomllib.TOMLDecodeError):
@@ -211,7 +211,7 @@ def load_config(repo: Path) -> Config:
 
 @dataclass(frozen=True)
 class Checks:
-    """``[checks]`` in ``.factory/project.toml``: what check-all and the gates run on this
+    """``[checks]`` in ``.softfield/project.toml``: what check-all and the gates run on this
     project (ADR 30 item 3). The defaults suit any uv project with its tests in ``tests/``."""
 
     test_dirs: tuple[str, ...] = ("tests",)

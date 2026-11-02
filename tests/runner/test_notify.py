@@ -122,8 +122,8 @@ def test_a_ticket_blocked_again_while_its_item_is_open_sends_no_second_decision(
     _blocks_then_looks(monkeypatch, [])
     _passes(monkeypatch, ok=False)
     _run(repo)
-    blocked = repo / ".factory" / "tasks" / "blocked" / "m1-01-lead.md"
-    git(repo, "mv", str(blocked), str(repo / ".factory" / "tasks" / "ready" / blocked.name))
+    blocked = repo / ".softfield" / "tasks" / "blocked" / "m1-01-lead.md"
+    git(repo, "mv", str(blocked), str(repo / ".softfield" / "tasks" / "ready" / blocked.name))
     git(repo, "commit", "-q", "-m", "requeue")
     _run(repo)
     bodies = [s["body"] for s in sent]
@@ -185,7 +185,7 @@ def test_the_post_has_a_5_second_limit(monkeypatch):
 
 
 def _blocked(repo: Path, task_id: str = "m1-04-thing") -> None:
-    path = write_task(repo / ".factory" / "tasks" / "blocked", task_id)
+    path = write_task(repo / ".softfield" / "tasks" / "blocked", task_id)
     append_footer(path, {"result": "blocked", "reason": "a secret reason"})
 
 
@@ -226,9 +226,9 @@ def test_a_tickets_decision_opens_the_overview(repo, sent, kind):
     if kind == "blocked":
         _blocked(repo)
     else:
-        write_task(repo / ".factory" / "tasks" / "escalated", "m1-02-photos")
+        write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")
     if kind == "adr":
-        state.owner = {"m1-02-photos": {"adr": ".factory/adr/14-photos.md", "question": "Keep?"}}
+        state.owner = {"m1-02-photos": {"adr": ".softfield/adr/14-photos.md", "question": "Keep?"}}
     owner.verdict(repo, "m1", state, "clean", db=_db(repo))
     [one] = sent
     assert one["body"] == f"{repo.name} · A ticket needs your decision"
@@ -268,8 +268,8 @@ def test_the_reserve_switchs_failed_notification_is_a_line(repo, sent):
 
 def test_no_title_text_or_reply_is_in_any_notification(repo, sent):
     _blocked(repo)
-    write_task(repo / ".factory" / "tasks" / "escalated", "m1-02-photos")
-    state = State(owner={"m1-02-photos": {"adr": ".factory/adr/14-photos.md", "question": "Q?"}})
+    write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")
+    state = State(owner={"m1-02-photos": {"adr": ".softfield/adr/14-photos.md", "question": "Q?"}})
     owner.verdict(repo, "m1", state, "adr-needed", db=_db(repo))
     owner.verdict(repo, "m2", State(), "adr-needed", db=_db(repo))
     assert sent

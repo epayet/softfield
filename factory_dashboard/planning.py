@@ -66,7 +66,7 @@ from runner.tasks import (
 
 router = APIRouter()
 
-_ADR_NUMBER = re.compile(r"\.factory/adr/(\d+)-")
+_ADR_NUMBER = re.compile(r"\.softfield/adr/(\d+)-")
 _NEXT_PICK = "on its way · the runner applies it at its next pick"
 
 
@@ -601,7 +601,7 @@ def planning(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
 
 # --- proposal review (f6-08) ----------------------------------------------------------------
 
-_MOCKUP_RE = re.compile(r"\.factory/cards/[^/]+-mockup/[^/].*")
+_MOCKUP_RE = re.compile(r"\.softfield/cards/[^/]+-mockup/[^/].*")
 # Old mock-up path: ``docs/milestones/<name>-mockup/<file>`` (ADR 30's move).
 _OLD_MOCKUP_RE = re.compile(r"^docs/milestones/([^/]+)-mockup/(.+)$")
 
@@ -615,7 +615,7 @@ def _resolve_mockup_path(path: str) -> str | None:
         return path
     match = _OLD_MOCKUP_RE.fullmatch(path)
     if match:
-        return f".factory/cards/{match.group(1)}-mockup/{match.group(2)}"
+        return f".softfield/cards/{match.group(1)}-mockup/{match.group(2)}"
     return None
 
 
@@ -639,7 +639,9 @@ def _adr_waits(
         if number and int(number[1]) in accepting:
             continue
         found = (
-            sorted((repo / ".factory" / "adr").glob(f"{number[1]}-*.md")) if repo and number else []
+            sorted((repo / ".softfield" / "adr").glob(f"{number[1]}-*.md"))
+            if repo and number
+            else []
         )
         if not found or is_proposed(found[0].read_text(encoding="utf-8")):
             return True

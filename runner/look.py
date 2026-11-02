@@ -226,7 +226,7 @@ def disk(
         lines.append(f"{label:32} {_amount((nbytes, files))}")
     lines += [
         f"{'the bench folder':32} {_amount(_size(bench))}",
-        f"{'.factory/var/runs/':32} {_amount(_size(runs))}",
+        f"{'.softfield/var/runs/':32} {_amount(_size(runs))}",
         f"{'the metrics database':32} {_amount(_size(db))}",
         f"{'its write-ahead log (-wal)':32} {_amount(_size(db.with_name(db.name + '-wal')))}",
     ]

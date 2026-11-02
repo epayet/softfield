@@ -111,8 +111,8 @@ def test_parse_blocked():
 
 def test_all_tests_runs_every_test_file_whatever_the_queue_holds(repo: Path, monkeypatch):
     """ADR 21: another queued ticket's test files are on main, so they are gated too."""
-    current = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-current")
-    other = write_task(repo / ".factory" / "tasks" / "ready", "m1-02-other")
+    current = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-current")
+    other = write_task(repo / ".softfield" / "tasks" / "ready", "m1-02-other")
     other.write_text(other.read_text().replace("test_thing.py", "test_other.py"))
     calls: list[tuple[str, ...]] = []
 
@@ -128,7 +128,7 @@ def test_all_tests_runs_every_test_file_whatever_the_queue_holds(repo: Path, mon
 
 def test_all_tests_runs_on_the_projects_workers(repo: Path, monkeypatch):
     """F71: the gate runs the same suite as check-all, on the same workers."""
-    toml = repo / ".factory" / "project.toml"
+    toml = repo / ".softfield" / "project.toml"
     toml.write_text(toml.read_text().replace("[checks]\n", "[checks]\ntest_workers = 4\n"))
     calls: list[tuple[str, ...]] = []
 
@@ -137,7 +137,7 @@ def test_all_tests_runs_on_the_projects_workers(repo: Path, monkeypatch):
         return GateResult(name, True, "")
 
     monkeypatch.setattr(gates, "_command", fake_command)
-    task = write_task(repo / ".factory" / "tasks" / "ready", "m1-01-current")
+    task = write_task(repo / ".softfield" / "tasks" / "ready", "m1-01-current")
     assert gate_all_tests(GateContext(repo, Git(repo), parse_task(task, 150), "main", (), 60)).ok
     assert calls[0][3:6] == ("-q", "-n", "4")
 
@@ -180,7 +180,7 @@ def _branch_with(repo: Path, files: dict[str, str | None]) -> GateContext:
             (repo / rel).write_text(text)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "wip")
-    task = parse_task(write_task(repo / ".factory" / "var", "m1-01-thing"), 1000)
+    task = parse_task(write_task(repo / ".softfield" / "var", "m1-01-thing"), 1000)
     return GateContext(repo, Git(repo), task, "main", (), 60)
 
 

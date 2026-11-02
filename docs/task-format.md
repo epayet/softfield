@@ -1,6 +1,6 @@
 # Task format
 
-Tasks ("tickets") are Markdown files with YAML frontmatter in `.factory/tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner, whose desk has it at once). Tickets set aside wait in `.factory/tasks/later/`: the runner never takes them, and `softfield queue <id>` (an id or a unique prefix) moves one back to `ready/` in a commit ([ADR 17](../.factory/adr/17-always-on-factory.md) item 3). A blocked ticket comes back the same way, from the desk's Try again (a `queue` request; later/ is searched first, then blocked/), or goes to `later/` with Set aside (a `set_aside` request); either keeps its footers ([F106](../.factory/cards/f106-where-do-blocked-tickets-go-for.md) D3). The file name is `<id>.md`. Why they look like this: [ADR 07](../.factory/adr/07-spend-less-frontier.md).
+Tasks ("tickets") are Markdown files with YAML frontmatter in `.softfield/tasks/ready/`. The lead writes them; the runner moves them to `done/`, `escalated/` (waiting for the lead) or `blocked/` (past its limits, or waiting for the owner, whose desk has it at once). Tickets set aside wait in `.softfield/tasks/later/`: the runner never takes them, and `softfield queue <id>` (an id or a unique prefix) moves one back to `ready/` in a commit ([ADR 17](../.softfield/adr/17-always-on-factory.md) item 3). A blocked ticket comes back the same way, from the desk's Try again (a `queue` request; later/ is searched first, then blocked/), or goes to `later/` with Set aside (a `set_aside` request); either keeps its footers ([F106](../.softfield/cards/f106-where-do-blocked-tickets-go-for.md) D3). The file name is `<id>.md`. Why they look like this: [ADR 07](../.softfield/adr/07-spend-less-frontier.md).
 
 ## Frontmatter
 
@@ -28,26 +28,26 @@ tests_only: true                    # optional: a weak test's fix; see "Test-onl
 ---
 ```
 
-`max_diff` is optional and rarely needed: the default is a 1000-line backstop against a rewritten file (`.factory/project.toml`), not a sizing tool.
+`max_diff` is optional and rarely needed: the default is a 1000-line backstop against a rewritten file (`.softfield/project.toml`), not a sizing tool.
 
 ### Milestone keys
-A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` ([ADR 16](../.factory/adr/16-claude-window-and-named-milestones.md) item 6).
+A milestone key is `<series><n>`, optionally with a slug: `<series><n>-<slug>` ([ADR 16](../.softfield/adr/16-claude-window-and-named-milestones.md) item 6).
 - **Short form:** `m4`, `f2` (a bare number `4` means `m4`). Milestones planned before ADR 16 keep it.
 - **Full form:** `f3-factory-line`, `m5-history`. The slug is a few lowercase words joined by `-`, starting with a letter, short enough to type.
 - **Ticket ids always use the short form:** `f3-01-factory-line`, never `f3-factory-line-01-…`.
-- **Docs use the full key:** `.factory/cards/<full key>.md` and `.factory/reviews/<full key>.md`. An existing short-key doc (`.factory/cards/f2.md`) still works.
-- **Frontmatter and commands take either form:** `softfield milestone f3` and `softfield milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `.factory/cards/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
+- **Docs use the full key:** `.softfield/cards/<full key>.md` and `.softfield/reviews/<full key>.md`. An existing short-key doc (`.softfield/cards/f2.md`) still works.
+- **Frontmatter and commands take either form:** `softfield milestone f3` and `softfield milestone f3-factory-line` run the same milestone. `f3` resolves to the full key from `.softfield/cards/<full key>.md`, or else from a ticket whose frontmatter names it. Write the full key in frontmatter.
 - **Tags use the key as resolved:** `f3-factory-line-start` and `f3-factory-line-done`.
-- **A milestone can wait for another's sign-off** ([ADR 17](../.factory/adr/17-always-on-factory.md) item 4): a line `> **After:** f3-factory-line signed off` in its doc's header (above the first `##`) keeps its tickets from being picked until that milestone's doc says "Status: done" (what `runner signoff` writes; the `<key>-done` tag also counts). `--dry-run` and the verdict say "waits for f3-factory-line's sign-off", and `runner run` goes on with the other milestones. With no `After:` line, milestones are independent.
-- **A milestone doc is a card** ([ADR 19](../.factory/adr/19-feature-board.md) items 1 and 2b): a line `> **State:** building · **Priority:** 2 · **Area:** factory` in its header. Any part may be left out:
+- **A milestone can wait for another's sign-off** ([ADR 17](../.softfield/adr/17-always-on-factory.md) item 4): a line `> **After:** f3-factory-line signed off` in its doc's header (above the first `##`) keeps its tickets from being picked until that milestone's doc says "Status: done" (what `runner signoff` writes; the `<key>-done` tag also counts). `--dry-run` and the verdict say "waits for f3-factory-line's sign-off", and `runner run` goes on with the other milestones. With no `After:` line, milestones are independent.
+- **A milestone doc is a card** ([ADR 19](../.softfield/adr/19-feature-board.md) items 1 and 2b): a line `> **State:** building · **Priority:** 2 · **Area:** factory` in its header. Any part may be left out:
   - **State:** idea, planning, ready, building, needs sign-off or done. Missing, it is done once the doc says "Status: done", else building.
-  - **Priority:** an integer, lower first; 100 if missing. It is the card's place on the board, and its tickets run in it: a feature ticket has no `priority:` of its own (pre-flight refuses one), and inside a card tickets go by `depends_on`, then id ([F173](../.factory/cards/f173-dragging-a-card-on-the-board.md)).
+  - **Priority:** an integer, lower first; 100 if missing. It is the card's place on the board, and its tickets run in it: a feature ticket has no `priority:` of its own (pre-flight refuses one), and inside a card tickets go by `depends_on`, then id ([F173](../.softfield/cards/f173-dragging-a-card-on-the-board.md)).
   - **Area:** factory or product; missing, it follows the key's series (`f` factory, `m` product).
 
-  Every runner command syncs each doc in `.factory/cards/` to the database at its start, so an idea with no tickets yet is a card too.
+  Every runner command syncs each doc in `.softfield/cards/` to the database at its start, so an idea with no tickets yet is a card too.
 
 ### Bug tickets
-A bug lives outside the milestones ([ADR 19](../.factory/adr/19-feature-board.md) item 2; [`.factory/cards/bugs.md`](../.factory/cards/bugs.md)):
+A bug lives outside the milestones ([ADR 19](../.softfield/adr/19-feature-board.md) item 2; [`.softfield/cards/bugs.md`](../.softfield/cards/bugs.md)):
 - **Id and key:** `bug-<nn>-<slug>` (`bug-07-queue-order`) with `milestone: bugs`, a standing key. Only a bug uses either.
 - **`area:`** factory or product, required: without it the bug fails pre-flight and goes to the lead.
 - **`priority:`** optional, 50 if missing (a milestone's card is 100 if it gives none): the bug's place on the board, written by the board's drag, not by hand.
@@ -82,7 +82,7 @@ Only when a ticket really needs them: a pattern with no entry in `docs/agents/de
 
 ## Rules
 - **One concept per ticket,** touching as many files as it needs.
-- **Short:** Context ≤ ~30 lines. Developers drop instructions from long prompts ([ADR 01](../.factory/adr/01-calibration-fixes.md)); put the one crucial instruction last.
+- **Short:** Context ≤ ~30 lines. Developers drop instructions from long prompts ([ADR 01](../.softfield/adr/01-calibration-fixes.md)); put the one crucial instruction last.
 - Backtick full repo paths only, never a bare file name.
 - Protected paths never appear in `files:`: that work is the lead's.
 - A ticket that adds user-facing text lists `coucou/locale/fr/LC_MESSAGES/django.po` and `django.mo` (or `djangojs.*` for JS) in `files:`.
