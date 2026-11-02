@@ -1,6 +1,7 @@
 # Milestone F15: Reprioritising tickets
 
-> **State:** ready · **Priority:** 9 · **Area:** factory
+> **State:** done · **Priority:** 9 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-02. Base: git tag `f15-reprioritising-tickets-start`. Report: [`.factory/reviews/f15-reprioritising-tickets.md`](../reviews/f15-reprioritising-tickets.md).
 > Planted by the owner on 2026-10-07.
 
 ## Notes

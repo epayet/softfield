@@ -1,6 +1,6 @@
 # Review: F15, reorder the cards from the board
 
-- **Status:** round 1 done (2026-10-30), waiting for your sign-off.
+- **Status:** done, signed off by the owner on 2026-11-02.
 
 ## Sign-off sheet
 
