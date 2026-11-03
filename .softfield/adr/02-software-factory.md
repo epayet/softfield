@@ -664,7 +664,7 @@ _(to fill in at the M3 review)_
 
 ### F175 (2026-11-03): the factory cleans up its temp files ([review](../reviews/f175-if-i-leave-the-factory-running.md))
 
-- **Q1:** three lead tickets, all first time (Sonnet 2/2, Opus 1/1), 30 minutes of work; no escalation or checkpoint. Review round 1: two should-fix and three nits fixed by the review, two nits only reported. The review itself finished four days after the merges, its first run interrupted.
+- **Q1:** three lead tickets, all first time (Sonnet 2/2, Opus 1/1), 30 minutes of work; no escalation or checkpoint. Review round 1: two should-fix and three nits fixed by the review, two nits only reported; round 2 held all five fixes and corrected one figure in the report. The review itself finished four days after the merges, its first run interrupted.
 - **Q3:** no developer work (protected runner code).
 - **Q5:** see the review's numbers.
 - **Anything else:** measuring first changed the fix: the plan blamed killed jobs, the measure found sample hooks in test repos. But the measure itself read length rather than disk use, and its tests couldn't tell: a tool that reports a quantity needs a test that separates it from its near neighbour. Housekeeping added to a path every command takes must not be able to fail that path (the temp folder on a full disk). The 30 GB is still not fully explained; the owner's check on their computer settles it.

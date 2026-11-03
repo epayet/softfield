@@ -14,7 +14,7 @@
 2. **Or delete after a longer time (suggested 365 days),** only logs of jobs whose ticket is merged and whose milestone is signed off.
 3. **Back up first, if anything is deleted:** the daily Dropbox backup holds the metrics database only (`runner/backup.py`), not these logs, so item 2 needs the backup to take them first. Item 1 deletes nothing and needs none.
 
-**The lead's recommendation (F175's review, 2026-11-03):** item 1 alone, as one lead ticket, with item 2 turned down. Logs are text and compress well, the owner keeps every one, and it adds no backup work. `.softfield/var/runs/` was 786 MB on 2026-11-03, up 13 MB in four days, so this is not urgent.
+**The lead's recommendation (F175's review, 2026-11-03):** item 1 alone, as one lead ticket, with item 2 turned down. Logs are text and compress well, the owner keeps every one, and it adds no backup work. `.softfield/var/runs/` took about 800 MB on the disk on 2026-11-03, growing by a few MB a day, so this is not urgent. (The 773 MB above is the files' length, read before `look disk` changed, so the two don't subtract exactly.)
 
 ## Alternatives turned down
 - **Leave it:** 773 MB is small on today's disk; the cost is a slow, silent growth.

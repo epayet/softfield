@@ -21,13 +21,14 @@
 - **bug-06** is set aside and worth queueing: it lets a review see the whole test suite finish (see What next).
 
 ### 4. Decisions waiting for you
-- **[ADR 39: bound the run logs](../adr/39-bound-the-run-logs.md).** The job logs are at 786 MB, up 13 MB in the last four days, and nothing limits them. It isn't urgent. I recommend compressing logs older than 90 days, so you keep every one, and not deleting any. The logs aren't in your daily Dropbox backup, so deleting them would lose them for good unless the backup takes them first.
+- **[ADR 39: bound the run logs](../adr/39-bound-the-run-logs.md).** The job logs take about 800 MB, growing by a few MB a day, and nothing limits them. It isn't urgent. I recommend compressing logs older than 90 days, so you keep every one, and not deleting any. The logs aren't in your daily Dropbox backup, so deleting them would lose them for good unless the backup takes them first.
 
 ### 5. How the work went
 - 2026-10-30 04:24 ([session](../sessions/2026-10-30-0424.md)): f175-01, the disk measure, passed first time on Sonnet ($0.58).
 - 2026-10-30 05:08 ([session](../sessions/2026-10-30-0508.md)): f175-02, one temp folder per job, passed first time on Opus ($1.02).
 - 2026-10-30 05:22 ([session](../sessions/2026-10-30-0522.md)): f175-03, measure again and fix, passed first time on Sonnet ($0.34).
 - 2026-10-30 05:32 and 2026-11-03: this review. Its first run was interrupted and it resumed four days later.
+- 2026-11-03 08:54 ([session](../sessions/2026-11-03-0854.md)): review round 1 finished ($3.63 for that job), five fixes made. Round 2 followed at 09:15: the fixes hold.
 - **Lessons:**
   - Measuring first paid off. The plan expected killed jobs to be the cause, but the measure pointed at sample files in test repos, a small fix the plan hadn't foreseen.
   - A clean-up step must never be able to stop the work. The new temp folder made commands fail on a full disk, the very case this card is about. Fixed, with tests.
@@ -64,14 +65,17 @@ No blocking findings. All fixed by the review, as the code is protected and each
 | F3 | nit | A deleted file held by several processes counted once per process | Counted once; test seen failing first |
 | F4 | nit | A held-open assertion passed on almost anything; a failed start had no test | Exact line; new test, which passed at once because the code was already right |
 | F5 | nit | ADR 39 made deletion wait on a backup that doesn't hold the logs | Corrected, recommendation added |
+| F8 | nit | Round 1's "up 13 MB in four days" for the logs subtracted a length from a later reading, and the logs took 799.5 MB by round 2 | Found in round 2; this sheet and ADR 39 now say about 800 MB and a few MB a day |
+
+**Round 2:** F1 to F5 re-read in the fix diffs and all hold. The new tests separate what they claim to: the disk test fails on files' length, the held-open test fails on a count per process, and the full-disk tests fail if the error escapes. Nothing new in the code.
 
 Said here only (route `report`):
-- **F6:** `test_send_lights_up_only_for_another_order_and_sends_the_names` timed out once in two full parallel runs, then passed in the next full run and in two smaller runs. This card doesn't touch that page, and I did not find the cause. f123-02 replaces the test.
+- **F6:** `test_send_lights_up_only_for_another_order_and_sends_the_names` timed out once in three full parallel runs, and passed in the other two and in two smaller runs. This card doesn't touch that page, and I did not find the cause. f123-02 replaces the test.
 - **F7:** from reading the code, not seen happening: a folder can stay when its runner's pid was reused or the runner lives on, and a folder a job made unreadable can't be removed. Each would be small, and a reboot empties them.
 
 **What was checked:**
-- **Tests:** a full run on 16 workers passed, 2,926 of 2,926; the one before it had the F6 failure. A run without workers can't finish inside one call, so it wasn't completed.
-- **Gates:** `softfield check-all` passes after the last edit (ruff, format, mypy, translations, layout, tests).
+- **Tests:** in round 2, a full run on 16 workers passed, 2,926 of 2,926, in 3 min 16 s; so did the last one in round 1, and the one before it had the F6 failure. A run without workers can't finish inside one call, so it wasn't completed.
+- **Gates:** `softfield check-all` passed after round 1's last code edit (ruff, format, mypy, translations, layout, tests). Round 2 changed only words in the review, ADR 39 and ADR 02, so it ran the tests and not `check-all` again.
 - **Edited tests:** the only existing test the developers' work changed is in `test_cli.py`, by an added import. Every other test is new.
 - **Live reading, 2026-11-03:** `/tmp` is 46–76 MB, of which this job's own folder is most. This is no proof of the fix on its own: the 63 old `tmp*.sqlite` files are gone too, so there has been a reboot since the last measure.
 - **French:** none, as the factory has no translations and no words changed.
@@ -83,7 +87,7 @@ Score 7: the design is sound and simple, and all three tickets passed first time
 Nothing new. bug-06 was already set aside.
 
 ## Factory
-- **Flow:** three lead tickets, all first time. No stops for the owner, no escalation, no checkpoint. One round of review, resumed after an interruption.
+- **Flow:** three lead tickets, all first time. No stops for the owner, no escalation, no checkpoint. Two rounds of review: the first resumed after an interruption and changed the runner, so the runner restarted (15 seconds) before the second.
 - **Models:** Sonnet 2/2 ($0.92), Opus 1/1 ($1.02), planning $1.76 on Opus. No local model work.
 - **The move under the review:** the first run stopped before F139 moved `.factory/` to `.softfield/`, so the resumed brief named a path that no longer exists (its output file, the backlog). ADR 35 had also retired the backlog. The resumed job had to work this out by reading the code.
 - **What to change:** a resumed job should be given its output path again, as the runner now computes it. It's small, and it only matters when a job resumes across such a move, so it stays here rather than becoming a ticket. Queue bug-06.
