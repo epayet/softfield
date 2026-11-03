@@ -1235,7 +1235,7 @@ def _blocked_words(db, project_id):
     return [i.words for i in blocked_group.items]
 
 
-def test_runner_message_only_says_lead_is_looking(planning, db_path, db):
+def test_runner_message_only_says_lead_is_looking(planning, db_path, db, serve):
     """Runner message on F9's thread without a lead follow-up: the words add
     " · the lead is looking at it"."""
     conn = metrics.open_db(db_path)
@@ -1258,13 +1258,12 @@ def test_runner_message_only_says_lead_is_looking(planning, db_path, db):
     assert item.fix_card == "f9"
     assert item.fix_first_point is None
     assert item.fix_replan is None
-    [item] = _group(db, "blocked")
-    assert item.fix_card == "f9"
-    assert item.fix_first_point is None
-    assert item.fix_replan is None
+    html = _page(serve())
+    assert "The lead is reading the work and its logs" in html
+    assert 'id="approve-f9-01-board"' not in html
 
 
-def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db):
+def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db, serve):
     """Runner message followed by a lead message on F9's thread: the words add
     " · the lead's fix waits on F9's thread"."""
     conn = metrics.open_db(db_path)
@@ -1290,6 +1289,9 @@ def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db):
     assert item.fix_card == "f9"
     assert item.fix_first_point is None
     assert item.fix_replan is None
+    html = _page(serve())
+    assert "The lead's fix" in html
+    assert "F9's thread" in html
 
 
 def test_no_runner_message_words_unchanged(planning, db_path, db):
@@ -1405,10 +1407,14 @@ def test_blocked_ticket_with_replan_shows_approve_button(planning, db_path, db, 
     assert item.fix_replan is not None
     assert item.fix_replan["title"] == "F9: rework the board"
     assert item.fix_replan["key_points"] == 3
-    assert "Approve the lead's fix" in _page(serve())
+    html = _page(serve())
+    assert "Approve the lead's fix" in html
+    assert "What went wrong: the test run was cut" in html
+    assert "F9: rework the board · 3 key points" in html
+    assert re.search(r'href="/planning/f9"', html)
     approve_btn = re.search(
         r'<button[^>]*id="approve-f9-01-board"[^>]*hx-vals=\'([^\']*)\'',
-        _page(serve()),
+        html,
     )
     assert approve_btn
     vals = json.loads(unescape(approve_btn[1]))
@@ -1417,14 +1423,14 @@ def test_blocked_ticket_with_replan_shows_approve_button(planning, db_path, db, 
     # "Try again as it is" posts queue for the ticket
     try_again_btn = re.search(
         r'<button[^>]*id="try-again-f9-01-board"[^>]*hx-vals=\'([^\']*)\'',
-        _page(serve()),
+        html,
     )
     assert try_again_btn
     vals = json.loads(unescape(try_again_btn[1]))
     assert vals["kind"] == "queue"
     assert vals["subject"] == "f9-01-board"
     # "Set aside" button present
-    assert "set-aside-f9-01-board" in _page(serve())
+    assert "set-aside-f9-01-board" in html
 
 
 def test_blocked_with_look_no_lead_reply_shows_reading_message(planning, db_path, db, serve):
@@ -1529,10 +1535,10 @@ def test_blocked_bug_ticket_keeps_standard_buttons(planning, db_path, db, serve)
     assert item.fix_first_point is None
     assert item.fix_replan is None
     html = _page(serve())
-    assert 'id="try-again-f1-01"' in html
-    assert 'id="set-aside-f1-01"' in html
-    assert 'class="btn go"' in html  # Try again is the main button
-    assert 'class="btn plain"' in html  # Set aside is quiet
+    assert re.search(r'id="try-again-f1-01"[^>]*class="[^"]*btn[^"]*go[^"]*"', html)
+    assert re.search(r'id="set-aside-f1-01"[^>]*class="[^"]*btn[^"]*plain[^"]*"', html)
+    assert "Try again as it is" in html
+    assert "Set aside" in html
 
 
 def test_approve_shows_item_on_its_way(page, planning, db_path, serve):
