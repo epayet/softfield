@@ -672,7 +672,7 @@ _(to fill in at the M3 review)_
 
 ### F127 (2026-11-03): the factory is optional ([review](../reviews/f127-shared-rules-stay-shared-across-projects.md))
 
-- **Q1:** one lead ticket, one commit of 103 files built in a terminal session, so no checkpoint. Review round 1: two blocking, three should-fix and one nit fixed by the review; one nit set aside (bug-54), three only reported.
+- **Q1:** one lead ticket, one commit of 103 files built in a terminal session, so no checkpoint. Review round 1: two blocking, three should-fix and one nit fixed by the review; one nit set aside (bug-54), three only reported. Round 2: the fixes hold, no code changed, three more nits only reported.
 - **Q3:** no developer work (protected runner code and instructions).
 - **Q5:** see the review's numbers.
 - **Anything else:** 2,926 passing tests missed a command that did nothing, because they called the function behind it and never the command. Moving a file into a protected folder changed which gate applies to it, and only one of the two had the exception. The review was told its commits were "none", since the ticket was written after the commit; the runner now says where to look.

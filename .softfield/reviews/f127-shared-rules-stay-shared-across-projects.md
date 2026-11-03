@@ -28,7 +28,7 @@ One thing to know: [ADR 41](../adr/41-the-factory-is-optional.md) says removing 
 ### 5. How the work went
 - 2026-10-27 and 2026-10-29: three planning jobs drafted and rewrote the ADR with you ($4.53 together; [the last one's session](../sessions/2026-10-29-0914.md)).
 - 2026-11-02: built in your terminal session, one commit (`2887ea89`), so no developer or checkpoint saw it. No local model work.
-- 2026-11-03: this review. It made six fixes itself.
+- 2026-11-03: this review. Round 1 made six fixes itself ($2.76). Round 2 re-read them, found them sound and changed no code.
 - **Lessons:**
   - Testing the pieces isn't testing the command. All 2,926 tests passed while `softfield lead` did nothing, because the tests called the function behind it and never the command itself. There is now a test through the command.
   - Moving a file can change which rules apply to it. The discoveries file moved into a protected folder, and only one of the two gates had an exception for it.
@@ -72,8 +72,19 @@ Said here only (route `report`):
 - **F8:** the review prompt, lead.md and task-format.md cite `docs/workflow.md`, which the package doesn't ship (against ADR 41 item 8). Your machine runs from `live`, which has it. F204's notes already carry this for tickets, and the fix belongs with that packaging work: move the review loop into `runner/instructions/`.
 - **F9:** from reading the code, not seen happening: a malformed `.softfield/opencode.json` would raise out of `run_opencode`. Only a lead edits that file. If it ever happens, add a check to `softfield doctor`.
 - **F10:** Coucou's and Travel Companion's READMEs keep the old wording from F3. They are those projects' own files and this job works in Softfield only, so the next terminal session in each copies the new text.
+- **F11:** a review's own fixes don't get the line F4 added, because a review isn't given "Your own work". Its fixes are small, so the risk is low. If a review ever breaks one of these rules, repeat the line under "Review".
+- **F12:** the runner's `-metrics.md` says the local model built this card's ticket, which it didn't, and credits the card with about 144M token-equivalents, because it adds up every transcript since the card's start tag. Nothing reads that file now that `softfield report` gives the numbers, so stop writing it when that code is next touched.
+- **F13:** the search F5 suggests has no word boundary, so `f12` also finds `f127`. It can only add noise, not hide a commit. If it ever misleads a review, add a word boundary.
 
-**What was checked:**
+**Round 2:** I re-read the whole fix diff against each finding. F1 to F6 are resolved, and no fix brought a new problem.
+- **F1:** the test also pins that a neighbouring `.softfield` file is still refused, and OpenCode's permissions allow the write.
+- **F2:** I read argparse's code in Python 3.13: it drops the `--`, so Claude gets the arguments as options. This is still not run against a real Claude, which is why it's your first test above.
+- **The fixes' tests:** they only add. The one existing test changed, the removal test in `test_setup.py`, gained checks and lost none.
+- **Checks:** `softfield check-all` passed in full on main. F11 to F13 are new and only reported, as they are small and F11 and F12 sit in code the fixes didn't touch.
+- **French:** none in the fixes either.
+- **Score:** still 6, because the score is about what was built, and the fixes don't change that.
+
+**What was checked in round 1:**
 - **The scope:** the runner listed no commits for this card (F5). I reviewed `2887ea89`, which the card and the ticket name, and read its code and tests in full. Its edits to docs, ADRs and cards I saw only as a list of files, apart from grepping the factory's code and instructions for old paths. I left the other commits in the range out. The ticket quotes a commit subject that doesn't exist; `2887ea89` is the closest match.
 - **Tests:** before the fixes, 2,926 of 2,926 passed on 16 workers, in 3 min 16 s. After them, `softfield check-all` passed in full (ruff, format, mypy, translations, layout, tests).
 - **Edited tests:** the commit changed many, nearly all to follow the moved paths. The real changes follow from the decision:
@@ -92,7 +103,7 @@ bug-54, from F7.
 
 ## Factory
 - **Flow:** one lead ticket, built in a terminal session, with no stops and no escalation. Planning took three jobs and two rewrites with you, which was the valuable part: it replaced copying files with injecting them.
-- **Models:** planning on Opus, $4.53. The terminal session and this review's cost aren't in the numbers yet. No local model work.
+- **Models:** planning on Opus, $4.53; the review's first round on Opus, $2.76. The terminal session's cost isn't in the numbers, and round 2's wasn't when this was written. No local model work.
 - **The gap:** a commit of 103 files built in a terminal gets no checkpoint, so the review was its first reader.
 - **What to change:**
   - F5 makes the empty list visible, and lead.md already asks for the ticket's id in the commit subject. A ticket written after its commit is what breaks that, so write it first.
