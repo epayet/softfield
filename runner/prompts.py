@@ -238,9 +238,8 @@ Do exactly one of:
    branch, crediting you both. Check out nothing else, and only for this outcome.
 2. requeue: repair or split the ticket and write the task file(s) to .softfield/tasks/ready/
    (runner/instructions/task-format.md), then run `softfield check-tickets <its files>` until it
-   passes. Add
-   facts, not a solution. Its next run builds on the branch; if
-   the work there is unusable, add "reset": true to decision.json and it starts from main.
+   passes. Add facts, not a solution. Its next run builds on the branch; if the work there is
+   unusable, add "reset": true to decision.json and it starts from main.
 3. requeue: answer the model's question by adding the facts to the task's Context, and write
    the task to .softfield/tasks/ready/{id}.md (as in 2, about the branch).
 4. implemented: if the task is hard or protected, implement it yourself on main and make
@@ -254,8 +253,7 @@ Then write {logs}/decision.json as
 "reset": true, and for "owner" also {{"adr": ".softfield/adr/NN-slug.md", "question": "<one line
 for the owner>"}}, and {logs}/escalation.md: 3-6 lines on what happened, what the local
 model got wrong, and the lesson. Turn the lesson into a check, an example or a line in
-.softfield/developer.md (at most 15 notes), and
-say which. """
+.softfield/developer.md (at most 15 notes), and say which. """
     + PROCESS_NOTE
     + """\
 Read-only git (diff, log, show) is fine; don't commit and don't edit .softfield/tasks/escalated/:
@@ -285,8 +283,7 @@ is anything masked instead of fixed? Don't read the developer's thinking unless 
 explaining. Then do what helps the next tickets most, any of:
 - nothing, if it's sound
 - a fix ticket in .softfield/tasks/ready/ (runner/instructions/task-format.md, `finding:` in the
-frontmatter), and
-  add its id to `depends_on` of the ready tickets that build on the problem
+  frontmatter), and add its id to `depends_on` of the ready tickets that build on the problem
 - tighten upcoming tickets in .softfield/tasks/ready/ with what you saw (facts, not solutions)
 - one line in .softfield/developer.md (at most 15 notes)
 
@@ -354,10 +351,10 @@ The hours, jobs and counts the report quotes come from the metrics database: rea
 dashboard page as text with `softfield look page <address>` (ADR 28).
 
 Grade each finding blocking / should-fix / nit and route it:
-- local: write a ticket in .softfield/tasks/ready/ (runner/instructions/task-format.md), `finding:
-<id>` in the
-  frontmatter, and run `softfield check-tickets <its files>` until it passes (`tests:` is never
-  empty: a ticket with nothing to test, like deleting a file, you do yourself as a claude fix).
+- local: write a ticket in .softfield/tasks/ready/ (runner/instructions/task-format.md),
+  `finding: <id>` in the frontmatter, and run `softfield check-tickets <its files>` until it
+  passes (`tests:` is never empty: a ticket with nothing to test, like deleting a file, you do
+  yourself as a claude fix).
   Findings listed as recurring must NOT go to the local model.
 - claude: fix it yourself now, keeping `uv run pytest -q {tests}` green.
 - adr: only for what the owner is asked for (their preferences, above). Draft an ADR (status
@@ -478,10 +475,8 @@ self-contained HTML in .softfield/cards/{card}-mockup/ (one file with its style,
 data inside: the owner reads it in a frame that runs its scripts and nothing else, so no \
 localStorage, no alert or confirm, no form to submit, no request to the dashboard and no \
 link to a new tab; any of these stops it answering); the card's milestone doc in \
-.softfield/cards/; tickets in .softfield/tasks/later/ (runner/instructions/task-format.md). Edit
-nothing else, and
-\
-don't commit: the runner commits the branch after your reply.
+.softfield/cards/; tickets in .softfield/tasks/later/ (runner/instructions/task-format.md). \
+Edit nothing else, and don't commit: the runner commits the branch after your reply.
 - A card that changes what a page shows or how it is laid out (a new view, an element \
 added, moved or removed, a new state or colour) gets a mock-up without being asked (F72), \
 in any page the project serves (its templates) alike. \

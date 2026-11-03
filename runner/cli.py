@@ -555,7 +555,7 @@ def main(argv: list[str] | None = None) -> int:
         procs.sweep_tmp()  # what runners killed by a reboot or a SIGKILL left (f175 D3)
     if args.command == "run" and not (getattr(args, "here", False) or getattr(args, "once", False)):
         return _run_projects(args, restarted)
-    if args.command in ("init", "service", "forget", "notify") or (
+    if args.command in ("init", "lead", "service", "forget", "notify") or (
         args.command == "dashboard" and (args.action == "update" or _here() is None)
     ):
         return _machine_command(args)

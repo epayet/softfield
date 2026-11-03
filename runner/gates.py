@@ -85,7 +85,7 @@ def outside_allowed(changed: Iterable[str], allowed: Iterable[str]) -> list[str]
 
 def touching_protected(changed: Iterable[str], protected: Iterable[str]) -> list[str]:
     patterns = list(protected)
-    return sorted(f for f in changed if matches_any(f, patterns))
+    return sorted(f for f in changed if f not in ALWAYS_ALLOWED and matches_any(f, patterns))
 
 
 def dependency_changes(changed: Iterable[str], checks: Checks) -> list[str]:

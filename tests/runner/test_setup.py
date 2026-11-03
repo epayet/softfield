@@ -359,9 +359,13 @@ def test_removing_the_dot_folder_leaves_the_repo_as_it_was(tmp_path):
     git(folder, "commit", "-q", "-m", "init")
     before = git(folder, "rev-parse", "HEAD").strip()
     setup.init(folder, tmp_path / "m.sqlite")
+    readme = (folder / ".softfield/README.md").read_text()
     git(folder, "rm", "-rq", ".softfield")
     assert git(folder, "diff", "--stat", before).strip() == ""
     assert (folder / "AGENTS.md").read_text() == "ours\n"
+    # The one thing outside the folder, a setting in .git, and the README owns up to it (F3)
+    assert git(folder, "config", "core.hooksPath").strip() == ".softfield/hooks"
+    assert "git config --unset core.hooksPath" in readme and "softfield check-all" in readme
 
 
 def test_softfield_lead_starts_claude_with_the_factorys_context(tmp_path, monkeypatch):

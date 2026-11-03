@@ -107,6 +107,15 @@ def test_every_section_a_lead_role_needs_is_a_heading_of_the_real_lead_md():
         assert text.startswith((ROOT / prompts.OWNER_DOC).read_text(encoding="utf-8").strip())
 
 
+@pytest.mark.parametrize("role", ["lead-ticket", "escalation"])
+def test_a_lead_that_writes_code_is_told_the_rules_a_developers_file_holds(role):
+    """rules.md reaches developers only, and a lead's job can't take it whole: it may edit
+    protected paths (f127 review, F4). ADR 41: what a lead is asked to do doesn't change."""
+    text = prompts.brief(ROOT, role)[0]
+    for rule in ("no new dependencies", "Accepted ADR", "Never skip, xfail or delete a test"):
+        assert rule in text, rule
+
+
 def test_the_roles_get_the_sections_f21_d2_lists():
     escalations, review = "Escalations (headless or interactive)", "Review"
     assert {

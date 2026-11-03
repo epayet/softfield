@@ -31,8 +31,8 @@ FACTORY_DIRS = (
     "tasks/blocked",
     "tasks/escalated",
 )
-# What `init` writes, from `templates/`: (template, path in the project). An existing file
-# stays as it is: the setup session merges what it needs (runner/instructions/bootstrap.md).
+# What `init` writes, from `templates/`: (template, path in the project), all in the dot folder
+# (ADR 41 item 1). An existing file stays as it is.
 FILES = (
     ("project.toml", ".softfield/project.toml"),
     ("protected-paths.txt", ".softfield/protected-paths.txt"),

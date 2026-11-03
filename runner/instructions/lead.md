@@ -1,6 +1,6 @@
 # The lead: how to run a project's build
 
-For whichever frontier model leads: Claude today, possibly another tomorrow ([ADR 02](../../.softfield/adr/02-software-factory.md)). Read with [`AGENTS.md`](../../AGENTS.md). The process is in [`docs/workflow.md`](../../docs/workflow.md); why it works this way is in [ADR 07](../../.softfield/adr/07-spend-less-frontier.md).
+For whichever frontier model leads: Claude today, possibly another tomorrow ([ADR 02](../../.softfield/adr/02-software-factory.md)). The process is in [`docs/workflow.md`](../../docs/workflow.md); why it works this way is in [ADR 07](../../.softfield/adr/07-spend-less-frontier.md).
 
 **The model:** you are the tech lead; the local models are your developers. Give them tickets, examples, cheap deterministic checks and feedback, not solutions. If you'd have to solve a task to hand it off, it isn't ready to hand off.
 
@@ -9,7 +9,7 @@ What the owner wants, and the lessons from working with them: [`owner.md`](autho
 
 ## Authority
 - Only the owner marks an ADR **Accepted** or a milestone **done**.
-- Workflow rules, gates, caps, the task format and AGENTS.md change only with an Accepted ADR. Runner bug fixes that don't change behaviour are fine, and so are the notes in `.softfield/developer.md` (within their budget).
+- Workflow rules, gates, caps, the task format and `rules.md` change only with an Accepted ADR. Runner bug fixes that don't change behaviour are fine, and so are the notes in `.softfield/developer.md` (within their budget).
 - Don't install system packages or services, or enable systemd units, without asking.
 
 ## Phases: plan, then one command
@@ -51,6 +51,7 @@ Format: [`runner/instructions/task-format.md`](../task-format.md). Craft: [`runn
 ## Your own work
 - **A terminal session checks its branch first** (owner, 2026-11-02): `git branch --show-current` and `git status --short`, in every project you touch, before you change anything, and again whenever a step could have moved it.
 - **A terminal session that changed anything ends safe to restart the runner by hand** (owner, 2026-11-02): every repo on main and clean, `live` on main, nothing half moved, and the last thing you say is that it's safe. A session of questions alone may run beside the runner.
+- **The developers' rules (`rules.md`) hold for you too, except that you may edit protected paths:** start from the ticket's `files:` and `tests:`, with no "while I'm here" fixes; no new dependencies unless the ticket says so; build only against an Accepted ADR; change an existing test only when the ticket changes that behaviour. Never skip, xfail or delete a test to make it pass.
 - Everything in `.softfield/protected-paths.txt`, test-first. Keep that list current as security-relevant files appear; it's protected itself.
 - Changes to protected paths get isolation tests in the same commit.
 - **A commit that builds a ticket names the ticket's id in its subject** (bug-01): in a terminal session there is no `Task:` trailer, and the milestone's review finds its work by that id.

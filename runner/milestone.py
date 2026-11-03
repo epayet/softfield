@@ -669,10 +669,14 @@ def _first_scope(s: Session, milestone: str, base: str) -> str:
                 f" (holds other tickets' work too: only {', '.join(tickets)} is this milestone's)"
             )
         lines.append(line)
+    found = "\n".join(lines) or (
+        "none by ticket id. A terminal session may have named the card instead: find them with"
+        f" `git log -i --grep={milestone.split('-')[0]}`, review those, and say so in the report."
+    )
     return (
         "Review this milestone's own commits: other work was committed in the same range, so"
         " the range's diff is not the milestone's. Read only these, and leave the other commits"
-        " out. The milestone's commits:\n" + ("\n".join(lines) or "none")
+        " out. The milestone's commits:\n" + found
     )
 
 

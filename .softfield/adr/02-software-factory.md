@@ -670,6 +670,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** measuring first changed the fix: the plan blamed killed jobs, the measure found sample hooks in test repos. But the measure itself read length rather than disk use, and its tests couldn't tell: a tool that reports a quantity needs a test that separates it from its near neighbour. Housekeeping added to a path every command takes must not be able to fail that path (the temp folder on a full disk). The 30 GB is still not fully explained; the owner's check on their computer settles it.
 - **Decisions affected:** none. ADR 39 waits for the owner.
 
+### F127 (2026-11-03): the factory is optional ([review](../reviews/f127-shared-rules-stay-shared-across-projects.md))
+
+- **Q1:** one lead ticket, one commit of 103 files built in a terminal session, so no checkpoint. Review round 1: two blocking, three should-fix and one nit fixed by the review; one nit set aside (bug-54), three only reported.
+- **Q3:** no developer work (protected runner code and instructions).
+- **Q5:** see the review's numbers.
+- **Anything else:** 2,926 passing tests missed a command that did nothing, because they called the function behind it and never the command. Moving a file into a protected folder changed which gate applies to it, and only one of the two had the exception. The review was told its commits were "none", since the ticket was written after the commit; the runner now says where to look.
+- **Decisions affected:** ADR 41's Consequences says removing the factory means deleting its folder, and one git setting stays too. The folder's README says so; the ADR's text is the owner's and is unchanged.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

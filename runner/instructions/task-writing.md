@@ -73,7 +73,7 @@ A sum of 9 or more on a developer ticket means split it, or make it a lead ticke
 
 ## Lessons from M2
 
-- **The model can only produce what its tools allow.** For every file in `files:`, check that `opencode.json` lets the model create it. m2-01 listed `django.mo`, but `msgfmt` was denied: it cost one wasted attempt and an escalation (ADR 04).
+- **The model can only produce what its tools allow.** For every file in `files:`, check that the run's permissions (`runner/templates/opencode.json`, plus the project's `.softfield/opencode.json`) let the model create it. m2-01 listed `django.mo`, but `msgfmt` was denied: it cost one wasted attempt and an escalation (ADR 04).
 - **French:** ask for "all its accents" explicitly (the model dropped them once), and give one tone example ("Réessayez un peu plus tard", not "Veuillez réessayer plus tard"). Claude still reads every `msgstr`.
 - **Outcome-style specs** (what, not how) passed as reliably as dictation-style ones on small UI tasks: 2/2 against 1/1 at first attempt. ADR 07 builds on this.
 - **Never wrap a runner session in an outer `timeout`.** It killed M2's runner mid-task. OpenCode's own limit is enough.

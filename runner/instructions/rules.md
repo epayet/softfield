@@ -1,4 +1,4 @@
-# The factory's rules, for every job it starts
+# The factory's rules, for every developer it starts
 
 A project's `.softfield/project.md` overrides any of them, except a rule a gate enforces: that one changes in `.softfield/project.toml` or `.softfield/protected-paths.txt`.
 

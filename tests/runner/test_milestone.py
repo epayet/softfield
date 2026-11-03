@@ -788,6 +788,16 @@ def test_round_one_lists_its_commits_when_others_work_is_in_range(repo):
     assert "f8-01-x" not in scope
 
 
+def test_round_one_that_finds_no_commit_says_where_to_look(repo):
+    """A terminal session named the card, not the ticket: F127's review was told to read
+    "none" of a commit of 103 files (f127 review, F5)."""
+    s = _scope_repo(repo)
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f8-01-x: other\n\nTask: f8-01-x")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "f9-the-theme: built by hand")
+    scope = milestone._first_scope(s, "f9", "f9-start")
+    assert "`git log -i --grep=f9`" in scope and "say so in the report" in scope
+
+
 # --- a review Claude can't take now (F53 D1) ------------------------------------------------
 
 

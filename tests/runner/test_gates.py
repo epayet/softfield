@@ -41,6 +41,13 @@ def test_protected_globs():
     ]
 
 
+def test_a_developers_discovery_is_not_a_protected_change():
+    """The rules send a discovery to .softfield/discoveries.md, under the protected dot folder
+    since ADR 41 (f127 review, F1): the gate must let that one file through, and only it."""
+    changed = [".softfield/discoveries.md", ".softfield/developer.md", "a.py"]
+    assert touching_protected(changed, [".softfield/**"]) == [".softfield/developer.md"]
+
+
 def test_dependency_changes():
     vendored = "factory_dashboard/static/vendor/htmx.min.js"
     changed = ["uv.lock", "coucou/static/coucou/vendor/alpine.js", vendored, "a.py"]

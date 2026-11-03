@@ -27,6 +27,25 @@ def in_repo(repo, monkeypatch, machine):
     return repo
 
 
+def test_softfield_lead_starts_claude_and_passes_its_arguments_on(in_repo, monkeypatch):
+    """ADR 41 item 3, through `main`: it was parsed and then did nothing (f127 review, F2)."""
+
+    class Started(Exception):
+        pass
+
+    seen = []
+
+    def execvp(file, args):
+        seen.append(args)
+        raise Started
+
+    monkeypatch.setattr(os, "execvp", execvp)
+    with pytest.raises(Started):
+        cli.main(["lead", "--", "--model", "opus"])
+    assert seen[0][0] == "claude" and seen[0][-2:] == ["--model", "opus"]
+    assert "--append-system-prompt" in seen[0]
+
+
 @pytest.mark.parametrize(("code", "expected"), [(0, 0), (2, 2)])
 def test_milestone_exits_with_the_verdicts_code(in_repo, monkeypatch, capsys, code, expected):
     monkeypatch.setattr(cli, "run_milestone", lambda cfg, n, base: "clean")
