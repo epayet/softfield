@@ -62,6 +62,11 @@ class DeskItem:
     place: Place | None = field(default=None, kw_only=True)  # a waiting thread's (F84)
     # a card's open proposals as one item (F51 D1): each part's name, and whether it is on its way
     parts: tuple[tuple[str, bool], ...] = field(default=(), kw_only=True)
+    # blocked ticket fix facts (f170-03): the card's key, the lead's first point title, and the
+    # replan proposal (title + key points count) if the lead replied with one
+    fix_card: str | None = field(default=None, kw_only=True)
+    fix_first_point: str | None = field(default=None, kw_only=True)
+    fix_replan: dict[str, object] | None = field(default=None, kw_only=True)
 
 
 @dataclass(frozen=True)

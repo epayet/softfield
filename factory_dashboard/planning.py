@@ -360,9 +360,17 @@ def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
             " ORDER BY m.at DESC LIMIT 1",
             (project_id, f"{ticket} blocked:%"),
         ).fetchone()
+        fix_card: str | None = None
+        fix_first_point: str | None = None
+        fix_replan: dict[str, object] | None = None
         if runner is not None:
             runner_at = runner["at"]
             card = runner["card"]
+            fix_card = card
+            # Strip "its work is on task/…" from the reason
+            match = re.search(r"\s*[.,;]\s*(its|the) work is on task/", words, re.IGNORECASE)
+            if match:
+                words = words[: match.start()]
             # Check for a lead message after the runner's on the same thread
             lead = conn.execute(
                 "SELECT max(id) FROM planner_messages"
@@ -373,10 +381,44 @@ def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
                 (project_id, card, runner_at),
             ).fetchone()
             if lead["max(id)"] is not None:
+                # Get the lead's first point title
+                lead_msg = conn.execute(
+                    "SELECT points FROM planner_messages WHERE id = ?",
+                    (lead["max(id)"],),
+                ).fetchone()
+                if lead_msg and lead_msg["points"]:
+                    points = json.loads(lead_msg["points"])
+                    if points:
+                        fix_first_point = str(points[0].get("title", ""))
+                # Find the replan proposal in the lead's latest proposals
+                prop_row = conn.execute(
+                    "SELECT proposals FROM planner_messages WHERE id = ?",
+                    (lead["max(id)"],),
+                ).fetchone()
+                if prop_row and prop_row["proposals"]:
+                    for prop in json.loads(prop_row["proposals"]):
+                        if isinstance(prop, dict) and prop.get("kind") == "replan":
+                            key_points = prop.get("key_points", [])
+                            fix_replan = {
+                                "title": str(prop.get("title", "")),
+                                "key_points": (
+                                    len(key_points) if isinstance(key_points, list) else 0
+                                ),
+                            }
                 words = f"{words} · the lead's fix waits on {card.upper()}'s thread"
             else:
                 words = f"{words} · the lead is looking at it"
-        items.append(DeskItem("blocked", ticket, words, f"/tickets/{ticket}"))
+        items.append(
+            DeskItem(
+                "blocked",
+                ticket,
+                words,
+                f"/tickets/{ticket}",
+                fix_card=fix_card,
+                fix_first_point=fix_first_point,
+                fix_replan=fix_replan,
+            )
+        )
     return items
 
 

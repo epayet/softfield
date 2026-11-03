@@ -1253,9 +1253,15 @@ def test_runner_message_only_says_lead_is_looking(planning, db_path, db):
         metrics.add_planner_message(conn, thread, "runner", _at(timedelta(minutes=5)), LOOK)
     finally:
         conn.close()
-    assert _blocked_words(db, project) == [
-        "check-all failed; the work is on task/f9-01-board · the lead is looking at it"
-    ]
+    assert _blocked_words(db, project) == ["check-all failed · the lead is looking at it"]
+    [item] = _group(db, "blocked")
+    assert item.fix_card == "f9"
+    assert item.fix_first_point is None
+    assert item.fix_replan is None
+    [item] = _group(db, "blocked")
+    assert item.fix_card == "f9"
+    assert item.fix_first_point is None
+    assert item.fix_replan is None
 
 
 def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db):
@@ -1279,9 +1285,11 @@ def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db):
         )
     finally:
         conn.close()
-    assert _blocked_words(db, project) == [
-        "check-all failed; the work is on task/f9-01-board · the lead's fix waits on F9's thread"
-    ]
+    assert _blocked_words(db, project) == ["check-all failed · the lead's fix waits on F9's thread"]
+    [item] = _group(db, "blocked")
+    assert item.fix_card == "f9"
+    assert item.fix_first_point is None
+    assert item.fix_replan is None
 
 
 def test_no_runner_message_words_unchanged(planning, db_path, db):
@@ -1326,6 +1334,263 @@ def test_another_tickets_runner_message_does_not_count(planning, db_path, db):
     finally:
         conn.close()
     assert _blocked_words(db, project) == ["waiting on f95-01"]
+
+
+# --- blocked ticket with lead's fix (f170-03) ------------------------------------------------
+
+
+def test_blocked_ticket_with_replan_shows_approve_button(planning, db_path, db, serve):
+    """A blocked f9-01-board whose card's thread has the runner's look then a lead reply with
+    a replan "F9: rework the board" of 3 key points, first point "What went wrong: the test
+    run was cut": the item shows that first point, "F9: rework the board · 3 key points",
+    a link to /planning/f9, and an "Approve the lead's fix" button posting approve_plan with
+    subject f9."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-01-board",
+            text="f9-01-board blocked: check-all failed",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board.",
+        )
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "lead",
+            _at(timedelta(minutes=1)),
+            "Looking.",
+            points=[
+                {
+                    "n": 1,
+                    "title": "What went wrong: the test run was cut",
+                    "text": "Cut by timeout.",
+                },
+                {"n": 2, "title": "The runner's limit is too low", "text": "Raise it."},
+                {
+                    "n": 3,
+                    "title": "The fix is to raise the gate timeout",
+                    "text": "Update project.toml.",
+                },
+            ],
+            proposals=[
+                {
+                    "id": "replan",
+                    "kind": "replan",
+                    "title": "F9: rework the board",
+                    "key_points": [
+                        {"n": 1, "title": "A"},
+                        {"n": 2, "title": "B"},
+                        {"n": 3, "title": "C"},
+                    ],
+                },
+            ],
+        )
+    finally:
+        conn.close()
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
+    [item] = blocked_group.items
+    assert item.fix_card == "f9"
+    assert item.fix_first_point == "What went wrong: the test run was cut"
+    assert item.fix_replan is not None
+    assert item.fix_replan["title"] == "F9: rework the board"
+    assert item.fix_replan["key_points"] == 3
+    assert "Approve the lead's fix" in _page(serve())
+    approve_btn = re.search(
+        r'<button[^>]*id="approve-f9-01-board"[^>]*hx-vals=\'([^\']*)\'',
+        _page(serve()),
+    )
+    assert approve_btn
+    vals = json.loads(unescape(approve_btn[1]))
+    assert vals["kind"] == "approve_plan"
+    assert vals["subject"] == "f9"
+    # "Try again as it is" posts queue for the ticket
+    try_again_btn = re.search(
+        r'<button[^>]*id="try-again-f9-01-board"[^>]*hx-vals=\'([^\']*)\'',
+        _page(serve()),
+    )
+    assert try_again_btn
+    vals = json.loads(unescape(try_again_btn[1]))
+    assert vals["kind"] == "queue"
+    assert vals["subject"] == "f9-01-board"
+    # "Set aside" button present
+    assert "set-aside-f9-01-board" in _page(serve())
+
+
+def test_blocked_with_look_no_lead_reply_shows_reading_message(planning, db_path, db, serve):
+    """With the look but no lead reply yet: "The lead is reading the work and its logs;
+    its fix comes here", no Approve button."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-01-board",
+            text="f9-01-board blocked: check-all failed",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board.",
+        )
+    finally:
+        conn.close()
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
+    [item] = blocked_group.items
+    assert item.fix_card == "f9"
+    assert item.fix_first_point is None
+    assert item.fix_replan is None
+    html = _page(serve())
+    assert "The lead is reading the work and its logs" in html
+    assert 'id="approve-f9-01-board"' not in html
+
+
+def test_blocked_with_lead_reply_no_replan_shows_fix_plate(planning, db_path, db, serve):
+    """A lead reply with no replan: no Approve button, the plate says the lead's fix waits
+    on F9's thread, with its link."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-01-board",
+            text="f9-01-board blocked: check-all failed",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board.",
+        )
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "lead",
+            _at(timedelta(minutes=1)),
+            "I'll fix it.",
+            points=[
+                {"n": 1, "title": "Raise the timeout", "text": "Update project.toml."},
+            ],
+        )
+    finally:
+        conn.close()
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
+    [item] = blocked_group.items
+    assert item.fix_card == "f9"
+    assert item.fix_first_point == "Raise the timeout"
+    assert item.fix_replan is None
+    html = _page(serve())
+    assert "The lead's fix" in html
+    assert "raise the timeout" in html.lower() or "Raise the timeout" in html
+    assert "F9's thread" in html
+    assert 'id="approve-f9-01-board"' not in html
+
+
+def test_blocked_bug_ticket_keeps_standard_buttons(planning, db_path, db, serve):
+    """A blocked bug ticket: "Try again" and "Set aside" as today."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f1-01",
+            text="f1-01 blocked: waiting on f12-03",
+            created=_at(timedelta(hours=4)),
+        )
+    finally:
+        conn.close()
+    blocked_group = next(g for g in desk(db, PROJECT, NOW) if g.key == "blocked")
+    [item] = blocked_group.items
+    assert item.fix_card is None
+    assert item.fix_first_point is None
+    assert item.fix_replan is None
+    html = _page(serve())
+    assert 'id="try-again-f1-01"' in html
+    assert 'id="set-aside-f1-01"' in html
+    assert 'class="btn go"' in html  # Try again is the main button
+    assert 'class="btn plain"' in html  # Set aside is quiet
+
+
+def test_approve_shows_item_on_its_way(page, planning, db_path, serve):
+    """Pressing Approve shows the item on its way at once, dashed orange, its buttons gone."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-01-board",
+            text="f9-01-board blocked: check-all failed",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f9-01-board blocked: check-all failed. Its work is on task/f9-01-board.",
+        )
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "lead",
+            _at(timedelta(minutes=1)),
+            "Looking.",
+            points=[
+                {
+                    "n": 1,
+                    "title": "What went wrong: the test run was cut",
+                    "text": "Cut by timeout.",
+                },
+            ],
+            proposals=[
+                {
+                    "id": "replan",
+                    "kind": "replan",
+                    "title": "F9: rework the board",
+                    "key_points": [{"n": 1, "title": "A"}],
+                },
+            ],
+        )
+    finally:
+        conn.close()
+    _open(page, serve())
+    page.click("#approve-f9-01-board")
+    item = page.locator("#blocked-f9-01-board")
+    item.locator("text=Approving the lead's fix at the runner's next pick").wait_for()
+    link = item.locator("a[href^='/tickets/']")
+    assert "dashed" in link.get_attribute("style")
+    assert not page.locator("#approve-f9-01-board").is_visible()
+    assert not page.locator("#try-again-f9-01-board").is_visible()
+    assert not page.locator("#set-aside-f9-01-board").is_visible()
+    # Fix plate hidden
+    fix = page.locator("#blocked-f9-01-board .fix")
+    assert fix.evaluate("el => el.style.display") == "none"
 
 
 # --- text boxes grow with what is typed (f82-01) ------------------------------------------------
