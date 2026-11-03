@@ -2539,6 +2539,48 @@ def test_approving_a_replan_brings_a_reworked_blocked_ticket_back_to_ready(repo,
     assert state.owner_pause is None
 
 
+def _tried_again(repo: Path) -> None:
+    """The owner's Try again on f7-03-c, after the replan's branch was drafted: its blocked copy
+    moved to ready/ on main."""
+    ready = repo / ".softfield" / "tasks" / "ready" / "f7-03-c.md"
+    git(repo, "mv", BLOCKED_C, str(ready.relative_to(repo)))
+    git(repo, "commit", "-q", "-m", "Try again f7-03-c")
+
+
+@pytest.mark.parametrize("place", ["ready", "later"])
+def test_a_replan_replaces_the_ticket_try_again_put_back(repo, place):
+    _blocked_too(repo)
+    _plan(repo, {f".softfield/tasks/{place}/f7-03-c.md": REWORKED})
+    _tried_again(repo)
+    state = _paused(repo)
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    result = _request(repo, asked)[1]
+    assert str(result).startswith("approved plan/f7")
+    assert "f7-03-c: the lead's fix replaced the ticket Try again put back" in str(result)
+    later = repo / ".softfield" / "tasks" / "later" / "f7-03-c.md"
+    text = _ready(repo).get("f7-03-c") if place == "ready" else later.read_text()
+    assert text is not None and text.startswith(REWORKED.rstrip("\n"))
+    assert text.count("result: blocked") == 1
+    assert (place == "later") == ("f7-03-c" not in _ready(repo))
+    assert later.exists() == (place == "later")
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+
+
+def test_a_replan_cannot_replace_the_running_ticket_try_again_put_back(repo):
+    _blocked_too(repo)
+    _plan(repo, {".softfield/tasks/ready/f7-03-c.md": REWORKED})
+    _tried_again(repo)
+    head = git(repo, "rev-parse", "HEAD")
+    state = _paused(repo)
+    state.in_flight = {"ticket": "f7-03-c"}
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state, LATER_ON)
+    assert "not approved" in str(_request(repo, asked)[1])
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
+
+
 def test_a_blocked_ticket_brought_back_keeps_its_failed_work(repo):
     """Its ``task/<id>`` copied to ``blocked/<id>``, as a Try again does: the reworked lead
     ticket starts again from main."""

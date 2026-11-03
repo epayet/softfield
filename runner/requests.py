@@ -11,6 +11,7 @@ keep one writer, and the run state.json, whose reserve switches (ADR 22 item 4) 
 import json
 import re
 import sqlite3
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from datetime import datetime
@@ -676,6 +677,56 @@ def _unblock(git: Git, brought: Mapping[str, str]) -> None:
         git.run("rm", "-q", "--", blocked)
 
 
+def _put_back(
+    git: Git, branch: str, changes: list[tuple[str, str]], card: str, running: str | None
+) -> dict[str, str]:
+    """A replan's tickets that a Try again put back in .softfield/tasks/ready/ on main after the
+    branch was drafted (f170 D2): each of ``card``'s tickets the branch adds in ready/ or later/
+    that its base lacks while main holds the name in ready/, by main's path, to the branch's path.
+    The running ticket is not one: its clash is refused as any other."""
+    base = git.run("merge-base", loop.MAIN, branch).strip()
+    found = {}
+    removed = {path for mode, path in changes if mode == "000000"}
+    for mode, path in changes:
+        name = Path(path).name
+        if mode == "000000" or not name.startswith(f"{card}-") or Path(name).stem == running:
+            continue
+        if not path.startswith((planner.READY_DIR, f".softfield/tasks/{LATER}/")):
+            continue
+        mine = f"{planner.READY_DIR}{name}"
+        if mine in removed:
+            continue
+        if Path(git.repo, mine).is_file() and not git.run(
+            "ls-tree", "--name-only", base, "--", path
+        ):
+            found[mine] = path
+    return found
+
+
+def _replace_put_back(git: Git, put_back: Mapping[str, str]) -> None:
+    """After the squash: main's ready copy (read from ``HEAD``) gives its runner footers to the
+    branch's ticket, which wins; a ticket the replan set aside in later/ loses the ready copy."""
+    for mine, path in put_back.items():
+        with tempfile.TemporaryDirectory() as folder:
+            source = Path(folder, "main.md")
+            source.write_text(git.run("show", f"HEAD:{mine}"), encoding="utf-8")
+            carry_footers(source, Path(git.repo, path))
+        if path != mine:
+            git.run("rm", "-q", "-f", "--", mine)
+
+
+def _settle_clash(git: Git, put_back: Mapping[str, str]) -> bool:
+    """A squash that stopped on conflicts: true when every one is a ticket in ``put_back``, now
+    taken as the branch wrote it."""
+    unmerged = git.run("diff", "--name-only", "--diff-filter=U").split()
+    if not unmerged or not set(unmerged) <= set(put_back):
+        return False
+    for path in unmerged:
+        git.run("checkout", "-q", "--theirs", "--", path)
+        git.run("add", "--", path)
+    return True
+
+
 def _export(
     repo: Path,
     conn: sqlite3.Connection,
@@ -760,6 +811,7 @@ def _approve_plan(
     changed: list[str] = []
     aside: list[str] = []
     brought: dict[str, str] = {}
+    put_back: dict[str, str] = {}
     drafted: list[tuple[str, str]] = []
     if planned and branch is not None:
         changes = _drafts(git, branch)
@@ -772,8 +824,14 @@ def _approve_plan(
         added, changed, aside = _ready_changes(repo, changes)
         if replan:
             brought = _brought_back(repo, changes, thread)
+        if replan:
+            put_back = _put_back(git, branch, changes, thread, running)
         # a blocked ticket brought back to later/ stays there, set aside (ADR 29 item 3)
-        aside += sorted(back for back in brought.values() if not back.startswith(planner.READY_DIR))
+        aside += sorted(
+            back
+            for back in [*brought.values(), *put_back.values()]
+            if not back.startswith(planner.READY_DIR)
+        )
         set_aside = {Path(path).name for path in aside}
         tickets = sorted(
             path
@@ -786,12 +844,14 @@ def _approve_plan(
         try:
             git.run("merge", "-q", "--squash", branch)
         except GitError:
-            _undo(git)
-            return f"{branch} clashes with {loop.MAIN}: not approved"
+            if not _settle_clash(git, put_back):
+                _undo(git)
+                return f"{branch} clashes with {loop.MAIN}: not approved"
     made: Path | None = None
     moved: dict[tuple[str, str], _Moved] = {}
     try:
         if planned:
+            _replace_put_back(git, put_back)
             _unblock(git, brought)
             checked = sorted([*tickets, *added, *changed], key=lambda path: Path(path).name)
             if problems := ticket_problems(repo, checked):
@@ -844,6 +904,10 @@ def _approve_plan(
             ("set aside", aside),
         )
         if found
+    ]
+    parts += [
+        f"{Path(path).stem}: the lead's fix replaced the ticket Try again put back"
+        for path in put_back.values()
     ]
     parts += said
     if replan and state.owner_pause is not None:  # applied while the line held: it goes on
