@@ -1,4 +1,4 @@
-# F139: Projects keep Softfield's files in .softfield, not .softfield
+# F139: Projects keep Softfield's files in .softfield, not .factory
 
 The planning thread behind F139's plan, oldest first, as it was when the owner approved it.
 
@@ -8,11 +8,11 @@ The planning thread behind F139's plan, oldest first, as it was when the owner a
 
 ## The lead, 2026-10-27 09:06
 
-> I've drafted the plan for F139: the runner moves each project's `.softfield` folder to `.softfield` itself, checks the result before committing, and does Softfield first so it restarts on the new code before moving the other projects.
+> I've drafted the plan for F139: the runner moves each project's `.factory` folder to `.softfield` itself, checks the result before committing, and does Softfield first so it restarts on the new code before moving the other projects.
 >
 > 1. **Worth doing, and best done now**: Calling the folder after the tool makes sense, the way `.github` is named after GitHub. The cost is about two lead tickets. The real risk is to the runner itself, which reads this folder for every ticket, card and log. The folder name appears 1,326 times in 94 files outside it (runner, dashboard, prompts, docs, tests). It is also in 73 ready tickets, 544 job log paths in the database and 25 open branches. Three live projects have the folder today, so it only gets more expensive with every new project.
 >    Action: Plan it now. The card's place on the board decides when it runs.
-> 2. **The runner does the move, not a ticket**: Editing 1,300 lines by hand in a lead ticket would cost a lot and miss some. Worse: a branch that renamed the folder would be merged by the old runner, which then files the finished ticket into `.softfield/tasks/done/` on a main that no longer has that folder. So one ticket builds the move and a second has the runner run it on this machine. The move renames the folder (logs included) and rewrites every tracked mention, ADRs, cards and tickets included. Names like `.card.factory` and `.factory-status` stay as they are.
+> 2. **The runner does the move, not a ticket**: Editing 1,300 lines by hand in a lead ticket would cost a lot and miss some. Worse: a branch that renamed the folder would be merged by the old runner, which then files the finished ticket into `.factory/tasks/done/` on a main that no longer has that folder. So one ticket builds the move and a second has the runner run it on this machine. The move renames the folder (logs included) and rewrites every tracked mention, ADRs, cards and tickets included. Names like `.card.factory` and `.factory-status` stay as they are.
 >    Action: Tickets f139-01-move-home and f139-02-runner-moves-projects (both lead: they change `runner/`).
 > 3. **Main is never left half moved**: Before it commits, the move runs every check on the moved project. If one fails, it puts everything back (folder, files, hook path) and the desk tells you which check failed. A project in a half state (both folders exist) is refused and shown on the desk too.
 >    Action: Part of f139-01.

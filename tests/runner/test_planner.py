@@ -789,6 +789,31 @@ def test_a_plan_branchs_changes_are_listed_with_their_words(replanned):
     )
 
 
+def test_what_main_and_the_branch_both_changed_alike_is_not_the_plans(repo):
+    """F139's move: one rename and edit, on main and again on a branch that hasn't caught up."""
+    _write(repo, "old/code.txt", "in old/\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "before")
+    git(repo, "checkout", "-q", "-b", "plan/f7")
+    _write(repo, READY_C, "the plan's c\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "the plan")
+    for branch in ("plan/f7", "main"):
+        git(repo, "checkout", "-q", branch)
+        git(repo, "rm", "-q", "old/code.txt")
+        _write(repo, "new/code.txt", "in new/\n")
+        git(repo, "add", "-A")
+        git(repo, "commit", "-q", "-m", "the move")
+    assert planner.plan_changes(repo, "f7") == [planner.Change(READY_C, "added", READY_C)]
+
+
+def test_a_branch_that_clashes_with_main_lists_what_it_changed_since_it_left(replanned):
+    _write(replanned, READY_A, "main's new a\n")
+    git(replanned, "add", "-A")
+    git(replanned, "commit", "-q", "-m", "main changes it too")
+    assert planner.Change(READY_A, "changed", READY_A) in planner.plan_changes(replanned, "f7")
+
+
 def test_a_set_aside_ticket_reads_from_the_branch_not_main(replanned):
     assert planner.draft(replanned, "f7", READY_A) == b"the replan's a\n"
     assert planner.draft(replanned, "f7", READY_C) == b"the replan's c\n"

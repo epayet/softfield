@@ -239,7 +239,7 @@ def plan_changes(repo: Path, thread: str) -> list[Change]:
         return []
     if branch is None or _git(repo, "rev-parse", "--verify", "-q", f"refs/heads/{branch}") is None:
         return []
-    out = _git(repo, "diff", "--raw", "--no-renames", "-z", f"{_MAIN}...refs/heads/{branch}")
+    out = _git(repo, "diff", "--raw", "--no-renames", "-z", *plan_range(repo, branch))
     if out is None:
         return []
     # `-z`: each change is its `:<modes> <shas> <status>` then its path, NUL after each
@@ -267,6 +267,16 @@ def plan_changes(repo: Path, thread: str) -> list[Change]:
             word = _WORDS.get(code, "changed")
             changes.append(Change(path, word, None if word == "removed" else path))
     return changes
+
+
+def plan_range(repo: Path, branch: str) -> tuple[str, ...]:
+    """What ``git diff`` compares to tell what approving ``branch`` changes: main against the two
+    merged, so what both changed alike isn't the plan's (F139's folder move, on main and on a branch
+    that hadn't caught up: 1,228 files). A branch that clashes with main: since it left main."""
+    merged = _git(repo, "merge-tree", "--write-tree", _MAIN, f"refs/heads/{branch}")
+    if merged is None:
+        return (f"{_MAIN}...refs/heads/{branch}",)
+    return (_MAIN, merged.decode().split()[0])
 
 
 def _git(repo: Path, *args: str) -> bytes | None:

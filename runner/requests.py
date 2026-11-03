@@ -308,9 +308,10 @@ def _undo(git: Git, *made: Path | None) -> None:
 
 
 def _drafts(git: Git, branch: str) -> list[tuple[str, str]]:
-    """Each path the plan branch changed since it left main, with its mode there."""
+    """Each path approving the plan branch changes, with its mode there (``planner.plan_range``)."""
     changes = []
-    for line in git.run("diff", "--raw", "--no-renames", f"{loop.MAIN}...{branch}").splitlines():
+    span = planner.plan_range(Path(git.repo), branch)
+    for line in git.run("diff", "--raw", "--no-renames", *span).splitlines():
         meta, _, path = line.partition("\t")
         changes.append((meta.split()[1], path))
     return changes

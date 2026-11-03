@@ -2395,6 +2395,27 @@ def test_a_replan_approved_without_a_pause_still_applies(repo):
     assert state.owner_pause is None and _pauses(repo) == []
 
 
+def test_a_plan_behind_a_change_main_also_made_is_approved(repo):
+    """F139's folder move, on main and on a plan branch that hadn't caught up: it isn't the plan's,
+    so it isn't refused as outside the drafts, and the approval changes only the plan's files."""
+    _running(repo)
+    (repo / "runner.py").write_text("in old/\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "code")
+    _plan(repo, {".softfield/tasks/ready/f7-01-a.md": LESS})
+    for branch in ("plan/f7", "main"):
+        git(repo, "checkout", "-q", branch)
+        (repo / "runner.py").write_text("in new/\n")
+        git(repo, "commit", "-q", "-am", "the move")
+    head = git(repo, "rev-parse", "HEAD").strip()
+    state = State()
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, state)
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing; changed f7-01-a"
+    assert _ready(repo)["f7-01-a"] == LESS
+    assert git(repo, "diff", "--name-only", head, "HEAD", "--", "runner.py") == ""
+
+
 def test_a_replan_sets_a_ready_ticket_aside_in_later(repo):
     _running(repo)
     _plan(
