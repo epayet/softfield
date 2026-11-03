@@ -41,3 +41,9 @@ attempts: 3
 tokens: 7276608
 logs: .softfield/var/runs/20261103-110556/f170-04-blocked-ticket-page
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
