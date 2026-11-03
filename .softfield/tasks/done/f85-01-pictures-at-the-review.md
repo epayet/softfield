@@ -46,3 +46,10 @@ Read ADR 40 in `.softfield/adr/40-pictures-at-sign-off-in-every-project.md` (it 
 result: blocked
 reason: the lead ticket changed nothing
 ```
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
