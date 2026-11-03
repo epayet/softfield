@@ -415,10 +415,12 @@ def _owners_mark(path: str, before: str | None, after: str | None) -> bool:
 def _owners_marks(git: Git, branch: str, changes: list[tuple[str, str]]) -> str | None:
     """Why the branch can't be merged, if a draft sets what only the owner sets."""
     marked = []
+    # the merged tree: a file main renamed is at its new name there, and not on the branch
+    source = planner.merged_tree(Path(git.repo), branch) or branch
     for mode, path in changes:
         on_main = Path(git.repo, path)
         before = on_main.read_text(encoding="utf-8") if on_main.is_file() else None
-        after = None if mode == "000000" else git.run("show", f"{branch}:{path}")
+        after = None if mode == "000000" else git.run("show", f"{source}:{path}")
         if _owners_mark(path, before, after):
             marked.append(path)
     if not marked:

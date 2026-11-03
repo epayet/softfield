@@ -680,10 +680,10 @@ _(to fill in at the M3 review)_
 
 ### F139 (2026-11-03): the folder is `.softfield` ([review](../reviews/f139-the-factory-folder-should-actually-be.md))
 
-- **Q1:** no ticket ran: the owner moved all three projects in a terminal session, with a one-shot script guarded by each project's full check, so no checkpoint saw it and f139-02 was dropped. Review round 1: one blocking and one should-fix fixed by the review, one should-fix set aside (bug-55), three nits only reported.
+- **Q1:** no ticket ran: the owner moved all three projects in a terminal session, with a one-shot script guarded by each project's full check, so no checkpoint saw it and f139-02 was dropped. Review round 1: one blocking and one should-fix fixed by the review, one should-fix set aside (bug-55), three nits only reported. Round 2: the blocking fix didn't work on the real branches, so it was reopened (f139-03), and the regression it caused was fixed.
 - **Q3:** no developer work (protected runner code, git and the database).
 - **Q5:** see the review's numbers.
-- **Anything else:** every check passed on the moved tree, yet the plan's promise that moved branches could still be approved wasn't true: a moved branch's diff since it left main was the whole move, 1,115 files for F133. A check on a tree says nothing about what git compares across history. A blind text pass also rewrites the one document that needs both names.
+- **Anything else:** every check passed on the moved tree, yet the plan's promise that moved branches could still be approved wasn't true: a moved branch's diff since it left main was the whole move, 1,115 files for F133. A check on a tree says nothing about what git compares across history. A blind text pass also rewrites the one document that needs both names. Round 1's fix passed tests that modelled the fault in one file, while all five real branches clash in 95 to 169 places: a fix for a fault seen on live data has to be tried on that data.
 - **Decisions affected:** none.
 
 ## 10. For the owner to decide at review time (each item can be accepted on its own)

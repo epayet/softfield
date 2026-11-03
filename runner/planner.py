@@ -228,11 +228,10 @@ class Change:
 
 
 def plan_changes(repo: Path, thread: str) -> list[Change]:
-    """What approving the card's plan branch changes (f6-24): each path it changed since it left
-    main, by path; a ready ticket removed and moved to .softfield/tasks/later/ is "set aside", once,
-    under its .softfield/tasks/ready/ path. Empty with no branch, or for the general thread. Git
-    only,
-    as ``draft``: ``runner.requests._drafts`` reads the same diff."""
+    """What approving the card's plan branch changes (f6-24, ``plan_range``), by path; a ready
+    ticket removed and moved to .softfield/tasks/later/ is "set aside", once, under its
+    .softfield/tasks/ready/ path. Empty with no branch, or for the general thread. Git only, as
+    ``draft``: ``runner.requests._drafts`` reads the same diff."""
     try:
         branch = plan_branch(thread_key(thread))
     except PlannerError:
@@ -273,10 +272,14 @@ def plan_range(repo: Path, branch: str) -> tuple[str, ...]:
     """What ``git diff`` compares to tell what approving ``branch`` changes: main against the two
     merged, so what both changed alike isn't the plan's (F139's folder move, on main and on a branch
     that hadn't caught up: 1,228 files). A branch that clashes with main: since it left main."""
-    merged = _git(repo, "merge-tree", "--write-tree", _MAIN, f"refs/heads/{branch}")
-    if merged is None:
-        return (f"{_MAIN}...refs/heads/{branch}",)
-    return (_MAIN, merged.decode().split()[0])
+    merged = merged_tree(repo, branch)
+    return (f"{_MAIN}...refs/heads/{branch}",) if merged is None else (_MAIN, merged)
+
+
+def merged_tree(repo: Path, branch: str) -> str | None:
+    """The tree approving ``branch`` leaves: main and it merged. None when they clash."""
+    out = _git(repo, "merge-tree", "--write-tree", _MAIN, f"refs/heads/{branch}")
+    return None if out is None else out.decode().split()[0]
 
 
 def _git(repo: Path, *args: str) -> bytes | None:

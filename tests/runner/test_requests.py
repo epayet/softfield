@@ -2416,6 +2416,23 @@ def test_a_plan_behind_a_change_main_also_made_is_approved(repo):
     assert git(repo, "diff", "--name-only", head, "HEAD", "--", "runner.py") == ""
 
 
+def test_a_plan_on_a_file_main_renamed_is_approved_at_the_new_name(repo):
+    """The merge carries the plan's edit over to the new name, which the branch doesn't have."""
+    _running(repo)
+    lines = "".join(f"line {n}\n" for n in range(40))
+    (repo / "docs").mkdir(exist_ok=True)
+    (repo / "docs" / "old.md").write_text(lines)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "a doc")
+    _plan(repo, {"docs/old.md": f"{lines}the plan's line\n"})
+    git(repo, "mv", "docs/old.md", "docs/new.md")
+    git(repo, "commit", "-q", "-m", "main renames it")
+    asked = _ask(repo, "approve_plan", "f7")
+    _apply(repo, State())
+    assert _request(repo, asked)[1] == "approved plan/f7: queued nothing"
+    assert (repo / "docs" / "new.md").read_text().endswith("the plan's line\n")
+
+
 def test_a_replan_sets_a_ready_ticket_aside_in_later(repo):
     _running(repo)
     _plan(
