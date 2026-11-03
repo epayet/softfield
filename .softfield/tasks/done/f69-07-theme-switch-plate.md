@@ -29,3 +29,12 @@ The picture to build: `.softfield/cards/f69-mockup/theme-switch.html` (Proposed,
 - the switch is no wider than the Pause sign: 36 px on a wide screen, 44 × 44 px at 390 px, where the top bar is no taller than before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2583
+gate_failures: []
+tokens: 3414036
+```
