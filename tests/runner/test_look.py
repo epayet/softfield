@@ -205,6 +205,7 @@ def _get_addresses() -> list[str]:
         "id": "adr-20",
         "request_id": "1",
         "key": "f1",
+        "file": "after-phone-1.png",
     }
     return [
         re.sub(r"\{([^}]+)\}", lambda m: values[m[1]], path)

@@ -3591,3 +3591,234 @@ def test_gauge_has_quarter_ticks():
     assert gauge_block
     assert "background-image" in gauge_block[1] or "linear-gradient" in gauge_block[1]
     assert "25%" in gauge_block[1], "quarter ticks use 25% spacing"
+
+
+# --- f85-02: Before and after on the card's page ---------------------------------------------
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 8
+CARD = "f50-pictured"
+
+
+def _pictured(
+    db_path: Path,
+    tmp_path: Path,
+    *,
+    project: str = PROJECT,
+    pictures: dict[str, dict[str, str]] | None = None,
+    pages: list[str] | None = None,
+    live: str = "",
+    factory: bool = False,
+    listed: bool = True,
+    files: tuple[str, ...] = (),
+) -> TestClient:
+    """A client over the fixture with ``project``'s checkout at ``tmp_path / project``: a card
+    ``f50-pictured`` (signed off sheet) whose picture folder holds ``files`` and, when
+    ``listed``, f85-01's ``shots.json``."""
+    repo = tmp_path / project
+    (repo / ".softfield").mkdir(parents=True)
+    toml = '[shots]\nprepare = "p"\nserve = "s {port}"\nready = "/"\n'
+    if live:
+        toml += f'live = "{live}"\n'
+    (repo / ".softfield" / "project.toml").write_text(toml, encoding="utf-8")
+    if factory:
+        (repo / "runner").mkdir()
+        (repo / "runner" / "loop.py").write_text("", encoding="utf-8")
+        (repo / "factory_dashboard").mkdir()
+        (repo / "factory_dashboard" / "app.py").write_text("", encoding="utf-8")
+    folder = repo / ".softfield" / "var" / "shots" / CARD
+    folder.mkdir(parents=True)
+    for name in files:
+        (folder / name).write_bytes(PNG)
+    if listed:
+        (folder / "shots.json").write_text(
+            json.dumps({"pages": pages or ["/board"], "base": "x", "pictures": pictures or {}}),
+            encoding="utf-8",
+        )
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = metrics.upsert_project(conn, project, repo=str(repo))
+        metrics.upsert_milestone(
+            conn, project_id, CARD, title="Pictured", signoff={"changed": "It changed."}
+        )
+    finally:
+        conn.close()
+    from factory_dashboard.app import get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+TAKEN = {"state": "taken", "reason": ""}
+ALL_TAKEN = {
+    f"{when}-{width}-{n}.png": TAKEN
+    for when in ("before", "after")
+    for width in ("phone", "wide")
+    for n in (1, 2)
+}
+
+
+def _panel(html: str) -> str:
+    found = re.search(r'<section class="shots" id="shots".*?</section>', html, re.DOTALL)
+    assert found, "no Before and after panel"
+    return found[0]
+
+
+def test_a_card_with_a_list_shows_the_panel_under_what_changed_one_plate_per_address(
+    db_path, tmp_path
+):
+    client = _pictured(
+        db_path, tmp_path, pages=["/board", "/memory/"], pictures=ALL_TAKEN, files=tuple(ALL_TAKEN)
+    )
+    html = client.get(f"/milestones/{CARD}").text
+    assert (
+        html.index('id="what-changed"') < html.index('id="shots"') < html.index('id="how-to-test"')
+    )
+    panel = _panel(html)
+    assert panel.index("/board") < panel.index("/memory/")
+    assert panel.count('class="page-plate"') == 2
+    assert f"/milestones/{CARD}/shots/after-phone-1.png" in panel
+    assert f"/milestones/{CARD}/shots/before-wide-2.png" in panel
+    assert "Before and after" in panel
+
+
+def test_a_card_without_a_list_shows_no_panel(db_path, tmp_path):
+    client = _pictured(db_path, tmp_path, listed=False)
+    assert 'id="shots"' not in client.get(f"/milestones/{CARD}").text
+
+
+def test_the_pictures_route_serves_only_named_pngs_of_the_cards_folder(db_path, tmp_path):
+    client = _pictured(
+        db_path, tmp_path, pictures=ALL_TAKEN, files=("after-phone-1.png", "notes.txt", "x.png")
+    )
+    served = client.get(f"/milestones/{CARD}/shots/after-phone-1.png")
+    assert served.status_code == 200
+    assert served.headers["content-type"] == "image/png"
+    assert served.content == PNG
+    for name in (
+        "notes.txt",
+        "x.png",
+        "after-phone-1.jpg",
+        "after-wide-1.png",  # not taken: missing
+        "..%2Fshots.json",
+        "..%2F..%2Fproject.toml",
+        "after-phone-01.png",
+        "shots.json",
+    ):
+        assert client.get(f"/milestones/{CARD}/shots/{name}").status_code == 404, name
+    assert client.get("/milestones/f99-other/shots/after-phone-1.png").status_code == 404
+
+
+def test_the_pictures_come_from_the_projects_own_folder(db_path, tmp_path):
+    client = _pictured(
+        db_path,
+        tmp_path,
+        project=OTHER,
+        pictures={"after-phone-1.png": TAKEN},
+        files=("after-phone-1.png",),
+    )
+    own = client.get(f"/milestones/{CARD}/shots/after-phone-1.png")
+    assert own.status_code == 404  # the page's project is coucou, whose folder has none
+    served = client.get(f"/milestones/{CARD}/shots/after-phone-1.png?project={OTHER}")
+    assert served.status_code == 200
+    assert (
+        f"/milestones/{CARD}/shots/after-phone-1.png?project={OTHER}"
+        in client.get(f"/milestones/{CARD}?project={OTHER}").text
+    )
+
+
+def test_a_before_recorded_as_new_says_the_page_did_not_exist(db_path, tmp_path):
+    pictures = {
+        "before-phone-1.png": {"state": "new", "reason": ""},
+        "before-wide-1.png": {"state": "new", "reason": ""},
+        "after-phone-1.png": TAKEN,
+        "after-wide-1.png": TAKEN,
+    }
+    client = _pictured(
+        db_path, tmp_path, pictures=pictures, files=("after-phone-1.png", "after-wide-1.png")
+    )
+    panel = _panel(client.get(f"/milestones/{CARD}").text)
+    assert "This page didn't exist before" in panel
+    assert "before-phone-1.png" not in panel
+
+
+def test_a_picture_that_failed_shows_its_reason_in_a_dashed_plate(db_path, tmp_path):
+    pictures = {
+        "before-phone-1.png": {"state": "failed", "reason": "the app stopped with code 1"},
+        "after-phone-1.png": {"state": "failed", "reason": "it answered 500"},
+    }
+    client = _pictured(db_path, tmp_path, pictures=pictures)
+    panel = _panel(client.get(f"/milestones/{CARD}").text)
+    assert "The page before couldn't be drawn" in panel
+    assert "the app stopped with code 1" in panel
+    assert "it answered 500" in panel
+    assert 'class="missing"' in panel
+    assert "<img" not in panel
+
+
+def test_a_softfield_cards_address_opens_the_dashboards_page_in_a_new_tab(db_path, tmp_path):
+    client = _pictured(db_path, tmp_path, factory=True, live="http://192.168.1.20:8000")
+    panel = _panel(client.get(f"/milestones/{CARD}").text)
+    link = re.search(r'<a [^>]*href="(/board\?project=coucou)"[^>]*>', panel)
+    assert link, panel
+    assert 'target="_blank"' in link[0] and 'rel="noopener"' in link[0]
+    assert "192.168.1.20" not in panel
+
+
+def test_another_projects_address_joins_its_live_address(db_path, tmp_path):
+    client = _pictured(
+        db_path, tmp_path, pages=["/memory/"], live="http://192.168.1.20:8000/", project=OTHER
+    )
+    panel = _panel(client.get(f"/milestones/{CARD}?project={OTHER}").text)
+    link = re.search(r'<a [^>]*href="(http://192.168.1.20:8000/memory/)"[^>]*>', panel)
+    assert link, panel
+    assert 'target="_blank"' in link[0] and 'rel="noopener"' in link[0]
+
+
+def test_an_address_with_no_live_is_plain_text_and_a_foreign_address_never_a_link(
+    db_path, tmp_path
+):
+    client = _pictured(db_path, tmp_path, pages=["/memory/", "//evil.example/x"], project=OTHER)
+    panel = _panel(client.get(f"/milestones/{CARD}?project={OTHER}").text)
+    assert "/memory/" in panel
+    assert 'target="_blank"' not in panel
+
+
+def test_a_foreign_address_is_never_a_link_even_with_a_live_address(db_path, tmp_path):
+    client = _pictured(
+        db_path,
+        tmp_path,
+        pages=["//evil.example/x", "https://evil.example/", "/ok"],
+        live="http://a:1",
+        project=OTHER,
+    )
+    panel = _panel(client.get(f"/milestones/{CARD}?project={OTHER}").text)
+    assert "evil.example" not in re.findall(r'href="([^"]*)"', panel)
+    assert not any("evil.example" in href for href in re.findall(r'href="([^"]*)"', panel))
+    assert 'href="http://a:1/ok"' in panel
+
+
+def test_the_panel_has_its_switches_and_the_plans_mockup_when_the_thread_has_one(db_path, tmp_path):
+    client = _pictured(db_path, tmp_path, pictures=ALL_TAKEN, files=tuple(ALL_TAKEN))
+    plain = _panel(client.get(f"/milestones/{CARD}").text)
+    assert "The plan's mock-up" not in plain
+    for word in ("Before", "After", "Phone", "Wide"):
+        assert f">{word}</button>" in plain
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = metrics.find_project(conn, PROJECT)
+        assert project_id is not None
+        thread = metrics.planner_thread(conn, project_id, "f50", NOW.isoformat())
+        metrics.add_planner_message(
+            conn,
+            thread["id"],
+            "lead",
+            NOW.isoformat(),
+            "Here.",
+            proposals=[{"id": "p1", "kind": "mockup", "title": "Mock", "path": "x"}],
+        )
+    finally:
+        conn.close()
+    panel = _panel(client.get(f"/milestones/{CARD}").text)
+    assert 'href="/planning/f50/proposals/p1?project=coucou"' in panel
+    assert "The plan's mock-up" in panel

@@ -111,6 +111,70 @@
   {% endif %}
 </section>
 
+{# F85 D7: only where "What changed" shows, and only with f85-01's list; the switches change
+   what is shown on the page itself #}
+{% if shots %}
+<section class="shots" id="shots">
+  <header><h2>Before and after</h2><span class="stripe" aria-hidden="true"></span><span class="src">{{ shots.plates | length }} page{{ "s" if shots.plates | length != 1 }} · taken {{ shots.taken }}</span></header>
+  <div class="body">
+    <div class="controls">
+      <div class="switch ba" role="group" aria-label="Before or after">
+        <button type="button" data-ba="before" aria-pressed="false">Before</button>
+        <button type="button" data-ba="after" aria-pressed="true">After</button>
+      </div>
+      <div class="switch" role="group" aria-label="Which screen">
+        <button type="button" data-w="phone" aria-pressed="true">Phone</button>
+        <button type="button" data-w="wide" aria-pressed="false">Wide</button>
+      </div>
+      {% if shots.mockup %}<a class="plan-mockup" href="{{ shots.mockup }}">The plan's mock-up ›</a>{% endif %}
+    </div>
+    {% for plate in shots.plates %}
+    <div class="page-plate">
+      <div class="addr">
+        {% if plate.href %}<a class="live" href="{{ plate.href }}" target="_blank" rel="noopener">{{ plate.address }} <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M4 2h6v6M10 2 3 9" fill="none" stroke="currentColor" stroke-width="1.5"/></svg></a><span class="open">opens the page as it is now in a new tab</span>
+        {% else %}<span>{{ plate.address }}</span>{% endif %}
+      </div>
+      <div class="pair">
+        {% for when, label, pictures in (("before", "Before", plate.before), ("after", "After", plate.after)) %}
+        <figure data-when="{{ when }}"{% if when == "before" %} hidden{% endif %}>
+          <figcaption>{{ label }}</figcaption>
+          {% for p in pictures %}
+          <div class="shot-slot" data-width="{{ p.width }}"{% if p.width == "wide" %} hidden{% endif %}>
+            {% if p.src %}<a class="shot" href="{{ p.src }}" target="_blank" rel="noopener"><img src="{{ p.src }}" alt="{{ label }}, {{ p.width }}: {{ plate.address }}" loading="lazy"></a>
+            {# p.say is one of the page's own fixed sentences #}
+            {% else %}<div class="missing"{% if p.why %} title="{{ p.why }}"{% endif %}>{{ p.say | safe }}.{% if p.why %} <small>{{ p.why }}</small>{% endif %}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </figure>
+        {% endfor %}
+      </div>
+    </div>
+    {% endfor %}
+    <p class="sub">Tap a picture to open it at full size. On a wide screen, Before and After sit side by side.</p>
+  </div>
+  <script>
+    (function shotsPanel() {
+      const panel = document.getElementById("shots");
+      const screen = window.matchMedia("(min-width: 1100px)");
+      let when = "after";
+      let width = screen.matches ? "wide" : "phone";
+      function draw() {
+        const sideBySide = screen.matches;
+        panel.classList.toggle("wide-screen", sideBySide);
+        panel.querySelectorAll("figure").forEach(function (f) { f.hidden = !sideBySide && f.dataset.when !== when; });
+        panel.querySelectorAll(".shot-slot").forEach(function (s) { s.hidden = s.dataset.width !== width; });
+        panel.querySelectorAll("[data-ba]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.ba === when)); });
+        panel.querySelectorAll("[data-w]").forEach(function (b) { b.setAttribute("aria-pressed", String(b.dataset.w === width)); });
+      }
+      panel.querySelectorAll("[data-ba]").forEach(function (b) { b.addEventListener("click", function () { when = b.dataset.ba; draw(); }); });
+      panel.querySelectorAll("[data-w]").forEach(function (b) { b.addEventListener("click", function () { width = b.dataset.w; draw(); }); });
+      screen.addEventListener("change", function () { width = screen.matches ? "wide" : "phone"; draw(); });
+      draw();
+    })();
+  </script>
+</section>
+{% endif %}
+
 <section id="how-to-test">
   <h2>How to test</h2>
   {% if "how_to_test" in signoff_html %}

@@ -16,20 +16,23 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote, urlencode
 
-from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import HTMLResponse, Response
 
 from factory_dashboard import queries
 from factory_dashboard.app import Db, Now, Project, render
 from factory_dashboard.board import RESERVABLE, STAGES, WORDS, Card, milestone_card
 from factory_dashboard.line import _natural
 from runner import metrics
+from runner.config import ConfigError, project_shots
 from runner.milestone import milestone_doc
 from runner.requests import RESERVE
+from runner.shots import FAILED, LIST_FILE, NEW, SHOTS_DIR, TAKEN
 from runner.tasks import full_key, milestone_file, short_key
 
 router = APIRouter()
@@ -525,6 +528,176 @@ def _reserve_lever(
     return ReserveLever(card.reserve, asked["value"] if asked is not None else None)
 
 
+@dataclass(frozen=True)
+class ShotPicture:
+    """One picture of a page (f85-02 / F85 D7): its address when it was taken, else why not."""
+
+    width: str  # "phone" or "wide"
+    src: str | None
+    say: str  # the plain words in the dashed plate when there is no picture
+    why: str  # the reason recorded in ``shots.json``, if any
+
+
+@dataclass(frozen=True)
+class ShotPlate:
+    address: str
+    href: str | None  # the page as it is now, else the address stays plain text
+    before: list[ShotPicture]
+    after: list[ShotPicture]
+
+
+@dataclass(frozen=True)
+class ShotsPanel:
+    plates: list[ShotPlate]
+    taken: str  # when the list was written
+    mockup: str | None  # the card's mock-up proposal on its planning thread
+
+
+SHOT_NAME = re.compile(r"(before|after)-(phone|wide)-[1-9][0-9]*\.png")
+SAFE_KEY = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*")
+WIDTHS = ("phone", "wide")
+
+
+def _is_factory(repo: Path) -> bool:
+    """Whether ``repo`` holds the factory's own code (as ``_factory_project`` tells)."""
+    return (repo / "runner" / "loop.py").is_file() and (
+        repo / "factory_dashboard" / "app.py"
+    ).is_file()
+
+
+def _shot_href(address: str, project: str, factory: bool, live: str) -> str | None:
+    """The link to a page as it is now: the dashboard's own for the factory, else the project's
+    ``live`` joined to the address; None for anything else (plain text, never a link that goes
+    nowhere or somewhere foreign)."""
+    if not address.startswith("/") or address.startswith("//"):
+        return None
+    if any(c in address for c in "\\\"'<> ") or any(ord(c) < 32 for c in address):
+        return None
+    if factory:
+        return address + ("&" if "?" in address else "?") + urlencode({"project": project})
+    if live.startswith(("http://", "https://")):
+        return live.rstrip("/") + address
+    return None
+
+
+def _shot_pictures(
+    listed: dict[str, Any], folder: Path, n: int, when: str, src: str
+) -> list[ShotPicture]:
+    recorded = listed.get("pictures")
+    recorded = recorded if isinstance(recorded, dict) else {}
+    found: list[ShotPicture] = []
+    for width in WIDTHS:
+        name = f"{when}-{width}-{n}.png"
+        entry = recorded.get(name)
+        state = entry.get("state") if isinstance(entry, dict) else None
+        why = str(entry.get("reason") or "") if isinstance(entry, dict) else ""
+        if state == TAKEN and (folder / name).is_file():
+            found.append(ShotPicture(width, f"{src}/{name}", "", ""))
+        elif state == NEW and when == "before":
+            found.append(ShotPicture(width, None, "This page didn't exist before", ""))
+        elif state == FAILED:
+            say = (
+                "The page before couldn't be drawn"
+                if when == "before"
+                else "The page couldn't be drawn"
+            )
+            found.append(ShotPicture(width, None, say, why))
+        else:
+            found.append(ShotPicture(width, None, "No picture was taken", ""))
+    return found
+
+
+def _mockup_link(conn: sqlite3.Connection, project_id: int | None, thread: str) -> str | None:
+    """The card's mock-up proposal on its planning thread, as the thread lists it."""
+    from factory_dashboard.thread import _proposals
+
+    if project_id is None:
+        return None
+    rows = conn.execute(
+        "SELECT m.* FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
+        (project_id, thread),
+    ).fetchall()
+    return next(
+        (p.link for p in _proposals(conn, project_id, thread, rows) if p.kind == "mockup"), None
+    )
+
+
+def shots_panel(
+    conn: sqlite3.Connection,
+    project: str,
+    project_id: int | None,
+    repo: Path | None,
+    key: str,
+    q: str,
+) -> ShotsPanel | None:
+    """The card's "Before and after" panel from f85-01's list in its project's picture folder;
+    None without the list (or a checkout)."""
+    if repo is None or not SAFE_KEY.fullmatch(key):
+        return None
+    folder = repo / SHOTS_DIR / key
+    try:
+        listed = json.loads((folder / LIST_FILE).read_text(encoding="utf-8"))
+        taken = _date(
+            datetime.fromtimestamp((folder / LIST_FILE).stat().st_mtime, tz=UTC).isoformat()
+        )
+    except (OSError, ValueError):
+        return None
+    pages = listed.get("pages") if isinstance(listed, dict) else None
+    if not isinstance(pages, list):
+        return None
+    try:
+        live = project_shots(repo)
+    except ConfigError:
+        live = None
+    factory = _is_factory(repo)
+    src = f"/milestones/{quote(key)}/shots"
+    suffix = q if q else ""
+    plates = [
+        ShotPlate(
+            address=str(address),
+            href=_shot_href(str(address), project, factory, live.live if live else ""),
+            before=[
+                replace(p, src=p.src + suffix if p.src else None)
+                for p in _shot_pictures(listed, folder, n, "before", src)
+            ],
+            after=[
+                replace(p, src=p.src + suffix if p.src else None)
+                for p in _shot_pictures(listed, folder, n, "after", src)
+            ],
+        )
+        for n, address in enumerate(pages, start=1)
+    ]
+    return ShotsPanel(
+        plates=plates,
+        taken=taken,
+        mockup=(link + q) if (link := _mockup_link(conn, project_id, short_key(key))) else None,
+    )
+
+
+@router.get("/milestones/{key}/shots/{file}")
+def milestone_shot(key: str, file: str, conn: Db, project: Project) -> Response:
+    """A picture of the card's panel, from its project's picture folder (D7). Only the names the
+    runner gives them (``before|after-phone|wide-<n>.png``) of a card the project has: anything
+    else is 404."""
+    from factory_dashboard.planning import _repo
+
+    repo = _repo(conn, project)
+    if (
+        repo is None
+        or not SAFE_KEY.fullmatch(key)
+        or not SHOT_NAME.fullmatch(file)
+        or queries._milestone(conn, project, key) is None
+    ):
+        raise HTTPException(404, "no such picture")
+    path = repo / SHOTS_DIR / key / file
+    if path.is_symlink() or not path.is_file():
+        raise HTTPException(404, "no such picture")
+    return Response(
+        path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
+    )
+
+
 @router.get("/milestones/{key}", response_class=HTMLResponse)
 def milestone_detail(
     key: str,
@@ -557,8 +730,15 @@ def milestone_detail(
     review = None if project_id is None else _review(conn, project, project_id, short_key(key), now)
     card = milestone_card(conn, project, now, key)  # None for a removed one: no stage
     grew = how_it_grew(card, detail.started, detail.ended)
+    repo = _repo(conn, project)
+    # under "What changed", so only where that shows (F85 D7)
+    shots = (
+        shots_panel(conn, project, project_id, repo, key, "?" + urlencode({"project": project}))
+        if detail.signoff
+        else None
+    )
     # from the card's doc; no checkout or no doc: the stored copy, as before F158
-    about = read_card_doc(_repo(conn, project), key) or AboutDoc(
+    about = read_card_doc(repo, key) or AboutDoc(
         _to_html(detail.outcome), _to_html(detail.done_when), ""
     )
     return render(
@@ -579,6 +759,7 @@ def milestone_detail(
             "about": about,
             "signoff_html": signoff_html,
             "review": review,
+            "shots": shots,
         },
     )
 

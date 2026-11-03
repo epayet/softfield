@@ -51,6 +51,7 @@
   --sans: var(--body);
   /* plate ornament: ink ticks, hazard stripe, corner cut */
   --tick: var(--ink-2);
+  --shot-frame: #0b0e12;      /* the frame a picture sits in (F85) */
   --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
   --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
 }
@@ -67,6 +68,7 @@
   --good: #2c9a46; --dev: #3a6fd8; --a7: #4a3aa7;
   --good-ink: #0a6e0a; --critical-ink: #b02d2d;
   --accent-wash: #fbefd6;
+  --shot-frame: #dfe2dc;
   --warn-ink: #8a5d00; --serious-ink: #a4461f; --accent: #a4461f;
   --ghost: repeating-linear-gradient(135deg, transparent 0 5px, rgba(0,0,0,.06) 5px 7px);
 }
@@ -1068,6 +1070,40 @@ body.has-order-bar main { padding-bottom: 120px; }
 .about summary { min-height: 44px; display: flex; align-items: center; cursor: pointer;
   font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
 .about .later { color: var(--muted); font-size: 13.5px; margin: 8px 0 0; }
+/* "Before and after" on the card's page (f85-02), after the .about plate */
+.shots { background: var(--bay); border: 1px solid var(--rule); position: relative; }
+.shots::before, .shots::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+.shots::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+.shots::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+.shots [hidden] { display: none !important; }
+.shots > header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--plate);
+  border-bottom: 1px solid var(--rule); }
+.shots > header h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; margin: 0; }
+.shots > header .stripe { flex: 1; height: 8px; background: var(--stripe); opacity: .55; }
+.shots > header .src { font: 11px var(--mono); color: var(--muted); }
+.shots .body { padding: 10px 14px 12px; display: grid; gap: 12px; }
+.shots .controls { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+.shots .switch { display: inline-flex; border: 1px solid var(--rule); }
+.shots .switch button { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 0 12px;
+  min-height: 44px; background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+.shots .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+.shots .plan-mockup { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; display: inline-flex;
+  align-items: center; min-height: 44px; }
+.shots .page-plate { border: 1px solid var(--rule); background: var(--floor); min-width: 0; }
+.shots .addr { font: 12px var(--mono); color: var(--ink-2); padding: 0 10px; min-height: 44px; display: flex; flex-wrap: wrap;
+  align-items: center; gap: 4px 10px; border-bottom: 1px solid var(--grid); background: var(--plate); overflow-wrap: anywhere; }
+.shots .addr a.live { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; color: var(--accent); }
+.shots .addr a.live svg { flex: none; }
+.shots .addr .open { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.shots .pair { display: grid; gap: 10px; padding: 10px; }
+.shots figure { margin: 0; display: grid; gap: 4px; min-width: 0; }
+.shots figcaption { font: 600 11px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.shots.wide-screen .pair { grid-template-columns: 1fr 1fr; }
+.shots.wide-screen .ba { display: none; }
+.shots .shot { display: block; background: var(--shot-frame); border: 1px solid var(--rule); padding: 6px; cursor: zoom-in; }
+.shots .shot img { display: block; max-width: 100%; height: auto; margin: 0 auto; }
+.shots .missing { border: 1px dashed var(--rule); color: var(--ink-2); font-size: 13px; padding: 18px 10px; text-align: center;
+  background: var(--bay); min-height: 160px; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
 .review-wait { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .review-wait h2 { margin: 0 !important; }
 
