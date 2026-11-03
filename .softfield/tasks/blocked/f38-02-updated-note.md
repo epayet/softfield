@@ -35,3 +35,9 @@ attempts: 3
 tokens: 9261133
 logs: .softfield/var/runs/20261103-163949/f38-02-updated-note
 ```
+
+```yaml
+# --- runner ---
+result: blocked
+reason: the finished work failed check-all; its work is on task/f38-02-updated-note
+```
