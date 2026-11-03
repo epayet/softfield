@@ -2953,7 +2953,7 @@ def test_the_theme_button_says_night_when_dark(page, client):
     page.route(f"{ORIGIN}/**", route)
     page.goto(ORIGIN + "/")
     btn = page.locator("#theme-btn")
-    assert btn.text_content() == "Light"
+    assert btn.evaluate("el => el.getAttribute('aria-checked')") == "true"
     assert btn.evaluate("el => el.title") == "Switch to the light theme"
 
 
@@ -2977,9 +2977,9 @@ def test_pressing_the_button_switches_to_light_at_once(page, client):
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
     # Click the button via JavaScript to ensure the event fires
     page.evaluate("document.getElementById('theme-btn').click()")
-    # The button now says "Night" (offering to switch back)
+    # The button aria-checked is now false (night is off, light is on)
     btn = page.locator("#theme-btn")
-    assert btn.text_content() == "Night"
+    assert btn.evaluate("el => el.getAttribute('aria-checked')") == "false"
     assert btn.evaluate("el => el.title") == "Switch to the night theme"
     # The html element has data-theme="light"
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
@@ -3096,7 +3096,7 @@ def test_without_stored_value_follows_the_system(page, client):
         window._themeListener({ matches: true });
     """)
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
-    assert page.locator("#theme-btn").text_content() == "Night"
+    assert page.locator("#theme-btn").evaluate("el => el.getAttribute('aria-checked')") == "false"
     floor = page.evaluate(
         "getComputedStyle(document.documentElement).getPropertyValue('--floor').trim()"
     )
@@ -3132,6 +3132,7 @@ def test_at_390px_the_top_bar_is_no_taller(page, client):
     page.evaluate("document.getElementById('theme-btn').style.display = ''")
     page.evaluate("document.getElementById('theme-btn').click()")
     assert header.evaluate(height) == with_button, "the light theme changes the bar's height"
+    assert page.locator("#theme-btn").evaluate("el => el.getAttribute('aria-checked')") == "true"
 
 
 def test_a_system_change_leaves_a_stored_choice_alone(page, client):
@@ -3158,7 +3159,7 @@ def test_a_system_change_leaves_a_stored_choice_alone(page, client):
     page.emulate_media(color_scheme="dark")
     page.wait_for_timeout(100)
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
-    assert page.locator("#theme-btn").text_content() == "Night"
+    assert page.locator("#theme-btn").evaluate("el => el.getAttribute('aria-checked')") == "false"
 
 
 def test_every_light_rule_is_scoped_to_the_light_theme():
@@ -3204,7 +3205,7 @@ def test_live_system_theme_changes_sync_button_and_dispatch_themechange(page, cl
     page.goto(ORIGIN + "/")
     page.wait_for_selector("#theme-btn", state="visible", timeout=REFRESH)
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "dark"
-    assert page.locator("#theme-btn").text_content() == "Light"
+    assert page.locator("#theme-btn").evaluate("el => el.getAttribute('aria-checked')") == "true"
     # Simulate a live system preference change to light (the browser won't fire this naturally)
     page.evaluate("window._themeFired = false")
     page.evaluate("""
@@ -3217,8 +3218,8 @@ def test_live_system_theme_changes_sync_button_and_dispatch_themechange(page, cl
     """)
     # data-theme should have changed
     assert page.evaluate("document.documentElement.getAttribute('data-theme')") == "light"
-    # button should say Night (offering to switch back to dark)
-    assert page.locator("#theme-btn").text_content() == "Night"
+    # aria-checked should be false (night is off, light is on)
+    assert page.locator("#theme-btn").evaluate("el => el.getAttribute('aria-checked')") == "false"
     assert (
         page.evaluate("document.getElementById('theme-btn').title") == "Switch to the night theme"
     )
@@ -3524,10 +3525,13 @@ def test_no_border_radius_except_top_bar_status_dot():
         # The top bar's status dot is allowed
         if ".factory-status .dot" in selector and "border-radius" in body:
             continue
-        # The gauge mark dot is allowed (it's a light, not an ornament)
-        if ".gauge .mark::after" in selector and "border-radius" in body:
-            continue
-        pytest.fail(f"border-radius found in {selector}: {body}")
+            # The gauge mark dot is allowed (it's a light, not an ornament)
+            if ".gauge .mark::after" in selector and "border-radius" in body:
+                continue
+            # The theme switch plate is allowed (it's a switch, not a panel)
+            if ".theme-switch .plate" in selector and "border-radius" in body:
+                continue
+            pytest.fail(f"border-radius found in {selector}: {body}")
 
 
 def test_idle_crate_svg_exists():

@@ -21,8 +21,9 @@
         var btn = document.getElementById("theme-btn");
         if (btn) {
           var t = document.documentElement.getAttribute("data-theme");
-          btn.textContent = t === "light" ? "Night" : "Light";
-          btn.title = t === "light" ? "Switch to the night theme" : "Switch to the light theme";
+          var night = t !== "light";
+          btn.setAttribute("aria-checked", String(night));
+          btn.title = night ? "Switch to the light theme" : "Switch to the night theme";
         }
         document.dispatchEvent(new Event("themechange"));
       });
@@ -95,13 +96,9 @@
     if (!btn) return;
     function update() {
       var t = document.documentElement.getAttribute("data-theme");
-      if (t === "light") {
-        btn.textContent = "Night";
-        btn.title = "Switch to the night theme";
-      } else {
-        btn.textContent = "Light";
-        btn.title = "Switch to the light theme";
-      }
+      var night = t !== "light";
+      btn.setAttribute("aria-checked", String(night));
+      btn.title = night ? "Switch to the light theme" : "Switch to the night theme";
     }
     btn.addEventListener("click", () => {
       var cur = document.documentElement.getAttribute("data-theme");
@@ -173,6 +170,7 @@
   });
 </script>
 </head>
+<svg width="0" height="0" style="position:absolute"><symbol id="moon" viewBox="0 0 16 16"><path d="M10.5 1.5a6.5 6.5 0 1 0 4 11.2A5.2 5.2 0 0 1 10.5 1.5z" fill="currentColor"/></symbol><symbol id="sun" viewBox="0 0 16 16"><g fill="currentColor"><circle cx="8" cy="8" r="3.2"/><rect x="7.2" y="0" width="1.6" height="3"/><rect x="7.2" y="13" width="1.6" height="3"/><rect x="0" y="7.2" width="3" height="1.6"/><rect x="13" y="7.2" width="3" height="1.6"/><rect x="7.2" y="0" width="1.6" height="3" transform="rotate(45 8 8)"/><rect x="7.2" y="13" width="1.6" height="3" transform="rotate(45 8 8)"/><rect x="0" y="7.2" width="3" height="1.6" transform="rotate(45 8 8)"/><rect x="13" y="7.2" width="3" height="1.6" transform="rotate(45 8 8)"/></g></symbol></svg>
 <body>
 <header class="bar">
   <div class="bar-top">
@@ -192,7 +190,7 @@
       </label>
       <noscript><button>Show</button></noscript>
     </form>
-    <button id="theme-btn" class="theme-btn" title="Switch to the light theme">Light</button>
+    <button id="theme-btn" class="theme-switch" role="switch" aria-label="Night theme" aria-checked="false" title="Switch to the light theme"><span class="plate"><span class="knob"></span><svg class="moon"><use href="#moon"/></svg><svg class="sun"><use href="#sun"/></svg></span></button>
   </div>
   {# The version poller sits on the stripe (f38): its "New version" tag hangs over it, so nothing moves #}
   <div class="bar-stripe"><div class="hazard" aria-hidden="true"></div>{{ version_poll | safe }}</div>
