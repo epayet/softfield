@@ -1,6 +1,6 @@
 # Milestone F186: A sign-off stays signed: F142's keeps coming back
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 0 · **Area:** factory
 > Planted by the owner on 2026-10-29.
 
 ## Notes
