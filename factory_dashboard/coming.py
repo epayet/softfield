@@ -320,11 +320,12 @@ def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) 
     is coming (the owner, 2026-10-08: an archived thread still looked like it needed them)."""
     pending = conn.execute(
         "SELECT kind, subject, value FROM owner_requests WHERE project_id = ? AND done IS NULL"
-        " AND kind IN ('archive', 'signoff', 'drop_seed', 'queue', 'set_aside')",
+        " AND kind IN ('archive', 'signoff', 'drop_seed', 'queue', 'set_aside', 'approve_plan')",
         (project_id,),
     ).fetchall()
     asked: dict[str, str] = {}
     tickets: dict[str, str] = {}  # by ticket id: a blocked ticket's item links to its page
+    fixes = {str(r["subject"] or "") for r in pending if r["kind"] == "approve_plan"}
     for r in pending:
         subject = str(r["subject"] or "")
         if r["kind"] == "archive" and r["value"] == "on":
@@ -344,6 +345,8 @@ def _acted_on(conn: sqlite3.Connection, project_id: int, items: list[DeskItem]) 
         thread = item.link.removeprefix("/planning/").split("/")[0]
         if item.link.startswith("/tickets/"):
             words = tickets.get(item.link.removeprefix("/tickets/"))
+            if words is None and item.fix_replan and item.fix_card in fixes:
+                words = "Approving the lead's fix at the runner's next pick"
         else:
             words = asked.get(thread) if "/proposals/" not in item.link else None
         found.append(replace(item, words=words, on_its_way=True) if words else item)

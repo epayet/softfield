@@ -899,6 +899,39 @@ def test_blocked_ticket_page_no_lead_reply_shows_reading(db_path, serve):
     assert 'id="approve-' not in section_raw(html, "blocked")
 
 
+def test_blocked_ticket_page_lead_reply_with_no_points_says_the_fix_waits(db_path, serve):
+    """A lead reply with no points or replan isn't "still reading": the panel says where it is."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(conn, project, "f21-lead-briefs", title="The lead's briefs")
+        metrics.upsert_ticket(conn, project, "f21-03-trim-owner", milestone_id=m_id, state="ripe")
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f21-03-trim-owner",
+            text="f21-03-trim-owner blocked: the lead ticket changed nothing",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f21", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f21-03-trim-owner blocked: the lead ticket changed nothing.",
+        )
+        metrics.add_planner_message(conn, thread, "lead", _at(timedelta(minutes=1)), "Looking.")
+    finally:
+        conn.close()
+
+    text = unescape(section(serve().get("/tickets/f21-03-trim-owner").text, "blocked"))
+    assert "The lead's fix waits on F21's thread." in text
+    assert "Read the fix on F21's thread ›" in text
+    assert "The lead is reading" not in text
+
+
 def test_resolved_blocked_ticket_has_no_blocked_panel(db_path, serve):
     """Once the blocked item is resolved, the page has no Blocked panel."""
     conn = metrics.open_db(db_path)

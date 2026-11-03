@@ -14,16 +14,16 @@ tests:
 ---
 
 ### Goal
-A blocked ticket on the desk says "the lead's fix waits on F<n>'s thread" only once the lead has answered the runner's look, and then links to that thread.
+A blocked ticket's "The lead's fix" plate, on the desk and on its page, says the fix waits on F<n>'s thread only once the lead has answered the runner's look.
 
 ### Context
-Read `def _blocked` in `factory_dashboard/planning.py` and `def look_of` in `runner/planner.py`. Lead ticket: its tests are in `tests/factory_dashboard/test_planning.py` (3,500 lines).
-- Today any lead message on the card's thread after the runner's look counts, so a reply to another of the owner's questions there reads as the fix.
-- Read instead whether the look's planner job (subject `<card>#m<message id>`, in the work queue) is done. When it is, the item's link is the card's thread; while it waits, "the lead is looking at it" and the ticket's page, as today.
+Read `def get_blocked_info` in `factory_dashboard/planning.py` and `def look_of` in `runner/planner.py`. Lead ticket: its tests are in `tests/factory_dashboard/test_planning.py` (3,500 lines).
+- Today any lead message on the card's thread after the runner's look sets `lead_replied`, so a reply to another of the owner's questions there reads as the fix.
+- Read instead whether the look's planner job (subject `<card>#m<message id>`, in the work queue) is done. While it waits, the plate says "The lead is reading the work and its logs; its fix comes here", as with no reply.
 
 ### Done when
-- a look still queued, with a lead reply on the thread to something else: "the lead is looking at it", linked to the ticket
-- the look's job done: "the lead's fix waits on F<n>'s thread", linked to `/planning/<card>`
+- a look still queued, with a lead reply on the thread to something else: the plate says the lead is reading
+- the look's job done: the plate says the fix waits on F<n>'s thread, with its link to `/planning/<card>`
 - a bug ticket with no card reads as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)

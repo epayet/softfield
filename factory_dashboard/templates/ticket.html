@@ -10,7 +10,7 @@
 {% if blocked %}
 {# f170-04: a bug ticket (no card) has only why and its two buttons, whatever a thread holds #}
 {% set fix_card = blocked.fix_card if card_key else none %}
-{% set has_fix = fix_card and (blocked.fix_first_point or blocked.fix_replan) %}
+{% set has_fix = fix_card and blocked.lead_replied %}
 {% set pressed = "this.disabled = true; this.closest('.aside').classList.add('sent')" %}
 <section id="blocked" class="panel aside blocked{% if blocked_sent %} sent{% endif %}">
   <div class="plate"><b>Blocked</b><span>.softfield/tasks/blocked/</span></div>
@@ -22,6 +22,7 @@
     {% if has_fix %}
     {% if blocked.fix_first_point %}<p class="what">{{ blocked.fix_first_point }}</p>{% endif %}
     {% if blocked.fix_replan %}<p class="plan">{{ blocked.fix_replan.title }}</p>{% endif %}
+    {% if not blocked.fix_first_point and not blocked.fix_replan %}<p class="what">The lead's fix waits on {{ fix_card | upper }}'s thread.</p>{% endif %}
     {% else %}
     <p class="what">The lead is reading the work and its logs; its fix comes here.</p>
     {% endif %}

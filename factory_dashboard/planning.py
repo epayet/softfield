@@ -334,12 +334,14 @@ def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     ]
 
 
+_WORK_ON_BRANCH = re.compile(r"\s*[.,;]\s*(?:its|the) work is on task/\S+", re.IGNORECASE)
+
+
 @dataclass(frozen=True)
 class BlockedFacts:
     """What the desk and a ticket's page say of a blocked ticket (f170-04)."""
 
-    reason: str  # the runner's reason alone
-    words: str  # the desk's line: the reason, then where the lead's fix waits
+    reason: str  # the runner's reason, without where its work is: the desk's line
     fix_card: str | None = None  # the thread the runner asked the lead on
     fix_first_point: str | None = None
     fix_replan: dict[str, object] | None = None
@@ -355,9 +357,9 @@ class BlockedFacts:
 def get_blocked_info(conn: sqlite3.Connection, project_id: int, ticket: str) -> BlockedFacts | None:
     """The facts of ``ticket``'s open ``blocked`` item, or None when it has none.
 
-    If the runner has a look on the card's thread and the lead has since replied, the words
-    say where the fix waits. If the runner has a look but the lead hasn't yet, the words say
-    the lead is looking. A bug ticket with no card gets nothing extra.
+    With the runner's look on the card's thread: whether the lead has replied since, the first
+    point of that reply, and its replan while the owner can still approve it. A bug ticket with
+    no card gets nothing extra.
     """
     row = conn.execute(
         "SELECT text FROM owner_items"
@@ -378,27 +380,36 @@ def get_blocked_info(conn: sqlite3.Connection, project_id: int, ticket: str) -> 
         (project_id, f"{ticket} blocked:%"),
     ).fetchone()
     if runner is None:
-        return BlockedFacts(reason, reason)
+        return BlockedFacts(reason)
     card = runner["card"]
-    # Strip "its work is on task/…" from the reason
-    match = re.search(r"\s*[.,;]\s*(its|the) work is on task/", reason, re.IGNORECASE)
-    if match:
-        reason = reason[: match.start()]
-    # The lead's latest message after the runner's, on the same thread
+    # Only "its work is on task/…" goes: "· N tickets wait behind it" may follow it
+    reason = _WORK_ON_BRANCH.sub("", reason)
+    # The lead's latest reply after the look, the one listing proposals if any does: what an
+    # approval reads (metrics.latest_proposals), whatever else the lead has said since
     lead = conn.execute(
-        "SELECT points, proposals FROM planner_messages"
+        "SELECT at, points, proposals FROM planner_messages"
         " WHERE thread_id = ? AND author = 'lead' AND at > ?"
-        " ORDER BY id DESC LIMIT 1",
+        " ORDER BY proposals IS NOT NULL AND proposals != '[]' DESC, id DESC LIMIT 1",
         (runner["thread_id"], runner["at"]),
     ).fetchone()
     if lead is None:
-        return BlockedFacts(
-            reason, f"{reason} · the lead is looking at it", card, lead_replied=False
-        )
+        return BlockedFacts(reason, card)
     points = json.loads(lead["points"]) if lead["points"] else []
+    since = _when(lead["at"])
+    asked = [
+        r
+        for r in conn.execute(
+            "SELECT * FROM owner_requests WHERE project_id = ? ORDER BY id", (project_id,)
+        ).fetchall()
+        if _when(r["created"]) > since
+    ]
     fix_replan: dict[str, object] | None = None
     for prop in json.loads(lead["proposals"]) if lead["proposals"] else []:
-        if isinstance(prop, dict) and prop.get("kind") == "replan":
+        if (
+            isinstance(prop, dict)
+            and prop.get("kind") == "replan"
+            and proposal_state(prop, card, asked) in (OPEN, ON_ITS_WAY)  # not once settled
+        ):
             key_points = prop.get("key_points", [])
             fix_replan = {
                 "title": str(prop.get("title", "")),
@@ -406,7 +417,6 @@ def get_blocked_info(conn: sqlite3.Connection, project_id: int, ticket: str) -> 
             }
     return BlockedFacts(
         reason,
-        f"{reason} · the lead's fix waits on {card.upper()}'s thread",
         card,
         str(points[0].get("title", "")) if points else None,
         fix_replan,
@@ -431,7 +441,7 @@ def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
                 DeskItem(
                     "blocked",
                     ticket,
-                    facts.words,
+                    facts.reason,
                     f"/tickets/{ticket}",
                     fix_card=facts.fix_card,
                     fix_first_point=facts.fix_first_point,

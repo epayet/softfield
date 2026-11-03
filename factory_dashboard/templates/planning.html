@@ -167,13 +167,11 @@
           <div style="font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2)">The lead's fix</div>
           {% if item.fix_first_point %}
           <p style="font-size: 14px; margin: 2px 0 0">{{ item.fix_first_point }}</p>
-          {% if item.fix_replan %}
-          <p style="font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0">{{ item.fix_replan.title }} · {{ item.fix_replan.key_points }} key points · <a href="/planning/{{ item.fix_card }}">read it on {{ item.fix_card | upper }}'s thread ›</a></p>
-          {% else %}
-          <p style="font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0">The lead's fix waits on <a href="/planning/{{ item.fix_card }}">{{ item.fix_card | upper }}'s thread</a></p>
           {% endif %}
+          {% if item.fix_replan %}
+          <p style="font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0">{{ item.fix_replan.title }} · {{ item.fix_replan.key_points }} key point{{ "" if item.fix_replan.key_points == 1 else "s" }} · <a href="/planning/{{ item.fix_card }}{{ q }}">read it on {{ item.fix_card | upper }}'s thread ›</a></p>
           {% else %}
-          <p style="font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0">The lead's fix waits on <a href="/planning/{{ item.fix_card }}">{{ item.fix_card | upper }}'s thread</a></p>
+          <p style="font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0">The lead's fix waits on <a href="/planning/{{ item.fix_card }}{{ q }}">{{ item.fix_card | upper }}'s thread</a></p>
           {% endif %}
           {% else %}
           <div style="font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2)">The lead's fix</div>
@@ -189,7 +187,7 @@
           {% endif %}
           <button type="button" id="try-again-{{ item.title }}" class="btn {{ 'go' if not item.fix_card else 'plain' }}" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
             hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ item.title | tojson }}}'
-            hx-on::before-request="blockedOnItsWay(this, 'Trying again at the runner\'s next pick')">Try again as it is</button>
+            hx-on::before-request="blockedOnItsWay(this, 'Trying again at the runner\'s next pick')">{% if item.fix_card %}Try again as it is{% else %}Try again{% endif %}</button>
           <button type="button" id="set-aside-{{ item.title }}" class="btn plain" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
             hx-vals='{"kind": "set_aside", "project": {{ project | tojson }}, "subject": {{ item.title | tojson }}}'
             hx-on::before-request="blockedOnItsWay(this, 'Set aside at the runner\'s next pick')">Set aside</button>

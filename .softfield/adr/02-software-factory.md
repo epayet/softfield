@@ -686,6 +686,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** every check passed on the moved tree, yet the plan's promise that moved branches could still be approved wasn't true: a moved branch's diff since it left main was the whole move, 1,115 files for F133. A check on a tree says nothing about what git compares across history. A blind text pass also rewrites the one document that needs both names. Round 1's fix passed tests that modelled the fault in one file, while all five real branches clash in 95 to 169 places: a fix for a fault seen on live data has to be tried on that data.
 - **Decisions affected:** none.
 
+### F170 (2026-11-03): the desk offers the lead's fix, and a blocked ticket's page says why ([review](../reviews/f170-there-s-a-blocked-ticket-that.md))
+
+- **Q1:** one lead ticket merged first time; four developer tickets, one of them (f170-04) escalated after three attempts and finished by Opus. Three checkpoints, one by Copilot standing in for Claude. Review round 1: seven should-fix and two nits fixed by the review, one set aside (bug-57), and two only reported.
+- **Q3:** Qwen passed f170-03 and both fix tickets, f170-05 on its second attempt. It failed f170-04, whose `files:` span two pages' modules, the route the plan should have given the lead. Sonnet passed f170-02 first time.
+- **Q5:** see the review's numbers.
+- **Anything else:** the first checkpoint's finding had three parts and its fix ticket took one and a half: the words stayed, the bug ticket's label stayed, and f170-06, told to fix the tests, wrote the wrong label into one. The next checkpoint read "the screen matches the ticket" from the tests, not the ticket. A fix ticket's finding needs its parts as separate Done when lines. Tests built their own proposals and lead replies, so nothing met real threads, where the lead says other things after its fix ("Approved by the owner…" is a lead message too).
+- **Decisions affected:** none. bug-57 makes pre-flight refuse a developer ticket that spans two pages, the check F84, F172 and F170 have now each wanted.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

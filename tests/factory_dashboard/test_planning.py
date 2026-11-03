@@ -1236,8 +1236,8 @@ def _blocked_words(db, project_id):
 
 
 def test_runner_message_only_says_lead_is_looking(planning, db_path, db, serve):
-    """Runner message on F9's thread without a lead follow-up: the words add
-    " · the lead is looking at it"."""
+    """Runner message on F9's thread without a lead follow-up: the words are the reason, and
+    the plate says the lead is reading."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1253,7 +1253,7 @@ def test_runner_message_only_says_lead_is_looking(planning, db_path, db, serve):
         metrics.add_planner_message(conn, thread, "runner", _at(timedelta(minutes=5)), LOOK)
     finally:
         conn.close()
-    assert _blocked_words(db, project) == ["check-all failed · the lead is looking at it"]
+    assert _blocked_words(db, project) == ["check-all failed"]
     [item] = _group(db, "blocked")
     assert item.fix_card == "f9"
     assert item.fix_first_point is None
@@ -1264,8 +1264,8 @@ def test_runner_message_only_says_lead_is_looking(planning, db_path, db, serve):
 
 
 def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db, serve):
-    """Runner message followed by a lead message on F9's thread: the words add
-    " · the lead's fix waits on F9's thread"."""
+    """Runner message followed by a lead message with no points on F9's thread: the words are
+    the reason, and the plate says the lead's fix waits on F9's thread."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1284,14 +1284,15 @@ def test_runner_message_then_lead_says_waits_on_thread(planning, db_path, db, se
         )
     finally:
         conn.close()
-    assert _blocked_words(db, project) == ["check-all failed · the lead's fix waits on F9's thread"]
+    assert _blocked_words(db, project) == ["check-all failed"]
     [item] = _group(db, "blocked")
     assert item.fix_card == "f9"
     assert item.fix_first_point is None
     assert item.fix_replan is None
     html = _page(serve())
-    assert "The lead's fix" in html
+    assert "The lead's fix waits on" in html
     assert "F9's thread" in html
+    assert "The lead is reading the work" not in html
 
 
 def test_no_runner_message_words_unchanged(planning, db_path, db):
@@ -1411,7 +1412,10 @@ def test_blocked_ticket_with_replan_shows_approve_button(planning, db_path, db, 
     assert "Approve the lead's fix" in html
     assert "What went wrong: the test run was cut" in html
     assert "F9: rework the board · 3 key points" in html
-    assert re.search(r'href="/planning/f9"', html)
+    assert re.search(r'href="/planning/f9\?', html)  # the project goes with it
+    assert re.search(r'id="approve-f9-01-board"[^>]*class="btn go"', html)
+    assert re.search(r'id="try-again-f9-01-board"[^>]*class="btn plain"', html)
+    assert re.search(r'id="set-aside-f9-01-board"[^>]*class="btn plain"', html)
     approve_btn = re.search(
         r'<button[^>]*id="approve-f9-01-board"[^>]*hx-vals=\'([^\']*)\'',
         html,
@@ -1535,10 +1539,11 @@ def test_blocked_bug_ticket_keeps_standard_buttons(planning, db_path, db, serve)
     assert item.fix_first_point is None
     assert item.fix_replan is None
     html = _page(serve())
-    assert re.search(r'id="try-again-f1-01"[^>]*class="[^"]*btn[^"]*go[^"]*"', html)
-    assert re.search(r'id="set-aside-f1-01"[^>]*class="[^"]*btn[^"]*plain[^"]*"', html)
-    assert "Try again as it is" in html
-    assert "Set aside" in html
+    assert re.search(r'id="try-again-f1-01"[^>]*class="btn go".*?>Try again</button>', html, re.S)
+    assert re.search(
+        r'id="set-aside-f1-01"[^>]*class="btn plain".*?>Set aside</button>', html, re.S
+    )
+    assert "Try again as it is" not in html
 
 
 def test_approve_shows_item_on_its_way(page, planning, db_path, serve):
@@ -1598,6 +1603,137 @@ def test_approve_shows_item_on_its_way(page, planning, db_path, serve):
     # Fix plate hidden
     fix = page.locator("#blocked-f9-01-board .fix")
     assert fix.evaluate("el => el.style.display") == "none"
+
+
+# --- what stands of the lead's fix on the desk (f170 review) ------------------------------------
+
+
+REPLAN = {
+    "id": "replan",
+    "kind": "replan",
+    "title": "F9: rework the board",
+    "key_points": [{"n": 1, "title": "A"}],
+}
+
+
+def _blocked_with_a_fix(db_path: Path, text: str = "check-all failed", **reply: Any) -> int:
+    """f9-01-board blocked, the runner's look on F9's thread, and the lead's reply a minute ago."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f9-01-board",
+            text=f"f9-01-board blocked: {text}",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(conn, thread, "runner", _at(timedelta(minutes=5)), LOOK)
+        metrics.add_planner_message(
+            conn, thread, "lead", _at(timedelta(minutes=1)), "The fix.", **reply
+        )
+        return project
+    finally:
+        conn.close()
+
+
+def test_blocked_words_keep_what_follows_the_branch(planning, db_path, db):
+    """As the runner writes it: only where the work is goes, the tickets behind it stay."""
+    project = _blocked_with_a_fix(
+        db_path,
+        "the finished work failed check-all; its work is on task/f9-01-board"
+        " · 1 ticket waits behind it",
+    )
+    assert _blocked_words(db, project) == [
+        "the finished work failed check-all · 1 ticket waits behind it"
+    ]
+
+
+def test_an_open_approve_keeps_the_blocked_item_on_its_way(planning, db_path, db, serve):
+    """The page drawn again after Approve: on its way, no button to press a second time."""
+    project = _blocked_with_a_fix(db_path, proposals=[REPLAN])
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.add_request(conn, project, "approve_plan", "f9", "", _at(timedelta(seconds=5)))
+    finally:
+        conn.close()
+    [item] = _group(db, "blocked")
+    assert item.on_its_way
+    assert item.words == "Approving the lead's fix at the runner's next pick"
+    assert 'id="approve-f9-01-board"' not in _page(serve())
+
+
+def test_another_cards_approve_leaves_the_blocked_item_alone(planning, db_path, db):
+    project = _blocked_with_a_fix(db_path, proposals=[REPLAN])
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.add_request(conn, project, "approve_plan", "f8", "", _at(timedelta(seconds=5)))
+    finally:
+        conn.close()
+    [item] = _group(db, "blocked")
+    assert not item.on_its_way
+    assert item.fix_replan is not None
+
+
+def test_a_later_lead_message_leaves_the_fix_on_offer(planning, db_path, db, serve):
+    """The lead answers something else after the fix: an approval still reads the replan, so
+    the desk keeps offering it and its first point."""
+    project = _blocked_with_a_fix(
+        db_path, points=[{"n": 1, "title": "What went wrong"}], proposals=[REPLAN]
+    )
+    conn = metrics.open_db(db_path)
+    try:
+        thread = metrics.planner_thread(conn, project, "f9", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "lead",
+            _at(timedelta(seconds=30)),
+            "It runs after f8.",
+            points=[{"n": 1, "title": "Your question"}],
+        )
+    finally:
+        conn.close()
+    [item] = _group(db, "blocked")
+    assert item.fix_first_point == "What went wrong"
+    assert item.fix_replan is not None
+    assert 'id="approve-f9-01-board"' in _page(serve())
+
+
+@pytest.mark.parametrize(
+    ("kind", "subject", "result"),
+    [
+        ("reject", "f9/replan", "rejected"),
+        ("send_back", "f9/replan", "queued for the lead"),
+        ("approve_plan", "f9", "approved plan/f9: queued nothing"),
+    ],
+)
+def test_a_settled_replan_is_not_offered(planning, db_path, db, serve, kind, subject, result):
+    """Rejected, sent back or approved, with the item still open: the plan branch may be gone,
+    so Approve would only be refused. The plate still says where the lead's words are."""
+    project = _blocked_with_a_fix(db_path, proposals=[REPLAN])
+    conn = metrics.open_db(db_path)
+    try:
+        request = metrics.add_request(conn, project, kind, subject, "", _at(timedelta(seconds=5)))
+        metrics.finish_request(conn, request, _at(timedelta(seconds=1)), result)
+    finally:
+        conn.close()
+    [item] = _group(db, "blocked")
+    assert item.lead_replied
+    assert item.fix_replan is None
+    html = _page(serve())
+    assert 'id="approve-f9-01-board"' not in html
+    assert "the lead's fix then still waits" not in html
+
+
+def test_a_replan_with_no_points_still_shows_its_title(planning, db_path, serve):
+    """Approve is offered, so what it approves is named, first point or not."""
+    _blocked_with_a_fix(db_path, proposals=[REPLAN])
+    html = _page(serve())
+    assert "F9: rework the board · 1 key point ·" in html
+    assert 'id="approve-f9-01-board"' in html
 
 
 # --- text boxes grow with what is typed (f82-01) ------------------------------------------------
