@@ -34,3 +34,10 @@ The picture to build: `.softfield/cards/f85-mockup/before-after.html` (Proposed)
 - in Chromium at 390 px, the Before / After switch flips the pictures; at 1440 px both show side by side
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
