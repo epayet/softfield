@@ -729,7 +729,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
                 max_rounds=cfg.review_rounds,
                 scope=scope,
                 tests=" ".join(project_checks(s.repo).test_dirs),  # the project's own (ADR 30)
-                recurring=", ".join(recurring_for_claude(seen)) or "none",
+                recurring=", ".join(recurring_for_claude(seen, milestone)) or "none",
                 checkpoints=_checkpoint_list(s, milestone),
                 out=out.relative_to(cfg.repo).as_posix(),
             ),
@@ -755,7 +755,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
             )
         )
         seen.update(update_seen(seen, round_))
-        count = sum(f.actionable for f in round_.findings)
+        count = sum(f.holds_review for f in round_.findings)
         previous = rounds[-1] if rounds else None
         rounds.append(count)
         save_state(s.state, s.state_path)

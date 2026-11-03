@@ -91,7 +91,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5)
    - small (about 20 lines in one file), protected or security, or a developer already failed it once → Claude fixes it directly
    - needs the owner (`runner/instructions/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner.
-3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code take the route `later` or `report`.
+3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code take the route `later` or `report`, and no round waits on them.
 
 **Stop rules** (the values are in `.softfield/project.toml`):
 
@@ -104,7 +104,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 | This round's findings ≥ the previous round's | stop |
 | ADR needed / unresolved security finding / cross-milestone surprise | stop immediately |
 
-**Report:** `.softfield/reviews/mN.md` starts with the owner's **sign-off sheet** (what changed, how to test it yourself, left for later, decisions waiting, how the work went; see `runner/instructions/lead.md`), then covers what was built, the findings and their resolutions, the backlog items, the metrics (tasks, attempts per task, escalation rate, review rounds, headless runs), the stop reason and workflow observations. **Only the owner marks a milestone done.**
+**Report:** `.softfield/reviews/mN.md` starts with the owner's **sign-off sheet** (what changed, how to test it yourself, left for later, decisions waiting, how the work went; see `runner/instructions/lead.md`), then covers what was built, the findings and their resolutions, what was set aside, the metrics (tasks, attempts per task, escalation rate, review rounds, headless runs), the stop reason and workflow observations. **Only the owner marks a milestone done.**
 
 ## Headless Claude invocation
 

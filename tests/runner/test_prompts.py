@@ -294,9 +294,8 @@ def test_on_a_duplicate_the_planner_only_merges_and_never_sends_the_owner_elsewh
 
 def test_no_prompt_or_re_review_names_a_backlog():
     """ADR 35: a finding is a set-aside bug ticket or a line in the report, never a backlog."""
-    texts = [v for k, v in vars(prompts).items() if k.isupper() and isinstance(v, str)]
-    assert texts and not [t for t in texts if "backlog" in t.lower()]
-    assert "backlog" not in inspect.getsource(milestone._fix_scope).lower()
+    for module in (prompts, milestone):
+        assert "backlog" not in inspect.getsource(module).lower(), module.__name__
 
 
 def test_the_machines_file_replaces_the_authors(tmp_path: Path, monkeypatch):

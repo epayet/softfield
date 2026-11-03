@@ -10,6 +10,7 @@ from typing import Any
 
 SEVERITIES = ("blocking", "should-fix", "nit")
 ROUTES = ("local", "claude", "adr", "later", "report", "backlog")  # backlog: old files only
+SET_ASIDE_ROUTES = ("later", "report")  # ADR 35: a seed or a line in the report, not a fix
 CLAUDE_STOPS = ("adr-needed", "security-unresolved", "unforeseen-cross-milestone")
 # A checkpoint finding the review confirmed or rejected, or a review finding a checkpoint
 # should have caught (missed).
@@ -37,6 +38,14 @@ class Finding:
     @property
     def actionable(self) -> bool:
         return self.severity != "nit" and not self.resolved
+
+    @property
+    def holds_review(self) -> bool:
+        """Open for the review's rounds: a should-fix point the review set aside isn't, as no
+        fix is coming for a later round to see (F149). A checkpoint's `report` still gets its
+        fix ticket: that goes by ``actionable``."""
+        set_aside = self.severity == "should-fix" and self.route in SET_ASIDE_ROUTES
+        return self.actionable and not set_aside
 
 
 @dataclass(frozen=True)
@@ -131,17 +140,19 @@ def parse_checkpoint(path: Path) -> tuple[Finding, ...]:
 
 
 def update_seen(seen: dict[str, int], round_: ReviewRound) -> dict[str, int]:
-    """Count how many rounds each actionable finding has been open."""
+    """Count how many rounds each finding has held the review open."""
     updated = dict(seen)
     for finding in round_.findings:
-        if finding.actionable:
+        if finding.holds_review:
             updated[finding.id] = updated.get(finding.id, 0) + 1
     return updated
 
 
-def recurring_for_claude(seen: dict[str, int]) -> list[str]:
-    """Findings open for a second round: Claude fixes these, not the local model."""
-    return sorted(fid for fid, count in seen.items() if count == 2)
+def recurring_for_claude(seen: dict[str, int], milestone: str) -> list[str]:
+    """This milestone's findings open for a second round: Claude fixes these, not the local
+    model. ``seen`` keeps every milestone's, by ids that start with their milestone's key."""
+    prefix = f"{milestone}-"
+    return sorted(fid for fid, count in seen.items() if count == 2 and fid.startswith(prefix))
 
 
 def stop_reason(
@@ -154,7 +165,7 @@ def stop_reason(
     """Why the loop must stop after this round, or None to continue."""
     if round_.stop:
         return round_.stop
-    count = sum(f.actionable for f in round_.findings)
+    count = sum(f.holds_review for f in round_.findings)
     if count == 0:
         return "clean"
     if any(n >= 3 for n in seen.values()):

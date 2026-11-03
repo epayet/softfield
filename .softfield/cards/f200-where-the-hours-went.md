@@ -4,4 +4,4 @@
 > From docs/backlog.md (f53-review), written by the lead on 2026-11-02.
 
 ## Notes
-A review can't fill "What clogged the factory line" from the metrics database: a headless review has no query command. Give `runner report` a "where the hours went" block (limit waits, failed attempts, stops for the owner, from runs, jobs and `usage_events`) for reviews to quote. Stays: a feature, to plant as a card.
+Each review works out "What clogged the factory line" for itself: since ADR 28 it can read the metrics database with `softfield look sql`, but it writes its own queries each time, and they can disagree with the dashboard's. Give `softfield report` a "where the hours went" block (limit waits, failed attempts, stops for the owner, from what `factory_dashboard/queries.py` already computes for the floor) for reviews to quote.

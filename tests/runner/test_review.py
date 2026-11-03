@@ -168,6 +168,45 @@ def test_recurrence():
     seen = update_seen({}, _round(BLOCKING, NIT))
     assert seen == {"m1-F1": 1}
     seen = update_seen(seen, _round(BLOCKING))
-    assert recurring_for_claude(seen) == ["m1-F1"]
+    assert recurring_for_claude(seen, "m1") == ["m1-F1"]
     seen = update_seen(seen, _round(BLOCKING))
     assert stop_reason(3, _round(BLOCKING), 5, seen, 9) == "a finding came back a third time"
+
+
+def test_only_this_milestones_findings_recur():
+    """F149: f139-F3, set aside on another card, was handed to F149's review to fix."""
+    seen = {"m1-F1": 2, "m11-F1": 2, "m2-F1": 2, "m1-F2": 1}
+    assert recurring_for_claude(seen, "m1") == ["m1-F1"]
+    assert recurring_for_claude(seen, "m3") == []
+
+
+@pytest.mark.parametrize("route", ["later", "report"])
+def test_a_should_fix_point_set_aside_holds_no_round(route):
+    """F149: no fix is coming for it, so it can't recur or keep the review going."""
+    aside = Finding("m1-F4", "should-fix", route, "untouched code")
+    assert update_seen({}, _round(aside)) == {}
+    assert stop_reason(1, _round(aside), None, {}, 3) == "clean"
+    assert stop_reason(1, _round(BLOCKING, aside), 2, {}, 3) is None  # one open, down from two
+    assert aside.actionable  # a stand-in checkpoint's still gets its fix ticket (`fix_tickets`)
+
+
+@pytest.mark.parametrize(
+    "finding",
+    [
+        Finding("m1-F4", "blocking", "later", "a bug can't be set aside"),
+        Finding("m1-F4", "should-fix", "backlog", "an old file reads as it did"),
+        SHOULD,
+    ],
+)
+def test_anything_else_still_holds_the_review(finding):
+    assert finding.holds_review
+    assert update_seen({}, _round(finding)) == {finding.id: 1}
+    assert stop_reason(1, _round(finding), None, {}, 3) is None
+
+
+@pytest.mark.parametrize("route", ["later", "report", "backlog"])
+def test_a_review_file_reads_the_routes_of_adr_35_and_old_files(tmp_path, route):
+    path = tmp_path / "r.json"
+    raw = {"id": "m1-F1", "severity": "nit", "route": route, "summary": "s"}
+    path.write_text(json.dumps({"findings": [raw]}))
+    assert parse_review(path).findings[0].route == route
