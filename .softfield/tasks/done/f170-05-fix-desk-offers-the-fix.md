@@ -25,3 +25,12 @@ f170-there-s-a-blocked-ticket-that-C1695-1: Blocked-item text and button states 
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 3732
+gate_failures: ['stopped']
+tokens: 4301538
+```
