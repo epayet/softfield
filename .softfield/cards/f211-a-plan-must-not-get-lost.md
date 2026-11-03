@@ -1,0 +1,7 @@
+# Milestone F211: A plan must not get lost when its card closes. Don't merge…
+
+> **State:** idea · **Priority:** 100 · **Area:** factory
+> Planted by the owner on 2026-11-03.
+
+## Notes
+A plan must not get lost when its card closes. Don't merge a new idea into a card whose plan is already approved unless that plan covers it; give it its own card. Sign-off and Archive must say when a plan is still open on the card, and let me keep it as a new card.
