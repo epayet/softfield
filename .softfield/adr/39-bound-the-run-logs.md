@@ -12,7 +12,9 @@
 ## Decisions (open, for the owner)
 1. **Keep every log for N days (suggested 90), then compress it** (`.log` → `.log.gz`, same name plus `.gz`; the job page reads either). Nothing is deleted.
 2. **Or delete after a longer time (suggested 365 days),** only logs of jobs whose ticket is merged and whose milestone is signed off.
-3. **Back up first:** whatever is removed or compressed is already in the daily Dropbox backup, or it waits until it is.
+3. **Back up first, if anything is deleted:** the daily Dropbox backup holds the metrics database only (`runner/backup.py`), not these logs, so item 2 needs the backup to take them first. Item 1 deletes nothing and needs none.
+
+**The lead's recommendation (F175's review, 2026-11-03):** item 1 alone, as one lead ticket, with item 2 turned down. Logs are text and compress well, the owner keeps every one, and it adds no backup work. `.softfield/var/runs/` was 786 MB on 2026-11-03, up 13 MB in four days, so this is not urgent.
 
 ## Alternatives turned down
 - **Leave it:** 773 MB is small on today's disk; the cost is a slow, silent growth.

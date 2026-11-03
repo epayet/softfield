@@ -15,6 +15,7 @@ Rows, cells and pages are capped, and the output says when it cut.
 import getpass
 import os
 import sqlite3
+import stat
 import warnings
 from html.parser import HTMLParser
 from pathlib import Path
@@ -114,20 +115,23 @@ def sql(db: Path, query: str) -> str:
 
 TMP_LABEL = "/tmp, all of it"  # noqa: S108 - a label, not a path used
 MAX_HELD = 20  # deleted-but-open files listed; the rest are counted
+BLOCK = 512  # the unit of st_blocks, whatever the filesystem's own block
 _TMP_ROOT = "softfield-"  # the runner's own folder in /tmp, then the user id (f175-02)
 
 
 def _size(path: Path) -> tuple[int, int]:
-    """Bytes and files under ``path`` (itself, when a file), links not followed, anything that
-    can't be read skipped. A path that isn't there is 0 and 0."""
+    """Bytes on the disk and files under ``path`` (itself, when a file), folders' own blocks
+    counted, links not followed, anything that can't be read skipped. A path that isn't there
+    is 0 and 0. Not the files' length: a million small ones take far more than theirs."""
     total = files = 0
     pending = [path]
     while pending:
         here = pending.pop()
         try:
             info = here.lstat()
-            if here.is_symlink() or not here.is_dir():
-                total, files = total + info.st_size, files + 1
+            total += info.st_blocks * BLOCK
+            if not stat.S_ISDIR(info.st_mode):
+                files += 1
                 continue
             with os.scandir(here) as entries:
                 pending.extend(Path(entry.path) for entry in entries)
@@ -143,9 +147,9 @@ def _amount(size: tuple[int, int]) -> str:
 
 
 def _holding(proc: Path, uid: int) -> list[tuple[int, int, str]]:
-    """Files deleted but still open in the user's processes: size, pid, command; the largest
-    first. A file held by two descriptors counts once."""
-    seen: set[tuple[int, int, int]] = set()
+    """Files deleted but still open in the user's processes: bytes on the disk, pid, command;
+    the largest first. A file held by two descriptors, or two processes, counts once."""
+    seen: set[tuple[int, int]] = set()
     found: list[tuple[int, int, str]] = []
     try:
         pids = [p for p in proc.iterdir() if p.name.isdigit()]
@@ -163,7 +167,7 @@ def _holding(proc: Path, uid: int) -> list[tuple[int, int, str]]:
                 if not os.readlink(link).endswith(" (deleted)"):
                     continue
                 info = link.stat()
-                key = (int(pid.name), info.st_dev, info.st_ino)
+                key = (info.st_dev, info.st_ino)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -171,7 +175,7 @@ def _holding(proc: Path, uid: int) -> list[tuple[int, int, str]]:
                     command = (pid / "comm").read_text().strip()
                 except OSError:
                     command = "?"
-                found.append((info.st_size, int(pid.name), command))
+                found.append((info.st_blocks * BLOCK, int(pid.name), command))
             except OSError:
                 continue
     return sorted(found, reverse=True)

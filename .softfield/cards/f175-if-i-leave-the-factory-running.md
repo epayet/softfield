@@ -41,3 +41,5 @@ One line per place, does it still grow?
 - `.softfield/var/runs/` (772 MB, every job's log): yes, slowly (about 0.7 MB since f175-01). It holds the owner's data and deleting logs changes what is kept, so it is not touched here: draft ADR 39 (`.softfield/adr/39-bound-the-run-logs.md`).
 - Metrics database and `-wal`: no; 4.4 MB `-wal` is steady, not worth a checkpoint job.
 - Deleted files held open: no; desktop programs', not the factory's.
+
+**Review, 2026-11-03:** the sizes above are the files' length, as `look disk` then read them; it now reads what they take on the disk. The earlier figures for small files, `pytest-of-manu` above all, are therefore lower than the space they took.

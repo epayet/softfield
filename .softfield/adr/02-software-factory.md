@@ -662,6 +662,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the ticket named the group-order tests but not three others that pinned the old order (inside the group, Previous and Next, Needs you), so even correct code would have failed the gates; now a line in `runner/instructions/task-writing.md`. The sixth no-edit night ticket; bug-48 is the fix.
 - **Decisions affected:** none.
 
+### F175 (2026-11-03): the factory cleans up its temp files ([review](../reviews/f175-if-i-leave-the-factory-running.md))
+
+- **Q1:** three lead tickets, all first time (Sonnet 2/2, Opus 1/1), 30 minutes of work; no escalation or checkpoint. Review round 1: two should-fix and three nits fixed by the review, two nits only reported. The review itself finished four days after the merges, its first run interrupted.
+- **Q3:** no developer work (protected runner code).
+- **Q5:** see the review's numbers.
+- **Anything else:** measuring first changed the fix: the plan blamed killed jobs, the measure found sample hooks in test repos. But the measure itself read length rather than disk use, and its tests couldn't tell: a tool that reports a quantity needs a test that separates it from its near neighbour. Housekeeping added to a path every command takes must not be able to fail that path (the temp folder on a full disk). The 30 GB is still not fully explained; the owner's check on their computer settles it.
+- **Decisions affected:** none. ADR 39 waits for the owner.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -61,11 +61,11 @@ TMP_BASE = Path("/tmp")  # noqa: S108 - the root is checked as ours before any u
 
 def _tmp_root() -> Path | None:
     """``/tmp/softfield-<uid>``, made private; None when the path there isn't our own folder
-    (another user's, or a link planted in the shared ``/tmp``)."""
+    (another user's, or a link planted in the shared ``/tmp``) or can't be made (a full disk)."""
     root = TMP_BASE / f"softfield-{os.getuid()}"
-    with contextlib.suppress(FileExistsError):
-        root.mkdir(mode=0o700)
     try:
+        with contextlib.suppress(FileExistsError):
+            root.mkdir(mode=0o700)
         st = root.lstat()
     except OSError:
         return None
@@ -77,13 +77,17 @@ def _tmp_root() -> Path | None:
 def _job_tmp(env: dict[str, str]) -> Path | None:
     """A fresh folder ``<runner pid>-<random>`` under the root, set as ``TMPDIR`` in ``env``;
     None, ``env`` unchanged, when it already names one under the root (D2: a nested command
-    keeps its job's) or the root isn't ours."""
+    keeps its job's), the root isn't ours or the disk is full: a folder is housekeeping, and
+    never what stops a command."""
     root = _tmp_root()
     if root is None:
         return None
     if root in Path(env.get("TMPDIR", "/")).parents:
         return None
-    folder = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=root))
+    try:
+        folder = Path(tempfile.mkdtemp(prefix=f"{os.getpid()}-", dir=root))
+    except OSError:
+        return None
     env["TMPDIR"] = str(folder)
     return folder
 

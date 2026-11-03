@@ -1,3 +1,4 @@
+import errno
 import os
 import shutil
 import signal
@@ -382,6 +383,33 @@ def test_the_sweep_removes_only_the_folders_of_dead_runners(tmp_path: Path, monk
     procs.sweep_tmp()
     assert not dead.exists()
     assert alive.is_dir() and odd.is_dir() and other.is_dir()
+
+
+def test_a_full_disk_stops_no_command(tmp_path: Path, monkeypatch, outside_a_job):
+    """The temp folder is housekeeping: on a full disk the command still runs, and says so."""
+
+    def full(*args, **kwargs):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(tempfile, "mkdtemp", full)
+    code, out, _ = run_bounded(["sh", "-c", 'echo "[${TMPDIR-}]"'], tmp_path, 10)
+    assert (code, out.strip()) == (0, "[]")
+
+
+def test_no_root_stops_neither_a_command_nor_the_sweep(tmp_path: Path, monkeypatch, outside_a_job):
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path / "not-there")
+    procs.sweep_tmp()
+    code, out, _ = run_bounded(["sh", "-c", 'echo "[${TMPDIR-}]"'], tmp_path, 10)
+    assert (code, out.strip()) == (0, "[]")
+
+
+def test_a_command_that_cannot_start_leaves_no_temp_folder(
+    tmp_path: Path, monkeypatch, outside_a_job
+):
+    monkeypatch.setattr(procs, "TMP_BASE", tmp_path)
+    with pytest.raises(FileNotFoundError):
+        run_bounded(["true"], tmp_path / "no-such-folder", 10)
+    assert list((tmp_path / f"softfield-{os.getuid()}").iterdir()) == []
 
 
 def test_a_root_someone_else_made_is_left_alone(tmp_path: Path, monkeypatch, outside_a_job):

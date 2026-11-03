@@ -3,6 +3,7 @@ dashboard's pages, and can change neither."""
 
 import importlib
 import json
+import os
 import pkgutil
 import re
 from pathlib import Path
@@ -313,9 +314,44 @@ def test_disk_lists_deleted_files_held_open_largest_first(tmp_path):
         uid=Path(proc).stat().st_uid, user="sam",
     )  # fmt: skip
     held = out.splitlines()[-3:]
-    assert "2 " in held[0] or "held open: 2" in held[0]
+    assert held[0] == "deleted files still held open: 2, largest first"
     assert "pid 22  big" in held[1] and "5.0 MB" in held[1]
     assert "pid 11  small" in held[2]
+
+
+def test_disk_counts_a_file_held_by_two_processes_once(tmp_path):
+    """Chrome's processes share a memory file: counted per process, it looked many times bigger."""
+    proc = tmp_path / "proc"
+    gone = _fill(tmp_path / "shared (deleted)", 5_000_000)
+    for pid in (11, 22):
+        (proc / str(pid) / "fd").mkdir(parents=True)
+        for fd in ("3", "4"):
+            (proc / str(pid) / "fd" / fd).symlink_to(gone)
+    out = look.disk(
+        tmp_path / "m", tmp_path / "b", tmp_path / "r", tmp=tmp_path / "t", proc=proc,
+        uid=proc.stat().st_uid, user="sam",
+    )  # fmt: skip
+    assert "deleted files still held open: 1, largest first" in out.splitlines()
+
+
+def test_disk_says_what_files_take_on_the_disk_not_their_length(tmp_path):
+    """A million small files take far more than their length, and a sparse file far less."""
+    small = tmp_path / "small"
+    for n in range(300):
+        _fill(small / f"{n % 10}" / str(n), 1)
+    (tmp_path / "runs").mkdir()
+    sparse = tmp_path / "runs" / "sparse"
+    sparse.touch()
+    os.truncate(sparse, 5_000_000)
+    takes = sum(p.lstat().st_blocks for p in (small, *small.rglob("*"))) * 512
+    assert takes >= 300  # the length alone
+    out = look.disk(
+        tmp_path / "m", small, tmp_path / "runs", tmp=tmp_path / "t", proc=tmp_path / "noproc",
+        uid=1, user="sam",
+    )  # fmt: skip
+    lines = {line[:32].strip(): line for line in out.splitlines()}
+    assert lines["the bench folder"].endswith(f"{takes / 1e6:.1f} MB, 300 files")
+    assert lines[".softfield/var/runs/"].endswith("0.0 MB, 1 files")
 
 
 def test_disk_caps_the_deleted_files_listed_and_counts_the_rest(tmp_path, monkeypatch):
