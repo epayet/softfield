@@ -32,3 +32,12 @@ Read `.softfield/cards/f170-there-s-a-blocked-ticket-that.md` (D4) and the mock-
 - the desk's blocked item says what it said before this ticket (its tests unchanged and passing)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 7276608
+logs: .softfield/var/runs/20261103-110556/f170-04-blocked-ticket-page
+```
