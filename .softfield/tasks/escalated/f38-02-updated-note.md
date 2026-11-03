@@ -26,3 +26,12 @@ Read the two `location.reload()` calls under "A new version (f38)" in `factory_d
 - the header's height and the top of `<main>` don't change when the note appears or goes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 9261133
+logs: .softfield/var/runs/20261103-163949/f38-02-updated-note
+```
