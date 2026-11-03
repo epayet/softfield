@@ -1,4 +1,4 @@
-# Milestone F209: i want the ticket currently being worked in the board be…
+# Milestone F209: The board lights the card at work and keeps itself up to date
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-03.
