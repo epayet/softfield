@@ -27,3 +27,10 @@ Read `.softfield/cards/f170-there-s-a-blocked-ticket-that.md` ("What happened", 
 - a plan (not a replan) whose branch clashes with main: refused, as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
