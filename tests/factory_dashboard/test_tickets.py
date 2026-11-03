@@ -3,6 +3,7 @@
 import json
 import re
 from datetime import timedelta
+from html import unescape
 from pathlib import Path
 
 import pytest
@@ -14,6 +15,7 @@ from tests.factory_dashboard.conftest import (
     LOCAL,
     NOW,
     PROJECT,
+    _at,
     write_tickets,
 )
 
@@ -720,3 +722,288 @@ def test_later_ticket_page_on_its_way_message(db_path, later_client):
     assert re.search(r'<button[^>]*class="go"', html, re.S) is None
     # On its way message
     assert "on its way" in html.lower()
+
+
+# --- Blocked ticket page (f170-04) -------------------------------------------
+
+
+def test_blocked_ticket_page_shows_blocked_panel_with_approve(db_path, serve):
+    """A blocked ticket page with a lead reply and replan: shows a Blocked panel with
+    the runner's reason, first point, replan title, an Approve button posting approve_plan
+    with the card's key, and links to /planning/f21 and /milestones/f21-lead-briefs."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(
+            conn,
+            project,
+            "f21-lead-briefs",
+            title="The lead's briefs",
+            status="ripe",
+            started=_at(timedelta(days=-10)),
+            ended=_at(timedelta(days=-2)),
+        )
+        metrics.upsert_ticket(conn, project, "f21-03-trim-owner", milestone_id=m_id, state="ripe")
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f21-03-trim-owner",
+            text="f21-03-trim-owner blocked: the lead ticket changed nothing",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f21", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f21-03-trim-owner blocked: the lead ticket changed nothing."
+            " Its work is on task/f21-01.",
+        )
+        # Lead reply must be after the runner's message
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "lead",
+            _at(timedelta(minutes=1)),
+            "Looking at it.",
+            points=[
+                {
+                    "n": 1,
+                    "title": "What went wrong: owner.md has grown past the ticket's target",
+                    "text": "The file grew.",
+                }
+            ],
+            proposals=[
+                {
+                    "id": "replan",
+                    "kind": "replan",
+                    "title": "Set aside f21-03, trim owner.md",
+                    "key_points": [{"n": 1, "title": "A"}, {"n": 2, "title": "B"}],
+                }
+            ],
+        )
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/tickets/f21-03-trim-owner").text
+    text = unescape(section(html, "blocked"))
+    raw = unescape(section_raw(html, "blocked"))
+    assert text.startswith("Blocked .softfield/tasks/blocked/ The lead ticket changed nothing. It")
+    assert "waits on" not in text.split("It won't run", 1)[0]
+    assert "What went wrong: owner.md has grown past the ticket's target" in text
+    assert "Set aside f21-03, trim owner.md" in text
+    assert "Nothing waits behind it" not in text
+    assert "the lead's fix then still waits on F21's thread" in text
+    approve_btn = re.search(
+        r'<button[^>]*id="approve-f21-03-trim-owner"[^>]*hx-vals=\'([^\']*)\'[^>]*>([^<]*)<',
+        section_raw(html, "blocked"),
+    )
+    assert approve_btn
+    assert unescape(approve_btn[2]) == "Approve the lead's fix"
+    vals = json.loads(approve_btn[1])
+    assert vals["kind"] == "approve_plan"
+    assert vals["subject"] == "f21"
+    assert '<a href="/planning/f21?' in raw
+    assert "Read the fix on F21's thread ›" in text
+    assert '<a href="/milestones/f21-lead-briefs?' in raw
+    assert "F21's card ›" in text
+    # a press shows the panel on its way at once
+    assert raw.count("classList.add('sent')") == 3
+    assert "On its way · at the runner's next pick" in text
+
+
+def test_blocked_ticket_page_shows_on_its_way_with_an_open_answer(db_path, serve):
+    """An answer the runner hasn't picked up yet: the page drawn again still shows it sent."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(conn, project, "f21-lead-briefs", title="The lead's briefs")
+        metrics.upsert_ticket(conn, project, "f21-03-trim-owner", milestone_id=m_id, state="ripe")
+        metrics.upsert_ticket(conn, project, "f21-04-other", milestone_id=m_id, state="ripe")
+        for ticket in ("f21-03-trim-owner", "f21-04-other"):
+            metrics.upsert_owner_item(
+                conn,
+                project,
+                "blocked",
+                ticket,
+                text=f"{ticket} blocked: the lead ticket changed nothing",
+                created=_at(timedelta(hours=4)),
+            )
+        metrics.add_request(
+            conn, project, "set_aside", "f21-03-trim-owner", "", _at(timedelta(minutes=5))
+        )
+    finally:
+        conn.close()
+
+    client = serve()
+
+    def panel_class(ticket: str) -> str:
+        page = client.get(f"/tickets/{ticket}").text
+        match = re.search(r'<section id="blocked" class="([^"]*)"', page)
+        assert match
+        return match[1]
+
+    assert "sent" in panel_class("f21-03-trim-owner").split()
+    assert "sent" not in panel_class("f21-04-other").split()
+
+
+def test_blocked_ticket_page_no_lead_reply_shows_reading(db_path, serve):
+    """A blocked ticket page with no lead reply yet: the panel says the lead is reading
+    the work and its logs, with Try again as it is and Set aside only."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(
+            conn,
+            project,
+            "f21-lead-briefs",
+            title="The lead's briefs",
+            status="ripe",
+            started=_at(timedelta(days=-10)),
+            ended=_at(timedelta(days=-2)),
+        )
+        metrics.upsert_ticket(conn, project, "f21-03-trim-owner", milestone_id=m_id, state="ripe")
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f21-03-trim-owner",
+            text="f21-03-trim-owner blocked: the lead ticket changed nothing",
+            created=_at(timedelta(hours=4)),
+        )
+        thread = metrics.planner_thread(conn, project, "f21", _at(timedelta(minutes=5)))["id"]
+        metrics.add_planner_message(
+            conn,
+            thread,
+            "runner",
+            _at(timedelta(minutes=5)),
+            "f21-03-trim-owner blocked: the lead ticket changed nothing."
+            " Its work is on task/f21-01.",
+        )
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/tickets/f21-03-trim-owner").text
+    text = unescape(section(html, "blocked"))
+    assert "The lead ticket changed nothing." in text
+    assert "The lead is reading the work and its logs" in text
+    assert "Try again as it is" in text
+    assert "Set aside" in text
+    assert "Approve the lead's fix" not in text
+    assert "the lead's fix then still waits" not in text
+    assert "Read the fix" not in text
+    assert 'id="approve-' not in section_raw(html, "blocked")
+
+
+def test_resolved_blocked_ticket_has_no_blocked_panel(db_path, serve):
+    """Once the blocked item is resolved, the page has no Blocked panel."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(
+            conn,
+            project,
+            "f21-lead-briefs",
+            title="The lead's briefs",
+            status="ripe",
+            started=_at(timedelta(days=-10)),
+            ended=_at(timedelta(days=-2)),
+        )
+        metrics.upsert_ticket(conn, project, "f21-03-trim-owner", milestone_id=m_id, state="ripe")
+        item_id = metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "f21-03-trim-owner",
+            text="f21-03-trim-owner blocked: the lead ticket changed nothing",
+            created=_at(timedelta(hours=4)),
+        )
+        metrics.resolve_owner_item(conn, item_id, _at(timedelta(hours=1)))
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/tickets/f21-03-trim-owner").text
+    assert 'id="blocked"' not in html
+    assert "changed nothing" not in html
+
+
+@pytest.mark.parametrize("in_bugs", [True, False])
+def test_blocked_bug_ticket_page_has_no_card_links(db_path, serve, in_bugs):
+    """A blocked bug ticket's page: Try again and Set aside, no card links, with its milestone
+    the ``bugs`` row or none."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(conn, project, "bugs") if in_bugs else None
+        metrics.upsert_ticket(conn, project, "bug-90-broken", milestone_id=m_id, state="blocked")
+        metrics.upsert_owner_item(
+            conn,
+            project,
+            "blocked",
+            "bug-90-broken",
+            text="bug-90-broken blocked: waiting on f12-03",
+            created=_at(timedelta(hours=4)),
+        )
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/tickets/bug-90-broken").text
+    text = unescape(section(html, "blocked"))
+    raw = section_raw(html, "blocked")
+    assert "Waiting on f12-03." in text
+    assert re.search(r'id="try-again-bug-90-broken"[^>]*>Try again<', raw, re.S)
+    assert re.search(r'id="set-aside-bug-90-broken"[^>]*>Set aside<', raw, re.S)
+    assert 'id="approve-' not in raw
+    assert "as it is" not in text
+    assert "The lead's fix" not in text
+    assert "/planning/" not in raw
+    assert "/milestones/" not in raw
+    crumbs = re.search(r'<nav[^>]*class="crumbs".*?</nav>', html, re.S)
+    assert crumbs
+    assert "/milestones/" not in crumbs[0]
+
+
+def test_ticket_page_first_crumb_names_card_and_links_to_milestones(db_path, serve):
+    """Every ticket page's first crumb names its card and links to /milestones/<full key>."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(
+            conn,
+            project,
+            "f21-lead-briefs",
+            title="the lead's briefs",  # as the card's heading has it: its first letter is raised
+            status="ripe",
+            started=_at(timedelta(days=-10)),
+            ended=_at(timedelta(days=-2)),
+        )
+        metrics.upsert_ticket(conn, project, "f21-03-trim-owner", milestone_id=m_id, state="ripe")
+    finally:
+        conn.close()
+
+    client = serve()
+    html = client.get("/tickets/f21-03-trim-owner").text
+    assert re.search(
+        r'<a href="/milestones/f21-lead-briefs\?[^"]*">F21, The lead&#39;s briefs</a>', html
+    )
+    assert 'id="blocked"' not in html
+
+
+def test_ticket_page_first_crumb_of_a_card_with_no_title(db_path, serve):
+    """A card with no title in the database: the crumb is its short key, still to its page."""
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        m_id = metrics.upsert_milestone(conn, project, "f99-untitled")
+        metrics.upsert_ticket(conn, project, "f99-01-a", milestone_id=m_id, state="ready")
+    finally:
+        conn.close()
+
+    html = serve().get("/tickets/f99-01-a").text
+    assert re.search(r'<a href="/milestones/f99-untitled\?[^"]*">F99</a>', html)

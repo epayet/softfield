@@ -1,11 +1,58 @@
 {% extends "base.html" %}
 {% block title %}{{ ticket.ticket }} · {{ project }}{% endblock %}
 {% block crumbs %}
-  {% if ticket.milestone %}<a href="/tickets?milestone={{ ticket.milestone }}{{ q }}">{{ ticket.milestone | upper }}</a>{% endif %}
+  {% if card_name %}<a href="/milestones/{{ ticket.milestone | urlencode }}{{ q }}">{{ card_name }}</a>{% elif ticket.milestone %}<a href="/tickets?milestone={{ ticket.milestone }}{{ q }}">{{ ticket.milestone | upper }}</a>{% endif %}
   <span>{{ ticket.ticket }}</span>
 {% endblock %}
 {% block content %}
 <div class="page">
+
+{% if blocked %}
+{# f170-04: a bug ticket (no card) has only why and its two buttons, whatever a thread holds #}
+{% set fix_card = blocked.fix_card if card_key else none %}
+{% set has_fix = fix_card and (blocked.fix_first_point or blocked.fix_replan) %}
+{% set pressed = "this.disabled = true; this.closest('.aside').classList.add('sent')" %}
+<section id="blocked" class="panel aside blocked{% if blocked_sent %} sent{% endif %}">
+  <div class="plate"><b>Blocked</b><span>.softfield/tasks/blocked/</span></div>
+  <p class="say">{{ blocked.sentence }}</p>
+  <p class="then">It won't run again until you choose below.</p>
+  {% if fix_card %}
+  <div class="fix">
+    <div class="head">The lead's fix</div>
+    {% if has_fix %}
+    {% if blocked.fix_first_point %}<p class="what">{{ blocked.fix_first_point }}</p>{% endif %}
+    {% if blocked.fix_replan %}<p class="plan">{{ blocked.fix_replan.title }}</p>{% endif %}
+    {% else %}
+    <p class="what">The lead is reading the work and its logs; its fix comes here.</p>
+    {% endif %}
+  </div>
+  {% endif %}
+  <p class="buttons">
+    {% if fix_card and blocked.fix_replan %}
+    <button type="button" class="btn go" id="approve-{{ ticket.ticket }}" hx-post="/requests" hx-swap="innerHTML"
+      hx-target="#blocked-status"
+      hx-on::before-request="{{ pressed }}"
+      hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ fix_card | tojson }}}'>Approve the lead's fix</button>
+    {% endif %}
+    <button type="button" class="btn plain" id="try-again-{{ ticket.ticket }}" hx-post="/requests" hx-swap="innerHTML"
+      hx-target="#blocked-status"
+      hx-on::before-request="{{ pressed }}"
+      hx-vals='{"kind": "queue", "project": {{ project | tojson }}, "subject": {{ ticket.ticket | tojson }}}'>{% if card_key %}Try again as it is{% else %}Try again{% endif %}</button>
+    <button type="button" class="btn plain" id="set-aside-{{ ticket.ticket }}" hx-post="/requests" hx-swap="innerHTML"
+      hx-target="#blocked-status"
+      hx-on::before-request="{{ pressed }}"
+      hx-vals='{"kind": "set_aside", "project": {{ project | tojson }}, "subject": {{ ticket.ticket | tojson }}}'>Set aside</button>
+  </p>
+  {% if fix_card and blocked.fix_replan %}
+  <p class="caveat">Try again as it is runs the same ticket unchanged; the lead's fix then still waits on {{ fix_card | upper }}'s thread.</p>
+  {% endif %}
+  <div class="way">On its way · at the runner's next pick</div>
+  {% if card_key %}
+  <p class="links">{% if fix_card %}<a href="/planning/{{ fix_card }}{{ q }}">{% if has_fix %}Read the fix on {{ fix_card | upper }}'s thread{% else %}{{ fix_card | upper }}'s thread{% endif %} ›</a> {% endif %}<a href="/milestones/{{ ticket.milestone | urlencode }}{{ q }}">{{ card_key | upper }}'s card ›</a></p>
+  {% endif %}
+  <div id="blocked-status"></div>
+</section>
+{% endif %}
 
 {% if is_later %}
 <section id="aside" class="panel aside{% if on_its_way %} sent{% endif %}">

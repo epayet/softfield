@@ -15,9 +15,11 @@ from fastapi import APIRouter, Query, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
+from factory_dashboard.planning import BlockedFacts, get_blocked_info
 from factory_dashboard.queries import ticket_priority
 from runner import metrics
-from runner.requests import QUEUE
+from runner.requests import APPROVE_PLAN, QUEUE, SET_ASIDE
+from runner.tasks import BUGS, short_key
 
 router = APIRouter()
 
@@ -497,6 +499,22 @@ def tickets_page(
     )
 
 
+def _card_key(detail: TicketDetail) -> str | None:
+    """The short key of the ticket's card (``f21``); a bug ticket has no card."""
+    if not detail.milestone or detail.milestone == BUGS:
+        return None
+    return short_key(detail.milestone)
+
+
+def _card_name(detail: TicketDetail) -> str | None:
+    """The card as the board names it: ``F21, The lead's briefs``."""
+    key = _card_key(detail)
+    if key is None:
+        return None
+    title = detail.milestone_title
+    return f"{key.upper()}, {title[0].upper()}{title[1:]}" if title else key.upper()
+
+
 @router.get("/tickets/{ticket_id}", response_class=HTMLResponse)
 def ticket_page(
     ticket_id: str,
@@ -543,6 +561,19 @@ def ticket_page(
         )
         later_priority = ticket_priority(detail.body, detail.milestone, None)
 
+    # A blocked ticket's panel (f170-04): the desk's facts, and its answer on its way
+    blocked: BlockedFacts | None = None
+    blocked_sent = False
+    project_id = metrics.find_project(conn, project)
+    if project_id is not None:
+        blocked = get_blocked_info(conn, project_id, ticket_id)
+    if blocked is not None and project_id is not None:
+        blocked_sent = any(
+            (r["kind"] in (QUEUE, SET_ASIDE) and r["subject"] == ticket_id)
+            or (r["kind"] == APPROVE_PLAN and r["subject"] == blocked.fix_card)
+            for r in metrics.open_requests(conn, project_id)
+        )
+
     # Parse ticket body for Goal, Done when, Context
     parsed = parse_ticket_body(detail.body) if detail.body else None
 
@@ -561,5 +592,9 @@ def ticket_page(
             "on_its_way": on_its_way,
             "later_priority": later_priority,
             "parsed": parsed,
+            "blocked": blocked,
+            "blocked_sent": blocked_sent,
+            "card_key": _card_key(detail),
+            "card_name": _card_name(detail),
         },
     )

@@ -12,6 +12,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Collection
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
@@ -333,92 +334,106 @@ def _seeds(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
     ]
 
 
-def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
-    """Open blocked tickets with their reason: one plain DeskItem per row, oldest first.
+@dataclass(frozen=True)
+class BlockedFacts:
+    """What the desk and a ticket's page say of a blocked ticket (f170-04)."""
+
+    reason: str  # the runner's reason alone
+    words: str  # the desk's line: the reason, then where the lead's fix waits
+    fix_card: str | None = None  # the thread the runner asked the lead on
+    fix_first_point: str | None = None
+    fix_replan: dict[str, object] | None = None
+
+    @property
+    def sentence(self) -> str:
+        """The reason as a page shows it: its first letter raised, one full stop."""
+        text = self.reason.rstrip(".")
+        return f"{text[:1].upper()}{text[1:]}."
+
+
+def get_blocked_info(conn: sqlite3.Connection, project_id: int, ticket: str) -> BlockedFacts | None:
+    """The facts of ``ticket``'s open ``blocked`` item, or None when it has none.
 
     If the runner has a look on the card's thread and the lead has since replied, the words
     say where the fix waits. If the runner has a look but the lead hasn't yet, the words say
     the lead is looking. A bug ticket with no card gets nothing extra.
     """
+    row = conn.execute(
+        "SELECT text FROM owner_items"
+        " WHERE project_id = ? AND kind = ? AND subject = ? AND resolved IS NULL"
+        " ORDER BY created, id DESC LIMIT 1",
+        (project_id, "blocked", ticket),
+    ).fetchone()
+    if row is None:
+        return None
+    reason = row["text"].removeprefix(f"{ticket} blocked: ")
+    # Find the latest runner message starting with "<ticket> blocked:" on this project
+    runner = conn.execute(
+        "SELECT m.at, m.thread_id, t.card FROM planner_messages m"
+        " JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.project_id = ? AND m.author = 'runner'"
+        " AND m.text LIKE ?"
+        " ORDER BY m.at DESC LIMIT 1",
+        (project_id, f"{ticket} blocked:%"),
+    ).fetchone()
+    if runner is None:
+        return BlockedFacts(reason, reason)
+    card = runner["card"]
+    # Strip "its work is on task/…" from the reason
+    match = re.search(r"\s*[.,;]\s*(its|the) work is on task/", reason, re.IGNORECASE)
+    if match:
+        reason = reason[: match.start()]
+    # The lead's latest message after the runner's, on the same thread
+    lead = conn.execute(
+        "SELECT points, proposals FROM planner_messages"
+        " WHERE thread_id = ? AND author = 'lead' AND at > ?"
+        " ORDER BY id DESC LIMIT 1",
+        (runner["thread_id"], runner["at"]),
+    ).fetchone()
+    if lead is None:
+        return BlockedFacts(reason, f"{reason} · the lead is looking at it", card)
+    points = json.loads(lead["points"]) if lead["points"] else []
+    fix_replan: dict[str, object] | None = None
+    for prop in json.loads(lead["proposals"]) if lead["proposals"] else []:
+        if isinstance(prop, dict) and prop.get("kind") == "replan":
+            key_points = prop.get("key_points", [])
+            fix_replan = {
+                "title": str(prop.get("title", "")),
+                "key_points": len(key_points) if isinstance(key_points, list) else 0,
+            }
+    return BlockedFacts(
+        reason,
+        f"{reason} · the lead's fix waits on {card.upper()}'s thread",
+        card,
+        str(points[0].get("title", "")) if points else None,
+        fix_replan,
+    )
+
+
+def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
+    """Open blocked tickets with their reason: one plain DeskItem per row, oldest first."""
     rows = conn.execute(
-        "SELECT subject, text FROM owner_items"
+        "SELECT subject FROM owner_items"
         " WHERE project_id = ? AND kind = ? AND resolved IS NULL"
         " ORDER BY created, id",
         (project_id, "blocked"),
     ).fetchall()
     items: list[DeskItem] = []
     for r in rows:
-        prefix = f"{r['subject']} blocked: "
-        words = r["text"][len(prefix) :] if r["text"].startswith(prefix) else r["text"]
         ticket = r["subject"]
-        # Find the latest runner message starting with "<ticket> blocked:" on this project
-        runner = conn.execute(
-            "SELECT m.at, t.card FROM planner_messages m"
-            " JOIN planner_threads t ON t.id = m.thread_id"
-            " WHERE t.project_id = ? AND m.author = 'runner'"
-            " AND m.text LIKE ?"
-            " ORDER BY m.at DESC LIMIT 1",
-            (project_id, f"{ticket} blocked:%"),
-        ).fetchone()
-        fix_card: str | None = None
-        fix_first_point: str | None = None
-        fix_replan: dict[str, object] | None = None
-        if runner is not None:
-            runner_at = runner["at"]
-            card = runner["card"]
-            fix_card = card
-            # Strip "its work is on task/…" from the reason
-            match = re.search(r"\s*[.,;]\s*(its|the) work is on task/", words, re.IGNORECASE)
-            if match:
-                words = words[: match.start()]
-            # Check for a lead message after the runner's on the same thread
-            lead = conn.execute(
-                "SELECT max(id) FROM planner_messages"
-                " WHERE thread_id = ("
-                "   SELECT id FROM planner_threads"
-                "   WHERE project_id = ? AND card = ?)"
-                " AND author = 'lead' AND at > ?",
-                (project_id, card, runner_at),
-            ).fetchone()
-            if lead["max(id)"] is not None:
-                # Get the lead's first point title
-                lead_msg = conn.execute(
-                    "SELECT points FROM planner_messages WHERE id = ?",
-                    (lead["max(id)"],),
-                ).fetchone()
-                if lead_msg and lead_msg["points"]:
-                    points = json.loads(lead_msg["points"])
-                    if points:
-                        fix_first_point = str(points[0].get("title", ""))
-                # Find the replan proposal in the lead's latest proposals
-                prop_row = conn.execute(
-                    "SELECT proposals FROM planner_messages WHERE id = ?",
-                    (lead["max(id)"],),
-                ).fetchone()
-                if prop_row and prop_row["proposals"]:
-                    for prop in json.loads(prop_row["proposals"]):
-                        if isinstance(prop, dict) and prop.get("kind") == "replan":
-                            key_points = prop.get("key_points", [])
-                            fix_replan = {
-                                "title": str(prop.get("title", "")),
-                                "key_points": (
-                                    len(key_points) if isinstance(key_points, list) else 0
-                                ),
-                            }
-                words = f"{words} · the lead's fix waits on {card.upper()}'s thread"
-            else:
-                words = f"{words} · the lead is looking at it"
-        items.append(
-            DeskItem(
-                "blocked",
-                ticket,
-                words,
-                f"/tickets/{ticket}",
-                fix_card=fix_card,
-                fix_first_point=fix_first_point,
-                fix_replan=fix_replan,
+        facts = get_blocked_info(conn, project_id, ticket)
+        if facts is not None:  # each row is an open item, so it always finds it
+            items.append(
+                DeskItem(
+                    "blocked",
+                    ticket,
+                    facts.words,
+                    f"/tickets/{ticket}",
+                    fix_card=facts.fix_card,
+                    fix_first_point=facts.fix_first_point,
+                    fix_replan=facts.fix_replan,
+                )
             )
-        )
     return items
 
 
