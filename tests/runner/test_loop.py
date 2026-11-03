@@ -7,9 +7,12 @@ import subprocess
 import tempfile
 import threading
 import time
+import urllib.error
 from collections.abc import Callable
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from email.message import Message
+from http.client import BadStatusLine, RemoteDisconnected
 from pathlib import Path
 
 import pytest
@@ -4343,6 +4346,36 @@ def test_the_run_names_the_warm_up_and_the_gates_while_they_run(repo, fake_model
     _run(repo)
     assert seen == ["warm-up", "gates · m1-01-thing"]
     assert _activity(repo) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        urllib.error.HTTPError("http://lm", 500, "Channel Error", Message(), None),
+        urllib.error.URLError("connection refused"),
+        TimeoutError("timed out"),
+        RemoteDisconnected("closed"),
+        BadStatusLine("nonsense"),
+    ],
+)
+def test_a_failed_warm_up_costs_no_run_and_the_attempt_goes_ahead(
+    repo, fake_model, monkeypatch, error
+):
+    """LM Studio answered the warm-up with an error after its engine crashed, and the
+    runner stopped with every project in it (2026-11-03)."""
+    _add_task(repo, "m1-01-thing")
+    fake_model.append(_implement)
+    contexts: list[object] = []
+
+    def warmup(*args: object) -> float:
+        raise error
+
+    monkeypatch.setattr(loop, "warmup", warmup)
+    monkeypatch.setattr(loop, "loaded_context_length", lambda *a: contexts.append(a))
+    _run(repo)
+    assert (repo / ".softfield" / "tasks" / "done" / "m1-01-thing.md").is_file()
+    assert _activity(repo) == (None, None)
+    assert contexts == []  # asked again at the warm-up that works
 
 
 def test_the_run_names_check_all_while_it_runs(repo, monkeypatch, tmp_path):

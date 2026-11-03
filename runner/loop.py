@@ -14,6 +14,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from functools import partial
+from http.client import HTTPException
 from pathlib import Path
 from typing import Any, Concatenate, NoReturn
 
@@ -2077,9 +2078,17 @@ def _develop(
         agent, reason = route_developer(s, task, role, attempt, failed=failed, refused=refused)
         local = is_local(agent)
         if local:
-            with doing(s, "warm-up"):
-                rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
-            _check_context(s)
+            try:
+                with doing(s, "warm-up"):
+                    rec.warmup_s += warmup(s.cfg.lm_base_url, s.cfg.lm_model, s.cfg.warmup_timeout)
+            except (OSError, HTTPException) as exc:
+                # A model that just crashed answers with an error, and this stopped every
+                # project's run (2026-11-03). The attempt finds out for itself, and costs one.
+                note = f"{task.id} attempt {attempt}: the warm-up failed: {exc}"
+                s.log(note)
+                s.report.notes.append(note)
+            else:
+                _check_context(s)
         context_limit = s.context_limit if local else None
         name = f"{agent.harness}-{attempt}" + (f"-{n}" if n > 1 else "")
         log = logs / (f"{name}.jsonl" if agent.harness == "opencode" else f"{name}.log")
