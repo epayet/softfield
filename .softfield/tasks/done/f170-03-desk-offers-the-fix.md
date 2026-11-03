@@ -31,3 +31,12 @@ Read `.softfield/cards/f170-there-s-a-blocked-ticket-that.md` (D3) and the mock-
 - pressing Approve shows the item on its way at once, dashed orange, its buttons gone
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2756
+gate_failures: []
+tokens: 3229980
+```
