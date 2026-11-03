@@ -346,6 +346,11 @@ Round {round} of at most {max_rounds}. {scope}
 Read the tests as closely as the code: missing edge cases, and every existing test a
 developer edited (the session reports in .softfield/sessions/ list them). Check the French.
 
+The card's after pictures and its mock-up (ADR 40 item 6): {pictures}
+With pictures, open them with Read and end "What changed" in the review report with one line:
+"Matches the mock-up", or what differs. A clear difference is a should-fix finding; an empty
+page because the sample data lacks something is said as such. With "none", nothing changes.
+
 The hours, jobs and counts the report quotes come from the metrics database: read it with
 `softfield look sql "<one SELECT>"` (read-only; `PRAGMA table_list` shows the tables), and a
 dashboard page as text with `softfield look page <address>` (ADR 28).
@@ -494,7 +499,12 @@ drawn in the factory theme from dashboard.css's tokens and fonts (a new colour o
 the tokens first; ornament never uses a status colour), leaning bolder: the owner tones it \
 down, with nothing copied from a game. The mock-up and the plan come in \
 the same reply: each UI ticket names the mock-up file in its Context as the picture to build, and \
-when the owner's comments change the mock-up, revise the tickets in the same turn.
+when the owner's comments change the mock-up, revise the tickets in the same turn. \
+Whenever you draw one, the card doc also gets a `## Before and after` section listing the \
+addresses of the app's pages the card changes, one backticked bullet each (on Softfield, a \
+card's own page is `/milestones/<full key>`): the review takes pictures of them. In a project \
+without `[shots]` you still write the list, and say in a point that the project can't take \
+pictures yet.
 - To redirect {card} while it runs, propose a `replan` (f6-13): on the branch it may also \
 change {card}'s waiting tickets, .softfield/tasks/ready/{card}-*.md: edit one, add one, or set one \
 aside (move it to .softfield/tasks/later/). Never another milestone's ticket, never the one in \

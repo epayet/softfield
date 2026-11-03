@@ -246,6 +246,47 @@ def test_a_factory_mockups_proposed_is_drawn_in_the_factory_theme_leaning_bolder
         assert "endfield" not in template.lower() and "arknights" not in template.lower()
 
 
+def test_a_mockup_comes_with_a_before_and_after_list_of_pages():
+    """f85-03 (ADR 40 items 4, 6, 7): planner, review, lead.md and the setup guide."""
+    text = prompts.PLANNER
+    start = text.index("- A card that changes what a page shows or how it is laid out")
+    paragraph = text[start : text.index("\n- ", start)]
+    assert "`## Before and after`" in paragraph and "one backticked bullet" in paragraph
+    assert "/milestones/<full key>" in paragraph and "without `[shots]`" in paragraph
+    assert "can't take pictures yet" in paragraph
+    assert "`## Before and after`" not in prompts.PLANNER_GENERAL
+
+    fields = dict(
+        milestone="f1", round=1, max_rounds=3, scope="", tests="tests", recurring="none",
+        checkpoints="none", out="x.json",
+    )  # fmt: skip
+    with_pictures = prompts.REVIEW.format(
+        pictures="after pictures: a.png; mock-up: m.html", **fields
+    )
+    assert "after pictures: a.png; mock-up: m.html" in with_pictures
+    assert '"Matches the mock-up"' in with_pictures and "should-fix finding" in with_pictures
+    assert "the sample data lacks something" in with_pictures
+    assert "(ADR 40 item 6): none\n" in prompts.REVIEW.format(pictures="none", **fields)
+
+    lead = (ROOT / "runner/instructions/lead.md").read_text(encoding="utf-8")
+    assert "## Before and after" in lead and "ADR 40 item 7" in lead
+    setup = (ROOT / "runner/instructions/bootstrap.md").read_text(encoding="utf-8")
+    assert "`[shots]`" in setup and "`prepare`" in setup and "`ready`" in setup
+    assert "never on live data" in setup.lower() and "no call to a model" in setup
+
+
+def test_the_review_names_the_after_pictures_and_the_mockup_or_none(tmp_path: Path):
+    assert milestone.review_pictures(tmp_path, "f1") == "none"
+    folder = tmp_path / ".softfield/var/shots/f1"
+    folder.mkdir(parents=True)
+    (folder / "after-phone-1.png").write_bytes(b"")
+    (tmp_path / ".softfield/cards/f1-mockup").mkdir(parents=True)
+    (tmp_path / ".softfield/cards/f1-mockup/a.html").write_text("x", encoding="utf-8")
+    line = milestone.review_pictures(tmp_path, "f1")
+    assert ".softfield/var/shots/f1/after-phone-1.png" in line
+    assert ".softfield/cards/f1-mockup/a.html" in line
+
+
 def test_the_planner_prompts_still_fill_in():
     """The new rules add no stray brace: both prompts format with the same fields."""
     for template in (prompts.PLANNER, prompts.PLANNER_GENERAL):

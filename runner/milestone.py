@@ -641,6 +641,19 @@ def _fix_scope(s: Session, milestone: str, since: str) -> str:
     )
 
 
+def review_pictures(repo: Path, milestone: str) -> str:
+    """The review's line on the card's after pictures and mock-up, or "none" (ADR 40 item 6)."""
+    folder = repo / shots.SHOTS_DIR / milestone
+    after = sorted(folder.glob("after-*.png"))
+    if not after:
+        return "none"
+    mockups = sorted((repo / ".softfield" / "cards" / f"{milestone}-mockup").glob("*.html"))
+    paths = ", ".join(p.relative_to(repo).as_posix() for p in after)
+    mockup = ", ".join(p.relative_to(repo).as_posix() for p in mockups) or "none"
+    listed = (folder / shots.LIST_FILE).relative_to(repo).as_posix()
+    return f"after pictures: {paths} (what each is: {listed}); mock-up: {mockup}"
+
+
 def _first_scope(s: Session, milestone: str, base: str) -> str:
     """What round 1 reads: the whole diff from ``base``, or, when commits of other work sit in
     the range (another milestone's merge, a terminal session's commit), this milestone's own
@@ -729,6 +742,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
                 round=round_no,
                 max_rounds=cfg.review_rounds,
                 scope=scope,
+                pictures=review_pictures(s.repo, milestone),
                 tests=" ".join(project_checks(s.repo).test_dirs),  # the project's own (ADR 30)
                 recurring=", ".join(recurring_for_claude(seen, milestone)) or "none",
                 checkpoints=_checkpoint_list(s, milestone),

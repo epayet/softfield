@@ -66,6 +66,11 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
 3. **Protected paths** (`.softfield/protected-paths.txt`): add the sensitive code you found or
    planned (security, privacy, data loss, deploy, settings), each with a one-line reason as a
    comment. List them in ADR 00 too.
+   **Pictures, for a project with pages** (ADR 40 item 4): fill in `[shots]` in `.softfield/project.toml`:
+   `prepare` makes sample data from the project's own fixtures, `serve` starts the app on
+   `127.0.0.1:{port}`, `ready` is an address that answers once it is up. Never on live data, and
+   with no call to a model or another service. Take one picture to prove it before the session
+   ends (run `prepare` and `serve`, and check that `ready` answers and the page renders).
 4. **The project's own rules** in `.softfield/project.md`: product taste, languages, code rules.
    Only what holds for this project; everything shared is Softfield's.
 5. **One line of description** in `.softfield/project.toml` (`description`): the Projects page shows it.
