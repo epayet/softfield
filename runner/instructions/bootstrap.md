@@ -66,30 +66,32 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
 3. **Protected paths** (`.softfield/protected-paths.txt`): add the sensitive code you found or
    planned (security, privacy, data loss, deploy, settings), each with a one-line reason as a
    comment. List them in ADR 00 too.
-   **Pictures, for a project with pages** (ADR 40 item 4): fill in `[shots]` in `.softfield/project.toml`:
-   `prepare` makes sample data from the project's own fixtures, `serve` starts the app on
-   `127.0.0.1:{port}`, `ready` is an address that answers once it is up. Never on live data, and
-   with no call to a model or another service. Take one picture to prove it before the session
-   ends (run `prepare` and `serve`, and check that `ready` answers and the page renders).
-4. **The project's own rules** in `.softfield/project.md`: product taste, languages, code rules.
+4. **Pictures, for a project with pages** (ADR 40 items 2 to 4): fill in `[shots]` in `.softfield/project.toml`:
+   `prepare` makes sample data from the project's own fixtures in the throwaway folder
+   `$SOFTFIELD_SHOTS_DATA` names; `serve` starts the app on `127.0.0.1:{port}`, its settings pointing
+   its database and files at that folder; `ready` is an address that answers once it is up; `live`,
+   optional, is where the owner opens the app, so each pictured address links to it.
+   Never on live data, and with no call to a model or another service. Prove it before the session
+   ends: run `prepare` and `serve`, and check that `ready` answers and the page renders.
+5. **The project's own rules** in `.softfield/project.md`: product taste, languages, code rules.
    Only what holds for this project; everything shared is Softfield's.
-5. **One line of description** in `.softfield/project.toml` (`description`): the Projects page shows it.
-6. **The first card**: `.softfield/cards/m1-<slug>.md`, the first milestone the owner wants, from the
+6. **One line of description** in `.softfield/project.toml` (`description`): the Projects page shows it.
+7. **The first card**: `.softfield/cards/m1-<slug>.md`, the first milestone the owner wants, from the
    seed or from what they asked, with this header and their words under `## Notes`:
    ```
    # Milestone M1: <title>
 
    > **State:** idea · **Priority:** 1 · **Area:** product
    ```
-7. **Commit** everything on `main`.
-8. **ADR 00, made easy to review.** Don't send the owner to the file. In the chat, give it as
+8. **Commit** everything on `main`.
+9. **ADR 00, made easy to review.** Don't send the owner to the file. In the chat, give it as
    `runner/instructions/author/owner.md` says ("Reviewing an ADR with the owner"), short and plain:
    - the key points, numbered, one line each: what the project is, what it's built with, how it
      is tested and run, what's protected and why, what stays out;
    - the open questions only, each with your recommendation and the alternatives as choices;
      everything else counts as agreed;
    - then: "Happy with ADR 00?". Fold their answers in and ask again until they are.
-9. **When they say yes** (or "you can accept it"), run `softfield accept 0` yourself, then
+10. **When they say yes** (or "you can accept it"), run `softfield accept 0` yourself, then
    `softfield doctor` in this folder, and fix what it says until it passes. Passing hands the
    project to the runner. End the session with doctor's closing lines, as they are: where the
    project is on the dashboard, its first card, and what to do there next.

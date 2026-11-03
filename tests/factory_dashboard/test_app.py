@@ -20,6 +20,7 @@ from factory_dashboard.queries import connect
 from runner import cli, metrics
 from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, write_allowance
 from tests.factory_dashboard.test_overview import REFRESH, lead_replies, open_overview
+from tests.factory_dashboard.test_planning import _open as open_planning_page
 from tests.layout import DISPLAY, PHONE, layout_problems
 
 STATIC = Path(app_module.__file__).parent / "static"
@@ -3822,3 +3823,87 @@ def test_the_panel_has_its_switches_and_the_plans_mockup_when_the_thread_has_one
     panel = _panel(client.get(f"/milestones/{CARD}").text)
     assert 'href="/planning/f50/proposals/p1?project=coucou"' in panel
     assert "The plan's mock-up" in panel
+    # a later reply with other proposals, F85's own case, doesn't lose the link
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.add_planner_message(
+            conn,
+            thread["id"],
+            "lead",
+            NOW.isoformat(),
+            "An ADR.",
+            proposals=[{"id": "adr-9", "kind": "adr", "title": "ADR 9", "path": "y"}],
+        )
+    finally:
+        conn.close()
+    panel = _panel(client.get(f"/milestones/{CARD}").text)
+    assert 'href="/planning/f50/proposals/p1?project=coucou"' in panel
+
+
+def test_a_card_without_a_sheet_shows_no_panel_even_with_a_list(db_path, tmp_path):
+    client = _pictured(db_path, tmp_path, pictures=ALL_TAKEN, files=tuple(ALL_TAKEN))
+    conn = metrics.open_db(db_path)
+    try:
+        project_id = metrics.find_project(conn, PROJECT)
+        assert project_id is not None
+        metrics.upsert_milestone(conn, project_id, "f51-unsigned", title="No sheet")
+    finally:
+        conn.close()
+    folder = tmp_path / PROJECT / ".softfield" / "var" / "shots"
+    (folder / "f51-unsigned").mkdir()
+    (folder / "f51-unsigned" / "shots.json").write_text(
+        (folder / CARD / "shots.json").read_text(encoding="utf-8"), encoding="utf-8"
+    )
+    assert 'id="shots"' not in client.get("/milestones/f51-unsigned").text
+
+
+def test_a_broken_project_toml_leaves_the_panel_with_plain_addresses(db_path, tmp_path):
+    client = _pictured(db_path, tmp_path, live="http://a:1")
+    (tmp_path / PROJECT / ".softfield" / "project.toml").write_text("[shots\n", encoding="utf-8")
+    response = client.get(f"/milestones/{CARD}")
+    assert response.status_code == 200
+    assert 'target="_blank"' not in _panel(response.text)
+
+
+def _shown(page) -> list[str]:
+    """The pictures the panel shows now, as their file names."""
+    hrefs = page.locator("#shots a.shot:visible").evaluate_all(
+        "links => links.map(link => link.getAttribute('href'))"
+    )
+    return [href.split("/")[-1].split("?")[0] for href in hrefs]
+
+
+def _lay_out(page) -> None:
+    page.evaluate("() => document.fonts.ready")
+    # the tabs scroll sideways on a phone by design
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    problems = layout_problems(page)
+    assert problems == [], "\n".join(problems)
+
+
+def test_on_a_phone_the_switches_flip_the_pictures(page, db_path, tmp_path):
+    client = _pictured(db_path, tmp_path, pictures=ALL_TAKEN, files=tuple(ALL_TAKEN))
+    page.set_viewport_size(PHONE)
+    open_planning_page(page, client, f"/milestones/{CARD}")
+    assert _shown(page) == ["after-phone-1.png"]
+    assert page.locator("#shots figcaption:visible").inner_text().lower() == "after · main now"
+    _lay_out(page)
+    page.locator('#shots [data-ba="before"]').click()
+    assert _shown(page) == ["before-phone-1.png"]
+    assert page.locator('#shots [data-ba="before"]').get_attribute("aria-pressed") == "true"
+    page.locator('#shots [data-w="wide"]').click()
+    assert _shown(page) == ["before-wide-1.png"]
+
+
+def test_on_a_wide_screen_before_and_after_sit_side_by_side(page, db_path, tmp_path):
+    client = _pictured(db_path, tmp_path, pictures=ALL_TAKEN, files=tuple(ALL_TAKEN))
+    page.set_viewport_size({"width": 1440, "height": 900})
+    open_planning_page(page, client, f"/milestones/{CARD}")
+    assert _shown(page) == ["before-wide-1.png", "after-wide-1.png"]
+    assert page.locator("#shots .switch.ba").is_hidden()
+    before = page.locator('#shots figure[data-when="before"]').bounding_box()
+    after = page.locator('#shots figure[data-when="after"]').bounding_box()
+    assert before["y"] == after["y"] and before["x"] + before["width"] <= after["x"]
+    _lay_out(page)
+    page.locator('#shots [data-w="phone"]').click()
+    assert _shown(page) == ["before-phone-1.png", "after-phone-1.png"]

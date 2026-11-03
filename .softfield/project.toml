@@ -26,7 +26,7 @@ serve = 'uv run --frozen softfield dashboard --port {port} --db "$SOFTFIELD_SHOT
 ready = "/"
 
 [caps]
-max_attempts = 3                       # per task: 1, 2 (+ gate output), 3 (fresh branch + direction)
+max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch + direction)
 # Headless Claude is bounded per trigger, not per milestone (ADR 12 item 10). A task past its
 # limits goes to tasks/blocked/ and is named in the report.
 directions_per_task = 1                 # the lead's direction before the last attempt

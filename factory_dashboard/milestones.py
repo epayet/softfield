@@ -608,19 +608,25 @@ def _shot_pictures(
 
 
 def _mockup_link(conn: sqlite3.Connection, project_id: int | None, thread: str) -> str | None:
-    """The card's mock-up proposal on its planning thread, as the thread lists it."""
-    from factory_dashboard.thread import _proposals
-
+    """The card's latest mock-up proposal on its planning thread, even when later replies list
+    only other proposals, as F85's own does."""
     if project_id is None:
         return None
     rows = conn.execute(
-        "SELECT m.* FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
-        " WHERE t.project_id = ? AND t.card = ? ORDER BY m.id",
+        "SELECT m.proposals FROM planner_messages m JOIN planner_threads t ON t.id = m.thread_id"
+        " WHERE t.project_id = ? AND t.card = ? AND m.author = 'lead'"
+        " AND m.proposals IS NOT NULL ORDER BY m.id DESC",
         (project_id, thread),
     ).fetchall()
-    return next(
-        (p.link for p in _proposals(conn, project_id, thread, rows) if p.kind == "mockup"), None
-    )
+    for row in rows:
+        for proposal in json.loads(row["proposals"]):
+            if (
+                isinstance(proposal, dict)
+                and proposal.get("kind") == "mockup"
+                and proposal.get("id")
+            ):
+                return f"/planning/{thread}/proposals/{proposal['id']}"
+    return None
 
 
 def shots_panel(

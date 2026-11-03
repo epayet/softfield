@@ -694,6 +694,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the first checkpoint's finding had three parts and its fix ticket took one and a half: the words stayed, the bug ticket's label stayed, and f170-06, told to fix the tests, wrote the wrong label into one. The next checkpoint read "the screen matches the ticket" from the tests, not the ticket. A fix ticket's finding needs its parts as separate Done when lines. Tests built their own proposals and lead replies, so nothing met real threads, where the lead says other things after its fix ("Approved by the owner…" is a lead message too).
 - **Decisions affected:** none. bug-57 makes pre-flight refuse a developer ticket that spans two pages, the check F84, F172 and F170 have now each wanted.
 
+### F85 (2026-11-03): real before and after pictures at sign-off ([review](../reviews/f85-when-i-sign-off-a-task.md))
+
+- **Q1:** three lead tickets, all merged, one parked about three hours for a Claude limit; no checkpoint. Review round 1: one blocking, four should-fix and two nits fixed by the review, one nit set aside (bug-58), two only reported.
+- **Q3:** no developer work (protected runner code; the dashboard ticket serves files from disk).
+- **Q5:** see the review's numbers.
+- **Anything else:** the blocking bug was found because the card reviewed itself: the brief said "mock-up: none" while the card's doc named its mock-up. Its test used `f1` as the card's key, a key where the short and full forms are the same, so a fixture hid the bug: a test of a path rule needs a value that tells the two rules apart. A ticket's "in Chromium" Done when reached main with no browser test, and nothing noticed.
+- **Decisions affected:** none. A card that changes the card page can't picture its own panel, since the pictures are taken before its sheet exists; the review says so.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

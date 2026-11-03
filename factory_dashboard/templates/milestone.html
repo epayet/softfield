@@ -135,9 +135,9 @@
         {% else %}<span>{{ plate.address }}</span>{% endif %}
       </div>
       <div class="pair">
-        {% for when, label, pictures in (("before", "Before", plate.before), ("after", "After", plate.after)) %}
+        {% for when, label, source, pictures in (("before", "Before", "at the card's start", plate.before), ("after", "After", "main now", plate.after)) %}
         <figure data-when="{{ when }}"{% if when == "before" %} hidden{% endif %}>
-          <figcaption>{{ label }}</figcaption>
+          <figcaption>{{ label }} · {{ source }}</figcaption>
           {% for p in pictures %}
           <div class="shot-slot" data-width="{{ p.width }}"{% if p.width == "wide" %} hidden{% endif %}>
             {% if p.src %}<a class="shot" href="{{ p.src }}" target="_blank" rel="noopener"><img src="{{ p.src }}" alt="{{ label }}, {{ p.width }}: {{ plate.address }}" loading="lazy"></a>

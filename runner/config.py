@@ -272,9 +272,13 @@ def project_shots(repo: Path) -> Shots | None:
         data = tomllib.loads((repo / PROJECT_TOML).read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
+    except tomllib.TOMLDecodeError as exc:
+        raise ConfigError(f"{PROJECT_TOML}: {exc}") from exc
     table = data.get("shots")
     if table is None:
         return None
+    if not isinstance(table, dict):
+        raise ConfigError(f"[shots] in {PROJECT_TOML}: not a table")
     try:
         shots = Shots(
             prepare=str(table["prepare"]),

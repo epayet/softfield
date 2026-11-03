@@ -189,12 +189,24 @@ def test_shots_is_read_with_the_project(tmp_path):
 
 @pytest.mark.parametrize(
     "text",
-    ["[shots]\nserve = 'a {port}'\nready = '/'\n", _toml("serve on no port")],
+    [
+        "[shots]\nserve = 'a {port}'\nready = '/'\n",
+        _toml("serve on no port"),
+        "shots = 'not a table'\n",
+    ],
 )
 def test_a_shots_section_that_cant_work_says_so(tmp_path, text):
     (tmp_path / ".softfield").mkdir()
     (tmp_path / ".softfield" / "project.toml").write_text(text)
     with pytest.raises(ConfigError, match=r"\[shots\]"):
+        project_shots(tmp_path)
+
+
+def test_a_project_toml_that_doesnt_parse_says_so(tmp_path):
+    """As a ConfigError, the one the dashboard's card page catches."""
+    (tmp_path / ".softfield").mkdir()
+    (tmp_path / ".softfield" / "project.toml").write_text("[shots\n")
+    with pytest.raises(ConfigError, match=r"project\.toml"):
         project_shots(tmp_path)
 
 

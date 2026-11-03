@@ -647,7 +647,10 @@ def review_pictures(repo: Path, milestone: str) -> str:
     after = sorted(folder.glob("after-*.png"))
     if not after:
         return "none"
-    mockups = sorted((repo / ".softfield" / "cards" / f"{milestone}-mockup").glob("*.html"))
+    # a mock-up's folder goes by the short key, `f85-mockup` (lead.md)
+    mockups = sorted(
+        (repo / ".softfield" / "cards" / f"{short_key(milestone)}-mockup").glob("*.html")
+    )
     paths = ", ".join(p.relative_to(repo).as_posix() for p in after)
     mockup = ", ".join(p.relative_to(repo).as_posix() for p in mockups) or "none"
     listed = (folder / shots.LIST_FILE).relative_to(repo).as_posix()

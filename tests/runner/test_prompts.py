@@ -273,18 +273,21 @@ def test_a_mockup_comes_with_a_before_and_after_list_of_pages():
     setup = (ROOT / "runner/instructions/bootstrap.md").read_text(encoding="utf-8")
     assert "`[shots]`" in setup and "`prepare`" in setup and "`ready`" in setup
     assert "never on live data" in setup.lower() and "no call to a model" in setup
+    assert "$SOFTFIELD_SHOTS_DATA" in setup and "`live`" in setup
 
 
 def test_the_review_names_the_after_pictures_and_the_mockup_or_none(tmp_path: Path):
-    assert milestone.review_pictures(tmp_path, "f1") == "none"
-    folder = tmp_path / ".softfield/var/shots/f1"
+    """The pictures go by the card's full key, its mock-up's folder by the short one."""
+    assert milestone.review_pictures(tmp_path, "f1-a-card") == "none"
+    folder = tmp_path / ".softfield/var/shots/f1-a-card"
     folder.mkdir(parents=True)
     (folder / "after-phone-1.png").write_bytes(b"")
+    assert milestone.review_pictures(tmp_path, "f1-a-card").endswith("mock-up: none")
     (tmp_path / ".softfield/cards/f1-mockup").mkdir(parents=True)
     (tmp_path / ".softfield/cards/f1-mockup/a.html").write_text("x", encoding="utf-8")
-    line = milestone.review_pictures(tmp_path, "f1")
-    assert ".softfield/var/shots/f1/after-phone-1.png" in line
-    assert ".softfield/cards/f1-mockup/a.html" in line
+    line = milestone.review_pictures(tmp_path, "f1-a-card")
+    assert ".softfield/var/shots/f1-a-card/after-phone-1.png" in line
+    assert line.endswith("mock-up: .softfield/cards/f1-mockup/a.html")
 
 
 def test_the_planner_prompts_still_fill_in():
