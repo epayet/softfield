@@ -30,3 +30,10 @@ Read ADR 40 in `.softfield/adr/40-pictures-at-sign-off-in-every-project.md` (ite
 - `runner/instructions/bootstrap.md` asks for `[shots]` on sample data for a project with pages
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
