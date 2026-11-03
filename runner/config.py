@@ -255,6 +255,40 @@ def project_checks(repo: Path) -> Checks:
         raise ConfigError(f"[checks] in {PROJECT_TOML}: {exc}") from exc
 
 
+@dataclass(frozen=True)
+class Shots:
+    """``[shots]`` in ``.softfield/project.toml``: how the project's app is served for the
+    review's pictures (ADR 40 item 2)."""
+
+    prepare: str  # makes the throwaway data, in $SOFTFIELD_SHOTS_DATA
+    serve: str  # starts the app on 127.0.0.1:{port}, in the tree being pictured
+    ready: str  # the address that answers once the app is up
+    live: str = ""  # where the owner opens the app: the dashboard's links, never the pictures
+
+
+def project_shots(repo: Path) -> Shots | None:
+    """The project's ``[shots]``; None without one: it gets no pictures."""
+    try:
+        data = tomllib.loads((repo / PROJECT_TOML).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    table = data.get("shots")
+    if table is None:
+        return None
+    try:
+        shots = Shots(
+            prepare=str(table["prepare"]),
+            serve=str(table["serve"]),
+            ready=str(table["ready"]),
+            live=str(table.get("live", "")),
+        )
+    except KeyError as exc:
+        raise ConfigError(f"[shots] in {PROJECT_TOML}: {exc} is missing") from exc
+    if "{port}" not in shots.serve:
+        raise ConfigError(f"[shots] in {PROJECT_TOML}: serve must say {{port}}")
+    return shots
+
+
 def suite_args(checks: Checks) -> list[str]:
     """pytest's arguments for the whole suite: its folders, on its workers."""
     workers = ["-n", str(checks.test_workers)] if checks.test_workers > 0 else []

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import yaml
 
-from runner import console, look, metrics, prompts
+from runner import console, look, metrics, prompts, shots
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
 from runner.config import Config, project_checks
 from runner.gates import GateResult
@@ -717,6 +717,7 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
             stop = E2E_STOP
             (s.run_dir / "e2e.txt").write_text(e2e.output, encoding="utf-8")
             break
+        shots.take(s.repo, milestone, base, s.log)  # ADR 40: for the owner's sign-off
         out = s.run_dir / f"review-{milestone}-r{round_no}.json"
         scope = (
             _first_scope(s, milestone, base) if round_no == 1 else _fix_scope(s, milestone, since)

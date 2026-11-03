@@ -1,11 +1,12 @@
 import json
 import re
 import sqlite3
+import sys
 from datetime import datetime, timedelta
 
 import pytest
 
-from runner import claude, cli, loop, metrics, milestone, owner
+from runner import claude, cli, loop, metrics, milestone, owner, shots
 from runner.agents import JobResult
 from runner.gates import GateResult
 from runner.loop import close_session, open_session
@@ -364,6 +365,84 @@ def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypat
     assert (leak["job_id"], leak["resolved"], leak["severity"]) == (reviews[1], 1, "should-fix")
     assert (leak["route"], leak["summary"], leak["milestone_id"]) == ("claude", "Leak", row["id"])
     assert (findings["m1-F2"]["job_id"], findings["m1-F2"]["resolved"]) == (reviews[0], 0)
+
+
+def _review_two_rounds(repo, monkeypatch, seen_by_round):
+    """A review of m1 stopping clean at its second round; each round's job records the pictures
+    it finds in ``seen_by_round``."""
+    rounds = [
+        [{"id": "m1-F1", "severity": "should-fix", "route": "claude", "summary": "Leak"}],
+        [
+            {
+                "id": "m1-F1",
+                "severity": "should-fix",
+                "route": "claude",
+                "summary": "Leak",
+                "resolved": True,
+            }
+        ],
+    ]
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        folder = repo_ / ".softfield" / "var" / "shots" / "m1"
+        seen_by_round.append(
+            {p.name: p.read_bytes() for p in folder.glob("*.png")} if folder.is_dir() else None
+        )
+        out = re.search(r"Write (\S+) as:", job.prompt)
+        assert out
+        (repo_ / out[1]).write_text(json.dumps({"findings": rounds.pop(0), "stop": None}))
+        (repo_ / ".softfield" / "reviews").mkdir(parents=True, exist_ok=True)
+        (repo_ / ".softfield" / "reviews" / "m1.md").write_text(REVIEW_DOC)
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    return milestone.review_milestone(_config(repo), "m1", "m1-start")
+
+
+def test_each_review_round_takes_the_after_and_the_before_once(repo, monkeypatch):
+    """ADR 40 item 1: on a real server and a real worktree, with the browser replaced."""
+    (repo / ".softfield" / "cards").mkdir(parents=True)
+    (repo / ".softfield" / "cards" / "m1.md").write_text(
+        MILESTONE_DOC + "\n## Before and after\n- `/`\n- `/other`\n"
+    )
+    with (repo / ".softfield" / "project.toml").open("a") as toml:
+        toml.write(
+            "\n[shots]\nprepare = 'true'\n"
+            f"serve = '{sys.executable} -m http.server {{port}} --bind 127.0.0.1'\nready = '/'\n"
+        )
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "plan")
+    git(repo, "tag", "m1-start")
+    calls: list[int] = []
+
+    def shoot(origin, wanted, folder):
+        calls.append(len(calls))
+        for want in wanted:
+            (folder / want.file).write_bytes(str(calls[-1]).encode())
+        return {want.file: shots.Picture(shots.TAKEN) for want in wanted}
+
+    monkeypatch.setattr(shots, "_shoot", shoot)
+    seen: list[dict[str, bytes]] = []
+    assert _review_two_rounds(repo, monkeypatch, seen) == "clean"
+    names = {
+        f"{when}-{width}-{n}.png"
+        for when in ("before", "after")
+        for width in ("phone", "wide")
+        for n in (1, 2)
+    }
+    assert set(seen[0]) == set(seen[1]) == names  # there before each round's job
+    assert seen[1]["before-wide-1.png"] == seen[0]["before-wide-1.png"]
+    assert seen[1]["after-wide-1.png"] != seen[0]["after-wide-1.png"]
+    assert len(git(repo, "worktree", "list").splitlines()) == 1
+    assert "shots" not in git(repo, "log", "--name-only", "--format=", "-5")  # never in git
+
+
+def test_a_review_without_shots_runs_as_it_did(repo, monkeypatch):
+    _milestone_repo(repo)
+    seen: list[None] = []
+    assert _review_two_rounds(repo, monkeypatch, seen) == "clean"
+    assert seen == [None, None]
 
 
 def _checkpoint_finding(repo, key: str, ticket: str | None = None) -> None:
