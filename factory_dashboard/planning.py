@@ -343,6 +343,7 @@ class BlockedFacts:
     fix_card: str | None = None  # the thread the runner asked the lead on
     fix_first_point: str | None = None
     fix_replan: dict[str, object] | None = None
+    lead_replied: bool = False
 
     @property
     def sentence(self) -> str:
@@ -391,7 +392,9 @@ def get_blocked_info(conn: sqlite3.Connection, project_id: int, ticket: str) -> 
         (runner["thread_id"], runner["at"]),
     ).fetchone()
     if lead is None:
-        return BlockedFacts(reason, f"{reason} · the lead is looking at it", card)
+        return BlockedFacts(
+            reason, f"{reason} · the lead is looking at it", card, lead_replied=False
+        )
     points = json.loads(lead["points"]) if lead["points"] else []
     fix_replan: dict[str, object] | None = None
     for prop in json.loads(lead["proposals"]) if lead["proposals"] else []:
@@ -407,6 +410,7 @@ def get_blocked_info(conn: sqlite3.Connection, project_id: int, ticket: str) -> 
         card,
         str(points[0].get("title", "")) if points else None,
         fix_replan,
+        lead_replied=True,
     )
 
 
@@ -432,6 +436,7 @@ def _blocked(conn: sqlite3.Connection, project_id: int) -> list[DeskItem]:
                     fix_card=facts.fix_card,
                     fix_first_point=facts.fix_first_point,
                     fix_replan=facts.fix_replan,
+                    lead_replied=facts.lead_replied,
                 )
             )
     return items

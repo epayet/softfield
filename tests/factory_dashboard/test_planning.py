@@ -1500,6 +1500,7 @@ def test_blocked_with_lead_reply_no_replan_shows_fix_plate(planning, db_path, db
     assert item.fix_card == "f9"
     assert item.fix_first_point == "Raise the timeout"
     assert item.fix_replan is None
+    assert item.lead_replied is True
     html = _page(serve())
     assert "The lead's fix" in html
     assert "raise the timeout" in html.lower() or "Raise the timeout" in html

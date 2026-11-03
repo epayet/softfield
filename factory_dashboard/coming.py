@@ -67,6 +67,7 @@ class DeskItem:
     fix_card: str | None = field(default=None, kw_only=True)
     fix_first_point: str | None = field(default=None, kw_only=True)
     fix_replan: dict[str, object] | None = field(default=None, kw_only=True)
+    lead_replied: bool = field(default=False, kw_only=True)
 
 
 @dataclass(frozen=True)
