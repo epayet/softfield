@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F216 mock-up: the card's page, once its review is written</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2; --tick: var(--ink-2);
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --factory: #f2b10a;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  code { font: 12.5px var(--mono); }
+  .mock-title { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .lede { color: var(--ink-2); max-width: 780px; margin: 0 0 10px; }
+  .switch { display: inline-flex; border: 1px solid var(--rule); margin-bottom: 12px; }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    min-height: 44px; background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 16px; align-items: start; }
+  .version-name { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  body[data-show="today"] [data-version="proposed"], body[data-show="proposed"] [data-version="today"] { display: none; }
+  @media (min-width: 1100px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    body[data-show] [data-version] { display: block; }
+  }
+  /* what this card changes, and the note that says how: the mock-up's only, not the page's */
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; font: 12px var(--mono); color: var(--good); margin: 4px 0 8px; }
+  .page { display: grid; gap: 14px; min-width: 0; }
+  .page > * { min-width: 0; }
+  .sub { color: var(--ink-2); margin: 2px 0 0; }
+
+  /* ---- the head, as drawn ---- */
+  #card-head { display: flex; flex-wrap: wrap; gap: 10px 20px; align-items: center; background: var(--bay);
+    border: 1px solid var(--rule); border-left: 6px solid var(--factory); padding: 14px 16px; }
+  .card-name { display: flex; flex-direction: column; gap: 2px; flex: 1 1 260px; min-width: 0; }
+  .card-meta { font: 12px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+  .card-name h1 { font: 700 21px/1.15 var(--display); text-transform: uppercase; margin: 0; overflow-wrap: anywhere; }
+  #card-head dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 4px 14px; font: 13px var(--mono); }
+  #card-head dt { color: var(--muted); } #card-head dd { margin: 0; min-width: 0; }
+  .stage-name { font-weight: 600; color: var(--hazard); }
+  .card-thread { flex: 1 1 100%; min-height: 44px; display: inline-flex; align-items: center;
+    font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+
+  /* ---- Today's bare sections ---- */
+  [data-version="today"] section > h2 { font: 700 15px var(--display); text-transform: uppercase; letter-spacing: .06em; margin: 0 0 6px; }
+  [data-version="today"] section ul { margin: 0; padding-left: 18px; }
+  [data-version="today"] section li { margin: 0 0 6px; }
+  [data-version="today"] section p { margin: 0 0 6px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; }
+  .grew { list-style: none; margin: 0 0 8px; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .grew li { background: var(--plate); padding: 8px 10px; margin: 0 !important; display: flex; flex-direction: column; min-height: 52px; }
+  .grew b { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+  .grew span { font: 12px var(--mono); color: var(--muted); }
+  .grew .now { outline: 2px solid var(--hazard); outline-offset: -2px; }
+  .grew .now b { color: var(--hazard); }
+  .grew .not-yet { background: var(--bay); } .grew .not-yet b { color: var(--muted); }
+  .kv { display: grid; grid-template-columns: max-content 1fr; gap: 3px 14px; margin: 0; }
+  .kv dt { color: var(--muted); } .kv dd { margin: 0; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
+  .stat b { display: block; font: 600 20px var(--mono); }
+  .stat span { color: var(--muted); font-size: 12.5px; }
+  .signoff-today { background: var(--bay); border: 1px solid var(--rule); border-left: 3px solid var(--hazard); padding: 12px 16px;
+    display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .press { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--hazard-ink);
+    background: var(--hazard); border: 0; padding: 0 16px; min-height: 44px; }
+  .signoff-today span, .signoff span { font-size: 12.5px; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; font: 600 11.5px var(--display); color: var(--muted); text-transform: uppercase; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  td.id { font: 12.5px var(--mono); overflow-wrap: anywhere; }
+
+  /* ---- Proposed: every part is the same plate, "What it's about"'s ---- */
+  .plate { background: var(--bay); border: 1px solid var(--rule); position: relative; }
+  .plate::before, .plate::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .plate::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .plate::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .plate > header { display: flex; align-items: center; gap: 10px; padding: 8px 14px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .plate > header h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; margin: 0; }
+  .plate > header .stripe { flex: 1; min-width: 12px; height: 8px; background: var(--stripe); opacity: .55; }
+  .plate > header .src { font: 11px var(--mono); color: var(--muted); }
+  .plate .body { padding: 10px 14px 12px; }
+  .plate .body p { margin: 0 0 6px; }
+  .plate ul, .plate ol { margin: 0; padding-left: 20px; }
+  .plate li { margin: 0 0 6px; }
+  .label { font: 600 11px var(--mono) !important; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin: 10px 0 4px !important; }
+  .label:first-child { margin-top: 0 !important; }
+  .plate.asks { border-left: 3px solid var(--hazard); }
+  .signoff { background: var(--plate); border: 1px solid var(--hazard); padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .folds { background: var(--bay); border: 1px solid var(--rule); }
+  .folds > header { padding: 8px 14px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .folds > header h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; margin: 0; }
+  .folds details { border-bottom: 1px solid var(--grid); }
+  .folds details:last-child { border-bottom: 0; }
+  .folds summary { min-height: 48px; padding: 6px 14px; display: flex; flex-wrap: wrap; gap: 0 10px; align-items: center; cursor: pointer; list-style: none; }
+  .folds summary::-webkit-details-marker { display: none; }
+  .folds summary b { font: 600 12.5px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+  .folds summary b::before { content: "› "; color: var(--muted); }
+  .folds details[open] summary b::before { content: "⌄ "; }
+  .folds summary span { font: 12px var(--mono); color: var(--muted); }
+  .folds .inside { padding: 2px 14px 12px; }
+  .folds .inside ul { margin: 0; padding-left: 18px; } .folds .inside li { margin: 0 0 6px; } .folds .inside p { margin: 0 0 6px; }
+  .caught td:first-child { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+  .caught td:last-child { font: 12px var(--mono); color: var(--ink-2); white-space: nowrap; }
+  .spend { display: grid; grid-template-columns: max-content 1fr max-content; gap: 5px 10px; align-items: center; font-size: 13px; margin: 0 0 8px; }
+  .spend i { display: block; height: 10px; background: var(--ink-2); }
+  .spend b { font: 600 12.5px var(--mono); }
+</style>
+</head>
+<body data-show="proposed">
+<h1 class="mock-title">F216: the card's page, once its review is written</h1>
+<p class="lede">F187's real page, Store every time in UTC. On a wide screen Today and Proposed sit side by side; on a phone, flip between them. F187's "Decisions made along the way" and "Done when, as of now" are written by hand from what its review report already says. The next review would write its own. Anything outlined in dashed green is new or moved, and the green notes explain why.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/milestone.html, with F187's stored sheet -->
+<div data-version="today">
+<p class="version-name">Today</p>
+<div class="page">
+  <header id="card-head">
+    <div class="card-name"><span class="card-meta">F187 · f187-store-every-time-in-utc-the</span><h1>Store every time in UTC, show local time on screen only</h1></div>
+    <dl><dt>Stage</dt><dd class="stage-name">Ripe: needs your sign-off</dd><dt>Priority</dt><dd>–</dd><dt>Area</dt><dd>factory</dd><dt>Tickets</dt><dd>3 of 3 done</dd></dl>
+    <a class="card-thread" href="#">Its planning thread: talk it through, sign it off ›</a>
+  </header>
+  <section class="plate"><header><h2>What it's about</h2><span class="stripe"></span></header><div class="body">
+    <p class="label">What it will do</p>
+    <p>Every time the factory stores is UTC (`…+00:00`), so ordering as text is ordering in time, in summer too. Every screen, console line and report shows local time, as today. The old rows are converted once, right after a backup copy, and nothing shown changes.</p>
+    <p class="label">Done when</p>
+    <ul><li>after the next run starts and its backup copy is written, `softfield look sql "SELECT count(*) FROM jobs WHERE started NOT LIKE '%+00:00'"` gives 0, and the same for requests, messages, desk items, usage events and runs</li>
+    <li>the console says once "converted N stored times to UTC (F187)"; the Dropbox copy taken just before still has the `+01:00` rows</li>
+    <li>the Overview, the line, the desk and a thread show the same clock times as before the change</li>
+    <li>with the machine's zone set to Paris in the tests, a time stored as `08:00+00:00` shows as 09:00 on every page and console line that the tests cover</li></ul>
+  </div></section>
+  <section class="panel"><h2>How it grew</h2><ol class="grew"><li><b>Seed</b><span>29 Oct</span></li><li><b>Sprouting</b></li><li><b>Planted</b></li><li class="now"><b>Ripe</b><span>4 Nov</span></li><li class="not-yet"><b>Harvested</b></li></ol><p class="sub">The outlined stage is where the card is now; the dimmed ones are still to come.</p></section>
+  <div class="signoff-today"><button type="button" class="press">Sign off</button><span>Marks it done and tags it, at the runner's next pick.</span></div>
+  <section><h2>What changed</h2><ul>
+    <li><strong>Nothing should look different.</strong> Every page, console line and report shows the same clock times as before. This winter the machine's time equals UTC anyway; the change matters from 28 March.</li>
+    <li><strong>The factory now writes every new time in UTC,</strong> so ordering times as text is ordering them in time, in summer too. Folder names, backup names and the dates written into cards stay in local time.</li>
+    <li><strong>The old rows convert once, after the next daily backup.</strong> The last copy is 2026-11-03 22:14, so the next one is due from 22:14 tonight, as soon as the runner next checks. The console will say "converted N stored times to UTC (F187)". <strong>It hasn't happened yet:</strong> 1,377 jobs, 458 runs, 1,514 usage events, 516 planner messages, 191 desk items and 154 requests still don't end in `+00:00`, and all of today's checks on it are from tests.</li>
+    <li><strong>I checked your real data for clashes:</strong> no two usage events or rating changes become the same time once converted, so the conversion shouldn't roll back.</li></ul></section>
+  <section><h2>How to test</h2>
+    <p>Do these after the console has said "converted N stored times to UTC (F187)", tonight or tomorrow:</p>
+    <p>1. Open the Overview, the line, the desk and a planning thread on your phone. An old thread message should show the same clock time as before: a message from early October still reads at its summer time.</p>
+    <p>2. Open the Timeline, Runs and Jobs pages. An old job from before 25 October should read with its summer time and `+01:00`, and a new one with `+00:00`.</p>
+    <p>3. Open the Dropbox folder `software-factory-backups`. The copy taken just before the conversion is the one to keep safe: it still holds the old rows as they were.</p>
+    <p>The lead can confirm the counts: all of them should reach 0 once the conversion has run.</p></section>
+  <section><h2>Decisions waiting for you</h2><p>None.</p></section>
+  <section><h2>What next</h2><ul>
+    <li><strong>Product:</strong> on hold, as you asked.</li>
+    <li><strong>Factory:</strong> run the factory's whole test suite once in a zone west of UTC as well as UTC and Paris. A slip that goes the other way, like resuming too early after a limit, shows best there. I'd plant it as a small card if the review's Paris tests ever miss something.</li>
+    <li><strong>Factory:</strong> make the suite fit a review's 10-minute limit for one command. The dashboard's tests alone took 16 minutes here. I'd start by running them in parallel, and plant that as a card of its own.</li></ul></section>
+  <section><h2>Left for later</h2><ul>
+    <li>With no backup set, a conversion that keeps failing writes a copy beside the database each time it retries. This machine has a backup set, so it doesn't apply here.</li>
+    <li>The runner's old JSON state lapses within a day, as the card planned. The product (`coucou/`) isn't part of this card.</li></ul></section>
+  <section><h2>How the work went</h2><ul>
+    <li>2026-10-29: planned from your note.</li>
+    <li>2026-11-02 22:10 ([session](../sessions/2026-11-02-2210.md)): `f187-02-pages-show-local-time`, three failed attempts by the local model (34 minutes), then the lead finished it on its branch in 17 minutes.</li>
+    <li>2026-11-04 06:27 ([session](../sessions/2026-11-04-0627.md)): `f187-01-runner-clocks-utc`, the lead's ticket on Sonnet, first attempt, 19 minutes.</li>
+    <li>2026-11-04 06:50 ([session](../sessions/2026-11-04-0650.md)): `f187-03-old-times-to-utc`, the lead's ticket on Sonnet, first attempt, 16 minutes.</li>
+    <li>2026-11-04 07:10: review round 1 fixed five findings itself.</li>
+    <li>Lessons:</li>
+    <li><strong>UK winter hides this whole class of bug.</strong> Both reset-time bugs (F1, F2) pass on this machine today and would have appeared on 28 March. Only a test with the zone set to Paris can show them, and the card already asked for that.</li>
+    <li><strong>Changing what a clock returns changes every reader, not just the writers.</strong> The card listed who writes through the clocks. `usage_limit_reset` reads `now` to mean "the machine's clock", and nothing marked it. The review found it by searching for every use of `now`'s zone.</li>
+    <li><strong>A sweep by column name misses renamed values.</strong> The Timeline's `bar.start` holds a stored time under another name (F3). The review found it by searching templates for any field that could hold a time.</li>
+    <li><strong>The local model's ticket was too short.</strong> The session's escalation note covers it, and `.softfield/developer.md` now has the worked example.</li></ul></section>
+  <section><h2>What clogged the factory line</h2><ul>
+    <li><strong>The ticket that had to go first ran last.</strong> 02 ran on 2 November, then 01 waited 30 hours 35 minutes (23:52 on 2 November to 06:27 on 4 November). Nothing was broken: other cards ahead on the board and their reviews took those hours. Nothing to unclog; the order inside the card held, since 03 waited for both.</li>
+    <li><strong>The local model's three attempts on 02 took 34 minutes and merged nothing,</strong> then 29 minutes' wait before the escalation started. Fix already made: the worked example in `.softfield/developer.md`. A ticket whose output depends on the machine's zone should be run against the suite when it's planned.</li>
+    <li><strong>The test suite's length:</strong> the full run didn't fit this review's limits and was stopped at about 88%, then the dashboard's 1,163 tests took another 16 minutes in three batches. To unclog it, see the parallel run in "What next".</li></ul></section>
+  <section><h2>Results</h2><dl class="kv"><dt>Tickets</dt><dd>3</dd><dt>Merged</dt><dd>3</dd><dt>Pass rate</dt><dd>0.0%</dd><dt>Attempts</dt><dd>3</dd><dt>Escalations</dt><dd>1</dd><dt>Review rounds</dt><dd>1</dd><dt>Review score</dt><dd>7.0/10</dd><dt>Owner score</dt><dd>–</dd></dl>
+    <h2 style="margin-top:8px">Findings by severity</h2><dl class="kv"><dt>should-fix</dt><dd>4</dd><dt>nit</dt><dd>3</dd></dl></section>
+  <section><h2>Savings</h2><div class="stats"><div class="stat"><b>$0.00</b><span>what Claude would have spent writing the 0 lines itself (≈0 token-equivalents)</span></div><div class="stat"><b>$2.95</b><span>what it spent supporting them (≈378k)</span></div><div class="stat"><b>-$2.95</b><span>net, on 1 delegated ticket</span></div></div></section>
+  <section><h2>Tickets</h2><table><thead><tr><th>Ticket</th><th>Goal</th><th>Who</th><th>State</th></tr></thead><tbody>
+    <tr><td class="id">f187-01-runner-clocks-utc</td><td>The runner stores every time in UTC and still shows local time wherever a person reads one.</td><td>claude-sonnet</td><td>done</td></tr>
+    <tr><td class="id">f187-02-pages-show-local-time</td><td>Every dashboard page shows a stored time in local time, whatever offset it was stored with.</td><td>claude-opus</td><td>done</td></tr>
+    <tr><td class="id">f187-03-old-times-to-utc</td><td>The metrics database's old times are converted to UTC once, right after a backup copy holds them as they were.</td><td>claude-sonnet</td><td>done</td></tr></tbody></table></section>
+  <section><h2>Runs</h2><ul><li><a href="#">20261104-071004</a></li><li><a href="#">20261104-065043</a></li><li><a href="#">20261104-062738</a></li><li><a href="#">20261102-221022</a></li><li><a href="#">20261029-081438</a></li></ul></section>
+  <section><h2>Findings</h2><dl class="kv"><dt>should-fix</dt><dd>4</dd><dt>nit</dt><dd>3</dd></dl></section>
+</div>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+<p class="version-name">Proposed</p>
+<div class="page">
+  <header id="card-head">
+    <div class="card-name"><span class="card-meta">F187 · f187-store-every-time-in-utc-the</span><h1>Store every time in UTC, show local time on screen only</h1></div>
+    <dl><dt>Stage</dt><dd class="stage-name">Ripe: needs your sign-off</dd><dt>Priority</dt><dd>–</dd><dt>Area</dt><dd>factory</dd><dt>Tickets</dt><dd>3 of 3 done</dd></dl>
+    <a class="card-thread" href="#">Its planning thread: talk it through, sign it off ›</a>
+  </header>
+
+  <section class="plate"><header><h2>What it's about</h2><span class="stripe"></span></header><div class="body">
+    <p class="label">What it will do</p>
+    <p>Every time the factory stores is UTC (<code>…+00:00</code>), so ordering as text is ordering in time, in summer too. Every screen, console line and report shows local time, as today. The old rows are converted once, right after a backup copy, and nothing shown changes.</p>
+    <div class="new">
+    <p class="label">Done when, as of now</p>
+    <ul>
+      <li><strong>Not yet:</strong> the stored times at 0 not in UTC, the console's line and the Dropbox copy. All three wait for tonight's backup; the code that does it is tested on a copy and on a clash.</li>
+      <li><strong>Your check:</strong> the same clock times as before on the Overview, the line, the desk and a thread. Tested in the tests' zones; it needs your look on real pages.</li>
+      <li><strong>Met:</strong> with the zone set to Paris, <code>08:00+00:00</code> shows as 09:00 on every page and console line the tests cover.</li>
+    </ul>
+    </div>
+    <span class="note">Done when, answered. Today this list only repeats the plan, and the answers sit in the report file, which no page shows.</span>
+  </div></section>
+
+  <section class="plate"><header><h2>What changed</h2><span class="stripe"></span></header><div class="body"><ul>
+    <li><strong>Nothing should look different.</strong> Every page and console line shows the same clock times; the change matters from 28 March, when the clocks move.</li>
+    <li><strong>The factory now writes every new time in UTC.</strong> Folder names, backup names and dates in cards stay local.</li>
+    <li><strong>The old rows convert once, after tonight's backup,</strong> from 22:14. The console will say "converted N stored times to UTC (F187)". It hasn't happened yet.</li>
+  </ul><span class="note new">The same plate as "What it's about". At most four points of two lines each, so the review writes less here.</span></div></section>
+
+  <section class="plate"><header><h2>How to test</h2><span class="stripe"></span></header><div class="body">
+    <p>After the console's line, tonight or tomorrow:</p>
+    <ol class="new">
+      <li>Open the Overview, the line, the desk and a thread on your phone. A message from early October still reads at its summer time.</li>
+      <li>Open the Timeline, Runs and Jobs pages. A job from before 25 October reads <code>+01:00</code>, a new one <code>+00:00</code>.</li>
+      <li>Open <code>software-factory-backups</code> in Dropbox. Keep the copy taken just before the conversion: it holds the old rows.</li>
+    </ol>
+    <span class="note">A real numbered list. Backticks and session links stop showing as raw text on every part of the page.</span>
+  </div></section>
+
+  <section class="plate new"><header><h2>Decisions made along the way</h2><span class="stripe"></span><span class="src">3, not in the plan</span></header><div class="body"><ul>
+    <li><strong>Also changed how a limit's reset time is read.</strong> The plan listed what writes through the clocks, but <code>usage_limit_reset</code> reads the clock to mean "the machine's time". It now returns UTC and reads a bare "resets 5pm" on the machine's clock. Left alone, both bugs would have started on 28 March. <em>The review.</em></li>
+    <li><strong>Tested only the four riskiest places in another zone.</strong> The plan's D6 asked for the tests to set Paris; the plain conversions were read by eye instead. A test for each would be one developer ticket; say if you want it. <em>The review.</em></li>
+    <li><strong>The dashboard's tests now run in UTC,</strong> with Paris and London fixtures for the tests that need a zone. The plan didn't say how, and two existing tests had to take a fixture. <em>The lead, on f187-02.</em></li>
+  </ul><span class="note">Replaces "None." The choices the plan didn't make: what, why, the other option, who. Disagree on the thread and it becomes a ticket. With nothing to say, the plate doesn't show.</span></div></section>
+
+  <div class="signoff new"><button type="button" class="press">Sign off</button><span>Marks it done and tags it, at the runner's next pick.</span></div>
+  <span class="note" style="margin-top:-8px">Moved here from above the review, so you read before you press.</span>
+
+  <section class="plate"><header><h2>What next</h2><span class="stripe"></span></header><div class="body"><ul>
+    <li><strong>Factory:</strong> make the suite fit a review's 10-minute limit for one command. The dashboard's tests alone took 16 minutes here. I'd start by running them in parallel.</li>
+    <li><strong>Factory:</strong> run the whole test suite once in a zone west of UTC too. A slip the other way, like resuming too early after a limit, shows best there.</li>
+  </ul><span class="note new">F164, Plant a review's ideas, draws its Plant buttons here. "Product: on hold" goes: it says nothing.</span></div></section>
+
+  <section class="folds new"><header><h2>Behind it</h2></header>
+    <details><summary><b>Left for later</b><span>2 small points</span></summary><div class="inside"><ul>
+      <li>With no backup set, a conversion that keeps failing writes a copy beside the database each time it retries. This machine has a backup set, so it doesn't apply here.</li>
+      <li>The runner's old JSON state lapses within a day, as the card planned.</li></ul></div></details>
+    <details open><summary><b>What the review caught</b><span>7: 5 fixed, 2 left as they are</span></summary><div class="inside">
+      <table class="caught"><tbody>
+        <tr><td>should-fix</td><td>A Claude limit's reset was still stored with its own offset: +01:00 from 28 March</td><td>fixed</td></tr>
+        <tr><td>should-fix</td><td>A bare "resets 5pm" was read as 5pm UTC once the runner's clock became UTC</td><td>fixed</td></tr>
+        <tr><td>should-fix</td><td>The Timeline page's jobs table still printed stored times as they are</td><td>fixed</td></tr>
+        <tr><td>should-fix</td><td>Most runner code converted to local time had no test in another zone</td><td>fixed</td></tr>
+        <tr><td>nit</td><td>A bench's folder was named in UTC, against D4</td><td>fixed</td></tr>
+        <tr><td>nit</td><td>A failing conversion logs at every check and, with no backup set, writes a copy each time</td><td>left</td></tr>
+        <tr><td>nit</td><td>Small leftovers: unused parameters and a redundant conversion</td><td>left</td></tr>
+      </tbody></table>
+      <span class="note">Today: the same two counts, shown twice. These are the rows the database already holds, so the review writes nothing extra. Drawn open here for the picture; closed on the page.</span>
+    </div></details>
+    <details><summary><b>Lessons</b><span>3</span></summary><div class="inside"><ul>
+      <li><strong>UK winter hides this whole class of bug.</strong> Only a test with the zone set to Paris can show one.</li>
+      <li><strong>Changing what a clock returns changes every reader,</strong> not just the writers the card listed.</li>
+      <li><strong>A sweep by column name misses renamed values,</strong> like the Timeline's <code>bar.start</code>.</li></ul></div></details>
+    <details><summary><b>What clogged the line</b><span>2, each with its fix</span></summary><div class="inside"><ul>
+      <li><strong>The local model's three attempts on 02: 34 minutes,</strong> nothing merged. Fixed: a worked example in the developers' notes.</li>
+      <li><strong>The test suite's length: 16 minutes in three batches.</strong> To unclog it, the parallel run in What next.</li></ul>
+      <span class="note">Only hours with a fix. "The ticket that had to go first ran last… nothing to unclog" goes.</span></div></details>
+    <details open><summary><b>What it cost</b><span>$7.61, of which the review $2.85</span></summary><div class="inside">
+      <div class="spend">
+        <span>The review</span><i style="width:100%"></i><b>$2.85</b>
+        <span>The lead finishing f187-02</span><i style="width:70%"></i><b>$2.00</b>
+        <span>Planning</span><i style="width:51%"></i><b>$1.46</b>
+        <span>The lead's two tickets</span><i style="width:46%"></i><b>$1.30</b>
+        <span>Developers, on your GPU</span><i style="width:0"></i><b>$0</b>
+      </div>
+      <dl class="kv"><dt>Review score</dt><dd>7.0/10</dd><dt>Review rounds</dt><dd>1</dd><dt>Developers, first time</dt><dd>0 of 1 ticket, then 3 attempts and a step up to the lead</dd></dl>
+      <span class="note">Replaces Results and Savings. Every page gets to say what the review cost. Savings show only when a developer wrote lines: today's "$0.00, -$2.95" and "Pass rate 0.0%" say little. Drawn open here for the picture; closed on the page.</span>
+    </div></details>
+    <details><summary><b>Your note and how it grew</b><span>planted 29 Oct</span></summary><div class="inside">
+      <p>Store every time in UTC. The runner writes local time (+01:00 before 25 Oct) and the dashboard writes UTC, so times sort wrong as text. Write UTC everywhere, show local time on screen only, and convert the old rows once after the daily backup.</p>
+      <ol class="grew"><li><b>Seed</b><span>29 Oct</span></li><li><b>Sprouting</b></li><li><b>Planted</b></li><li class="now"><b>Ripe</b><span>4 Nov</span></li><li class="not-yet"><b>Harvested</b></li></ol>
+    </div></details>
+    <details><summary><b>Tickets</b><span>3 of 3 done</span></summary><div class="inside"><div style="overflow-x:auto"><table><thead><tr><th>Ticket</th><th>Goal</th><th>Who</th><th>State</th></tr></thead><tbody>
+      <tr><td class="id">f187-01-runner-clocks-utc</td><td>The runner stores every time in UTC and still shows local time wherever a person reads one.</td><td>claude-sonnet</td><td>done</td></tr>
+      <tr><td class="id">f187-02-pages-show-local-time</td><td>Every dashboard page shows a stored time in local time, whatever offset it was stored with.</td><td>claude-opus</td><td>done</td></tr>
+      <tr><td class="id">f187-03-old-times-to-utc</td><td>The metrics database's old times are converted to UTC once, right after a backup copy holds them as they were.</td><td>claude-sonnet</td><td>done</td></tr></tbody></table></div></div></details>
+    <details><summary><b>Runs</b><span>5</span></summary><div class="inside"><ul><li><a href="#">20261104-071004</a></li><li><a href="#">20261104-065043</a></li><li><a href="#">20261104-062738</a></li><li><a href="#">20261102-221022</a></li><li><a href="#">20261029-081438</a></li></ul></div></details>
+  </section>
+  <span class="note" style="margin-top:-8px">Everything after What next folds into one plate, each line saying what's inside. Nothing is lost, and a part with nothing in it doesn't show ("Not written yet" and "No runs." go).</span>
+
+  <section class="plate asks new"><header><h2>Needs your answer</h2><span class="stripe"></span><span class="src">F175's, for the picture</span></header><div class="body">
+    <p><strong>ADR 39: bound the run logs.</strong> The job logs take about 800 MB, growing by a few MB a day, and nothing limits them. It isn't urgent. I recommend compressing logs older than 90 days and deleting none.</p>
+    <span class="note">Drawn last so you can compare, but on the page it sits straight under the head. It shows only when one is waiting, as on F175. F187 has none, so it has no such plate.</span>
+  </div></section>
+</div>
+</div>
+
+</div>
+
+<script>
+(function reviewPageMockup() {
+  var buttons = document.querySelectorAll(".switch button");
+  buttons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      document.body.dataset.show = b.dataset.show;
+      buttons.forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+    });
+  });
+})();
+</script>
+</body>
+</html>
