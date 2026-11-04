@@ -931,7 +931,7 @@ def test_a_cancel_on_its_way_strikes_the_message_and_the_send_form_comes_back(
 def _dashed_links(html: str) -> list[str]:
     """The links of the dashed (on its way) boxes in "Your answers wanted"."""
     return re.findall(
-        r'<a href="([^"?]+)[^"]*" class="on-its-way-item', _groups(html).get("answers", "")
+        r'<a href="([^"?]+)[^"]*"[^>]*class="[^"]*on-its-way-item', _groups(html).get("answers", "")
     )
 
 

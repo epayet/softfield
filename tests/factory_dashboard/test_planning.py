@@ -354,6 +354,54 @@ def test_the_desk_page_lays_out_at_phone_and_display_sizes(page, planning, db_pa
     assert layout_problems(page) == []
 
 
+def test_the_planning_template_keeps_only_a_meters_mark_and_a_groups_colour_inline():
+    """f81-04: every other style= moved into dashboard.css."""
+    template = (STATIC.parent / "templates" / "planning.html").read_text(encoding="utf-8")
+    styles = re.findall(r'style="([^"]*)"', template)
+    assert len(styles) == 6  # the two meters' fills and marks, a group's colour, the writing bar
+    assert [s for s in styles if not re.match(r"(width|left): |--c: ", s)] == []
+
+
+@pytest.mark.parametrize("theme", ["dark", "light"])
+@pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
+def test_the_planning_room_draws_a_plate_on_every_panel(
+    page, planning, db_path, serve, size, theme
+):
+    """The tiles, Coming, Plant, the desk and Archived each open on the plate's own background,
+    in a panel; Coming alone is dashed, and the polls' wrappers draw no box."""
+    _finished(db_path, planning, "plant", None, DUCKS, None)
+    client = serve()
+    _archive(db_path, planning, "general", timedelta(minutes=30))
+    page.set_viewport_size(size)
+    page.add_init_script(f"localStorage.setItem('theme', '{theme}')")
+    _open(page, client)
+    assert page.evaluate("() => document.documentElement.dataset.theme") == theme
+    plate = page.evaluate(
+        "() => { const e = document.createElement('i'); e.style.background = 'var(--plate)';"
+        " document.body.append(e); const c = getComputedStyle(e).backgroundColor; e.remove();"
+        " return c; }"
+    )
+    background = "e => getComputedStyle(e).backgroundColor"
+    for head in (
+        "#factory-now > h2",
+        "#lead-window > h2",
+        "#desk-coming > h2",
+        "#plant > h2",
+        "#desk > h2",
+        "#archived > summary",
+    ):
+        assert page.locator(head).evaluate(background) == plate, head
+        assert "panel" in page.locator(head).evaluate("e => e.parentElement.className"), head
+    edge = "e => getComputedStyle(e).borderTopStyle"
+    assert page.locator("#desk-coming").evaluate(edge) == "dashed"
+    assert page.locator("#desk").evaluate(edge) == "solid"
+    display = "e => getComputedStyle(e).display"
+    assert page.locator("#live-desk").evaluate(display) == "contents"
+    assert page.locator("#live-desk-coming").evaluate(display) == "contents"
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    assert layout_problems(page) == []
+
+
 # --- thread page fixtures --------------------------------------------------------------------
 
 _SEVEN_POINTS = [
@@ -915,8 +963,7 @@ def test_an_archive_on_its_way_shows_dashed_and_counts_no_more(planning, db_path
     assert top_bar(db, PROJECT, NOW)["planning_count"] == before - 1
     html = _page(serve())
     found = re.search(
-        r'<a href="/planning/general[^"]*" class="on-its-way-item"'
-        r' style="[^"]*dashed var\(--hazard\)',
+        r'<a href="/planning/general[^"]*" class="desk-item on-its-way-item"',
         html,
     )
     assert found, "no dashed item"
@@ -1175,7 +1222,8 @@ def test_a_blocked_tickets_button_asks_for_it_by_its_id_and_shows_it_on_its_way(
     page.click(f"#{button}-{SECOND}")
     item = page.locator(f"#blocked-{SECOND}")
     item.locator(f"text={ON_ITS_WAY[kind]}").wait_for()
-    assert "dashed" in item.locator("a").get_attribute("style")
+    edge = "e => getComputedStyle(e).borderLeftStyle"
+    assert item.locator("a").evaluate(edge) == "dashed"
     assert not page.locator(f"#try-again-{SECOND}").is_visible()
     assert not page.locator(f"#set-aside-{SECOND}").is_visible()
     page.wait_for_selector(f"#blocked-status-{SECOND} >> text=Asked")
@@ -1211,7 +1259,7 @@ def test_a_blocked_ticket_asked_for_is_on_its_way_and_leaves_the_count(
     assert _items(blocked)[1] == (f"/tickets/{SECOND}", SECOND)
     assert f'id="blocked-{SECOND}"' not in html
     second = blocked.split(f'href="/tickets/{SECOND}', 1)[1].split("</a>", 1)[0]
-    assert "on-its-way-item" in second and "dashed var(--hazard)" in second
+    assert "on-its-way-item" in second
     assert ON_ITS_WAY[kind] in unescape(second)
     assert f"try-again-{SECOND}" not in html and f"set-aside-{SECOND}" not in html
     first = _blocked_item(html, FIRST)
@@ -1596,13 +1644,12 @@ def test_approve_shows_item_on_its_way(page, planning, db_path, serve):
     item = page.locator("#blocked-f9-01-board")
     item.locator("text=Approving the lead's fix at the runner's next pick").wait_for()
     link = item.locator("a[href^='/tickets/']")
-    assert "dashed" in link.get_attribute("style")
+    assert link.evaluate("e => getComputedStyle(e).borderLeftStyle") == "dashed"
     assert not page.locator("#approve-f9-01-board").is_visible()
     assert not page.locator("#try-again-f9-01-board").is_visible()
     assert not page.locator("#set-aside-f9-01-board").is_visible()
     # Fix plate hidden
-    fix = page.locator("#blocked-f9-01-board .fix")
-    assert fix.evaluate("el => el.style.display") == "none"
+    assert not page.locator("#blocked-f9-01-board .fix").is_visible()
 
 
 # --- what stands of the lead's fix on the desk (f170 review) ------------------------------------
@@ -1913,7 +1960,7 @@ def _boxes(html: str) -> list[tuple[str, str, bool]]:
     return [
         (thread, _text(body), "writing" in attrs)
         for thread, attrs, body in re.findall(
-            r'<a href="/planning/([^"?]+)[^"]*"( class="on-its-way-item[^>]*)>(.*?)</a>',
+            r'<a href="/planning/([^"?]+)[^"]*" class="desk-item on-its-way-item([^"]*)">(.*?)</a>',
             _groups(html)["answers"],
             re.S,
         )
@@ -2103,7 +2150,7 @@ def test_proposals_wait_for_the_lead_while_the_owners_message_does(
     (item,) = _proposal_items(db_path)
     assert item.on_its_way and item.words.startswith("being revised · ")
     group = _groups(_page(client))["proposals"]
-    assert 'class="on-its-way-item' in group
+    assert 'class="desk-item on-its-way-item' in group
     assert "being revised · " in _text(group)
     assert not _waiting_proposals(db_path)
 

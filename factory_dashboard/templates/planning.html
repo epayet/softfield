@@ -3,35 +3,35 @@
 {% block title %}Planning · {{ project }}{% endblock %}
 
 {% block content %}
-<section id="tiles" aria-label="Can I plan now" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule)">
-  <div id="factory-now" style="background: var(--bay); padding: 10px 14px; display: flex; flex-direction: column; gap: 3px">
-    <h2 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted)">The factory now</h2>
+<section id="tiles" class="tiles" aria-label="Can I plan now">
+  <div id="factory-now" class="panel tile">
+    <h2>The factory now</h2>
     {% if factory.running %}
-    <p style="margin: 0">Running <b>{{ factory.running.ticket or factory.running.role }}</b> on {{ factory.running.agent }}, attempt {{ factory.running.attempt }}, {{ factory.running.elapsed | ago }}.</p>
+    <p>Running <b>{{ factory.running.ticket or factory.running.role }}</b> on {{ factory.running.agent }}, attempt {{ factory.running.attempt }}, {{ factory.running.elapsed | ago }}.</p>
     {% elif not factory.writing %}
-    <p style="margin: 0">Nothing running right now.</p>
+    <p>Nothing running right now.</p>
     {% endif %}
     {% if factory.writing %}
     {# F84 D6: the reply being written, linked to its thread, and the replies after it #}
     {% set w = factory.writing %}
-    <p class="writing-now" style="margin: 0">Writing now: <a class="key" href="/planning/{{ w.thread }}">{{ w.thread | upper }}</a>, {{ w.title }} · {{ w.elapsed | ago }} in</p>
-    <p style="margin: 0; color: var(--good-ink)">{% if w.count %}Then {{ w.count }} {{ "reply" if w.count == 1 else "replies" }} in line{% if w.all is not none %}, about {{ w.all | ago }} for all{% endif %}.{% else %}No other reply in line.{% endif %}</p>
+    <p class="writing-now">Writing now: <a class="key" href="/planning/{{ w.thread }}">{{ w.thread | upper }}</a>, {{ w.title }} · {{ w.elapsed | ago }} in</p>
+    <p class="tile-reply">{% if w.count %}Then {{ w.count }} {{ "reply" if w.count == 1 else "replies" }} in line{% if w.all is not none %}, about {{ w.all | ago }} for all{% endif %}.{% else %}No other reply in line.{% endif %}</p>
     {% elif factory.next_reply %}
-    <p style="margin: 0; color: var(--good-ink)">Your next reply: {{ factory.next_reply }}.</p>
+    <p class="tile-reply">Your next reply: {{ factory.next_reply }}.</p>
     {% else %}
-    <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">planning goes first: a message is answered once the running job is done</p>
+    <p class="tile-small">planning goes first: a message is answered once the running job is done</p>
     {% endif %}
   </div>
 
-  <div id="lead-window" style="background: var(--bay); padding: 10px 14px; display: flex; flex-direction: column; gap: 5px">
-    <h2 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--opus)">The lead's window</h2>
+  <div id="lead-window" class="panel tile">
+    <h2 class="lead-window-heading">The lead's window</h2>
     {% set value = (window.value or 0) if window else 0 %}
     <div class="meter">
       <span class="{{ 'past-mark' if window and window.mark is not none and value >= window.mark else 'under-mark' }}" style="width: {{ '%.0f' | format(value * 100) }}%"></span>
       <span class="mark" title="the factory stops here; the rest is yours" style="left: {{ '%.0f' | format(((window.mark if window else none) or 0.75) * 100) }}%"></span>
     </div>
     <div class="meter-ticks"></div>
-    <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">5-hour window {{ window.percent if window and window.percent else "–" }}{{ " · " ~ (window.reset_label or window.status) if window and (window.reset_label or window.status) }} · planning may go past the 75% line, the factory stops there</p>
+    <p class="tile-small">5-hour window {{ window.percent if window and window.percent else "–" }}{{ " · " ~ (window.reset_label or window.status) if window and (window.reset_label or window.status) }} · planning may go past the 75% line, the factory stops there</p>
     {% set wvalue = (week.value or 0) if week else 0 %}
     <div class="meter">
       <span class="{{ 'past-mark' if week and week.mark is not none and wvalue >= week.mark else 'under-mark' }}" style="width: {{ '%.0f' | format(wvalue * 100) }}%"></span>
@@ -40,58 +40,57 @@
       {% endif %}
     </div>
     <div class="meter-ticks"></div>
-    <p style="margin: 0; font: 11.5px var(--mono); color: var(--muted)">week {{ week.percent if week and week.percent else "–" }}{{ " · " ~ (week.reset_label or week.status) if week and (week.reset_label or week.status) }}</p>
+    <p class="tile-small">week {{ week.percent if week and week.percent else "–" }}{{ " · " ~ (week.reset_label or week.status) if week and (week.reset_label or week.status) }}</p>
   </div>
 </section>
 
-<div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
+<div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select">
 {% if coming.items %}
-<section id="desk-coming" class="desk-coming" aria-label="{{ coming.name }}" style="margin-top: 14px; background: var(--bay)">
-    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--hazard)">{{ coming.name }} · {{ coming.items | length }}</h2>
+<section id="desk-coming" class="panel desk-coming" aria-label="{{ coming.name }}">
+    <h2>{{ coming.name }} · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
-    <div style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
+    <div class="desk-group">
       {% if item.change %}
       {# F14: a change on a waiting plant is on its way, dashed orange; the row opens no more #}
-      <div class="on-its-way-item" id="waiting-{{ item.id }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px dashed var(--hazard); color: var(--fg); min-height: 44px; box-sizing: border-box">
-        <span style="font-size: 14px{% if item.cancelled %}; text-decoration: line-through{% endif %}">{{ item.title }}</span>
-        <span style="font: 11.5px var(--mono); color: var(--hazard)">{{ item.words }}</span>
+      <div class="desk-item on-its-way-item" id="waiting-{{ item.id }}">
+        <span class="desk-title{% if item.cancelled %} strikethrough{% endif %}">{{ item.title }}</span>
+        <span class="desk-words">{{ item.words }}</span>
         {% with asked = {"id": item.change, "done": none} %}{% include "_partials/request.html" %}{% endwith %}
       </div>
       {% else %}
       {# F14: a waiting plant opens in place, to edit or cancel it before the runner takes it #}
       <details class="waiting-plant" id="waiting-{{ item.id }}">
-        <summary style="display: block; cursor: pointer">
-          <div style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
-            <span style="font-size: 14px">{{ item.title }}</span>
-            {% if item.words %}<span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>{% endif %}
+        <summary>
+          <div class="desk-item">
+            <span class="desk-title">{{ item.title }}</span>
+            {% if item.words %}<span class="desk-words">{{ item.words }}</span>{% endif %}
           </div>
         </summary>
-        <div style="display: flex; flex-direction: column; gap: 8px; padding: 9px; border: 1px solid var(--rule); border-top: 0">
+        <div class="edit-box">
           {% if not item.seed %}
-          <form id="edit-{{ item.id }}" hx-post="/requests" hx-target="#waiting-status-{{ item.id }}" hx-swap="innerHTML"
-            hx-vals='js:{kind: "change", project: {{ project | tojson }}, subject: "{{ item.id }}", value: JSON.stringify({% if item.titled %}{title: this.elements.title.value, thoughts: this.elements.thoughts.value}{% else %}{text: this.elements.text.value}{% endif %})}'
-            style="display: flex; flex-direction: column; gap: 8px">
+          <form id="edit-{{ item.id }}" class="edit-form" hx-post="/requests" hx-target="#waiting-status-{{ item.id }}" hx-swap="innerHTML"
+            hx-vals='js:{kind: "change", project: {{ project | tojson }}, subject: "{{ item.id }}", value: JSON.stringify({% if item.titled %}{title: this.elements.title.value, thoughts: this.elements.thoughts.value}{% else %}{text: this.elements.text.value}{% endif %})}'>
             {% if item.titled %}
-            <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Title
-              <input name="title" required value="{{ item.title }}" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; min-height: 44px; box-sizing: border-box">
+            <label class="edit-label">Title
+              <input name="title" required value="{{ item.title }}" class="edit-input">
             </label>
-            <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Thoughts
-              <textarea name="thoughts" rows="4" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ item.text }}</textarea>
+            <label class="edit-label">Thoughts
+              <textarea name="thoughts" rows="4" class="edit-input">{{ item.text }}</textarea>
             </label>
             {% else %}
-            <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">Your note
-              <textarea name="text" rows="4" required style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px">{{ item.text }}</textarea>
+            <label class="edit-label">Your note
+              <textarea name="text" rows="4" required class="edit-input">{{ item.text }}</textarea>
             </label>
             {% endif %}
           </form>
           {% endif %}
-          <p style="margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+          <p class="waiting-buttons">
             {% if not item.seed %}
             <button type="submit" form="edit-{{ item.id }}" id="save-{{ item.id }}" class="btn go">Save</button>
             {% endif %}
             <button type="button" id="cancel-{{ item.id }}" class="btn plain" hx-post="/requests" hx-target="#waiting-status-{{ item.id }}" hx-swap="innerHTML"
               hx-vals='{"kind": "change", "project": {{ project | tojson }}, "subject": {{ item.id | string | tojson }}, "value": {{ '{"cancel": true}' | tojson }}}'>Cancel it</button>
-            <span id="waiting-status-{{ item.id }}" style="font-size: 12.5px; color: var(--muted)"></span>
+            <span id="waiting-status-{{ item.id }}" class="waiting-status"></span>
           </p>
         </div>
       </details>
@@ -102,42 +101,41 @@
   {% endif %}
   </div>
 
-<div style="display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px">
+<div class="desk-row">
   <div id="plant-row">
-  <form id="plant" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
-    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1", again: this.elements.again.value || undefined})}'
-    style="flex: 1 1 280px; min-width: 0; background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px">
-    <h2 style="margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Plant an idea</h2>
-    <label style="display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted)">What's on your mind? As rough as you like: the lead names the card
-      <textarea name="text" rows="4" required placeholder="The pause button did nothing the first time…" style="font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px"></textarea>
+  <form id="plant" class="panel plant-form" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
+    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1", again: this.elements.again.value || undefined})}'>
+    <h2>Plant an idea</h2>
+    <label class="edit-label">What's on your mind? As rough as you like: the lead names the card
+      <textarea name="text" rows="4" required placeholder="The pause button did nothing the first time…" class="edit-input"></textarea>
     </label>
-    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+    <div class="plant-actions">
       <input type="hidden" name="ask" value="">
       {# F48 D2: the refused note Try again put in the box; the send names it, once #}
       <input type="hidden" name="again" value="">
       <button type="submit" id="plant-only" class="btn go" onclick="this.form.elements.ask.value = ''">Plant</button>
       <button type="submit" id="plant-ask" class="btn plain" onclick="this.form.elements.ask.value = '1'">Plant and ask the lead</button>
-      <span id="plant-status" style="font-size: 12.5px; color: var(--muted)">Plant: a seed card that waits for you; write on its thread to send it to the lead. Plant and ask the lead: the lead answers it on its thread.</span>
+      <span id="plant-status" class="plant-status">Plant: a seed card that waits for you; write on its thread to send it to the lead. Plant and ask the lead: the lead answers it on its thread.</span>
     </div>
   </form>
   </div>
 
-  <div id="live-desk" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-disinherit="hx-select" style="display: contents">
-  <section id="desk" aria-label="Your desk" style="flex: 999 1 420px; min-width: 0; background: var(--bay); border: 1px solid var(--rule)">
-    <h2 style="margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--rule); font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase">Your desk{% if planning_count %} · {{ planning_count }}{% endif %}</h2>
+  <div id="live-desk" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-disinherit="hx-select">
+  <section id="desk" class="panel desk" aria-label="Your desk">
+    <h2>Your desk{% if planning_count %} · {{ planning_count }}{% endif %}</h2>
     {% for group in groups if group.items %}
-    <div id="desk-{{ group.key }}" style="padding: 10px 14px; border-bottom: 1px solid var(--grid); display: flex; flex-direction: column; gap: 6px">
-      <h3 style="margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var({{ group.color }})">{% set waiting = group.items | rejectattr("on_its_way") | list | length %}{{ group.name }}{% if waiting %} · {{ waiting }}{% endif %}</h3>
+    <div id="desk-{{ group.key }}" class="desk-group">
+      <h3 class="group-head" style="--c: var({{ group.color }})">{% set waiting = group.items | rejectattr("on_its_way") | list | length %}{{ group.name }}{% if waiting %} · {{ waiting }}{% endif %}</h3>
       {% for item in group.items %}
       {% if group.key == "refused" %}
       {# The owner's words the runner refused (F31 D9): in full, why, Try again and Dismiss.
          A plant's edit that didn't go through (f14-04) has Dismiss only: neither again nor note #}
       <article class="refused" id="refused-{{ item.id }}">
         <div class="refused-body">
-          <span style="font-size: 14px">{{ item.title }}</span>
-          {% if item.text %}<p style="margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px">{{ item.text }}</p>{% endif %}
-          <span style="font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere">The runner said: {{ item.words }}</span>
-          <div style="display: flex; gap: 8px; flex-wrap: wrap">
+          <span class="desk-title">{{ item.title }}</span>
+          {% if item.text %}<p class="refused-text">{{ item.text }}</p>{% endif %}
+          <span class="refused-words">The runner said: {{ item.words }}</span>
+          <div class="refused-actions">
             {% if item.again %}
             <a id="again-{{ item.id }}" href="{{ item.again }}{{ q }}&amp;again={{ item.id }}#reply" class="btn go">Try again</a>
             {% elif item.note %}
@@ -154,32 +152,32 @@
       {% elif group.key == "blocked" and not item.on_its_way %}
       {# F106 D3: a blocked ticket keeps its link, buttons under it; a press shows
          it on its way at once (blockedOnItsWay below) #}
-      <article class="blocked-ticket" id="blocked-{{ item.title }}" style="display: flex; flex-direction: column; gap: 6px">
-        <a href="{{ item.link }}{{ q }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
-          <span style="font-size: 14px">{{ item.title }}</span>
-          <span class="blocked-words" style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>
+      <article class="blocked-ticket" id="blocked-{{ item.title }}">
+        <a href="{{ item.link }}{{ q }}" class="desk-item">
+          <span class="desk-title">{{ item.title }}</span>
+          <span class="desk-words blocked-words">{{ item.words }}</span>
         </a>
         {% if item.fix_card %}
-        <div class="fix" style="position: relative; padding: 8px 10px 9px 14px; background: var(--plate); border: 1px solid var(--rule)">
-          <div style="position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px)"></div>
-          <div style="position: absolute; right: -1px; top: -1px; width: 9px; height: 9px; border-top: 2px solid var(--ink-2); border-right: 2px solid var(--ink-2)"></div>
+        <div class="fix">
+          <div class="fix-hazard"></div>
+          <div class="fix-corner"></div>
           {% if item.lead_replied %}
-          <div style="font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2)">The lead's fix</div>
+          <div class="fix-heading">The lead's fix</div>
           {% if item.fix_first_point %}
-          <p style="font-size: 14px; margin: 2px 0 0">{{ item.fix_first_point }}</p>
+          <p class="fix-point">{{ item.fix_first_point }}</p>
           {% endif %}
           {% if item.fix_replan %}
-          <p style="font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0">{{ item.fix_replan.title }} · {{ item.fix_replan.key_points }} key point{{ "" if item.fix_replan.key_points == 1 else "s" }} · <a href="/planning/{{ item.fix_card }}{{ q }}">read it on {{ item.fix_card | upper }}'s thread ›</a></p>
+          <p class="fix-note">{{ item.fix_replan.title }} · {{ item.fix_replan.key_points }} key point{{ "" if item.fix_replan.key_points == 1 else "s" }} · <a href="/planning/{{ item.fix_card }}{{ q }}">read it on {{ item.fix_card | upper }}'s thread ›</a></p>
           {% else %}
-          <p style="font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0">The lead's fix waits on <a href="/planning/{{ item.fix_card }}{{ q }}">{{ item.fix_card | upper }}'s thread</a></p>
+          <p class="fix-note">The lead's fix waits on <a href="/planning/{{ item.fix_card }}{{ q }}">{{ item.fix_card | upper }}'s thread</a></p>
           {% endif %}
           {% else %}
-          <div style="font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2)">The lead's fix</div>
-          <p style="font-size: 14px; margin: 2px 0 0">The lead is reading the work and its logs; its fix comes here</p>
+          <div class="fix-heading">The lead's fix</div>
+          <p class="fix-point">The lead is reading the work and its logs; its fix comes here</p>
           {% endif %}
         </div>
         {% endif %}
-        <p class="blocked-buttons" style="margin: 0; display: flex; gap: 8px; flex-wrap: wrap">
+        <p class="blocked-buttons">
           {% if item.fix_replan %}
           <button type="button" id="approve-{{ item.title }}" class="btn go" hx-post="/requests" hx-target="#blocked-status-{{ item.title }}" hx-swap="innerHTML"
             hx-vals='{"kind": "approve_plan", "project": {{ project | tojson }}, "subject": {{ item.fix_card | tojson }}}'
@@ -193,26 +191,26 @@
             hx-on::before-request="blockedOnItsWay(this, 'Set aside at the runner\'s next pick')">Set aside</button>
         </p>
         {% if item.fix_card and item.fix_replan %}
-        <span class="caveat" style="font-size: 12.5px; color: var(--muted)">Try again as it is runs the same ticket unchanged; the lead's fix then still waits on {{ item.fix_card | upper }}'s thread.</span>
+        <span class="caveat">Try again as it is runs the same ticket unchanged; the lead's fix then still waits on {{ item.fix_card | upper }}'s thread.</span>
         {% endif %}
-        <span id="blocked-status-{{ item.title }}" style="font-size: 12.5px; color: var(--muted)"></span>
+        <span id="blocked-status-{{ item.title }}" class="blocked-status"></span>
       </article>
       {% else %}
       {# the owner acted on it: on its way, dashed orange, until the runner's next pick #}
       {# F84 D5, kept by F74: a thread waiting for the lead shows its place; the one reply being written, in the planner's colour #}
       {% set writing = item.place is not none and item.place.place == 0 %}
-      <a href="{{ item.link }}{{ q }}"{% if item.on_its_way %} class="on-its-way-item{% if writing %} writing{% endif %}"{% endif %} style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px {% if item.on_its_way %}dashed var(--hazard){% else %}solid var(--rule){% endif %}; color: var(--fg); min-height: 44px; box-sizing: border-box">
+      <a href="{{ item.link }}{{ q }}" class="desk-item{% if item.on_its_way %} on-its-way-item{% if writing %} writing{% endif %}{% endif %}">
         {% if writing %}<span class="writing-label">Writing now</span>{% endif %}
-        <span style="font-size: 14px">{{ item.title }}</span>
+        <span class="desk-title">{{ item.title }}</span>
         {% if item.parts | length > 1 %}
-        <span class="parts" style="display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px">
-          {% for name, way in item.parts %}<span class="part{% if way %} on-its-way{% endif %}" style="font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; background: var(--bay); {% if way %}color: var(--hazard); border: 1px dashed var(--hazard){% else %}color: var(--ink-2); border: 1px solid var(--rule){% endif %}">{% if not loop.first %}<span style="color: var(--muted)">→ </span>{% endif %}{{ name }}{% if way %} · on its way{% endif %}</span>{% endfor %}
+        <span class="parts">
+          {% for name, way in item.parts %}<span class="part{% if way %} on-its-way{% endif %}">{% if not loop.first %}<span class="part-arrow">→ </span>{% endif %}{{ name }}{% if way %} · on its way{% endif %}</span>{% endfor %}
         </span>
         {% endif %}
-        {% if item.words %}<span style="font: 11.5px var(--mono); color: {% if writing %}var(--opus-ink){% elif item.on_its_way %}var(--hazard){% else %}var(--muted){% endif %}">{{ item.words }}</span>{% endif %}
+        {% if item.words %}<span class="desk-words">{{ item.words }}</span>{% endif %}
         {% if writing and item.place.typical %}
         <span class="writing-bar" title="time spent against a typical reply"><span style="width: {{ [100, (item.place.elapsed / item.place.typical * 100) | int] | min }}%"></span></span>
-        <span style="font: 10.5px var(--mono); color: var(--muted)">{{ item.place.elapsed | ago }} of about {{ item.place.typical | ago }} (a reply's usual length)</span>
+        <span class="writing-elapsed">{{ item.place.elapsed | ago }} of about {{ item.place.typical | ago }} (a reply's usual length)</span>
         {% endif %}
       </a>
       {% endif %}
@@ -233,13 +231,11 @@
     const link = item.querySelector("a");
     item.classList.add("on-its-way");
     link.classList.add("on-its-way-item");
-    link.style.border = "1px dashed var(--hazard)";
     const said = item.querySelector(".blocked-words");
     said.textContent = words;
-    said.style.color = "var(--hazard)";
-    item.querySelector(".blocked-buttons").style.display = "none";
+    item.querySelector(".blocked-buttons").hidden = true;
     const fix = item.querySelector(".fix");
-    if (fix) fix.style.display = "none";
+    if (fix) fix.hidden = true;
   }
   // F48 D2: a retry sent takes the card it retries off the desk at once (its group too, when
   // it was the last), and the form names it no more. The status's own polls bubble here too.
@@ -279,13 +275,13 @@
 </script>
 
 {% if set_aside %}
-<details id="set-aside" style="margin-top: 14px; background: var(--bay); border: 1px solid var(--rule)">
-  <summary style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; cursor: pointer; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted)">Set aside · {{ set_aside | length }}</summary>
-  <div style="padding: 0 14px 10px; display: flex; flex-direction: column; gap: 6px">
+<details id="set-aside" class="panel details-section">
+  <summary>Set aside · {{ set_aside | length }}</summary>
+  <div class="details-inner">
     {% for item in set_aside %}
-    <a href="{{ item.link }}{{ q }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
-      <span style="font-size: 14px">{{ item.title }}</span>
-      <span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>
+    <a href="{{ item.link }}{{ q }}" class="desk-item">
+      <span class="desk-title">{{ item.title }}</span>
+      <span class="desk-words">{{ item.words }}</span>
     </a>
     {% endfor %}
   </div>
@@ -293,13 +289,13 @@
 {% endif %}
 
 {% if archived %}
-<details id="archived" style="margin-top: 14px; background: var(--bay); border: 1px solid var(--rule)">
-  <summary style="padding: 10px 14px; min-height: 44px; box-sizing: border-box; display: flex; align-items: center; cursor: pointer; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted)">Archived · {{ archived | length }}</summary>
-  <div style="padding: 0 14px 10px; display: flex; flex-direction: column; gap: 6px">
+<details id="archived" class="panel details-section">
+  <summary>Archived · {{ archived | length }}</summary>
+  <div class="details-inner">
     {% for item in archived %}
-    <a href="{{ item.link }}{{ q }}" style="display: flex; flex-direction: column; padding: 7px 9px; background: var(--plate); border: 1px solid var(--rule); color: var(--fg); min-height: 44px; box-sizing: border-box">
-      <span style="font-size: 14px">{{ item.title }}</span>
-      <span style="font: 11.5px var(--mono); color: var(--muted)">{{ item.words }}</span>
+    <a href="{{ item.link }}{{ q }}" class="desk-item">
+      <span class="desk-title">{{ item.title }}</span>
+      <span class="desk-words">{{ item.words }}</span>
     </a>
     {% endfor %}
   </div>

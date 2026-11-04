@@ -219,7 +219,7 @@ tbody tr:hover { background: var(--accent-wash); }
   background-image: linear-gradient(90deg, var(--rule) 1px, transparent 1px);
   background-size: 25% 100%; background-position: 0 0; background-repeat: repeat-x; }
 /* F84 D5: the one reply the lead is writing, in the planner's colour (a status, so the agent's
-   colour); the rows carry an inline border, hence the !important */
+   colour); !important, over the dashed edge of a row on its way */
 .writing { border-left: 3px solid var(--opus) !important; }
 .writing-label { align-self: flex-start; font: 600 10.5px var(--display); letter-spacing: .12em;
   text-transform: uppercase; color: var(--hazard-ink); background: var(--opus); padding: 1px 7px;
@@ -1127,6 +1127,61 @@ textarea { max-height: 60vh; overflow-y: auto; }
 .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
 .btn.go:disabled { color: var(--muted); background: transparent; border: 1px dashed var(--muted); cursor: default; }
 .action-buttons { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+
+/* The Planning room (f81-04): the tiles, Plant, Coming, the desk, Set aside and Archived are
+   panels with a plate header, their items .desk-item rows. The polls' wrappers draw nothing. */
+#live-desk-coming, #live-desk { display: contents; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.tile { display: flex; flex-direction: column; gap: 3px; }
+#lead-window { gap: 5px; }
+.tile > p { margin: 0; }
+.tile-reply { color: var(--good-ink); }
+.tile-small { font: 11.5px var(--mono); color: var(--muted); }
+.lead-window-heading { color: var(--opus); }
+.desk-coming { margin-top: 14px; }
+.desk-coming > h2 { color: var(--hazard); }
+.desk-row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; margin-top: 14px; }
+.plant-form { flex: 1 1 280px; display: flex; flex-direction: column; gap: 8px; }
+.desk { flex: 999 1 420px; }
+:is(.tile, .plant-form) > h2 { margin-bottom: 4px; }
+.plant-actions, .waiting-buttons, .blocked-buttons, .refused-actions { margin: 0; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.plant-status, .waiting-status, .blocked-status, .blocked-ticket .caveat { font-size: 12.5px; color: var(--muted); }
+.edit-label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+.edit-input { font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; min-height: 44px; box-sizing: border-box; }
+.edit-box { display: flex; flex-direction: column; gap: 8px; padding: 9px; border: 1px solid var(--rule); border-top: 0; }
+.edit-form { display: flex; flex-direction: column; gap: 8px; }
+.waiting-plant > summary { display: block; cursor: pointer; }
+.desk-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--grid); }
+.desk-group:last-child { margin-bottom: 0; padding-bottom: 0; border-bottom: 0; }
+.group-head { margin: 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--c, var(--muted)); display: flex; align-items: center; gap: 8px; }
+.group-head::before { content: ""; width: 10px; height: 2px; background: var(--hazard); }
+.desk-item { display: flex; flex-direction: column; padding: 7px 9px 7px 12px; background: var(--plate); border: 1px solid var(--rule); border-left: 3px solid var(--ink-2); color: var(--fg); min-height: 44px; box-sizing: border-box; }
+.desk-title { font-size: 14px; }
+.desk-title.strikethrough { text-decoration: line-through; }
+.desk-words { font: 11.5px var(--mono); color: var(--muted); }
+.desk-item.on-its-way-item { border: 1px dashed var(--hazard); }
+.on-its-way-item .desk-words { color: var(--hazard); }
+.writing .desk-words { color: var(--opus-ink); }
+.writing-elapsed { font: 10.5px var(--mono); color: var(--muted); }
+.parts { display: flex; flex-wrap: wrap; gap: 4px; margin: 4px 0 2px; }
+.parts > .part { font: 600 10.5px var(--mono); letter-spacing: .06em; text-transform: uppercase; padding: 1px 6px; background: var(--bay); color: var(--ink-2); border: 1px solid var(--rule); }
+.parts > .part.on-its-way { color: var(--hazard); border: 1px dashed var(--hazard); }
+.part-arrow { color: var(--muted); }
+.blocked-ticket { display: flex; flex-direction: column; gap: 6px; }
+.blocked-ticket .fix { position: relative; padding: 8px 10px 9px 14px; background: var(--plate); border: 1px solid var(--rule); }
+.fix-hazard { position: absolute; left: 0; top: 0; bottom: 0; width: 5px; background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+.fix-corner { position: absolute; right: -1px; top: -1px; width: 9px; height: 9px; border-top: 2px solid var(--ink-2); border-right: 2px solid var(--ink-2); }
+.fix-heading { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.fix-point { font-size: 14px; margin: 2px 0 0; }
+.fix-note { font: 11.5px var(--mono); color: var(--muted); margin: 2px 0 0; }
+.refused-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
+.refused-words { font: 11.5px var(--mono); color: var(--muted); overflow-wrap: anywhere; }
+/* Set aside and Archived fold: their plate is the summary, which .panel > h2 can't reach */
+.details-section { margin-top: 14px; padding: 0 14px; }
+.details-section > summary { display: flex; align-items: center; gap: 10px; margin: 0 -14px; padding: 7px 14px; min-height: 44px; box-sizing: border-box; background: var(--plate); cursor: pointer; font: 600 14px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.details-section > summary::after { content: ""; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+.details-section[open] > summary { margin-bottom: 10px; border-bottom: 1px solid var(--rule); }
+.details-inner { display: flex; flex-direction: column; gap: 6px; padding-bottom: 12px; }
 
 /* Ensure the HTML hidden attribute works even when .btn sets display */
 [hidden] { display: none !important; }

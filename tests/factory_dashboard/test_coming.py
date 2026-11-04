@@ -229,7 +229,7 @@ def _answers(html: str) -> str:
 
 def _dashed(html: str, link: str) -> int:
     """How many dashed (on its way) items in "Your answers wanted" link to ``link``."""
-    found = re.findall(r'<a href="([^"?]+)[^"]*" class="on-its-way-item"', _answers(html))
+    found = re.findall(r'<a href="([^"?]+)[^"]*"[^>]*class="[^"]*on-its-way-item', _answers(html))
     return found.count(link)
 
 
@@ -858,7 +858,7 @@ def test_an_edit_on_its_way_shows_the_new_title_and_the_row_opens_no_more(planni
     change = _finished(db_path, planning, "change", str(note), edit, None)
     html = _page(serve())
     tag, row = _waiting(html, note)
-    assert tag == "div" and "on-its-way-item" in row and "1px dashed var(--hazard)" in row
+    assert tag == "div" and "on-its-way-item" in row
     assert _text(row) == f"Calmer colours Nothing bright. changed · {PICK} {ASKED}"
     assert f'hx-get="/requests/{change}"' in row
     assert "<details" not in row and "<form" not in row and "<button" not in row
@@ -874,8 +874,8 @@ def test_a_cancel_on_its_way_strikes_the_plant_through(planning, db_path, serve)
     cancel = _finished(db_path, planning, "change", str(ducks), '{"cancel": true}', None)
     _finished(db_path, planning, "change", str(ducks), json.dumps({"title": "Swans"}), None)
     tag, row = _waiting(_page(serve()), ducks)
-    assert tag == "div" and "1px dashed var(--hazard)" in row
-    assert re.search(r'<span style="[^"]*text-decoration: line-through">Rubber ducks</span>', row)
+    assert tag == "div" and "on-its-way-item" in row
+    assert re.search(r'<span class="desk-title strikethrough">Rubber ducks</span>', row)
     assert _text(row) == f"Rubber ducks cancelling at the runner's next pick {ASKED}"
     assert f'hx-get="/requests/{cancel}"' in row and "<button" not in row
 
@@ -886,7 +886,7 @@ def test_a_change_the_runner_finished_shows_no_more(planning, db_path, serve):
     ducks = _finished(db_path, planning, "plant", None, DUCKS, None)
     _finished(db_path, planning, "change", str(ducks), '{"cancel": true}', "a change is JSON")
     tag, row = _waiting(_page(serve()), ducks)
-    assert tag == "details" and "line-through" not in row
+    assert tag == "details" and "strikethrough" not in row
 
 
 def test_a_seeds_plant_offers_cancel_it_only(planning, db_path, serve):
@@ -910,7 +910,7 @@ def test_a_change_that_came_too_late_keeps_a_row_for_the_runners_word(planning, 
     html = _page(client)
     assert "Coming seeds · 1" in _coming(html)
     tag, row = _waiting(html, ducks)
-    assert tag == "div" and "line-through" not in row and "<button" not in row
+    assert tag == "div" and "strikethrough" not in row and "<button" not in row
     assert _text(row) == f"Rubber ducks your change came too late: the runner had taken it {ASKED}"
     assert f'hx-get="/requests/{change}"' in row
     _write(
@@ -986,6 +986,8 @@ def test_cancel_it_posts_a_cancel_and_the_row_is_struck_through_at_once(
     struck = page.locator(f"#waiting-{ducks} span").first
     assert struck.inner_text() == "Rubber ducks"
     assert "line-through" in struck.evaluate("e => getComputedStyle(e).textDecorationLine")
+    edge = "e => getComputedStyle(e).borderLeftStyle"
+    assert page.locator(f"#waiting-{ducks}").evaluate(edge) == "dashed"
     assert page.locator(f"#waiting-{ducks} summary, #cancel-{ducks}").count() == 0
     assert _asked_changes(db_path) == [(str(ducks), {"cancel": True})]
 
