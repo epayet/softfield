@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F215 mock-up: the floor without its grid</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css) */
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --warn-ink: #f2b10a;
+    --opus: #ff9640; --dev: #5b9cf5; --good: #5fd17a; --a1: #7aa7ff; --accent: #ffc48a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --floor-lit: #1c232b;   /* new, the "Lit from above" option only: the floor under a lamp */
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --floor: #eceee9; --bay: #f7f8f5; --plate: #ffffff; --grid: #dcdfd9; --rule: #c3c8c0;
+    --fg: #16191d; --ink-2: #3f4650; --muted: #5b636d; --warn-ink: #8a5d00;
+    --good: #2c9a46; --dev: #3a6fd8; --a1: #3f6fd6; --accent: #a4461f;
+    --floor-lit: #fbfcf9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  a { color: var(--accent); text-decoration: none; }
+  .mock-h { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .lede { color: var(--ink-2); max-width: 760px; margin: 0 0 10px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+  .switch { display: inline-flex; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; min-height: 44px; padding: 0 12px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* Phone: one picture at a time. Wide: all three side by side, no switch needed. */
+  .versions { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  @media (max-width: 1099px) {
+    .versions[data-on="today"] > :not([data-version="today"]),
+    .versions[data-on="proposed"] > :not([data-version="proposed"]),
+    .versions[data-on="lit"] > :not([data-version="lit"]) { display: none; }
+  }
+  @media (min-width: 1100px) {
+    .versions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .which { display: none; }
+  }
+  .label { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); margin: 0 0 6px; }
+  .note { color: var(--ink-2); font-size: 13px; margin: 8px 0 0; }
+  .note .new { padding: 0 4px; }
+  .new { outline: 1px dashed var(--good); outline-offset: -3px; }   /* what this card changes */
+
+  /* ---- the page as drawn (dashboard.css) ---- */
+  .shot { border: 1px solid var(--rule); background-color: var(--floor); overflow: hidden; }
+  /* Today: the body rule, as it is */
+  .floor-today { background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 32px 32px; }
+  /* Proposed: only background-color: var(--bg) is left on the body */
+  .floor-plain { background-image: none; }
+  /* The option: a soft light from above, no lines */
+  .floor-lit { background-image: radial-gradient(ellipse 110% 340px at 50% 0, var(--floor-lit), transparent); background-repeat: no-repeat; }
+
+  header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 10px; padding: 12px 16px 10px; }
+  .bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
+  .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px; color: var(--fg); min-height: 44px; }
+  .brand svg { flex: none; width: 28px; height: 28px; }
+  .brand-soft { color: var(--warn-ink); } .brand-field { color: var(--good); }
+  .factory-status { display: flex; align-items: center; gap: 8px; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--opus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--opus) 18%, transparent); }
+  .sign { width: 36px; height: 36px; display: grid; place-items: center; background: var(--hazard); color: var(--hazard-ink); font-size: 18px; }
+  .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  nav.tabs { display: flex; flex-wrap: wrap; justify-self: start; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); }
+  nav.tabs a { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    padding: 8px 14px; border: solid var(--rule); border-width: 0 1px 1px 0; white-space: nowrap; }
+  nav.tabs a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
+  main { padding: 14px 16px 48px; }
+  .crumbs { font-size: 13px; margin-bottom: 12px; }
+  .crumbs a { color: var(--ink-2); }
+  .page { display: grid; gap: 14px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 0 14px 12px; min-width: 0; position: relative; }
+  .panel::before, .panel::after { content: ""; position: absolute; width: 10px; height: 10px; border: 0 solid var(--tick); }
+  .panel::before { top: -1px; left: -1px; border-top-width: 2px; border-left-width: 2px; }
+  .panel::after { bottom: -1px; right: -1px; border-bottom-width: 2px; border-right-width: 2px; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: var(--plate); border-bottom: 1px solid var(--rule);
+    font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .1em; }
+  .panel > h2::after { content: ""; order: 1; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .panel > h2 .src { order: 2; font: 11px var(--mono); text-transform: none; letter-spacing: 0; color: var(--muted); }
+  .panel > p { margin: 0 0 8px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font: 600 11px var(--mono); text-transform: uppercase; padding: 1px 7px; border: 1px solid var(--rule); background: var(--plate); }
+  .pill::before { content: ""; width: 7px; height: 7px; background: var(--a1); }
+  .running-card { display: grid; gap: 8px; }
+  .running-head { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+  .readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); }
+  .readout { background: var(--plate); padding: 6px 10px; display: flex; flex-direction: column; }
+  .readout b { font: 600 22px/1.1 var(--display); }
+  .readout b small { font: 500 12px var(--mono); color: var(--muted); margin-left: 3px; }
+  .readout span { font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  .count { font: 700 28px/1 var(--display); }
+  .count small { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-left: 6px; }
+  h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); margin: 0 0 4px; font-weight: 600; }
+  .belt { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .belt li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; padding: 5px 8px 5px 0;
+    background: var(--plate); border-left: 3px solid var(--rule); font-size: 13.5px; overflow-wrap: anywhere; }
+  .belt li .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; }
+  .belt li.lead { border-left-color: var(--opus); }
+  .belt li b { font: 600 12px var(--mono); }
+</style>
+</head>
+<body>
+<p class="mock-h">F215: the floor without its grid</p>
+<p class="lede">The top of the Overview, on this morning's real values. Only the page's background changes: the plates, ticks, stripes and belts stay as they are. Look at the gaps between the panels and around them.</p>
+<div class="controls">
+  <div class="switch which" role="group" aria-label="Which version">
+    <button type="button" data-show="today" aria-pressed="false">Today</button>
+    <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+    <button type="button" data-show="lit" aria-pressed="false">Lit</button>
+  </div>
+  <div class="switch themes" role="group" aria-label="Which theme">
+    <button type="button" data-theme-to="dark" aria-pressed="true">Night</button>
+    <button type="button" data-theme-to="light" aria-pressed="false">Light</button>
+  </div>
+</div>
+
+<div class="versions" data-on="proposed">
+
+  <!-- Today: the body rule and factory_dashboard/templates/base.html, _partials/running.html, _partials/queue.html -->
+  <div data-version="today">
+    <p class="label">Today: the grid</p>
+    <div class="shot floor-today">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="12" width="24" height="14" rx="2" fill="var(--hazard)" stroke="var(--hazard-ink)" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/><path d="M14 12 L14 6" stroke="var(--good)" stroke-width="2" stroke-linecap="round"/><path d="M14 8 Q10 6 10 3" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M14 10 Q18 8 18 5" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+          <span class="factory-status"><i class="dot"></i><span class="words">Running: softfield · planner, job 1755</span><span class="sign">⏸</span></span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs" aria-label="Pages"><a href="#">Projects</a><a href="#" aria-current="page">Overview</a><a href="#">Planning · 33</a><a href="#">Board</a></nav>
+      </header>
+      <main>
+        <nav class="crumbs"><a href="#">softfield</a></nav>
+        <div class="page">
+          <section class="panel">
+            <h2>Now <span class="src">refreshes every 5 s</span></h2>
+            <div class="running-card">
+              <div class="running-head"><span class="pill">attempt 1</span> <span class="mono">claude-opus</span> <span>planner</span> <a href="#">job 1755 ›</a></div>
+              <div class="readouts">
+                <div class="readout"><b>9<small>s</small></b><span>Elapsed</span></div>
+                <div class="readout"><b>0<small>tokens</small></b><span>Read · 0 turns</span></div>
+                <div class="readout"><b>9<small>s ago</small></b><span>Heartbeat</span></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <h2>Queue</h2>
+            <p><span class="count">100 <small>tickets waiting.</small></span></p>
+            <h3>Next in line</h3>
+            <ol class="belt">
+              <li class="lead"><span class="n">2</span><span><b>f203-03-pushing-shows-on-the-bar</b> While the runner pushes to GitHub, the top bar and the Overview say "pushing to GitHub". · the lead</span></li>
+              <li class="lead"><span class="n">3</span><span><b>f162-01-no-checkpoint-before-review</b> A milestone's last merges go straight to its review. · the lead</span></li>
+            </ol>
+          </section>
+        </div>
+      </main>
+    </div>
+    <p class="note">Lines every 32 px, showing wherever a panel doesn't cover the page.</p>
+  </div>
+
+  <!-- Proposed: the same page; the body keeps its colour and loses its background image -->
+  <div data-version="proposed">
+    <p class="label">Proposed: a plain floor</p>
+    <div class="shot floor-plain new">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="12" width="24" height="14" rx="2" fill="var(--hazard)" stroke="var(--hazard-ink)" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/><path d="M14 12 L14 6" stroke="var(--good)" stroke-width="2" stroke-linecap="round"/><path d="M14 8 Q10 6 10 3" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M14 10 Q18 8 18 5" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+          <span class="factory-status"><i class="dot"></i><span class="words">Running: softfield · planner, job 1755</span><span class="sign">⏸</span></span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs" aria-label="Pages"><a href="#">Projects</a><a href="#" aria-current="page">Overview</a><a href="#">Planning · 33</a><a href="#">Board</a></nav>
+      </header>
+      <main>
+        <nav class="crumbs"><a href="#">softfield</a></nav>
+        <div class="page">
+          <section class="panel">
+            <h2>Now <span class="src">refreshes every 5 s</span></h2>
+            <div class="running-card">
+              <div class="running-head"><span class="pill">attempt 1</span> <span class="mono">claude-opus</span> <span>planner</span> <a href="#">job 1755 ›</a></div>
+              <div class="readouts">
+                <div class="readout"><b>9<small>s</small></b><span>Elapsed</span></div>
+                <div class="readout"><b>0<small>tokens</small></b><span>Read · 0 turns</span></div>
+                <div class="readout"><b>9<small>s ago</small></b><span>Heartbeat</span></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <h2>Queue</h2>
+            <p><span class="count">100 <small>tickets waiting.</small></span></p>
+            <h3>Next in line</h3>
+            <ol class="belt">
+              <li class="lead"><span class="n">2</span><span><b>f203-03-pushing-shows-on-the-bar</b> While the runner pushes to GitHub, the top bar and the Overview say "pushing to GitHub". · the lead</span></li>
+              <li class="lead"><span class="n">3</span><span><b>f162-01-no-checkpoint-before-review</b> A milestone's last merges go straight to its review. · the lead</span></li>
+            </ol>
+          </section>
+        </div>
+      </main>
+    </div>
+    <p class="note"><span class="new">Dashed green</span> marks the change: the floor is one flat colour, and the plates carry the theme alone.</p>
+  </div>
+
+  <!-- The bolder option: a soft light from above, one new token -->
+  <div data-version="lit">
+    <p class="label">The option: lit from above</p>
+    <div class="shot floor-lit new">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="2" y="12" width="24" height="14" rx="2" fill="var(--hazard)" stroke="var(--hazard-ink)" stroke-width="1.5"/><line x1="10" y1="12" x2="10" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/><line x1="18" y1="12" x2="18" y2="26" stroke="var(--hazard-ink)" stroke-width="1.5"/><path d="M14 12 L14 6" stroke="var(--good)" stroke-width="2" stroke-linecap="round"/><path d="M14 8 Q10 6 10 3" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/><path d="M14 10 Q18 8 18 5" stroke="var(--good)" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+          <span class="factory-status"><i class="dot"></i><span class="words">Running: softfield · planner, job 1755</span><span class="sign">⏸</span></span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs" aria-label="Pages"><a href="#">Projects</a><a href="#" aria-current="page">Overview</a><a href="#">Planning · 33</a><a href="#">Board</a></nav>
+      </header>
+      <main>
+        <nav class="crumbs"><a href="#">softfield</a></nav>
+        <div class="page">
+          <section class="panel">
+            <h2>Now <span class="src">refreshes every 5 s</span></h2>
+            <div class="running-card">
+              <div class="running-head"><span class="pill">attempt 1</span> <span class="mono">claude-opus</span> <span>planner</span> <a href="#">job 1755 ›</a></div>
+              <div class="readouts">
+                <div class="readout"><b>9<small>s</small></b><span>Elapsed</span></div>
+                <div class="readout"><b>0<small>tokens</small></b><span>Read · 0 turns</span></div>
+                <div class="readout"><b>9<small>s ago</small></b><span>Heartbeat</span></div>
+              </div>
+            </div>
+          </section>
+          <section class="panel">
+            <h2>Queue</h2>
+            <p><span class="count">100 <small>tickets waiting.</small></span></p>
+            <h3>Next in line</h3>
+            <ol class="belt">
+              <li class="lead"><span class="n">2</span><span><b>f203-03-pushing-shows-on-the-bar</b> While the runner pushes to GitHub, the top bar and the Overview say "pushing to GitHub". · the lead</span></li>
+              <li class="lead"><span class="n">3</span><span><b>f162-01-no-checkpoint-before-review</b> A milestone's last merges go straight to its review. · the lead</span></li>
+            </ol>
+          </section>
+        </div>
+      </main>
+    </div>
+    <p class="note">No lines, a soft glow at the top that fades into the floor. Most of it sits behind the panels, so the difference is small.</p>
+  </div>
+
+</div>
+
+<script>
+  function wire() {
+    const versions = document.querySelector(".versions");
+    document.querySelectorAll(".which button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".which button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        versions.dataset.on = button.dataset.show;
+      });
+    });
+    document.querySelectorAll(".themes button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".themes button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.documentElement.setAttribute("data-theme", button.dataset.themeTo);
+      });
+    });
+  }
+  wire();
+</script>
+</body>
+</html>
