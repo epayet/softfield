@@ -33,3 +33,10 @@ The desk item says what to do in words, with no terminal command (`command=""`):
 - at each pick the runner probes, at most every 5 minutes, and a passing probe clears the item and frees the held jobs, with no restart
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
