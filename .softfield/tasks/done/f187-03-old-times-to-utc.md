@@ -32,3 +32,10 @@ Read `.softfield/cards/f187-store-every-time-in-utc-the.md` D5 (the columns and 
 - the console says "converted N stored times to UTC (F187)"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
