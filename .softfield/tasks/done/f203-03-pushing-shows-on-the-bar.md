@@ -27,6 +27,7 @@ Read `check_push` and `doing` in `runner/loop.py`, and `test_a_pick_pushes_what_
 
 ```yaml
 # --- runner ---
-result: blocked
-reason: check-all failed; the work is on task/f203-03-pushing-shows-on-the-bar
+result: done
+agent: lead
+attempts: 3
 ```
