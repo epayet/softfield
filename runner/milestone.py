@@ -413,6 +413,9 @@ def _rate_verdicts(s: Session, milestone: str) -> None:
 def _record_review(s: Session, milestone: str, rounds: int) -> None:
     if s.project_id is None:
         return
+    if signed_off(s.repo, milestone):  # during the review: it stays done, its sheet as signed
+        _record(s, metrics.upsert_milestone, s.project_id, milestone, review_rounds=rounds)
+        return
     review = milestone_file(s.repo, "reviews", milestone)
     sheet = signoff_sections(review.read_text(encoding="utf-8")) if review.is_file() else {}
     _record(
@@ -757,7 +760,8 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
             commands=(*CHECK_COMMANDS, *GIT_READ_COMMANDS, look.COMMAND, CHECK_TICKETS),
         )
         since = s.git.head()
-        if s.project_id is not None:  # under way: off the line's queue (f4-20)
+        # under way: off the line's queue (f4-20); one signed off meanwhile stays done (F186 D1)
+        if s.project_id is not None and not signed_off(s.repo, milestone):
             _record(s, metrics.upsert_milestone, s.project_id, milestone, status="review")
         call_claude(s, job, milestone, f"{milestone}-review-r{round_no}")
         try:

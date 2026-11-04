@@ -2,7 +2,7 @@ import json
 import re
 import sqlite3
 import sys
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -365,6 +365,34 @@ def test_a_review_records_its_rounds_findings_and_sign_off_sheet(repo, monkeypat
     assert (leak["job_id"], leak["resolved"], leak["severity"]) == (reviews[1], 1, "should-fix")
     assert (leak["route"], leak["summary"], leak["milestone_id"]) == ("claude", "Leak", row["id"])
     assert (findings["m1-F2"]["job_id"], findings["m1-F2"]["resolved"]) == (reviews[0], 0)
+
+
+def test_a_sign_off_during_a_review_stays_through_its_rounds_and_its_end(repo, monkeypatch):
+    """F186 D1: F142's review ended after the sign-off and set its milestone back to review."""
+    _milestone_repo(repo)
+    finding = {"id": "m1-F1", "severity": "should-fix", "route": "claude", "summary": "Leak"}
+    rounds = [[finding], [{**finding, "resolved": True}]]
+    db = _config(repo).metrics_db
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        out = re.search(r"Write (\S+) as:", job.prompt)
+        assert out
+        (repo_ / out[1]).write_text(json.dumps({"findings": rounds.pop(0), "stop": None}))
+        review = repo_ / ".softfield" / "reviews" / "m1.md"
+        review.parent.mkdir(parents=True, exist_ok=True)
+        if rounds:  # the first round: the owner signs this sheet off while it runs
+            review.write_text(REVIEW_DOC)
+            owner.signoff(repo_, "m1", date(2026, 10, 8), db=db)
+        else:
+            review.write_text(REVIEW_DOC.replace("Send a photo", "Written after the sign-off"))
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start") == "clean"
+    [row] = _rows(repo, "milestones")
+    assert (row["status"], row["review_rounds"]) == ("done", 2)
+    assert json.loads(str(row["signoff"]))["how_to_test"] == "1. Send a photo."
 
 
 def _review_two_rounds(repo, monkeypatch, seen_by_round):

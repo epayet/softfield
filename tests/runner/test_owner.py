@@ -393,6 +393,28 @@ def test_a_second_signoff_settles_and_changes_nothing(repo: Path):
     assert _open(repo) == {}
 
 
+def _milestone_row(repo: Path, key: str) -> sqlite3.Row:
+    conn = metrics.open_db(_db(repo))
+    try:
+        row: sqlite3.Row = conn.execute("SELECT * FROM milestones WHERE key = ?", (key,)).fetchone()
+    finally:
+        conn.close()
+    return row
+
+
+def test_a_second_signoff_keeps_when_it_ended_and_takes_a_new_score(repo: Path):
+    """F186: settling moved F142's end by a week in the reports, and dropped a score given."""
+    _milestone(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo), score=7)
+    first = _milestone_row(repo, "m1")["ended"]
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))  # no score: the first one stays
+    row = _milestone_row(repo, "m1")
+    assert (row["status"], row["ended"], row["owner_score"]) == ("done", first, 7)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo), score=9)
+    row = _milestone_row(repo, "m1")
+    assert (row["ended"], row["owner_score"]) == (first, 9)
+
+
 def test_heal_resolves_items_of_a_signed_off_milestone_only(repo: Path):
     """F186 D3: an item reopened after the sign-off clears; an unsigned milestone's stays."""
     _milestone(repo)

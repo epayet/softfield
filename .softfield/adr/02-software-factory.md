@@ -702,6 +702,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the blocking bug was found because the card reviewed itself: the brief said "mock-up: none" while the card's doc named its mock-up. Its test used `f1` as the card's key, a key where the short and full forms are the same, so a fixture hid the bug: a test of a path rule needs a value that tells the two rules apart. A ticket's "in Chromium" Done when reached main with no browser test, and nothing noticed.
 - **Decisions affected:** none. A card that changes the card page can't picture its own panel in round 1, since the pictures are taken before its sheet exists; from round 2 on it can, half-drawn, as its After is being taken.
 
+### F186 (2026-11-04): a sign-off stays signed ([review](../reviews/f186-why-can-t-i-sign-off.md))
+
+- **Q1:** one lead ticket, merged first time; no checkpoint. Review round 1: one blocking, two should-fix and one nit fixed by the review, one nit only reported.
+- **Q3:** no developer work (protected runner code). Sonnet built it for $0.33 and missed the half of D1 inside the review loop.
+- **Q5:** see the review's numbers.
+- **Anything else:** the ticket's test replaced the review with a stub, and the review was what set the milestone back, though the Done when asked for the status to stay. A race needs a test through the real path, with the other event in the middle of it. A heal that starts from open items can't see a wrong row with no item. A fault in the owner's own button waited over five days for its turn on the board.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

@@ -276,6 +276,17 @@ def test_a_review_ending_after_the_sign_off_records_no_verdict(in_repo, monkeypa
     assert cli._review(cfg, in_repo, "f9") is False
 
 
+def test_a_milestone_command_ending_after_the_sign_off_records_no_verdict(in_repo, monkeypatch):
+    """F186 D1: `softfield milestone` ends a review as `runner run` does."""
+    monkeypatch.setattr(cli, "run_milestone", lambda cfg, key, base: "clean")
+    monkeypatch.setattr(cli, "signed_off", lambda repo, key: True)
+    monkeypatch.setattr(owner, "verdict", lambda *a, **kw: pytest.fail("a verdict after sign-off"))
+    monkeypatch.setattr(
+        owner, "record_verdict", lambda *a, **kw: pytest.fail("a session Verdict after sign-off")
+    )
+    assert cli.main(["milestone", "f9"]) == 0
+
+
 def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):
     """f2-03: a Ctrl-C left run 20261002-055804 alive and on the reserve."""
     ended: list[str] = []

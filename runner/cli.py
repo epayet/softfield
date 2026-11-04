@@ -598,6 +598,9 @@ def main(argv: list[str] | None = None) -> int:
             stop = run_milestone(cfg, key, args.base or f"{key}-start")
             if stop == RESTART:
                 _restart()  # an escalation changed the runner (ADR 12)
+            if signed_off(repo, key):  # as in `_review` (F186 D1)
+                print(f"\n{key} is signed off: no verdict.")
+                return 0
             state = load_state(cfg.runs_dir / "state.json")
             code, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)
             owner.record_verdict(repo, text)
