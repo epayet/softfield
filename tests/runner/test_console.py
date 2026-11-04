@@ -1,6 +1,6 @@
 """The console's lines (f1-42): each names its agent in brackets and stays short."""
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from runner import console
 
@@ -85,3 +85,12 @@ def test_a_pause_gives_the_exact_resume_time():
     tomorrow = console.paused("claude-opus", "limit", now + timedelta(hours=15), now)
     assert "resumes Fri 09:39 (in 15 h 00)" in tomorrow
     assert console.resumed("claude-opus", "direction") == "▶ [claude-opus] direction resumed"
+
+
+def test_a_resume_time_and_its_day_are_on_the_machines_clock(paris):
+    """F187: 22:30 UTC is 23:30 in Paris, so an hour on is tomorrow there, and today in UTC."""
+    now = datetime(2026, 10, 29, 22, 30, tzinfo=UTC)
+    soon = console.paused("claude-opus", "limit", now + timedelta(minutes=12), now)
+    assert "resumes 23:42 (in 12 min)" in soon
+    tomorrow = console.paused("claude-opus", "limit", now + timedelta(hours=1), now)
+    assert "resumes Fri 00:30" in tomorrow

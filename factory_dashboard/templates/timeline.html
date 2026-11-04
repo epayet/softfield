@@ -46,8 +46,8 @@
         <td>{% if bar.ticket %}<a href="/jobs/{{ bar.job_id }}">{{ bar.ticket }}</a>{% else %}&ndash;{% endif %}</td>
         <td>{{ lane.agent }}</td>
         <td>{{ bar.role }}</td>
-        <td>{{ bar.start }}</td>
-        <td>{{ bar.end }}</td>
+        <td>{{ bar.start | local }}</td>
+        <td>{{ bar.end | local }}</td>
         <td>{{ bar.outcome }}</td>
       </tr>
       {% endfor %}

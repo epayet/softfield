@@ -238,7 +238,7 @@ def _open(cfg: Config) -> Session:
     """A session recorded as a `bench` run; its logs in `.softfield/var/bench/`. state.json is only
     read."""
     started = now()
-    run_dir = bench_dir(cfg) / f"bench-{started:%Y%m%d-%H%M%S}"
+    run_dir = bench_dir(cfg) / f"bench-{started.astimezone():%Y%m%d-%H%M%S}"  # F187 D4
     run_dir.mkdir(parents=True, exist_ok=True)
     s = Session(
         cfg=cfg,

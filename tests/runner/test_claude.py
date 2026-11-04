@@ -65,6 +65,14 @@ def test_clock_reset_later_today_and_tomorrow():
     )
 
 
+def test_a_reset_comes_back_in_utc_and_a_bare_clock_is_the_machines(paris):
+    """F187: 14:00 UTC is 16:00 in Paris. A bare "5pm" is on the machine's clock, not UTC's."""
+    _, named = usage_limit_reset("hit your session limit · resets 6:50pm (Europe/London)", NOW)
+    assert named is not None and named.isoformat() == "2026-09-27T17:50:00+00:00"
+    _, bare = usage_limit_reset("You've hit your limit · resets 5pm", NOW)
+    assert bare is not None and bare.isoformat() == "2026-09-27T15:00:00+00:00"
+
+
 def test_limit_without_time():
     assert usage_limit_reset("rate limit exceeded", NOW) == (True, None)
 

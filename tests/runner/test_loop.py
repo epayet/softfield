@@ -198,16 +198,6 @@ def test_a_named_milestones_queue_takes_tickets_written_with_either_key(repo, mo
     assert ran == ["f3-01-a", "f3-02-b"]
 
 
-@pytest.fixture
-def paris(monkeypatch):
-    """The machine's zone is Paris, so local is not UTC and a slip shows (F187 D6)."""
-    monkeypatch.setenv("TZ", "Europe/Paris")
-    time.tzset()
-    yield
-    monkeypatch.undo()
-    time.tzset()
-
-
 def test_the_clock_is_utc_whatever_the_zone(paris):
     assert loop.now().utcoffset() == timedelta(0)
     assert loop.now().isoformat().endswith("+00:00")
@@ -7298,6 +7288,17 @@ def test_an_idle_run_with_work_done_ends_its_session_at_midnight_to_report_it(
     assert report.idle and report.review is None
     assert [(t.id, t.result) for t in report.tasks] == [("m1-01-thing", "done")]
     assert len(list((repo / ".softfield" / "sessions").glob("*.md"))) == 1
+
+
+def test_the_new_day_that_ends_an_idle_session_is_the_machines(repo, paris, monkeypatch):
+    """F187: 22:30 and 23:10 UTC are one day in UTC, but midnight has passed in Paris."""
+    s = loop.open_session(_config(repo), None)
+    s.report.started = datetime(2026, 10, 29, 22, 30, tzinfo=UTC)
+    s.report.tasks = [TaskRecord("m1-01-a", "m1", "done")]
+    monkeypatch.setattr(loop, "now", lambda: datetime(2026, 10, 29, 23, 10, tzinfo=UTC))
+    assert loop._idle_holds(s) is False
+    assert s.report.idle
+    loop.close_session(s)
 
 
 def test_a_ctrl_c_while_idle_ends_the_run_with_its_session_report(

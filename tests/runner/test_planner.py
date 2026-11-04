@@ -1536,6 +1536,18 @@ def test_approving_a_plan_commits_its_thread_with_its_drafts(repo):
     assert git(repo, "status", "--porcelain", "--untracked-files=all") == ""
 
 
+def test_an_exports_stamp_is_local(paris):
+    """F187 D3: stored at 23:30 UTC, it reads the next day at 00:30 in Paris."""
+    message = {
+        "author": "lead",
+        "at": "2026-10-29T23:30:00+00:00",
+        "points": None,
+        "proposals": None,
+        "text": "Hello.",
+    }
+    assert planner._exported(message).startswith("## The lead, 2026-10-30 00:30\n")
+
+
 def test_a_messages_markdown_cant_make_a_heading_of_the_export(repo):
     _card(repo)
     _plan(repo, {".softfield/tasks/later/f7-01-a.md": _ticket("f7-01-a")})

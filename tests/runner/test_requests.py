@@ -4,7 +4,6 @@ commands would, each finished once with its result."""
 import json
 import os
 import sqlite3
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -2021,16 +2020,6 @@ def _pauses(repo: Path) -> list[tuple[object, object]]:
         return [(r["at"], r["resets_at"]) for r in rows]
     finally:
         conn.close()
-
-
-@pytest.fixture
-def paris(monkeypatch):
-    """The machine's zone is Paris, so local is not UTC and a slip shows (F187 D6)."""
-    monkeypatch.setenv("TZ", "Europe/Paris")
-    time.tzset()
-    yield
-    monkeypatch.undo()
-    time.tzset()
 
 
 def test_a_pause_stored_in_utc_answers_in_local_time(repo, paris):

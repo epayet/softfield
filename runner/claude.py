@@ -12,7 +12,7 @@ import subprocess
 import time
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -109,13 +109,14 @@ _ZONE_RE = re.compile(r"\(([A-Za-z_]+/[A-Za-z_/]+)\)")  # "resets 6:50pm (Europe
 
 
 def _zone(text: str, now: datetime) -> datetime:
-    """``now`` in the time zone the message names, if it names one we know."""
+    """``now`` in the time zone the message names, if it names one we know; else on the
+    machine's clock, which is what a bare "resets 5pm" means, ``now`` being UTC (F187)."""
     if match := _ZONE_RE.search(text):
         try:
             return now.astimezone(ZoneInfo(match.group(1)))
         except (ZoneInfoNotFoundError, ValueError):
             pass
-    return now
+    return now.astimezone()
 
 
 def usage_limit_reset(text: str, now: datetime) -> tuple[bool, datetime | None]:
@@ -134,7 +135,7 @@ def usage_limit_reset(text: str, now: datetime) -> tuple[bool, datetime | None]:
         reset = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if reset <= now:
             reset += timedelta(days=1)
-        return True, reset
+        return True, reset.astimezone(UTC)  # the caller stores it (F187 D1)
     return True, None
 
 

@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from factory_dashboard.app import create_app, get_now
+from factory_dashboard.queries import local
 from runner import metrics
 from runner.metrics import open_db
 from tests.factory_dashboard.conftest import (
@@ -99,6 +100,18 @@ def section(html: str, name: str) -> str:
 def test_timeline_page_returns_200(client):
     resp = client.get("/timeline")
     assert resp.status_code == 200
+
+
+def test_the_jobs_table_prints_local_times(paris, client):
+    """F187 D3: the table prints a time as it stands; the chart's own data stays stored UTC."""
+    html = client.get("/timeline").text
+    bars = [bar for lane in charts(html)["timeline"]["lanes"] for bar in lane["bars"]]
+    table = re.search(r'<section id="jobs".*?</section>', html, re.S)
+    assert table and bars
+    for bar in bars:
+        assert f"<td>{local(bar['start']).isoformat()}</td>" in table[0]
+        assert f"<td>{local(bar['end']).isoformat()}</td>" in table[0]
+    assert "+00:00</td>" not in table[0]
 
 
 def test_json_block_has_one_lane_per_agent_and_one_bar_per_job(client):

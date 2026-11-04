@@ -28,6 +28,13 @@ from tests.factory_dashboard.test_queries import write_sonnet_ticket
 T0 = datetime(2026, 9, 27, 14, 0, tzinfo=UTC)
 
 
+def test_a_sessions_title_and_address_are_local(paris):
+    """F187 D4: the run's folder is named in local time, so its address is too."""
+    text = render(SessionReport(started=T0, ended=T0 + timedelta(minutes=30)))
+    assert "# Session 2026-09-27 16:00" in text
+    assert f"{DASHBOARD_URL}/runs/20260927-160000" in text
+
+
 def _report() -> SessionReport:
     report = SessionReport(started=T0, ended=T0 + timedelta(minutes=30))
     report.tasks = [

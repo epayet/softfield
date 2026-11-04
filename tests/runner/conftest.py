@@ -16,6 +16,16 @@ def utc_zone(monkeypatch):
     time.tzset()
 
 
+@pytest.fixture
+def paris(monkeypatch):
+    """The machine's zone is Paris, so local is not UTC and a slip shows (F187 D6)."""
+    monkeypatch.setenv("TZ", "Europe/Paris")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
 TASK = """\
 ---
 id: {id}
