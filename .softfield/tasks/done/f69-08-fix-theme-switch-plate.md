@@ -26,3 +26,12 @@ f81-assess-the-current-ui-state-of-C1743-1: Phone plate sizing rule never applie
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 3767
+gate_failures: ['all-tests', 'stopped']
+tokens: 971002
+```
