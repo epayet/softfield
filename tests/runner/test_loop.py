@@ -17,10 +17,10 @@ from pathlib import Path
 
 import pytest
 
-from runner import checks, claude, gates, local_model, loop, metrics, prompts, ratings
+from runner import backup, checks, claude, gates, local_model, loop, metrics, prompts, ratings
 from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
 from runner.claude import ClaudeJob, Progress, TransientError, UsageLimited
-from runner.config import Config
+from runner.config import Backup, Config
 from runner.gates import GateResult
 from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTotals
 from runner.report import SessionReport, TaskRecord
@@ -224,6 +224,72 @@ def test_a_run_stores_utc_and_its_folder_is_named_in_local_time(repo, paris):
     at, resets = s.db.execute("SELECT at, resets_at FROM usage_events").fetchone()
     assert at.endswith("+00:00") and resets.endswith("+00:00")
     loop.close_session(s)
+
+
+OLD_AT = "2026-09-30T15:00:00+01:00"
+OLD_AS_UTC = "2026-09-30T14:00:00+00:00"
+
+
+def _old_database(cfg: Config, *, collide: bool = False) -> None:
+    """A metrics database that still owes the F187 step, with a time in +01:00."""
+    conn = metrics.open_db(cfg.metrics_db)
+    conn.execute("DELETE FROM once_steps WHERE name = ?", (metrics.UTC_STEP,))
+    for at in (OLD_AT, *([OLD_AS_UTC] if collide else [])):
+        conn.execute("INSERT INTO usage_events (agent, at, kind) VALUES ('claude', ?, 's')", (at,))
+    conn.close()
+
+
+def _usage_times(path: Path) -> list[str]:
+    conn = sqlite3.connect(path)
+    try:
+        return [r[0] for r in conn.execute("SELECT at FROM usage_events ORDER BY id")]
+    finally:
+        conn.close()
+
+
+def test_the_old_times_are_converted_after_a_copy_beside_the_database(repo, capsys):
+    cfg = _config(repo)
+    _old_database(cfg)
+    s = loop.open_session(cfg, None)
+    loop.check_backup(s)
+    [copy] = cfg.metrics_db.parent.glob("factory-metrics-*.sqlite")
+    assert _usage_times(copy) == [OLD_AT]  # the owner's data, as it was
+    assert _usage_times(cfg.metrics_db) == [OLD_AS_UTC]
+    assert "converted 1 stored times to UTC (F187)" in capsys.readouterr().out
+    loop.check_backup(s)
+    assert capsys.readouterr().out == ""
+    assert len(list(cfg.metrics_db.parent.glob("factory-metrics-*.sqlite"))) == 1
+
+
+def test_the_old_times_are_converted_once_the_backup_copy_is_written(repo, tmp_path, capsys):
+    folder = tmp_path / "Dropbox"
+    cfg = replace(_config(repo), backup=Backup(folder, 14, 24))
+    _old_database(cfg)
+    s = loop.open_session(cfg, None)
+    s.backups = backup.Backups(cfg.metrics_db, Backup(folder, 14, 24))
+    loop.check_backup(s)
+    [copy] = folder.glob("factory-metrics-*.sqlite")
+    assert _usage_times(copy) == [OLD_AT]
+    assert _usage_times(cfg.metrics_db) == [OLD_AS_UTC]
+    assert not list(cfg.metrics_db.parent.glob("factory-metrics-*.sqlite"))
+    capsys.readouterr()
+    loop.check_backup(s)  # no new copy is due, and nothing is owed
+    assert capsys.readouterr().out == ""
+
+
+def test_a_collision_changes_nothing_and_is_said_once(repo, capsys):
+    cfg = _config(repo)
+    _old_database(cfg, collide=True)
+    s = loop.open_session(cfg, None)
+    loop.check_backup(s)
+    loop.check_backup(s)
+    assert _usage_times(cfg.metrics_db) == [OLD_AT, OLD_AS_UTC]
+    conn = metrics.open_db(cfg.metrics_db)
+    assert metrics.utc_step_owed(conn)
+    conn.close()
+    out = capsys.readouterr().out
+    assert out.count("Converting the stored times to UTC (F187)") == 1
+    assert len([n for n in s.report.notes if "F187" in n]) == 1
 
 
 def test_a_wait_until_a_stored_time_says_it_in_local_time(repo, paris, monkeypatch):

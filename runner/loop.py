@@ -242,6 +242,7 @@ class Session:
     # The metrics database's copies (F20 D1), None without `[backup]`; a failure is noted once
     backups: backup.Backups | None = None
     backup_failed: bool = False
+    utc_settled: bool = False  # F187 D5: the old times are converted, or a collision was said once
     picks: int = 0  # jobs run so far, tickets and queued jobs (`run_projects`'s round)
 
     @property
@@ -680,10 +681,50 @@ def check_backup(s: Session) -> None:
     """The metrics database's copy, when one is due (F20 D1): at the run's start, at each pick
     and while it waits. A failure is a console line and a report note (once until a copy
     works again), never an error that stops the run; a later check tries again."""
-    if s.backups is None:
+    path: Path | None = None
+    if s.backups is not None:
+        path = _backup_copy(s, s.backups)
+    _convert_old_times(s, path)
+
+
+def _convert_old_times(s: Session, copy: Path | None) -> None:
+    """F187 D5: once, right after a copy holds the old times as they were, they become UTC.
+    With no backup set, a copy is written beside the database first. A collision on a unique
+    key changes nothing, leaves the step owed, and is said once."""
+    if s.utc_settled or (s.backups is not None and copy is None):
         return
     try:
-        path = s.backups.check(now())
+        conn = metrics.open_db(s.cfg.metrics_db)
+    except Exception:
+        return
+    try:
+        if not metrics.utc_step_owed(conn):
+            s.utc_settled = True
+            return
+        if copy is None:
+            backup.copy(s.cfg.metrics_db, s.cfg.metrics_db.parent, now())
+        changed = metrics.convert_old_times_to_utc(conn, now().astimezone(UTC).isoformat())
+        s.utc_settled = True
+        s.log(f"[{RUNNER_AGENT}] converted {changed} stored times to UTC (F187)")
+    except sqlite3.IntegrityError as exc:
+        s.utc_settled = True
+        line = (
+            f"Converting the stored times to UTC (F187) hit a clash ({exc}); nothing changed, and"
+            " the next run tries again."
+        )
+        s.log(f"[{RUNNER_AGENT}] {line}")
+        s.report.notes.append(line)
+    except Exception as exc:
+        line = f"converting the stored times to UTC failed ({exc}); a later check tries again."
+        s.log(f"[{RUNNER_AGENT}] {line}")
+    finally:
+        conn.close()
+
+
+def _backup_copy(s: Session, backups: backup.Backups) -> Path | None:
+    """The new copy when one is due; a failure is noted once (see ``check_backup``)."""
+    try:
+        path = backups.check(now())
     except Exception as exc:
         line = (
             f"The metrics database's backup failed ({type(exc).__name__}: {exc}); the run went"
@@ -693,10 +734,11 @@ def check_backup(s: Session) -> None:
         if not s.backup_failed:
             s.backup_failed = True
             s.report.notes.append(line)
-        return
+        return None
     if path is not None:
         s.backup_failed = False
         s.log(f"[{RUNNER_AGENT}] backed up the metrics database to {path}")
+    return path
 
 
 PUSH_KIND = "push"  # a push that needs the owner (ADR 42); its subject is the project's remote

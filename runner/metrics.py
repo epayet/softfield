@@ -12,7 +12,7 @@ import re
 import sqlite3
 from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 _V1 = """
@@ -282,7 +282,24 @@ _V14 = """
 ALTER TABLE planner_threads ADD COLUMN merges_unread TEXT;
 """
 
-ONCE_STEPS = ("f55 clear-out",)  # one-off steps an older database still owes (F55 D3)
+UTC_STEP = "f187 utc"  # F187 D5: old local times become UTC, once
+ONCE_STEPS = ("f55 clear-out", UTC_STEP)  # one-off steps an older database still owes (F55 D3)
+
+# The columns F187 D5 converts: every stored time that was written with a local offset
+UTC_COLUMNS: dict[str, tuple[str, ...]] = {
+    "milestones": ("started", "ended"),
+    "runs": ("started", "ended", "heartbeat", "waiting_until"),
+    "jobs": ("started", "ended"),
+    "rating_changes": ("at",),
+    "usage_events": ("at", "resets_at"),
+    "owner_items": ("created", "resolved"),
+    "owner_requests": ("created", "done", "dismissed"),
+    "work_queue": ("created", "not_before", "done"),
+    "planner_threads": ("created", "archived"),
+    "planner_messages": ("at",),
+    "once_steps": ("at",),
+    "projects": ("paused",),
+}
 
 # One step per schema version: step N takes the database from version N-1 to N. Append only.
 MIGRATIONS: list[str] = [
@@ -1079,6 +1096,52 @@ def once(conn: sqlite3.Connection, name: str, at: str) -> bool:
     """Mark the one-off step ``name`` done (F55 D3): True the first time only."""
     found = conn.execute("INSERT OR IGNORE INTO once_steps (name, at) VALUES (?, ?)", (name, at))
     return found.rowcount == 1
+
+
+def _as_utc(value: object) -> str | None:
+    """``value`` as the same instant in UTC, or None when it isn't a time with an offset."""
+    if not isinstance(value, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        return None
+    return moment.astimezone(UTC).isoformat()
+
+
+def convert_old_times_to_utc(conn: sqlite3.Connection, at: str) -> int:
+    """F187 D5: every stored time with a local offset becomes the same instant in UTC, in one
+    transaction that also marks the step done. Returns how many values changed. A value that
+    collides with a unique key raises ``sqlite3.IntegrityError`` after a rollback: nothing
+    changed, nothing deleted, the step still owed."""
+    changed = 0
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for table, columns in UTC_COLUMNS.items():
+            for column in columns:
+                rows = conn.execute(
+                    f'SELECT rowid, "{column}" FROM {table} WHERE "{column}" IS NOT NULL'  # noqa: S608
+                ).fetchall()
+                for rowid, value in rows:
+                    converted = _as_utc(value)
+                    if converted is not None and converted != value:
+                        conn.execute(
+                            f'UPDATE {table} SET "{column}" = ? WHERE rowid = ?',  # noqa: S608
+                            (converted, rowid),
+                        )
+                        changed += 1
+        once(conn, UTC_STEP, at)
+        conn.execute("COMMIT")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    return changed
+
+
+def utc_step_owed(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM once_steps WHERE name = ?", (UTC_STEP,)).fetchone() is None
 
 
 def set_thread_session(conn: sqlite3.Connection, thread_id: int, session_id: str) -> None:

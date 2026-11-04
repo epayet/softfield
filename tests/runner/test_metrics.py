@@ -604,6 +604,68 @@ def test_an_open_owner_item_keeps_its_created_and_a_resolved_one_reopens(db, ids
     assert (row["id"], row["created"], row["resolved"]) == (item, T1, None)
 
 
+# --- F187 D5: the old local times become UTC, once -----------------------------------------
+
+
+def _usage(db, at, resets_at=None, agent="claude"):
+    db.execute(
+        "INSERT INTO usage_events (agent, at, kind, resets_at) VALUES (?, ?, 'session', ?)",
+        (agent, at, resets_at),
+    )
+
+
+def _owe_the_utc_step(db):
+    db.execute("DELETE FROM once_steps WHERE name = ?", (metrics.UTC_STEP,))
+
+
+def test_every_column_the_utc_step_converts_exists(db):
+    for table, columns in metrics.UTC_COLUMNS.items():
+        found = {row[1] for row in db.execute(f"PRAGMA table_info({table})")}
+        assert set(columns) <= found, table
+
+
+def test_a_new_database_has_the_utc_step_done(db):
+    assert not metrics.utc_step_owed(db)
+
+
+def test_old_offsets_become_the_same_instant_in_utc_and_the_rest_stays(db, ids):
+    _owe_the_utc_step(db)
+    db.execute("INSERT INTO once_steps (name, at) VALUES ('older', '2026-01-02T03:04:05+01:00')")
+    _usage(db, "2026-09-30T15:00:00+01:00", "2026-10-01T00:00:00+01:00")
+    _usage(db, "2026-09-30T14:00:00+00:00", None, agent="local")
+    db.execute("UPDATE projects SET paused = 'setting up'")
+    db.execute("UPDATE runs SET ended = '2026-09-30'")  # a plain date
+    assert metrics.utc_step_owed(db)
+    changed = metrics.convert_old_times_to_utc(db, "2026-11-04T10:00:00+00:00")
+    assert changed == 4  # runs.started, usage_events.at and resets_at (claude), the older step
+    rows = db.execute("SELECT agent, at, resets_at FROM usage_events ORDER BY agent").fetchall()
+    assert [tuple(r) for r in rows] == [
+        ("claude", "2026-09-30T14:00:00+00:00", "2026-09-30T23:00:00+00:00"),
+        ("local", "2026-09-30T14:00:00+00:00", None),
+    ]
+    assert db.execute("SELECT started FROM runs").fetchone()[0] == "2026-09-30T13:23:11+00:00"
+    assert db.execute("SELECT ended FROM runs").fetchone()[0] == "2026-09-30"
+    assert db.execute("SELECT paused FROM projects").fetchone()[0] == "setting up"
+    older = db.execute("SELECT at FROM once_steps WHERE name = 'older'").fetchone()[0]
+    assert older == "2026-01-02T02:04:05+00:00"
+    assert not metrics.utc_step_owed(db)
+    assert metrics.convert_old_times_to_utc(db, "2026-11-04T11:00:00+00:00") == 0
+
+
+def test_a_collision_changes_nothing_and_leaves_the_step_owed(db, ids):
+    _owe_the_utc_step(db)
+    _usage(db, "2026-09-30T15:00:00+01:00")
+    _usage(db, "2026-09-30T14:00:00+00:00")  # the same instant, so the same key once converted
+    db.execute("UPDATE runs SET heartbeat = '2026-09-30T15:00:00+02:00'")
+    with pytest.raises(sqlite3.IntegrityError):
+        metrics.convert_old_times_to_utc(db, "2026-11-04T10:00:00+00:00")
+    assert metrics.utc_step_owed(db)
+    ats = [r[0] for r in db.execute("SELECT at FROM usage_events ORDER BY id")]
+    assert ats == ["2026-09-30T15:00:00+01:00", "2026-09-30T14:00:00+00:00"]
+    assert db.execute("SELECT heartbeat FROM runs").fetchone()[0] == "2026-09-30T15:00:00+02:00"
+    assert db.execute("SELECT started FROM runs").fetchone()[0] == T0
+
+
 def test_writes_are_committed_at_once(tmp_path):
     """A crash loses nothing (ADR 13 item 1): another connection sees each write."""
     path = tmp_path / "factory-metrics.sqlite"
