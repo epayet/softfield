@@ -1,6 +1,6 @@
 # Milestone F61: Claude's meters say when the window runs out at this rate
 
-> **State:** ready · **Priority:** 6 · **Area:** factory
+> **State:** ready · **Priority:** 5 · **Area:** factory
 > Planted by the owner on 2026-10-08.
 
 ## Notes

@@ -1,6 +1,6 @@
 # Milestone F192: A fast lane request shows on the board and Overview as soon as it's made
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 5 · **Area:** factory
 > Planted by the owner on 2026-11-02.
 
 ## Notes

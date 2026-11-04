@@ -1,6 +1,6 @@
 # Milestone F203: A sign-off pushes the milestone to GitHub
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 0 · **Area:** factory
 > From the owner's terminal session of 2026-11-02.
 
 ## Notes
