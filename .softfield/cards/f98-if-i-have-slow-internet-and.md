@@ -1,6 +1,6 @@
 # Milestone F98: A pressed button shows it is sending, and the same press is taken once
 
-> **State:** ready · **Priority:** 9 · **Area:** factory
+> **State:** ready · **Priority:** 8 · **Area:** factory
 > Planted by the owner on 2026-10-10.
 
 ## Notes
