@@ -34,3 +34,10 @@ Read `.softfield/cards/f187-store-every-time-in-utc-the.md` ("What we know", D1 
 - `runner/metrics.py`'s docstring says times are stored in UTC and shown in local time
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
