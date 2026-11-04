@@ -410,9 +410,9 @@ tr.few .gauge { opacity: .35; }
   .bar-top .filters select { width: 100%; min-width: 0; }
   .factory-status { grid-area: 1 / 2; }
    .theme-switch { grid-area: 1 / 4; width: 44px; height: 44px; }  /* a thumb's target, like the dot */
-   .phone .theme-switch .plate { height: 40px; }
-   .phone .theme-switch .knob { height: 17px; }
-   .phone .theme-switch[aria-checked="false"] .knob { top: calc(100% - 19px); }
+   .theme-switch .plate { height: 40px; }
+   .theme-switch .knob { height: 17px; }
+   .theme-switch[aria-checked="false"] .knob { top: calc(100% - 19px); }
   .factory-status .dot-btn, .factory-status .sign { width: 44px; height: 44px; }
   .factory-status .words { display: none; }
   .bar-top.show-words .factory-status .words, .factory-status .words.fail { display: block; position: absolute; top: 100%; right: 0;

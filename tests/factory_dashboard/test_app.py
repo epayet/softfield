@@ -587,6 +587,44 @@ def test_phone_top_bar_is_compact_and_tabs_scroll(page, client, tmp_path, scheme
     assert layout_problems(page) == []
 
 
+def test_phone_theme_switch_plate_is_40px_tall(page, client):
+    """f69-08: the phone-specific knob sizing requires a .phone ancestor, but the app
+    does not add that class at mobile widths; the overrides must apply directly."""
+    page.set_viewport_size(PHONE)
+    page.emulate_media(color_scheme="dark", reduced_motion="reduce")
+
+    def route(r):
+        url = r.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.route(f"{ORIGIN}/**", route)
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector(".theme-switch", state="visible", timeout=REFRESH)
+    page.evaluate("() => document.fonts.ready")
+    plate = page.locator(".theme-switch .plate")
+    height = plate.evaluate("el => el.getBoundingClientRect().height")
+    assert height == 40, f"plate height {height}px != 40px at 390px viewport"
+    knob = page.locator(".theme-switch .knob")
+    knob_height = knob.evaluate("el => el.getBoundingClientRect().height")
+    assert knob_height == 17, f"knob height {knob_height}px != 17px at 390px viewport"
+    # The knob position when aria-checked="false" mirrors the aria-checked="true" position
+    plate_bcr = plate.evaluate("el => el.getBoundingClientRect()")
+    knob_bcr = knob.evaluate("el => el.getBoundingClientRect()")
+    gap_top = knob_bcr["top"] - plate_bcr["top"]
+    page.evaluate("document.getElementById('theme-btn').click()")
+    assert page.locator("#theme-btn").evaluate("el => el.getAttribute('aria-checked')") == "false"
+    knob_bcr = knob.evaluate("el => el.getBoundingClientRect()")
+    plate_bcr = plate.evaluate("el => el.getBoundingClientRect()")
+    gap_bottom = plate_bcr["bottom"] - knob_bcr["bottom"]
+    assert gap_bottom == pytest.approx(gap_top, abs=1), (
+        f"knob gap bottom {gap_bottom} != gap top {gap_top}"
+    )
+
+
 def test_phone_top_bar_steps_aside_on_scroll(page, client, tmp_path):
     """f42-02: on a phone the top bar slides away when scrolling down
     and comes back on scroll up."""
