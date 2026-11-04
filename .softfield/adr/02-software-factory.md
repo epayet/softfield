@@ -718,6 +718,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** UK winter hides this whole class of bug: both reset-time bugs passed here today and would have appeared on 28 March, and only a test with the zone set elsewhere shows them. Changing what a clock returns changes its readers as well as its writers, so a plan's list of writers isn't enough. A sweep by column name misses a value under another name (the Timeline's `bar.start`). The conversion of the old rows was still owed when the review stopped, waiting for the next backup, so the review checked it on tests only.
 - **Decisions affected:** none.
 
+### F203 (2026-11-04): a sign-off pushes the milestone to GitHub, and the bar says so ([review](../reviews/f203-push-to-github-at-sign-off.md))
+
+- **Q1:** one lead ticket reviewed (f203-03), three lines of code and one test. Two attempts failed when Claude's login expired, and the ticket was blocked; the lead finished it from its branch in the owner's terminal session. No checkpoint. Review round 1: no defect, two nits only reported. The push itself (f203-01, f203-02) was built in a terminal session and wasn't in this review.
+- **Q3:** no developer work (protected runner code). Neither Sonnet nor Opus could be judged: the login ran out under them.
+- **Q5:** see the review's numbers.
+- **Anything else:** an expired login looks like a passing error, so each job waited through its retries and then failed: about 3 hours of failed jobs, then about 7 with nothing running, for a three-line ticket. The block read "check-all failed", which pointed at the code. A terminal finish leaves no job row, so the metrics hold two attempts where the ticket says three.
+- **Decisions affected:** none. bug-59 holds Claude's jobs and asks the owner to log in.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
