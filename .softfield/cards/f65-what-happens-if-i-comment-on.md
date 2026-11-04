@@ -21,6 +21,9 @@ Found: once the runner has taken the approval, ready tickets already keep the ca
 ### From F182: When I don't sign off a card and comment on it instead, I… (merged by the lead on 2026-10-29)
 When I don't sign off a card and comment on it instead, I would like to see it orange dotted like I responded it. I wonder if that should be part of the bundling the whole task into one thing. Should sign offs be bundled with the plan and the original conversation, especially if I keep discussing the results and want to iterate on it, sounds like a step further in the bundling idea. I still want to see the tasks that are done first. Perhaps it should be styled differently if it's ripe
 
+### From F217: if i left a comment on a sign off review, i want to see… (merged by the lead on 2026-11-04)
+if i left a comment on a sign off review, i want to see that it's being revised with orange dashes in the planning desk
+
 ## Expected outcome
 Commenting on a card that waits for sign-off starts a round: the lead answers and drafts the follow-up, you approve it, the line builds it, a short review checks it, and the card comes back to your desk opening on **"Round 2: what changed since your comment"**: your comment quoted, each change with how to test it, and the tickets linked. Earlier rounds fold below. Repeat until you press Sign off.
 
