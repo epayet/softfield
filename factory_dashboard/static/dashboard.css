@@ -293,6 +293,22 @@ tbody tr:hover { background: var(--accent-wash); }
 .next-in-line h3 { font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted);
   margin: 0; font-weight: 600; }
 .next-in-line p { margin: 4px 0 0; }
+/* readouts: the job's numbers on a plate */
+.readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 1px; background: var(--rule);
+  border: 1px solid var(--rule); }
+.readout { background: var(--plate); padding: 6px 10px; display: flex; flex-direction: column; }
+.readout b { font: 600 22px/1.1 var(--display); font-variant-numeric: tabular-nums; }
+.readout b small { font: 500 12px var(--mono); color: var(--muted); margin-left: 3px; }
+.readout span { font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+/* the next in line: a numbered belt of crates */
+.belt { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.belt li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; padding: 5px 8px 5px 0;
+  background: var(--plate); border-left: 3px solid var(--rule); font-size: 13.5px; }
+.belt li .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; }
+.belt li.lead { border-left-color: var(--opus); } .belt li.developer { border-left-color: var(--dev); }
+.belt li b { font: 600 12px var(--mono); }
+.count { font: 700 28px/1 var(--display); color: var(--fg); }
+.count small { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-left: 6px; }
 /* the fast lane's bay on top of Next in line (F172 D9): the hazard stripe and the ink, as .card-reserve */
 .lane-bay { display: grid; gap: 4px; padding: 6px 8px 8px 16px; background: var(--plate);
   border: 1px solid var(--rule); position: relative; }

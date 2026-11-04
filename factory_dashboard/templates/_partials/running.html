@@ -14,16 +14,16 @@
     {% if job.title %}
     <div class="running-title">{{ job.title }}</div>
     {% endif %}
-    <dl class="kv">
-      <dt>Elapsed</dt><dd class="mono">{{ job.elapsed | ago }}</dd>
-      {% if job.difficulty %}<dt>Difficulty</dt><dd class="mono">{{ job.difficulty }}</dd>{% endif %}
+    <div class="readouts">
+      <div class="readout"><b>{{ job.elapsed | ago }}<small>s</small></b><span>Elapsed</span></div>
+      {% if job.difficulty %}<div class="readout"><b>{{ job.difficulty }}<small></small></b><span>Difficulty</span></div>{% endif %}
       {% if job.waiting_clock %}
-      <dt>Waiting</dt><dd class="mono">Waiting for Claude's limit to reset, until {{ job.waiting_clock }}</dd>
+      <div class="readout"><span>Waiting for Claude's limit to reset, until {{ job.waiting_clock }}</span></div>
       {% else %}
-      <dt>Live</dt><dd class="mono">        {% if job.tokens_in is not none or job.tokens_cached is not none %}read {{ ((job.tokens_in or 0) + (job.tokens_cached or 0)) | tokens }} tokens · {{ job.steps or 0 }} turns{% else %}no tokens reported yet{% endif %}</dd>
+      <div class="readout"><b>{{ ((job.tokens_in or 0) + (job.tokens_cached or 0)) | tokens }}<small>tokens</small></b><span>Read · {{ job.steps or 0 }} turns</span></div>
       {% endif %}
-      <dt>Heartbeat</dt><dd class="mono">{{ job.heartbeat | ago }} ago</dd>
-    </dl>
+      <div class="readout"><b>{{ job.heartbeat | ago }}<small>ago</small></b><span>Heartbeat</span></div>
+    </div>
   </div>
   {% else %}
   {% for run in runs %}

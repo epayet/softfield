@@ -2,23 +2,23 @@
   <h2>Queue</h2>
   {% if queue or queued_jobs %}
     {% if queue %}
-    <p>{{ queue | length }} ticket{{ "s" if queue | length != 1 }} waiting.</p>
+    <p><span class="count">{{ queue | length }} <small>{{ "ticket" if queue | length == 1 else "tickets" }} waiting.</small></span></p>
     {% elif queued_jobs %}
-    <p>{{ queued_jobs | length }} job{{ "s" if queued_jobs | length != 1 }} waiting.</p>
+    <p><span class="count">{{ queued_jobs | length }}<small>{{ "job" if queued_jobs | length == 1 else "jobs" }} waiting.</small></span></p>
     {% endif %}
   {% else %}
     <p class="sub">The queue is empty.</p>
   {% endif %}
-  <div class="next-in-line">
-    <h3>Next in line</h3>
+  <h3>Next in line</h3>
+  <ol class="belt">
     {% if lane %}
     <div class="lane-bay">
       <span class="label">Fast lane <span>goes before everything</span></span>
       {% for j in queued_jobs if j.lane %}
-      <div class="next-row"><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
+      <li><span class="n"></span><span><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</span></li>
       {% endfor %}
       {% for t in lane %}
-      <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · {{ waits[t.ticket] }}{% endif %} · {{ t.card }}</div>
+      <li class="{{ t.kind }}"><span class="n">{{ t.number }}</span><span><b class="mono"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · {{ waits[t.ticket] }}{% endif %} · {{ t.card }}</span></li>
       {% endfor %}
     </div>
     {% endif %}
@@ -28,20 +28,20 @@
     {% set thread = parts[0] if parts else '' %}
     {% set preview = j.message[:60] %}
     {% set truncated = j.message | length > 60 %}
-    <div class="next-row" title="{{ j.message }}"><b class="mono">{{ j.kind }}: <a href="/planning/{{ thread }}">{{ thread | upper }}</a></b> · {% if truncated %}"{{ preview }}…"{% else %}"{{ preview }}"{% endif %}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
+    <li title="{{ j.message }}"><span class="n"></span><span><b class="mono">{{ j.kind }}: <a href="/planning/{{ thread }}">{{ thread | upper }}</a></b> · {% if truncated %}"{{ preview }}…"{% else %}"{{ preview }}"{% endif %}{% if j.waits %} · {{ j.waits }}{% endif %}</span></li>
     {% elif j.kind == "Plant" %}
-    <div class="next-row"><b class="mono">{{ j.kind }}: {% if j.cancelled %}<s>{{ j.subject }}</s>{% else %}{{ j.subject }}{% endif %}</b> · {{ j.reason }}</div>
+    <li><span class="n"></span><span><b class="mono">{{ j.kind }}: {% if j.cancelled %}<s>{{ j.subject }}</s>{% else %}{{ j.subject }}{% endif %}</b> · {{ j.reason }}</span></li>
     {% else %}
-    <div class="next-row"><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</div>
+    <li><span class="n"></span><span><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</span></li>
     {% endif %}
     {% endfor %}
     {% for t in next %}
     {% if t.ticket %}
-    <div class="next-row"><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · {{ waits[t.ticket] }}{% endif %} · {% if t.early_for %}early: {{ t.early_for }} waits for it{% else %}priority {{ t.priority }}{% endif %}</div>
+    <li class="{{ t.kind }}"><span class="n">{{ t.number }}</span><span><b class="mono">{{ t.number }} <a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · {{ waits[t.ticket] }}{% endif %} · {% if t.early_for %}early: {{ t.early_for }} waits for it{% else %}priority {{ t.priority }}{% endif %}</span></li>
     {% else %}
-    <div class="next-row"><b class="mono">{{ t.number }} {{ t.title }}</b> · a batch{% if t.waits %} · waits for {{ t.waits | join(", ") }}{% endif %}</div>
+    <li><span class="n">{{ t.number }}</span><span><b class="mono">{{ t.number }} {{ t.title }}</b> · a batch{% if t.waits %} · waits for {{ t.waits | join(", ") }}{% endif %}</span></li>
     {% endif %}
     {% endfor %}
-    <p><a href="/board{{ q }}">Reorder on the board ›</a></p>
-  </div>
+    <li><a href="/board{{ q }}">Reorder on the board ›</a></li>
+  </ol>
 </section>

@@ -87,7 +87,7 @@ def test_a_job_with_a_fresh_heartbeat_is_running_now(client):
     assert "f1-04-live" in now
     assert "attempt 2" in now and LOCAL in now and "developer" in now
     assert "12 min" in now  # elapsed
-    assert "read 42k tokens · 17 turns" in now
+    assert "42k tokens" in now and "Read · 17 turns" in now
     assert "30 s ago" in now  # the heartbeat
     assert "Running now." in now  # the ticket's title
     needs = section(html, "needs-you")
@@ -334,7 +334,7 @@ def test_claude_job_shows_cached_and_turns(client, db_path):
         conn.close()
     running = section(client.get("/").text, "now")
     # 36k uncached + 970k cached: neither part alone renders as 1.0M.
-    assert "read 1.0M tokens · 18 turns" in running
+    assert "1.0M tokens" in running and "Read · 18 turns" in running
 
 
 def test_now_leaves_out_a_bench(client, db_path):
@@ -405,7 +405,7 @@ def test_cached_only_shown_when_input_null(client, db_path):
     finally:
         conn.close()
     running = section(client.get("/").text, "now")
-    assert "read 500k tokens · 10 turns" in running
+    assert "500k tokens" in running and "Read · 10 turns" in running
 
 
 def test_now_holds_what_works_then_next_in_line_and_no_terminal_command(client):
@@ -420,7 +420,9 @@ def test_now_holds_what_works_then_next_in_line_and_no_terminal_command(client):
     assert "softfield run" not in queue_section and "softfield run" not in now
     markup = html.split('id="queue"', 1)[1].split("</section>", 1)[0]
     assert "<code>" not in markup
-    assert re.search(r"<p>\d+ tickets? waiting\.</p>", markup)
+    assert re.search(
+        r"<p[^>]*>\s*<span class=\"count\">\d+\s*<small>[^<]+</small></span>\s*</p>", markup
+    )
     assert "f1-01-first" not in next_in_line  # merged
 
 
@@ -2861,11 +2863,11 @@ def test_planning_row_shows_first_60_chars_and_title(client, db_path):
     # The row should contain Planning:
     assert "Planning:" in next_section
     # Find the planning row in raw HTML (href/title can't be found in stripped text)
-    planning_row = html.split("Planning:")[1].split("</div>")[0]
+    planning_row = html.split("Planning:")[1].split("</li>")[0]
     assert 'href="/planning/f11"' in planning_row
-    # Title attribute is on the <div>, find it from the full row
+    # Title attribute is on the <li>, find it from the full row
     next_html = html.split("Next in line", 1)[1]
-    title_match = re.search(r'<div class="next-row" title="([^"]*)"[^>]*>.*?Planning:', next_html)
+    title_match = re.search(r'<li title="([^"]*)"[^>]*>.*?Planning:', next_html)
     assert title_match
     assert title_match.group(1) == long_text
     # Visible text: first 60 chars + …
@@ -2903,9 +2905,9 @@ def test_planning_row_with_empty_text_shows_first_comment(client, db_path):
     queue_section = section(html, "queue")
     next_section = queue_section.split("Next in line", 1)[1]
     assert "First comment." in next_section
-    # Title attribute is on the <div>, find it from the full row
+    # Title attribute is on the <li>, find it from the full row
     next_html = html.split("Next in line", 1)[1]
-    title_match = re.search(r'<div class="next-row" title="([^"]*)"[^>]*>.*?Planning:', next_html)
+    title_match = re.search(r'<li title="([^"]*)"[^>]*>.*?Planning:', next_html)
     assert title_match
     assert title_match.group(1) == "First comment."
 
@@ -2995,7 +2997,7 @@ def _plants(db_path: Path, *changes: tuple[int, str]) -> None:
 
 
 def _plant_rows(markup: str) -> list[str]:
-    rows = re.findall(r'<div class="next-row">(.*?)</div>', markup, re.S)
+    rows = re.findall(r"<li[^>]*>(.*?)</li>", markup, re.S)
     return [" ".join(unescape(re.sub(r"<[^>]+>", " ", r)).split()) for r in rows if "Plant:" in r]
 
 
@@ -3643,8 +3645,8 @@ def _lane_bay(html: str) -> tuple[str, str]:
 
 
 def _rows(markup: str) -> list[str]:
-    """The text of each ``next-row`` in ``markup``."""
-    return [row_text(r) for r in re.findall(r'<div class="next-row"[^>]*>(.*?)</div>', markup)]
+    """The text of each ``.belt li`` in ``markup``."""
+    return [row_text(r) for r in re.findall(r"<li[^>]*>(.*?)</li>", markup)]
 
 
 def _queue_on(board_db: Path, kind: str, subject: str) -> None:
