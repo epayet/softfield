@@ -1,6 +1,6 @@
 # Review: F187, every time stored in UTC, shown in local time
 
-- **Status:** round 1 done. The old rows are not converted yet: that happens right after tonight's backup.
+- **Status:** round 2 done, nothing left to fix. The old rows are not converted yet: that happens right after tonight's backup.
 
 ## Sign-off sheet
 
@@ -31,6 +31,7 @@ None.
 - 2026-11-04 06:27 ([session](../sessions/2026-11-04-0627.md)): `f187-01-runner-clocks-utc`, the lead's ticket on Sonnet, first attempt, 19 minutes.
 - 2026-11-04 06:50 ([session](../sessions/2026-11-04-0650.md)): `f187-03-old-times-to-utc`, the lead's ticket on Sonnet, first attempt, 16 minutes.
 - 2026-11-04 07:10: review round 1 fixed five findings itself.
+- 2026-11-04 10:12: review round 2 had no fix merges to read. It confirmed round 1's fixes are unchanged and ran all of the runner's tests.
 - Lessons:
   - **UK winter hides this whole class of bug.** Both reset-time bugs (F1, F2) pass on this machine today and would have appeared on 28 March. Only a test with the zone set to Paris can show them, and the card already asked for that.
   - **Changing what a clock returns changes every reader, not just the writers.** The card listed who writes through the clocks. `usage_limit_reset` reads `now` to mean "the machine's clock", and nothing marked it. The review found it by searching for every use of `now`'s zone.
@@ -71,6 +72,8 @@ No French changed.
 | F6 | nit | report | A conversion that keeps failing logs at each check and, with no backup set, writes a copy each time | Not fixed: needs a rare failure on a machine with no backup, for a step that runs once |
 | F7 | nit | report | Unused `now` parameters on two `_when`s, and a redundant `.astimezone(UTC)` in `_convert_old_times` | Not fixed: harmless |
 
+**Round 2:** there were no fix merges, because round 1 made its fixes directly. F1 to F5 stay resolved: the files they changed are the same as at the end of round 1, and their tests pass. F6 and F7 stay as reported. No new findings.
+
 What held up when I looked for trouble:
 - The conversion's column list matches the schema; `merges_unread` is a list of card keys, not a time.
 - A new database starts with the step done, and the real database still owes it.
@@ -80,7 +83,7 @@ What held up when I looked for trouble:
 Checkpoints: none read these tickets, so there's nothing to judge and no "missed".
 
 **Done when, as of now:**
-- The counts at 0, the console line and the Dropbox copy can only be checked after tonight's backup. The code paths are tested, on a copy and on a clash.
+- The counts at 0, the console line and the Dropbox copy can only be checked after tonight's backup. The code paths are tested, on a copy and on a clash. At 10:12 today the step was still owed, as expected: 458 runs and 1,377 jobs still held old times, the same as round 1, and new rows were being written in UTC.
 - "The same clock times as before" and "08:00+00:00 shows as 09:00" are tested in the zones given; the first needs your look on real pages.
 
 ## What was set aside
@@ -90,7 +93,9 @@ F6 and F7, as above. No bug tickets: neither is worth a run.
 - Sonnet passed both lead tickets on the first attempt. Its misses (F1, F2, F4, F5) were all outside the ticket's list of clocks and display sites. Searching for the readers of a changed value is what caught them, so this is the review doing its job, and no change is needed.
 - All five fixes were in protected code or a few lines, so I made them here rather than writing developer tickets.
 - **How the fixes were checked:** ruff and mypy pass, and the dashboard's 1,163 tests pass, run in three batches. `tests/runner` has no complete final count: it ran first in a full run that showed no failure before the time limit stopped it at about 88%. The runner's tests were all in the part that finished, judging by the suite's size, and the new ones in `tests/runner` also passed on their own. The `E`s printed after that stop came from the stop itself: those tests passed when rerun.
+- **Round 2 closes that gap for the runner:** all of `tests/runner` passes on current main, 1,882 tests in 6 minutes 27 seconds, as do the Timeline's 16. The dashboard's other tests weren't rerun in round 2: nothing of this card changed since their 1,163 passed in round 1.
 - `softfield report` isn't among the commands a review may run, so the numbers below come from the runner.
+- The ADR 02 entry is added. `runner/instructions/lead.md` still says to update "Known range" above, but `lead.md` has no such section; the line should lose that clause the next time the file is edited. Not worth a run.
 
 <!-- runner report -->
 <!-- /runner report -->

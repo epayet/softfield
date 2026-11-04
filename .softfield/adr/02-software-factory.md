@@ -710,6 +710,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the ticket's test replaced the review with a stub, and the review was what set the milestone back, though the Done when asked for the status to stay. A race needs a test through the real path, with the other event in the middle of it. A heal that starts from open items can't see a wrong row with no item. A fault in the owner's own button waited over five days for its turn on the board.
 - **Decisions affected:** none.
 
+### F187 (2026-11-04): every time stored in UTC, shown in local time ([review](../reviews/f187-store-every-time-in-utc-the.md))
+
+- **Q1:** three tickets: one developer ticket escalated after three failed attempts and finished by the lead on its branch, two lead tickets merged first time; no checkpoint. Review round 1: four should-fix and one nit fixed by the review, two nits only reported. Round 2: no fix merges, the fixes hold, nothing new.
+- **Q3:** Qwen 0/3 on f187-02 (34 minutes, nothing merged). Sonnet passed f187-01 and f187-03 first time; its misses were all outside the ticket's lists.
+- **Q5:** see the review's numbers.
+- **Anything else:** UK winter hides this whole class of bug: both reset-time bugs passed here today and would have appeared on 28 March, and only a test with the zone set elsewhere shows them. Changing what a clock returns changes its readers as well as its writers, so a plan's list of writers isn't enough. A sweep by column name misses a value under another name (the Timeline's `bar.start`). The conversion of the old rows was still owed when the review stopped, waiting for the next backup, so the review checked it on tests only.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.
