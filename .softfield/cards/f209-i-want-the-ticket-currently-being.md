@@ -6,6 +6,9 @@
 ## Notes
 i want the ticket currently being worked in the board be highlighted a bit more. also it doesn't seem to auto refresh very well
 
+### From F218: Developer view if a developer is working on something, it… (merged by the lead on 2026-11-04)
+Developer view if a developer is working on something, it should be highlighted as blue still. It currently doesn't even though it has the now tag
+
 ## Today (read in the code, 2026-11-03)
 - **The card at work barely shows.** `started` gives every card with a ticket ever started the same orange edge: 16 of the 53 planted cards tonight. The card at work differs by one 12.5 px "Now:" line (`.card-now`), and it can sit far down the column: F9 is #23.
 - **Only a ticket job shows.** `Card.running` comes from jobs with a ticket. A review has its small "Review running" box, and a planner job shows nothing beyond "the lead is answering", which comes from the thread, not the job.
