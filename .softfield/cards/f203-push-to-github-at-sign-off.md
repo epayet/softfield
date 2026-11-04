@@ -1,6 +1,7 @@
 # Milestone F203: A sign-off pushes the milestone to GitHub
 
-> **State:** ready · **Priority:** 0 · **Area:** factory
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-04. Base: git tag `f203-push-to-github-at-sign-off-start`. Report: [`.softfield/reviews/f203-push-to-github-at-sign-off.md`](../reviews/f203-push-to-github-at-sign-off.md).
 > From the owner's terminal session of 2026-11-02.
 
 ## Notes

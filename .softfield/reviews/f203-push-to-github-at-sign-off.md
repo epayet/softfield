@@ -1,6 +1,6 @@
 # Review: F203, a sign-off pushes the milestone to GitHub
 
-- **Status:** round 1 done, nothing to fix. This round read only `f203-03-pushing-shows-on-the-bar`, as asked. The push itself (f203-01, f203-02) was built in your terminal session of 2 November and wasn't part of it.
+- **Status:** done, signed off by the owner on 2026-11-04.
 
 ## Sign-off sheet
 
