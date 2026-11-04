@@ -24,3 +24,9 @@ Read `check_push` and `doing` in `runner/loop.py`, and `test_a_pick_pushes_what_
 - a pick with no new tag never sets that activity
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: blocked
+reason: check-all failed; the work is on task/f203-03-pushing-shows-on-the-bar
+```
