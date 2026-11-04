@@ -3,7 +3,7 @@
 ## Sign-off sheet
 
 ### 1. What changed
-When a card that changed a page is ready for your sign-off, its page now shows a **Before and after** panel right under "What changed". It holds real pictures of each page the card changed, as the page was when the card started and as it is now, on a phone and on a wide screen.
+When a card that changed a page is ready for your sign-off, its page now shows a "Before and after" panel right under "What changed". It holds real pictures of each page the card changed, as the page was when the card started and as it is now, on a phone and on a wide screen.
 
 - On a phone, the Before / After switch flips between the two. On a wide screen they sit side by side.
 - The Phone / Wide switch picks the size, and a tap opens a picture at full size.
@@ -13,18 +13,18 @@ When a card that changed a page is ready for your sign-off, its page now shows a
 
 The runner takes the pictures itself before each review round, on a copy of the factory's data, so nothing real is touched. The review now opens the after pictures and says in one line whether they match the mock-up. New projects with pages are asked to set this up. Softfield has it now; travel-companion and Coucou get theirs from a card each (their text is in the card's "Other projects").
 
-Differs from the mock-up: F85's own after picture can't show the panel, because the pictures are taken before the card's sheet exists and the panel shows only with a sheet, so its Before and After look the same. Reading its code against the mock-up's Proposed, the panel matches, except the words on each address, which read "the page as it is now" where the mock-up says "the live page".
+Differs from the mock-up in two small ways, and neither needs changing: each address says "opens the page as it is now" where the mock-up says "opens the live page", and a wide screen opens on the Wide pictures where the mock-up opens on Phone. In F85's own After, the panel's After reads "No picture was taken" because that picture was being taken at that moment.
 
 ### 2. How to test it yourself
 1. On your phone, open F85's page from the board. "Before and after" is under "What changed", with one page listed.
-2. Press Before, then After, then Wide, then Phone: the picture changes each time. F85's own Before and After look alike (see above), so the real test is step 5.
+2. Press Before, then After, then Wide, then Phone: the picture changes each time. Before has no panel and After has one, showing a smaller picture of the page inside it (see above).
 3. Tap a picture: it opens at full size.
 4. Tap the address above it: the page opens as it is now, in a new tab.
-5. Sign off the next Softfield card that changes a page and has a mock-up, and do the same there: Before and After should now differ, and "What changed" ends with the line on the mock-up.
+5. Sign off the next Softfield card that changes a page and has a mock-up, and do the same there: Before and After show that card's change, and "What changed" ends with the line on the mock-up.
 6. On a computer, open a card's page with pictures: Before and After sit side by side, and there is no Before / After switch.
 
 ### 3. Left for later
-- `bug-58`: a card's "What it's about" shows its doc's Markdown marks as written, like `[ADR 40](../adr/40-….md)`; you can see it in F85's pictures. It's set aside on the board as a seed.
+- `bug-58`: a card's "What it's about" and its sheet show Markdown marks as written, like `[ADR 40](../adr/40-….md)`; you can see it in F85's pictures and on this page. It's set aside on the board as a seed.
 - Pictures in the light theme, and pictures for planner jobs, stay in the card's "Later".
 
 ### 4. Decisions waiting for you
@@ -34,6 +34,7 @@ None. [ADR 40](../adr/40-pictures-at-sign-off-in-every-project.md) was accepted 
 - 2026-10-29 (run 20261029-222125): `f85-01` started, found its ADR still Proposed, and stopped without a change: right to stop. The approval had reached another file with the same number. A terminal session fixed that on 2026-11-02, and the ADR is now ADR 40.
 - 2026-11-03 16:39 ([session](../sessions/2026-11-03-1639.md)): `f85-01` (the pictures) parked for a Claude limit, then built by the lead in 17 minutes; 0 local tokens on it.
 - 2026-11-03 20:12 ([session](../sessions/2026-11-03-2012.md)): `f85-02` (the panel, 14 minutes) and `f85-03` (planner, review and setup words, 6 minutes), built by the lead first time; 0 local tokens.
+- 2026-11-04 (run 20261104-015401): review round 2, no fix merges: it read round 1's own fixes and the first after pictures to show the panel. No new work.
 - Lessons:
   - **The review was never given the mock-up.** The brief looked for the mock-up under the card's full name, while mock-ups go by the short one, so every card would have read "mock-up: none". The test used a card named `f1`, where both names are the same. Fixed in this review, with a test that tells them apart.
   - **A card reviewing itself found that bug.** The brief said "none" while the card's doc named its mock-up. It is worth running a new review feature on its own card.
@@ -65,16 +66,28 @@ Tests read closely. Existing tests a developer edited: one, `test_look.py`'s add
 | F4 | should-fix | claude | A `project.toml` that doesn't parse gave a 500 on a card's page with pictures: `project_shots` raised what the page doesn't catch (f85-01) | Fixed: it raises `ConfigError`, with tests in both places |
 | F5 | should-fix | claude | The setup guide never named `$SOFTFIELD_SHOTS_DATA` or `live`, and sat inside "Protected paths" (f85-03) | Fixed: its own step, naming both |
 | F6 | nit | claude | The panel's captions dropped the mock-up's "at the card's start" and "main now" (f85-02) | Fixed, and tested |
-| F7 | nit | later | A card's "What it's about" shows Markdown marks as written (older code, seen in the pictures) | `bug-58` |
+| F7 | nit | later | A card's "What it's about" and its sheet show Markdown marks as written (older code, seen in the pictures) | `bug-58`, widened in round 2 to a bold in a paragraph |
 | F8 | nit | report | A redirect from the app to another port of 127.0.0.1 would pass the browser's rule, against ADR 40 item 3: routes aren't run again on a redirect, and the name rule excludes 127.0.0.1. Read from the code, not run. It needs the project's own app to redirect, and only a GET could get through | Suggested fix if a project ever needs it: the guard fetches with redirects off and fulfils the answer |
 | F9 | nit | report | Small tidying in `milestones.py`: `_is_factory` repeats the check in `_factory_project`; `suffix = q if q else ""` does nothing; an address with `#` gets its `?project=` after the fragment; one redundant assertion in `test_app.py` | Suggested fix: tidy them when that code is next touched |
 | F10 | nit | claude | f85-01 changed one space on `max_attempts` in `project.toml`, out of line with its neighbours | Fixed |
+| F11 | nit | report | From round 2 on, a card that lists its own page gets an After showing its panel half-drawn: last round's date, the kept Before, and "No picture was taken" for the After, because `_take` removes the old afters before drawing (seen in F85's After) | Suggested fix if it ever misleads: take the afters into a temporary folder and move them in at the end. It only costs a smaller picture inside the picture, so I left it |
+
+Round 2 had no fix merges, so it read round 1's own fixes, which nobody else had read. All hold, and the seven marked fixed stay fixed:
+- **F1:** this round's brief named `.softfield/cards/f85-mockup/before-after.html`, so the fix works on the real card.
+- **F2:** the panel's "The plan's mock-up ›" is in the after picture and on the live page. The older proposal still opens, marked as replaced.
+- **F3:** the browser tests read well: they check the visible pictures, the caption, the pressed state and the layout, on both widths. The unsigned-card test has its positive case in the tests beside it.
+- **F4:** the runner's own call sits inside `take`'s catch-all, so a `ConfigError` can't stop a review.
+- **F5:** nothing refers to the setup guide's steps by number, so the renumbering breaks nothing.
+- **F6:** the captions read as in the mock-up, on the live page.
+- **F10:** the comment's column lines up with its neighbours again.
+
+Round 2's one correction is to my own round 1 report: it said F85 couldn't picture its own panel. That holds only for round 1, since the sheet exists from round 2 on. The sheet, the mock-up line and ADR 02's entry now say so. I also took the stars out of the sheet's first paragraph, since `_to_html` bolds only inside a list item (now in `bug-58`).
 
 No checkpoint ran (three lead tickets), so there are no checkpoint verdicts. Score: 7/10. The picture-taking is careful and well tested, and each decision is followed. But the comparison the card promised couldn't have worked on any real card, and a fixture hid it.
 
 Checked and fine: the route refuses other names, `..`, other cards and symlinks; `p.say | safe` only ever holds the page's fixed sentences; a reason is escaped; an address becomes a link only to `live` or the dashboard; both trees share one data folder; the worktree and data are removed after a failure. The ticket said Before shows first on a phone, while the mock-up you approved shows After first: built as the mock-up, which I kept.
 
-After the fixes, the whole runner and dashboard suite passes (3,014 tests, on six workers), and mypy and ruff pass on the changed code. A first run on one worker reached its time limit, and my rewording of the setup guide failed one test there; that's fixed too. Round 2 still has to read these fixes.
+After the fixes, the whole runner and dashboard suite passes (3,014 tests, on six workers), and mypy and ruff pass on the changed code. A first run on one worker reached its time limit, and my rewording of the setup guide failed one test there; that's fixed too. In round 2, with no code changed, I ran only the 62 picture and panel tests (all pass), plus ruff and mypy on the changed code (both pass), not the whole suite.
 
 The French: no `coucou/locale/fr/` change in this milestone.
 

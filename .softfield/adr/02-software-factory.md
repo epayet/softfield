@@ -700,7 +700,7 @@ _(to fill in at the M3 review)_
 - **Q3:** no developer work (protected runner code; the dashboard ticket serves files from disk).
 - **Q5:** see the review's numbers.
 - **Anything else:** the blocking bug was found because the card reviewed itself: the brief said "mock-up: none" while the card's doc named its mock-up. Its test used `f1` as the card's key, a key where the short and full forms are the same, so a fixture hid the bug: a test of a path rule needs a value that tells the two rules apart. A ticket's "in Chromium" Done when reached main with no browser test, and nothing noticed.
-- **Decisions affected:** none. A card that changes the card page can't picture its own panel, since the pictures are taken before its sheet exists; the review says so.
+- **Decisions affected:** none. A card that changes the card page can't picture its own panel in round 1, since the pictures are taken before its sheet exists; from round 2 on it can, half-drawn, as its After is being taken.
 
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
