@@ -1,4 +1,4 @@
-# Milestone F219: Lead tickets stop at Claude's reserve: runner, dry run and pages agree
+# Milestone F219: Lead tickets follow Claude's week pace; runner and dry run share one rule
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-04.
