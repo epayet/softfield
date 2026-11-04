@@ -22,9 +22,9 @@ The planning thread behind F149's plan, oldest first, as it was when the owner a
 >    Action: f149-02 checks each item against the code, writes the seeds and cards, then deletes the file.
 > 6. **Travel companion and Coucou: one plant on each board**: A Softfield ticket can't write into another project's repo, so each of those projects cleans up its own file through a card on its own board. Pick the project in the Plant box and paste:
 >
-> Travel companion: "Retire docs/backlog.md: a lead ticket writes each item still worth a fix as a bug ticket set aside in .softfield/tasks/later/ (milestone: bugs, finding: the review's id, its words and fix in full), drops the rest with a reason, then deletes the file. Reviews no longer write it."
+> Travel companion: "Retire docs/backlog.md: a lead ticket writes each item still worth a fix as a bug ticket set aside in .factory/tasks/later/ (milestone: bugs, finding: the review's id, its words and fix in full), drops the rest with a reason, then deletes the file. Reviews no longer write it."
 >
-> Coucou: "Retire docs/backlog.md: a lead ticket writes each product item still worth a fix as a bug ticket set aside in .softfield/tasks/later/, none queued while product work is on hold, drops the factory items Softfield already handles (m0, the m1 runner status, the 2026-10-02 sign-off) and fixes the links in README.md. Reviews no longer write it."
+> Coucou: "Retire docs/backlog.md: a lead ticket writes each product item still worth a fix as a bug ticket set aside in .factory/tasks/later/, none queued while product work is on hold, drops the factory items Softfield already handles (m0, the m1 runner status, the 2026-10-02 sign-off) and fixes the links in README.md. Reviews no longer write it."
 >    Action: You plant the two notes. Each project's lead then drafts its own single ticket.
 > 7. **Until f149-01 merges, reviews keep writing the file**: This is two lead tickets, about an hour of work. F149 sits at the bottom of the board (priority 100), so any reviews that run before it will still add items. f149-02 converts whatever has been added by then. No ready ticket changes, so there's no need to pause the factory.
 >    Action: Drag F149 up the board if you want the file gone before the next reviews.
@@ -32,3 +32,42 @@ The planning thread behind F149's plan, oldest first, as it was when the owner a
 > Proposals:
 > - ADR 35: No backlog file: fixes are bug seeds, ideas are planted (adr)
 > - F149: retire the backlog file (plan)
+
+## The lead, 2026-10-28 09:53
+
+> Approved by the owner on 2026-10-28: approved plan/f149: queued f149-01-reviews-stop-writing-a-backlog, f149-02-backlog-items-to-seeds
+
+## The lead, 2026-11-02 20:54
+
+> Done on 2 Nov: no review writes a backlog file, and Softfield's is gone. Items became bug-49 to bug-53, cards F200 to F202 and a line on F143; the rest are dropped with reasons, listed on this card. Travel Companion's and Coucou's files go through their own planted cards, F10 and F1.
+
+## The owner, 2026-11-04 07:56
+
+> rather than becoming a seed on my board, i imagined more of a 'plant this seed' option from the review, unless that is planned elsewhere already?
+
+## The lead, 2026-11-04 08:07
+
+> You're right, and it's only partly planned. I've drafted ADR 43 and one ticket that make a review's small fixes plantable from the review, instead of landing on your board.
+>
+> 1. **Half of this is already planned**: F164, Plant a review's ideas straight from the review, builds the plate with Plant and Plant and ask the lead. It's ready but not built, because its tickets f164-01, f164-03 and f164-06 are still waiting. It only covers ideas in "What next". Small fixes go to the board because I wrote it that way in ADR 35, No backlog file: the review sets a bug ticket aside without asking you.
+>    Action: Build on F164's plate. No second button or new screen.
+> 2. **A review's small fix becomes a line you can plant**: I agree with you. 52 bug tickets are set aside on Softfield's board, and the last 8 reviews added 5 more that nobody asked for. Now a review will write each small fix worth a run as one sentence in "What next": the file, the problem and the fix. It shows on F164's plate with the same two buttons, and nothing reaches your board until you press one. That's about one plate per review going by those 8.
+>    Action: ADR 43 and f164-07, review fixes are quoted too.
+> 3. **The cost: a planted fix isn't ready to run**: A set-aside bug ticket can be queued as it is. A planted fix is only an idea card, so it needs Plant and ask the lead to get its ticket, and that planner job has averaged $2.40. You pay only for the fixes you want, and reviews stop writing tickets nobody asked for, so I still recommend it. The cheaper-looking option, where Plant releases a ticket the review already wrote, means paying for every ticket whether you plant it or not, plus a new kind of request.
+>    Action: Nothing, unless you'd rather keep ready-made tickets.
+> 4. **The risk: a fix nobody plants stays in its review**: An unplanted fix stays only in the review report and the metrics database, and nothing reminds you of it. Bugs in the milestone's own work are still fixed without asking, and a security finding can never be left as a line to plant.
+>    Action: Written into ADR 43, items 3 and 5.
+> 5. **Fixes must land on the right project's board**: F164 sends any line under Factory to Softfield's board. A fix to Stampu's own code written there would be planted in the wrong project, so a project's own fixes go under Product. Softfield's own fixes go under Factory.
+>    Action: Written into ADR 43, item 2, and f164-07, review fixes are quoted too.
+> 6. **Reviews keep setting bug tickets aside until F164 is built**: Without the plate, a quoted line has no button, so f164-07, review fixes are quoted too, waits for F164's tickets. Until then reviews keep setting bug tickets aside as they do now. F164, Plant a review's ideas straight from the review, is at 12 on the board.
+>    Action: Drag F164 up if you want this sooner.
+> 7. **The 52 bug tickets already on the board stay**: They're already written and paid for, and any one of them can be queued as it is. Turning them into plates would cost money and fix nothing. You can still remove any you don't want from the board.
+>    Action: Nothing.
+> 8. **F149 can still be signed off**: The new ticket sits on F164, because that's the work it waits for. Sign-off refuses a card with tickets left, so a ticket here would have held F149, Retire the backlog file, until F164 was done. The backlog file itself is retired as you asked. Only the bug-seed part of the sign-off sheet changes later.
+>    Action: Press Accept on ADR 43, then Approve, then Sign off on this page. Approve is refused until ADR 43 is accepted.
+> 9. **No new mock-up**: A fix looks exactly like an idea on F164's plate, so F164's mock-up already shows it. Nothing else changes on screen.
+>    Action: Tell me if you want fixes to look different from ideas, and I'll draw it.
+>
+> Proposals:
+> - ADR 43: The owner plants a review's small fixes (adr)
+> - F164: a review's fixes get Plant buttons too (plan)

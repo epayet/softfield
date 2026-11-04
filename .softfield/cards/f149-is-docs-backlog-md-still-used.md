@@ -43,3 +43,6 @@ No review in any project writes a backlog file again; Softfield's is gone, each 
 **Dropped, each still in its review report:** already tickets: f79-F3 (bug-01), ADR 07's parallel developers (bug-03), f12-F10 (bug-40). Not worth a run, as D4 decided: f12-F11, f104-F3, f17-F5, f153-F3, f3 (SIGKILL), f4-F4, f3-C310-2, f114-F7, f2 (two gates). Added since D4, same reason (never seen, or right today): f68-F7, f84-F3, f32-F1, f21-F3, f15-F6.
 **Coucou's section and m2-F6** are in Coucou's own file, which its F1 card retires. Travel Companion's goes through its F10.
 
+## The owner's note on sign-off (2026-11-04)
+The owner wants to plant a review's small fixes from the review, not find them on the board. ADR 43 amends D1 and D3: the route `later` becomes a quoted line with F164's Plant buttons. The work is `f164-07-review-fixes-are-quoted-too`, on F164 because it waits for F164's plates, so this card's sign-off doesn't wait for it.
+
