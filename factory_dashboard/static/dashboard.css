@@ -854,6 +854,9 @@ main:has(.board) { max-width: 1360px; }
   background: var(--floor); font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
 .card-reserve i { width: 14px; align-self: stretch;
   background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+/* a card with an open fast lane request (F192): the plate while the runner hasn't taken it */
+.card-reserve.on-its-way { outline: 1px dashed var(--hazard); outline-offset: 0; color: var(--hazard); }
+.card-reserve.on-its-way.leaving i { background: var(--ghost); }
 .card-review { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35;
   padding: 5px 8px; background: var(--floor); border-left: 2px solid var(--hazard); color: var(--ink-2); }
 .card-review b { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--fg); }

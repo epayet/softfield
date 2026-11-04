@@ -2130,3 +2130,88 @@ def test_sending_from_the_view_posts_the_same_reorder(page, board_db):
     line.remove("f27")
     line.insert(line.index("f23"), "f27")
     assert [(r["kind"], json.loads(r["value"])) for r in rows] == [("reorder", line)]
+
+
+# --- a card with an open fast lane request (f192-01) -------------------------------------------
+
+
+def _reserve(value: str, done: str | None = None) -> Callable[[sqlite3.Connection, int], None]:
+    """A ``reserve`` request, open or finished with ``done``."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        asked = metrics.add_request(conn, p, "reserve", "f23", value, NOW.isoformat())
+        if done:
+            metrics.finish_request(conn, asked, done, "")
+
+    return change
+
+
+def test_a_planted_card_with_an_open_reserve_on_shows_the_on_its_way_plate(board_db, board_client):
+    """F192 D1, D2: a planted card with lane_asked "on" has the on-its-way plate."""
+    write(board_db, _reserve("on"))
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.reserve is False  # F23 is not marked
+    assert f23.lane_asked == "on"
+    html = _page(board_client)
+    _, words, raw = _card(html, "/milestones/f23-planted")
+    assert "card-reserve on-its-way" in raw
+    assert "fast lane · on its way · at the runner's next pick" in words
+
+
+def test_a_planted_card_with_an_open_reserve_off_shows_the_leaving_plate(board_db, board_client):
+    """F192 D2: a planted card with lane_asked "off" has the leaving plate."""
+    write(board_db, _reserve("off"))
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.lane_asked == "off"
+    html = _page(board_client)
+    _, words, raw = _card(html, "/milestones/f23-planted")
+    assert "card-reserve on-its-way leaving" in raw
+    assert "leaving the fast lane · on its way" in words
+
+
+def test_a_seed_card_keeps_lane_asked_none_even_with_a_request(board_db):
+    """F192 D1: a seed card's lane_asked is None even with a reserve request."""
+    write(board_db, _reserve("on"))
+    found = read(board_db)
+    f20 = card(found, "F20")
+    assert f20.lane_asked is None
+
+
+def test_a_card_with_no_open_request_keeps_its_class_unchanged(board_db, board_client, tmp_path):
+    """F192 D2: a marked card with no open request keeps exactly class="card-reserve"."""
+    mark_reserve(board_db, tmp_path / "repo", "f23-planted")
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.reserve is True
+    assert f23.lane_asked is None
+    html = _page(board_client)
+    _, words, raw = _card(html, "/milestones/f23-planted")
+    assert 'class="card-reserve"' in raw
+    assert "on-its-way" not in raw
+    assert "fast lane" in words
+
+
+def test_a_done_reserve_request_shows_no_plate(board_db, board_client):
+    """F192: a request the runner has done shows nothing."""
+    write(board_db, _reserve("on", NOW.isoformat()))
+    found = read(board_db)
+    f23 = card(found, "F23")
+    assert f23.lane_asked is None
+    html = _page(board_client)
+    _, _words, raw = _card(html, "/milestones/f23-planted")
+    assert "on-its-way" not in raw
+
+
+def test_moving_a_card_keeps_the_plate_showing(page, board_db):
+    """F192 D2: moving a card on the board leaves the plate showing."""
+    write(board_db, _reserve("on"))
+    _three_planted(page, board_db)
+    page.locator(".slot[data-key=f23] .card .card-reserve").wait_for()
+    _drag(page, "f23", "f24")
+    slot = page.locator('.slot[data-key="f23"]')
+    plate = slot.locator(".card-reserve")
+    assert plate.is_visible()
+    classes = plate.get_attribute("class") or ""
+    assert "on-its-way" in classes

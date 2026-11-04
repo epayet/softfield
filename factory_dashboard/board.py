@@ -41,7 +41,7 @@ from runner import metrics
 from runner.config import read_protected
 from runner.loop import ticket_minutes
 from runner.milestone import card as milestone_header
-from runner.requests import REORDER
+from runner.requests import REORDER, RESERVE
 from runner.router import lead_only
 from runner.tasks import BUGS, DEFAULT_PRIORITY, milestone_file, short_key
 
@@ -119,6 +119,7 @@ class Card:
     was: int = 0  # then, its place without the reorder
     waits: tuple[str, ...] = ()  # other card keys this card's ready tickets depend on
     reserve: bool = False  # a planted card marked to use Claude's reserve (F172 D6)
+    lane_asked: str | None = None  # "on" or "off" from an open reserve request (F192)
     developers: DevWork | None = None  # its developer work; None outside the developers' view
     thread: str = ""  # its conversation's short key, lower case; "" for a bug or none (f15-06)
     setting_aside: bool = False  # an open request sets its thread aside
@@ -422,6 +423,14 @@ def _cards(
             (project,),
         )
     }
+    # the open reserve requests, latest per subject first (F192 D1)
+    lane_requests: dict[str, str] = {}
+    for r in conn.execute(
+        "SELECT r.subject, r.value FROM owner_requests r JOIN projects p ON p.id = r.project_id"
+        " WHERE p.name = ? AND r.kind = ? AND r.done IS NULL ORDER BY r.id DESC",
+        (project, RESERVE),
+    ):
+        lane_requests.setdefault(r["subject"], r["value"])
     latest_messages: dict[str, sqlite3.Row] = {}
     for r in conn.execute(
         "SELECT t.card, m.author, m.at FROM planner_messages m"
@@ -522,6 +531,7 @@ def _cards(
             note=_card_note(key.lower(), stage, latest_messages, sent, waits),
             waits=waits,
             reserve=stage in RESERVABLE and marked(repo, m["key"]),
+            lane_asked=lane_requests.get(key.lower()) if stage in RESERVABLE else None,
             started=started,
             running=running(counted) if stage == "planted" else None,
             developers=dev_work(stage, own),
