@@ -138,7 +138,7 @@ def _pause(conn: sqlite3.Connection, state: State, now: datetime, kind: str) -> 
     since = state.owner_pause
     if kind == PAUSE:
         if since is not None:
-            return f"already paused, since {datetime.fromisoformat(since):%H:%M}"
+            return f"already paused, since {datetime.fromisoformat(since).astimezone():%H:%M}"
         state.owner_pause = now.isoformat()
         metrics.add_usage_event(conn, loop.RUNNER_AGENT, state.owner_pause, PAUSE)
         return "paused: the runner finishes its job, then holds"
@@ -534,7 +534,9 @@ def _merge(
         )
     text = docs[0].read_text(encoding="utf-8")
     title = milestone.milestone_doc(text).get("title") or duplicate
-    source = f"From {names[0]}: {title} (merged by the {by} on {now.date().isoformat()})"
+    source = (
+        f"From {names[0]}: {title} (merged by the {by} on {now.astimezone().date().isoformat()})"
+    )
     doc = docs[1].read_text(encoding="utf-8")
     notes = planner.card_notes(text)
     docs[1].write_text(planner.merged_card(doc, notes, source, summary=summary), "utf-8")
@@ -1021,7 +1023,7 @@ def _accept_adr(
     branch = planner.plan_branch(thread)
     draft = _adr_draft(git, branch, number) if branch and _has_branch(git, branch) else None
     if branch is None or draft is None:
-        path = owner.decide_adr(repo, number, "Accepted", now.date(), db=db)
+        path = owner.decide_adr(repo, number, "Accepted", now.astimezone().date(), db=db)
         accepted = path.relative_to(repo).as_posix()
         result = f"accepted {accepted}"
     else:
@@ -1036,7 +1038,13 @@ def _accept_adr(
             if target != draft:
                 _renumber_draft(repo, draft, target, number, new)
             owner.decide_adr(
-                repo, new, "Accepted", now.date(), db=db, path=repo / target, asked_as=number
+                repo,
+                new,
+                "Accepted",
+                now.astimezone().date(),
+                db=db,
+                path=repo / target,
+                asked_as=number,
             )
         except Exception:
             _undo(git)
@@ -1111,7 +1119,9 @@ def _plant(
         name = f"{slug}-{n}"
     key = planner.next_key(repo, area, metrics.thread_cards(conn, project_id))
     full = f"{key}-{name}"
-    note = " ".join(filter(None, [f"Planted by the owner on {now.date().isoformat()}", source]))
+    note = " ".join(
+        filter(None, [f"Planted by the owner on {now.astimezone().date().isoformat()}", source])
+    )
     doc = planner.seed_card(key, title, thoughts, area, note + ".")
     found = milestone.card(full, doc)
     if (found.state, found.area) != (planner.IDEA, area) or milestone.milestone_after(doc):
@@ -1183,7 +1193,7 @@ def _drop_seed(
     at = now.isoformat()
     if thread in metrics.thread_cards(conn, project_id):
         thread_id = metrics.planner_thread(conn, project_id, thread, at)["id"]
-        text = f"Removed by the owner on {now.date().isoformat()}."
+        text = f"Removed by the owner on {now.astimezone().date().isoformat()}."
         metrics.add_planner_message(conn, thread_id, "lead", at, text)
     for row in metrics.open_jobs(conn, project_id):
         if row["kind"] == planner.PLANNER and str(row["subject"]).rpartition("#")[0] == thread:
@@ -1807,7 +1817,7 @@ def _apply(
     try:
         if kind == SIGNOFF:
             key = milestone_arg(repo, subject)
-            owner.signoff(repo, key, now.date(), db=db)
+            owner.signoff(repo, key, now.astimezone().date(), db=db)
             return f"signed off {key}"
         if kind in (QUEUE, SET_ASIDE):
             if not subject:  # "" would match every ticket in the folder
@@ -1972,10 +1982,16 @@ def _close_if_settled(
     at = now.isoformat()
     states = [planner.proposal_state(p, thread, asked) for p in listed]
     if all(state == planner.REJECTED for state in states):  # nothing taken: won't do
-        why, line = planner.REJECTED, f"Rejected by the owner on {now.date().isoformat()}: won't do"
+        why, line = (
+            planner.REJECTED,
+            f"Rejected by the owner on {now.astimezone().date().isoformat()}: won't do",
+        )
     else:  # a reject that closes a thread with approvals isn't called one
         said = "Settled" if result.startswith(planner.REJECTED) else "Approved"
-        why, line = planner.APPROVED, f"{said} by the owner on {now.date().isoformat()}: {result}"
+        why, line = (
+            planner.APPROVED,
+            f"{said} by the owner on {now.astimezone().date().isoformat()}: {result}",
+        )
     metrics.add_planner_message(conn, found["id"], "lead", at, line)
     metrics.set_thread_archived(conn, found["id"], at, why)
     _resolve_items(conn, project_id, now, [thread])

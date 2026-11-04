@@ -156,11 +156,11 @@ def _event_times(lines: Iterable[str]) -> list[int]:
 
 
 def _iso_ms(ms: int) -> str:
-    return datetime.fromtimestamp(ms / 1000, tz=UTC).astimezone().isoformat()
+    return datetime.fromtimestamp(ms / 1000, tz=UTC).isoformat()
 
 
 def _iso_mtime(path: Path, minus_s: float = 0.0) -> str:
-    return datetime.fromtimestamp(path.stat().st_mtime - minus_s, tz=UTC).astimezone().isoformat()
+    return datetime.fromtimestamp(path.stat().st_mtime - minus_s, tz=UTC).isoformat()
 
 
 def _key_of(ticket: str) -> str | None:
@@ -345,7 +345,9 @@ def _run(b: _Backfill, run: Path) -> None:
     ).fetchone()
     if row is not None and row["command"] not in (None, BACKFILL):
         return  # the runner recorded this run as it happened
-    started = datetime.strptime(run.name, "%Y%m%d-%H%M%S").astimezone().isoformat()
+    started = (
+        datetime.strptime(run.name, "%Y%m%d-%H%M%S").astimezone().astimezone(UTC).isoformat()
+    )  # the folder's name is local time (F187 D4)
     run_id = metrics.upsert_run(b.conn, b.project_id, run.name, command=BACKFILL, started=started)
     ends: list[str] = []
     attempts: Counter[str] = Counter()

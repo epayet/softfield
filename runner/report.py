@@ -139,7 +139,7 @@ def _tasks_line(tasks: list[TaskRecord]) -> str:
 def run_url(report: SessionReport) -> str:
     """The run's page on the dashboard. The runner names a run's folder after its start
     (``runner.loop.open_session``)."""
-    return f"{DASHBOARD_URL}/runs/{report.started:%Y%m%d-%H%M%S}"
+    return f"{DASHBOARD_URL}/runs/{report.started.astimezone():%Y%m%d-%H%M%S}"
 
 
 def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
@@ -149,7 +149,7 @@ def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
     local_in = sum(t.tokens_in for t in tasks)
     local_out = sum(t.tokens_out for t in tasks)
     lines = [
-        f"# Session {report.started:%Y-%m-%d %H:%M}",
+        f"# Session {report.started.astimezone():%Y-%m-%d %H:%M}",
         "",
         f"- **Duration:** {_minutes((ended - report.started).total_seconds())}",
         f"- **Tasks:** {_tasks_line(tasks)}",
@@ -178,7 +178,7 @@ def render(report: SessionReport, claude: ClaudeUsage | None = None) -> str:
 
 
 def write(repo: Path, report: SessionReport, claude: ClaudeUsage | None = None) -> Path:
-    path = repo / ".softfield" / "sessions" / f"{report.started:%Y-%m-%d-%H%M}.md"
+    path = repo / ".softfield" / "sessions" / f"{report.started.astimezone():%Y-%m-%d-%H%M}.md"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(render(report, claude), encoding="utf-8")
     return path

@@ -198,6 +198,43 @@ def test_a_named_milestones_queue_takes_tickets_written_with_either_key(repo, mo
     assert ran == ["f3-01-a", "f3-02-b"]
 
 
+@pytest.fixture
+def paris(monkeypatch):
+    """The machine's zone is Paris, so local is not UTC and a slip shows (F187 D6)."""
+    monkeypatch.setenv("TZ", "Europe/Paris")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def test_the_clock_is_utc_whatever_the_zone(paris):
+    assert loop.now().utcoffset() == timedelta(0)
+    assert loop.now().isoformat().endswith("+00:00")
+
+
+def test_a_run_stores_utc_and_its_folder_is_named_in_local_time(repo, paris):
+    s = loop.open_session(_config(repo), "run")
+    assert s.db is not None
+    started = s.db.execute("SELECT started FROM runs").fetchone()["started"]
+    assert started.endswith("+00:00")
+    assert s.run_dir.name == f"{s.report.started.astimezone():%Y%m%d-%H%M%S}"
+    assert s.run_dir.name != f"{s.report.started:%Y%m%d-%H%M%S}"
+    loop.wait_for_claude(s, 0, loop.now(), "x")
+    at, resets = s.db.execute("SELECT at, resets_at FROM usage_events").fetchone()
+    assert at.endswith("+00:00") and resets.endswith("+00:00")
+    loop.close_session(s)
+
+
+def test_a_wait_until_a_stored_time_says_it_in_local_time(repo, paris, monkeypatch):
+    s = loop.open_session(_config(repo), None)
+    seen: list[str] = []
+    monkeypatch.setattr(loop, "set_activity", lambda s, activity, until=None: seen.append(activity))
+    loop.wait_for_claude(s, 0, datetime(2026, 10, 29, 8, 0, tzinfo=UTC), None, limit=False)
+    assert "until 09:00" in seen[0]
+    loop.close_session(s)
+
+
 def test_retry_gets_gate_output_and_a_hint_and_can_recover(repo, fake_model):
     _add_task(repo, "m1-01-thing")
 

@@ -208,6 +208,6 @@ def _at(text: str) -> datetime:
 
 
 def _when(at: datetime, now: datetime) -> str:
-    """``Mon 5 Oct 17:00``, in the caller's time zone."""
-    at = at.astimezone(now.tzinfo)
+    """``Mon 5 Oct 17:00``, in local time."""
+    at = at.astimezone()
     return f"{at:%a} {at.day} {at:%b %H:%M}"

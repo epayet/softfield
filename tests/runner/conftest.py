@@ -1,7 +1,20 @@
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def utc_zone(monkeypatch):
+    """The runner shows local time; its tests write UTC times and read them back as such, so
+    the machine's zone is UTC unless a test sets another (F187 D6)."""
+    monkeypatch.setenv("TZ", "UTC")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
 
 TASK = """\
 ---

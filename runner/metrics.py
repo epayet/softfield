@@ -2,7 +2,8 @@
 
 Plain functions over a ``sqlite3.Connection``. Every write is an upsert on its table's natural
 key, so the runner and the backfill can repeat one safely, and commits at once, so a crash
-loses nothing. Times are ISO-8601 text passed in by the caller; lists and dicts are stored as
+loses nothing. Times are stored in UTC, as ISO-8601 with ``+00:00``; shown in local time
+(F187). The caller passes them in as text; lists and dicts are stored as
 JSON. An optional argument left as ``None`` keeps the column's current value.
 """
 

@@ -729,7 +729,7 @@ def _exported(message: sqlite3.Row | Mapping[str, Any]) -> str:
     """One message for the export: its author and time as a heading, then what it said, quoted:
     its text, the lead's points and proposals, or the owner's comments by point."""
     who = {"owner": "The owner", RUNNER: "The runner"}.get(message["author"], "The lead")
-    at = datetime.fromisoformat(str(message["at"])).strftime("%Y-%m-%d %H:%M")
+    at = datetime.fromisoformat(str(message["at"])).astimezone().strftime("%Y-%m-%d %H:%M")
     points = json.loads(message["points"]) if message["points"] else []
     proposals = json.loads(message["proposals"]) if message["proposals"] else []
     parts = [str(message["text"]).strip()]

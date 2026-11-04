@@ -130,7 +130,14 @@ class RunnerError(RuntimeError):
 
 
 def now() -> datetime:
-    return datetime.now().astimezone()
+    """The moment, in UTC: every stored time is (F187 D1). A person's view converts it with
+    ``.astimezone()``."""
+    return datetime.now(UTC)
+
+
+def local_clock() -> datetime:
+    """The moment in the machine's zone, for what a person reads (the console's stamps)."""
+    return now().astimezone()
 
 
 def clock() -> float:
@@ -250,7 +257,7 @@ class Session:
 
     def log(self, message: str) -> None:
         """One console line (`runner.console`); an empty one is a blank line."""
-        print(f"[{now():%H:%M:%S}] {message}" if message else "", flush=True)
+        print(f"[{local_clock():%H:%M:%S}] {message}" if message else "", flush=True)
 
 
 def open_session(cfg: Config, command: str | None = "run") -> Session:
@@ -281,7 +288,7 @@ def open_session(cfg: Config, command: str | None = "run") -> Session:
     if git.current_branch() != MAIN or not git.is_clean():
         raise RunnerError("start the runner on a clean main branch")
     started = now()
-    run_dir = cfg.runs_dir / f"{started:%Y%m%d-%H%M%S}"
+    run_dir = cfg.runs_dir / f"{started.astimezone():%Y%m%d-%H%M%S}"
     run_dir.mkdir(parents=True, exist_ok=True)
     s = Session(
         cfg=cfg, git=git, state=state, report=SessionReport(started=started), run_dir=run_dir
@@ -769,7 +776,7 @@ def wait_for_claude(
         at = now().isoformat()
         _record(s, metrics.add_usage_event, RUNNER_AGENT, at, "wait", resets_at=resumes.isoformat())
     waiting = f"{WAITING_FOR_CLAUDE} · {what}" if what else WAITING_FOR_CLAUDE
-    with doing(s, f"{waiting} until {resumes:%H:%M}", resumes):
+    with doing(s, f"{waiting} until {resumes.astimezone():%H:%M}", resumes):
         if until is None:
             step = BACKUP_POLL_S if s.backups is not None else seconds
             left = seconds
@@ -4049,7 +4056,7 @@ def set_switch(state: State, switch: str, on: bool, at: datetime) -> str:
         state.switches.pop(switch, None)
         return f"“{SWITCHES[switch]}” is off"
     state.switches[switch] = at.isoformat()
-    ends = at + timedelta(hours=USE_RESERVE_HOURS)
+    ends = (at + timedelta(hours=USE_RESERVE_HOURS)).astimezone()
     return f"“{SWITCHES[switch]}” is on until {ends:%a %H:%M}"
 
 
@@ -4217,7 +4224,7 @@ def fresh_reading(s: Session) -> None:
     if why:
         s.log(
             f"[{PROBE_AGENT}] no fresh reading of Claude's windows ({why}):"
-            f" going by the stored one from {stored:%H:%M}"
+            f" going by the stored one from {stored.astimezone():%H:%M}"
         )
         return
     read = ", ".join(f"{r.window} {r.utilization:.0%}" for r in result.readings)
@@ -4683,9 +4690,10 @@ def _at_the_reserve(s: Session, at: datetime) -> tuple[str, datetime] | None:
     week = next((w for w in windows if w.name == "seven_day"), None)
     if week is None or week.resets_at is None:
         return None
-    resets = week.resets_at.astimezone(at.tzinfo)
+    resets = week.resets_at
+    shown = resets.astimezone()
     left = f"{1 - week.used:.0%} of the week left"
-    return f"{left}, resets {resets:%a} {resets.day} {resets:%b %H:%M}", resets
+    return f"{left}, resets {shown:%a} {shown.day} {shown:%b %H:%M}", resets
 
 
 def _resolve_items(conn: sqlite3.Connection, project_id: int, kind: str, subject: str) -> None:
@@ -4758,7 +4766,7 @@ def _at_five_hour(s: Session, at: datetime) -> tuple[str, datetime] | None:
     five = next((w for w in windows if w.name == "five_hour"), None)
     if five is None or five.resets_at is None:
         return None
-    return f"{five.used:.0%}", five.resets_at.astimezone(at.tzinfo)
+    return f"{five.used:.0%}", five.resets_at
 
 
 def _five_hour_switched(s: Session) -> bool:
@@ -4812,7 +4820,8 @@ def at_five_hour(s: Session, task: Task) -> bool:
     used, resets = found
     text = (
         f"{task.id} waits for Claude's 5-hour window ({used} used, kept for you):"
-        f" it goes on after {resets:%H:%M}, or at once if you turn on “{SWITCHES[FIVE_HOUR]}”"
+        f" it goes on after {resets.astimezone():%H:%M},"
+        f" or at once if you turn on “{SWITCHES[FIVE_HOUR]}”"
     )
     if s.project_id is not None:
         _record(
@@ -4836,7 +4845,7 @@ def at_five_hour(s: Session, task: Task) -> bool:
     save_state(s.state, s.state_path)
     s.report.notes.append(text)
     reason = f"Claude's 5-hour window is at {used}, kept for you"
-    where = f"goes on after {resets:%H:%M}"
+    where = f"goes on after {resets.astimezone():%H:%M}"
     s.log(console.stopped(task.id, "parked", reason, where, waiting_behind(s, task.id)))
     return True
 
@@ -4921,7 +4930,7 @@ def _hold_for_the_owner(s: Session) -> bool:
     again. The hold is no limit's `wait`: the pause's own usage event (`runner.requests`)
     counts it as stopped for the owner. False, and no hold, when the run has no project row to
     read a resume from: it ends instead."""
-    since = datetime.fromisoformat(str(s.state.owner_pause)).astimezone(now().tzinfo)
+    since = datetime.fromisoformat(str(s.state.owner_pause)).astimezone()
     paused = f"Paused by you since {since:%H:%M}"
     if s.project_id is None:
         s.report.notes.append(f"{paused}: `softfield resume`, then run again.")
@@ -4968,7 +4977,7 @@ def _idle_line(s: Session, ready: list[Task], paused: set[str], held: Mapping[st
     parked = [s.state.parked[t.id] for t in ready if t.id in s.state.parked]
     parked = [entry for entry in parked if not _due(entry, at)]
     if parked:
-        resets = min(_resets(entry) for entry in parked).astimezone(at.tzinfo)
+        resets = min(_resets(entry) for entry in parked).astimezone()
         when = f"{resets:%a %H:%M}"
         if all(entry["kind"] == RESERVE_KIND for entry in parked):
             what = f"for Claude's reserve · the week resets {when}"
@@ -5006,7 +5015,8 @@ def _idle_holds(s: Session) -> bool:
     backup, reads Claude's windows and picks again. The hold starts no job itself. False to
     end the session: the owner's Ctrl-C, or the first idle poll of a new day when the session
     has work to report (D3: ``report.idle``, and the command starts the next session)."""
-    if now().date() != s.report.started.date() and (s.report.tasks or s.report.claude_runs):
+    new_day = local_clock().date() != s.report.started.astimezone().date()
+    if new_day and (s.report.tasks or s.report.claude_runs):
         s.report.idle = True
         return False
     try:
@@ -5102,7 +5112,8 @@ def _reinstall(home: Path) -> None:
         ["uv", "tool", "install", "-e", str(home), "--reinstall"], home, 600
     )
     if code != 0:
-        print(f"[{now():%H:%M:%S}] [{RUNNER_AGENT}] softfield's reinstall failed: {err or out}")
+        stamp = f"{local_clock():%H:%M:%S}"
+        print(f"[{stamp}] [{RUNNER_AGENT}] softfield's reinstall failed: {err or out}")
 
 
 RESTART_NOTE = (
@@ -5415,7 +5426,7 @@ def run_projects(
                 s = sessions.get(cfg.repo)
                 if (
                     s is not None
-                    and now().date() != s.report.started.date()
+                    and local_clock().date() != s.report.started.astimezone().date()
                     and (s.report.tasks or s.report.claude_runs)
                 ):
                     close_session(sessions.pop(cfg.repo))  # the day's report (F101 D3)
@@ -5426,7 +5437,8 @@ def run_projects(
                     except RunnerError as exc:
                         if cfg.repo not in refused:
                             refused.add(cfg.repo)
-                            print(f"[{now():%H:%M:%S}] [{RUNNER_AGENT}] {cfg.project_name}: {exc}")
+                            stamp = f"{local_clock():%H:%M:%S}"
+                            print(f"[{stamp}] [{RUNNER_AGENT}] {cfg.project_name}: {exc}")
                         continue
                     refused.discard(cfg.repo)
                     sessions[cfg.repo] = s
@@ -5437,7 +5449,7 @@ def run_projects(
             if not ran:
                 _idle_wait()
     except KeyboardInterrupt:
-        print(f"[{now():%H:%M:%S}] [{RUNNER_AGENT}] Ended by you.", flush=True)
+        print(f"[{local_clock():%H:%M:%S}] [{RUNNER_AGENT}] Ended by you.", flush=True)
         if busy:  # mid-job, as one project's run: no report, the next start recovers it
             for s in sessions.values():
                 if s not in busy:

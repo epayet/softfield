@@ -10,7 +10,7 @@ import sqlite3
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import yaml
@@ -136,7 +136,7 @@ def owner_items(repo: Path, milestone: str, state: State, review_stop: str) -> l
 
 
 def _now() -> str:
-    return datetime.now().astimezone().isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _write(repo: Path, db: Path | None, write: Callable[[sqlite3.Connection, int], None]) -> None:

@@ -752,7 +752,7 @@ def main(argv: list[str] | None = None) -> int:
             if setup.ready(name, cfg.metrics_db):
                 print("The runner takes it from its next round, between two jobs.")
                 if card is not None:  # the lead plans it without waiting for a message
-                    at = datetime.now().astimezone().isoformat()
+                    at = loop.now().isoformat()
                     planning = setup.plan_first_card(name, card, cfg.metrics_db, at)
             print(setup.hand_over(name, card, host, planning=planning))
         elif args.command == "check-tickets":

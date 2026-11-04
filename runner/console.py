@@ -91,7 +91,9 @@ def stopped(task_id: str, state: str, reason: str, where: str, waiting: int) -> 
 
 
 def paused(agent: str, why: str, resumes: datetime, now: datetime) -> str:
-    at = f"{resumes:%H:%M}" if resumes.date() == now.date() else f"{resumes:%a %H:%M}"
+    shown = resumes.astimezone()
+    same_day = shown.date() == now.astimezone().date()
+    at = f"{shown:%H:%M}" if same_day else f"{shown:%a %H:%M}"
     return f"⏸ [{agent}] {why} · resumes {at} (in {duration((resumes - now).total_seconds())})"
 
 
