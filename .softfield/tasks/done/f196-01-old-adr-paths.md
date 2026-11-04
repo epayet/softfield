@@ -27,3 +27,12 @@ Read `.softfield/cards/f196-f58-is-in-progress-but-has.md`: "What happens today"
 - a proposal whose path is `.softfield/adr/…` behaves as it does today, its draft on the plan branch included
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2616
+gate_failures: []
+tokens: 2383769
+```
