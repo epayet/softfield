@@ -24,3 +24,12 @@ The picture to build is the board in `.softfield/cards/f192-mockup/lane-on-its-w
 - a request the runner has done (`done` set) shows nothing
 - moving a card on the board leaves the plate showing
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 4071
+gate_failures: ['no-changes', 'stopped']
+tokens: 4267352
+```
