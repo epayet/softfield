@@ -1,6 +1,6 @@
 # Review: F186, a sign-off stays signed
 
-- **Status:** review done, waiting for sign-off.
+- **Status:** done, signed off by the owner on 2026-11-04.
 
 ## Sign-off sheet
 

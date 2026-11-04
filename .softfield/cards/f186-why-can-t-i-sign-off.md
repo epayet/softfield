@@ -1,6 +1,7 @@
 # Milestone F186: A sign-off stays signed: F142's keeps coming back
 
-> **State:** ready · **Priority:** 0 · **Area:** factory
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-04. Base: git tag `f186-why-can-t-i-sign-off-start`. Report: [`.softfield/reviews/f186-why-can-t-i-sign-off.md`](../reviews/f186-why-can-t-i-sign-off.md).
 > Planted by the owner on 2026-10-29.
 
 ## Notes
