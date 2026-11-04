@@ -1,6 +1,7 @@
 # Milestone F162: No checkpoint on merges the milestone's review is about to read
 
-> **State:** ready · **Priority:** 3 · **Area:** factory
+> **State:** done · **Priority:** 3 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-04. Base: git tag `f162-doing-a-checkpoint-just-before-a-start`. Report: [`.softfield/reviews/f162-doing-a-checkpoint-just-before-a.md`](../reviews/f162-doing-a-checkpoint-just-before-a.md).
 > Planted by the owner on 2026-10-20.
 
 ## Notes

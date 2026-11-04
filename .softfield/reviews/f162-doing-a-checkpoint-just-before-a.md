@@ -1,6 +1,6 @@
 # Review: F162, no checkpoint on merges the milestone's review is about to read
 
-- **Status:** round 1 done. One blocking bug and five smaller problems found, all fixed in this round.
+- **Status:** done, signed off by the owner on 2026-11-04.
 
 **Expected outcome:** when a milestone's last ticket merges, its review starts at once: no checkpoint reads merges the review is about to read whole. Other milestones' merges still get theirs.
 
