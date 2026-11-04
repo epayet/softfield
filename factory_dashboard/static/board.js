@@ -208,11 +208,12 @@
     b.setAttribute("aria-label", label);
     return b;
   };
-  const setUp = () => {
-    const sent = JSON.parse(document.getElementById("board-line").textContent);
+  const setUp = (sentArg, lineArg) => {
+    const boardLine = document.getElementById("board-line");
+    const sent = sentArg ?? JSON.parse(boardLine.textContent);
     stageOf = Object.fromEntries(sent);
     came = sent.map(([key]) => key);
-    line = came.slice();
+    line = lineArg ?? came.slice();
     for (const s of field.querySelectorAll(".slot")) {
       if (!PLACED.includes(s.dataset.stage)) continue;
       const card = s.querySelector(".card");
@@ -238,6 +239,26 @@
     line = came.slice();
     work();
   });
+
+  // Redraw the field from a fresh fetch: the steps after a send, and on pageshow from bfcache.
+  const refresh = async (moves, skipBoardLine) => {
+    try {
+      const page = new DOMParser().parseFromString(await (await fetch(location.href, { cache: "no-cache" })).text(), "text/html");
+      field.querySelector(".stages").replaceWith(page.querySelector("#field .stages"));
+      if (!skipBoardLine) {
+        document.getElementById("board-line").textContent = page.getElementById("board-line").textContent;
+      }
+    } catch {
+      return null; // failed fetch: leave the page as it is
+    }
+    if (skipBoardLine) {
+      return [...field.querySelectorAll(".slot")].map((s) => [s.dataset.key, s.dataset.stage]);
+    }
+    show(field.dataset.shown);
+    setUp();
+    return null;
+  };
+
   const send = bar.querySelector('[data-order="send"]');
   const say = bar.querySelector("p");
   send.addEventListener("click", async () => {
@@ -253,16 +274,18 @@
       return;
     }
     send.disabled = false;
-    try {
-      const page = new DOMParser().parseFromString(await (await fetch(location.href)).text(), "text/html");
-      field.querySelector(".stages").replaceWith(page.querySelector("#field .stages"));
-      document.getElementById("board-line").textContent = page.getElementById("board-line").textContent;
-    } catch {
-      location.reload(); // sent: the page as it is now shows it on its way
-      return;
-    }
-    show(field.dataset.shown);
-    setUp();
+    await refresh();
   });
+
+  // Coming back with the phone's back button shows the field as it is now (D3).
+  addEventListener("pageshow", async (event) => {
+    if (!event.persisted) return; // normal load: fetch nothing
+    if (moved.size) return; // unsent moves: keep the field as the owner ordered it
+    const stages = await refresh(undefined, true);
+    if (!stages) return;
+    const sent = line.map((key, i) => [key, stages[i]?.[1] ?? stages.find((s) => s[0] === key)?.[1]]);
+    setUp(sent, line);
+  });
+
   setUp();
 })();

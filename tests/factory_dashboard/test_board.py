@@ -2204,6 +2204,45 @@ def test_a_done_reserve_request_shows_no_plate(board_db, board_client):
     assert "on-its-way" not in raw
 
 
+def test_pageshow_with_persisted_true_draws_the_field_with_grip_and_menu(page, board_db):
+    """D3: a pageshow with persisted true draws the second body's field, with each card's grip
+    and ... working."""
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    fetches: list[str] = []
+    page.on("request", lambda r: fetches.append(r.url) if "/board" in r.url else None)
+    page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+    page.wait_for_timeout(500)
+    board_fetches = [f for f in fetches if "/board" in f]
+    assert len(board_fetches) == 1
+    grip = page.locator(".slot[data-key=f24] .grip")
+    assert grip.count() >= 1
+    more = page.locator(".slot[data-key=f24] .more")
+    assert more.count() >= 1
+
+
+def test_pageshow_with_persisted_false_fetches_nothing(page, board_db):
+    """D3: a pageshow with persisted false on a normal load fetches nothing."""
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    fetches: list[str] = []
+    page.on("request", lambda r: fetches.append(r.url) if "/board" in r.url else None)
+    page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: false}))")
+    page.wait_for_timeout(500)
+    board_fetches = [f for f in fetches if "/board" in f]
+    assert board_fetches == []
+
+
+def test_pageshow_with_moved_card_fetches_and_keeps_moves(page, board_db):
+    """D3: with a card moved and not sent, that pageshow fetches nothing and the moves stay."""
+    _three_planted(page, board_db)
+    _drag(page, "f27", "f23")
+    assert _order(page, "planted") == ["f24", "f27", "f23", "bug-02-stale", *STARTED]
+    page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+    page.wait_for_timeout(500)
+    assert _order(page, "planted") == ["f24", "f27", "f23", "bug-02-stale", *STARTED]
+
+
 def test_moving_a_card_keeps_the_plate_showing(page, board_db):
     """F192 D2: moving a card on the board leaves the plate showing."""
     write(board_db, _reserve("on"))
