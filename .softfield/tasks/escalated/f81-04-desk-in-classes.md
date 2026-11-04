@@ -30,3 +30,12 @@ Build the desk of the Proposed side of `.softfield/cards/f81-mockup/theme-pass.h
 - a plant, a waiting plant's Save and Cancel, Try again, Set aside and Dismiss show on their way as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: stopped)
+attempts: 3
+tokens: 11295692
+logs: .softfield/var/runs/20261103-212438/f81-04-desk-in-classes
+```
