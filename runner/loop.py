@@ -775,9 +775,10 @@ def check_push(s: Session) -> None:
         if tags == memory.settled and not memory.failing_since:
             return
         address = config.machine_ntfy()
-        outcome = push.push_signed_off(
-            s.repo, remote, address.rsplit("/", 1)[-1] if address else None
-        )
+        with doing(s, "pushing to GitHub"):
+            outcome = push.push_signed_off(
+                s.repo, remote, address.rsplit("/", 1)[-1] if address else None
+            )
         for tag in outcome.pushed:
             s.log(f"[{RUNNER_AGENT}] pushed {tag} to {remote}")
         if outcome.held:

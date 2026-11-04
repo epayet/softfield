@@ -7723,6 +7723,33 @@ def test_a_pick_pushes_what_is_signed_off_and_doesnt_ask_again(repo, tmp_path, m
     assert _open_items(s) == []
 
 
+def test_the_activity_says_pushing_only_while_a_push_runs(repo, tmp_path, monkeypatch):
+    """f203-03: a long push doesn't look like "picking the next ticket"; a pick with no new tag
+    never says it."""
+    from runner import push
+
+    _signed_off_project(repo, tmp_path, monkeypatch)
+    s = loop.open_session(_config(repo))
+    s.activity = "picking the next ticket"
+    seen: list[str | None] = []
+    real = push.push_signed_off
+
+    def spy(*a, **k):
+        seen.append(s.activity)
+        return real(*a, **k)
+
+    monkeypatch.setattr("runner.push.push_signed_off", spy)
+    loop.check_push(s)
+    assert seen == ["pushing to GitHub"]
+    assert s.activity == "picking the next ticket"
+    activities: list[str] = []
+    monkeypatch.setattr(
+        loop, "set_activity", lambda sess, activity, *a: activities.append(activity)
+    )
+    loop.check_push(s)
+    assert activities == []
+
+
 def test_a_held_push_is_a_desk_item_and_goes_when_it_clears(repo, tmp_path, monkeypatch):
     """ADR 42 items 6 and 7: the desk names the file, never the value; work goes on."""
     _signed_off_project(repo, tmp_path, monkeypatch)
