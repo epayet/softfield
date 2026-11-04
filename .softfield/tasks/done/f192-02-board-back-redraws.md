@@ -22,3 +22,12 @@ A browser test, as in `tests/factory_dashboard/test_line.py` (its `page` fixture
 - a `pageshow` with `persisted` false on a normal load fetches nothing
 - with a card moved and not sent, that `pageshow` fetches nothing and the moves stay
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 5684
+gate_failures: ['task-tests']
+tokens: 4131841
+```
