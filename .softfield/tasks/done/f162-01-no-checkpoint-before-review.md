@@ -27,3 +27,10 @@ Read `.softfield/adr/38-no-checkpoint-the-review-will-read.md` (items 1–4), th
 - two merges of a milestone still building queue a checkpoint as today
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
