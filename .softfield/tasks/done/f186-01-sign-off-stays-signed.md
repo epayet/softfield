@@ -32,3 +32,10 @@ Read `.softfield/cards/f186-why-can-t-i-sign-off.md`: "What happens today" tells
 - a first sign-off works as before: doc, review, commit, tag, item resolved
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
