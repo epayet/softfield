@@ -1,4 +1,4 @@
-# Milestone F219: Lead tickets don't wait on Claude's week pace line, but…
+# Milestone F219: Lead tickets stop at Claude's reserve: runner, dry run and pages agree
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-04.
