@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from runner import loop, milestone, owner
+from runner import loop, metrics, milestone, owner
+from runner.config import project_name
 from runner.state import State
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
@@ -375,6 +376,37 @@ def test_signoff_resolves_every_item_of_its_milestone(repo: Path):
     assert ("review-stop", "m1") in _open(repo)
     owner.signoff(repo, "m1", TODAY, db=_db(repo))
     assert _open(repo) == {}
+
+
+def test_a_second_signoff_settles_and_changes_nothing(repo: Path):
+    """F186 D2: F142's second sign-off failed on a doc already done."""
+    _milestone(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))
+    head = git(repo, "rev-parse", "HEAD")
+    doc = (repo / ".softfield" / "cards" / "m1.md").read_text()
+    owner.verdict(repo, "m1", State(), "clean", db=_db(repo))  # a late verdict reopens it
+    assert ("signoff", "m1") in _open(repo)
+    owner.signoff(repo, "m1", date(2026, 10, 9), db=_db(repo))
+    assert git(repo, "rev-parse", "HEAD") == head
+    assert git(repo, "tag").split() == ["m1-done"]
+    assert (repo / ".softfield" / "cards" / "m1.md").read_text() == doc
+    assert _open(repo) == {}
+
+
+def test_heal_resolves_items_of_a_signed_off_milestone_only(repo: Path):
+    """F186 D3: an item reopened after the sign-off clears; an unsigned milestone's stays."""
+    _milestone(repo)
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))
+    owner.verdict(repo, "m1", State(), "clean", db=_db(repo))
+    owner.verdict(repo, "m2", State(), "adr-needed", db=_db(repo))
+    conn = metrics.open_db(_db(repo))
+    try:
+        project = metrics.upsert_project(conn, project_name(repo), repo=str(repo))
+        owner.heal_signed_off(repo, conn, project)
+    finally:
+        conn.close()
+    assert ("signoff", "m1") not in _open(repo)
+    assert ("review-stop", "m2") in _open(repo)
 
 
 def test_signoff_stores_the_sign_off_sheet_as_signed(repo: Path):

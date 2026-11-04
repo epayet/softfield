@@ -2127,6 +2127,7 @@ def apply_requests(repo: Path, db: Path, now: datetime, state: State) -> list[st
         if metrics.once(conn, CLEAR_OUT, now.isoformat()):
             lines += _clear_out(repo, conn, project, now)
         _settle_waits(conn, project, state, now)
+        owner.heal_signed_off(repo, conn, project)
         # Changes go first (F14 D2), and the others are read after them: a cancelled plant or
         # message is never applied, and an edited one goes with its new words
         for row in metrics.open_requests(conn, project):

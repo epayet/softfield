@@ -19,7 +19,7 @@ from runner import metrics, notify
 from runner.config import project_name
 from runner.gitops import RUNNER_AUTHOR, Git, with_trailers
 from runner.loop import BLOCKED_KIND, blocked_text
-from runner.milestone import WAITS, footer_fields, signoff_sections
+from runner.milestone import WAITS, footer_fields, signed_off, signoff_sections
 from runner.state import State
 from runner.tasks import (
     STOPPED,
@@ -358,6 +358,15 @@ def _signed_off(
     )
 
 
+def heal_signed_off(repo: Path, conn: sqlite3.Connection, project: int) -> None:
+    """Open sign-off and review-stop items whose milestone is signed off are resolved, and the
+    milestone is done: a verdict that came after the sign-off had reopened them (F186 D3)."""
+    for row in metrics.open_owner_items(conn, project):
+        subject = row["subject"]
+        if row["kind"] in _MILESTONE_KINDS and subject and signed_off(repo, subject):
+            _signed_off(subject, None, {}, conn, project)
+
+
 def signoff(
     repo: Path,
     milestone: str,
@@ -371,6 +380,9 @@ def signoff(
     optional ``score`` (1-10, ADR 14 item 14) is how the result felt on the devices."""
     if score is not None and not 1 <= score <= 10:
         raise OwnerError(f"a score is 1 to 10, not {score}")
+    if signed_off(repo, milestone):  # a second sign-off settles; it commits and tags nothing
+        _write(repo, db, lambda conn, project: _signed_off(milestone, None, {}, conn, project))
+        return
     left = [f"{t} ({f})" for f in _UNFINISHED for t in _ids(repo, f, milestone)]
     if left and not force:
         raise OwnerError(

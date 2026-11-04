@@ -90,6 +90,26 @@ def test_a_signoff_request_signs_off_as_the_command_does(repo):
     assert _apply(repo) == []  # finished once
 
 
+def test_apply_requests_clears_items_of_a_signed_off_milestone(repo):
+    """F186 D3: F142's sign-off item was reopened by a late verdict and nothing closed it."""
+    _milestone(repo)
+    _ask(repo, "signoff", "m1")
+    _apply(repo)
+    _item(repo, "signoff", "m1")  # reopened after the sign-off
+    _item(repo, "review-stop", "m2")  # a milestone not signed off
+    _apply(repo)
+    assert [(k, s, open_) for k, s, _, open_ in _items(repo)] == [
+        ("signoff", "m1", False),
+        ("review-stop", "m2", True),
+    ]
+    conn = metrics.open_db(_db(repo))
+    try:
+        status = conn.execute("SELECT status FROM milestones WHERE key = 'm1'").fetchone()[0]
+    finally:
+        conn.close()
+    assert status == "done"
+
+
 def test_a_signoff_request_with_work_left_is_finished_with_the_commands_error(repo):
     _milestone(repo)
     write_task(repo / ".softfield" / "tasks" / "escalated", "m1-02-photos")

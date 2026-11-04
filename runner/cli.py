@@ -45,6 +45,7 @@ from runner.milestone import (
     review_milestone,
     run_due_review,
     run_milestone,
+    signed_off,
 )
 from runner.requests import ticket_problems
 from runner.state import load_state, save_state
@@ -349,6 +350,8 @@ def _review(cfg: Config, repo: Path, key: str) -> bool:
     if stop == RESTART:
         return True
     if stop == PARKED:
+        return False
+    if signed_off(repo, key):  # signed off while the review ran: no verdict reopens it (F186 D1)
         return False
     state = load_state(cfg.runs_dir / "state.json")
     _, text = owner.verdict(repo, key, state, stop, db=cfg.metrics_db)

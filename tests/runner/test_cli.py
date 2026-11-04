@@ -262,6 +262,20 @@ def test_a_review_that_changes_the_runner_restarts_runner_run(in_repo, monkeypat
         cli.main(["run", "--here"])
 
 
+def test_a_review_ending_after_the_sign_off_records_no_verdict(in_repo, monkeypatch):
+    """F186 D1: F142's review ended after the owner signed it off and reopened the sign-off."""
+    from tests.runner.test_loop import _config
+
+    cfg = _config(in_repo)
+    monkeypatch.setattr(cli, "run_due_review", lambda cfg, key: "clean")
+    monkeypatch.setattr(cli, "signed_off", lambda repo, key: True)
+    monkeypatch.setattr(owner, "verdict", lambda *a, **kw: pytest.fail("a verdict after sign-off"))
+    monkeypatch.setattr(
+        owner, "record_verdict", lambda *a, **kw: pytest.fail("a session Verdict after sign-off")
+    )
+    assert cli._review(cfg, in_repo, "f9") is False
+
+
 def test_a_ctrl_c_or_a_crash_ends_the_commands_runs(in_repo, monkeypatch):
     """f2-03: a Ctrl-C left run 20261002-055804 alive and on the reserve."""
     ended: list[str] = []
