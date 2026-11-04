@@ -1,4 +1,4 @@
-# Milestone F216: Let's redesign the milestone review page it's very…
+# Milestone F216: A shorter, consistent review page, with the decisions made along the way
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-04.
