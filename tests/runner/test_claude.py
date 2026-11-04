@@ -12,6 +12,7 @@ from runner.agents import (
     FAILURE,
     GIT_READ_COMMANDS,
     LIMIT,
+    LOGIN,
     TRANSIENT,
     Agent,
     JobResult,
@@ -23,6 +24,7 @@ from runner.claude import (
     ADAPTER,
     STRIPPED_ENV,
     ClaudeJob,
+    LoginExpired,
     Progress,
     TransientError,
     UsageLimited,
@@ -440,6 +442,40 @@ def test_a_dropped_connection_or_overload_is_transient(tmp_path, monkeypatch, st
     job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
     with pytest.raises(TransientError):
         run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+
+
+# The result line of every job on 2026-11-04, when the login expired during f203-03 (bug-59)
+LOGIN_RESULT = "Failed to authenticate: OAuth session expired and could not be refreshed"
+LOGIN_STREAM = json.dumps(
+    {
+        "type": "result",
+        "is_error": True,
+        "terminal_reason": "api_error",
+        "api_error_status": None,
+        "result": LOGIN_RESULT,
+        "session_id": "s1",
+    }
+)
+
+
+def test_an_expired_login_is_its_own_error_not_a_passing_one(tmp_path, monkeypatch):
+    _fake_stream(monkeypatch, LOGIN_STREAM, 1)
+    job = ClaudeJob(kind="review", prompt="Review.", allowed_tools=("Read",))
+    with pytest.raises(LoginExpired) as expired:
+        run_claude(job, tmp_path, 10, tmp_path / "log", NOW)
+    assert str(expired.value) == LOGIN_RESULT and expired.value.session_id == "s1"
+    assert not isinstance(expired.value, TransientError)
+
+
+def test_the_adapter_hands_back_an_expired_login_as_a_result(tmp_path, monkeypatch):
+    _fake_stream(monkeypatch, LOGIN_STREAM, 1)
+    result = _adapter_run(tmp_path, JobSpec(role="review", prompt="Review.", timeout=10))
+    assert (result.error, result.session_id) == (LOGIN, "s1")
+
+
+def test_a_probe_on_an_expired_login_fails_and_does_not_raise(tmp_path, monkeypatch):
+    _fake_stream(monkeypatch, LOGIN_STREAM, 1)
+    assert not claude.probe(tmp_path, tmp_path / "log", NOW).ok
 
 
 # --- Claude's allowance, read from the stream (ADR 15 item 3) ------------------------------

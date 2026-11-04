@@ -93,12 +93,26 @@ class TransientError(Exception):
         self.readings = readings
 
 
+class LoginExpired(Exception):
+    """A job stopped because Claude's login has expired: it answers in under a second, and only
+    the owner logging in again ends it, so the caller holds the job instead of retrying."""
+
+    def __init__(
+        self, detail: str, session_id: str | None = None, readings: tuple[Reading, ...] = ()
+    ) -> None:
+        super().__init__(detail)
+        self.session_id = session_id
+        self.readings = readings
+
+
 def claude_env(environ: Mapping[str, str]) -> dict[str, str]:
     return {k: v for k, v in environ.items() if k not in STRIPPED_ENV}
 
 
 # Words that suggest a limit in an error the precise patterns below don't recognise.
 _MAYBE_LIMIT_RE = re.compile(r"\b(limit|quota|capacity)\b", re.IGNORECASE)
+# Its status is null and its reason "api_error", as a lost connection's: only the words tell.
+_LOGIN_RE = re.compile(r"Failed to authenticate", re.IGNORECASE)
 _LIMIT_RE = re.compile(
     r"(usage limit|hit your (?:\w+ )?limit|(?:session|weekly) limit|limit reached|rate limit)",
     re.IGNORECASE,
@@ -367,6 +381,8 @@ def run_claude(
     session_id = str(data["session_id"]) if data.get("session_id") else None
     readings = stream.readings
     if is_error:
+        if _LOGIN_RE.search(text + stderr):
+            raise LoginExpired(text.strip()[:200], session_id, readings)
         limited, resets_at = usage_limit_reset(text + stderr, now)
         # The status is structured, so it outlasts a change of wording; the text only says when.
         if limited or data.get("api_error_status") == 429:
@@ -402,11 +418,11 @@ PROBE_TIMEOUT = 120  # seconds
 
 
 def probe(repo: Path, log_path: Path, now: datetime) -> JobResult:
-    """One `PROBE_JOB`. It never raises: a limit or a passing error is a failed result, with
-    whatever its stream read."""
+    """One `PROBE_JOB`. It never raises: a limit, an expired login or a passing error is a
+    failed result, with whatever its stream read."""
     try:
         return run_claude(PROBE_JOB, repo, PROBE_TIMEOUT, log_path, now)
-    except (UsageLimited, TransientError) as exc:
+    except (UsageLimited, LoginExpired, TransientError) as exc:
         return JobResult(ok=False, text=str(exc), duration_s=0.0, readings=exc.readings)
 
 
@@ -442,6 +458,15 @@ class ClaudeAdapter:
                 refusal=Refusal(limit.window, limit.resets_at, limit.certain),
                 session_id=limit.session_id,
                 readings=limit.readings,
+            )
+        except LoginExpired as expired:
+            return JobResult(
+                ok=False,
+                text=str(expired),
+                duration_s=0.0,
+                login_expired=True,
+                session_id=expired.session_id,
+                readings=expired.readings,
             )
         except TransientError as blip:
             return JobResult(

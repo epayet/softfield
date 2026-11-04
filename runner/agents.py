@@ -20,6 +20,7 @@ GIT_READ_COMMANDS = ("git diff", "git log", "git show")  # the runner commits, n
 
 # ADR 15 item 12's error classes
 LIMIT, TRANSIENT, FAILURE = "limit", "transient", "failure"
+LOGIN = "login"  # the harness's login has expired: only the owner can end it (bug-59)
 
 
 @dataclass(frozen=True)
@@ -92,6 +93,7 @@ class JobResult:
     cost_usd: float | None = None  # the harness's API-equivalent price (f1 D7)
     refusal: Refusal | None = None
     transient: bool = False  # a lost connection, an overload, a server error
+    login_expired: bool = False
     num_turns: int = 0
     session_id: str | None = None
     readings: tuple[Reading, ...] = ()  # every window reading, in order
@@ -109,6 +111,8 @@ class JobResult:
             return None
         if self.refusal is not None:
             return LIMIT
+        if self.login_expired:
+            return LOGIN
         return TRANSIENT if self.transient else FAILURE
 
 

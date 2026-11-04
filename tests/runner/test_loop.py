@@ -19,7 +19,7 @@ import pytest
 
 from runner import backup, checks, claude, gates, local_model, loop, metrics, prompts, ratings
 from runner.agents import Agent, JobResult, JobSpec, Reading, Refusal
-from runner.claude import ClaudeJob, Progress, TransientError, UsageLimited
+from runner.claude import ClaudeJob, LoginExpired, Progress, TransientError, UsageLimited
 from runner.config import Backup, Config
 from runner.gates import GateResult
 from runner.local_model import STOP_REPEATING, OpencodeRun, StreamFacts, TokenTotals
@@ -6886,6 +6886,239 @@ def test_a_failed_probe_falls_back_to_the_stored_reading(
     assert [item["kind"] for item in _rows(repo, "owner_items")] == ["five-hour"]
     [probe_job] = [j for j in _rows(repo, "jobs") if j["role"] == "probe"]
     assert probe_job["outcome"] == "failed"
+
+
+# --- an expired login holds Claude's jobs (bug-59) ------------------------------------------
+
+LOGIN_RESULT = "Failed to authenticate: OAuth session expired and could not be refreshed"
+LOGIN_TEXT = "Claude's login has expired: log in again on this machine."
+PLANNER_REPLY = 'Here.\n```json\n{"points": []}\n```'
+
+
+class _Login:
+    """Headless Claude behind a login that works or not: what ran, in order, and every word
+    to the owner's phone."""
+
+    def __init__(self, monkeypatch) -> None:
+        self.works = False
+        self.jobs: list[str] = []
+        self.told: list[str] = []
+        monkeypatch.setattr(claude, "run_claude", self._run_claude)
+        monkeypatch.setattr(loop, "_notify", lambda s, words, path: self.told.append(words))
+
+    def _run_claude(self, job, repo_, timeout, log_path, now, resume=None):
+        self.jobs.append(job.kind)
+        if not self.works:
+            raise LoginExpired(LOGIN_RESULT)
+        if job.kind == "lead-ticket":
+            _lead_writes(repo_, "lead")
+        return JobResult(
+            ok=True,
+            text=PLANNER_REPLY if job.kind == "planner" else "ok",
+            duration_s=1.0,
+            session_id="s1",
+        )
+
+
+def _login_items(repo: Path) -> list[dict[str, object]]:
+    return [i for i in _rows(repo, "owner_items") if i["kind"] == loop.LOGIN_KIND]
+
+
+def _picks(s: loop.Session) -> None:
+    """The picks until nothing can run, as `softfield run`'s turn makes them."""
+    loop.work_queue(s, reviews=True, wait=False)
+
+
+def test_a_lead_ticket_on_an_expired_login_waits_and_goes_once_the_login_works(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _add_task(repo, "m1-02-thing")
+    _passes(monkeypatch)
+    fake_model.append(_implement)
+    login = _Login(monkeypatch)
+    s = loop.open_session(_config(repo))
+
+    _picks(s)
+    # Stopped in ready/, with no attempt counted, and the developer's ticket still ran
+    assert login.jobs == ["lead-ticket"]
+    assert [(t.id, t.result) for t in s.report.tasks] == [("m1-02-thing", "done")]
+    tasks = repo / ".softfield" / "tasks"
+    assert (tasks / "ready" / "m1-01-lead.md").is_file()
+    assert not list((tasks / "blocked").glob("*.md"))
+    [job] = [j for j in _rows(repo, "jobs") if j["role"] == "lead-ticket"]
+    assert (job["outcome"], job["note"]) == ("failed", "parked")
+    # One item, in words, with no command, and one notification
+    [item] = _login_items(repo)
+    assert (item["text"], item["command"], item["resolved"]) == (LOGIN_TEXT, "", None)
+    assert len(login.told) == 1
+    # While it waits, the run says what for, and doesn't sleep as for a limit
+    ready = load_dir(s.tasks_dir("ready"), 150)
+    line = loop._idle_line(s, ready, set(), {})
+    assert "1 ticket waits for Claude's login" in line and "1 expired Claude login" in line
+    assert loop._wait_for_reset(s, ready, loop.open_rows(s)) is False
+
+    fake_clock[0] += timedelta(minutes=4, seconds=59)
+    _picks(s)
+    assert login.jobs == ["lead-ticket"]  # no probe within 5 minutes of the last word
+
+    fake_clock[0] += timedelta(seconds=1)
+    _picks(s)
+    assert login.jobs == ["lead-ticket", "probe"]  # still out: it keeps waiting
+    assert (tasks / "ready" / "m1-01-lead.md").is_file()
+    [item] = _login_items(repo)
+    assert item["resolved"] is None and len(login.told) == 1
+
+    login.works = True
+    _picks(s)
+    assert login.jobs == ["lead-ticket", "probe"]  # the next probe's 5 minutes aren't up
+
+    fake_clock[0] += timedelta(minutes=5)
+    _picks(s)
+    assert login.jobs == ["lead-ticket", "probe", "probe", "lead-ticket"]
+    assert (tasks / "done" / "m1-01-lead.md").is_file()
+    [item] = _login_items(repo)
+    assert item["resolved"] is not None and len(login.told) == 1
+    assert _state(repo).parked == {} and _state(repo).interrupted == {}
+    assert git(repo, "branch", "--show-current").strip() == "main"
+
+
+def test_a_planner_job_on_an_expired_login_keeps_its_row_and_says_nothing_on_its_thread(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    _plan_message(repo, "f7", "Why one queue?")
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    login = _Login(monkeypatch)
+    s = loop.open_session(_config(repo))
+
+    _picks(s)
+    # The planner's job was stopped; Claude's next job waits with it and runs nothing
+    assert login.jobs == ["planner"]
+    [row] = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
+    assert row["done"] is None and row["not_before"] is not None
+    assert [m["author"] for m in _messages(repo)] == ["owner"]
+    assert [i["kind"] for i in _rows(repo, "owner_items")] == [loop.LOGIN_KIND]
+    assert len(login.told) == 1
+
+    login.works = True
+    fake_clock[0] += timedelta(minutes=5)
+    _picks(s)
+    assert login.jobs == ["planner", "probe", "planner", "lead-ticket"]
+    [row] = [r for r in _rows(repo, "work_queue") if r["kind"] == "planner"]
+    assert row["done"] is not None
+    assert [m["author"] for m in _messages(repo)] == ["owner", "lead"]
+    assert _state(repo).queued == {}
+    [item] = _login_items(repo)
+    assert item["resolved"] is not None
+
+
+def test_a_review_parked_while_the_login_is_out_goes_when_it_works(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    """A support job Claude can't take meanwhile is held for the login too, not for a limit."""
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    login = _Login(monkeypatch)
+    s = loop.open_session(_config(repo))
+    _picks(s)
+    assert loop.park_review(s, "m1") is True
+    [row] = [r for r in loop.open_rows(s) if r.kind == loop.REVIEW]
+    assert s.state.queued[loop.row_key(row)][loop.LOGIN_HELD] is True
+    hold = loop.claude_hold(s, loop.now())
+    assert hold is not None and hold.reason == "Claude's login has expired"
+    login.works = True
+    fake_clock[0] += timedelta(minutes=5)
+    loop.check_login(s)
+    [row] = [r for r in loop.open_rows(s) if r.kind == loop.REVIEW]
+    assert row.not_before is None and loop.LOGIN_HELD not in s.state.queued[loop.row_key(row)]
+    assert loop.claude_hold(s, loop.now()) is None
+
+
+def test_a_restart_on_a_login_still_out_holds_the_ticket_again_and_says_nothing_new(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    login = _Login(monkeypatch)
+    first = loop.open_session(_config(repo))
+    _picks(first)
+    loop.close_session(first)
+
+    second = loop.open_session(_config(repo))
+    assert _state(repo).parked["m1-01-lead"][loop.RETRY] is True  # a restart tries it at once
+    _picks(second)
+    assert login.jobs == ["lead-ticket", "probe"]  # the probe goes first, and holds it again
+    entry = _state(repo).parked["m1-01-lead"]
+    assert loop.RETRY not in entry and entry[loop.LOGIN_HELD] is True
+    assert len(_login_items(repo)) == 1 and len(login.told) == 1
+
+
+def test_a_restart_after_logging_in_clears_the_item_and_runs_the_ticket(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    login = _Login(monkeypatch)
+    first = loop.open_session(_config(repo))
+    _picks(first)
+    loop.close_session(first)
+
+    login.works = True
+    _picks(loop.open_session(_config(repo)))  # at once: the owner may have just logged in
+    assert login.jobs == ["lead-ticket", "probe", "lead-ticket"]
+    [item] = _login_items(repo)
+    assert item["resolved"] is not None
+
+
+def test_the_login_is_the_machines_so_another_projects_item_stands_for_this_one(
+    repo, fake_model, fake_clock, monkeypatch
+):
+    _lead_task(repo, "m1-01-lead")
+    _passes(monkeypatch)
+    login = _Login(monkeypatch)
+    conn = metrics.open_db(_config(repo).metrics_db)
+    other = metrics.upsert_project(conn, "other", repo="/elsewhere")
+    metrics.upsert_owner_item(
+        conn, other, loop.LOGIN_KIND, "claude", text=LOGIN_TEXT, command="", created="2026"
+    )
+    conn.commit()
+    conn.close()
+    s = loop.open_session(_config(repo))
+    assert s.db is not None
+    loop.check_login(s)  # the first pick asks: the other project's item says it's out
+    assert login.jobs == ["probe"]
+    fake_clock[0] += timedelta(minutes=5)
+    _picks(s)
+    assert login.jobs == ["probe", "probe", "lead-ticket"]
+    [item] = _login_items(repo)
+    assert item["project_id"] == other and item["resolved"] is None
+    assert login.told == []
+
+    login.works = True
+    fake_clock[0] += timedelta(minutes=5)
+    loop.check_login(s)
+    [item] = _login_items(repo)
+    assert item["resolved"] is not None  # whichever project's probe passes clears it
+
+
+def test_a_job_that_cannot_park_waits_for_the_login_where_it_is(repo, fake_clock, monkeypatch):
+    """A review `runner milestone` runs has no queue to go back to: it waits, as for a limit."""
+    login = _Login(monkeypatch)
+    s = loop.open_session(_config(repo))
+    tries: list[datetime] = []
+    real = login._run_claude
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        tries.append(loop.now())
+        login.works = len(tries) > 1
+        return real(job, repo_, timeout, log_path, now, resume)
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    job = JobSpec(role="review", prompt="Review.", timeout=1)
+    result = loop.call_claude(s, job, "m1", "m1-review-r1")
+    assert result.ok and tries == [THURSDAY, THURSDAY + timedelta(minutes=5)]
+    assert len(_login_items(repo)) == 1 and len(login.told) == 1
 
 
 def test_a_finding_on_no_known_ticket_gets_no_fix_ticket(repo):

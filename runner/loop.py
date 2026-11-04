@@ -41,6 +41,7 @@ from runner.agents import (
     ANY,
     CHECK_COMMANDS,
     GIT_READ_COMMANDS,
+    LOGIN,
     TRANSIENT,
     Agent,
     JobResult,
@@ -234,6 +235,7 @@ class Session:
     activity: str | None = None
     waiting_until: datetime | None = None
     probed: bool = False  # a fresh reading of Claude's windows was taken (f4-07)
+    login_checked: datetime | None = None  # when Claude's login last answered (`check_login`)
     # Queue rows the metrics database couldn't take (f8 D1): this session runs them still.
     unqueued: dict[int, dispatch.Queued] = field(default_factory=dict)
     running_row: dispatch.Queued | None = None  # the queued job running now: its job's row
@@ -1238,6 +1240,14 @@ PLANNER = dispatch.PLANNER
 # messages to the planner (f6-01)
 QUEUED = (*SUPPORT, DIRECTION, PLANNER)
 FIVE_HOUR_HELD = "five_hour"  # a parked entry's flag: held by the owner's 25%, not a limit
+# An expired login (bug-59). A job it stopped parks as for a limit, flagged, until the next
+# check of the login (`check_login`); the item on the owner's desk is one for the whole machine.
+LOGIN_HELD = "login"  # a parked entry's flag, and an interrupted job's cause
+LOGIN_KIND = "claude-login"
+LOGIN_SUBJECT = "claude"
+LOGIN_TEXT = "Claude's login has expired: log in again on this machine."
+LOGIN_CHECK = timedelta(minutes=5)
+LOGIN_REASON = "Claude's login has expired"
 
 
 def _park(
@@ -1250,11 +1260,15 @@ def _park(
     session: str | None,
     resets_at: datetime | None,
     extra: Mapping[str, Any] | None = None,
+    *,
+    login: bool = False,
 ) -> NoReturn:
     """Park the job: its changes committed on its branch (on ``parked/…`` if it ran on main),
     its session kept for the resume, its ticket held until the reset (with none given,
-    ``backoff_min`` from now). ``extra`` is what a support job needs to start again."""
+    ``backoff_min`` from now). ``extra`` is what a support job needs to start again. With
+    ``login``, an expired login stopped it, not a limit."""
     at = now()
+    flag = {LOGIN_HELD: True} if login else {}
     resets = resets_at or at + timedelta(seconds=s.cfg.backoff_min)
     branch = s.git.current_branch()
     kept = "" if branch == MAIN else branch
@@ -1266,12 +1280,18 @@ def _park(
     if kept and kept != branch:
         s.git.checkout(MAIN)
     entry = {"session_id": session or "", "branch": kept}
-    s.state.interrupted[job_key(job.role, name)] = {**entry, "agent": agent, "cause": "limit"}
+    cause = LOGIN_HELD if login else "limit"
+    s.state.interrupted[job_key(job.role, name)] = {**entry, "agent": agent, "cause": cause}
     if job.role in QUEUED:
         subject = milestone if job.role == CHECKPOINT else name
-        park_row(s, job.role, subject, resets, **(extra or {}))
+        park_row(s, job.role, subject, resets, **(extra or {}), **flag)
     else:
-        s.state.parked[name] = {"kind": job.role, **entry, "resets_at": resets.isoformat()}
+        s.state.parked[name] = {
+            "kind": job.role,
+            **entry,
+            "resets_at": resets.isoformat(),
+            **flag,
+        }
     s.state.in_flight = None
     s.state.count_run(milestone)
     save_state(s.state, s.state_path)
@@ -1290,8 +1310,9 @@ def _park(
             ok=False,
         )
     )
-    s.log(console.paused(agent, f"Claude usage limit, {name} parked", resets, at))
-    s.report.notes.append(f"Parked {name} ({job.role}) for a Claude usage limit.")
+    why = LOGIN_REASON if login else "Claude usage limit"
+    s.log(console.paused(agent, f"{why}, {name} parked", resets, at))
+    s.report.notes.append(f"Parked {name} ({job.role}): {why}.")
     raise Parked(resets)
 
 
@@ -1660,6 +1681,22 @@ def call_claude(
             run, lambda elapsed: s.log(console.running(agent, what, elapsed)), write_progress
         )
         _record_readings(s, agent, result.readings)
+        if result.error == LOGIN:
+            _login_expired(s)
+            session = result.session_id or resume
+            at = now()
+            resumes = at + LOGIN_CHECK
+            if park:
+                name = ticket or subject
+                _park(s, job, name, milestone, agent, job_id, session, resumes, parked, login=True)
+            # No queue to go back to (a review under `runner milestone`): it waits where it is
+            attempt += 1
+            resume = session
+            interrupted = True
+            _in_flight_session(s, resume)
+            s.log(console.paused(agent, LOGIN_REASON, resumes, at))
+            wait_for_claude(s, LOGIN_CHECK.total_seconds(), resumes, ticket or subject, limit=False)
+            continue
         if result.error == TRANSIENT:
             if transient >= len(TRANSIENT_WAITS):
                 s.report.notes.append(
@@ -3861,7 +3898,7 @@ def handle_escalation(s: Session, task: Task, logs: Path, reason: str) -> None:
     # One stopped part-way is the same escalation when it resumes: not counted again (one
     # parked for a limit was taken off the count when it parked)
     earlier = s.state.interrupted.get(job_key("escalation", task.id))
-    resuming = earlier is not None and earlier.get("cause") != "limit"
+    resuming = earlier is not None and earlier.get("cause") not in ("limit", LOGIN_HELD)
     if used >= s.cfg.escalations_per_task and not resuming:
         block(s, escalated, f"{used} escalations used; last: {reason}")
         return
@@ -4141,14 +4178,17 @@ def _parked_ahead(
     *,
     five_hour: bool = True,
     rows: Sequence[dispatch.Queued] | None = None,
+    login: bool = True,
 ) -> list[tuple[datetime, str]]:
     """`_limits_ahead`'s resets, each with what it is for: the parked tickets (``tickets``,
-    if given) and the parked support jobs (``rows``, else every open one)."""
+    if given) and the parked support jobs (``rows``, else every open one). Without ``login``,
+    the jobs held only for an expired login are left out: no time ends their wait."""
     found = [
         (_resets(entry), _parked_name(key))
         for key, entry in s.state.parked.items()
         if entry["kind"] != "reserve"
         and (five_hour or not entry.get(FIVE_HOUR_HELD))
+        and (login or not entry.get(LOGIN_HELD))
         and (tickets is None or key in tickets)
         and not _due(entry, at)
     ]
@@ -4156,7 +4196,8 @@ def _parked_ahead(
         parks = row.kind in QUEUED or row.kind == REVIEW  # a review's row parks too (F53 D1)
         if not parks or row.not_before is None or _at(row.not_before) <= at:
             continue
-        if five_hour or not s.state.queued.get(row_key(row), {}).get(FIVE_HOUR_HELD):
+        needs = s.state.queued.get(row_key(row), {})
+        if (five_hour or not needs.get(FIVE_HOUR_HELD)) and (login or not needs.get(LOGIN_HELD)):
             found.append((_at(row.not_before), _row_name(row)))
     return found
 
@@ -4274,6 +4315,84 @@ def fresh_reading(s: Session) -> None:
     s.log(f"[{PROBE_AGENT}] fresh reading of Claude's windows: {read}")
 
 
+def _login_items(conn: sqlite3.Connection) -> list[sqlite3.Row]:
+    """The open login items of every project: the login is the machine's, and so the item."""
+    rows: list[sqlite3.Row] = conn.execute(
+        "SELECT id FROM owner_items WHERE kind = ? AND resolved IS NULL", (LOGIN_KIND,)
+    ).fetchall()
+    return rows
+
+
+def _login_asked(s: Session) -> bool:
+    """Whether the owner's desk, in any project, already asks them to log in."""
+    found = _record(s, _login_items)
+    return bool(found)
+
+
+def _resolve_login_items(conn: sqlite3.Connection) -> None:
+    at = now().isoformat()
+    for row in _login_items(conn):
+        metrics.resolve_owner_item(conn, row["id"], at)
+
+
+def _login_expired(s: Session) -> None:
+    """A job found the login expired: the next check is ``LOGIN_CHECK`` from now, and the
+    owner is asked once, whatever else it stopped, here or in another project."""
+    at = now()
+    s.login_checked = at
+    if s.project_id is None or _login_asked(s):
+        return
+    _record(
+        s,
+        metrics.upsert_owner_item,
+        s.project_id,
+        LOGIN_KIND,
+        LOGIN_SUBJECT,
+        text=LOGIN_TEXT,
+        command="",
+        created=at.isoformat(),
+    )
+    s.report.notes.append(LOGIN_TEXT)
+    _notify(s, *notify.item_message(LOGIN_KIND, LOGIN_SUBJECT))
+
+
+def check_login(s: Session) -> None:
+    """At each pick, with a job held for the login or the owner still asked, and at most every
+    ``LOGIN_CHECK``: one probe. A failed one holds the jobs until the next check; a passing one
+    clears the item and frees them, with no restart. A new session asks at its first pick: the
+    owner may have logged in before restarting, and the restart's retries wait for this."""
+    entries = [entry for entry in s.state.parked.values() if entry.get(LOGIN_HELD)]
+    rows = [r for r in open_rows(s) if s.state.queued.get(row_key(r), {}).get(LOGIN_HELD)]
+    if not entries and not rows and not _login_asked(s):
+        return
+    at = now()
+    if s.login_checked is not None and at - s.login_checked < LOGIN_CHECK:
+        return
+    s.login_checked = at
+    with doing(s, "checking Claude's login"):
+        result = probe(s.repo, s.run_dir / "claude-login.log", at)
+    _record_readings(s, PROBE_AGENT, result.readings)
+    if result.ok:
+        for entry in entries:
+            del entry[LOGIN_HELD]
+            entry[RETRY] = True
+        for row in rows:
+            del s.state.queued[row_key(row)][LOGIN_HELD]
+            _unpark_row(s, row)
+        _record(s, _resolve_login_items)
+        s.log(f"[{RUNNER_AGENT}] Claude's login works again: {len(entries) + len(rows)} jobs go on")
+    else:
+        until = at + LOGIN_CHECK
+        for entry in entries:
+            entry.pop(RETRY, None)
+            entry["resets_at"] = until.isoformat()
+        for row in rows:
+            s.state.queued[row_key(row)].pop(RETRY, None)
+            _set_row(s, row, until)
+        s.log(f"[{RUNNER_AGENT}] {LOGIN_REASON}: asked again at {until.astimezone():%H:%M}")
+    save_state(s.state, s.state_path)
+
+
 @dataclass(frozen=True)
 class Hold:
     """Why Claude may not take a support job now, and until when."""
@@ -4281,6 +4400,7 @@ class Hold:
     until: datetime
     reason: str
     five_hour: bool  # only the owner's share of the 5-hour window holds it: its switch lifts it
+    login: bool = False  # only an expired login holds it: `check_login` frees it
 
 
 def claude_hold(s: Session, at: datetime, *, owners: bool = False) -> Hold | None:
@@ -4290,7 +4410,9 @@ def claude_hold(s: Session, at: datetime, *, owners: bool = False) -> Hold | Non
     to use (ADR 15 item 4). The ``owners`` own work (a planner job) may use both reserves
     (ADR 20 item 2)."""
     if ahead := _limits_ahead(s, at, five_hour=False):
-        return Hold(max(min(ahead), at + timedelta(minutes=1)), "Claude is limited", False)
+        login = not _parked_ahead(s, at, five_hour=False, login=False)
+        reason = LOGIN_REASON if login else "Claude is limited"
+        return Hold(max(min(ahead), at + timedelta(minutes=1)), reason, False, login)
     windows = rested_claude_windows(s, at)
     five_on = owners or switch_on(s.state, FIVE_HOUR, at)
     kept = {"seven_day", *(("five_hour",) if five_on else ())}
@@ -4314,7 +4436,8 @@ def _park_support(s: Session, role: str, name: str, hold: Hold, /, **resume: str
     until ``hold`` ends (f8 D3), and the queue goes on meanwhile. ``resume`` is what it needs
     to start again; its session, if it had one, stays in ``interrupted``."""
     what = role if role == CHECKPOINT else f"{role} of {name}"
-    park_row(s, role, name, hold.until, hold.five_hour, **resume)
+    flag = {LOGIN_HELD: True} if hold.login else {}
+    park_row(s, role, name, hold.until, hold.five_hour, **resume, **flag)
     s.report.notes.append(f"Parked the {what}: {hold.reason}.")
     s.log(console.paused(RUNNER_AGENT, f"the {what} waits for Claude", hold.until, now()))
 
@@ -4945,10 +5068,11 @@ def _wait_for_reset(s: Session, ready: list[Task], rows: Sequence[dispatch.Queue
     turned on ends the sleep."""
     at = now()
     tickets = {t.id for t in ready}
-    ahead = _parked_ahead(s, at, tickets, rows=rows)
+    # An expired login has no reset to sleep to: the run holds, and each pick checks it
+    ahead = _parked_ahead(s, at, tickets, rows=rows, login=False)
     if not ahead:
         return False
-    held = len(ahead) > len(_parked_ahead(s, at, tickets, five_hour=False, rows=rows))
+    held = len(ahead) > len(_parked_ahead(s, at, tickets, five_hour=False, rows=rows, login=False))
     first, name = min(ahead)  # the parked job that resumes first is what the wait is for
     wait = max(60.0, (first - at).total_seconds() + 60)
     resumes = at + timedelta(seconds=wait)
@@ -5000,6 +5124,7 @@ OWNER_WAITS = {
     "signoff": "sign-off",
     "planning": "planning reply",
     MAIN_RED_KIND: "failing check on main",
+    LOGIN_KIND: "expired Claude login",
 }
 
 
@@ -5024,6 +5149,8 @@ def _idle_line(s: Session, ready: list[Task], paused: set[str], held: Mapping[st
         when = f"{resets:%a %H:%M}"
         if all(entry["kind"] == RESERVE_KIND for entry in parked):
             what = f"for Claude's reserve · the week resets {when}"
+        elif all(entry.get(LOGIN_HELD) for entry in parked):
+            what = "for Claude's login"
         else:
             what = f"for Claude until {when}"
         causes.append(_tickets_wait(len(parked), what))
@@ -5264,6 +5391,7 @@ def work_queue(
         check_backup(s)
         check_push(s)
         set_aside_unreadable(s)
+        check_login(s)
         fresh_reading(s)
         if reviews:
             _queue_due_review(s)
