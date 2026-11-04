@@ -39,3 +39,9 @@ attempts: 3
 tokens: 11295692
 logs: .softfield/var/runs/20261103-212438/f81-04-desk-in-classes
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
