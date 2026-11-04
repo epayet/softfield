@@ -112,6 +112,16 @@ def proposal_review(
     number = _ADR_NUMBER.match(str(proposal.get("path") or ""))
     path = str(proposal.get("path") or "")
     repo = _repo(conn, project)
+    # For old paths, only show Accept ADR when the exact file exists on main
+    adr_number: str | None = None
+    if number:
+        if path.startswith("docs/adr/"):
+            if repo is not None:
+                main_path = repo / path
+                if main_path.exists():
+                    adr_number = str(int(number[1]))
+        else:
+            adr_number = str(int(number[1]))
     resolved = _resolve_mockup_path(path) if path else None
     mockup: str | None = None
     mockup_gone: str | None = None
@@ -160,7 +170,7 @@ def proposal_review(
             if isinstance(key_points, list)
             else [],
             "proposals": _proposals(conn, project_id, thread, rows, _known_cards(repo)),
-            "adr_number": str(int(number[1])) if number else None,
+            "adr_number": adr_number,
             "merge": _merge_words(proposal),
             "mockup": mockup,
             "mockup_gone": mockup_gone,

@@ -2225,3 +2225,50 @@ def test_the_thread_and_proposal_pages_say_being_revised(planning, db_path, serv
     page = _review_page(client, "/planning/f85/proposals/plan")
     assert "Being revised" in page
     assert "Approve" in page and "Reject" in page
+
+
+# --- old ADR paths (_adr_waits) (f196-01) -------------------------------------------------------
+
+
+def test_adr_waits_for_old_path_with_file_on_main_and_proposed_status(planning, db_path, checkout):
+    """An ADR proposal with an old ``docs/adr/`` path: when the exact file exists on main and is
+    Proposed, ``_adr_waits`` returns True."""
+    from factory_dashboard.planning import _adr_waits
+
+    adr = checkout / "docs" / "adr" / "27-the-lead-acts-when-asked.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text("# ADR 27: the lead acts when asked\n\n- **Status:** Proposed\n")
+    old_adr_proposal: dict[str, object] = {
+        "kind": "adr",
+        "path": "docs/adr/27-the-lead-acts-when-asked.md",
+    }
+    assert _adr_waits(checkout, [old_adr_proposal]) is True
+
+
+def test_adr_waits_false_for_old_path_with_file_on_main_and_accepted_status(
+    planning, db_path, checkout
+):
+    """An ADR proposal with an old ``docs/adr/`` path: when the exact file exists on main and is
+    Accepted, ``_adr_waits`` returns False."""
+    from factory_dashboard.planning import _adr_waits
+
+    adr = checkout / "docs" / "adr" / "27-the-lead-acts-when-asked.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text("# ADR 27: the lead acts when asked\n\n- **Status:** Accepted\n")
+    old_adr_proposal: dict[str, object] = {
+        "kind": "adr",
+        "path": "docs/adr/27-the-lead-acts-when-asked.md",
+    }
+    assert _adr_waits(checkout, [old_adr_proposal]) is False
+
+
+def test_adr_waits_for_old_path_with_file_missing_on_main(planning, db_path, checkout):
+    """An ADR proposal with an old ``docs/adr/`` path: when the exact file does not exist on main,
+    ``_adr_waits`` returns True."""
+    from factory_dashboard.planning import _adr_waits
+
+    old_adr_proposal: dict[str, object] = {
+        "kind": "adr",
+        "path": "docs/adr/27-planning-beside-the-line.md",
+    }
+    assert _adr_waits(checkout, [old_adr_proposal]) is True

@@ -747,3 +747,53 @@ def test_the_mockup_iframe_shows_at_display(page, planning, db_path, serve, chec
     assert height >= 480
     link = page.locator(".mockup-link")
     assert link.is_visible()
+
+
+# --- old ADR paths (f196-01) --------------------------------------------------------------------
+
+
+def test_old_path_adr_shows_accept_adr_when_file_exists_on_main(planning, db_path, serve, checkout):
+    """A proposal whose stored path is ``docs/adr/27-the-lead-acts-when-asked.md`` and that file
+    exists on main: Accept ADR posts its number."""
+    adr = checkout / "docs" / "adr" / "27-the-lead-acts-when-asked.md"
+    adr.parent.mkdir(parents=True)
+    adr.write_text(ADR_ON_MAIN.format(status="Proposed"))
+    old_adr = {
+        "id": "adr-27",
+        "kind": "adr",
+        "title": "ADR 27: the lead acts when asked",
+        "path": "docs/adr/27-the-lead-acts-when-asked.md",
+        "key_points": [],
+    }
+    _write(db_path, lambda conn: _review(conn, planning, "f58", old_adr))
+    html = _review_page(serve(), "/planning/f58/proposals/adr-27")
+    assert _posts(html, "accept-adr") == {
+        "kind": "accept_adr",
+        "project": PROJECT,
+        "subject": "f58",
+        "value": "27",
+    }
+
+
+def test_old_path_adr_shows_no_accept_adr_when_file_missing_on_main(
+    planning, db_path, serve, checkout
+):
+    """A proposal whose stored path is ``docs/adr/27-planning-beside-the-line.md`` but that file
+    does not exist on main: no Accept ADR; Send back and Reject stay."""
+    # Another ADR of number 27 exists on main, but not the one named in the proposal
+    other = checkout / "docs" / "adr" / "27-another-adr.md"
+    other.parent.mkdir(parents=True)
+    other.write_text(ADR_ON_MAIN.format(status="Accepted"))
+    old_adr = {
+        "id": "adr-27",
+        "kind": "adr",
+        "title": "ADR 27: planning beside the line",
+        "path": "docs/adr/27-planning-beside-the-line.md",
+        "key_points": [],
+    }
+    _write(db_path, lambda conn: _review(conn, planning, "f27", old_adr))
+    client = serve()
+    html = _review_page(client, "/planning/f27/proposals/adr-27")
+    assert 'id="accept-adr"' not in html
+    assert 'id="send-back"' in html
+    assert 'id="reject"' in html

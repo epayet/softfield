@@ -67,7 +67,7 @@ from runner.tasks import (
 
 router = APIRouter()
 
-_ADR_NUMBER = re.compile(r"\.softfield/adr/(\d+)-")
+_ADR_NUMBER = re.compile(r"(?:\.softfield/adr|docs/adr)/(\d+)-")
 _NEXT_PICK = "on its way · the runner applies it at its next pick"
 
 
@@ -710,11 +710,22 @@ def _adr_waits(
         number = _ADR_NUMBER.match(str(p.get("path") or ""))
         if number and int(number[1]) in accepting:
             continue
-        found = (
-            sorted((repo / ".softfield" / "adr").glob(f"{number[1]}-*.md"))
-            if repo and number
-            else []
-        )
-        if not found or is_proposed(found[0].read_text(encoding="utf-8")):
-            return True
+        path = str(p.get("path") or "")
+        if path.startswith("docs/adr/"):
+            # Old path: check if the exact file exists on main and is still Proposed
+            if repo is None:
+                return True
+            main_path = repo / path
+            if not main_path.exists():
+                return True
+            if is_proposed(main_path.read_text(encoding="utf-8")):
+                return True
+        else:
+            found = (
+                sorted((repo / ".softfield" / "adr").glob(f"{number[1]}-*.md"))
+                if repo and number
+                else []
+            )
+            if not found or is_proposed(found[0].read_text(encoding="utf-8")):
+                return True
     return False
