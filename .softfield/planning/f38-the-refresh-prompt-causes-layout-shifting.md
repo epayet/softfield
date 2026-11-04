@@ -47,3 +47,29 @@ The planning thread behind F38's plan, oldest first, as it was when the owner ap
 > Proposals:
 > - Mock-up: "✓ Updated 14:09" on a page that updated itself (mockup)
 > - F38, second round: a page that updated itself says so (plan)
+
+## The lead, 2026-10-29 00:52
+
+> Approved by the owner on 2026-10-29: approved plan/f38: queued f38-02-updated-note
+
+## The runner, 2026-11-03 19:47
+
+> f38-02-updated-note blocked: the finished work failed check-all; its work is on task/f38-02-updated-note.
+> Its work is on task/f38-02-updated-note; its run's logs are in .softfield/var/runs/20261103-163949/f38-02-updated-note.
+> What went wrong, and what is the fix? Propose it as a replan: the ticket reworked, split or set aside.
+
+## The lead, 2026-11-03 19:50
+
+> The work on f38-02 is good. It was blocked by a test outside it that failed by 1 millisecond. The replan mends that test first, then has the lead copy the finished work over.
+>
+> 1. **What went wrong: a test outside this work failed by 1 millisecond**: The "✓ Updated" note is finished on its branch, and 2975 of 2976 tests passed. The one failure is a runner test about Claude's reserve, nothing to do with the note. It expected a fake clock to stand still and found 12:00:00.001. The fake clock replaces Python's sleep for the whole test run, and Python's own subprocess code sleeps 1 ms while it waits for a program that hasn't ended yet. On a busy machine that nudges the clock. Python's source has exactly that 1 ms wait, which fits, but I can't run tests from here, so the new test in point 2 is what will prove it. A second reserve test failed the same way in the escalation's earlier full run, then passed alone and on the rerun.
+>    Action: Ticket f38-03, in point 2.
+> 2. **The fix: mend the fake clock itself**: The escalation suggested loosening the one assertion. I'd fix the fake clock instead, because seven assertions rely on it and each could fail the same way. With f38-03, Python's subprocess code gets the real sleep and the runner keeps the fake one. A new test runs a short program and checks the clock didn't move. It's a small change to one test file, so a developer can build it.
+>    Action: New ticket f38-03-fake-clock-ignores-subprocess (developer, difficulty 2), first in this replan.
+> 3. **f38-02 can't go back to a developer: the lead copies it over**: A developer ticket that comes back carries on from its branch. That branch now holds the escalation's note in `.softfield/developer.md`, which is protected, so the protected-paths check would refuse every attempt. As a lead ticket it starts again from main, and the runner keeps the finished work on a separate copy of the branch when you approve. The ticket tells the lead to make the same changes from that copy and not to rebuild or redesign anything. The cost is one more Claude job on work already done, probably a dollar or two (my guess; f38-01's escalation cost $1.40). Sending it back to the local model would be free, but it would have to undo that note, and it has already spent three attempts and 9 million tokens on this ticket.
+>    Action: f38-02-updated-note comes back as a lead ticket, waiting for f38-03. What it builds and the mock-up don't change.
+> 4. **Worth moving F38 up the board**: F38, The new-version notice becomes a tag on the top bar, sits at place 90, behind about 100 ready tickets at about 70 minutes each. That could be days. Until f38-03 lands, this 1 ms failure can cost any other ticket an attempt or a block, as it did here. I recommend dragging F38 near the top of the board once you've approved: the ticket is small and it protects everything behind it. If you leave it, nothing breaks, but the "Updated" note and the mend arrive later.
+>    Action: Your call on the board. Nothing else is needed from you for this.
+>
+> Proposals:
+> - F38: mend the fake clock, then the lead lands the "Updated" note (replan)
