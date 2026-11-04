@@ -1,6 +1,7 @@
 # Milestone F175: The factory cleans up its temp files, so the disk stops filling
 
-> **State:** ready · **Priority:** 7 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 7 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-04. Base: git tag `f175-if-i-leave-the-factory-running-start`. Report: [`.softfield/reviews/f175-if-i-leave-the-factory-running.md`](../reviews/f175-if-i-leave-the-factory-running.md).
 > Planted by the owner on 2026-10-26.
 
 ## Notes

@@ -1,5 +1,7 @@
 # Review: F175, the factory cleans up its temp files, so the disk stops filling
 
+- **Status:** done, signed off by the owner on 2026-11-04.
+
 ## Sign-off sheet
 
 ### 1. What changed
