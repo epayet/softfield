@@ -27,3 +27,12 @@ Build Now and the Queue of the Proposed side of `.softfield/cards/f81-mockup/the
 - the Queue shows its count large and Next in line as rows edged by who does the ticket
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 5780
+gate_failures: ['no-changes']
+tokens: 4593933
+```
