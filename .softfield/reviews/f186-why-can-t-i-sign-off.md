@@ -25,7 +25,8 @@ None.
 - 2026-10-29: planned from your note in the Planning room, and you approved the plan the same morning.
 - 2026-11-04 01:57 ([session](../sessions/2026-11-04-0157.md)): `f186-01-sign-off-stays-signed`, the lead's ticket (protected `runner/`), Sonnet, first attempt, 6 minutes, $0.33.
 - 2026-11-04 04:53 ([session](../sessions/2026-11-04-0453.md)): review round 1 found one blocking gap and fixed four findings itself, all in protected code.
-- 2026-11-04 05:39: review round 2 confirmed those four fixes and caught a mistake in one of them (F6), fixed in the same round.
+- 2026-11-04 05:39 ([session](../sessions/2026-11-04-0539.md)): review round 2 confirmed those four fixes and caught a mistake in one of them (F6), fixed in the same round.
+- 2026-11-04 06:05: review round 3 read that last fix and found nothing new, so the review stops here.
 - Lessons:
   - **A review's own fix needs the same doubt as a ticket's.** Round 1's end-date fix assumed the first sign-off had always reached the database. If it hadn't, the card would have ended with no date and dropped out of the reports. Round 2 found this by asking what each new branch does when the earlier step failed.
   - **The ticket's main test stopped one step short of the bug.** It replaced the review with a stand-in, and the review itself was what set the card back to "in review". The new test runs the real review loop, with a sign-off in the middle of it.
@@ -66,6 +67,8 @@ No existing test was edited: the ticket and this review only add tests. No Frenc
 | F6 | should-fix | claude | F3's fix left a card with no end date when its first sign-off never reached the database, so settling marked it done without a date | Fixed in round 2: the first write that finds no end date sets it; new test |
 
 Round 2 re-read the fixes for F1 to F4: F1, F2 and F4 hold as written, and F3 holds with F6's change. F1's test runs the real loop, and F2's and F3's tests check what they claim.
+
+Round 3 re-read round 2's diff: F3, F4 and F6 hold, with no new finding. All three callers of `_signed_off` go through the one end-date check, and only the backfill also writes a milestone's end, from the done tag. F6's test would fail on the old code. No existing test was edited in this round either, and no done milestone in the database lacks an end date.
 
 Checkpoints: none read this ticket, so there's nothing to judge and no "missed".
 
