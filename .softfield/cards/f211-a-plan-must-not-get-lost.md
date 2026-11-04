@@ -1,4 +1,4 @@
-# Milestone F211: A plan must not get lost when its card closes. Don't merge…
+# Milestone F211: Open plans survive a card's closing, and new ideas don't join a planned card
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-03.
