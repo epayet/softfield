@@ -9,6 +9,8 @@ files:
   - factory_dashboard/templates/planning.html
 tests:
   - tests/factory_dashboard/test_planning.py
+  - tests/factory_dashboard/test_coming.py
+  - tests/factory_dashboard/test_thread.py
 ---
 
 ### Goal
@@ -20,7 +22,7 @@ Build the desk of the Proposed side of `.softfield/cards/f81-mockup/theme-pass.h
 - A desk group's colour (`var({{ group.color }})`) stays the group's: set it as a custom property (`style="--c: var(...)"` is allowed for it) and colour `.group-head` from it.
 - `blockedOnItsWay` in the page's script sets inline styles: make it add a class, so the dashed hazard edge comes from `.on-its-way-item`'s rule.
 - Keep every id, `hx-*` attribute, `name`, script hook and word; the live polls select `#desk`, `#desk-coming` and `#plant-row` by id.
-- Tests in `tests/factory_dashboard/test_planning.py` that read an inline style read the class instead.
+- Tests in `tests/factory_dashboard/test_planning.py`, `test_coming.py` and `test_thread.py` that read an inline style or the old class order read the class instead. The heading's text stays "Coming seeds": capitals come from the CSS.
 
 ### Done when
 - `planning.html` has no `style=` but meter widths, the mark's position and the group's `--c`
