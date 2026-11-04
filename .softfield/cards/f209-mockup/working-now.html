@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F209 mock-up: the card at work on the board</title>
+<style>
+  /* The dashboard's own tokens and rules, copied from factory_dashboard/static/dashboard.css (dark theme) */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a; --dev: #5b9cf5;
+    --product: #4fd1a5; --factory: #f2b10a; --fail: #ec5458;
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; color: var(--fg); font: 15px/1.5 var(--body); padding: 14px;
+    background-color: var(--floor);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  [hidden] { display: none !important; }
+
+  /* the mock-up's own frame */
+  .intro h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .intro p { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; border: 1px solid var(--rule); margin-bottom: 12px; }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; min-height: 44px; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 18px; align-items: start; }
+  .label { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 0 0 8px; }
+  .label-sub { font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  .phone { width: 100%; max-width: 390px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .why { display: block; margin: 7px 0 0; font: 12px/1.4 var(--mono); color: var(--good); }
+  .say { color: var(--ink-2); font-size: 13.5px; max-width: 760px; margin: 8px 0 0; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .versions [data-version] { display: block !important; }
+    .versions [data-version][hidden] { display: block !important; }
+  }
+
+  /* the page, as dashboard.css draws it */
+  .bar { background: var(--floor); border: 1px solid var(--rule); border-bottom: 0; padding: 8px 10px; display: flex; align-items: center; gap: 8px; }
+  .brand { font: 700 17px var(--display); letter-spacing: .03em; } .soft { color: var(--hazard); } .field-w { color: var(--good); }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--opus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--opus) 18%, transparent); margin-left: auto; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); }
+  .tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--rule); border-top: 0; background: var(--floor); }
+  .tabs span { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 8px 10px; }
+  .tabs .on { background: var(--hazard); color: var(--hazard-ink); }
+  .page { display: grid; gap: 14px; padding: 14px 0 0; }
+  h2.board-title { margin: 0; font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .plots { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; padding: 12px;
+    background: var(--bay) repeating-linear-gradient(135deg, transparent 0 10px, color-mix(in srgb, var(--hazard) 9%, transparent) 10px 12px);
+    border: 1px solid var(--rule); }
+  .plot { min-height: 56px; padding: 6px 8px; background: var(--plate); border: 1px solid var(--rule); color: var(--ink-2); }
+  .plot b { display: block; font: 600 20px/1 var(--display); color: var(--fg); }
+  .plot span { font: 600 10.5px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .plot.on { border-color: var(--hazard); box-shadow: inset 0 -4px 0 var(--hazard); color: var(--fg); }
+  .stage { background: var(--bay); border: 1px solid var(--rule); }
+  .stage-head { padding: 10px 12px; border-bottom: 1px solid var(--rule); }
+  .stage-head h3 { margin: 0; font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; }
+  .slot { display: grid; grid-template-columns: 44px minmax(0, 1fr) 44px; }
+  .grip, .more { display: grid; place-items: center; background: var(--plate); color: var(--muted); border: 1px solid var(--rule); font: 600 18px var(--mono); }
+  .grip { border-right: 0; } .more { border-left: 0; }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px; padding: 9px 10px;
+    background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--factory); color: var(--fg); overflow-wrap: anywhere; min-width: 0; }
+  .card.started { border-color: var(--opus); border-left-color: var(--factory); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .meter { display: block; height: 8px; background: var(--floor); border: 1px solid var(--rule); position: relative; }
+  .meter > span { position: absolute; inset: 1px auto 1px 1px; background: var(--factory); }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+  .card-now { font-size: 12.5px; line-height: 1.35; }
+  .card-now b { color: var(--opus); font-weight: 600; }
+  .card-growing { display: inline-block; margin-left: 4px; padding: 1px 6px; font: 600 10.5px var(--display); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--opus); border: 1px solid var(--opus); background: var(--floor); }
+  .gap { font: 12px var(--mono); color: var(--muted); text-align: center; padding: 2px 0; }
+  .note { font: 12px var(--mono); color: var(--muted); padding: 0 10px 10px; margin: 0; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font: 12px var(--mono); color: var(--ink-2); margin: 0; padding: 8px 12px; border-top: 1px solid var(--rule); background: var(--plate); }
+  .swatch { display: inline-block; width: 12px; height: 10px; margin-right: 5px; vertical-align: -1px; }
+
+  /* ---- proposed: the colour says who works, as the top bar's dot does: orange the lead, blue a developer ---- */
+  .lead { --who: var(--opus); } .developer { --who: var(--dev); }
+  .lamp { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--who);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--who) 25%, transparent); }
+  @media (prefers-reduced-motion: no-preference) { .lamp.lit { animation: breathe 2.6s ease-in-out infinite; } }
+  @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
+
+  /* the card: a thick frame in that colour, a filled head, a wash, its work in plain words */
+  .slot.at-work { box-shadow: 0 0 0 2px var(--who), 0 0 18px color-mix(in srgb, var(--who) 40%, transparent); position: relative; z-index: 1; }
+  .slot.at-work .card { border-color: var(--who); border-left-color: var(--factory);
+    background: color-mix(in srgb, var(--who) 12%, var(--plate)); }
+  .at-work-head { display: flex; align-items: center; gap: 8px; margin: -9px -10px 2px; padding: 5px 10px;
+    background: var(--who); color: var(--hazard-ink); font: 700 12px var(--display); letter-spacing: .1em; text-transform: uppercase; }
+  .at-work-head .lamp { background: var(--hazard-ink); box-shadow: none; }
+  .at-work-doing { font-size: 13px; line-height: 1.35; }
+  .at-work-doing code { font: 600 12px var(--mono); }
+
+  /* the plate at the top of the board: what works now, always there, so nothing moves */
+  .board-now { display: grid; gap: 3px; padding: 10px 26px 10px 14px; color: var(--fg); background: var(--plate);
+    border: 1px solid var(--rule); border-left: 6px solid var(--who, var(--rule)); clip-path: var(--notch); text-decoration: none; }
+  .board-now .row { display: flex; align-items: center; gap: 8px; }
+  .board-now .what { font: 700 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--who, var(--muted)); }
+  .board-now .when { margin-left: auto; font: 12px var(--mono); color: var(--muted); }
+  .board-now .name { font: 600 15px/1.25 var(--body); }
+  .board-now .doing { font-size: 13px; line-height: 1.35; color: var(--ink-2); overflow-wrap: anywhere; }
+  .board-now .foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; font: 12px var(--mono); color: var(--muted); }
+  .board-now .foot .go { color: var(--sonnet); }
+  .board-now.idle { padding-top: 8px; padding-bottom: 8px; }
+  .board-now .stale { color: var(--hazard); }
+
+  /* a calmer version, for comparison */
+  .calm .slot.at-work { box-shadow: 0 0 0 1px var(--who); }
+  .calm .slot.at-work .card { background: var(--plate); }
+  .calm .at-work-head { background: none; color: var(--who); margin: 0; padding: 0; }
+  .calm .at-work-head .lamp { background: var(--who); }
+  .states { display: grid; gap: 10px; }
+  .states h4 { margin: 8px 0 -4px; font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="intro">
+  <h1>F209: the card at work on the board</h1>
+  <p>Planted, on a phone. The cards are the board's real ones tonight. Nothing is running as this is drawn, so the job is an example: F9's next ticket, 12 minutes in.</p>
+</div>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/board.html and dashboard.css -->
+<section data-version="today" hidden>
+  <p class="label">Today</p>
+  <div class="phone">
+    <div class="bar"><span class="brand"><span class="soft">Soft</span><span class="field-w">Field</span></span><i class="dot"></i></div>
+    <div class="hazard"></div>
+    <div class="tabs"><span>Overview</span><span>Planning · 27</span><span class="on">Board</span><span>Tickets</span></div>
+    <div class="page">
+      <h2 class="board-title">The board</h2>
+      <div class="plots">
+        <div class="plot"><b>69</b><span>Seed</span></div>
+        <div class="plot"><b>10</b><span>Sprouting</span></div>
+        <div class="plot on"><b>53</b><span>Planted</span></div>
+        <div class="plot"><b>6</b><span>Ripe</span></div>
+        <div class="plot"><b>65</b><span>Harvested</span></div>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><h3>Planted</h3><span>in line for the factory, #1 first · 53, 16 growing</span></div>
+        <div class="cards">
+          <div class="slot"><span class="grip">⠿</span><div class="card"><span class="card-meta"><b>#1</b> F186 factory</span><span class="card-title">A sign-off stays signed: F142's keeps coming back</span><span class="meter"><span style="width:0"></span></span><span class="card-count">0 of 1 ticket</span></div><span class="more">⋯</span></div>
+          <div class="slot"><span class="grip">⠿</span><div class="card started"><span class="card-meta"><b>#2</b> F187 factory <span class="card-growing">growing</span></span><span class="card-title">Store every time in UTC, show local time on screen only</span><span class="meter"><span style="width:33%"></span></span><span class="card-count">1 of 3 tickets</span></div><span class="more">⋯</span></div>
+          <div class="slot"><span class="grip">⠿</span><div class="card started"><span class="card-meta"><b>#3</b> F85 factory <span class="card-growing">growing</span></span><span class="card-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="meter"><span style="width:33%"></span></span><span class="card-count">1 of 3 tickets</span></div><span class="more">⋯</span></div>
+          <div class="gap">… 19 more cards, 6 of them growing …</div>
+          <div class="slot"><span class="grip">⠿</span><div class="card started"><span class="card-meta"><b>#23</b> F9 factory <span class="card-growing">growing</span></span><span class="card-title">line polish</span><span class="meter"><span style="width:94%"></span></span><span class="card-count">34 of 36 tickets · 5 set aside, won't run</span><span class="card-now"><b>Now:</b> f9-29-week-pace · The Overview shows when Claude's week pacing holds lead tickets back… · claude-opus, attempt 1</span></div><span class="more">⋯</span></div>
+        </div>
+        <p class="note">Fetched once, when the page opens. Only the top bar updates after that.</p>
+      </div>
+    </div>
+  </div>
+  <p class="say">One of 16 orange cards, told apart by one small line, 22 cards down. It stays as it was until you reload.</p>
+</section>
+
+<!-- Proposed -->
+<section data-version="proposed">
+  <p class="label">Proposed</p>
+  <div class="phone">
+    <div class="bar"><span class="brand"><span class="soft">Soft</span><span class="field-w">Field</span></span><i class="dot"></i></div>
+    <div class="hazard"></div>
+    <div class="tabs"><span>Overview</span><span>Planning · 27</span><span class="on">Board</span><span>Tickets</span></div>
+    <div class="page">
+      <h2 class="board-title">The board</h2>
+      <div class="new">
+        <a class="board-now lead" href="#">
+          <span class="row"><i class="lamp lit"></i><span class="what">Working now · the lead</span><span class="when">12 min</span></span>
+          <span class="name">F9 · line polish</span>
+          <span class="doing"><code>f9-29-week-pace</code> · The Overview shows when Claude's week pacing holds lead tickets back… · claude-opus, attempt 1</span>
+          <span class="foot"><span>refreshes every 10 s</span><span class="go">#23 in Planted · open the card ›</span></span>
+        </a>
+      </div>
+      <span class="why" style="margin-top:-8px">New plate, above the plots: the work is on the first screen wherever its card sits. Tap to open the card.</span>
+      <div class="plots">
+        <div class="plot"><b>69</b><span>Seed</span></div>
+        <div class="plot"><b>10</b><span>Sprouting</span></div>
+        <div class="plot on"><b>53</b><span>Planted</span></div>
+        <div class="plot"><b>6</b><span>Ripe</span></div>
+        <div class="plot"><b>65</b><span>Harvested</span></div>
+      </div>
+      <div class="stage">
+        <div class="stage-head"><h3>Planted</h3><span>in line for the factory, #1 first · 53, 16 growing</span></div>
+        <div class="cards">
+          <div class="slot"><span class="grip">⠿</span><div class="card"><span class="card-meta"><b>#1</b> F186 factory</span><span class="card-title">A sign-off stays signed: F142's keeps coming back</span><span class="meter"><span style="width:0"></span></span><span class="card-count">0 of 1 ticket</span></div><span class="more">⋯</span></div>
+          <div class="slot"><span class="grip">⠿</span><div class="card started"><span class="card-meta"><b>#2</b> F187 factory <span class="card-growing">growing</span></span><span class="card-title">Store every time in UTC, show local time on screen only</span><span class="meter"><span style="width:33%"></span></span><span class="card-count">1 of 3 tickets</span></div><span class="more">⋯</span></div>
+          <div class="slot"><span class="grip">⠿</span><div class="card started"><span class="card-meta"><b>#3</b> F85 factory <span class="card-growing">growing</span></span><span class="card-title">Real before and after pictures of the changed pages when you sign a card off</span><span class="meter"><span style="width:33%"></span></span><span class="card-count">1 of 3 tickets</span></div><span class="more">⋯</span></div>
+          <div class="gap">… 19 more cards, 6 of them growing …</div>
+          <div class="slot at-work lead"><span class="grip">⠿</span><div class="card started">
+            <span class="at-work-head"><i class="lamp lit"></i>Working now · the lead</span>
+            <span class="card-meta"><b>#23</b> F9 factory <span class="card-growing">growing</span></span>
+            <span class="card-title">line polish</span>
+            <span class="meter"><span style="width:94%"></span></span>
+            <span class="card-count">34 of 36 tickets · 5 set aside, won't run</span>
+            <span class="at-work-doing"><code>f9-29-week-pace</code> · The Overview shows when Claude's week pacing holds lead tickets back… · claude-opus, attempt 1</span>
+          </div><span class="more">⋯</span></div>
+          <span class="why">The card stays in its place in the line, framed and filled with who works. It replaces the "Now:" line.</span>
+        </div>
+        <p class="legend"><span><i class="swatch" style="background:var(--opus)"></i>working now: the lead</span><span><i class="swatch" style="background:var(--dev)"></i>working now: a developer</span></p>
+      </div>
+    </div>
+
+    <p class="label-sub">The plate's other states</p>
+    <div class="states">
+      <h4>A developer on a ticket</h4>
+      <a class="board-now developer" href="#">
+        <span class="row"><i class="lamp lit"></i><span class="what">Working now · a developer</span><span class="when">41 min</span></span>
+        <span class="name">F132 · One view of the whole factory</span>
+        <span class="doing"><code>f132-03-away-every-project</code> · While you were away counts what every project did… · local-qwen3.6-35b-a3b, attempt 2</span>
+        <span class="foot"><span>refreshes every 10 s</span><span class="go">#4 in Planted · open the card ›</span></span>
+      </a>
+      <h4>A review or the lead answering you</h4>
+      <a class="board-now lead" href="#">
+        <span class="row"><i class="lamp lit"></i><span class="what">Working now · the lead answers you</span><span class="when">3 min</span></span>
+        <span class="name">F209 · i want the ticket currently being worked…</span>
+        <span class="foot"><span>refreshes every 10 s</span><span class="go">#10 in Sprouting · open the conversation ›</span></span>
+      </a>
+      <h4>A job held by Claude's limit: no glow, here or on its card</h4>
+      <a class="board-now lead" href="#">
+        <span class="row"><span class="what">Waits for Claude until 23:40</span></span>
+        <span class="name">F9 · line polish</span>
+        <span class="foot"><span>refreshes every 10 s</span><span class="go">#23 in Planted · open the card ›</span></span>
+      </a>
+      <h4>Nothing at work: a quiet line, the same place</h4>
+      <div class="board-now idle"><span class="row"><span class="what">Nothing is being worked on now</span><span class="when">refreshes every 10 s</span></span></div>
+      <h4>When the refresh can't happen, it says so</h4>
+      <div class="board-now idle"><span class="row"><span class="what stale">Refresh held: your moves aren't sent yet</span></span></div>
+      <div class="board-now idle"><span class="row"><span class="what stale">Not updated since 20:14: the dashboard doesn't answer</span></span></div>
+    </div>
+
+    <p class="label-sub">A calmer version, if this is too loud</p>
+    <div class="calm states">
+      <div class="slot at-work lead"><span class="grip">⠿</span><div class="card started">
+        <span class="at-work-head"><i class="lamp"></i>Working now · the lead</span>
+        <span class="card-meta"><b>#23</b> F9 factory <span class="card-growing">growing</span></span>
+        <span class="card-title">line polish</span>
+        <span class="at-work-doing"><code>f9-29-week-pace</code> · claude-opus, attempt 1</span>
+      </div><span class="more">⋯</span></div>
+    </div>
+    <p class="say">No fill, no glow, no breathing lamp. The tickets build the bolder one; say if you'd rather have this.</p>
+  </div>
+</section>
+</div>
+
+<script>
+  function setUpSwitch() {
+    const buttons = document.querySelectorAll(".switch button");
+    buttons.forEach((button) => {
+      button.addEventListener("click", () => {
+        buttons.forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  }
+  setUpSwitch();
+</script>
+</body>
+</html>
