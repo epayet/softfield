@@ -2929,6 +2929,48 @@ def _settle_lead_task(
 # --- checkpoints (ADR 12 item 8) ------------------------------------------------------
 
 
+def _done_milestone(s: Session, ticket: str) -> str | None:
+    """The short key of a merged ticket's milestone, from its file in done/."""
+    try:
+        text = (s.tasks_dir("done") / f"{ticket}.md").read_text(encoding="utf-8")
+        meta, _ = split_frontmatter(text)
+        return short_key(milestone_key(meta.get("milestone")))
+    except (OSError, TaskError, yaml.YAMLError, UnicodeDecodeError):
+        return None
+
+
+def _drop_covered_merges(s: Session) -> None:
+    """ADR 38: merges the milestone's review will read leave `unchecked` and `recheck`: their
+    milestone's review is due, or stopped at `restart` with its fix tickets to come. One log
+    line says so."""
+    from runner.milestone import RESTART, due_reviews  # runner.milestone imports this module
+
+    covered = {short_key(key) for key in due_reviews(s.repo, s.state)}
+    covered |= {short_key(key) for key, stop in s.state.review_stop.items() if stop == RESTART}
+    if not covered or not (s.state.unchecked or s.state.recheck):
+        return
+    dropped: dict[str, list[str]] = {}
+
+    def keep(entry: str) -> bool:
+        ticket = entry.split()[0]
+        key = _done_milestone(s, ticket)
+        if key is None or key not in covered:
+            return True
+        if ticket not in dropped.setdefault(key, []):
+            dropped[key].append(ticket)
+        return False
+
+    s.state.unchecked = [m for m in s.state.unchecked if keep(m)]
+    s.state.recheck = [m for m in s.state.recheck if keep(m)]
+    if not dropped:
+        return
+    if not s.state.recheck:
+        s.state.recheck_filed = []
+    save_state(s.state, s.state_path)
+    for key, tickets in dropped.items():
+        s.log(f"no checkpoint: {key.upper()}'s review reads {', '.join(tickets)}")
+
+
 def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     """After a developer merge (``_merge`` lists it as unchecked): every ``checkpoint_every``
     of them, queue a checkpoint. One already queued runs on every merge since; one parked for
@@ -2936,6 +2978,7 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     batch (F151 D1). One parked only for Claude's limit waits for its reset."""
     if rec.result != "done" or task.agent != "developer":
         return
+    _drop_covered_merges(s)
     if len(s.state.unchecked) < s.cfg.checkpoint_every:
         return
     if (row := find_row(s, CHECKPOINT)) is not None:
@@ -3407,6 +3450,9 @@ def checkpoint(s: Session, milestone: str, out: Path | None = None) -> None:
     unchecked ones read-only and the checkpoint parks, for Claude to check them all again once
     it may; the queue goes on (ADR 16 items 4 and 9). ``out`` is a parked checkpoint's note,
     for its resume."""
+    _drop_covered_merges(s)
+    if not (s.state.unchecked or s.state.recheck):
+        return  # the review reads what was left; its row is finished with no job
     merged = list(dict.fromkeys([*s.state.recheck, *s.state.unchecked]))
     if (hold := claude_hold(s, now())) is not None:
         if s.state.unchecked:  # never the stand-in again on what it reviewed

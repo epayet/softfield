@@ -1666,6 +1666,7 @@ def test_a_ticket_the_checkpoint_wrote_failing_to_parse_gets_one_repair_turn(
 ):
     for n in (1, 2):
         _add_task(repo, f"m1-0{n}-thing")
+    _add_task(repo, "m1-09-later", "[m1-99-never]")  # keeps the milestone building (ADR 38)
     script, calls = _lead_sessions(monkeypatch)
 
     def repair(job, repo_):
@@ -1777,6 +1778,9 @@ def _checkpoint_writes(text: str) -> Callable[[ClaudeJob, Path], None]:
 def _two_merges(repo: Path, fake_model) -> None:
     for n in (1, 2):
         _add_task(repo, f"m1-0{n}-thing")
+    # a third that never runs keeps the milestone building: a finished one's review reads these
+    # merges, and has no checkpoint (ADR 38)
+    _add_task(repo, "m1-03-later", "[m1-99-never]")
 
     def change(n: int):
         def run(repo, prompt):
@@ -2395,6 +2399,7 @@ def test_a_requeued_ticket_continues_its_branch(repo, fake_model, fake_lead):
 
 def test_a_clean_requeue_gets_no_repair_turn(repo, fake_model, fake_lead):
     _escalate_on_protected(repo, fake_model)
+    _add_task(repo, "m1-09-later", "[m1-99-never]")  # keeps the milestone building (ADR 38)
     fake_model.extend([_undo_and_implement, _after])
     script, jobs = fake_lead
     script.extend([lambda job, repo_: None, _requeue(False), lambda job, repo_: None])
@@ -2447,6 +2452,7 @@ def test_a_requeue_naming_a_missing_path_gets_one_repair_turn_and_runs(
     repo, fake_model, monkeypatch
 ):
     _escalate_on_protected(repo, fake_model)
+    _add_task(repo, "m1-09-later", "[m1-99-never]")  # keeps the milestone building (ADR 38)
     fake_model.extend([_undo_and_implement, _after])
     script, calls = _lead_sessions(monkeypatch)
     script.extend(
@@ -4969,6 +4975,7 @@ def test_the_checkpoint_after_sonnets_merges_goes_to_opus(
     _readings_at(repo, 0.20)
     _add_task(repo, "m1-01-thing")
     _add_task(repo, "m1-02-thing")
+    _add_task(repo, "m1-09-later", "[m1-99-never]")  # keeps the milestone building (ADR 38)
     kinds: list[str] = []
     monkeypatch.setattr(claude, "run_claude", _claude_developer(kinds))
     report = _routed(repo)
@@ -5421,6 +5428,7 @@ def test_a_checkpoint_refused_by_a_limit_parks_and_developer_tickets_go_on(
     resumes first after the reset."""
     for n in (1, 2, 3):
         _add_task(repo, f"m1-0{n}-thing")
+    _add_task(repo, "m1-09-later", "[m1-99-never]")  # keeps the milestone building (ADR 38)
     resets = THURSDAY + timedelta(hours=1)
     events: list[tuple[object, ...]] = []
 
@@ -6411,7 +6419,7 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
 
     def recheck(job: ClaudeJob, repo_: Path) -> None:
         assert loop.now() > FIVE_RESETS
-        for ticket in ("m1-01-thing", "m1-02-thing", "m1-03-fix-thing"):
+        for ticket in ("m1-01-thing", "m1-02-thing", "m1-04-fix-thing"):
             assert f"- {ticket}: `git show " in job.prompt
         assert "m1-01-thing (coucou/part1.py)" in job.prompt  # what the stand-in filed
         _checkpoint_writes(json.dumps({"findings": [new]}))(job, repo_)
@@ -6441,7 +6449,7 @@ def test_with_claude_at_80_percent_copilot_does_the_checkpoint_and_its_findings_
     assert (found[key]["route"], found[key]["agent"]) == ("local", "copilot-auto")
     assert found[f"m1-C{checkpoint['id']}-2"]["route"] == "backlog"
     # The fix ticket was written, queued and done by a developer
-    fixed = repo / ".softfield" / "tasks" / "done" / "m1-03-fix-thing.md"
+    fixed = repo / ".softfield" / "tasks" / "done" / "m1-04-fix-thing.md"
     ticket = parse_task(fixed, 150)
     assert (ticket.finding, ticket.agent, ticket.files) == (key, "developer", ("coucou/part1.py",))
     assert ticket.tests == ("tests/unit/test_thing.py",)  # those of the ticket at fault
@@ -6522,6 +6530,7 @@ def test_two_stand_in_checkpoints_then_claude_free_make_one_claude_recheck_of_al
 def _four_merges(repo: Path, fake_model) -> None:
     for n in range(1, 5):
         _add_task(repo, f"m1-0{n}-thing")
+    _add_task(repo, "m1-09-later", "[m1-99-never]")  # keeps the milestone building (ADR 38)
 
     def change(n: int):
         def run(repo, prompt):
@@ -6710,6 +6719,94 @@ def test_the_5_hour_switch_turned_on_while_the_review_is_parked_makes_it_the_nex
     assert ran == ["f10-01-next"] and s.report.review == "f9"
     assert fake_clock[0] == THURSDAY
     assert loop.switch_on(_state(repo), "five_hour", loop.now())
+
+
+# --- ADR 38: no checkpoint on merges the milestone's review reads ---------------------------
+
+
+def _ticket_in(repo: Path, folder: str, task_id: str) -> None:
+    path = write_task(repo / ".softfield" / "tasks" / folder, task_id)
+    key = task_id.split("-")[0]
+    path.write_text(path.read_text().replace("milestone: 1\n", f"milestone: {key}\n"))
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", f"{task_id} in {folder}")
+
+
+def _merged(s: loop.Session, task_id: str) -> None:
+    """A developer merge of ``task_id`` (already in done/), as ``_merge`` lists it."""
+    s.state.unchecked.append(f"{task_id} abc123 local-m")
+    task = type("T", (), {"agent": "developer", "milestone": task_id.split("-")[0]})()
+    loop.note_merge(s, task, TaskRecord(id=task_id, milestone=task.milestone, result="done"))
+
+
+def test_the_last_merge_of_a_milestone_queues_no_checkpoint(repo):
+    _ticket_in(repo, "done", "f9-01-first")
+    s = loop.open_session(_config(repo))
+    _merged(s, "f9-01-first")  # still building: one merge, below the count
+    _ticket_in(repo, "done", "f9-02-last")
+    _merged(s, "f9-02-last")
+    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert s.state.unchecked == []
+    loop.close_session(s)
+
+
+def test_a_merge_of_another_milestone_still_building_keeps_its_checkpoint_count(repo):
+    _ticket_in(repo, "done", "f10-01-first")
+    _ticket_in(repo, "ready", "f10-02-next")
+    s = loop.open_session(_config(repo))
+    _merged(s, "f10-01-first")
+    _ticket_in(repo, "done", "f9-01-only")
+    _merged(s, "f9-01-only")  # f9 is complete: its review reads this one
+    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert s.state.unchecked == ["f10-01-first abc123 local-m"]
+    loop.close_session(s)
+
+
+def test_a_fix_merged_while_the_review_is_stopped_at_restart_queues_no_checkpoint(repo):
+    _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "done", "f9-03-fix")
+    _ticket_in(repo, "ready", "f9-04-waits")  # the milestone is not due: only the stop covers it
+    s = loop.open_session(_config(repo))
+    s.state.review_stop["f9"] = "restart"
+    _merged(s, "f9-01-first")
+    _merged(s, "f9-03-fix")
+    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert s.state.unchecked == []
+    loop.close_session(s)
+
+
+def test_two_merges_of_a_milestone_still_building_queue_a_checkpoint(repo):
+    for n in (1, 2):
+        _ticket_in(repo, "done", f"f9-0{n}-done")
+    _ticket_in(repo, "ready", "f9-03-next")
+    s = loop.open_session(_config(repo))
+    _merged(s, "f9-01-done")
+    _merged(s, "f9-02-done")
+    row = loop.find_row(s, loop.CHECKPOINT)
+    assert row is not None and row.reason == "after f9-01-done and f9-02-done merged"
+    loop.close_session(s)
+
+
+def test_a_queued_checkpoint_whose_merges_the_review_reads_runs_no_job(repo, fake_lead, capsys):
+    _, jobs = fake_lead
+    for n in (1, 2):
+        _ticket_in(repo, "done", f"f9-0{n}-done")
+    _ticket_in(repo, "ready", "f9-03-last")
+    s = loop.open_session(_config(repo))
+    _merged(s, "f9-01-done")
+    _merged(s, "f9-02-done")  # the count reaches 2: a checkpoint is queued
+    row = loop.find_row(s, loop.CHECKPOINT)
+    assert row is not None
+    path = repo / ".softfield" / "tasks"
+    (path / "ready" / "f9-03-last.md").rename(path / "done" / "f9-03-last.md")  # the last merge
+    loop.run_queued(s, row, escalate=False)
+    assert jobs == [] and s.state.unchecked == []
+    assert loop.find_row(s, loop.CHECKPOINT) is None
+    assert "no checkpoint: F9's review reads f9-01-done, f9-02-done" in capsys.readouterr().out
+    loop._queue_due_review(s)
+    review = loop.find_row(s, loop.REVIEW)
+    assert review is not None and review.subject == "f9"
+    loop.close_session(s)
 
 
 def test_a_review_parked_for_the_owners_share_keeps_no_lead_work_from_claude(repo, fake_clock):
