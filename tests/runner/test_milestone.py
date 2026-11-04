@@ -21,7 +21,7 @@ from runner.milestone import (
     signoff_sections,
 )
 from runner.report import TaskRecord
-from runner.state import State, load_state
+from runner.state import State, load_state, save_state
 from runner.tasks import append_footer
 from tests.runner.conftest import git, write_task
 from tests.runner.test_loop import FIVE_RESETS, THURSDAY, _claude_at, _config
@@ -955,6 +955,56 @@ def test_a_named_milestones_review_still_waits_for_claude(repo, monkeypatch, clo
     assert events == [("e2e", True), ("review", True)]
     [row] = _rows(repo, "work_queue")
     assert row["done"] is not None and row["not_before"] is None
+
+
+def test_a_last_rounds_fix_merge_stays_for_a_checkpoint(repo, monkeypatch):
+    """ADR 38's covered merges are those a next round reads: at the round cap there is none."""
+    _milestone_repo(repo)
+    cfg = _config(repo)
+    state_path = cfg.runs_dir / "state.json"
+    state = load_state(state_path)
+    state.review_counts["m1"] = [3, 2]  # two of the three rounds run
+    save_state(state, state_path)
+    seen: list[str] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        milestone_ticket(repo_, "ready", "m1-05-fix", "m1")
+        _review_writes(job, repo_, [{**LEAK, "id": "m1-F1"}])
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    def run_task(s, task):
+        git(
+            repo,
+            "mv",
+            f".softfield/tasks/ready/{task.path.name}",
+            f".softfield/tasks/done/{task.path.name}",
+        )
+        git(repo, "commit", "-q", "-m", f"{task.id}: done")
+        s.state.unchecked.append(f"{task.id} abc123 local-m")
+        seen.append(task.id)
+        return TaskRecord(id=task.id, milestone=task.milestone, result="done")
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(loop, "run_task", run_task)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    stop = milestone.review_milestone(cfg, "m1", "m1-start")
+    assert stop == "review round cap (3) reached" and seen == ["m1-05-fix"]
+    assert load_state(state_path).unchecked == ["m1-05-fix abc123 local-m"]
+
+
+def test_a_restart_with_no_round_left_stops_instead_of_restarting_again(repo, monkeypatch):
+    """A last round's lead fix that changed the runner stops at `restart`; the restarted run
+    has no round left, and must end the review or `runner run` restarts for ever."""
+    _milestone_repo(repo)
+    cfg = _config(repo)
+    state_path = cfg.runs_dir / "state.json"
+    state = load_state(state_path)
+    state.review_counts["m1"] = [3, 2, 1]
+    state.review_stop["m1"] = milestone.RESTART
+    save_state(state, state_path)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    assert milestone.review_milestone(cfg, "m1", "m1-start") == "review rounds used up"
+    assert load_state(state_path).review_stop["m1"] == "review rounds used up"
 
 
 def test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes(

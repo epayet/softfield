@@ -782,14 +782,20 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         rounds.append(count)
         save_state(s.state, s.state_path)
         reason = stop_reason(round_no, round_, previous, seen, cfg.review_rounds)
-        if work_queue(s, milestone=milestone):
+        # no round follows: a checkpoint reads this round's fixes, not the review (ADR 38)
+        s.last_round = short_key(milestone) if reason else None
+        restarted = work_queue(s, milestone=milestone)
+        s.last_round = None
+        if restarted:
             stop = RESTART
             break
         if reason:
             stop = reason
             break
     if stop == "not started":  # no rounds left: a rerun after the owner decided something
-        stop = s.state.review_stop.get(milestone, "review rounds used up")
+        stop = s.state.review_stop.get(milestone, RESTART)
+        if stop == RESTART:  # a restart with no round left would restart for ever
+            stop = "review rounds used up"
     s.state.review_stop[milestone] = stop
     save_state(s.state, s.state_path)
     s.running_row = None

@@ -6739,14 +6739,77 @@ def _merged(s: loop.Session, task_id: str) -> None:
     loop.note_merge(s, task, TaskRecord(id=task_id, milestone=task.milestone, result="done"))
 
 
+def _finish(repo: Path, task_id: str) -> None:
+    """The ticket waiting in ready/ reaches done/."""
+    tasks = repo / ".softfield" / "tasks"
+    (tasks / "ready" / f"{task_id}.md").rename(tasks / "done" / f"{task_id}.md")
+
+
 def test_the_last_merge_of_a_milestone_queues_no_checkpoint(repo):
     _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "ready", "f9-02-last")
     s = loop.open_session(_config(repo))
     _merged(s, "f9-01-first")  # still building: one merge, below the count
-    _ticket_in(repo, "done", "f9-02-last")
+    assert s.state.unchecked == ["f9-01-first abc123 local-m"]
+    _finish(repo, "f9-02-last")
     _merged(s, "f9-02-last")
     assert loop.find_row(s, loop.CHECKPOINT) is None
     assert s.state.unchecked == []
+    loop.close_session(s)
+
+
+def test_a_lead_ticket_completing_the_milestone_drops_its_unchecked_merge(repo):
+    """Else the checkpoint after the next milestone's merge reads what the review has read."""
+    _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "ready", "f9-02-lead")
+    s = loop.open_session(_config(repo))
+    _merged(s, "f9-01-first")
+    _finish(repo, "f9-02-lead")
+    lead = type("T", (), {"agent": "lead", "milestone": "f9"})()
+    loop.note_merge(s, lead, TaskRecord(id="f9-02-lead", milestone="f9", result="done"))
+    assert s.state.unchecked == []
+    loop.close_session(s)
+
+
+def test_a_stand_ins_batch_the_review_reads_leaves_the_recheck(repo, capsys):
+    _ticket_in(repo, "done", "f9-01-first")
+    _ticket_in(repo, "done", "f10-01-first")
+    _ticket_in(repo, "ready", "f10-02-next")
+    s = loop.open_session(_config(repo))
+    s.state.recheck = ["f9-01-first abc123 copilot", "f10-01-first def456 copilot"]
+    s.state.recheck_filed = [["f9-01-first", "a.py"]]
+    loop._drop_covered_merges(s)
+    assert s.state.recheck == ["f10-01-first def456 copilot"]  # another milestone's stays
+    assert s.state.recheck_filed == [["f9-01-first", "a.py"]]  # the batch goes on
+    assert "no checkpoint: F9's review reads f9-01-first" in capsys.readouterr().out
+    s.state.recheck = ["f9-01-first abc123 copilot"]
+    loop._drop_covered_merges(s)
+    assert s.state.recheck == [] and s.state.recheck_filed == []
+    loop.close_session(s)
+
+
+def test_a_parked_checkpoint_left_with_nothing_leaves_no_session_to_resume(repo):
+    """The next checkpoint, on other merges, must start afresh: not carry on this one's."""
+    _ticket_in(repo, "done", "f9-01-first")
+    s = loop.open_session(_config(repo))
+    key = loop.job_key(loop.CHECKPOINT, loop.CHECKPOINT)
+    s.state.interrupted[key] = {"session_id": "old", "branch": "", "cause": "limit"}
+    _merged(s, "f9-01-first")
+    assert s.state.unchecked == [] and key not in s.state.interrupted
+    loop.close_session(s)
+
+
+def test_the_fixes_of_a_reviews_last_round_keep_their_checkpoint(repo, capsys):
+    """No round follows it, so nothing else would read them, however due the milestone looks."""
+    for n in (1, 2):
+        _ticket_in(repo, "done", f"f9-0{n}-fix")
+    s = loop.open_session(_config(repo))
+    s.last_round = "f9"
+    _merged(s, "f9-01-fix")
+    _merged(s, "f9-02-fix")
+    row = loop.find_row(s, loop.CHECKPOINT)
+    assert row is not None and row.reason == "after f9-01-fix and f9-02-fix merged"
+    assert "no checkpoint" not in capsys.readouterr().out
     loop.close_session(s)
 
 

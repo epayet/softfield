@@ -726,6 +726,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** an expired login looks like a passing error, so each job waited through its retries and then failed: about 3 hours of failed jobs, then about 7 with nothing running, for a three-line ticket. The block read "check-all failed", which pointed at the code. A terminal finish leaves no job row, so the metrics hold two attempts where the ticket says three.
 - **Decisions affected:** none. bug-59 holds Claude's jobs and asks the owner to log in.
 
+### F162 (2026-11-04): no checkpoint on merges the milestone's review is about to read ([review](../reviews/f162-doing-a-checkpoint-just-before-a.md))
+
+- **Q1:** one lead ticket (f162-01), which merged on its second attempt: the first died with the expired login. No checkpoint. Review round 1: one blocking and four should-fix on the milestone, one should-fix on older code, two nits only reported. The review fixed the six itself, as `runner/` is protected.
+- **Q3:** no developer work. Sonnet built what the ticket and ADR 38 asked for, for $0.81. The blocking bug came from the ADR's own reading of `restart`, so the ticket passed on that bug.
+- **Q5:** see the review's numbers.
+- **Anything else:** the ADR and the plan assumed a review's fix tickets wait under `restart`, but `restart` only means the runner's code changed. Fixes normally merge inside the review's loop with no stop recorded, so the milestone looked "due" and its last round's fixes were dropped with a log line saying the review would read them. An ADR's words about a state are worth checking against the code that sets it, at plan time. One test's comment also claimed a state it never reached, and it passed for the wrong reason: a test's setup should assert the state it says it reaches.
+- **Decisions affected:** none. ADR 38's wording on `restart` is inexact, and the review report says so.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

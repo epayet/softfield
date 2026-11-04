@@ -230,6 +230,8 @@ class Session:
     # Jobs so far per (ticket, role group): the next job's `attempt` and its log's number.
     job_numbers: dict[tuple[str | None, str], int] = field(default_factory=dict)
     last_job_id: int | None = None  # the last Claude job's row, for its findings
+    # The milestone whose review stops after this round, while its fixes run: no round reads them
+    last_round: str | None = None
     ticket_started: float = 0.0  # `clock()` when the current ticket started, for the console
     # What the run says it does outside a job, and until when it waits (`set_activity`).
     activity: str | None = None
@@ -2941,12 +2943,14 @@ def _done_milestone(s: Session, ticket: str) -> str | None:
 
 def _drop_covered_merges(s: Session) -> None:
     """ADR 38: merges the milestone's review will read leave `unchecked` and `recheck`: their
-    milestone's review is due, or stopped at `restart` with its fix tickets to come. One log
-    line says so."""
+    milestone's review is due, or stopped at `restart` with its fix tickets to come. Not the
+    fixes of a review's last round: no round reads those, so they keep their checkpoint. One
+    log line says so."""
     from runner.milestone import RESTART, due_reviews  # runner.milestone imports this module
 
     covered = {short_key(key) for key in due_reviews(s.repo, s.state)}
     covered |= {short_key(key) for key, stop in s.state.review_stop.items() if stop == RESTART}
+    covered.discard(s.last_round or "")
     if not covered or not (s.state.unchecked or s.state.recheck):
         return
     dropped: dict[str, list[str]] = {}
@@ -2966,6 +2970,9 @@ def _drop_covered_merges(s: Session) -> None:
         return
     if not s.state.recheck:
         s.state.recheck_filed = []
+    if not (s.state.unchecked or s.state.recheck):
+        # a parked checkpoint's session: the next checkpoint must not carry it on, on these merges
+        s.state.interrupted.pop(job_key(CHECKPOINT, CHECKPOINT), None)
     save_state(s.state, s.state_path)
     for key, tickets in dropped.items():
         s.log(f"no checkpoint: {key.upper()}'s review reads {', '.join(tickets)}")
@@ -2975,11 +2982,12 @@ def note_merge(s: Session, task: Task, rec: TaskRecord) -> None:
     """After a developer merge (``_merge`` lists it as unchecked): every ``checkpoint_every``
     of them, queue a checkpoint. One already queued runs on every merge since; one parked for
     Claude's re-check after a stand-in starts again at the next pick, for a stand-in on the new
-    batch (F151 D1). One parked only for Claude's limit waits for its reset."""
-    if rec.result != "done" or task.agent != "developer":
+    batch (F151 D1). One parked only for Claude's limit waits for its reset. A lead ticket's
+    merge counts for none, but may be the one that completes its milestone (ADR 38)."""
+    if rec.result != "done":
         return
     _drop_covered_merges(s)
-    if len(s.state.unchecked) < s.cfg.checkpoint_every:
+    if task.agent != "developer" or len(s.state.unchecked) < s.cfg.checkpoint_every:
         return
     if (row := find_row(s, CHECKPOINT)) is not None:
         if s.state.recheck and _row_waits(s, CHECKPOINT, row.subject):

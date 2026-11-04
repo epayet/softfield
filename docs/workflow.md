@@ -88,7 +88,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    - **Should-fix:** design drift, missing edge cases, weak tests.
    - **Nit** → a bug ticket set aside in `.softfield/tasks/later/` if it's worth a run (route `later`), else said in the review report only (route `report`). Nits never loop.
 2. **Routing each blocking or should-fix finding:**
-   - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5)
+   - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5); a merge the next round is about to read has no checkpoint (ADR 38)
    - small (about 20 lines in one file), protected or security, or a developer already failed it once → Claude fixes it directly
    - needs the owner (`runner/instructions/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner.
 3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code take the route `later` or `report`, and no round waits on them.
@@ -98,7 +98,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
 | Rule | Default |
 |---|---|
 | Review rounds per milestone | 3 |
-| Headless Claude runs | no milestone cap: 1 direction and 2 escalations per task, a checkpoint every 2 developer merges (ADR 12 item 10) |
+| Headless Claude runs | no milestone cap: 1 direction and 2 escalations per task, a checkpoint every 2 developer merges (ADR 12 item 10), not counting those the milestone's review is about to read (ADR 38) |
 | A finding recurs a 2nd time | Claude fixes it (not the local model) |
 | A finding recurs a 3rd time | stop |
 | This round's findings ≥ the previous round's | stop |
