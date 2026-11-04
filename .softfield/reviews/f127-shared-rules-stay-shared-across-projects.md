@@ -1,5 +1,7 @@
 # Review: F127, the factory is optional
 
+- **Status:** done, signed off by the owner on 2026-11-04.
+
 ## Sign-off sheet
 
 ### 1. What changed

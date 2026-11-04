@@ -1,6 +1,7 @@
 # Milestone F127: The factory is optional: its context is injected, and each thing lives with whoever it's true for
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-04. Base: git tag `f127-shared-rules-stay-shared-across-projects-start`. Report: [`.softfield/reviews/f127-shared-rules-stay-shared-across-projects.md`](../reviews/f127-shared-rules-stay-shared-across-projects.md).
 > Planted by the owner on 2026-10-14.
 
 ## Notes
