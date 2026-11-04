@@ -704,7 +704,7 @@ _(to fill in at the M3 review)_
 
 ### F186 (2026-11-04): a sign-off stays signed ([review](../reviews/f186-why-can-t-i-sign-off.md))
 
-- **Q1:** one lead ticket, merged first time; no checkpoint. Review round 1: one blocking, two should-fix and one nit fixed by the review, one nit only reported.
+- **Q1:** one lead ticket, merged first time; no checkpoint. Review round 1: one blocking, two should-fix and one nit fixed by the review, one nit only reported. Round 2: one should-fix in round 1's own fix, fixed there.
 - **Q3:** no developer work (protected runner code). Sonnet built it for $0.33 and missed the half of D1 inside the review loop.
 - **Q5:** see the review's numbers.
 - **Anything else:** the ticket's test replaced the review with a stub, and the review was what set the milestone back, though the Done when asked for the status to stay. A race needs a test through the real path, with the other event in the middle of it. A heal that starts from open items can't see a wrong row with no item. A fault in the owner's own button waited over five days for its turn on the board.

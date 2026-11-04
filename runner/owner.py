@@ -337,17 +337,18 @@ def _signed_off(
     sheet: dict[str, str],
     conn: sqlite3.Connection,
     project: int,
-    *,
-    first: bool = True,
 ) -> None:
-    """The milestone's row done and its items resolved. Only the ``first`` sign-off ends it: the
-    day it ended decides the reports' weeks, and settling later doesn't move it (F186)."""
+    """The milestone's row done and its items resolved. The first write that finds no end sets
+    it: that day decides the reports' weeks, and settling later doesn't move it (F186)."""
+    row = conn.execute(
+        "SELECT ended FROM milestones WHERE project_id = ? AND key = ?", (project, milestone)
+    ).fetchone()
     metrics.upsert_milestone(
         conn,
         project,
         milestone,
         status="done",
-        ended=_now() if first else None,
+        ended=None if row and row[0] else _now(),
         owner_score=score,
         signoff=sheet or None,
     )
@@ -368,7 +369,7 @@ def heal_signed_off(repo: Path, conn: sqlite3.Connection, project: int) -> None:
     for row in metrics.open_owner_items(conn, project):
         subject = row["subject"]
         if row["kind"] in _MILESTONE_KINDS and subject and signed_off(repo, subject):
-            _signed_off(subject, None, {}, conn, project, first=False)
+            _signed_off(subject, None, {}, conn, project)
 
 
 def signoff(
@@ -385,11 +386,7 @@ def signoff(
     if score is not None and not 1 <= score <= 10:
         raise OwnerError(f"a score is 1 to 10, not {score}")
     if signed_off(repo, milestone):  # a second sign-off settles; it commits and tags nothing
-        _write(
-            repo,
-            db,
-            lambda conn, project: _signed_off(milestone, score, {}, conn, project, first=False),
-        )
+        _write(repo, db, lambda conn, project: _signed_off(milestone, score, {}, conn, project))
         return
     left = [f"{t} ({f})" for f in _UNFINISHED for t in _ids(repo, f, milestone)]
     if left and not force:

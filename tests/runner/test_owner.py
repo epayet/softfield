@@ -415,6 +415,17 @@ def test_a_second_signoff_keeps_when_it_ended_and_takes_a_new_score(repo: Path):
     assert (row["ended"], row["owner_score"]) == (first, 9)
 
 
+def test_settling_a_sign_off_the_database_missed_still_ends_it(repo: Path):
+    """F186: the first sign-off goes on without the database; a done row with no end would leave
+    the reports, and the board's latest cards."""
+    _milestone(repo)
+    owner.signoff(repo, "m1", TODAY)  # the tag and the doc, but nothing in the database
+    owner.signoff(repo, "m1", TODAY, db=_db(repo))
+    row = _milestone_row(repo, "m1")
+    assert row["status"] == "done"
+    assert row["ended"]
+
+
 def test_heal_resolves_items_of_a_signed_off_milestone_only(repo: Path):
     """F186 D3: an item reopened after the sign-off clears; an unsigned milestone's stays."""
     _milestone(repo)

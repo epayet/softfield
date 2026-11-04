@@ -24,8 +24,10 @@ None.
 ### 5. How the work went
 - 2026-10-29: planned from your note in the Planning room, and you approved the plan the same morning.
 - 2026-11-04 01:57 ([session](../sessions/2026-11-04-0157.md)): `f186-01-sign-off-stays-signed`, the lead's ticket (protected `runner/`), Sonnet, first attempt, 6 minutes, $0.33.
-- 2026-11-04 04:53: review round 1 (this one) found one blocking gap and fixed four findings itself, all in protected code.
+- 2026-11-04 04:53 ([session](../sessions/2026-11-04-0453.md)): review round 1 found one blocking gap and fixed four findings itself, all in protected code.
+- 2026-11-04 05:39: review round 2 confirmed those four fixes and caught a mistake in one of them (F6), fixed in the same round.
 - Lessons:
+  - **A review's own fix needs the same doubt as a ticket's.** Round 1's end-date fix assumed the first sign-off had always reached the database. If it hadn't, the card would have ended with no date and dropped out of the reports. Round 2 found this by asking what each new branch does when the earlier step failed.
   - **The ticket's main test stopped one step short of the bug.** It replaced the review with a stand-in, and the review itself was what set the card back to "in review". The new test runs the real review loop, with a sign-off in the middle of it.
   - **The fix went in the one place the ticket named.** The card's own account of F142 named `_record_review`, but the check went only where the verdict is recorded. For a race like this one, every write after the sign-off needs the check, so I went through them all.
   - **The heal could only cover part of it:** it starts from open items, so a card wrongly back "in review" with no open item would never have been noticed.
@@ -47,7 +49,7 @@ None.
 - Added by this review:
   - `runner/milestone.py`: the review loop doesn't set a signed-off milestone back to `review` or replace its signed sheet.
   - `runner/cli.py`: `softfield milestone` makes the same check as `_review`.
-  - `runner/owner.py`: settling keeps the end date and keeps a score given.
+  - `runner/owner.py`: settling keeps the end date and keeps a score given. A sign-off the database missed gets its end date when it is settled.
 
 The heal worked on real data before this review: item 250 was resolved at 02:07:11, and F142's milestone is `done`.
 
@@ -61,6 +63,9 @@ No existing test was edited: the ticket and this review only add tests. No Frenc
 | F3 | should-fix | claude | Settling moved the milestone's end date | Fixed for the future, with a test; F142's row keeps 2026-11-04 |
 | F4 | nit | claude | A second sign-off dropped the owner's score | Fixed, with a test |
 | F5 | nit | report | A review stop needing the owner, on a card signed off during that review, raises nothing on the desk | Not fixed: rare. Stopping the rounds at the sign-off (What next) removes the case |
+| F6 | should-fix | claude | F3's fix left a card with no end date when its first sign-off never reached the database, so settling marked it done without a date | Fixed in round 2: the first write that finds no end date sets it; new test |
+
+Round 2 re-read the fixes for F1 to F4: F1, F2 and F4 hold as written, and F3 holds with F6's change. F1's test runs the real loop, and F2's and F3's tests check what they claim.
 
 Checkpoints: none read this ticket, so there's nothing to judge and no "missed".
 
@@ -72,6 +77,7 @@ Checkpoints: none read this ticket, so there's nothing to judge and no "missed".
 ## Workflow observations
 - A lead ticket on Sonnet at $0.33 did most of the card, but missed the part that needed tracing the whole path. The ticket's Context did name `_record_review` and its Done when did ask for the status to stay; the test just didn't reach it. A Done when about what a real path does should have a test through that path.
 - Fixing in the review was right here: all four fixes were small and in protected code, which a developer can't take. F142's review showed the cost of routing such a fix out: four days for ten lines.
+- Round 2 earned its cost: nothing else reads a fix the review makes itself, and F6 would otherwise have reached main. Its effect would have been quiet: nothing fails, and a card just goes missing from the reports. No change to the loop is needed.
 
 <!-- runner report -->
 <!-- /runner report -->
