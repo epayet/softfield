@@ -1,4 +1,4 @@
-# Milestone F210: Bundle a card's conversation with its proposals in one box…
+# Milestone F210: One box per card on the desk, and one reading path through its proposals
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-03.
