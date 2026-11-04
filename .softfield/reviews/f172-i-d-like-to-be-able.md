@@ -1,5 +1,7 @@
 # Review: F172, a card marked to use Claude's reserve
 
+- **Status:** done, signed off by the owner on 2026-11-04.
+
 ## Sign-off sheet
 
 ### 1. What changed

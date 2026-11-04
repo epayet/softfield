@@ -1,6 +1,7 @@
 # Milestone F172: Mark a card to use Claude's reserve, so only its tickets run past the mark
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-04. Base: git tag `f172-i-d-like-to-be-able-start`. Report: [`.softfield/reviews/f172-i-d-like-to-be-able.md`](../reviews/f172-i-d-like-to-be-able.md).
 > Planted by the owner on 2026-10-22.
 
 ## Notes
