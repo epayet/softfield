@@ -25,3 +25,12 @@ The picture to build is the Overview in `.softfield/cards/f192-mockup/lane-on-it
 - with `"off"`, its tickets are out of the bay and back among the rest
 - the same on `/` and `/live`
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: task-tests)
+attempts: 3
+tokens: 7731086
+logs: .softfield/var/runs/20261104-220212/f192-03-overview-lane-on-its-way
+```
