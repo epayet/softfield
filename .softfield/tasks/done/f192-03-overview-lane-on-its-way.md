@@ -34,3 +34,9 @@ attempts: 3
 tokens: 7731086
 logs: .softfield/var/runs/20261104-220212/f192-03-overview-lane-on-its-way
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
