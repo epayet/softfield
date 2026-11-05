@@ -32,3 +32,12 @@ Facts for the new tests, all from that file and `tests/factory_dashboard/conftes
 - A new test: after `_three_planted`, write the `_planted` for F20 above, fire `pageshow` with `persisted: true`, and wait for F20's slot in `#stage-planted`. It asserts F20's slot has `data-stage` "planted", `f20` is in `_order(page, "planted")`, `_order(page, "seed")` is exactly `["bug-01-duck-count"]`, and F20's slot has exactly one `.grip`.
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: ruff)
+attempts: 3
+tokens: 3628572
+logs: .softfield/var/runs/20261105-024727/f192-03-fix-back-redraw-stage-and-tests
+```
