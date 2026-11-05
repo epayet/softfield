@@ -769,12 +769,23 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
     # the fast lane's tickets, and their directions and escalations, go first (F172 D9)
     reserve_cards = reserve_marked(conn, project, now)
+    # as the runner will once it applies the requests: a card asked out has left (F192 D4)
     lane, rest = fast_lane(
-        live_line(conn, project, now.astimezone())["queue"], {c.key for c in reserve_cards}
+        live_line(conn, project, now.astimezone())["queue"],
+        {c.key for c in reserve_cards if c.lane_asked != "off"},
     )
     lane_ids = {str(r["ticket"]) for r in lane}
     qjobs = queued_jobs(conn, project, now, first=lane_ids)
-    lane = [{**r, "card": short_key(str(r["milestone"])).upper()} for r in lane[:3]]
+    # "on its way" only on a row of the card asked in, not on a ticket it waits for elsewhere
+    asked_in = {c.key for c in reserve_cards if c.lane_asked == "on"}
+    lane = [
+        {
+            **r,
+            "card": (card := short_key(str(r["milestone"])).upper()),
+            "on_its_way": card in asked_in,
+        }
+        for r in lane[:3]
+    ]
     # three tickets in all, renumbered: the lane's run before the rest
     upcoming = [{**r, "number": n} for n, r in enumerate([*lane, *rest][:3], start=1)]
     open_needs = needs_you(conn, project, now, jobs, all_queued)

@@ -317,6 +317,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .lane-bay .label { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--fg); }
 .lane-bay .label span { font: 400 12px var(--body); text-transform: none; letter-spacing: 0;
   color: var(--muted); margin-left: 6px; }
+.lane-way { font: 600 11.5px var(--mono); color: var(--hazard); white-space: nowrap; }
 .warnline { color: var(--serious-ink); font-size: 13px; }
 .steps { list-style: none; margin: 0; padding: 0; }
 .steps li { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }

@@ -18,7 +18,7 @@
       <li><span class="n"></span><span><b class="mono">{{ j.kind }}: {{ j.subject }}</b> · {{ j.reason }}{% if j.waits %} · {{ j.waits }}{% endif %}</span></li>
       {% endfor %}
       {% for t in lane %}
-      <li class="{{ t.kind }}"><span class="n">{{ t.number }}</span><span><b class="mono"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · {{ waits[t.ticket] }}{% endif %} · {{ t.card }}</span></li>
+      <li class="{{ t.kind }}"><span class="n">{{ t.number }}</span><span><b class="mono"><a href="/tickets/{{ t.ticket }}{{ q }}">{{ t.ticket }}</a></b> {{ t.title or "" }} · {{ "the lead" if t.kind == "lead" else "a developer" }}{% if t.ticket in waits %} · {{ waits[t.ticket] }}{% endif %} · {{ t.card }}{% if t.on_its_way %} <span class="lane-way">on its way</span>{% endif %}</span></li>
       {% endfor %}
     </div>
     {% endif %}

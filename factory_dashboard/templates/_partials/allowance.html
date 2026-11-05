@@ -44,10 +44,10 @@
         {% endif %}
       </div>
     </div>
-    {# once, under Claude's last meter: the cards in the fast lane (F172 D6, D8) #}
+    {# once, under Claude's last meter: the cards in the fast lane (F172 D6, D8), and on their way (F192 D4) #}
     {% if reserve_cards and a.label == "Claude" and (loop.nextitem is none or loop.nextitem.label != "Claude") %}
     <div id="reserve-cards" class="line cards-on"><b>Fast lane:</b>
-      {% for c in reserve_cards %}<a href="/milestones/{{ c.full_key | urlencode }}{{ q }}">{{ c.key }}, {{ c.title or c.key }}</a>{{ " · " if not loop.last }}{% endfor %}
+      {% for c in reserve_cards %}<a href="/milestones/{{ c.full_key | urlencode }}{{ q }}">{{ c.key }}, {{ c.title or c.key }}</a>{% if c.lane_asked == "on" %} <span class="lane-way">on its way</span>{% elif c.lane_asked == "off" %} <span class="lane-way">leaving · on its way</span>{% endif %}{{ " · " if not loop.last }}{% endfor %}
     </div>
     {% endif %}
     {% endfor %}

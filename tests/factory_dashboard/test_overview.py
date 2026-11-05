@@ -599,6 +599,67 @@ def test_no_marked_card_names_none_under_claude_s_meters(board_db, tmp_path):
     assert "Past both marks for" not in html
 
 
+def _ask_lane(board_db: Path, card: str, value: str) -> None:
+    """An open ``reserve`` request, its subject the card's short key in lower case."""
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        metrics.add_request(conn, project, "reserve", card, value, NOW.isoformat())
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _reserve_row(html: str) -> str:
+    """The text of the "Fast lane:" line under Claude's meters."""
+    panel = html.split('<section id="allowance"', 1)[1].split("</section>", 1)[0]
+    return row_text(panel.split('id="reserve-cards"', 1)[1].split(">", 1)[1].split("</div>", 1)[0])
+
+
+def test_the_lane_on_its_way_names_the_card_and_shows_its_tickets(board_db, tmp_path):
+    """F192 D4: the only card, asked in and not yet marked: named "on its way", and its tickets
+    in the lane's bay, every row saying so; on ``/`` and ``/live``."""
+    client = _reserve_client(board_db, tmp_path)
+    _ask_lane(board_db, "f23", "on")
+    for path in ("/", "/live"):
+        html = client.get(path).text
+        assert html.count('id="reserve-cards"') == 1, path
+        assert _reserve_row(html) == "Fast lane: F23, Planted on its way", path
+        bay, after = _lane_bay(html)
+        rows = _rows(bay)
+        assert [r.split()[1] for r in rows] == ["f23-01-first", "f23-02-second"], path
+        assert all(r.endswith("· F23 on its way") for r in rows), path
+        assert "f23-01-first" not in after, path
+
+
+def test_a_marked_card_with_no_request_stays_as_today_beside_one_on_its_way(board_db, tmp_path):
+    """F192 D4: F24 is marked with no request, so nothing says it is on its way, on its line or
+    on its rows; F23, asked in, says so on both."""
+    client = _reserve_client(board_db, tmp_path, "f24-growing")
+    _ask_lane(board_db, "f23", "on")
+    for path in ("/", "/live"):
+        html = client.get(path).text
+        assert _reserve_row(html) == "Fast lane: F24, Growing · F23, Planted on its way", path
+        rows = _rows(_lane_bay(html)[0])
+        assert any(" f24-" in r for r in rows) and any(" f23-" in r for r in rows), path
+        for row in rows:
+            assert row.endswith("· F24" if " f24-" in row else "· F23 on its way"), path
+
+
+def test_the_lane_off_moves_tickets_back_to_the_rest(board_db, tmp_path):
+    """F192 D4: the only marked card, asked out: still named, "leaving · on its way", with no
+    bay and its tickets back among the rest; on ``/`` and ``/live``."""
+    client = _reserve_client(board_db, tmp_path, "f23-planted")
+    _ask_lane(board_db, "f23", "off")
+    for path in ("/", "/live"):
+        html = client.get(path).text
+        assert _reserve_row(html) == "Fast lane: F23, Planted leaving · on its way", path
+        bay, after = _lane_bay(html)
+        assert bay == "", path
+        assert "f23-01-first" in after, path
+        assert "on its way" not in after, path
+
+
 def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_path):
     """f8-06: the week's switch on (turned on 2.5 h ago, so until tomorrow 09:30) posts "off";
     the 5-hour switch, absent from state.json, is off and posts "on"."""
