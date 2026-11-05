@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F226 mock-up: the board's ⋯ menu</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --factory: #f2b10a; --fail: #ec5458;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); }
+  h1 { margin: 0 0 4px; font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; }
+  .lede { max-width: 760px; margin: 0 0 12px; color: var(--ink-2); }
+  [hidden] { display: none !important; }
+
+  /* the switch: on a phone one picture at a time, on a wide screen both side by side */
+  .switch { display: inline-flex; margin: 0 0 14px; border: 1px solid var(--rule); }
+  .switch button { padding: 10px 18px; background: var(--bay); color: var(--muted); border: 0; cursor: pointer;
+    font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 20px; align-items: start; }
+  .version { min-width: 0; }
+  .version h2 { margin: 0 0 10px; padding: 4px 0 6px; font: 700 15px var(--display); letter-spacing: .1em;
+    text-transform: uppercase; border-bottom: 2px solid var(--rule); }
+  .version h2::after { content: ""; display: block; height: 4px; margin-top: 6px; background: var(--stripe); }
+  h3 { margin: 18px 0 6px; font: 600 12px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+  h3:first-of-type { margin-top: 0; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .version[hidden] { display: block !important; }
+  }
+
+  /* what this card changes: an outline and a short note; the hazard stripe is ornament, no status */
+  .change { outline: 1px dashed var(--hazard); outline-offset: 2px; }
+  .note { margin: 8px 0 0; padding: 5px 8px; border-left: 2px solid var(--hazard); background: var(--floor);
+    color: var(--ink-2); font-size: 13px; line-height: 1.35; }
+
+  /* ---- the sheet as drawn (dashboard.css, a dialog here shown in place) ---- */
+  .order-sheet { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 520px; padding: 12px 16px 14px;
+    background: var(--bay); color: var(--fg); border: 1px solid var(--rule); }
+  .order-sheet h4 { margin: 0 0 4px; font: 600 14px var(--body); overflow-wrap: anywhere; }
+  .order-sheet small { color: var(--muted); font-size: 12px; }
+  .order-sheet button { min-height: 44px; padding: 0 14px; background: var(--plate); color: var(--fg); border: 1px solid var(--rule);
+    font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .order-moves { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+  .order-moves button { padding: 0 4px; }
+  .order-actions { display: flex; flex-direction: column; gap: 6px; }
+  .order-actions a, .order-actions button { display: flex; align-items: center; width: 100%; min-height: 44px; padding: 0 14px;
+    border: 1px solid var(--rule); background: var(--plate); color: var(--fg); text-decoration: none; text-align: left;
+    font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  .close { width: 100%; }
+</style>
+</head>
+<body>
+<h1>F226: the board's ⋯ menu</h1>
+<p class="lede">The menu a card's ⋯ opens, for three cards on the board as they are today. "Open the card" goes to the same address as tapping the card itself.</p>
+
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+  <!-- Today: copied from factory_dashboard/templates/board.html, #order-sheet and card_actions -->
+  <section class="version" data-version="today" hidden>
+    <h2>Today</h2>
+
+    <h3>Sprouting: a card with a conversation</h3>
+    <div class="order-sheet">
+      <h4>F225 · The night switch slides by itself when a page loads</h4>
+      <small>Move in this stage</small>
+      <div class="order-moves"><button>Top</button><button>Up</button><button>Down</button><button>Bottom</button></div>
+      <div class="order-actions"><a href="#">Open its conversation</a><button>Set aside</button><a href="#">Open the card</a></div>
+      <button class="close">Close</button>
+    </div>
+
+    <h3>Planted: not set aside from the board</h3>
+    <div class="order-sheet">
+      <h4>F169 · Let the planner search and read the web for research</h4>
+      <small>Move in this stage</small>
+      <div class="order-moves"><button>Top</button><button>Up</button><button>Down</button><button>Bottom</button></div>
+      <div class="order-actions"><a href="#">Open its conversation</a><a href="#">Open the card</a></div>
+      <button class="close">Close</button>
+    </div>
+
+    <h3>A bug: no conversation</h3>
+    <div class="order-sheet">
+      <h4>bug-05-idle-restart-waits-for-a-commit · An idle `softfield run` restarts onto new runner code only once that code is committed, never on a half-saved change.</h4>
+      <small>Move in this stage</small>
+      <div class="order-moves"><button>Top</button><button>Up</button><button>Down</button><button>Bottom</button></div>
+      <div class="order-actions"><a href="#">Open the card</a></div>
+      <button class="close">Close</button>
+    </div>
+  </section>
+
+  <!-- Proposed -->
+  <section class="version" data-version="proposed">
+    <h2>Proposed</h2>
+
+    <h3>Sprouting: a card with a conversation</h3>
+    <div class="order-sheet">
+      <h4>F225 · The night switch slides by itself when a page loads</h4>
+      <small>Move in this stage</small>
+      <div class="order-moves"><button>Top</button><button>Up</button><button>Down</button><button>Bottom</button></div>
+      <div class="order-actions change"><a href="#">Open its conversation</a><button>Set aside</button></div>
+      <button class="close">Close</button>
+    </div>
+    <p class="note">Open the card is gone: tap the card itself.</p>
+
+    <h3>Planted: not set aside from the board</h3>
+    <div class="order-sheet">
+      <h4>F169 · Let the planner search and read the web for research</h4>
+      <small>Move in this stage</small>
+      <div class="order-moves"><button>Top</button><button>Up</button><button>Down</button><button>Bottom</button></div>
+      <div class="order-actions change"><a href="#">Open its conversation</a></div>
+      <button class="close">Close</button>
+    </div>
+    <p class="note">Open the card is gone; the conversation is the one thing the card's own tap doesn't reach.</p>
+
+    <h3>A bug: no conversation</h3>
+    <div class="order-sheet change">
+      <h4>bug-05-idle-restart-waits-for-a-commit · An idle `softfield run` restarts onto new runner code only once that code is committed, never on a half-saved change.</h4>
+      <small>Move in this stage</small>
+      <div class="order-moves"><button>Top</button><button>Up</button><button>Down</button><button>Bottom</button></div>
+      <button class="close">Close</button>
+    </div>
+    <p class="note">The moves alone, with no empty row under them.</p>
+  </section>
+</div>
+
+<script>
+  function setUpSwitch() {
+    var buttons = document.querySelectorAll(".switch button");
+    var versions = document.querySelectorAll("[data-version]");
+    buttons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        buttons.forEach(function (o) { o.setAttribute("aria-pressed", String(o === b)); });
+        versions.forEach(function (v) { v.hidden = v.dataset.version !== b.dataset.show; });
+      });
+    });
+  }
+  setUpSwitch();
+</script>
+</body>
+</html>
