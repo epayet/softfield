@@ -41,3 +41,9 @@ attempts: 3
 tokens: 3628572
 logs: .softfield/var/runs/20261105-024727/f192-03-fix-back-redraw-stage-and-tests
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
