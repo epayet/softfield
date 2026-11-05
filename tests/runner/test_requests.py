@@ -2239,6 +2239,8 @@ def _ducks(repo: Path) -> str:
     """F3's card on main, planned since its note was planted; main's head."""
     (repo / ".softfield" / "cards").mkdir(parents=True)
     (repo / ".softfield" / "cards" / "f3-rubber-ducks.md").write_text(DUCKS_CARD)
+    toml = repo / ".softfield" / "project.toml"  # a factory project: its notes take `f` keys
+    toml.write_text('[project]\narea = "factory"\n\n' + toml.read_text())
     git(repo, "add", ".softfield")
     git(repo, "commit", "-q", "-m", "f3")
     return git(repo, "rev-parse", "HEAD")
@@ -2246,6 +2248,27 @@ def _ducks(repo: Path) -> str:
 
 def _idea(title: str, thoughts: str = "", **more: object) -> str:
     return json.dumps({"title": title, "thoughts": thoughts, **more})
+
+
+@pytest.mark.parametrize(
+    ("project", "value", "stem"),
+    [
+        ("", {"text": "Blue ducks"}, "m1-blue-ducks"),
+        ('[project]\narea = "factory"\n', {"text": "Blue ducks"}, "f1-blue-ducks"),
+        ('[project]\narea = "garden"\n', {"text": "Blue ducks"}, "m1-blue-ducks"),
+        (
+            '[project]\narea = "factory"\n',
+            {"text": "Blue ducks", "area": "product"},
+            "m1-blue-ducks",
+        ),
+        ("", {"text": "Blue ducks", "area": "factory"}, "f1-blue-ducks"),
+    ],
+)
+def test_a_note_without_an_area_takes_its_projects_area(repo, project, value, stem):
+    toml = repo / ".softfield" / "project.toml"
+    toml.write_text(project + "\n" + toml.read_text())
+    _ask(repo, "plant", None, json.dumps(value))
+    assert _apply(repo) == [f"plant: planted .softfield/cards/{stem}.md"]
 
 
 def test_a_note_whose_slug_a_card_has_with_other_words_plants_a_second_card(repo):

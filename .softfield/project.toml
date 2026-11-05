@@ -4,6 +4,7 @@
 [project]
 name = "softfield"
 description = "The software factory itself: the runner, the dashboard and the workflow that build every project."
+area = "factory"  # the area a note planted without one takes (F171 D5); product when missing
 
 # What check-all and the gates run (ADR 30 item 3)
 [checks]

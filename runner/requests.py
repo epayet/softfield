@@ -1103,9 +1103,9 @@ def _plant(
     subject, value = row["subject"], row["value"]
     if subject:
         title, thoughts, source = _seed(conn, project_id, str(subject))
-        area = planner.seed_area(value)
+        area = planner.seed_area(value, planner.project_area(repo))
     else:
-        title, thoughts, area = planner.planting(value)
+        title, thoughts, area = planner.planting(value, planner.project_area(repo))
         source = ""
     # A taken slug is no refusal (F48 D1): the same words again are planted already, and a
     # note that only starts like a card takes the slug's first free -2, -3, …

@@ -11,6 +11,7 @@ import re
 import sqlite3
 import statistics
 import subprocess
+import tomllib
 import unicodedata
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
@@ -408,10 +409,22 @@ def _words(title: object, thoughts: object) -> tuple[str, str]:
     return title, thoughts
 
 
-def _area(data: Mapping[str, Any]) -> str:
+def project_area(repo: Path) -> str:
+    """The area a note planted without one takes: ``area`` under ``[project]`` in the
+    project's ``.softfield/project.toml``; ``product`` when it is missing or unreadable."""
+    try:
+        data = tomllib.loads((repo / ".softfield" / "project.toml").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return "product"
+    project = data.get("project")
+    area = project.get("area") if isinstance(project, dict) else None
+    return area if area in AREAS else "product"
+
+
+def _area(data: Mapping[str, Any], default: str = "factory") -> str:
     area = data.get("area")
     if area in (None, ""):
-        return "factory"  # product work is on hold (the owner, 2026-10-04)
+        return default
     if area not in AREAS:
         raise PlannerError(f"an idea's area is {' or '.join(AREAS)}, not {area!r}")
     return str(area)
@@ -451,15 +464,15 @@ def _note_text(data: Mapping[str, Any]) -> str | None:
     return text.strip()
 
 
-def planting(value: object) -> tuple[str, str, str]:
+def planting(value: object, default: str = "factory") -> tuple[str, str, str]:
     """A ``plant`` request's value (f6 D1): the idea's title, its thoughts and its area
-    (factory unless given). A one-box note's title is its heading, and its thoughts the whole
-    text (F31 D7)."""
+    (``default`` unless given: the project's, F171 D5). A one-box note's title is its heading,
+    and its thoughts the whole text (F31 D7)."""
     data = _plant_data(value)
     if (text := _note_text(data)) is not None:
-        return heading(text), text, _area(data)
+        return heading(text), text, _area(data, default)
     title, thoughts = _words(data.get("title"), data.get("thoughts") or "")
-    return title, thoughts, _area(data)
+    return title, thoughts, _area(data, default)
 
 
 def plant_words(value: object, title: str, thoughts: str) -> str:
@@ -486,9 +499,9 @@ def seed_words(proposal: Mapping[str, Any]) -> tuple[str, str]:
     return _words(proposal.get("title"), "\n".join(lines))
 
 
-def seed_area(value: object) -> str:
-    """The area an approved seed is planted in: the request's, if it gives one, else factory."""
-    return "factory" if value in (None, "") else _area(_plant_data(value))
+def seed_area(value: object, default: str = "factory") -> str:
+    """The area an approved seed is planted in: the request's, if it gives one, else ``default``."""
+    return default if value in (None, "") else _area(_plant_data(value), default)
 
 
 def _notes(thoughts: str) -> str:

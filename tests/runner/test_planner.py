@@ -961,6 +961,30 @@ def test_a_long_title_is_cut_at_a_word_and_kept_whole_in_the_thoughts():
     assert thoughts == f"{long.strip()}\n\nSticky?"
     assert planner.planting(json.dumps({"title": "x" * 130}))[:2] == ("x" * 119 + "…", "x" * 130)
     assert planner.planting(json.dumps({"title": "y" * 120})) == ("y" * 120, "", "factory")
+    assert planner.planting(json.dumps({"title": "y"}), "product")[2] == "product"
+    assert (
+        planner.planting(json.dumps({"title": "y", "area": "factory"}), "product")[2] == "factory"
+    )
+    assert planner.seed_area(None, "product") == "product"
+    assert planner.seed_area(json.dumps({"area": "factory"}), "product") == "factory"
+
+
+@pytest.mark.parametrize(
+    ("text", "area"),
+    [
+        (None, "product"),
+        ("[project]\n", "product"),
+        ("not [toml", "product"),
+        ('[project]\narea = "garden"\n', "product"),
+        ('[project]\narea = "factory"\n', "factory"),
+        ('[project]\narea = "product"\n', "product"),
+    ],
+)
+def test_project_area_reads_the_project_toml(tmp_path, text, area):
+    if text is not None:
+        (tmp_path / ".softfield").mkdir()
+        (tmp_path / ".softfield" / "project.toml").write_text(text)
+    assert planner.project_area(tmp_path) == area
 
 
 def test_a_one_box_note_is_its_heading_and_its_whole_text():
@@ -1025,6 +1049,8 @@ def _f6(repo: Path) -> None:
     (repo / ".softfield" / "cards").mkdir(parents=True)
     (repo / ".softfield" / "cards" / "f6-planning-room.md").write_text(F6_DOC)
     (repo / ".softfield" / "cards" / "m4.md").write_text("# Milestone M4: product\n")
+    toml = repo / ".softfield" / "project.toml"  # a factory project: its notes take `f` keys
+    toml.write_text('[project]\narea = "factory"\n\n' + toml.read_text())
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "f6")
 
