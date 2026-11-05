@@ -1193,6 +1193,16 @@ def test_start_and_end_keep_tickets_by_first_job_started(tmp_path):
     sonnet_rows = lead_split(reading, PROJECT, start="2026-10-01T10:00:00+02:00")
     assert len(sonnet_rows) == 1
     assert sonnet_rows[0].agent == SONNET
+    # end: tickets whose first job started <= end
+    early_rows = lead_split(reading, PROJECT, end="2026-10-01T09:30:00+02:00")
+    assert len(early_rows) == 1
+    assert early_rows[0].agent == OPUS
+    # end at exactly Sonnet's start includes both
+    both_rows = lead_split(reading, PROJECT, end="2026-10-01T10:00:00+02:00")
+    assert len(both_rows) == 2
+    # end before Opus's start excludes all
+    too_early_rows = lead_split(reading, PROJECT, end="2026-10-01T08:59:59+02:00")
+    assert len(too_early_rows) == 0
     reading.close()
 
 
