@@ -1,5 +1,7 @@
 # ADR 25: Claude's week is paced with a day's margin
 
+See ADR 44: the runner applied this to lead tickets only from then, and its evidence came from a dry run that disagreed with the runner.
+
 - **Status:** Accepted (by the owner, 2026-10-06)
 - **Date:** 2026-10-06
 - **Deciders:** project owner (accepts), Claude (drafts)
