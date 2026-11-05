@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F229 mock-up: the strip under every bar goes</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a; --fail: #ec5458;
+    --opus: #ff9640; --factory: #5b9cf5; --a2: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 780px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  .versions > div { min-width: 0; }
+  @media (min-width: 1100px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [hidden] { display: block !important; }
+    .versions > div::before { content: attr(data-label); display: block; font: 700 14px var(--display);
+      letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); margin: 12px 0 0; }
+  }
+  /* Today's strip, circled: what this card takes away */
+  .goes { outline: 1px dashed var(--fail); outline-offset: 2px; }
+  /* Proposed: the space that stays under the bar */
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; font: 11px var(--mono); margin-top: 6px; }
+  .note.out { color: var(--fail); }
+  .note.in { color: var(--good); }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: the panel, the meter, the strip, the allowance, the tile, the card ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .agent { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .meter { height: 12px; background: var(--floor); border: 1px solid var(--rule); position: relative; }
+  .meter > span { position: absolute; inset: 1px auto 1px 1px; max-width: 100%; background: var(--c, var(--a2)); }
+  .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
+    outline: 1px solid var(--bay); z-index: 1; }
+  .meter > .under-mark { background: var(--good); }
+  .meter > .past-mark { background: var(--hazard); }
+  .meter > .nearly-out { background: var(--fail); }
+  .meter-ticks { height: 5px; margin-top: 2px; background: var(--plate); border: 1px solid var(--rule);
+    background-image: linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+    background-size: 25% 100%; background-position: 0 0; background-repeat: repeat-x; }
+  .allow { display: flex; flex-direction: column; gap: 12px; }
+  .allow .line { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; margin-bottom: 4px; flex-wrap: wrap; }
+  .allow .line small { color: var(--muted); }
+  .tile { display: flex; flex-direction: column; gap: 5px; }
+  .tile > p { margin: 0; }
+  .tile-small { font: 11.5px var(--mono); color: var(--muted); }
+  .lead-window-heading { color: var(--opus); }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
+    padding: 9px 10px; background: var(--plate); border: 1px solid var(--rule);
+    border-left: 4px solid var(--factory); color: var(--fg); overflow-wrap: anywhere; }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card .meter { display: block; height: 8px; }
+  .card-count { font: 12px var(--mono); color: var(--muted); }
+
+  /* ---- proposed: the one rule that changes; the bar keeps the room its mark overhangs ---- */
+  [data-version="proposed"] .meter { margin-bottom: 6px; }
+  [data-version="proposed"] .card .meter { margin-bottom: 0; }
+</style>
+</head>
+<body>
+<h1>F229: the strip under every bar goes</h1>
+<p class="lede">The readings are the live ones of 5 Nov at 11:03: Claude's 5-hour window at 94%, its week at 92%, Copilot's month at 2%. The board's card is F164, Plant a review's ideas straight from the review, at 4 of 8 tickets. The marks sit at 75% and at 70%, the planning tile's own words and the configuration's defaults; the fill colours are the Overview's rule, as today.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/_partials/allowance.html, planning.html, board.html -->
+<div data-version="today" data-label="Today" hidden>
+  <h3>Overview: Agent allowance</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 94%</span></div>
+        <div class="meter"><span class="past-mark" style="width:94%"></span><span class="mark" style="left:75%"></span></div>
+        <div class="meter-ticks goes"></div>
+        <div class="line"><small>resets at 15:40</small><small>kept for you from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Claude</span><span>week: 92%</span></div>
+        <div class="meter"><span class="past-mark" style="width:92%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="meter-ticks goes"></div>
+        <div class="line"><small>resets on Nov 9 16:00</small><small>reserve kept for the lead from here</small></div>
+      </div>
+      <div>
+        <div class="line"><span class="agent">Copilot</span><span>month: 2%</span></div>
+        <div class="meter"><span class="under-mark" style="width:2%"></span></div>
+        <div class="meter-ticks goes"></div>
+        <div class="line"><small>resets on Dec 1 00:00</small></div>
+      </div>
+    </div>
+    <span class="note out">dashed red: the second bar with its 4 chunks</span>
+  </section>
+
+  <h3>Planning: the lead's window</h3>
+  <div class="panel tile">
+    <h2 class="lead-window-heading">The lead's window</h2>
+    <div class="meter"><span class="past-mark" style="width:94%"></span><span class="mark" style="left:75%"></span></div>
+    <div class="meter-ticks goes"></div>
+    <p class="tile-small">5-hour window 94% · resets at 15:40 · planning may go past the 75% line, the factory stops there</p>
+    <div class="meter"><span class="past-mark" style="width:92%"></span><span class="mark" style="left:70%"></span></div>
+    <div class="meter-ticks goes"></div>
+    <p class="tile-small">week 92% · resets on Nov 9 16:00</p>
+  </div>
+
+  <h3>Board: a card's tickets</h3>
+  <div class="card">
+    <span class="card-meta"><b>#9</b> <span>F164</span> <span>factory</span></span>
+    <span class="card-title">Plant a review's ideas straight from the review</span>
+    <span class="meter"><span style="width:50%"></span></span>
+    <span class="meter-ticks goes"></span>
+    <span class="card-count">4 of 8 tickets</span>
+  </div>
+</div>
+
+<!-- Proposed: the strip is gone everywhere; the rest is as it was -->
+<div data-version="proposed" data-label="Proposed">
+  <h3>Overview: Agent allowance</h3>
+  <section class="panel">
+    <h2>Agent allowance <span class="src">latest reading per window</span></h2>
+    <div class="allow">
+      <div class="new">
+        <div class="line"><span class="agent">Claude</span><span>5-hour window: 94%</span></div>
+        <div class="meter"><span class="past-mark" style="width:94%"></span><span class="mark" style="left:75%"></span></div>
+        <div class="line"><small>resets at 15:40</small><small>kept for you from here</small></div>
+      </div>
+      <div class="new">
+        <div class="line"><span class="agent">Claude</span><span>week: 92%</span></div>
+        <div class="meter"><span class="past-mark" style="width:92%"></span><span class="mark" style="left:70%"></span></div>
+        <div class="line"><small>resets on Nov 9 16:00</small><small>reserve kept for the lead from here</small></div>
+      </div>
+      <div class="new">
+        <div class="line"><span class="agent">Copilot</span><span>month: 2%</span></div>
+        <div class="meter"><span class="under-mark" style="width:2%"></span></div>
+        <div class="line"><small>resets on Dec 1 00:00</small></div>
+      </div>
+    </div>
+    <span class="note in">dashed green: one bar, with the mark and the percent as they were</span>
+  </section>
+
+  <h3>Planning: the lead's window</h3>
+  <div class="panel tile new">
+    <h2 class="lead-window-heading">The lead's window</h2>
+    <div class="meter"><span class="past-mark" style="width:94%"></span><span class="mark" style="left:75%"></span></div>
+    <p class="tile-small">5-hour window 94% · resets at 15:40 · planning may go past the 75% line, the factory stops there</p>
+    <div class="meter"><span class="past-mark" style="width:92%"></span><span class="mark" style="left:70%"></span></div>
+    <p class="tile-small">week 92% · resets on Nov 9 16:00</p>
+  </div>
+
+  <h3>Board: a card's tickets</h3>
+  <div class="card new">
+    <span class="card-meta"><b>#9</b> <span>F164</span> <span>factory</span></span>
+    <span class="card-title">Plant a review's ideas straight from the review</span>
+    <span class="meter"><span style="width:50%"></span></span>
+    <span class="card-count">4 of 8 tickets</span>
+  </div>
+</div>
+</div>
+
+<script>
+  (function () {
+    var buttons = document.querySelectorAll(".switch button");
+    var versions = document.querySelectorAll("[data-version]");
+    buttons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        buttons.forEach(function (b) { b.setAttribute("aria-pressed", String(b === button)); });
+        versions.forEach(function (v) { v.hidden = v.dataset.version !== button.dataset.show; });
+      });
+    });
+  })();
+</script>
+</body>
+</html>
