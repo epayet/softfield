@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F222 mock-up: the priority number goes</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --good: #5fd17a;
+    --opus: #ff9640; --dev: #5b9cf5;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .lede { color: var(--ink-2); margin: 0 0 12px; max-width: 760px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: none; margin: 0 0 14px; border: 1px solid var(--rule); width: fit-content; }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .both { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .version { min-width: 0; display: grid; gap: 12px; }
+  .version > h2 { font: 700 15px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); margin: 0; }
+  @media (max-width: 900px) {
+    .switch { display: inline-flex; }
+    .both { grid-template-columns: 1fr; }
+    body[data-show="today"] .version.proposed, body[data-show="proposed"] .version.today { display: none; }
+  }
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .note { display: block; font: 11.5px var(--mono); color: var(--good); margin: 4px 0 0; }
+
+  /* the panels as drawn (dashboard.css) */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; position: relative; }
+  .panel > h3 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel > h3 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .mono { font-family: var(--mono); font-size: 12.5px; }
+  .belt { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .belt li { display: grid; grid-template-columns: 28px 1fr; gap: 8px; align-items: center; padding: 5px 8px 5px 0; border-left: 3px solid var(--rule); overflow-wrap: anywhere; }
+  .belt li .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; }
+  .belt li.lead { border-left-color: var(--opus); }
+  .belt li b { font: 600 12px var(--mono); }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th { text-align: left; font: 600 11.5px var(--display); color: var(--muted); text-transform: uppercase; padding: 5px 8px; border-bottom: 1px solid var(--rule); }
+  td { padding: 5px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+  .num { text-align: right; }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; }
+  dt { font: 600 11.5px var(--display); text-transform: uppercase; color: var(--muted); }
+  dd { margin: 0; }
+  .card-name { font: 700 16px var(--display); margin: 0 0 8px; }
+  .card-meta { display: block; font: 11.5px var(--mono); color: var(--muted); }
+  .aside { border-color: var(--hazard); padding-top: 0; }
+  .aside .plate { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px; border-bottom: 1px solid var(--hazard); }
+  .aside .plate b { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+  .aside .plate span { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+  .aside .say { font-size: 15px; margin: 0 0 6px; }
+  .aside .then { color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px; }
+  .btn { display: inline-flex; align-items: center; font: 700 14px var(--display); letter-spacing: .08em; text-transform: uppercase; min-height: 44px; padding: 0 20px; background: var(--hazard); color: var(--hazard-ink); border: 0; }
+</style>
+</head>
+<body data-show="proposed">
+<h1>F222: the priority number goes</h1>
+<p class="lede">Every place a page says a priority today, on real cards and tickets. The board itself doesn't change: it already shows places. Nothing here is drawn new but one line on a ticket's page, so the themed look stays as it is.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="both">
+
+<!-- Today: copied from factory_dashboard/templates/_partials/queue.html, milestone.html, ticket.html, tickets.html, milestones.html -->
+<div class="version today">
+  <h2>Today</h2>
+  <section class="panel">
+    <h3>Next in line <span class="src">Overview</span></h3>
+    <ol class="belt">
+      <li class="lead"><span class="n">1</span><span><b class="mono">1 <a href="#">f169-01-planner-searches-the-web</a></b> Planner jobs can search and read the web · the lead · priority 1</span></li>
+      <li class="lead"><span class="n">2</span><span><b class="mono">2 <a href="#">bug-03-roadmap-items-to-seeds</a></b> Every idea the old roadmap still held is a seed or is named as built · the lead · priority 2</span></li>
+      <li class="lead"><span class="n">3</span><span><b class="mono">3 <a href="#">f25-01-still-needed</a></b> Before the lead answers, it checks whether the seed is still needed · the lead · priority 2</span></li>
+    </ol>
+  </section>
+  <section class="panel">
+    <h3>A card's page</h3>
+    <p class="card-name"><span class="card-meta">F169 · f169-why-is-web-search-related-tool</span>Let the planner search and read the web for research</p>
+    <dl>
+      <dt>Stage</dt><dd>Planted: in line for the factory</dd>
+      <dt>Priority</dt><dd>P1</dd>
+      <dt>Area</dt><dd>factory</dd>
+      <dt>Tickets</dt><dd>0 of 1 done</dd>
+    </dl>
+  </section>
+  <section class="panel">
+    <h3>A queued ticket's page</h3>
+    <p class="card-name"><span class="card-meta">F169, Let the planner search and read the web for research</span>f169-01-planner-searches-the-web</p>
+    <p class="mono">Goal &amp; Done when, from the ticket</p>
+  </section>
+  <section class="panel aside">
+    <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
+    <p class="say">This ticket won't run until you queue it.</p>
+    <p class="then">Queued, it joins the line at priority 30, behind the tickets that go first; move it on the board once it is there.</p>
+    <span class="btn">Queue it</span>
+  </section>
+  <section class="panel">
+    <h3>Set aside <span class="src">Tickets page</span></h3>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Kind</th><th class="num">Priority</th><th>Queue</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><a href="#">bug-06-review-suite-fits-one-call</a></td><td>lead</td><td class="num">26</td><td>Queue</td></tr>
+        <tr><td class="mono"><a href="#">bug-07-every-hx-target-is-on-its-page</a></td><td>developer</td><td class="num">30</td><td>Queue</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+  <section class="panel">
+    <h3>Milestones <span class="src">other columns as they are</span></h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Key</th><th>Title</th><th class="num">Priority</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><a href="#">f169</a></td><td>Let the planner search and read the web for research</td><td class="num">1</td></tr>
+        <tr><td class="mono"><a href="#">f25</a></td><td>whenever i plant something, does it check the current state of things</td><td class="num">2</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+</div>
+
+<!-- Proposed -->
+<div class="version proposed">
+  <h2>Proposed</h2>
+  <section class="panel">
+    <h3>Next in line <span class="src">Overview</span></h3>
+    <ol class="belt">
+      <li class="lead"><span class="n">1</span><span><b class="mono">1 <a href="#">f169-01-planner-searches-the-web</a></b> Planner jobs can search and read the web · the lead · <span class="new">F169</span></span></li>
+      <li class="lead"><span class="n">2</span><span><b class="mono">2 <a href="#">bug-03-roadmap-items-to-seeds</a></b> Every idea the old roadmap still held is a seed or is named as built · the lead · <span class="new">bug</span></span></li>
+      <li class="lead"><span class="n">3</span><span><b class="mono">3 <a href="#">f25-01-still-needed</a></b> Before the lead answers, it checks whether the seed is still needed · the lead · <span class="new">F25</span></span></li>
+    </ol>
+    <span class="note">The card replaces "priority N". The number on the left is already the place.</span>
+  </section>
+  <section class="panel">
+    <h3>A card's page</h3>
+    <p class="card-name"><span class="card-meta">F169 · f169-why-is-web-search-related-tool</span>Let the planner search and read the web for research</p>
+    <dl>
+      <dt>Stage</dt><dd>Planted: in line for the factory</dd>
+      <dt class="new">Place</dt><dd class="new">#1 in Planted</dd>
+      <dt>Area</dt><dd>factory</dd>
+      <dt>Tickets</dt><dd>0 of 1 done</dd>
+    </dl>
+    <span class="note">Worked out from the queue each time the page opens, so it's never out of date. The same #1 the board shows. A ripe or harvested card has no such row.</span>
+  </section>
+  <section class="panel">
+    <h3>A queued ticket's page</h3>
+    <p class="card-name"><span class="card-meta">F169, Let the planner search and read the web for research</span>f169-01-planner-searches-the-web</p>
+    <p class="new">In line with F169, #1 in Planted</p>
+    <p class="mono">Goal &amp; Done when, from the ticket</p>
+    <span class="note">New: a ticket waiting in ready shows its card's place, or its own if it's a bug. A finished or set-aside ticket doesn't.</span>
+  </section>
+  <section class="panel aside">
+    <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
+    <p class="say">This ticket won't run until you queue it.</p>
+    <p class="then new">Queued, it goes to the end of the line; move it on the board once it is there.</p>
+    <span class="btn">Queue it</span>
+  </section>
+  <section class="panel">
+    <h3>Set aside <span class="src">Tickets page</span></h3>
+    <div class="scroll"><table>
+      <thead><tr><th>ID</th><th>Kind</th><th>Queue</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><a href="#">bug-06-review-suite-fits-one-call</a></td><td>lead</td><td>Queue</td></tr>
+        <tr><td class="mono"><a href="#">bug-07-every-hx-target-is-on-its-page</a></td><td>developer</td><td>Queue</td></tr>
+      </tbody>
+    </table></div>
+    <span class="note">The Priority column is gone.</span>
+  </section>
+  <section class="panel">
+    <h3>Milestones <span class="src">other columns as they are</span></h3>
+    <div class="scroll"><table>
+      <thead><tr><th>Key</th><th>Title</th></tr></thead>
+      <tbody>
+        <tr><td class="mono"><a href="#">f169</a></td><td>Let the planner search and read the web for research</td></tr>
+        <tr><td class="mono"><a href="#">f25</a></td><td>whenever i plant something, does it check the current state of things</td></tr>
+      </tbody>
+    </table></div>
+    <span class="note">The Priority column is gone; the board has the places.</span>
+  </section>
+</div>
+
+</div>
+
+<script>
+  function wireSwitch() {
+    var buttons = document.querySelectorAll(".switch button");
+    buttons.forEach(function (button) {
+      button.addEventListener("click", function () {
+        document.body.dataset.show = button.dataset.show;
+        buttons.forEach(function (other) {
+          other.setAttribute("aria-pressed", String(other === button));
+        });
+      });
+    });
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
