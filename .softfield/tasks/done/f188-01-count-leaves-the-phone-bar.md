@@ -25,3 +25,12 @@ The picture to build is `.softfield/cards/f188-mockup/review-dock.html` (Propose
 - at a wide screen, the count still shows and still updates as comments are written
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2101
+gate_failures: []
+tokens: 3440230
+```
