@@ -742,6 +742,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** f192-02's gates were green on a blank field: on a phone, back emptied the board. Its test ignored the ticket's "second body" and used `count()`, which can't see a hidden column. "Fail without the change" isn't enough when the test only proves that some fetch happened: a redraw's test has to show the new thing, visible, at the width the owner uses. The ticket itself also dropped half of D3 (back without the browser's memory) from its Done when, so a developer who met every line would still have missed it: a ticket's Done when has to carry each branch of the decision it cites.
 - **Decisions affected:** none.
 
+### F219 (2026-11-05): lead tickets follow Claude's week pace, and the runner and dry run share one rule ([review](../reviews/f219-lead-tickets-don-t-wait-on.md))
+
+- **Q1:** two lead tickets, both first attempts, no checkpoint. Review round 1: five should-fix and three nits; three fixed by the review, one fix ticket (f219-03), two set aside (bug-61, bug-62), two only reported.
+- **Q3:** no developer tickets: `runner/` and the ADRs are protected.
+- **Q5:** see the review's numbers.
+- **Anything else:** removing the park at the reserve was tested thoroughly at the pick, but the review's rounds and `softfield milestone` also relied on a held ticket being parked. When a change removes a state, search for what reads the absence of work as well as what reads the state. The new rule also holds f9-29, the ticket meant to show it on the Overview, so a plan that counts on another card's ticket should say what happens if the rule holds that ticket.
+- **Decisions affected:** none. ADR 44 stands.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

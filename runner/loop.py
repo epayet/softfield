@@ -6009,9 +6009,12 @@ def dry_run_plan(cfg: Config) -> None:
     windows = _pick_windows(state, claude, queued, at)
     lane = reserve_cards(cfg.repo, ready)
     by_the_owner = state.owner_pause is not None
-    # A parked row says its own wait in the list: only a parked ticket limits the other lines
+    # A parked row says its own wait in the list: only a parked ticket limits the other rows. A
+    # ticket's line goes by what `choose_ticket` goes by, a parked row's limit included.
     listed = _pick_windows(state, claude, [], at)
-    lines = dispatch.plan(queued, tickets, listed, at, paused=by_the_owner, first=lane)
+    rows = dispatch.plan(queued, tickets, listed, at, paused=by_the_owner, first=lane)
+    held = dispatch.plan(queued, tickets, windows, at, paused=by_the_owner, first=lane)
+    lines = [h if h.pick.kind == dispatch.TICKET else r for r, h in zip(rows, held, strict=True)]
     chosen = choose_ticket(
         ready,
         done,

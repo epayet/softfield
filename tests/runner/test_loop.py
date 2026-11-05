@@ -4130,6 +4130,23 @@ def test_the_dry_run_reads_a_refusal_as_the_runner_does(repo, fake_clock, capsys
     assert _both_choose(repo, capsys) == ("f2-01-thing", "f2-01-thing")
 
 
+def test_the_dry_runs_lead_line_says_the_limit_a_parked_job_keeps_it_behind(
+    repo, fake_clock, capsys
+):
+    """F219's review: the pick leaves a lead ticket while a review is parked for a limit, and the
+    line said "runnable" beside it."""
+    _week_read(repo, 0.10, LINE_33)
+    conn = metrics.open_db(_config(repo).metrics_db)
+    project = metrics.upsert_project(conn, repo.name, repo=str(repo))
+    resets = (THURSDAY + timedelta(hours=1)).isoformat()
+    metrics.queue_job(conn, project, "review", "m9", "its review", THURSDAY.isoformat(), resets)
+    conn.close()
+    _lead_and_developer(repo)
+    out = _dry_run(repo, capsys)
+    assert "f1-01-lead: Claude is limited until" in out
+    assert out.strip().splitlines()[-1] == "next: f2-01-thing"
+
+
 def test_over_the_line_a_fast_lane_ticket_waits_while_a_window_rests(repo, fake_clock, capsys):
     """ADR 35 item 5: the lane gets past the line and the reserves, never a real limit."""
     _week_read(repo, 0.65, LINE_33)
