@@ -861,6 +861,49 @@ def test_lead_panel_shows_with_non_opus_lead_ticket(lead_client):
     assert "difficulty 4 or below" in panel
     # Opus d5 → "difficulty 5 and up"
     assert "difficulty 5 and up" in panel
+    # Actual saved amount
+    assert "$2.50" in panel
+    # Sonnet row cell values: band, tickets, merged, first_time, step_ups,
+    # dollars, would_have, saved
+    sonnet_row_match = re.search(
+        r"<tr[^>]*>.*?<td[^>]*>claude-sonnet</td>.*?</tr>", table_raw, re.S
+    )
+    assert sonnet_row_match, "no Sonnet row in lead table"
+    sonnet_row = sonnet_row_match.group(0)
+    assert "difficulty 4 or below" in sonnet_row
+    assert '<td class="num">1</td>' in sonnet_row  # tickets
+    assert '<td class="num">1</td>' in sonnet_row  # merged
+    assert "0.50" in sonnet_row  # dollars
+    assert "3.00" in sonnet_row  # would_have
+    assert "2.50" in sonnet_row  # saved
+    # Opus row present
+    assert "claude-opus" in table_raw
+    # Bar widths: Sonnet fill approximately 17% of Opus would-have
+    assert re.search(r"width:17%", section_raw(html, "lead"))
+
+
+def test_lead_panel_390px_table_scrolls_without_page_overflow(page, lead_client):
+    """The 390 px panel table scrolls; nothing overflows the page."""
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(LAN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=lead_client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.set_viewport_size({"width": 390, "height": 800})
+    page.route(f"{LAN}/**", route)
+    page.goto(LAN + "/agents")
+    table = page.locator("#lead table")
+    table.wait_for(state="visible", timeout=5000)
+    # Table is wider than the viewport (scrolling is needed)
+    table_w = table.bounding_box()["width"]
+    assert table_w > 390, f"table width {table_w} not wider than 390 px"
+    # Page body does not overflow beyond the table
+    body_w = page.evaluate("document.body.offsetWidth")
+    assert body_w <= table_w, f"page body {body_w} wider than table {table_w}"
 
 
 def test_lead_panel_absent_without_non_opus_lead_ticket(serve):
@@ -910,6 +953,20 @@ def test_who_did_what_has_lead_ticket_and_planner_columns(client):
             f"{col} appears before {expected_order[expected_order.index(col) - 1]}"
         )
         last_idx = idx
+
+
+def test_unlisted_role_column_appears_after_known_roles(lead_client):
+    """A role not in the known list gets a column after the known ones."""
+    html = lead_client.get("/agents").text
+    roles_raw = section_raw(html, "roles")
+    headers = re.findall(r"<th[^>]*>([^<]+)</th>", roles_raw)
+    # The lead_client fixture has a "triage" role job
+    assert "triage" in headers, f"unlisted role 'triage' missing; got {headers}"
+    # Verify it appears after the last known role (planner)
+    last_known = "planner"
+    last_idx = headers.index(last_known)
+    triage_idx = headers.index("triage")
+    assert triage_idx > last_idx, f"'triage' ({triage_idx}) not after '{last_known}' ({last_idx})"
 
 
 def test_lead_bars_scale_to_their_inline_width(page, lead_client):

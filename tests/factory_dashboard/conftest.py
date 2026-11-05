@@ -2334,6 +2334,33 @@ def write_lead_tickets(conn: sqlite3.Connection) -> None:
         tokens_out=2_000,
     )
 
+    # Unlisted role "triage" for testing that unknown roles get a column after the known ones
+    metrics.start_job(
+        conn,
+        run,
+        ticket_id=None,
+        milestone_id=f1,
+        role="triage",
+        agent=LOCAL,
+        attempt=1,
+        started="2026-10-01T12:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=None,
+            milestone_id=f1,
+            role="triage",
+            agent=LOCAL,
+            attempt=1,
+            started="2026-10-01T12:00:00+02:00",
+        ),
+        ended="2026-10-01T12:05:00+02:00",
+        outcome="passed",
+    )
+
 
 @pytest.fixture
 def lead_client(db_path: Path) -> TestClient:
