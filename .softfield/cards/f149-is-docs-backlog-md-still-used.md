@@ -1,6 +1,7 @@
 # Milestone F149: Retire the backlog file: reviews stop writing it, its items become seeds
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** done · **Priority:** 100 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-05. Base: git tag `f149-is-docs-backlog-md-still-used-start`. Report: [`.softfield/reviews/f149-is-docs-backlog-md-still-used.md`](../reviews/f149-is-docs-backlog-md-still-used.md).
 > Planted by the owner on 2026-10-16.
 
 ## Notes

@@ -1,5 +1,7 @@
 # Review: F149, retire the backlog file
 
+- **Status:** done, signed off by the owner on 2026-11-05.
+
 ## Sign-off sheet
 
 **Expected:** no review in any project writes a backlog file again, and Softfield's is gone, each item a bug seed on the board, a planted card, or dropped with its reason.
