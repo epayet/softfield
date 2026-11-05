@@ -3575,13 +3575,15 @@ def test_no_border_radius_except_top_bar_status_dot():
         # The top bar's status dot is allowed
         if ".factory-status .dot" in selector and "border-radius" in body:
             continue
-            # The gauge mark dot is allowed (it's a light, not an ornament)
-            if ".gauge .mark::after" in selector and "border-radius" in body:
-                continue
-            # The theme switch plate is allowed (it's a switch, not a panel)
-            if ".theme-switch .plate" in selector and "border-radius" in body:
-                continue
-            pytest.fail(f"border-radius found in {selector}: {body}")
+        # The gauge mark dot is allowed (it's a light, not an ornament)
+        if ".gauge .mark::after" in selector and "border-radius" in body:
+            continue
+        # The theme switch plate and knob are allowed (it's a switch, not a panel)
+        if ".theme-switch .plate" in selector and "border-radius" in body:
+            continue
+        if ".theme-switch .knob" in selector and "border-radius" in body:
+            continue
+        pytest.fail(f"border-radius found in {selector}: {body}")
 
 
 def test_idle_crate_svg_exists():

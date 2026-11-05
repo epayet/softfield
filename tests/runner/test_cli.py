@@ -9,7 +9,7 @@ import pytest
 
 from runner import cli, loop, metrics, owner, procs
 from runner.config import load_config
-from runner.milestone import RESTART
+from runner.milestone import PARKED, RESTART
 from runner.report import SessionReport
 from runner.state import load_state, save_state
 from tests.runner.conftest import git, write_task
@@ -60,7 +60,7 @@ def test_milestone_gives_no_verdict_while_its_review_waits_for_a_held_fix(
 ):
     """F219's review: "parked" isn't a stop the verdict knows, so it read as ready for sign-off
     and put a sign-off on the desk, with the fix still to do."""
-    monkeypatch.setattr(cli, "run_milestone", lambda cfg, n, base: cli.PARKED)
+    monkeypatch.setattr(cli, "run_milestone", lambda cfg, n, base: PARKED)
     monkeypatch.setattr(owner, "verdict", lambda *a, **k: pytest.fail("a verdict"))
     assert cli.main(["milestone", "1"]) == 0
     out = capsys.readouterr().out
