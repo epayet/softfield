@@ -1,6 +1,6 @@
 # Milestone F219: Lead tickets follow Claude's week pace; runner and dry run share one rule
 
-> **State:** idea · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-04.
 
 ## Notes
@@ -28,3 +28,29 @@ Whichever I choose:
 - A dry run and the runner must agree, with one shared function deciding whether a lead ticket may start. Add a test that gives both the same state and checks they give the same answer, including a week between the pace line and the reserve (61% against 32%).
 - runner/ is protected, so the runner change is the lead's ticket.
 - If a page changes what it shows, it needs the usual mock-up.
+
+## Plan
+- **The owner's decision (2026-11-04):** "I want the pacing and the reserve, towards the end it can use the reserve if available. Critical tickets will be added to the fast lane. Planning is the exception, it can still use the reserve."
+- **Expected outcome:** a lead ticket starts only under Claude's week pace line, and in the week's last 10% it may use the reserve. The runner, the dry run and the Overview all say so. Developers, planning and the fast lane go on while it waits.
+- **Done when:** a test gives the runner and the dry run the same state and they choose the same next ticket, 65% against a pace line of 33% included; the Overview shows the line, the wait and until when.
+- **How to test it:** over the line, the runner takes no new lead ticket off the fast lane, and `softfield run --dry-run` names the developer ticket it takes. Pull the lever, or put the card in the fast lane, and the lead ticket goes.
+
+## Decisions
+ADR 44 holds the rule.
+
+- **D1 One function:** `allowance.lead_hold(agent, windows, cost, now, *, reserves=())` returns the reason a lead ticket may not start, or None. A window in `reserves` is a cap on its whole capacity. Otherwise the week is its pace line, and in its last 10% a cap of 100% (the owner, 2026-11-04: "it'd be a shame to lose out on token, I may not do planning"); the 5-hour window is its cap of 75%. A window resting after a refusal holds it. `allowance.answer` doesn't change for anyone else.
+- **D2 One path:** the code that chooses the next ticket becomes one function, given what it needs as parameters: the ready tickets, what is done, paused and parked, the windows, the switches and the fast lane cards. `_next_task` calls it from the session; `dry_run_plan` calls it from the files and marks that ticket as next. The dry run's other lines take their wait from `lead_hold`, through `dispatch._ticket_line`.
+- **D3 One set of windows:** one helper builds Claude's windows from the readings and the refusals, for both. The dry run reads refusals too.
+- **D4 What a hold does:** a lead ticket held by the week is passed over, with no park and no desk item, and the pick asks again each turn. `at_reserve` and its `reserve` parking go, and old entries are cleared at the start of a run. Held by the 5-hour window, it parks only when nothing else can run, as today (`at_five_hour`).
+- **D5 Not held:** a fast lane card's tickets, a ticket parked mid-work once its reset has passed, a ticket waiting only for its gates, and every queued job: planner, review, direction, escalation, checkpoint.
+- **D6 Keep the pick's empty windows out of the question:** `dispatch.pick` in `work_queue` still receives one ticket, already chosen, so its windows stay empty and its docstring says why: queued jobs park themselves as they start (`claude_hold`). A real window there would pass over a ticket at the 5-hour mark, and it would never park.
+- **D7 The Overview** ([mock-up](f219-mockup/lead-stop.html)): f9-29, with its post and stripes, keeps its name, and f61-01, f77-01 and f77-02 go on waiting for it. A plate under the week's meter says lead tickets wait, until about when, and what goes on meanwhile; each held lead row says so. In the last 10% the plate says the whole reserve is open. The mark's words and the legend's line about the mark are corrected: planning and reviews go past it.
+
+## Tickets
+| # | Slug | Who | Diff | After | What |
+|---|------|-----|------|-------|------|
+| 01 | one-lead-rule | L | 6 | | D1 to D6, with the test that the runner and the dry run agree |
+| 02 | rewrite-f9-29 | L | 2 | 01 | D7: f9-29 draws the new rule; ADR 25 points at ADR 44 |
+
+## Before and after
+- `/`
