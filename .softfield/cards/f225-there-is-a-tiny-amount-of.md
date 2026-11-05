@@ -1,4 +1,4 @@
-# Milestone F225: There is a tiny amount of time when the page loads where…
+# Milestone F225: The night switch slides by itself when a page loads
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-05.
