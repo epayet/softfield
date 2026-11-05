@@ -55,6 +55,18 @@ def test_milestone_exits_with_the_verdicts_code(in_repo, monkeypatch, capsys, co
     assert capsys.readouterr().out.endswith("VERDICT\n")
 
 
+def test_milestone_gives_no_verdict_while_its_review_waits_for_a_held_fix(
+    in_repo, monkeypatch, capsys
+):
+    """F219's review: "parked" isn't a stop the verdict knows, so it read as ready for sign-off
+    and put a sign-off on the desk, with the fix still to do."""
+    monkeypatch.setattr(cli, "run_milestone", lambda cfg, n, base: cli.PARKED)
+    monkeypatch.setattr(owner, "verdict", lambda *a, **k: pytest.fail("a verdict"))
+    assert cli.main(["milestone", "1"]) == 0
+    out = capsys.readouterr().out
+    assert "Claude's week" in out and "SIGN-OFF" not in out
+
+
 def test_an_owner_command_that_refuses_exits_1(in_repo, capsys):
     assert cli.main(["accept", "99"]) == 1
     assert "ADR 99 not found" in capsys.readouterr().err

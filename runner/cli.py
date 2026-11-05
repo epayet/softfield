@@ -598,6 +598,9 @@ def main(argv: list[str] | None = None) -> int:
             stop = run_milestone(cfg, key, args.base or f"{key}-start")
             if stop == RESTART:
                 _restart()  # an escalation changed the runner (ADR 12)
+            if stop == PARKED:  # no verdict yet, as in `_review` (F219 D3)
+                print(f"\n{key}: its review goes on once its fix is done: Claude's week holds it.")
+                return 0
             if signed_off(repo, key):  # as in `_review` (F186 D1)
                 print(f"\n{key} is signed off: no verdict.")
                 return 0

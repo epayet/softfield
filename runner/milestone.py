@@ -731,7 +731,9 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
     Claude's room is checked before each round, e2e run included. With ``park`` (`runner
     run`), a round Claude can't take now parks the review's row and returns PARKED: no stop
     is recorded, and it goes on from that round once the queue picks it again (F53 D1).
-    Without, there is no queue to go back to: it waits for the reset."""
+    Without, there is no queue to go back to: it waits for the reset. With or without, a round
+    whose lead fix the week holds also returns PARKED, its row done: no stop is recorded, and the
+    review comes due again once the fix is done (F219 D3)."""
     s = open_session(cfg, f"review {milestone}")
     s.running_row = row = enqueue(s, REVIEW, milestone, review_reason(milestone))
     rounds = s.state.review_counts.setdefault(milestone, [])

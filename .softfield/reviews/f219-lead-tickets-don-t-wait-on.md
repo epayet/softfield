@@ -1,6 +1,6 @@
 # Review: F219, lead tickets follow Claude's week pace
 
-- **Status:** round 1 done, one fix ticket running (f219-03), then round 2.
+- **Status:** round 2 done. Every fix is checked and no ticket is left to run.
 
 ## Sign-off sheet
 
@@ -10,6 +10,7 @@
 - **Developers, planning, reviews and the fast lane carry on.** So does a ticket that was cut off mid-work once its reset has passed.
 - **The runner and its dry run now choose the next ticket with the same code,** so they can't disagree the way they did with bug-59.
 - **When the run has nothing else to do, the top bar says so:** for example "Idle: 22 lead tickets wait for Claude's week · until about Sun 23:12".
+- **A review doesn't pay for rounds with nothing to read.** If its lead fix ticket is held by the week, the review ends for now and comes back by itself once the fix is done.
 - **The Overview doesn't show any of this yet.** That is f9-29 (see 3). Until it runs, the legend still says "the factory stops here", and Next in line lists held lead tickets with no wait.
 
 ### 2. How to test it yourself
@@ -30,17 +31,20 @@ None. [ADR 44](../adr/44-lead-tickets-stop-at-the-reserve.md) is already accepte
 ### 5. How the work went
 - 2026-11-05, 05:49 to 06:18: f219-01 merged at the first attempt (Opus, 25 minutes, $4.03). [Session](../sessions/2026-11-05-0247.md).
 - 2026-11-05, 06:18 to 06:27: f219-02 merged at the first attempt (Sonnet, 5 minutes, $0.20). [Session](../sessions/2026-11-05-0618.md).
-- 2026-11-05, 06:27: review round 1, which found one fix for a ticket (f219-03) and made three small fixes itself.
+- 2026-11-05, 06:31 to 07:21: review round 1 (Opus, $3.32), which found one fix for a ticket (f219-03) and made three small fixes itself. [Session](../sessions/2026-11-05-0627.md).
+- 2026-11-05, 07:21 to 07:26: f219-03 merged at the first attempt (Sonnet, 5 minutes, $0.35). [Session](../sessions/2026-11-05-0721.md).
+- 2026-11-05, from 07:33: review round 2, which checked the fixes and made one small fix itself.
 - Lessons:
   - **Removing a park changes more than the pick.** The pick was tested thoroughly, but the review's rounds and `softfield milestone` also relied on a held ticket being parked. f219-03 and bug-61 cover those two.
   - **The line now holds its own follow-up work.** A card's page change that lands on another card waits like any lead ticket, so the review now says so and points to the fast lane.
+  - **A new result has to reach every caller.** f219-03's tests covered the standing run, but "parked" also reached `softfield milestone`, which read it as ready for sign-off. Round 2 fixed that and added a test.
 
 ### 6. What next
 - **Product:** on hold, as you asked.
 - **Factory:** put F9 in the fast lane, so the Overview shows the rule. Then watch the first full week: ADR 44 expects few lead tickets outside the fast lane until F177 cuts the cost of planner replies, and 61 of the 105 ready tickets are lead tickets.
 
 ### 7. What clogged the factory line
-Nothing clogged this card. It took about 40 minutes from its first job to its review, with no failed attempts, limits or stops for you. The two tickets did wait for each other, but f219-02 depended on f219-01's function, and it took only 5 minutes.
+Nothing clogged this card. It took about 40 minutes from its first job to its review, with no failed attempts, limits or stops for you. The two first tickets did wait for each other, but f219-02 depended on f219-01's function, and it took only 5 minutes. Its one fix ticket then ran at once, since F219 is on the fast lane, and round 2 started 7 minutes after it ended.
 
 ## What was built
 - **`allowance.lead_hold`** is the one rule, with `lead_goes_at` for "until about when". `allowance.answer` gives every other caller the same answers as before.
@@ -55,7 +59,8 @@ No French changed: this is the factory, in English.
 ## Findings and resolutions
 | id | severity | route | summary | resolution |
 |---|---|---|---|---|
-| F1 | should-fix | ticket | A review pays for further rounds while its lead fix ticket is held by the week | f219-03: the review ends with no stop and comes due again when the fix is done |
+| F1 | should-fix | ticket | A review pays for further rounds while its lead fix ticket is held by the week | Resolved by f219-03: the review ends with no stop and comes due again when the fix is done |
+| F9 | should-fix | fixed | With that fix, `softfield milestone` would read a waiting review as ready for sign-off and put a sign-off on the desk | Fixed in round 2, with a new test: no verdict, and it says what the review waits for |
 | F2 | should-fix | later | `softfield milestone` blames a blocked ticket for what the week holds, and opens a desk item | Set aside as bug-61: only the terminal command reaches it |
 | F3 | should-fix | fixed | `docs/workflow.md` still described the old park | Fixed in this round |
 | F5 | should-fix | fixed | The dry run listed a lead ticket as runnable while a parked job's limit held it | Fixed in this round, with a new test |
@@ -72,6 +77,11 @@ What held up when I looked for trouble:
 - **"Until about":** `lead_goes_at` can't return nothing for Claude's windows, because `_windows_from` drops a reading with no reset, so the `max()` in the idle line is safe.
 - **Fast lane or lever at 100% of the week:** one job can start and be refused, then it parks and the window rests. That was already so, and ADR 44 says the limit is real.
 
+What held up in round 2:
+- **f219-03's return:** the row is finished and no stop recorded, so no crate lingers on the line, and `due_reviews` lists the card again only once the fix is in `done/`. A fix parked for a real limit or a resting window waits the same way, which is the right result too.
+- **Its tests:** they replace `_passed_over` and the queue, so they cover the loop's decision, not the real windows. The pace rule and the lever's reading have their own tests from f219-01, so this is enough.
+- **The dry run's fix (F5):** `dispatch.plan` orders its lines without looking at the windows, so pairing the two plans line by line is sound.
+
 Checkpoints: none read these tickets, so there's nothing to judge and no "missed".
 
 ## What was set aside
@@ -79,7 +89,7 @@ bug-61 and bug-62 are on the board as seeds. F6 and F8 are only reported here.
 
 ## Workflow observations
 - **How the flow went:** two tickets, both first attempts, no stops and no interventions from you. Opus was right for f219-01, and Sonnet for the rewrite.
-- **What to change:** when a plan's "Done when" counts on a ticket from another card, the plan should say what happens if the new rule holds that ticket. Here, the rule F219 added holds the ticket that was meant to show it. That is advice for planners, not a gate.
+- **What to change:** when a plan's "Done when" counts on a ticket from another card, the plan should say what happens if the new rule holds that ticket. Here, the rule F219 added holds the ticket that was meant to show it. That is advice for planners, not a gate. Also, a new return value of `review_milestone` should be followed to each of its three callers: f219-03's ticket said "whatever `park` is" and named only the queue's path. That is advice for whoever writes such a ticket, not a check.
 
 <!-- runner report -->
 <!-- /runner report -->

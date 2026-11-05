@@ -91,7 +91,7 @@ All coordination goes through files in the repo. Run logs go to `.softfield/var/
    - by default → a developer fix ticket (`finding: mN-F3`), checked by the usual checkpoint, not another round (ADR 17 item 5); a merge the next round is about to read has no checkpoint (ADR 38)
    - small (about 20 lines in one file), protected or security, or a developer already failed it once → Claude fixes it directly
    - needs the owner (`runner/instructions/lead.md`) → a draft ADR, and **stop**. Never park a finding for the owner.
-3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code take the route `later` or `report`, and no round waits on them.
+3. **Re-review:** covers only the fix diffs and whether each finding is resolved. New blocking issues in the fixes count; should-fix points about untouched code take the route `later` or `report`, and no round waits on them. A lead fix ticket the week's pace line holds ends the loop with no stop and no verdict, rather than paying for a round that reads no fixes: the review comes due again once the fix is done, and goes on from the next round ([ADR 44](../.softfield/adr/44-lead-tickets-stop-at-the-reserve.md) item 6).
 
 **Stop rules** (the values are in `.softfield/project.toml`):
 
