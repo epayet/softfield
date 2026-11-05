@@ -14,6 +14,8 @@ one unit: Claude's are fractions of 1 (its readings), Ollama's tokens, Copilot's
 - **The reserve** is kept back: Claude's week for the lead's support roles, its 5-hour
   window for the owner (ADR 16 item 1). With ``use_reserve`` (every window's, or the names
   of those whose reserve may be used) a window is a cap on its whole capacity instead.
+- **A lead ticket** (ADR 44) has its own question, ``lead_hold``: the same line and caps, but in
+  the week's last 10% it may use the whole reserve, since what is left at the reset is lost.
 """
 
 import math
@@ -95,6 +97,45 @@ def answer(
     return Answer(ok, f"{agent}: {text}")
 
 
+def lead_hold(
+    agent: str,
+    windows: Sequence[Window],
+    cost: float,
+    now: datetime,
+    *,
+    reserves: Collection[str] = (),
+) -> str | None:
+    """Why a lead ticket may not start now, or None (ADR 44 items 1 and 2). A window in
+    ``reserves`` is a cap on its whole capacity. Otherwise a fixed window is its pace line and, in
+    its last 10%, a cap of 100%; a rolling one is its cap. A window resting after a refusal holds
+    it, whatever its reserves."""
+    checks = [_check(w, cost, now, w.name in reserves, whole_sweep=True) for w in windows]
+    refused = [c for c in checks if not c[0]]
+    return f"{agent}: {min(refused, key=lambda c: c[1])[2]}" if refused else None
+
+
+def lead_goes_at(window: Window, cost: float, now: datetime) -> datetime | None:
+    """About when ``lead_hold`` lets go of ``window`` with its usage as it stands: its rest's end,
+    the moment its pace line reaches that usage or its last 10% opens, or its reset. None when
+    nothing says."""
+    if resting(window, now):
+        return window.cooldown_until
+    if window.capacity is None or window.resets_at is None:
+        return None
+    need = window.used + cost
+    if window.kind == "rolling" or need >= window.capacity - EPS:
+        return window.resets_at
+    share = window.capacity * (1 - window.reserve)
+    reached = need / share - MARGIN if share > 0 else 1.0
+    start = window.resets_at - window.length
+    return start + window.length * max(0.0, min(reached, 1 - SWEEP))
+
+
+def resting(window: Window, now: datetime) -> bool:
+    """Is ``window`` resting after a refusal?"""
+    return window.cooldown_until is not None and now < window.cooldown_until
+
+
 def reserve_only(
     agent: str, windows: Sequence[Window], cost: float, now: datetime, name: str | None = None
 ) -> bool:
@@ -167,11 +208,13 @@ def expected_cost(agent: str, difficulty: int, past_jobs: Sequence[PastJob], see
 
 
 def _check(
-    window: Window, cost: float, now: datetime, use_reserve: bool
+    window: Window, cost: float, now: datetime, use_reserve: bool, *, whole_sweep: bool = False
 ) -> tuple[bool, float, str]:
-    """(allowed, headroom as a share of capacity, the reason without the agent)."""
+    """(allowed, headroom as a share of capacity, the reason without the agent). With
+    ``whole_sweep`` (a lead ticket), a fixed window's last 10% is a cap on its whole capacity, and
+    a full window holds even a job of no expected cost."""
     label = LABELS.get(window.name, window.name)
-    if window.cooldown_until is not None and now < window.cooldown_until:
+    if resting(window, now) and window.cooldown_until is not None:
         return (
             False,
             -math.inf,
@@ -193,6 +236,11 @@ def _check(
             f"{used}, {_side(ok)} its cap of {cap / capacity:.0%}{note}",
         )
     elapsed = min(max((now - (window.resets_at - window.length)) / window.length, 0.0), 1.0)
+    if whole_sweep and elapsed >= 1 - SWEEP - EPS:
+        ok = need <= capacity + EPS and window.used < capacity - EPS
+        word = "under" if ok else "at"
+        text = f"{used}, in its last 10%, {word} its cap of 100%"
+        return ok, (capacity - need) / capacity, text
     if elapsed >= 1 - SWEEP - EPS:
         headroom = (share - need) / capacity
         if need <= share + EPS:

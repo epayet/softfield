@@ -81,6 +81,44 @@ def test_at_the_weeks_reserve_a_lead_ticket_waits_and_support_jobs_may_use_it():
     assert waits["f8-07"] is None
 
 
+def _week_at_33(used: float) -> allowance.Window:
+    """Claude's week with its pace line at 33% now (0.7 × (2.3/7 + 1/7))."""
+    resets = NOW + 4.7 * timedelta(days=1)
+    return replace(_week(used), resets_at=resets)
+
+
+def test_over_its_pace_line_a_lead_ticket_waits_and_names_the_line():
+    """ADR 44 item 1: 65% is short of the reserve, and the line holds it all the same."""
+    lines = plan([], [_lead("f8-02"), _dev("f8-07")], Windows(claude=(_week_at_33(0.65),)), NOW)
+    waits = {line.pick.subject: line.waits for line in lines}
+    assert waits == {"f8-02": "claude: week 65% used, over its pace line of 33%", "f8-07": None}
+
+
+def test_in_the_weeks_last_10_percent_a_lead_ticket_may_use_the_whole_reserve():
+    """ADR 44 item 2: the last 17 hours or so."""
+    last = replace(_week(0.72), resets_at=NOW + timedelta(hours=16))
+    assert pick([], [_lead("f8-02")], Windows(claude=(last,)), NOW) is not None
+    full = replace(last, used=1.0)
+    assert pick([], [_lead("f8-02")], Windows(claude=(full,)), NOW) is None
+
+
+def test_over_the_line_a_planner_job_a_review_and_a_checkpoint_still_run():
+    """ADR 44 items 4 and 5."""
+    queued = [_row("planner", "f9"), _row("review", "f7"), _row("checkpoint", "f8")]
+    lines = plan(queued, [_lead("f8-02")], Windows(claude=(_week_at_33(0.65),)), NOW)
+    waits = {line.pick.subject: line.waits for line in lines}
+    assert (waits["f9"], waits["f7"], waits["f8"]) == (None, None, None)
+    assert waits["f8-02"] is not None
+
+
+def test_over_the_line_a_ticket_parked_mid_work_goes_at_its_reset():
+    """ADR 44 item 7: work already begun goes on, whatever the pace."""
+    parked = _lead("f8-02", not_before=NOW - timedelta(minutes=1))
+    assert pick([], [parked], Windows(claude=(_week_at_33(0.65),)), NOW) == Pick(
+        "ticket", "f8-02", "priority 100, lead ticket, its reset has passed"
+    )
+
+
 def test_the_owners_switch_lets_a_lead_ticket_use_the_reserve():
     windows = Windows(claude=(_week(0.75),), reserves=frozenset({"seven_day"}))
     got = pick([], [_lead("f8-02"), _dev("f8-07")], windows, NOW)

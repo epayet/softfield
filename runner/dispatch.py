@@ -12,10 +12,14 @@ callers read the metrics database, ``.softfield/tasks/`` and ``state.json``.
   go by age.
 - A job that can't run now is skipped with its reason, and the next one is taken: a queued
   row before its ``not_before``, a ticket that waits (a dependency, a pause, a sign-off), or
-  Claude work while Claude is limited or its windows say no. Support jobs may use the week's
-  reserve (ADR 15 item 4); a lead ticket only the reserves the owner lets the factory use.
-  Developer tickets never wait for Claude: that keeps "lead work first, developers
-  meanwhile" (ADR 16 item 2) without a path of its own.
+  Claude work while Claude is limited or its windows say no. Queued jobs aren't paced, and may
+  use the week's reserve (ADR 15 item 4, ADR 44 items 4 and 5). A lead ticket asks
+  ``allowance.lead_hold`` (ADR 44): the week's pace line, then the whole reserve in its last 10%,
+  and the reserves the owner lets the factory use. One parked mid-work goes at its reset whatever
+  the pace (item 7). Developer tickets never wait for Claude: that keeps "lead work first,
+  developers meanwhile" (ADR 16 item 2) without a path of its own.
+- ``plan`` lists every job and says why each waits, for the dry run and the pages. The next ticket
+  itself is `loop.choose_ticket`'s, for the runner and the dry run alike (ADR 44 item 9).
 - While the owner pauses the factory, every job waits, "paused by you" (ADR 22 item 5), but
   the planner's: the owner pauses to talk a change through on /planning (its ⚑, f6-14).
 - The fast lane goes before everything (ADR 35 item 2): the caller's ``first`` (a lane card's
@@ -79,7 +83,7 @@ class Ticket:
     lead: bool  # only the lead may do it (`router.lead_only`)
     priority: int
     waits: str | None = None  # a dependency, a pause, a sign-off: never picked
-    not_before: datetime | None = None  # parked for a Claude limit until then
+    not_before: datetime | None = None  # parked for a Claude limit until then, mid-work
     early_for: str | None = None  # the ticket it runs early for: that one waits for it (F173 D7)
     regate: bool = False  # its attempt finished and only its gates wait (`state.regate`)
 
@@ -190,17 +194,23 @@ def _ticket_line(t: Ticket, windows: Windows, now: datetime, *, lane: bool = Fal
         return Line(job, None)  # its gates need no Claude: no limit or reserve holds them
     if t.not_before is not None and t.not_before > now:
         return Line(job, f"waits until {_when(t.not_before, now)}")
-    if not t.lead:
+    if not t.lead or t.not_before is not None:  # past its reset: its work goes on (ADR 44 item 7)
         return Line(job, None)
-    return Line(job, _claude_says(windows, now, LANE_RESERVES if lane else windows.reserves))
+    reserves = LANE_RESERVES if lane else windows.reserves
+    held = allowance.lead_hold(CLAUDE, windows.claude, COST, now, reserves=reserves)
+    return Line(job, _limited(windows, now) or held)
+
+
+def _limited(windows: Windows, now: datetime) -> str | None:
+    if windows.limited_until is not None and windows.limited_until > now:
+        return f"Claude is limited until {_when(windows.limited_until, now)}"
+    return None
 
 
 def _claude_says(windows: Windows, now: datetime, reserves: Collection[str]) -> str | None:
-    """Why Claude can't take a job now, or None when it can."""
-    if windows.limited_until is not None and windows.limited_until > now:
-        return f"Claude is limited until {_when(windows.limited_until, now)}"
+    """Why Claude can't take a queued job now, or None when it can."""
     fit = allowance.answer(CLAUDE, windows.claude, COST, now, use_reserve=reserves)
-    return None if fit.ok else fit.reason
+    return _limited(windows, now) or (None if fit.ok else fit.reason)
 
 
 def _at(text: str) -> datetime:

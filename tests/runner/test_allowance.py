@@ -1,4 +1,5 @@
 import json
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -10,6 +11,8 @@ from runner.allowance import (
     Window,
     answer,
     expected_cost,
+    lead_goes_at,
+    lead_hold,
     learn,
     reserve_only,
     window_shape,
@@ -36,6 +39,75 @@ def claude_five_hour(used, now, reserve=0.0):
     return Window(
         "five_hour", "rolling", 5 * HOUR, now + 2 * HOUR, 1.0, used, reserve, measured=True
     )
+
+
+# --- A lead ticket: the pace line, then the whole reserve in the last 10% (ADR 44) ----------
+
+LINE_33 = WEEK_START + 2.3 * DAY  # 0.7 × (2.3/7 + 1/7) = 33%
+LAST_10 = WEEK_RESET - 16 * HOUR
+
+
+@pytest.mark.parametrize(
+    ("used", "now", "held"),
+    [
+        (0.20, LINE_33, None),
+        (0.65, LINE_33, "claude: week 65% used, over its pace line of 33%"),
+        (0.72, LAST_10, None),
+        (0.95, LAST_10, None),
+        (1.00, LAST_10, "claude: week 100% used, in its last 10%, at its cap of 100%"),
+    ],
+)
+def test_lead_hold_follows_the_weeks_line_and_opens_the_reserve_in_its_last_10(used, now, held):
+    assert lead_hold("claude", [claude_week(used)], 0.0, now) == held
+
+
+def test_past_75_percent_of_the_5_hour_window_holds_a_lead_ticket():
+    windows = [claude_week(0.10), claude_five_hour(0.80, LINE_33, reserve=0.25)]
+    assert lead_hold("claude", windows, 0.0, LINE_33) == (
+        "claude: 5-hour window 80% used, over its cap of 75%"
+    )
+
+
+def test_a_window_named_in_reserves_is_a_cap_on_its_whole_capacity():
+    week, five = claude_week(0.65), claude_five_hour(0.80, LINE_33, reserve=0.25)
+    assert lead_hold("claude", [week], 0.0, LINE_33, reserves={"seven_day"}) is None
+    assert lead_hold("claude", [five], 0.0, LINE_33, reserves={"five_hour"}) is None
+    # Each window has its own: the week's lever doesn't lift the 5-hour window
+    assert lead_hold("claude", [week, five], 0.0, LINE_33, reserves={"seven_day"}) is not None
+
+
+def test_a_window_resting_after_a_refusal_holds_a_lead_ticket_whatever_its_reserves():
+    resting = replace(claude_week(0.10), cooldown_until=LINE_33 + HOUR)
+    held = lead_hold("claude", [resting], 0.0, LINE_33, reserves={"seven_day"})
+    assert held is not None and "refused, waiting until" in held
+    assert lead_hold("claude", [resting], 0.0, LINE_33 + HOUR) is None
+
+
+def test_answer_keeps_its_sweep_for_every_other_caller():
+    assert not answer("claude", [claude_week(0.72)], 0.0, LAST_10).ok
+
+
+@pytest.mark.parametrize(
+    ("used", "goes"),
+    [
+        # The line reaches 65% once elapsed + 1/7 = 0.65/0.7
+        (0.65, WEEK_START + WEEK * (0.65 / 0.7 - 1 / 7)),
+        # Over the whole line: the last 10% opens first
+        (0.75, WEEK_START + WEEK * 0.9),
+        (1.00, WEEK_RESET),
+    ],
+)
+def test_lead_goes_at_says_when_the_week_lets_a_lead_ticket_go(used, goes):
+    at = lead_goes_at(claude_week(used), 0.0, LINE_33)
+    assert at == goes
+    if used < 1:
+        assert lead_hold("claude", [claude_week(used)], 0.0, at + timedelta(seconds=1)) is None
+        assert lead_hold("claude", [claude_week(used)], 0.0, at - HOUR) is not None
+
+
+def test_lead_goes_at_a_resting_window_says_its_rest():
+    resting = replace(claude_week(0.10), cooldown_until=LINE_33 + HOUR)
+    assert lead_goes_at(resting, 0.0, LINE_33) == LINE_33 + HOUR
 
 
 @pytest.mark.parametrize(
