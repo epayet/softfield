@@ -27,3 +27,10 @@ Read the rounds loop of `review_milestone`, `run_milestone` and `PARKED` in `run
 - a developer's fix ticket runs and round 2 follows as today, over the line too
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
