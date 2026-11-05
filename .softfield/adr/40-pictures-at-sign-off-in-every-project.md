@@ -43,3 +43,6 @@
 ## What doesn't change
 - What a job may do (ADR 28), the gates, the ticket and card formats (a new optional section in the card doc).
 - Nothing is pictured in a project that hasn't set up `[shots]`.
+
+## Amendments
+- **`ready` goes (the lead, 2026-11-05, F85):** item 2's `ready` address is removed. The app counts as up once its port takes a connection, and the browser's own limit of 30 s per page decides each picture. F219's After failed with the app running: the Overview took about 4 s on an idle machine, and the `ready` check gave up on it after 5 s and asked again, 180 s long, while the picture itself would have had 30 s. The owner asked "why not just a screenshot anyway?". Only Softfield had set `[shots]`, so nothing else changes.

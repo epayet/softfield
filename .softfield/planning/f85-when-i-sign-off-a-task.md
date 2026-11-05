@@ -48,7 +48,7 @@ The planning thread behind F85's plan, oldest first, as it was when the owner ap
 >
 > 1. **Yes, every project: each one says how its app is started**: The three apps are too different for the runner to guess. Softfield is the dashboard, with no sign-in. Travel-companion (Stampu) is a Django app with its own database of your trips and notes. Coucou is two Django apps whose screens need a paired device. So each project gets a short `[shots]` section in its own settings file: how to make its data, how to start its app, and which address answers once it's up. At the review the runner starts the app twice, on the code from the card's start and on main, takes the pictures and stops it. Any project with that section gets the same Before and after panel on its card pages.
 >    Action: ADR 35 items 1–3; f85-01 is rewritten to read `[shots]`, and f85-02 shows any project's pictures.
-> 2. **This card sets up Softfield; the other two need a card each**: F85 builds the picture-taking and Softfield's own setting, so Softfield cards get pictures as soon as it's built. Travel-companion's and Coucou's settings live in their own repos, so they're work for their own boards: a small card each, which makes sample data and points the app's database at it. The plant texts are ready to paste on each project's board. Travel-companion: "Set up pictures at sign-off (Softfield ADR 35): a `[shots]` section in .softfield/project.toml, a `shots_data` command that builds sample asks, dreams, places and notes from fixtures with no call to the model, and settings that use SOFTFIELD_SHOTS_DATA for the database when it is set." Coucou: "Set up pictures at sign-off (Softfield ADR 35): a `[shots]` section in .softfield/project.toml serving the public and admin apps on sample data (a paired sample screen, sample photos that aren't Mum's), with no real data and no back door in the device sign-in." Coucou's card can wait on its board, since product work is on hold. Plant travel-companion's once F85 is built.
+> 2. **This card sets up Softfield; the other two need a card each**: F85 builds the picture-taking and Softfield's own setting, so Softfield cards get pictures as soon as it's built. Travel-companion's and Coucou's settings live in their own repos, so they're work for their own boards: a small card each, which makes sample data and points the app's database at it. The plant texts are ready to paste on each project's board. Travel-companion: "Set up pictures at sign-off (Softfield ADR 35): a `[shots]` section in .factory/project.toml, a `shots_data` command that builds sample asks, dreams, places and notes from fixtures with no call to the model, and settings that use SOFTFIELD_SHOTS_DATA for the database when it is set." Coucou: "Set up pictures at sign-off (Softfield ADR 35): a `[shots]` section in .factory/project.toml serving the public and admin apps on sample data (a paired sample screen, sample photos that aren't Mum's), with no real data and no back door in the device sign-in." Coucou's card can wait on its board, since product work is on hold. Plant travel-companion's once F85 is built.
 >    Action: Plant both cards from each project's own page (the texts are also under 'Other projects' in the card's doc).
 > 3. **Your private data stays out of the pictures: sample data for products**: My recommendation: a product is pictured on sample data from its own fixtures, never on its live database. Otherwise Mum's photos and your trip notes would end up in pictures that the review sends to Claude every round. A page might also change something just by loading, or call the model and cost money. The cost: a page that's empty in the sample data looks empty in the picture, and the sample data has to keep up as the app grows. The review says so when it sees an empty page. Softfield is the exception: it's pictured on a copy of the factory's own database, which the review can already read. The alternatives: (b) a copy of the live data, truer pictures but private data in every review; (c) sample data by default, with a per-project switch for a copy of the live data.
 >    Action: ADR 35 item 4. Answer only if you prefer (b) or (c).
@@ -89,7 +89,7 @@ The planning thread behind F85's plan, oldest first, as it was when the owner ap
 ## The runner, 2026-10-29 22:22
 
 > f85-01-pictures-at-the-review blocked: the lead ticket changed nothing.
-> Its work is on task/f85-01-pictures-at-the-review; its run's logs are in .softfield/var/runs/20261029-222125/f85-01-pictures-at-the-review.
+> Its work is on task/f85-01-pictures-at-the-review; its run's logs are in .factory/var/runs/20261029-222125/f85-01-pictures-at-the-review.
 > What went wrong, and what is the fix? Propose it as a replan: the ticket reworked, split or set aside.
 
 ## The lead, 2026-10-29 22:25
@@ -110,3 +110,40 @@ The planning thread behind F85's plan, oldest first, as it was when the owner ap
 > Proposals:
 > - ADR 39: Before and after pictures at sign-off, in every project (was 35) (adr)
 > - F85: renumber its ADR, fix ADR approval, bring f85-01 back (replan)
+
+## The lead, 2026-11-02 19:59
+
+> Approved by the owner on 2026-11-02: approved plan/f85: queued f85-01-pictures-at-the-review
+
+## The lead, 2026-11-02 20:54
+
+> Your Accept reached the wrong ADR twice, the bug this thread found on 29 Oct. It's fixed for every card (an Accept takes the exact file, a taken number moves to the next free one), so f85-04 wasn't needed. This card's ADR is now ADR 40, accepted as you asked, and your approval of 31 Oct was applied: f85-01 is ready again.
+
+## The owner, 2026-11-05 08:13
+
+> The page couldn't be drawn.
+> the app didn't answer in 180 s: The factory dashboard: http://127.0.0.1:37697/projects (Ctrl-C stops it)
+>
+> Why not just a screenshot anyway? Note that I'm on --lan
+
+## The lead, 2026-11-05 08:17
+
+> You're right, it should have just taken the screenshot. I've drafted a replan with one small ticket that makes it do that. Nothing is queued until you approve it.
+>
+> 1. **Why not just a screenshot? It should have taken one**: Before taking a picture, the runner asks the app's Overview page whether it is up, and gives up on each try after 5 s. The picture itself is allowed 30 s, so the check was far stricter than the thing it was guarding. The Overview took about 4 s when I timed it by hand on the idle machine, and a just-started app is slower. Each abandoned try keeps running inside the app, so the next one is slower still, and it never came back in time. That's the most likely cause: I didn't reproduce the failed run, and the ticket confirms it. F219, Lead tickets follow Claude's week pace, got a Before because that older code answered in time.
+>    Action: f85-05: drop the check. Once the app's port takes a connection, take the picture, and only a picture that really fails gives a reason.
+> 2. **--lan had nothing to do with it**: The pictures never touch the dashboard you run with --lan. The runner starts its own private copy on this machine, on a spare port, using a copy of the data. The `127.0.0.1:37697` in the message is that copy's start-up line, which is really a sign it was running, not a sign of the fault. No other job was running at the time either, so a busy machine wasn't the reason.
+>    Action: f85-05 stops quoting that line: the message will only quote the app when the app stops by itself.
+> 3. **If you meant a screenshot of the dashboard you already run: I'd keep the separate copy**: That would work for Softfield's After, but it can't give a Before, because your running dashboard only has today's code. Before and After would also be drawn on different data, so every number would differ as well as the change. For travel-companion and Coucou it would mean pictures of your live data going to Claude, which ADR 40 rules out. The address above each picture already opens the real page when you want to look at it yourself.
+>    Action: Nothing: the private copy stays.
+> 4. **The fix changes ADR 40 slightly**: The `ready` setting exists only for that check, so it goes. Only Softfield has set up pictures so far, so no other project is affected. I've written this into ADR 40 as an amendment, and approving the replan accepts it. The panel looks the same, so there's no new mock-up.
+>    Action: ADR 40's Amendments and D11 on the card.
+> 5. **F85 waits for this fix before its sign-off**: Adding the ticket takes F85 off your sign-off list until the fix is built and reviewed: about 40 minutes of lead work plus a review round. It's a lead ticket, so at Claude's week of 81% it may wait behind the week's pace line unless F85 is on the fast lane. I'd still do it this way, because missing pictures are exactly what this card was meant to prevent.
+>    Action: Approve the replan. Pull F85's fast lane lever if you want it sooner.
+> 6. **You can sign F219 off without its After**: F219's own sheet says the Overview doesn't show its change yet (that comes with f9-29), so the missing After hides nothing. A picture is only taken again if F219 gets another review round. If it doesn't, the message stays on its page until you sign it off.
+>    Action: Nothing: F219's sign-off doesn't need to wait.
+> 7. **The Overview itself is slow to draw**: About 4 s on an idle machine is a lot for a page you open from your phone. I don't know yet whether it got slower recently. This is a separate job from F85, so here's the text to paste into the Plant box: "The Overview takes about 4 s to draw on an idle machine (timed 2026-11-05): find where the time goes and make it faster, and say whether F219's runner changes made it slower."
+>    Action: Plant it if you want it looked at.
+>
+> Proposals:
+> - F85: a slow page still gets its picture (replan)
