@@ -28,3 +28,12 @@ Read `.softfield/cards/f179-how-is-sonnet-doing-as-an.md`, D1, D2 and D3: they d
 - Opus's own rows have no would-have and no saving; a project with no lead ticket returns `[]`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 7677
+gate_failures: ['ruff']
+tokens: 8515186
+```
