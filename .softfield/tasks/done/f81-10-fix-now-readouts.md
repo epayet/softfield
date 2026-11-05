@@ -26,3 +26,12 @@ f81-assess-the-current-ui-state-of-C1743-3: Queued-job count has no text separat
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1718
+gate_failures: []
+tokens: 249041
+```
