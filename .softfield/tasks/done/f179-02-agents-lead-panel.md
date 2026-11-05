@@ -28,3 +28,12 @@ The picture to build: `.softfield/cards/f179-mockup/agents-lead-tickets.html` (P
 - the panel reads well at 390 px wide: the table scrolls, nothing overflows
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 5549
+gate_failures: ['task-tests']
+tokens: 6224438
+```
