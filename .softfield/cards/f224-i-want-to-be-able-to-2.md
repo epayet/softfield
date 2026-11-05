@@ -1,4 +1,4 @@
-# Milestone F224: I want to be able to approve a plan in high priority…
+# Milestone F224: Approve a plan to go first in line, in the fast lane
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-05.
