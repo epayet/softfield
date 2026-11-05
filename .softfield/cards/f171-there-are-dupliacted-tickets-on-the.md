@@ -1,6 +1,7 @@
 # Milestone F171: Each card once on the board, and fix tickets named after what they fix
 
-> **State:** ready · **Priority:** 7 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 7 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-05. Base: git tag `f171-there-are-dupliacted-tickets-on-the-start`. Report: [`.softfield/reviews/f171-there-are-dupliacted-tickets-on-the.md`](../reviews/f171-there-are-dupliacted-tickets-on-the.md).
 > Planted by the owner on 2026-10-22.
 
 ## Notes

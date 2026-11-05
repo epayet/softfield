@@ -1,5 +1,7 @@
 # Review: F171 each card once on the board, and fix tickets named after what they fix
 
+- **Status:** done, signed off by the owner on 2026-11-05.
+
 ## Sign-off sheet
 
 ### 1. What changed
