@@ -256,9 +256,10 @@ def lead_split_data(
 ) -> dict[str, object]:
     """Lead tickets by model (D4): rows from ``lead_split`` for the page's filter."""
     rows = lead_split(conn, project, key=milestone)
-    total_dollars = sum(r.dollars for r in rows)
-    total_would_have = sum(r.would_have for r in rows)
-    total_saved = sum(r.saved for r in rows)
+    non_opus = [r for r in rows if r.agent != "claude-opus"]
+    total_dollars = sum(r.dollars for r in non_opus)
+    total_would_have = sum(r.would_have for r in non_opus)
+    total_saved = sum(r.saved for r in non_opus)
     sonnet_pct = round(total_dollars / total_would_have * 100) if total_would_have else 0
     has_non_opus = any(r.agent != "claude-opus" for r in rows)
     return {

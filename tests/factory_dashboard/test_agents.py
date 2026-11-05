@@ -7,6 +7,9 @@ from pathlib import Path
 from tests.factory_dashboard.conftest import LOCAL, OPUS, SONNET, SONNET_45, SONNET_46
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
+STATIC = Path(__file__).parents[2] / "factory_dashboard" / "static"
+LAN = "http://192.168.1.20:8765"
+DISPLAY = {"width": 1280, "height": 800}
 
 
 def section(html: str, name: str) -> str:
@@ -866,6 +869,19 @@ def test_lead_panel_absent_without_non_opus_lead_ticket(serve):
     assert 'id="lead"' not in html
 
 
+def test_lead_panel_sonnet_totals_exclude_opus_rows(lead_client):
+    """f179-07: Sonnet totals must not include Opus-owned tickets."""
+    html = lead_client.get("/agents").text
+    lead_raw = section_raw(html, "lead")
+    # The panel section must have the 'lead' class for CSS to apply
+    assert re.search(r'<section[^>]*\bid="lead"[^>]*class="[^"]*lead[^"]*"', html)
+    # Sonnet bar width reflects only non-Opus dollars vs non-Opus would-have
+    # Sonnet row: would_have=$3.00 (Opus mean at d4), dollars=$0.50 → 17%
+    assert re.search(r"width:17%", lead_raw)
+    # Total saved is only from non-Opus rows: $2.50
+    assert "$2.50" in section(html, "lead")
+
+
 def test_who_did_what_has_lead_ticket_and_planner_columns(client):
     """D5: "Who did what" has lead-ticket and planner columns, in D5's order."""
     html = client.get("/agents").text
@@ -894,3 +910,36 @@ def test_who_did_what_has_lead_ticket_and_planner_columns(client):
             f"{col} appears before {expected_order[expected_order.index(col) - 1]}"
         )
         last_idx = idx
+
+
+def test_lead_bars_scale_to_their_inline_width(page, lead_client):
+    """The Sonnet and Opus fills show at their inline widths, the ratio is about 0.17."""
+
+    def route(r) -> None:
+        url = r.request.url.removeprefix(LAN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            r.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        else:
+            r.fulfill(body=lead_client.get(url).text, content_type="text/html; charset=utf-8")
+
+    page.set_viewport_size(DISPLAY)
+    page.route(f"{LAN}/**", route)
+    page.goto(LAN + "/agents")
+    sonnet_fill = page.locator(".bar.sonnet .fill")
+    opus_fill = page.locator(".bar.opus .fill")
+    sonnet_fill.wait_for(state="visible", timeout=5000)
+    opus_fill.wait_for(state="visible", timeout=5000)
+    sonnet_w = sonnet_fill.bounding_box()["width"]
+    opus_w = opus_fill.bounding_box()["width"]
+    assert sonnet_w > 0 and opus_w > 0
+    ratio = sonnet_w / opus_w
+    assert 0.15 <= ratio <= 0.19, f"ratio {ratio:.3f} not about 0.17"
+    assert sonnet_fill.is_visible()
+    assert opus_fill.is_visible()
+    sonnet_label = page.locator(".bar.sonnet .label")
+    opus_label = page.locator(".bar.opus .label")
+    sonnet_label.wait_for(state="visible", timeout=5000)
+    opus_label.wait_for(state="visible", timeout=5000)
+    assert sonnet_label.is_visible()
+    assert opus_label.is_visible()
