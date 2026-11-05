@@ -15,10 +15,12 @@
     <div class="running-title">{{ job.title }}</div>
     {% endif %}
     <div class="readouts">
-      <div class="readout"><b>{{ job.elapsed | ago }}<small>s</small></b><span>Elapsed</span></div>
-      {% if job.difficulty %}<div class="readout"><b>{{ job.difficulty }}<small></small></b><span>Difficulty</span></div>{% endif %}
+      <div class="readout"><b>{{ job.elapsed | ago }}</b><span>Elapsed</span></div>
+      {% if job.difficulty %}<div class="readout"><b>{{ job.difficulty }}</b><span>Difficulty</span></div>{% endif %}
       {% if job.waiting_clock %}
       <div class="readout"><span>Waiting for Claude's limit to reset, until {{ job.waiting_clock }}</span></div>
+      {% elif (job.tokens_in or 0) + (job.tokens_cached or 0) == 0 %}
+      <div class="readout"><b>no tokens reported yet</b><span>Read · {{ job.steps or 0 }} turns</span></div>
       {% else %}
       <div class="readout"><b>{{ ((job.tokens_in or 0) + (job.tokens_cached or 0)) | tokens }}<small>tokens</small></b><span>Read · {{ job.steps or 0 }} turns</span></div>
       {% endif %}

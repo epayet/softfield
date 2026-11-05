@@ -102,14 +102,14 @@ def test_a_job_with_a_fresh_heartbeat_is_running_now(client):
     plates = re.findall(r'<div class="readout">', now_html[1])
     assert len(plates) >= 4, f"expected ≥4 readout plates, got {len(plates)}"
 
-    # Elapsed plate: <b>value<small>s</small></b><span>Elapsed</span>
+    # Elapsed plate: <b>value</b><span>Elapsed</span>
     elapsed = re.search(
-        r'<div class="readout"><b>([^<]+)<small>s</small></b><span>Elapsed</span></div>',
+        r'<div class="readout"><b>([^<]+)</b><span>Elapsed</span></div>',
         now_html[1],
         re.S,
     )
     assert elapsed, "no elapsed readout plate"
-    assert "12 min" in elapsed[1]
+    assert elapsed[1].strip() == "12 min"
 
     # Tokens plate: <b>value<small>tokens</small></b><span>Read · N turns</span>
     tokens = re.search(
@@ -503,6 +503,44 @@ def test_cached_only_shown_when_input_null(client, db_path):
         conn.close()
     running = section(client.get("/").text, "now")
     assert "500k tokens" in running and "Read · 10 turns" in running
+
+
+def test_a_running_job_with_no_tokens_says_no_tokens_reported_yet(client, db_path):
+    """A running job whose tokens_in and tokens_cached are both 0/None shows
+    'no tokens reported yet' instead of '0 tokens'."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1", verdict="ready")
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-123458",
+            command="milestone f1",
+            started="2026-10-02T13:00:00+00:00",
+            heartbeat="2026-10-02T13:00:30+00:00",
+        )
+        ticket = metrics.upsert_ticket(
+            conn, project, "f1-99-notokens", milestone_id=f1, kind="developer", state="running"
+        )
+        job = metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="developer",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-02T13:00:00+00:00",
+        )
+        metrics.update_running_job(conn, job, tokens_in=0, tokens_cached=0, steps=3)
+    finally:
+        conn.close()
+    now = section(client.get("/").text, "now")
+    assert "no tokens reported yet" in now
+    assert "0 tokens" not in now
 
 
 def test_now_holds_what_works_then_next_in_line_and_no_terminal_command(client):
@@ -991,6 +1029,28 @@ def test_next_in_line_says_what_a_parked_review_waits_for(client, db_path):
     assert rows.index("1 f1-05-first") < rows.index("2 f1-06-second") < rows.index("3 review F1")
     reset = f"Claude's reset at {until.astimezone():%H:%M}"
     assert rows.endswith(f"3 review F1 · a batch · waits for {reset} Reorder on the board ›")
+
+
+def test_next_in_line_li_sits_directly_in_ol_and_no_empty_n_spans(client):
+    """F81-12: every <li> of Next in line sits directly in an <ol>/<ul>,
+    with no <div> between them, no empty <small>, and no empty .n spans."""
+    html = client.get("/").text
+    queue_section = html.split('id="queue"', 1)[1].split("</section>", 1)[0]
+    # All <li> elements are direct children of <ol class="belt"> (no <div> wrapper).
+    ol = re.search(r'<ol class="belt">(.*?)</ol>', queue_section, re.S)
+    assert ol, 'no <ol class="belt">'
+    ol_content = ol[1]
+    # No <div> inside the <ol>
+    assert "<div" not in ol_content, "invalid <div> inside <ol>"
+    # Every <li> is a direct child: no <div> between <ol> and <li>
+    li_tags = re.findall(r"<li[^>]*>(.*?)</li>", ol_content, re.S)
+    assert len(li_tags) >= 3, f"expected ≥3 <li> in <ol>, got {len(li_tags)}"
+    # No empty <small> tags
+    empty_small = re.findall(r"<small\s*/?>\s*</small>", ol_content)
+    assert not empty_small, f"empty <small> tags found: {empty_small}"
+    # No empty .n spans
+    empty_n = re.findall(r'<span class="n">\s*</span>', ol_content)
+    assert not empty_n, f"empty .n spans found: {empty_n}"
 
 
 def test_next_in_line_is_the_first_three_of_the_run_order(queue_client, db_path):
@@ -3811,11 +3871,11 @@ def _lane_bay(html: str) -> tuple[str, str]:
     what follows it."""
     panel = html.split('<section id="queue"', 1)[1].split("</section>", 1)[0]
     rows = panel.split("Next in line", 1)[1]
-    if '<div class="lane-bay">' not in rows:
+    if '<li class="lane-label">' not in rows:
         return "", rows
-    before, bay = rows.split('<div class="lane-bay">', 1)
+    before, bay = rows.split('<li class="lane-label">', 1)
     assert 'class="next-row"' not in before  # the bay comes first
-    inside, after = bay.split("\n    </div>", 1)
+    inside, after = bay.split('<li class="bay-end">', 1)
     return inside, after
 
 
