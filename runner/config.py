@@ -262,7 +262,6 @@ class Shots:
 
     prepare: str  # makes the throwaway data, in $SOFTFIELD_SHOTS_DATA
     serve: str  # starts the app on 127.0.0.1:{port}, in the tree being pictured
-    ready: str  # the address that answers once the app is up
     live: str = ""  # where the owner opens the app: the dashboard's links, never the pictures
 
 
@@ -283,7 +282,6 @@ def project_shots(repo: Path) -> Shots | None:
         shots = Shots(
             prepare=str(table["prepare"]),
             serve=str(table["serve"]),
-            ready=str(table["ready"]),
             live=str(table.get("live", "")),
         )
     except KeyError as exc:

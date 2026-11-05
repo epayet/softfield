@@ -24,7 +24,6 @@ dependency_dirs = ["factory_dashboard/static/vendor/"]
 [shots]
 prepare = '''uv run --frozen python -c "import os; from datetime import UTC, datetime; from pathlib import Path; from runner.backup import copy; from runner.config import machine_metrics_db; data = Path(os.environ['SOFTFIELD_SHOTS_DATA']); copy(machine_metrics_db(), data, datetime.now(UTC)).rename(data / 'metrics.sqlite')"'''
 serve = 'uv run --frozen softfield dashboard --port {port} --db "$SOFTFIELD_SHOTS_DATA/metrics.sqlite"'
-ready = "/"
 
 [caps]
 max_attempts = 3                        # per task: 1, 2 (+ gate output), 3 (fresh branch + direction)

@@ -78,7 +78,7 @@ http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), App).serve_forever()
 
 
 def _toml(serve: str = f"{sys.executable} app.py {{port}}", prepare: str = "true") -> str:
-    return f"\n[shots]\nprepare = '{prepare}'\nserve = '{serve}'\nready = '/'\n"
+    return f"\n[shots]\nprepare = '{prepare}'\nserve = '{serve}'\n"
 
 
 @pytest.fixture
@@ -184,13 +184,23 @@ def test_shots_is_read_with_the_project(tmp_path):
     toml.write_text("[project]\nname = 'x'\n")
     assert project_shots(tmp_path) is None
     toml.write_text(_toml("serve {port}", "fill") + "live = 'http://192.168.1.20:8000'\n")
-    assert project_shots(tmp_path) == Shots("fill", "serve {port}", "/", "http://192.168.1.20:8000")
+    assert project_shots(tmp_path) == Shots("fill", "serve {port}", "http://192.168.1.20:8000")
+
+
+def test_a_leftover_ready_is_ignored(tmp_path):
+    (tmp_path / ".softfield").mkdir()
+    toml = tmp_path / ".softfield" / "project.toml"
+    toml.write_text(_toml("serve {port}", "fill"))
+    plain = project_shots(tmp_path)
+    toml.write_text(_toml("serve {port}", "fill") + "ready = '/'\n")
+    assert plain == Shots("fill", "serve {port}") == project_shots(tmp_path)
 
 
 @pytest.mark.parametrize(
     "text",
     [
-        "[shots]\nserve = 'a {port}'\nready = '/'\n",
+        "[shots]\nserve = 'a {port}'\n",
+        "[shots]\nprepare = 'a'\n",
         _toml("serve on no port"),
         "shots = 'not a table'\n",
     ],
@@ -287,9 +297,29 @@ def test_a_server_that_doesnt_start_is_recorded_with_its_reason(app, shoot):
 
 def test_a_server_that_never_answers_is_recorded(app, shoot, monkeypatch):
     monkeypatch.setattr(shots, "READY_LIMIT", 0.5)
-    _set_shots(app, _toml("sleep 60 # {port}"))
+    _set_shots(app, _toml("echo chatter; sleep 60 # {port}"))
     _take(app)
-    assert "didn't answer" in _list(app)["pictures"]["after-phone-1.png"]["reason"]
+    reason = _list(app)["pictures"]["after-phone-1.png"]["reason"]
+    assert reason == "the app didn't open its port in 0 s"  # READY_LIMIT, rounded
+    assert "chatter" not in reason
+
+
+def test_a_slow_page_gets_its_pictures_and_no_readiness_request(app, shoot):
+    """Slower than the old 5 s check; the app gets one request per picture and none for `/`."""
+    slow = APP.replace("import http.server,", "import time, http.server,").replace(
+        "        found = page.is_file()\n",
+        "        found = page.is_file()\n        time.sleep(6 if found else 0)\n",
+    )
+    (app / "app.py").write_text(slow)
+    git(app, "add", "-A")
+    git(app, "commit", "-q", "-m", "slow")
+    (app / ".softfield" / "cards" / f"{KEY}.md").write_text("## Before and after\n- `/second`\n")
+    _take(app)
+    pictures = _list(app)["pictures"]
+    assert pictures["after-phone-1.png"]["state"] == shots.TAKEN
+    assert pictures["after-wide-1.png"]["state"] == shots.TAKEN
+    requests = Path(os.environ["APP_LOG"]).read_text().splitlines()
+    assert sorted(requests) == ["GET /second"] * 4  # two after, two before (404 there)
 
 
 def test_a_failing_prepare_is_recorded_for_every_picture(app, shoot):

@@ -271,7 +271,7 @@ def test_a_mockup_comes_with_a_before_and_after_list_of_pages():
     lead = (ROOT / "runner/instructions/lead.md").read_text(encoding="utf-8")
     assert "## Before and after" in lead and "ADR 40 item 7" in lead
     setup = (ROOT / "runner/instructions/bootstrap.md").read_text(encoding="utf-8")
-    assert "`[shots]`" in setup and "`prepare`" in setup and "`ready`" in setup
+    assert "`[shots]`" in setup and "`prepare`" in setup and "`ready`" not in setup
     assert "never on live data" in setup.lower() and "no call to a model" in setup
     assert "$SOFTFIELD_SHOTS_DATA" in setup and "`live`" in setup
 

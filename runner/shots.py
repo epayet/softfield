@@ -7,7 +7,6 @@ Playwright is a dev dependency, and the installed ``softfield`` has none: the br
 process of its own, from Softfield's own project (``python -m runner.shots``)."""
 
 import contextlib
-import http.client
 import json
 import os
 import re
@@ -173,17 +172,14 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _answers(port: int, address: str) -> bool:
-    """Whether the app answers, a sign-in's redirect included. Never follows a redirect, and
-    never goes through a proxy: it is the one request the browser's rule doesn't cover."""
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=5)
+def _listening(port: int) -> bool:
+    """Whether the port takes a connection. No request is made, so the app has nothing to
+    answer, and nothing is left running in it."""
     try:
-        connection.request("GET", address)
-        return connection.getresponse().status < 500
-    except (OSError, http.client.HTTPException):
+        with socket.create_connection(("127.0.0.1", port), timeout=1):
+            return True
+    except OSError:
         return False
-    finally:
-        connection.close()
 
 
 def _output(file: IO[str]) -> str:
@@ -200,14 +196,12 @@ def _serving(shots: Shots, tree: Path, env: Mapping[str, str]) -> Iterator[str]:
         proc, folder = procs._start(command, tree, env, subprocess.DEVNULL, output, output)
         with procs._owned(proc, folder):
             deadline = time.monotonic() + READY_LIMIT
-            while not _answers(port, shots.ready):
+            while not _listening(port):
                 code = proc.poll()
                 if code is not None:
                     raise _Failed(f"the app stopped with code {code}: {_output(output)}")
                 if time.monotonic() >= deadline:
-                    raise _Failed(
-                        f"the app didn't answer in {READY_LIMIT:.0f} s: {_output(output)}"
-                    )
+                    raise _Failed(f"the app didn't open its port in {READY_LIMIT:.0f} s")
                 time.sleep(0.2)
             yield f"http://127.0.0.1:{port}"
         proc.wait()

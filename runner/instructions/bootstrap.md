@@ -69,10 +69,10 @@ steers from the dashboard. Your job here is the minimum the dashboard needs to t
 4. **Pictures, for a project with pages** (ADR 40 items 2 to 4): fill in `[shots]` in `.softfield/project.toml`:
    `prepare` makes sample data from the project's own fixtures in the throwaway folder
    `$SOFTFIELD_SHOTS_DATA` names; `serve` starts the app on `127.0.0.1:{port}`, its settings pointing
-   its database and files at that folder; `ready` is an address that answers once it is up; `live`,
+   its database and files at that folder; `live`,
    optional, is where the owner opens the app, so each pictured address links to it.
    Never on live data, and with no call to a model or another service. Prove it before the session
-   ends: run `prepare` and `serve`, and check that `ready` answers and the page renders.
+   ends: run `prepare` and `serve`, and check that the page renders.
 5. **The project's own rules** in `.softfield/project.md`: product taste, languages, code rules.
    Only what holds for this project; everything shared is Softfield's.
 6. **One line of description** in `.softfield/project.toml` (`description`): the Projects page shows it.
