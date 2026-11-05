@@ -32,3 +32,10 @@ Read D3, D6 and D11 and "F219's After that wasn't drawn" in `.softfield/cards/f8
 - `.softfield/project.toml` has no `ready`, and pictures of `/` come out on this repo
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `runner/instructions/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
