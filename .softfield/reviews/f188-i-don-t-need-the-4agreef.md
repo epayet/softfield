@@ -1,5 +1,7 @@
 # Review: F188, the count leaves the review's phone bar
 
+- **Status:** done, signed off by the owner on 2026-11-05.
+
 ## Sign-off sheet
 
 ### 1. What changed

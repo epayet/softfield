@@ -1,6 +1,7 @@
 # Milestone F188: Drop the 'N agreed · M to change' count from the review's phone bar
 
-> **State:** ready · **Priority:** 6 · **Area:** factory
+> **State:** done · **Priority:** 6 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-05. Base: git tag `f188-i-don-t-need-the-4agreef-start`. Report: [`.softfield/reviews/f188-i-don-t-need-the-4agreef.md`](../reviews/f188-i-don-t-need-the-4agreef.md).
 > Planted by the owner on 2026-10-29.
 
 ## Notes
