@@ -1,6 +1,6 @@
 # Milestone F196: A planted card with no tickets, and an old ADR that lost its Accept button
 
-> **State:** ready · **Priority:** 4 · **Area:** factory
+> **State:** ready · **Priority:** 10 · **Area:** factory
 > Planted by the owner on 2026-11-02.
 
 ## Notes

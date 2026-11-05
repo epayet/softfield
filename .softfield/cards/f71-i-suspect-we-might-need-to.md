@@ -1,6 +1,6 @@
 # Milestone F71: I suspect we might need to increase the timeouts as the…
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** ready · **Priority:** 4 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

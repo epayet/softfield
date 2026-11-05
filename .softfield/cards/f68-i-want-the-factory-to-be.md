@@ -1,6 +1,6 @@
 # Milestone F68: I want the factory to be renamed SoftField. That should be…
 
-> **State:** ready · **Priority:** 10 · **Area:** factory
+> **State:** ready · **Priority:** 13 · **Area:** factory
 > Planted by the owner on 2026-10-09.
 
 ## Notes

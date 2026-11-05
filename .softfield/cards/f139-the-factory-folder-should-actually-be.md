@@ -1,6 +1,6 @@
 # Milestone F139: Projects keep Softfield's files in .softfield, not .factory
 
-> **State:** ready · **Priority:** 2 · **Area:** factory
+> **State:** ready · **Priority:** 3 · **Area:** factory
 > Planted by the owner on 2026-10-15.
 
 ## Notes
