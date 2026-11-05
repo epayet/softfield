@@ -888,6 +888,81 @@ def test_unknown_difficulty_takes_opus_overall_mean(tmp_path):
     assert s.saved == pytest.approx(1.80 - 0.50)
 
 
+def test_unknown_difficulty_uses_ticket_mean_not_difficulty_mean(tmp_path):
+    """F179 D2: when difficulties have different ticket counts, the fallback
+    averages across Opus tickets, not difficulty-level means equally."""
+    path = tmp_path / "skew.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    # Opus: two d3 tickets ($1.00, $2.00) and one d4 ticket ($6.00)
+    # Per-difficulty means: d3=$1.50, d4=$6.00 → equal-weighted mean = $3.75 (wrong)
+    # Ticket-level mean: ($1.00+$2.00+$6.00)/3 = $3.00 (correct)
+    t0 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0" * 40,
+    )
+    _job(writer, run, f1, t0, "lead-ticket", OPUS, 1, "passed", cost_usd=1.00, **CLAUDE_TOKENS)
+    t0b = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00b-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0b" * 40,
+    )
+    _job(writer, run, f1, t0b, "lead-ticket", OPUS, 1, "passed", cost_usd=2.00, **CLAUDE_TOKENS)
+    t0c = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00c-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=4,
+        state="done",
+        merged_by=OPUS,
+        commit="0c" * 40,
+    )
+    _job(writer, run, f1, t0c, "lead-ticket", OPUS, 1, "passed", cost_usd=6.00, **CLAUDE_TOKENS)
+
+    # Sonnet ticket: d5 (difficulty Opus never did)
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=5,
+        state="done",
+        merged_by=SONNET,
+        commit="a" * 40,
+    )
+    _job(writer, run, f1, t1, "lead-ticket", SONNET, 1, "passed", cost_usd=0.50, **CLAUDE_TOKENS)
+
+    writer.close()
+    reading = connect(path)
+    rows = lead_split(reading, PROJECT)
+    reading.close()
+    sonnet_rows = [r for r in rows if r.agent == SONNET]
+    assert len(sonnet_rows) == 1
+    s = sonnet_rows[0]
+    # Ticket-level mean: (1.00 + 2.00 + 6.00) / 3 = 3.00, not difficulty-level mean
+    assert s.would_have == pytest.approx(3.00)
+    assert s.saved == pytest.approx(3.00 - 0.50)
+
+
 def test_ticket_with_no_difficulty_is_in_no_row(tmp_path):
     """A ticket with no difficulty is in no row."""
     path = tmp_path / "no_diff.sqlite"

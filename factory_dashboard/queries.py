@@ -427,8 +427,14 @@ def savings(conn: sqlite3.Connection, project: str, key: str | None = None) -> S
 # --- lead split (F179 D1, D2, D3) -------------------------------------------------------
 
 
-def _opus_mean_by_diff(conn: sqlite3.Connection, project_id: int) -> dict[int, float]:
-    """Opus's mean dollars per merged lead ticket, by difficulty."""
+def _opus_mean_by_diff(
+    conn: sqlite3.Connection, project_id: int
+) -> tuple[dict[int, float], float | None]:
+    """Opus's mean dollars per merged lead ticket, by difficulty and overall.
+
+    Only counts tickets where Opus is the owner (first real attempt) and
+    the ticket is merged (has a passed job).
+    """
     rows = conn.execute(
         "SELECT t.id, t.difficulty FROM tickets t "
         "WHERE t.project_id = ? AND t.kind = 'lead' "
@@ -436,7 +442,17 @@ def _opus_mean_by_diff(conn: sqlite3.Connection, project_id: int) -> dict[int, f
         (project_id,),
     ).fetchall()
     totals: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    overall_total: float = 0.0
+    overall_count: float = 0.0
     for ticket in rows:
+        owner = _ticket_owner(conn, ticket["id"])
+        if owner != "claude-opus":
+            continue
+        if not conn.execute(
+            "SELECT 1 FROM jobs WHERE ticket_id = ? AND outcome = 'passed' LIMIT 1",
+            (ticket["id"],),
+        ).fetchone():
+            continue
         roles = ("lead-ticket", "direction", "escalation", "checkpoint", "review", "narrative")
         marks = ", ".join("?" for _ in roles)
         jobs = conn.execute(
@@ -450,7 +466,11 @@ def _opus_mean_by_diff(conn: sqlite3.Connection, project_id: int) -> dict[int, f
         total_cost = sum(dollars(j) for j in jobs)
         totals[ticket["difficulty"]][0] += total_cost
         totals[ticket["difficulty"]][1] += 1.0
-    return {d: total / count for d, (total, count) in totals.items() if count > 0}
+        overall_total += total_cost
+        overall_count += 1.0
+    by_diff = {d: total / count for d, (total, count) in totals.items() if count > 0}
+    overall = overall_total / overall_count if overall_count > 0 else None
+    return by_diff, overall
 
 
 def _ticket_owner(conn: sqlite3.Connection, ticket_id: int) -> str | None:
@@ -583,9 +603,8 @@ def lead_split(
             continue
         band_agent[(b, owner)].append(t)
 
-    # Opus mean dollars by difficulty
-    opus_mean = _opus_mean_by_diff(conn, project_id)
-    overall_mean = sum(opus_mean.values()) / len(opus_mean) if opus_mean else None
+    # Opus mean dollars by difficulty and overall
+    opus_mean, overall_mean = _opus_mean_by_diff(conn, project_id)
 
     # Aggregate per (band, agent)
     rows_out: list[LeadRow] = []
