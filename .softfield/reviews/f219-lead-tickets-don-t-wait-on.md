@@ -1,6 +1,6 @@
 # Review: F219, lead tickets follow Claude's week pace
 
-- **Status:** round 2 done. Every fix is checked and no ticket is left to run.
+- **Status:** done, signed off by the owner on 2026-11-05.
 
 ## Sign-off sheet
 

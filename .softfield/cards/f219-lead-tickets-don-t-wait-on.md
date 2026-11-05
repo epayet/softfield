@@ -1,6 +1,7 @@
 # Milestone F219: Lead tickets follow Claude's week pace; runner and dry run share one rule
 
-> **State:** ready · **Priority:** 0 · **Area:** factory · **Fast lane:** yes
+> **State:** done · **Priority:** 0 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-05. Base: git tag `f219-lead-tickets-don-t-wait-on-start`. Report: [`.softfield/reviews/f219-lead-tickets-don-t-wait-on.md`](../reviews/f219-lead-tickets-don-t-wait-on.md).
 > Planted by the owner on 2026-11-04.
 
 ## Notes
