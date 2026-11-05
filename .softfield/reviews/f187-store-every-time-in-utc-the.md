@@ -1,6 +1,6 @@
 # Review: F187, every time stored in UTC, shown in local time
 
-- **Status:** round 2 done, nothing left to fix. The old rows are not converted yet: that happens right after tonight's backup.
+- **Status:** done, signed off by the owner on 2026-11-05.
 
 ## Sign-off sheet
 

@@ -1,6 +1,7 @@
 # Milestone F187: Store every time in UTC, show local time on screen only
 
-> **State:** ready · **Priority:** 6 · **Area:** factory
+> **State:** done · **Priority:** 6 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-05. Base: git tag `f187-store-every-time-in-utc-the-start`. Report: [`.softfield/reviews/f187-store-every-time-in-utc-the.md`](../reviews/f187-store-every-time-in-utc-the.md).
 > Planted by the owner on 2026-10-29.
 
 ## Notes
