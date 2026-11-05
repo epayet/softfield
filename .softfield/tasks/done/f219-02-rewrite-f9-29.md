@@ -24,3 +24,10 @@ Read D7 in `.softfield/cards/f219-lead-tickets-don-t-wait-on.md` and `.softfield
 - f9-29 as rewritten passes pre-flight (`softfield check-tickets` on it)
 - the listed `tests:` pass
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
