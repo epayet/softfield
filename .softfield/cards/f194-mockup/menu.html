@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F194 mock-up: the menu</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --sonnet: #ffc48a; --opus: #ff9640; --good: #5fd17a; --warn-ink: #f2b10a;
+    --tick: var(--ink-2);
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 20px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 10px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; margin-bottom: 8px; }
+  .switch { display: inline-flex; border: 1px solid var(--rule); }
+  .switch button, .pretend button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 16px;
+    min-height: 44px; background: var(--bay); color: var(--muted); border: 0; border-right: 1px solid var(--rule); cursor: pointer; }
+  .switch button:last-child, .pretend button:last-child { border-right: 0; }
+  .switch button[aria-pressed="true"], .pretend button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .pretend-wrap { color: var(--ink-2); font-size: 13px; }
+  .pretend { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--rule); margin-top: 4px; }
+  .pretend button { padding: 8px 10px; font-size: 12px; }
+
+  /* Side by side on a wide screen; a switch on a phone */
+  .versions { display: grid; gap: 22px; grid-template-columns: minmax(0, 1fr); }
+  .col-head { font: 700 15px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 4px 0 0; }
+  @media (min-width: 900px) {
+    .versions { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .switch { display: none; }
+    [data-version][data-off] { display: block !important; }
+  }
+  [data-version][data-off] { display: none; }
+
+  .frame { border: 1px solid var(--rule); background-color: var(--floor); position: relative;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  .frame.phone { width: 390px; max-width: 100%; height: 560px; overflow: hidden; }
+  .scaler { overflow: hidden; }
+  .frame.wide { width: 1000px; height: 520px; transform-origin: 0 0; }
+
+  .new { outline: 1px dashed var(--good); outline-offset: 2px; }
+  .gone { outline: 1px dashed var(--muted); outline-offset: 2px; }
+  ul.notes { list-style: none; margin: 10px 0 0; padding: 0; color: var(--ink-2); font-size: 13.5px; max-width: 620px; }
+  ul.notes li { padding: 4px 0 4px 12px; border-left: 2px solid var(--rule); margin-bottom: 6px; }
+  .legend-new { outline: 1px dashed var(--good); padding: 0 4px; }
+  .legend-gone { outline: 1px dashed var(--muted); padding: 0 4px; }
+
+  /* ---- the top bar as drawn (dashboard.css, base.html) ---- */
+  header.bar { background: var(--floor); border-bottom: 1px solid var(--rule); display: grid; gap: 10px;
+    grid-template-columns: minmax(0, 1fr); padding: 12px 16px 10px; position: relative; z-index: 5; }
+  .bar-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 18px; }
+  .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px; color: var(--fg); min-height: 44px; }
+  .brand svg { flex: none; width: 28px; height: 28px; }
+  .brand-soft { color: var(--warn-ink); } .brand-field { color: var(--good); }
+  .brand small { font: 400 12px var(--mono); letter-spacing: 0; color: var(--muted); margin-left: 8px; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  .factory-status { display: flex; align-items: center; gap: 4px; align-self: center; padding: 0 2px; }
+  .dot-btn { width: 28px; height: 44px; display: grid; place-items: center; flex: none; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--opus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--opus) 18%, transparent); }
+  .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px; }
+  .sign { width: 36px; height: 36px; display: grid; place-items: center; flex: none; border: 1px solid var(--hazard); background: var(--hazard); color: var(--hazard-ink); font-size: 18px; }
+  .filters { display: flex; gap: 8px; margin: 0 0 0 auto; }
+  .filters label { font: 500 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .select { font: 13px var(--body); padding: 3px 6px; border: 1px solid var(--rule); background: var(--plate); color: var(--fg); text-transform: none; letter-spacing: 0; display: inline-block; }
+  .theme-btn { font: 600 12px var(--display); letter-spacing: .04em; text-transform: uppercase; color: var(--ink-2); padding: 4px 8px; white-space: nowrap; align-self: center; }
+
+  nav.tabs { display: flex; flex-wrap: wrap; justify-self: start; border-top: 1px solid var(--rule); border-left: 1px solid var(--rule); position: relative; }
+  nav.tabs a { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    padding: 8px 14px; border: solid var(--rule); border-width: 0 1px 1px 0; white-space: nowrap; text-decoration: none; cursor: pointer; }
+  nav.tabs a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* the phone's bar */
+  .phone header.bar { padding: 2px 16px; row-gap: 2px; }
+  .phone .bar-top { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 2px 4px; }
+  .phone .brand { font-size: 18px; letter-spacing: .02em; white-space: nowrap; gap: 3px; }
+  .phone .brand svg { width: 24px; height: 24px; }
+  .phone .brand small, .phone .words, .phone .filters .label-word { display: none; }
+  .phone .filters { display: contents; }
+  .phone .filters label { grid-area: 1 / 3; min-width: 0; }
+  .phone .select { width: 100%; }
+  .phone .factory-status { grid-area: 1 / 2; }
+  .phone .theme-btn { grid-area: 1 / 4; }
+  .phone .dot-btn, .phone .sign { width: 44px; height: 44px; }
+  .phone .hazard { margin-top: -2px; height: 4px; }
+  .phone nav.tabs.today { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; border-top: 0; width: 100%; }
+  .phone nav.tabs.today::-webkit-scrollbar { display: none; }
+  .phone nav.tabs.today a { flex: none; }
+
+  /* ---- proposed: four slots of a fixed size, so nothing ever moves ---- */
+  nav.tabs.slots { display: grid; grid-template-columns: 120px 150px 92px 130px; flex-wrap: nowrap; }
+  nav.tabs.slots > a, nav.tabs.slots > details > summary { display: flex; align-items: center; justify-content: center; text-align: center; min-height: 38px; }
+  /* edge to edge on a phone, so "Planning · 99" and "Timeline ▾" fit from 360 px up */
+  .phone nav.tabs.slots { justify-self: stretch; margin: 0 -16px; border-left: 0; border-top: 0; grid-template-columns: 1fr 1.4fr .75fr 1fr; }
+  .phone nav.tabs.slots > a, .phone nav.tabs.slots > details > summary { min-height: 44px; padding: 0 4px; font-size: 12px; letter-spacing: .04em; }
+  details.more { display: block; min-width: 0; }
+  details.more > summary { height: 100%; }
+  details.more > summary { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+    padding: 8px 10px; border: solid var(--rule); border-width: 0 1px 1px 0; white-space: nowrap; cursor: pointer; list-style: none; gap: 5px; }
+  details.more > summary::-webkit-details-marker { display: none; }
+  details.more > summary .caret { font-size: 10px; }
+  details.more[open] > summary { color: var(--fg); background: var(--plate); }
+  details.more > summary.here, details.more[open] > summary.here { background: var(--hazard); color: var(--hazard-ink); }
+
+  /* the sub menu: a plate on its own, hung from the fourth slot */
+  .more-panel { position: absolute; top: 100%; right: 0; width: 340px; z-index: 6; margin-top: 4px;
+    background: var(--plate); border: 1px solid var(--rule); box-shadow: 0 8px 22px rgba(0, 0, 0, .55); }
+  .phone .more-panel { left: 0; right: 0; width: auto; }
+  .more-panel::before { content: ""; display: block; height: 6px; background: var(--stripe); opacity: .8; }
+  .more-panel::after { content: ""; position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px;
+    border: solid var(--tick); border-width: 0 1px 1px 0; }
+  .more-head { font: 600 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); padding: 6px 12px 2px; }
+  .more-panel a { display: flex; align-items: baseline; gap: 10px; padding: 11px 12px; min-height: 44px; border-top: 1px solid var(--rule); text-decoration: none; color: var(--fg); cursor: pointer; }
+  .more-panel a b { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; flex: 0 0 84px; }
+  .more-panel a span { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+  .more-panel a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); }
+  .more-panel a[aria-current="page"] span { color: var(--hazard-ink); }
+
+  /* a bit of the page under the bar */
+  main { padding: 12px 16px; }
+  .crumbs { font-size: 13px; color: var(--ink-2); margin-bottom: 10px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 6px; }
+  .panel p { margin: 0; color: var(--ink-2); font-size: 13.5px; }
+</style>
+</head>
+<body>
+<h1>F194: the menu</h1>
+<p class="lede">The top bar of every page, on a phone and on a wide screen. These work: pick a page below or tap the menu in a picture, and watch where the items go.</p>
+<div class="controls">
+  <div class="switch" role="group" aria-label="Which version">
+    <button type="button" data-show="today" aria-pressed="false">Today</button>
+    <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+  </div>
+  <div class="pretend-wrap">You are on:<br>
+    <div class="pretend" role="group" aria-label="Which page">
+      <button type="button" data-go="/">Overview</button>
+      <button type="button" data-go="/planning">Planning</button>
+      <button type="button" data-go="/board">Board</button>
+      <button type="button" data-go="/tickets">Tickets</button>
+      <button type="button" data-go="/timeline">Timeline</button>
+      <button type="button" data-go="/bench">Bench</button>
+    </div>
+  </div>
+</div>
+
+<div class="versions">
+  <section data-version="today" data-off>
+    <p class="col-head">Today</p>
+    <h3>Phone, 390 px</h3>
+    <div class="frame phone" id="today-phone">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="14" width="18" height="10" fill="#f2b10a" stroke="#1a1405"/><path d="M14 14V6M14 9c-3 0-5-1-6-4M14 9c3 0 5-1 6-4" fill="none" stroke="#5fd17a" stroke-width="2"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></span>
+          <div class="factory-status"><span class="dot-btn"><span class="dot"></span></span><span class="words">Running: softfield · planner, job 1669</span><span class="sign">⏸</span></div>
+          <div class="filters"><label><span class="label-word">Project </span><span class="select">softfield ▾</span></label></div>
+          <span class="theme-btn">Light</span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs today" aria-label="Pages"><a data-go="/projects">Projects</a><a data-go="/" aria-current="page">Overview</a><a data-go="/planning">Planning · 12</a><a data-go="/board">Board</a><a data-go="/tickets">Tickets</a><a data-go="/jobs">Jobs</a><a data-go="/runs">Runs</a><a data-go="/timeline">Timeline</a><a data-go="/agents">Agents</a><a data-go="/bench">Bench</a></nav>
+      </header>
+      <main><div class="crumbs">softfield</div><section class="panel"><h2>Now</h2><p>attempt 4 · claude-opus · planner, job 1669 ›</p></section></main>
+    </div>
+    <ul class="notes">
+      <li>Ten tabs in a sideways strip. Each page scrolls its own tab to the middle (<code>base.html</code>, line 88), so everything has moved when the page opens: that's the shifting you see.</li>
+    </ul>
+    <h3>Wide screen</h3>
+    <div class="scaler"><div class="frame wide" id="today-wide">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="14" width="18" height="10" fill="#f2b10a" stroke="#1a1405"/><path d="M14 14V6M14 9c-3 0-5-1-6-4M14 9c3 0 5-1 6-4" fill="none" stroke="#5fd17a" stroke-width="2"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></span>
+          <div class="factory-status"><span class="dot-btn"><span class="dot"></span></span><span class="words">Running: softfield · planner, job 1669</span><span class="sign">⏸</span></div>
+          <div class="filters"><label><span class="label-word">Project </span><span class="select">softfield ▾</span></label></div>
+          <span class="theme-btn">Light</span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs today" aria-label="Pages"><a data-go="/projects">Projects</a><a data-go="/" aria-current="page">Overview</a><a data-go="/planning">Planning · 12</a><a data-go="/board">Board</a><a data-go="/tickets">Tickets</a><a data-go="/jobs">Jobs</a><a data-go="/runs">Runs</a><a data-go="/timeline">Timeline</a><a data-go="/agents">Agents</a><a data-go="/bench">Bench</a></nav>
+      </header>
+      <main><div class="crumbs">softfield</div><section class="panel"><h2>Now</h2><p>attempt 4 · claude-opus · planner, job 1669 ›</p></section></main>
+    </div></div>
+    <ul class="notes">
+      <li>All ten in a row. The Planning count going from 9 to 12 pushes the tabs after it along.</li>
+    </ul>
+  </section>
+
+  <section data-version="proposed">
+    <p class="col-head">Proposed</p>
+    <h3>Phone, 390 px</h3>
+    <div class="frame phone" id="proposed-phone">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="14" width="18" height="10" fill="#f2b10a" stroke="#1a1405"/><path d="M14 14V6M14 9c-3 0-5-1-6-4M14 9c3 0 5-1 6-4" fill="none" stroke="#5fd17a" stroke-width="2"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></span>
+          <div class="factory-status"><span class="dot-btn"><span class="dot"></span></span><span class="words">Running: softfield · planner, job 1669</span><span class="sign">⏸</span></div>
+          <div class="filters"><label><span class="label-word">Project </span><span class="select">softfield ▾</span></label></div>
+          <span class="theme-btn">Light</span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots new" aria-label="Pages"><a data-go="/" aria-current="page">Overview</a><a data-go="/planning">Planning · 12</a><a data-go="/board">Board</a>
+          <details class="more" open>
+            <summary><span class="slot-name">More</span> <span class="caret">▾</span></summary>
+            <div class="more-panel new"><div class="more-head">More pages</div>
+              <a data-go="/projects"><b>Projects</b><span>every project, and the order the runner works in</span></a>
+              <a data-go="/tickets"><b>Tickets</b><span>this project's tickets, latest work first</span></a>
+              <a data-go="/jobs"><b>Jobs</b><span>every job an agent ran, newest first</span></a>
+              <a data-go="/runs"><b>Runs</b><span>every runner command, newest first</span></a>
+              <a data-go="/timeline"><b>Timeline</b><span>the jobs along the day</span></a>
+              <a data-go="/agents"><b>Agents</b><span>who did what, and how well</span></a>
+              <a data-go="/bench"><b>Bench</b><span>finished tickets replayed by chosen agents</span></a>
+            </div>
+          </details>
+        </nav>
+      </header>
+      <main><div class="crumbs">softfield</div><section class="panel"><h2>Now</h2><p>attempt 4 · claude-opus · planner, job 1669 ›</p></section></main>
+    </div>
+    <ul class="notes">
+      <li><span class="legend-new">Dashed green</span> marks what changes.</li>
+      <li>Four slots of a fixed size that fill the row: Overview, Planning, Board, More. No scrolling, and they never move, whatever the page or the Planning count.</li>
+      <li>On a page from the sub menu, the fourth slot lights up yellow and says its name ("Timeline ▾"), so you still see where you are.</li>
+      <li>The sub menu holds the other seven, Projects first, each with a few words on what it is. It closes on a tap outside it.</li>
+    </ul>
+    <h3>Wide screen</h3>
+    <div class="scaler"><div class="frame wide" id="proposed-wide">
+      <header class="bar">
+        <div class="bar-top">
+          <span class="brand"><svg viewBox="0 0 28 28" aria-hidden="true"><rect x="5" y="14" width="18" height="10" fill="#f2b10a" stroke="#1a1405"/><path d="M14 14V6M14 9c-3 0-5-1-6-4M14 9c3 0 5-1 6-4" fill="none" stroke="#5fd17a" stroke-width="2"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></span>
+          <div class="factory-status"><span class="dot-btn"><span class="dot"></span></span><span class="words">Running: softfield · planner, job 1669</span><span class="sign">⏸</span></div>
+          <div class="filters"><label><span class="label-word">Project </span><span class="select">softfield ▾</span></label></div>
+          <span class="theme-btn">Light</span>
+        </div>
+        <div class="hazard" aria-hidden="true"></div>
+        <nav class="tabs slots new" aria-label="Pages"><a data-go="/" aria-current="page">Overview</a><a data-go="/planning">Planning · 12</a><a data-go="/board">Board</a>
+          <details class="more">
+            <summary><span class="slot-name">More</span> <span class="caret">▾</span></summary>
+            <div class="more-panel new"><div class="more-head">More pages</div>
+              <a data-go="/projects"><b>Projects</b><span>every project, and the order the runner works in</span></a>
+              <a data-go="/tickets"><b>Tickets</b><span>this project's tickets, latest work first</span></a>
+              <a data-go="/jobs"><b>Jobs</b><span>every job an agent ran, newest first</span></a>
+              <a data-go="/runs"><b>Runs</b><span>every runner command, newest first</span></a>
+              <a data-go="/timeline"><b>Timeline</b><span>the jobs along the day</span></a>
+              <a data-go="/agents"><b>Agents</b><span>who did what, and how well</span></a>
+              <a data-go="/bench"><b>Bench</b><span>finished tickets replayed by chosen agents</span></a>
+            </div>
+          </details>
+        </nav>
+      </header>
+      <main><div class="crumbs">softfield</div><section class="panel"><h2>Now</h2><p>attempt 4 · claude-opus · planner, job 1669 ›</p></section></main>
+    </div></div>
+    <ul class="notes">
+      <li>The same four slots at the same sizes. The project picker stays in the top row, where it is today, on both.</li>
+    </ul>
+  </section>
+</div>
+
+<script>
+  // The pictures are plain HTML above, so they show whatever happens here; this only moves the
+  // current page between them. Inside a function: at the top level, a name like `top` belongs to
+  // the browser, and declaring it stops the whole script (the first draft of this file was blank).
+  (function () {
+    // What base.html does on every load: the current tab is scrolled to the middle of the strip
+    function centreToday() {
+      const strip = document.querySelector("#today-phone nav.tabs");
+      const tab = strip.querySelector("[aria-current]");
+      if (tab) strip.scrollLeft = tab.offsetLeft - (strip.clientWidth - tab.offsetWidth) / 2;
+    }
+
+    // The wide pictures are a 1000 px bar, scaled to their column
+    function fit() {
+      document.querySelectorAll(".scaler").forEach((box) => {
+        if (!box.offsetWidth) return;
+        const scale = Math.min(1, box.clientWidth / 1000);
+        box.querySelector(".frame").style.transform = `scale(${scale})`;
+        box.style.height = `${520 * scale}px`;
+      });
+    }
+
+    function show(page) {
+      document.querySelectorAll(".frame [data-go]").forEach((link) => {
+        if (link.dataset.go === page) link.setAttribute("aria-current", "page");
+        else link.removeAttribute("aria-current");
+      });
+      document.querySelectorAll(".frame details.more").forEach((more) => {
+        const current = more.querySelector(".more-panel [aria-current] b");
+        more.querySelector("summary").classList.toggle("here", Boolean(current));
+        more.querySelector(".slot-name").textContent = current ? current.textContent : "More";
+        more.open = false;
+      });
+      document.querySelectorAll(".pretend button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.go === page)));
+      centreToday();
+    }
+
+    document.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) return;
+      const go = event.target.closest("[data-go]");
+      if (go) { event.preventDefault(); show(go.dataset.go); return; }
+      // A tap outside the sub menu closes it
+      document.querySelectorAll("details.more[open]").forEach((d) => { if (!d.contains(event.target)) d.open = false; });
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") document.querySelectorAll("details.more[open]").forEach((d) => { d.open = false; });
+    });
+    document.querySelectorAll(".switch button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+        document.querySelectorAll("[data-version]").forEach((v) => { v.toggleAttribute("data-off", v.dataset.version !== button.dataset.show); });
+        fit();
+        centreToday();
+      });
+    });
+    addEventListener("resize", fit);
+
+    document.querySelector('.pretend button[data-go="/"]').setAttribute("aria-pressed", "true");
+    centreToday();
+    fit();
+  })();
+</script>
+</body>
+</html>
