@@ -758,6 +758,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** two tests written by the local model could never fail, because they looked for `F99` among rows keyed `f99-empty`, and the checkpoint called them sound. "Fails without the change" is written in every ticket's Done when, but nothing runs it. `f171-04` also waited 13 days after its card's other tickets had merged.
 - **Decisions affected:** none.
 
+### F188 (2026-11-05): the count leaves the review's phone bar ([review](../reviews/f188-i-don-t-need-the-4agreef.md))
+
+- **Q1:** one developer ticket at difficulty 1 (one CSS rule, one test), Qwen first time in 35 minutes; no checkpoint. Review round 1: two should-fix and one nit, all fixed by the review.
+- **Q3:** Qwen 1/1, no failed attempt. Opus $0.87 for the plan.
+- **Q5:** see the review's numbers.
+- **Anything else:** the ticket said "leave the template as it is" and the developer added an empty spacer to it anyway; the runner's "changed files outside `files:`" note flagged it, but no checkpoint ran. A Done when about the side not changed ("the count still updates on a wide screen") got no test: the developer tests what changes and skips what must stay.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

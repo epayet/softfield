@@ -47,7 +47,6 @@ from tests.factory_dashboard.test_planning import (
     _write,
 )
 from tests.factory_dashboard.test_proposal import (
-    ADR_ON_MAIN,
     _f6_mockup_review,
 )
 from tests.layout import DISPLAY, PHONE, layout_problems
@@ -1183,6 +1182,8 @@ def test_the_dock_is_compact_on_a_phone(page, planning, db_path, serve, checkout
     assert fold["y"] >= dock_box["y"]
     assert fold["y"] + fold["height"] <= dock_box["y"] + height
     assert approve["x"] < fold["x"]
+    # the button at the left, the fold at the right edge, as in F188's mock-up
+    assert fold["x"] > dock_box["x"] + dock_box["width"] / 2
     # this page is shorter than the screen, so the dock sits in the flow: Send at the bottom on a
     # long page is test_on_a_phone_one_point_shows_at_a_time's check
     assert approve["y"] + approve["height"] <= PHONE["height"]
@@ -1193,28 +1194,18 @@ def test_the_dock_is_compact_on_a_phone(page, planning, db_path, serve, checkout
     assert page.locator("#review-count").is_visible()
 
 
-def test_a_comment_writes_send_one_change_back_with_no_count(
-    page, planning, db_path, serve, checkout
-):
-    """With a comment written at 390 px the bar shows \"Send 1 change back\" and still no
-    count."""
-    git(checkout, "checkout", "-q", "-b", "plan/f6")
-    for rel, text in (
-        (".softfield/cards/f6-mockup/index.html", "<p>the desk</p>"),
-        (".softfield/adr/20-planning-room.md", ADR_ON_MAIN),
-    ):
-        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
-        (checkout / rel).write_text(text)
-    git(checkout, "add", "-A")
-    git(checkout, "commit", "-q", "-m", "drafts")
-    git(checkout, "checkout", "-q", "main")
+def test_a_comment_writes_send_one_change_back_with_no_count(page, planning, db_path, serve):
+    """With a comment written at 390 px the bar shows "Send 1 change back" and still no
+    count; on a wide screen the count shows the comment (F188 D2)."""
     _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR))
     page.set_viewport_size(PHONE)
     _open(page, serve(), "/planning/f6/proposals/adr-20")
     page.click(".key-point:visible .change-btn")
     page.fill('textarea.comment[data-point="1"]', "This needs work.")
-    assert "SEND 1 CHANGE BACK" in page.locator("#send-back").inner_text()
+    assert page.locator("#send-back").inner_text().lower() == "send 1 change back"
     assert not page.locator("#review-count").is_visible()
+    page.set_viewport_size(DISPLAY)
+    assert page.locator("#review-count").inner_text().lower().endswith("· 1 to change")
 
 
 # --- every number the lead writes links to what it names (F37 D2, D3) -------------------------
