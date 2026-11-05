@@ -3963,3 +3963,15 @@ def test_on_a_wide_screen_before_and_after_sit_side_by_side(page, db_path, tmp_p
     _lay_out(page)
     page.locator('#shots [data-w="phone"]').click()
     assert _shown(page) == ["before-phone-1.png", "after-phone-1.png"]
+
+
+def test_the_projects_send_order_button_carries_btn_and_go(client):
+    """f81-09: the "Send new order" button on the Projects page carries ``btn`` and ``go``
+    so ``.btn.go`` supplies the hazard-yellow background when enabled (f81-08 removed it
+    from ``.projects-page .send-order``)."""
+    html = client.get("/projects").text
+    btn = re.search(r'<button[^>]*class="([^"]*)"[^>]*>Send new order</button>', html)
+    assert btn, "no 'Send new order' button found"
+    classes = btn[1].split()
+    assert "btn" in classes, f"button classes {classes} missing 'btn'"
+    assert "go" in classes, f"button classes {classes} missing 'go'"
