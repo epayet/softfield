@@ -2287,8 +2287,9 @@ def test_pageshow_with_persisted_false_fetches_nothing(page, board_db):
     assert board_fetches == []
 
 
-def test_pageshow_with_moved_card_fetches_and_keeps_moves(page, board_db):
-    """D3: with a card moved and not sent, that pageshow fetches nothing and the moves stay."""
+def test_pageshow_with_unsent_moves_keeps_order_and_skips_fetch(page, board_db):
+    """D3: with a card moved and not sent, that pageshow makes no board request and the order
+    stays."""
     _three_planted(page, board_db)
     _drag(page, "f27", "f23")
     assert _order(page, "planted") == ["f24", "f27", "f23", "bug-02-stale", *STARTED]
@@ -2298,6 +2299,38 @@ def test_pageshow_with_moved_card_fetches_and_keeps_moves(page, board_db):
     page.wait_for_timeout(500)
     assert fetches == []
     assert _order(page, "planted") == ["f24", "f27", "f23", "bug-02-stale", *STARTED]
+
+
+def test_pageshow_with_reorder_draws_the_new_planted_order(page, board_db):
+    """F192 D3: an order sent after the page opened (F27 before F23) reaches the redraw: Planted
+    is in the new order, the other stages stay the same, and no card has .moved."""
+    _three_planted(page, board_db)
+    seed_before = _order(page, "seed")
+    sprouting_before = _order(page, "sprouting")
+    line = [key for key, _ in read(board_db).line]
+    line.remove("f27")
+    line.insert(line.index("f23"), "f27")
+    write(board_db, _reorder(json.dumps(line)))
+    page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+    page.locator(".slot[data-key=f27] .card.on-its-way").wait_for()
+    assert _order(page, "planted") == ["f24", "f27", "f23", "bug-02-stale", *STARTED]
+    assert _order(page, "seed") == seed_before
+    assert _order(page, "sprouting") == sprouting_before
+    assert page.locator(".card.moved").count() == 0
+
+
+def test_pageshow_with_planted_f20_draws_it_in_planted_stage(page, board_db):
+    """F192 D3: a seed planted after the page opened is drawn in its new stage: F20 in Planted
+    with data-stage "planted" and one grip, and gone from Seed."""
+    _three_planted(page, board_db)
+    assert _order(page, "seed") == ["f20", "bug-01-duck-count"]
+    write(board_db, _planted(("f20-duck-pond", 9)))
+    page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+    page.locator("#stage-planted .slot[data-key=f20]").wait_for(state="attached")
+    assert page.locator(".slot[data-key=f20]").get_attribute("data-stage") == "planted"
+    assert "f20" in _order(page, "planted")
+    assert _order(page, "seed") == ["bug-01-duck-count"]
+    assert page.locator(".slot[data-key=f20] .grip").count() == 1
 
 
 def test_moving_a_card_keeps_the_plate_showing(page, board_db):
