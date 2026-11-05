@@ -3382,6 +3382,14 @@ def test_queue_panel_title_is_h2():
     assert "<h2>Queue</h2>" in queue_html
 
 
+def test_queued_job_count_has_text_separator():
+    """f81-10: queued-job count has a whitespace separator so it does not touch the <small> text."""
+    queue_html = (STATIC.parent / "templates" / "_partials" / "queue.html").read_text()
+    assert "{{ queued_jobs | length }} <small>" in queue_html, (
+        "queued_jobs count must be separated from <small> by a space",
+    )
+
+
 def test_about_uses_tick_token():
     """.about corner ticks use var(--tick)."""
     css = (STATIC / "dashboard.css").read_text()
