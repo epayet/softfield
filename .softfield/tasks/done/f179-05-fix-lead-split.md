@@ -25,3 +25,12 @@ f69-i-want-a-button-to-switch-C1849-1: The fallback Opus mean does not represent
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1185
+gate_failures: []
+tokens: 1238537
+```
