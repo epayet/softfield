@@ -1,6 +1,7 @@
 # Milestone F192: A fast lane request shows on the board and Overview as soon as it's made
 
-> **State:** ready · **Priority:** 5 · **Area:** factory
+> **State:** done · **Priority:** 5 · **Area:** factory
+> **Status: done.** Signed off by the owner on 2026-11-05. Base: git tag `f192-when-i-click-use-the-fast-start`. Report: [`.softfield/reviews/f192-when-i-click-use-the-fast.md`](../reviews/f192-when-i-click-use-the-fast.md).
 > Planted by the owner on 2026-11-02.
 
 ## Notes

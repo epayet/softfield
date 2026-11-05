@@ -1,6 +1,6 @@
 # Review: F192, a fast lane request shows on the board and the Overview as soon as it's made
 
-- **Status:** round 1 done; waiting for your sign-off and your check on a real phone.
+- **Status:** done, signed off by the owner on 2026-11-05.
 
 ## Sign-off sheet
 
