@@ -34,3 +34,10 @@ Read `.softfield/adr/44-lead-tickets-stop-at-the-reserve.md` and D1 to D6 in `.s
 - a developer job on a cloud agent is still refused past its pace line (the existing router tests stay green)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
