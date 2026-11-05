@@ -7,6 +7,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import types
 import urllib.error
 from collections.abc import Callable
 from dataclasses import replace
@@ -3755,9 +3756,17 @@ def fake_clock(monkeypatch) -> list[datetime]:
         slept.append(seconds)
         clock[0] += timedelta(seconds=seconds)
 
+    real_sleep = time.sleep
     monkeypatch.setattr(loop, "now", lambda: clock[0])
     monkeypatch.setattr("time.sleep", sleep)
+    monkeypatch.setattr("subprocess.time", types.SimpleNamespace(sleep=real_sleep))
     return clock
+
+
+def test_fake_clock_stands_during_subprocess(fake_clock):
+    """subprocess calls time.sleep too (first delay 1 ms); it must not move the fake clock."""
+    subprocess.run(["sleep", "0.05"], timeout=5)
+    assert fake_clock[0] == THURSDAY
 
 
 def _lead_writes(repo_: Path, name: str) -> None:
