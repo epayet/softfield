@@ -28,3 +28,10 @@ Read D5 in `.softfield/cards/f171-there-are-dupliacted-tickets-on-the.md`, then 
 - a plant that gives an area keeps it, whatever the project's
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+agent: lead
+attempts: 1
+```
