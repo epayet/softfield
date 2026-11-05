@@ -13,6 +13,7 @@ from factory_dashboard.queries import (
     clog,
     connect,
     eligibility,
+    lead_split,
     local,
     milestone_results,
     parse_review_note,
@@ -596,3 +597,556 @@ def test_the_connection_is_read_only(db):
 def test_connect_refuses_a_missing_database(tmp_path):
     with pytest.raises(sqlite3.OperationalError):
         connect(tmp_path / "nothing.sqlite")
+
+
+# --- lead split (F179 D1, D2, D3) -----------------------------------------------------------
+
+
+def _make_lead_db(
+    tmp_path: Path,
+    *,
+    opus_d3_1_cost: float = 1.6,
+    opus_d3_2_cost: float = 1.8,
+    sonnet_d3_cost: float = 0.5,
+) -> sqlite3.Connection:
+    """A project where Opus merged two difficulty-3 leads and Sonnet merged one."""
+    path = tmp_path / "lead.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    # Opus lead ticket 1: d3, $1.60
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="a" * 40,
+    )
+    _job(
+        writer,
+        run,
+        f1,
+        t1,
+        "lead-ticket",
+        OPUS,
+        1,
+        "passed",
+        cost_usd=opus_d3_1_cost,
+        **CLAUDE_TOKENS,
+    )
+
+    # Opus lead ticket 2: d3, $1.80
+    t2 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-02-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="b" * 40,
+    )
+    _job(
+        writer,
+        run,
+        f1,
+        t2,
+        "lead-ticket",
+        OPUS,
+        1,
+        "passed",
+        cost_usd=opus_d3_2_cost,
+        **CLAUDE_TOKENS,
+    )
+
+    # Sonnet lead ticket: d3, $0.50
+    t3 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-03-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=SONNET,
+        commit="c" * 40,
+    )
+    _job(
+        writer,
+        run,
+        f1,
+        t3,
+        "lead-ticket",
+        SONNET,
+        1,
+        "passed",
+        cost_usd=sonnet_d3_cost,
+        **CLAUDE_TOKENS,
+    )
+
+    writer.close()
+    return connect(path)
+
+
+def _lead_db(tmp_path: Path) -> Iterator[sqlite3.Connection]:
+    """Generator: yields the read-only connection from a lead-split database."""
+    conn = _make_lead_db(tmp_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+
+def test_sonnet_row_says_how_many_tickets_would_have_and_saved(tmp_path):
+    """F179 D1, D2: Opus merged two d3 leads ($1.60, $1.80); Sonnet merged one d3 ($0.50).
+    Sonnet's 'difficulty 4 or below' row: 1 ticket, 1 first time,
+    would-have $1.70, saved $1.20."""
+    gen = _lead_db(tmp_path)
+    conn = next(gen)
+    rows = lead_split(conn, PROJECT)
+    assert len(rows) == 2
+    sonnet_rows = [r for r in rows if r.agent == SONNET]
+    assert len(sonnet_rows) == 1
+    s = sonnet_rows[0]
+    assert s.band == "difficulty 4 or below"
+    assert s.tickets == 1
+    assert s.merged == 1
+    assert s.first_time == 1
+    assert s.step_ups == 0
+    assert s.would_have == pytest.approx(1.70)
+    assert s.saved == pytest.approx(1.20)
+    assert s.reviewed == 0
+    assert s.should_fix == 0
+    assert s.blocking == 0
+
+
+def test_parked_first_job_then_passed_counts_first_time(tmp_path):
+    """F179 D1: a Sonnet ticket whose first job is parked, then a passed
+    Sonnet job, counts first time."""
+    path = tmp_path / "parked.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    # Opus d3 leads for mean
+    t0 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0" * 40,
+    )
+    _job(writer, run, f1, t0, "lead-ticket", OPUS, 1, "passed", cost_usd=1.70, **CLAUDE_TOKENS)
+
+    # Sonnet ticket: first job parked, second passed
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=SONNET,
+        commit="a" * 40,
+    )
+    _job(writer, run, f1, t1, "lead-ticket", SONNET, 1, "failed", note="parked")
+    _job(writer, run, f1, t1, "lead-ticket", SONNET, 2, "passed", cost_usd=0.50, **CLAUDE_TOKENS)
+
+    writer.close()
+    reading = connect(path)
+    rows = lead_split(reading, PROJECT)
+    reading.close()
+    sonnet_rows = [r for r in rows if r.agent == SONNET]
+    assert len(sonnet_rows) == 1
+    s = sonnet_rows[0]
+    assert s.first_time == 1
+    assert s.step_ups == 0
+
+
+def test_failed_then_opus_pass_is_step_up_with_opus_dollars(tmp_path):
+    """F179 D1: a failed Sonnet attempt then a passed Opus job is Sonnet's,
+    not first time, 1 step-up, with Opus dollars in Sonnet's dollars."""
+    path = tmp_path / "stepup.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    # Opus d3 leads for mean
+    t0 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0" * 40,
+    )
+    _job(writer, run, f1, t0, "lead-ticket", OPUS, 1, "passed", cost_usd=1.70, **CLAUDE_TOKENS)
+
+    # Sonnet ticket: failed attempt then Opus step-up
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="a" * 40,
+    )
+    _job(writer, run, f1, t1, "lead-ticket", SONNET, 1, "failed", cost_usd=0.30, **CLAUDE_TOKENS)
+    _job(writer, run, f1, t1, "lead-ticket", OPUS, 2, "passed", cost_usd=1.20, **CLAUDE_TOKENS)
+
+    writer.close()
+    reading = connect(path)
+    rows = lead_split(reading, PROJECT)
+    reading.close()
+    sonnet_rows = [r for r in rows if r.agent == SONNET]
+    assert len(sonnet_rows) == 1
+    s = sonnet_rows[0]
+    assert s.first_time == 0
+    assert s.step_ups == 1
+    # Sonnet's dollars include both its own and Opus's step-up
+    assert s.dollars == pytest.approx(0.30 + 1.20)
+
+
+def test_unknown_difficulty_takes_opus_overall_mean(tmp_path):
+    """F179 D2: a difficulty Opus never did takes Opus's mean over all its lead tickets."""
+    path = tmp_path / "unknown_diff.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    # Opus leads: d3 ($1.60), d4 ($2.00) → overall mean = (1.60 + 2.00) / 2 = 1.80
+    t0 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0" * 40,
+    )
+    _job(writer, run, f1, t0, "lead-ticket", OPUS, 1, "passed", cost_usd=1.60, **CLAUDE_TOKENS)
+    t0b = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00b-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=4,
+        state="done",
+        merged_by=OPUS,
+        commit="0b" * 40,
+    )
+    _job(writer, run, f1, t0b, "lead-ticket", OPUS, 1, "passed", cost_usd=2.00, **CLAUDE_TOKENS)
+
+    # Sonnet ticket: d5 (difficulty Opus never did)
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=5,
+        state="done",
+        merged_by=SONNET,
+        commit="a" * 40,
+    )
+    _job(writer, run, f1, t1, "lead-ticket", SONNET, 1, "passed", cost_usd=0.50, **CLAUDE_TOKENS)
+
+    writer.close()
+    reading = connect(path)
+    rows = lead_split(reading, PROJECT)
+    reading.close()
+    sonnet_rows = [r for r in rows if r.agent == SONNET]
+    assert len(sonnet_rows) == 1
+    s = sonnet_rows[0]
+    assert s.band == "difficulty 5 and up"
+    # Opus's overall mean = (1.60 + 2.00) / 2 = 1.80
+    assert s.would_have == pytest.approx(1.80)
+    assert s.saved == pytest.approx(1.80 - 0.50)
+
+
+def test_ticket_with_no_difficulty_is_in_no_row(tmp_path):
+    """A ticket with no difficulty is in no row."""
+    path = tmp_path / "no_diff.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    t0 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0" * 40,
+    )
+    _job(writer, run, f1, t0, "lead-ticket", OPUS, 1, "passed", cost_usd=1.70, **CLAUDE_TOKENS)
+
+    # Sonnet ticket with no difficulty
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        state="done",
+        merged_by=SONNET,
+        commit="a" * 40,
+    )
+    _job(writer, run, f1, t1, "lead-ticket", SONNET, 1, "passed", cost_usd=0.50, **CLAUDE_TOKENS)
+
+    writer.close()
+    reading = connect(path)
+    rows = lead_split(reading, PROJECT)
+    reading.close()
+    sonnet_rows = [r for r in rows if r.agent == SONNET]
+    assert len(sonnet_rows) == 0
+
+
+def test_reviewed_counts_passed_review_job_and_findings(tmp_path):
+    """Reviewed counts a ticket whose milestone has a passed review job;
+    should-fix and blocking count its findings."""
+    path = tmp_path / "reviewed.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    t0 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0" * 40,
+    )
+    _job(writer, run, f1, t0, "lead-ticket", OPUS, 1, "passed", cost_usd=1.70, **CLAUDE_TOKENS)
+
+    # Sonnet ticket with review findings
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=SONNET,
+        commit="a" * 40,
+    )
+    _job(writer, run, f1, t1, "lead-ticket", SONNET, 1, "passed", cost_usd=0.50, **CLAUDE_TOKENS)
+
+    # Add a review job and findings on the milestone
+    review = _job(writer, run, f1, None, "review", OPUS, 1, "passed", cost_usd=1.0, **CLAUDE_TOKENS)
+    metrics.add_finding(writer, f1, "F1", ticket_id=t1, job_id=review, severity="should-fix")
+    metrics.add_finding(writer, f1, "F2", ticket_id=t1, job_id=review, severity="blocking")
+    metrics.add_finding(writer, f1, "F3", ticket_id=t1, job_id=review, severity="nit")
+
+    writer.close()
+    reading = connect(path)
+    rows = lead_split(reading, PROJECT)
+    reading.close()
+    sonnet_rows = [r for r in rows if r.agent == SONNET]
+    assert len(sonnet_rows) == 1
+    s = sonnet_rows[0]
+    assert s.reviewed == 1
+    assert s.should_fix == 1
+    assert s.blocking == 1
+
+
+def test_key_keeps_one_milestones_tickets(tmp_path):
+    """key keeps one milestone's tickets."""
+    path = tmp_path / "key.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    f2 = metrics.upsert_milestone(writer, project, "f2", started="2026-10-05T09:00:00+02:00")
+    run1 = metrics.upsert_run(writer, project, "20261001-100000")
+    run2 = metrics.upsert_run(writer, project, "20261005-100000")
+
+    # f1: Sonnet d3
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=SONNET,
+        commit="a" * 40,
+    )
+    _job(writer, run1, f1, t1, "lead-ticket", SONNET, 1, "passed", cost_usd=0.50, **CLAUDE_TOKENS)
+
+    # f2: Sonnet d3
+    t2 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f2-01-lead",
+        milestone_id=f2,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=SONNET,
+        commit="b" * 40,
+    )
+    _job(writer, run2, f2, t2, "lead-ticket", SONNET, 1, "passed", cost_usd=0.60, **CLAUDE_TOKENS)
+
+    writer.close()
+    reading = connect(path)
+    # Without key: both milestones
+    all_rows = lead_split(reading, PROJECT)
+    assert len(all_rows) == 1
+    assert all_rows[0].tickets == 2
+    # With key: only f1's ticket
+    f1_rows = lead_split(reading, PROJECT, key="f1")
+    assert len(f1_rows) == 1
+    assert f1_rows[0].tickets == 1
+    reading.close()
+
+
+def test_start_and_end_keep_tickets_by_first_job_started(tmp_path):
+    """start and end keep tickets whose first job started in them."""
+    path = tmp_path / "time.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+
+    # Opus d3 lead at 09:00
+    t0 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-00-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=OPUS,
+        commit="0" * 40,
+    )
+    job0 = metrics.start_job(
+        writer,
+        run,
+        ticket_id=t0,
+        milestone_id=f1,
+        role="lead-ticket",
+        agent=OPUS,
+        attempt=1,
+        started="2026-10-01T09:00:00+02:00",
+    )
+    metrics.finish_job(
+        writer,
+        job0,
+        ended="2026-10-01T09:10:00+02:00",
+        outcome="passed",
+        cost_usd=1.70,
+        tokens_in=10_000,
+        tokens_cached=100_000,
+        tokens_out=2_000,
+    )
+
+    # Sonnet d3 lead at 10:00
+    t1 = metrics.upsert_ticket(
+        writer,
+        project,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        difficulty=3,
+        state="done",
+        merged_by=SONNET,
+        commit="a" * 40,
+    )
+    job1 = metrics.start_job(
+        writer,
+        run,
+        ticket_id=t1,
+        milestone_id=f1,
+        role="lead-ticket",
+        agent=SONNET,
+        attempt=1,
+        started="2026-10-01T10:00:00+02:00",
+    )
+    metrics.finish_job(
+        writer,
+        job1,
+        ended="2026-10-01T10:10:00+02:00",
+        outcome="passed",
+        cost_usd=0.50,
+        tokens_in=10_000,
+        tokens_cached=100_000,
+        tokens_out=2_000,
+    )
+
+    writer.close()
+    reading = connect(path)
+    # Both tickets
+    all_rows = lead_split(reading, PROJECT)
+    assert len(all_rows) == 2
+    # Only Sonnet's ticket (started at 10:00)
+    sonnet_rows = lead_split(reading, PROJECT, start="2026-10-01T10:00:00+02:00")
+    assert len(sonnet_rows) == 1
+    assert sonnet_rows[0].agent == SONNET
+    reading.close()
+
+
+def test_opus_rows_have_no_would_have_or_saved(tmp_path):
+    """Opus's own rows have no would-have and no saving."""
+    gen = _lead_db(tmp_path)
+    conn = next(gen)
+    rows = lead_split(conn, PROJECT)
+    opus_rows = [r for r in rows if r.agent == OPUS]
+    assert len(opus_rows) == 1
+    o = opus_rows[0]
+    assert o.would_have == 0.0
+    assert o.saved == 0.0
+
+
+def test_no_lead_ticket_returns_empty_list(tmp_path):
+    """A project with no lead ticket returns []."""
+    path = tmp_path / "no_lead.sqlite"
+    writer = metrics.open_db(path)
+    project = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project, "f1", started="2026-10-01T09:00:00+02:00")
+    # Only developer tickets, no lead tickets
+    t = metrics.upsert_ticket(
+        writer, project, "f1-01-dev", milestone_id=f1, kind="developer", difficulty=3, state="done"
+    )
+    run = metrics.upsert_run(writer, project, "20261001-100000")
+    _job(writer, run, f1, t, "developer", SONNET, 1, "passed", cost_usd=0.50, **CLAUDE_TOKENS)
+    writer.close()
+    reading = connect(path)
+    rows = lead_split(reading, PROJECT)
+    assert rows == []
+    reading.close()

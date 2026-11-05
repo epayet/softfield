@@ -67,6 +67,7 @@ LEAD_ROLES = ("lead-ticket", "direction", "escalation", "checkpoint", "review", 
 UNKNOWN_AGENT = "backfill-unknown"  # D6
 PAUSE = "pause"  # the runner's usage event while the owner pauses it (`runner.requests`)
 SEVERITIES = ("blocking", "should-fix", "nit")
+EASY_LEAD_UP_TO = 4  # Sonnet takes difficulty 4 and below (ADR 32)
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -147,6 +148,24 @@ class Savings:
 class Trend:
     results: MilestoneResults
     savings: Savings
+
+
+@dataclass(frozen=True)
+class LeadRow:
+    """One row of the lead split: per agent and difficulty band, how the lead tickets went."""
+
+    band: str
+    agent: str
+    tickets: int = 0
+    merged: int = 0
+    first_time: int = 0
+    step_ups: int = 0
+    dollars: float = 0.0
+    would_have: float = 0.0
+    saved: float = 0.0
+    reviewed: int = 0
+    should_fix: int = 0
+    blocking: int = 0
 
 
 # --- helpers -------------------------------------------------------------------------------
@@ -403,6 +422,257 @@ def savings(conn: sqlite3.Connection, project: str, key: str | None = None) -> S
         if key is None or m["key"] == key
     ]
     return _combine([agent for part in parts for agent in part.agents])
+
+
+# --- lead split (F179 D1, D2, D3) -------------------------------------------------------
+
+
+def _opus_mean_by_diff(conn: sqlite3.Connection, project_id: int) -> dict[int, float]:
+    """Opus's mean dollars per merged lead ticket, by difficulty."""
+    rows = conn.execute(
+        "SELECT t.id, t.difficulty FROM tickets t "
+        "WHERE t.project_id = ? AND t.kind = 'lead' "
+        'AND t."commit" IS NOT NULL AND t.difficulty IS NOT NULL',
+        (project_id,),
+    ).fetchall()
+    totals: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    for ticket in rows:
+        roles = ("lead-ticket", "direction", "escalation", "checkpoint", "review", "narrative")
+        marks = ", ".join("?" for _ in roles)
+        jobs = conn.execute(
+            "SELECT * FROM jobs WHERE ticket_id = ? "  # noqa: S608, UP031
+            "AND agent = 'claude-opus' "
+            "AND role IN (%s)" % marks,
+            (ticket["id"], *roles),
+        ).fetchall()
+        if not jobs:
+            continue
+        total_cost = sum(dollars(j) for j in jobs)
+        totals[ticket["difficulty"]][0] += total_cost
+        totals[ticket["difficulty"]][1] += 1.0
+    return {d: total / count for d, (total, count) in totals.items() if count > 0}
+
+
+def _ticket_owner(conn: sqlite3.Connection, ticket_id: int) -> str | None:
+    """The owner of a lead ticket: agent of its first lead-ticket job that is an attempt.
+    Jobs with note 'parked' or 'interrupted' are not attempts."""
+    roles = ("lead-ticket", "direction", "escalation", "checkpoint", "review", "narrative")
+    marks = ", ".join("?" for _ in roles)
+    all_jobs = conn.execute(
+        "SELECT agent, note FROM jobs WHERE ticket_id = ? "  # noqa: S608, UP031
+        "AND role IN (%s) "
+        "ORDER BY id ASC" % marks,
+        (ticket_id, *roles),
+    ).fetchall()
+    for j in all_jobs:
+        if j["note"] not in ("parked", "interrupted"):
+            return str(j["agent"])
+    return None
+
+
+def _ticket_first_started(conn: sqlite3.Connection, ticket_id: int) -> str | None:
+    """The first job's started time for a ticket."""
+    row = conn.execute(
+        "SELECT started FROM jobs WHERE ticket_id = ? AND started IS NOT NULL "
+        "ORDER BY started ASC LIMIT 1",
+        (ticket_id,),
+    ).fetchone()
+    return str(row["started"]) if row else None
+
+
+def _ticket_is_reviewed(conn: sqlite3.Connection, milestone_id: int, ticket_id: int) -> bool:
+    """Whether a ticket's milestone has a passed review job."""
+    row = conn.execute(
+        "SELECT 1 FROM jobs WHERE milestone_id = ? AND role = 'review' "
+        "AND outcome = 'passed' LIMIT 1",
+        (milestone_id,),
+    ).fetchone()
+    return row is not None
+
+
+def _ticket_findings(
+    conn: sqlite3.Connection, milestone_id: int, ticket_id: int
+) -> tuple[int, int]:
+    """Count should-fix and blocking findings for a ticket."""
+    row = conn.execute(
+        "SELECT sum(severity = 'should-fix') AS sf, sum(severity = 'blocking') AS bl "
+        "FROM findings WHERE milestone_id = ? AND ticket_id = ?",
+        (milestone_id, ticket_id),
+    ).fetchone()
+    return int(row["sf"] or 0), int(row["bl"] or 0)
+
+
+def _band(diff: int | None) -> str | None:
+    """The difficulty band for a ticket's difficulty, or None if no difficulty."""
+    if diff is None:
+        return None
+    if diff <= EASY_LEAD_UP_TO:
+        return f"difficulty {EASY_LEAD_UP_TO} or below"
+    return f"difficulty {EASY_LEAD_UP_TO + 1} and up"
+
+
+def lead_split(
+    conn: sqlite3.Connection,
+    project: str,
+    key: str | None = None,
+    start: str | None = None,
+    end: str | None = None,
+) -> list[LeadRow]:
+    """Per agent and difficulty band, how the lead tickets went (D1, D2, D3).
+    ``key`` keeps one milestone's tickets; ``start``/``end`` keep tickets whose
+    first job started in them. A project with no lead ticket returns ``[]``."""
+    project_id = _project_id(conn, project)
+    if project_id is None:
+        return []
+
+    # Determine which milestones and tickets to consider
+    if key is not None:
+        m = _milestone(conn, project, key)
+        if m is None:
+            return []
+        milestones = [m]
+    else:
+        milestones = _milestones(conn, project)
+
+    # Gather lead tickets from the relevant milestones
+    ticket_rows: list[sqlite3.Row] = []
+    for m in milestones:
+        rows = conn.execute(
+            "SELECT id, difficulty, milestone_id FROM tickets "
+            "WHERE milestone_id = ? AND kind = 'lead'",
+            (m["id"],),
+        ).fetchall()
+        ticket_rows.extend(rows)
+
+    if not ticket_rows:
+        return []
+
+    # Filter by start/end on first job's started time
+    if start is not None:
+        start_dt = datetime.fromisoformat(start) if isinstance(start, str) else start
+    else:
+        start_dt = None
+    if end is not None:
+        end_dt = datetime.fromisoformat(end) if isinstance(end, str) else end
+    else:
+        end_dt = None
+
+    filtered: list[sqlite3.Row] = []
+    for t in ticket_rows:
+        fs = _ticket_first_started(conn, t["id"])
+        if fs is None:
+            continue
+        fs_time = _time(fs)
+        if start_dt is not None and fs_time < start_dt:
+            continue
+        if end_dt is not None and fs_time > end_dt:
+            continue
+        filtered.append(t)
+
+    if not filtered:
+        return []
+
+    # Group by (band, agent)
+    band_agent: dict[tuple[str, str], list[sqlite3.Row]] = defaultdict(list)
+    for t in filtered:
+        b = _band(t["difficulty"])
+        if b is None:
+            continue
+        owner = _ticket_owner(conn, t["id"])
+        if owner is None:
+            continue
+        band_agent[(b, owner)].append(t)
+
+    # Opus mean dollars by difficulty
+    opus_mean = _opus_mean_by_diff(conn, project_id)
+    overall_mean = sum(opus_mean.values()) / len(opus_mean) if opus_mean else None
+
+    # Aggregate per (band, agent)
+    rows_out: list[LeadRow] = []
+    for (band, agent), tickets in sorted(band_agent.items()):
+        merged = 0
+        first_time = 0
+        step_ups = 0
+        dollars_total = 0.0
+        reviewed = 0
+        should_fix = 0
+        blocking = 0
+
+        for t in tickets:
+            # Check if ticket is merged (has a passed job)
+            if conn.execute(
+                "SELECT 1 FROM jobs WHERE ticket_id = ? AND outcome = 'passed' LIMIT 1",
+                (t["id"],),
+            ).fetchone():
+                merged += 1
+
+            # Get all jobs for first attempt analysis
+            all_jobs = conn.execute(
+                "SELECT outcome, note, agent FROM jobs WHERE ticket_id = ? ORDER BY id ASC",
+                (t["id"],),
+            ).fetchall()
+
+            # Find first real attempt (not parked/interrupted)
+            first_real_outcome = None
+            for j in all_jobs:
+                if j["note"] not in ("parked", "interrupted"):
+                    first_real_outcome = j["outcome"]
+                    break
+
+            if first_real_outcome == "passed":
+                first_time += 1
+            elif first_real_outcome == "failed":
+                # Check if a later Opus job passed (step-up)
+                has_opus_pass = any(
+                    j["outcome"] == "passed" and j["agent"] == "claude-opus" for j in all_jobs[1:]
+                )
+                if has_opus_pass:
+                    step_ups += 1
+
+            # Sum dollars from all jobs on this ticket
+            job_rows = conn.execute(
+                "SELECT cost_usd, tokens_in, tokens_cached, tokens_out, agent "
+                "FROM jobs WHERE ticket_id = ?",
+                (t["id"],),
+            ).fetchall()
+            for j in job_rows:
+                dollars_total += dollars(j)
+
+            # Review and findings
+            if _ticket_is_reviewed(conn, t["milestone_id"], t["id"]):
+                reviewed += 1
+            sf, bl = _ticket_findings(conn, t["milestone_id"], t["id"])
+            should_fix += sf
+            blocking += bl
+
+        # Would-have and saved (not for Opus rows)
+        diff = tickets[0]["difficulty"]
+        would_have = 0.0
+        saved = 0.0
+        if agent != "claude-opus":
+            rate = opus_mean.get(diff, overall_mean)
+            if rate is not None:
+                would_have = rate
+                saved = would_have - dollars_total
+
+        rows_out.append(
+            LeadRow(
+                band=band,
+                agent=agent,
+                tickets=len(tickets),
+                merged=merged,
+                first_time=first_time,
+                step_ups=step_ups,
+                dollars=round(dollars_total, 2),
+                would_have=round(would_have, 2),
+                saved=round(saved, 2),
+                reviewed=reviewed,
+                should_fix=should_fix,
+                blocking=blocking,
+            )
+        )
+
+    return rows_out
 
 
 # --- eligibility (ADR 14 item 12, ADR 15 item 9, ADR 16 item 10) ---------------------------
