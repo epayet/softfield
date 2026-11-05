@@ -25,3 +25,4 @@ Short on purpose: at most 15 notes (ADR 07). The lead keeps them current. The on
 ## Notes
 1. The dashboard is FastAPI and Jinja, with no translations.
 2. A `reserve` request's subject is the card's short key in lower case (`f23`), never its full key (`f23-planted`, which matches no card, so `lane_asked` stays None and the test sees nothing): `_ask_lane` in `tests/factory_dashboard/test_overview.py`. f192-03 lost two attempts to it.
+3. A browser test of a redraw checks what shows (`wait_for`, `is_visible`), not `count()`: under 900 px only the stage marked `.shown` displays, and f192-02's `count()` passed on a blank field.

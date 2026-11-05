@@ -2209,16 +2209,70 @@ def test_pageshow_with_persisted_true_draws_the_field_with_grip_and_menu(page, b
     and ... working."""
     page.set_viewport_size(PHONE)
     open_page(page, _client(board_db), "/board")
+    stages = ("seed", "sprouting", "planted")
+    before = {stage: _order(page, stage) for stage in stages}
     fetches: list[str] = []
     page.on("request", lambda r: fetches.append(r.url) if "/board" in r.url else None)
+    write(board_db, _reserve("on"))  # the second body: the lever pulled on the card's page
     page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
-    page.wait_for_timeout(500)
-    board_fetches = [f for f in fetches if "/board" in f]
-    assert len(board_fetches) == 1
-    grip = page.locator(".slot[data-key=f24] .grip")
-    assert grip.count() >= 1
-    more = page.locator(".slot[data-key=f24] .more")
-    assert more.count() >= 1
+    plate = page.locator(".slot[data-key=f23] .card-reserve.on-its-way")
+    plate.wait_for()  # visible: on a phone the stage shown stays shown
+    assert len(fetches) == 1
+    # every card still in its own stage, in its place, and nothing marked as moved
+    assert {stage: _order(page, stage) for stage in stages} == before
+    assert page.locator(".card.moved").count() == 0
+    assert page.locator(".slot[data-key=f24] .grip").count() == 1  # one grip, not one per redraw
+    page.locator(".slot[data-key=f24] .more").click()
+    assert page.locator("#order-sheet").evaluate("(d) => d.open")
+    page.locator("#order-sheet [data-move=down]").click()
+    assert _order(page, "planted")[:2] == [before["planted"][1], "f24"]
+
+
+def test_back_without_the_browsers_memory_still_fetches_what_is_true_now(page, board_db):
+    """F192 D3: back that doesn't come from the browser's memory (not ``persisted``): the document
+    can still be the browser's old copy, so the field is fetched past it, on a phone."""
+    client = _client(board_db)
+    old_copy = client.get("/board").text
+    page.set_viewport_size(PHONE)
+    open_page(page, client, "/board")
+
+    def from_the_browsers_cache(route) -> None:
+        if route.request.resource_type == "document":
+            route.fulfill(body=old_copy, content_type="text/html; charset=utf-8")
+        else:
+            route.fallback()
+
+    page.route(f"{ORIGIN}/board", from_the_browsers_cache)
+    page.goto(f"{ORIGIN}/planning")
+    write(board_db, _reserve("on"))
+    page.go_back()
+    page.locator(".slot[data-key=f23] .card-reserve.on-its-way").wait_for()
+
+
+def test_pageshow_when_the_fetch_fails_leaves_the_page_as_it_is(page, board_db):
+    """F192 D3: an answer that isn't the board, here a 500, changes nothing on the page."""
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(board_db), "/board")
+    before = _order(page, "planted")
+    page.route(f"{ORIGIN}/board", lambda route: route.fulfill(status=500, body="no"))
+    with page.expect_response(f"{ORIGIN}/board"):
+        page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
+    page.wait_for_timeout(100)
+    assert _order(page, "planted") == before
+    assert page.locator(".slot[data-key=f24]").is_visible()
+
+
+def test_a_sent_order_whose_refetch_fails_reloads_the_page(page, board_db):
+    """f15-04, kept by F192: the order is sent, so the moves can't stay on the page as not sent."""
+    _three_planted(page, board_db)
+    _drag(page, "f27", "f23")
+    page.route(
+        f"{ORIGIN}/board",
+        lambda route: route.abort() if route.request.resource_type == "fetch" else route.fallback(),
+    )
+    with page.expect_navigation():
+        page.locator('[data-order="send"]').click()
+    assert page.locator("#order-bar").is_hidden()
 
 
 def test_pageshow_with_persisted_false_fetches_nothing(page, board_db):
@@ -2238,8 +2292,11 @@ def test_pageshow_with_moved_card_fetches_and_keeps_moves(page, board_db):
     _three_planted(page, board_db)
     _drag(page, "f27", "f23")
     assert _order(page, "planted") == ["f24", "f27", "f23", "bug-02-stale", *STARTED]
+    fetches: list[str] = []
+    page.on("request", lambda r: fetches.append(r.url) if "/board" in r.url else None)
     page.evaluate("() => dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}))")
     page.wait_for_timeout(500)
+    assert fetches == []
     assert _order(page, "planted") == ["f24", "f27", "f23", "bug-02-stale", *STARTED]
 
 

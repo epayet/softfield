@@ -208,12 +208,11 @@
     b.setAttribute("aria-label", label);
     return b;
   };
-  const setUp = (sentArg, lineArg) => {
-    const boardLine = document.getElementById("board-line");
-    const sent = sentArg ?? JSON.parse(boardLine.textContent);
+  const setUp = () => {
+    const sent = JSON.parse(document.getElementById("board-line").textContent);
     stageOf = Object.fromEntries(sent);
     came = sent.map(([key]) => key);
-    line = lineArg ?? came.slice();
+    line = came.slice();
     for (const s of field.querySelectorAll(".slot")) {
       if (!PLACED.includes(s.dataset.stage)) continue;
       const card = s.querySelector(".card");
@@ -240,23 +239,25 @@
     work();
   });
 
-  // Redraw the field from a fresh fetch: the steps after a send, and on pageshow from bfcache.
-  const refresh = async (moves, skipBoardLine) => {
+  // Redraw the field as it is now, past the browser's cache: after a send, and on the way back.
+  // False, with the page left as it is, when no board came.
+  const refresh = async () => {
+    let page;
     try {
-      const page = new DOMParser().parseFromString(await (await fetch(location.href, { cache: "no-cache" })).text(), "text/html");
-      field.querySelector(".stages").replaceWith(page.querySelector("#field .stages"));
-      if (!skipBoardLine) {
-        document.getElementById("board-line").textContent = page.getElementById("board-line").textContent;
-      }
+      const answer = await fetch(location.href, { cache: "no-cache" });
+      if (!answer.ok) return false;
+      page = new DOMParser().parseFromString(await answer.text(), "text/html");
     } catch {
-      return null; // failed fetch: leave the page as it is
+      return false;
     }
-    if (skipBoardLine) {
-      return [...field.querySelectorAll(".slot")].map((s) => [s.dataset.key, s.dataset.stage]);
-    }
+    const stages = page.querySelector("#field .stages");
+    const sent = page.getElementById("board-line");
+    if (!stages || !sent) return false;
+    field.querySelector(".stages").replaceWith(stages);
+    document.getElementById("board-line").textContent = sent.textContent;
     show(field.dataset.shown);
     setUp();
-    return null;
+    return true;
   };
 
   const send = bar.querySelector('[data-order="send"]');
@@ -274,17 +275,16 @@
       return;
     }
     send.disabled = false;
-    await refresh();
+    if (!(await refresh())) location.reload(); // sent: the page as it is now shows it on its way
   });
 
-  // Coming back with the phone's back button shows the field as it is now (D3).
-  addEventListener("pageshow", async (event) => {
-    if (!event.persisted) return; // normal load: fetch nothing
-    if (moved.size) return; // unsent moves: keep the field as the owner ordered it
-    const stages = await refresh(undefined, true);
-    if (!stages) return;
-    const sent = line.map((key, i) => [key, stages[i]?.[1] ?? stages.find((s) => s[0] === key)?.[1]]);
-    setUp(sent, line);
+  // Coming back with the phone's back button shows the field as it is now (D3): from the
+  // browser's memory (persisted), or by back or forward, which may load the browser's old copy.
+  addEventListener("pageshow", (event) => {
+    const back = performance.getEntriesByType("navigation")[0]?.type === "back_forward";
+    if (!event.persisted && !back) return; // normal load: fetch nothing
+    if (moved.size) return; // moves not sent: keep them
+    refresh();
   });
 
   setUp();

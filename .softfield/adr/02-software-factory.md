@@ -734,6 +734,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** the ADR and the plan assumed a review's fix tickets wait under `restart`, but `restart` only means the runner's code changed. Fixes normally merge inside the review's loop with no stop recorded, so the milestone looked "due" and its last round's fixes were dropped with a log line saying the review would read them. An ADR's words about a state are worth checking against the code that sets it, at plan time. One test's comment also claimed a state it never reached, and it passed for the wrong reason: a test's setup should assert the state it says it reaches.
 - **Decisions affected:** none. ADR 38's wording on `restart` is inexact, and the review report says so.
 
+### F192 (2026-11-05): a fast lane request shows on the board and the Overview as soon as it's made ([review](../reviews/f192-when-i-click-use-the-fast.md))
+
+- **Q1:** three developer tickets: f192-01 on its last attempt after a direction, f192-02 on its second attempt after a timeout, f192-03 escalated and finished by the lead. One checkpoint, on f192-01 only. Review round 1: three blocking, four should-fix and one nit, all fixed by the review except one should-fix set aside as bug-60.
+- **Q3:** Qwen merged 2 of 3 developer tickets, none on its first attempt; about 3.9 of its 4.8 hours went to attempts that merged nothing. f192-03's lane logic needed the lead.
+- **Q5:** see the review's numbers.
+- **Anything else:** f192-02's gates were green on a blank field: on a phone, back emptied the board. Its test ignored the ticket's "second body" and used `count()`, which can't see a hidden column. "Fail without the change" isn't enough when the test only proves that some fetch happened: a redraw's test has to show the new thing, visible, at the width the owner uses. The ticket itself also dropped half of D3 (back without the browser's memory) from its Done when, so a developer who met every line would still have missed it: a ticket's Done when has to carry each branch of the decision it cites.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

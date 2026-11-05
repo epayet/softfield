@@ -317,7 +317,7 @@ tbody tr:hover { background: var(--accent-wash); }
 .lane-bay .label { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--fg); }
 .lane-bay .label span { font: 400 12px var(--body); text-transform: none; letter-spacing: 0;
   color: var(--muted); margin-left: 6px; }
-.lane-way { font: 600 11.5px var(--mono); color: var(--hazard); white-space: nowrap; }
+.lane-way { font: 600 11.5px var(--mono); color: var(--warn-ink); white-space: nowrap; }
 .warnline { color: var(--serious-ink); font-size: 13px; }
 .steps { list-style: none; margin: 0; padding: 0; }
 .steps li { display: grid; grid-template-columns: 110px 1fr; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--grid); }
@@ -856,7 +856,7 @@ main:has(.board) { max-width: 1360px; }
 .card-reserve i { width: 14px; align-self: stretch;
   background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
 /* a card with an open fast lane request (F192): the plate while the runner hasn't taken it */
-.card-reserve.on-its-way { outline: 1px dashed var(--hazard); outline-offset: 0; color: var(--hazard); }
+.card-reserve.on-its-way { outline: 1px dashed var(--hazard); outline-offset: 0; color: var(--warn-ink); }
 .card-reserve.on-its-way.leaving i { background: var(--ghost); }
 .card-review { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35;
   padding: 5px 8px; background: var(--floor); border-left: 2px solid var(--hazard); color: var(--ink-2); }

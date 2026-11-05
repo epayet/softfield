@@ -660,6 +660,23 @@ def test_the_lane_off_moves_tickets_back_to_the_rest(board_db, tmp_path):
         assert "on its way" not in after, path
 
 
+def test_the_lane_goes_back_to_plain_once_the_runner_has_taken_the_request(board_db, tmp_path):
+    """F192 Done when: a marked card whose request is finished reads as any marked card."""
+    client = _reserve_client(board_db, tmp_path, "f23-planted")
+    conn = metrics.open_db(board_db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        asked = metrics.add_request(conn, project, "reserve", "f23", "on", NOW.isoformat())
+        metrics.finish_request(conn, asked, NOW.isoformat(), "")
+        conn.commit()
+    finally:
+        conn.close()
+    for path in ("/", "/live"):
+        html = client.get(path).text
+        assert _reserve_row(html) == "Fast lane: F23, Planted", path
+        assert "on its way" not in _lane_bay(html)[0], path
+
+
 def test_each_claude_meter_has_its_switch_showing_the_stored_state(db_path, tmp_path):
     """f8-06: the week's switch on (turned on 2.5 h ago, so until tomorrow 09:30) posts "off";
     the 5-hour switch, absent from state.json, is off and posts "on"."""
