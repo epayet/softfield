@@ -26,3 +26,33 @@ The planning thread behind F209's plan, oldest first, as it was when the owner a
 > Proposals:
 > - The card at work stands out, and the board follows the work by itself (plan)
 > - F209 mock-up: the card at work on the board (mockup)
+
+## The lead, 2026-11-04 10:05
+
+> Approved by the owner on 2026-11-04: approved plan/f209: queued f209-01-card-at-work, f209-02-plate-working-now, f209-03-field-refreshes-itself
+
+## The lead, 2026-11-04 10:05
+
+> Merged F218 here: Developer view if a developer is working on something, it…
+
+## The owner, 2026-11-04 10:05
+
+> From F218, merged here:
+> Developer view if a developer is working on something, it should be highlighted as blue still. It currently doesn't even though it has the now tag
+
+## The lead, 2026-11-04 10:11
+
+> This small replan makes your blue-card note an explicit test in F209's first ticket, and adds the look to the mock-up.
+>
+> 1. **A developer at work stays blue in the developer's view**: That is the plan now. Today that view ignores a ticket once it has started, so the card fades even with its Now tag. F209's first ticket only promised not to fade a "lead only" card, which missed cards whose developer work waits for a lead ticket, and the fading rules in the stylesheet would beat the new frame.
+>    Action: The first ticket now requires the blue frame and head at full strength on all three kinds of card, checked in a browser test. The mock-up shows it under "In the developer's view".
+> 2. **The lead at work stays bright in that view too**: You asked only about developers. I'd keep the lead's card orange at full strength as well: the view fades what developers can't take, but a card being worked on now should never look idle. The colour still tells you it isn't developer work.
+>    Action: Included in the same ticket. If you'd rather have only developers lit in that view, say so and I'll change it.
+> 3. **The card's words can still say "lead only"**: This fixes the colour, not the words. Until F206, The board's developer's view counts tickets a developer has started, is built, a blue card can still say "lead only" and its count can be off. I'm keeping the two apart because F206 changes how tickets are counted, and F206 has its own plan.
+>    Action: Nothing on this card. Both need to land for that view to be fully right.
+> 4. **No need to pause the factory**: This changes a ticket that is waiting, and F209's tickets are near the back of the line, so the runner won't reach it before you answer.
+>    Action: Pause from the dashboard first only if you have dragged F209 to the front. Approving lifts a pause.
+>
+> Proposals:
+> - A card at work keeps its colour in the developer's view (replan)
+> - F209 mock-up: the card at work on the board (mockup)

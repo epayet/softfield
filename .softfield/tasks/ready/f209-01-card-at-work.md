@@ -19,7 +19,9 @@ Read D1 and D2 in `.softfield/cards/f209-i-want-the-ticket-currently-being.md`. 
 
 `Card.running` in `factory_dashboard/board.py` becomes `Card.at_work`, and the template's `.card-now` line goes. `Work` is filled from `running_jobs` in `factory_dashboard/overview.py`, as now, but for every live job. The role rule is in `factory_status`, in `factory_dashboard/app.py`. A job with `waiting_clock` keeps the frame and says "Waits for Claude until HH:MM", with no fill, glow or lamp.
 
-On a card, only `factory_dashboard/templates/board.html` reads `running`. Add the two swatches to the board's legend, in the mock-up's words. In the developer's view, an at-work slot isn't faded.
+On a card, only `factory_dashboard/templates/board.html` reads `running`. Add the two swatches to the board's legend, in the mock-up's words.
+
+In the developer's view, an at-work slot keeps its frame and full strength, whatever the card holds for developers. Watch the specificity: the fading rules in `factory_dashboard/static/dashboard.css` start `.dev-view .slot.dev-waits` and `.dev-view .slot.dev-none`, so they beat a plain `.slot.at-work`. The card's words (`dev_tag`) don't change here. The picture is "In the developer's view" in the mock-up.
 
 ### Done when
 - a ticket's live job lights its card, in Planted, on a bug's card too; orange for the lead, blue for a developer
@@ -27,5 +29,6 @@ On a card, only `factory_dashboard/templates/board.html` reads `running`. Add th
 - a job whose run has stopped beating lights nothing
 - a job waiting for Claude's limit shows its words and has no lit look
 - a lit card stays at its place in the column, and keeps its growing tag
-- in the developer's view, a lit card on a `dev-none` slot isn't faded
+- in the developer's view, a card with a developer at work has the blue frame and head at full strength (computed `opacity` 1, in a browser test as in `tests/factory_dashboard/test_line.py`), on `dev-can`, `dev-waits` and `dev-none` slots alike
+- in the developer's view, a card with the lead at work keeps its orange frame at full strength too
 - the listed `tests:` pass, and fail without the change
