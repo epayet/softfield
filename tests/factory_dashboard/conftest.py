@@ -2238,3 +2238,114 @@ def checkout(tmp_path: Path, db_path: Path, planning: int, monkeypatch) -> Path:
     finally:
         conn.close()
     return repo
+
+
+def write_lead_tickets(conn: sqlite3.Connection) -> None:
+    """On top of ``write_fixture``: one Sonnet lead ticket (d4) and one Opus lead ticket (d5).
+
+    The Sonnet ticket (difficulty 4) is a non-Opus lead ticket; the Opus ticket (difficulty 5)
+    is an Opus lead ticket. Both are merged with a passed job.
+    """
+    project = metrics.upsert_project(conn, PROJECT)
+    f1 = metrics.upsert_milestone(conn, project, "f1")
+    run = metrics.upsert_run(conn, project, "20261001-100000", command="milestone f1")
+
+    # Sonnet lead ticket (difficulty 4, non-Opus)
+    sonnet_ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-99-sonnet",
+        milestone_id=f1,
+        kind="lead",
+        state="done",
+        difficulty=4,
+        merged_by=SONNET,
+        commit="s" * 40,
+    )
+    metrics.start_job(
+        conn,
+        run,
+        ticket_id=sonnet_ticket,
+        milestone_id=f1,
+        role="lead-ticket",
+        agent=SONNET,
+        attempt=1,
+        started="2026-10-01T10:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=sonnet_ticket,
+            milestone_id=f1,
+            role="lead-ticket",
+            agent=SONNET,
+            attempt=1,
+            started="2026-10-01T10:00:00+02:00",
+        ),
+        ended="2026-10-01T10:10:00+02:00",
+        outcome="passed",
+        cost_usd=0.50,
+        tokens_in=10_000,
+        tokens_cached=100_000,
+        tokens_out=2_000,
+    )
+
+    # Opus lead ticket (difficulty 5, Opus)
+    opus_ticket = metrics.upsert_ticket(
+        conn,
+        project,
+        "f1-98-opus",
+        milestone_id=f1,
+        kind="lead",
+        state="done",
+        difficulty=5,
+        merged_by=OPUS,
+        commit="o" * 40,
+    )
+    metrics.start_job(
+        conn,
+        run,
+        ticket_id=opus_ticket,
+        milestone_id=f1,
+        role="lead-ticket",
+        agent=OPUS,
+        attempt=1,
+        started="2026-10-01T11:00:00+02:00",
+    )
+    metrics.finish_job(
+        conn,
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=opus_ticket,
+            milestone_id=f1,
+            role="lead-ticket",
+            agent=OPUS,
+            attempt=1,
+            started="2026-10-01T11:00:00+02:00",
+        ),
+        ended="2026-10-01T11:10:00+02:00",
+        outcome="passed",
+        cost_usd=2.00,
+        tokens_in=10_000,
+        tokens_cached=100_000,
+        tokens_out=2_000,
+    )
+
+
+@pytest.fixture
+def lead_client(db_path: Path) -> TestClient:
+    """A client over the fixture plus non-Opus lead tickets (Sonnet d4 + Opus d5)."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_lead_tickets(conn)
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")

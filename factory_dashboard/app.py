@@ -30,6 +30,20 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from factory_dashboard.queries import local
 from runner.usage import short
 
+
+def _agent_token(agent: str) -> str:
+    """The CSS token for an agent's colour (f80 D2)."""
+    _AGENT_TOKENS = {
+        "claude-opus": "--opus",
+        "claude-sonnet": "--sonnet",
+        "local-qwen": "--qwen",
+        "ollama-gpt-oss": "--oss",
+        "ollama-nemotron": "--nemo",
+        "copilot-": "--copilot",
+    }
+    return next((t for p, t in _AGENT_TOKENS.items() if agent.startswith(p)), "--muted")
+
+
 HOST, PORT = "127.0.0.1", 8765
 HERE = Path(__file__).parent
 templates = Jinja2Templates(directory=HERE / "templates")
@@ -64,7 +78,9 @@ def shown(at: str | datetime | None, form: str | None = None) -> str:
     return moment.strftime(form) if form else moment.isoformat()
 
 
-templates.env.filters.update(usd=usd, pct=pct, tokens=short, ago=ago, local=shown)
+templates.env.filters.update(
+    usd=usd, pct=pct, tokens=short, ago=ago, local=shown, agent_token=_agent_token
+)
 
 # Cache by path -> (mtime, first 10 hex chars of sha256).
 _static_cache: dict[str, tuple[float, str]] = {}

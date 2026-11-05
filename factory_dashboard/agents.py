@@ -12,7 +12,7 @@ from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Project, render
 from factory_dashboard.eligibility import eligibility_rows
-from factory_dashboard.queries import dollars
+from factory_dashboard.queries import dollars, lead_split
 from runner.ratings import MERGED_FIRST, MERGED_LATER, NOT_MERGED
 from runner.ratings import expected as rating_expected
 
@@ -44,10 +44,12 @@ def _agent_token(agent: str) -> str:
 ROLES: tuple[str, ...] = (
     "developer",
     "last-attempt",
+    "lead-ticket",
     "direction",
     "escalation",
     "checkpoint",
     "review",
+    "planner",
 )
 
 
@@ -223,6 +225,19 @@ def agents_roles(
     ).fetchall()
     agent_names = [a["agent"] for a in agents]
     counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    # Gather every role that has a job
+    all_roles: set[str] = set(ROLES)
+    for row in conn.execute(
+        "SELECT DISTINCT j.role FROM jobs j"  # noqa: S608
+        " JOIN runs r ON r.id = j.run_id"
+        " JOIN projects p ON p.id = r.project_id"
+        " LEFT JOIN milestones m ON m.id = j.milestone_id" + where_clause,
+        base_params,
+    ).fetchall():
+        all_roles.add(row["role"])
+    # ROLES first in order, then any extra in name order
+    extra = all_roles - set(ROLES)
+    ordered = tuple(r for r in ROLES if r in all_roles) + tuple(sorted(extra))
     for row in conn.execute(
         "SELECT j.agent, j.role FROM jobs j"  # noqa: S608
         " JOIN runs r ON r.id = j.run_id"
@@ -231,7 +246,29 @@ def agents_roles(
         base_params,
     ).fetchall():
         counts[row["agent"]][row["role"]] += 1
-    return agent_names, ROLES, dict(counts)
+    return agent_names, ordered, dict(counts)
+
+
+def lead_split_data(
+    conn: sqlite3.Connection,
+    project: str,
+    milestone: str | None = None,
+) -> dict[str, object]:
+    """Lead tickets by model (D4): rows from ``lead_split`` for the page's filter."""
+    rows = lead_split(conn, project, key=milestone)
+    total_dollars = sum(r.dollars for r in rows)
+    total_would_have = sum(r.would_have for r in rows)
+    total_saved = sum(r.saved for r in rows)
+    sonnet_pct = round(total_dollars / total_would_have * 100) if total_would_have else 0
+    has_non_opus = any(r.agent != "claude-opus" for r in rows)
+    return {
+        "rows": rows,
+        "total_dollars": total_dollars,
+        "total_would_have": total_would_have,
+        "total_saved": total_saved,
+        "sonnet_pct": sonnet_pct,
+        "has_non_opus": has_non_opus,
+    }
 
 
 def work_kind(files: list[str] | None) -> str:
@@ -350,6 +387,7 @@ def agents_page(
     agent_names, roles, counts = agents_roles(conn, project, milestone)
     ratings = rating_data(conn, project, milestone)
     by_kind = by_kind_data(conn, project, milestone)
+    lead = lead_split_data(conn, project, milestone)
     return render(
         request,
         conn,
@@ -363,6 +401,7 @@ def agents_page(
             "counts": counts,
             "ratings": ratings,
             "by_kind": by_kind,
+            "lead": lead,
             "eligible": eligibility_rows(conn, project),
             "milestone": milestone,
         },

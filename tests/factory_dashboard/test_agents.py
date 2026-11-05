@@ -837,3 +837,60 @@ def test_an_agents_next_version_keeps_its_familys_colour():
     assert _agent_token("ollama-nemotron-3-ultra") == "--nemo"
     assert _agent_token("claude-opus") == "--opus"
     assert _agent_token("ollama-gemma4-31b") == "--muted"
+
+
+def test_lead_panel_shows_with_non_opus_lead_ticket(lead_client):
+    """With Sonnet and Opus lead tickets, the panel shows the saving, two bars and a table row."""
+    html = lead_client.get("/agents").text
+    # Panel section exists
+    assert 'id="lead"' in html
+    panel = section(html, "lead")
+    # Readout shows total saved
+    assert "saved" in panel
+    # Two bars present
+    assert "Opus would have" in panel
+    assert "Sonnet" in panel
+    # Table rows per agent-band
+    table_raw = section_raw(html, "lead")
+    assert "claude-sonnet" in table_raw
+    assert "claude-opus" in table_raw
+    # Difficulty band for Sonnet (d4 → "difficulty 4 or below")
+    assert "difficulty 4 or below" in panel
+    # Opus d5 → "difficulty 5 and up"
+    assert "difficulty 5 and up" in panel
+
+
+def test_lead_panel_absent_without_non_opus_lead_ticket(serve):
+    """With no non-Opus lead ticket there is no panel."""
+    html = serve(live=False).get("/agents").text
+    assert 'id="lead"' not in html
+
+
+def test_who_did_what_has_lead_ticket_and_planner_columns(client):
+    """D5: "Who did what" has lead-ticket and planner columns, in D5's order."""
+    html = client.get("/agents").text
+    # Extract column headers from raw HTML
+    roles_raw = section_raw(html, "roles")
+    headers = re.findall(r"<th[^>]*>([^<]+)</th>", roles_raw)
+    # D5 order: developer, last-attempt, lead-ticket, direction, escalation,
+    # checkpoint, review, planner
+    expected_order = [
+        "developer",
+        "last-attempt",
+        "lead-ticket",
+        "direction",
+        "escalation",
+        "checkpoint",
+        "review",
+        "planner",
+    ]
+    for _i, col in enumerate(expected_order):
+        assert col in headers, f"missing column {col}; got {headers}"
+    # Verify order: each expected column appears after the previous one
+    last_idx = -1
+    for col in expected_order:
+        idx = headers.index(col)
+        assert idx > last_idx, (
+            f"{col} appears before {expected_order[expected_order.index(col) - 1]}"
+        )
+        last_idx = idx

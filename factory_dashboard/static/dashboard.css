@@ -357,6 +357,23 @@ tr.few .gauge { opacity: .35; }
 .key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin: 8px 0 0; color: var(--muted); font-size: 12.5px; }
 .key .gauge { width: 40px; display: inline-block; vertical-align: middle; margin-right: 6px; }
 
+/* F179: the Lead tickets by model panel */
+.panel.lead { padding: 12px 14px 14px; }
+.panel.lead .readout { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; }
+.panel.lead .readout b { font: 600 22px/1 var(--display); font-variant-numeric: tabular-nums; }
+.panel.lead .readout span { font: 600 10.5px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); }
+.panel.lead .bars { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; overflow-x: auto; }
+.panel.lead .bar { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.panel.lead .bar .fill { flex: 1 1 0; min-width: 60px; height: 18px; background: var(--plate); border: 1px solid var(--rule); position: relative; }
+.panel.lead .bar.opus .fill { background: var(--opus); opacity: .75; }
+.panel.lead .bar.sonnet .fill { background: var(--sonnet); opacity: .75; }
+.panel.lead .bar .label { font: 11px var(--mono); color: var(--ink-2); white-space: nowrap; flex: none; }
+.panel.lead .scroll { overflow-x: auto; }
+@media (max-width: 390px) {
+  .panel.lead .scroll { overflow-x: auto; }
+  .panel.lead table { min-width: 520px; }
+}
+
 @media (max-width: 560px) { .steps li { grid-template-columns: 1fr; gap: 2px; } }
 @media (prefers-reduced-motion: no-preference) { .pulse { animation: pulse 2s ease-in-out infinite; } }
 @keyframes pulse { 50% { opacity: .45; } }

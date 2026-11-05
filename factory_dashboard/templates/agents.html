@@ -39,6 +39,35 @@
   </table></div>
 </section>
 
+{% if lead.has_non_opus %}
+<section id="lead" class="panel">
+  <h2>Lead tickets, by model</h2>
+  <div class="readout"><b>{{ lead.total_saved | usd }}</b><span>saved</span></div>
+  <div class="bars">
+    <div class="bar opus"><span class="fill" style="width:100%"></span><span class="label">Opus would have {{ lead.total_would_have | usd }}</span></div>
+    <div class="bar sonnet"><span class="fill" style="width:{{ lead.sonnet_pct }}%"></span><span class="label">Sonnet {{ lead.total_dollars | usd }}</span></div>
+  </div>
+  <div class="scroll"><table>
+    <thead><tr><th>Agent</th><th>Band</th><th class="num">Tickets</th><th class="num">Merged</th><th class="num">First</th><th class="num">Step-up</th><th class="num">$</th><th class="num">Would-have</th><th class="num">Saved</th></tr></thead>
+    <tbody>
+    {% for r in lead.rows %}
+    <tr style="--who: var({{ r.agent | agent_token }})">
+      <td class="mono agent-cell">{{ r.agent }}</td>
+      <td>{{ r.band }}</td>
+      <td class="num">{{ r.tickets }}</td>
+      <td class="num">{{ r.merged }}</td>
+      <td class="num">{{ r.first_time }}</td>
+      <td class="num">{{ r.step_ups }}</td>
+      <td class="num">{{ r.dollars | usd }}</td>
+      <td class="num">{{ r.would_have | usd }}</td>
+      <td class="num">{{ r.saved | usd }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
 <section id="by-kind" class="panel bay-kind">
   <h2>By kind of work <span class="src">coding, against the rating</span></h2>
   <p class="sub">How each agent did on each kind of ticket, beside what its rating expected then. A ticket with a template, CSS or JavaScript file is a page.</p>
