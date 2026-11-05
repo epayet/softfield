@@ -1,0 +1,924 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F199 mock-up: the floor as a strip and a map</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --clog: #ec5458;
+    --opus: #ff9640; --sonnet: #ffc48a; --qwen: #8ccf62; --copilot: #7aa7ff;
+    --good: #5fd17a; --dev: #5b9cf5;
+    --bg: var(--floor); --surface: var(--bay); --ink: var(--fg);
+    --warn: var(--hazard); --warn-ink: var(--hazard); --critical: var(--fail); --roller: var(--hazard);
+    --a1: var(--copilot); --a2: var(--opus); --a3: var(--qwen); --a4: var(--sonnet);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --sans: var(--body);
+    --tick: var(--ink-2);
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 10px 10px 0 0; border: 1px solid var(--rule); vertical-align: top; }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 14px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+  .version { flex: 1 1 360px; min-width: 0; max-width: 100%; }
+  @media (min-width: 1100px) { .switch.which { display: none; } [data-version][hidden] { display: block !important; } }
+  [hidden] { display: none !important; }
+  .size { font: 12px var(--mono); color: var(--hazard); margin: 0 0 6px; }
+  .phone { width: 358px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card changes */
+  ul.notes { color: var(--ink-2); font-size: 13.5px; margin: 10px 0 0; padding-left: 18px; max-width: 760px; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel h2 { font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; margin: 0 0 8px; }
+  .panel h2 .src { font: 400 12px var(--body); text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+  .stub { color: var(--muted); font: 12px var(--mono); padding: 10px 14px; margin: 8px 0; border: 1px solid var(--grid); }
+
+  /* ---- Today: copied from dashboard.css, "The factory line" ---- */
+  .floor-wrap { overflow-x: auto; }
+  .floor { display: block; width: 100%; min-width: 1100px; height: auto; background: var(--bg); font-family: var(--mono); font-size: 11px; }
+  .floor.floor-phone { min-width: 0; }
+  .floor-phone .soil { fill: url(#soil-phone); }
+  .floor-phone .belt .bed { stroke-width: 14; } .floor-phone .belt .rollers { stroke-width: 9; }
+  .floor-phone .belt.back .bed { stroke-width: 9; } .floor-phone .belt.back .rollers { stroke-width: 6; }
+  .floor text { fill: var(--ink-2); }
+  .floor text.head { fill: var(--c, var(--ink)); font: 700 12px var(--sans); letter-spacing: .12em; }
+  .floor text.big { font-size: 14px; }
+  .floor text.name { fill: var(--ink); font-size: 12px; }
+  .floor text.dim, .floor .belt text { fill: var(--muted); font-size: 10.5px; pointer-events: none; }
+  .floor text.on { fill: var(--surface); font-weight: 700; font-size: 10px; }
+  .floor .unit { fill: var(--surface); stroke: var(--c, var(--rule)); stroke-width: 2; }
+  .floor .field-plot { fill: var(--surface); stroke: var(--rule); stroke-dasharray: 8 5; }
+  .floor .soil { fill: url(#soil); stroke: var(--rule); }
+  .floor .soil-line { stroke: var(--rule); stroke-width: 2; }
+  .floor .seed { fill: var(--muted); }
+  .floor .sprout { stroke: var(--a3); stroke-width: 2; fill: none; }
+  .floor .bar-bg { fill: var(--grid); } .floor .bar-fill { fill: var(--warn); }
+  .floor [data-station="seeds"], .floor [data-station="rows"] { --c: var(--ink-2); }
+  .floor [data-station="planting"] { --c: var(--a3); }
+  .floor .developers { --c: var(--dev); }
+  .floor .lead { --c: var(--a2); }
+  .floor .reviewers { --c: var(--a4); }
+  .floor .reviewers.stand-in { --c: var(--a1); }
+  .floor .machine .unit { stroke-width: 2.5; }
+  .floor .machine.stand-in .unit, .floor .machine.off .unit { stroke-dasharray: 6 4; }
+  .floor .machine.off, .floor .machine.waiting { --c: var(--muted); }
+  .floor .machine.idle { --c: var(--muted); opacity: 0.55; }
+  .floor .plate { fill: var(--c); }
+  .floor .plate.local { fill: var(--ink); }
+  .floor .plate.cloud { fill: var(--surface); stroke: var(--ink); stroke-width: 1.2; }
+  .floor text.ptext { font: 700 8px var(--sans); letter-spacing: .06em; }
+  .floor text.ptext.local { fill: var(--surface); }
+  .floor text.ptext.cloud { fill: var(--ink); }
+  .floor .led { fill: var(--roller); }
+  .floor .smoke { fill: var(--c); opacity: .3; }
+  .floor .crate { stroke: var(--ink); stroke-width: 1.2; }
+  .floor .crate.lead { fill: var(--a2); } .floor .crate.developer { fill: var(--dev); }
+  .floor .crate.batch { fill: var(--a4); }
+  .floor .crate.waits { fill-opacity: .45; stroke-dasharray: 3 2; }
+  .floor .belt .bed { fill: none; stroke: var(--grid); stroke-width: 18; }
+  .floor .belt .rollers { fill: none; stroke: var(--rule); stroke-width: 12; stroke-dasharray: 2 7; }
+  .floor .belt.back .rollers { stroke: var(--critical); opacity: .35; }
+  .floor .belt.today .rollers { stroke: var(--roller); opacity: .55; }
+  .floor .belt.carrying .rollers { stroke: var(--roller); opacity: 1; }
+  .floor .light { fill: var(--good); }
+  .floor [data-station="ripe"] { --c: var(--warn-ink); }
+  .floor [data-station="ripe"] .unit { stroke-width: 2.5; }
+  .floor [data-station="stash"] .unit { stroke-dasharray: 6 4; }
+  .floor .tile { fill: var(--bg); stroke: var(--a3); stroke-width: 1.5; }
+
+  /* ---- Proposed: the strip (plain HTML, so it needs no drawing code) ---- */
+  .strip-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 0 0 6px; }
+  .strip-head h2 { margin: 0; }
+  .open-map { font: 600 12px var(--display); letter-spacing: .05em; text-transform: uppercase; color: var(--hazard-ink); background: var(--hazard);
+    border: 0; padding: 8px 12px; min-height: 36px; cursor: pointer; clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%); }
+  .readout { font: 12.5px var(--mono); color: var(--ink); background: var(--floor); border-left: 3px solid var(--rule); padding: 4px 8px; margin: 0 0 8px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .readout.at-work { border-left-color: var(--opus); } .readout.at-dev { border-left-color: var(--dev); }
+  .readout.clog { border-left-color: var(--clog); color: var(--fg); }
+  .readout .sign { color: var(--clog); font-weight: 700; }
+  .strip { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); position: relative; }
+  .strip::before { content: ""; position: absolute; left: 0; right: 0; top: 19px; height: 8px; background: var(--grid);
+    background-image: repeating-linear-gradient(90deg, var(--rule) 0 2px, transparent 2px 9px); }
+  .strip.moving::before { background-image: repeating-linear-gradient(90deg, var(--roller) 0 2px, transparent 2px 9px); }
+  .strip li { position: relative; text-align: center; min-width: 0; cursor: pointer; padding: 0 1px; }
+  .strip .box { width: 44px; height: 46px; margin: 0 auto; background: var(--plate); border: 1.5px solid var(--rule); display: grid; place-items: center;
+    font: 700 19px/1 var(--display); color: var(--fg); clip-path: polygon(0 0, calc(100% - 7px) 0, 100% 7px, 100% 100%, 0 100%); }
+  .strip .lbl { display: block; font: 600 9.5px/1.2 var(--mono); letter-spacing: .02em; text-transform: uppercase; color: var(--ink-2); margin-top: 5px; overflow-wrap: anywhere; }
+  .strip li.on .box { border-color: var(--c, var(--hazard)); }
+  .strip li.ripe .box { border-color: var(--warn-ink); color: var(--warn-ink); }
+  .strip li.clogged .box { border-color: var(--clog); }
+  .strip .dots { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+  .strip .dots i { width: 11px; height: 11px; background: var(--grid); border: 1px solid var(--rule); display: block; }
+  .strip .bulb { width: 18px; height: 18px; border-radius: 50%; background: var(--good); }
+  @media (min-width: 700px) { .strip .box { width: 64px; height: 52px; font-size: 24px; } .strip .lbl { font-size: 11px; } .strip::before { top: 22px; } }
+
+  /* ---- Proposed: the map, drawn from one table per shape ---- */
+  .mapframe { background: var(--floor); border: 1px solid var(--rule); }
+  .map { display: block; width: 100%; height: auto; font-family: var(--mono); }
+  .map .ground { fill: var(--floor); } .map .gridline { stroke: var(--grid); stroke-width: .5; }
+  .map text { fill: var(--ink-2); font-size: 9.5px; }
+  .map text.title { fill: var(--ink); font: 700 10px var(--display); letter-spacing: .1em; }
+  .map text.plate-t { fill: var(--hazard-ink); font: 700 9.5px var(--display); letter-spacing: .08em; }
+  .map text.num { fill: var(--ink); font: 700 24px var(--display); }
+  .map text.num.small { font-size: 17px; }
+  .map text.dim { fill: var(--muted); }
+  .map text.nm { fill: var(--ink); font-size: 10px; }
+  .map text.on { fill: var(--floor); font-weight: 700; font-size: 8.5px; }
+  .map text.chip-t { fill: var(--ink); font: 700 9px var(--mono); }
+  .map text.status { fill: var(--ink); font-size: 11px; }
+  .map .zone { fill: var(--bay); stroke: var(--rule); stroke-width: 1; }
+  .map .tick { stroke: var(--tick); stroke-width: 1.2; fill: none; }
+  .map .plate-b { fill: var(--hazard); }
+  .map .unit { fill: var(--plate); stroke: var(--c, var(--rule)); stroke-width: 1.5; }
+  .map .tap { cursor: pointer; }
+  .map .machine { --c: var(--muted); }
+  .map .machine.lead.working { --c: var(--a2); } .map .machine.developers.working { --c: var(--dev); } .map .machine.reviewers.working { --c: var(--a4); }
+  .map .machine.idle, .map .machine.off { opacity: .62; }
+  .map .machine.off .unit { stroke-dasharray: 5 3; }
+  .map .machine.clogged { --c: var(--clog); opacity: 1; }
+  .map .lid { fill: var(--floor); stroke: var(--c); stroke-width: 1; }
+  .map .vent { fill: none; stroke: var(--c); stroke-width: 2; stroke-dasharray: 3 2.2; transform-box: fill-box; transform-origin: center; }
+  .map .led { fill: var(--muted); } .map .machine.working .led { fill: var(--good); } .map .machine.clogged .led { fill: var(--clog); }
+  .map .sign { fill: var(--clog); }
+  .map .crate { stroke: var(--ink); stroke-width: 1; }
+  .map .crate.lead { fill: var(--a2); } .map .crate.developer { fill: var(--dev); } .map .crate.batch { fill: var(--a4); }
+  .map .crate.waits { fill-opacity: .4; stroke-dasharray: 2.5 2; }
+  .map .bed { fill: none; stroke: var(--grid); stroke-width: 11; }
+  .map .rollers { fill: none; stroke: var(--rule); stroke-width: 8; stroke-dasharray: 1.6 5; }
+  .map .belt.back .bed { stroke-width: 7; } .map .belt.back .rollers { stroke-width: 5; stroke: var(--critical); opacity: .45; }
+  .map .belt.today .rollers { stroke: var(--roller); opacity: .5; }
+  .map .belt.carrying .rollers { stroke: var(--roller); opacity: 1; }
+  .map .chip { fill: var(--floor); stroke: var(--rule); stroke-width: 1; }
+  .map .tilebg { fill: var(--grid); } .map .tilefill { fill: var(--hazard); }
+  .map .tileedge { fill: none; stroke: var(--rule); stroke-width: .8; }
+  .map .tileedge.growing { stroke: var(--opus); stroke-width: 1.2; }
+  .map .tileedge.bug { stroke-dasharray: 2 1.5; }
+  .map .seedplot { fill: var(--floor); stroke: var(--rule); }
+  .map .hopper { fill: var(--plate); stroke: var(--rule); stroke-width: 1.5; }
+  .map .gate { fill: var(--plate); stroke: var(--rule); stroke-width: 1.5; }
+  .map .bulb { fill: var(--good); }
+  .map .ripebox { fill: var(--plate); stroke: var(--warn-ink); stroke-width: 2; }
+  .map .swatch-line { stroke-width: 6; }
+  @media (prefers-reduced-motion: no-preference) {
+    .map .belt.carrying .rollers { animation: roll .4s linear infinite; }
+    .map .machine.working .vent { animation: spin 2.4s linear infinite; }
+    .map .sign { animation: pulse 2s ease-in-out infinite; }
+    .strip.moving::before { animation: stripRoll .4s linear infinite; }
+    @keyframes roll { to { stroke-dashoffset: -6.6; } }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes pulse { 50% { opacity: .45; } }
+    @keyframes stripRoll { to { background-position-x: 9px; } }
+  }
+  #sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 9; background: var(--plate); border-top: 3px solid var(--hazard); padding: 12px 16px; max-height: 45vh; overflow: auto; }
+  #sheet b { font: 700 14px var(--display); letter-spacing: .06em; text-transform: uppercase; display: block; margin-bottom: 4px; }
+  #sheet p { margin: 0 0 8px; font-size: 14px; color: var(--ink-2); white-space: pre-line; }
+  #sheet button { min-height: 44px; padding: 8px 16px; background: var(--bay); color: var(--fg); border: 1px solid var(--rule); font: 600 13px var(--display); cursor: pointer; }
+</style>
+</head>
+<body>
+<h1>F199: the floor, small and as a map</h1>
+<p class="lede">The floor as it stood on 2 Nov at 23:13: Opus on a planner job, 105 tickets queued, 57 cards planted, 2 ripe. Today's drawing is the live code run on those values (past the first few, the harvested tiles' order is approximate). In Proposed, "Developer working" and "Waiting for Claude" are examples. Tap anything on the map.</p>
+<div class="switch which" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+<div class="switch" role="group" aria-label="Which moment, in Proposed">
+  <button type="button" data-moment="now" aria-pressed="true">Now</button>
+  <button type="button" data-moment="dev" aria-pressed="false">Developer working</button>
+  <button type="button" data-moment="limit" aria-pressed="false">Waiting for Claude</button>
+</div>
+
+<div class="versions">
+<!-- Today: factory_dashboard/templates/_partials/line.html, drawn by factory_dashboard/static/factory.js -->
+<div class="version" data-version="today" hidden>
+  <h3>Today · wide screen</h3>
+  <p class="size">needs 1,100 px, or it scrolls sideways</p>
+  <section class="panel">
+    <h2>From the field to the stash <span class="src">live</span></h2>
+    <div class="floor-wrap"><svg id="floor" class="floor" viewBox="0 0 1320 640" role="img" aria-label="Today's floor"></svg></div>
+  </section>
+  <h3>Today · phone</h3>
+  <p class="size">about 1,900 px tall on a 390 px phone: 2 to 3 screens</p>
+  <section class="panel phone">
+    <h2>From the field to the stash <span class="src">live</span></h2>
+    <svg id="floor-phone" class="floor floor-phone" viewBox="0 0 358 1740" role="img" aria-label="Today's phone floor"></svg>
+  </section>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h3>Proposed · on the Overview, any screen</h3>
+  <p class="size">about 170 px tall, under Now and the Queue</p>
+  <div class="stub">Now · Queue · Next in line</div>
+  <section class="panel new" style="max-width:760px">
+    <div class="strip-head"><h2>The floor <span class="src">live</span></h2><button type="button" class="open-map" data-open>Open the map ›</button></div>
+    <div id="readout" class="readout"></div>
+    <ol id="strip" class="strip"></ol>
+  </section>
+  <div class="stub">Agent allowance · While you were away · Savings</div>
+  <ul class="notes">
+    <li>One belt, six stops, one line saying what's on it. A tap on a stop opens the map.</li>
+    <li>The Replay bar leaves the Overview for the map. While you were away keeps its own choice of stretch.</li>
+    <li>This same strip is what a widget or your website would show later.</li>
+  </ul>
+
+  <h3>Proposed · the map, phone (one screen, no scrolling)</h3>
+  <div class="phone mapframe new"><svg id="map-tall" class="map" viewBox="0 0 360 640" role="img" aria-label="The map, for a phone held upright"></svg></div>
+  <h3>Proposed · the map, wide (or a phone turned sideways)</h3>
+  <div class="mapframe new"><svg id="map-wide" class="map" viewBox="0 0 960 540" role="img" aria-label="The map, for a wide screen"></svg></div>
+  <ul class="notes">
+    <li>Seen from above, on a grid: every machine, belt and pile on one screen, at any size. Its own page, with a Full screen button.</li>
+    <li>Planted rows go. Every planted card is one tile, in the board's order, first top left: its yellow fill is its merged tickets, an orange edge means a ticket has started.</li>
+    <li>Belts lose their words and keep a number, so nothing overlaps. A tap says what it is.</li>
+    <li>The field uses the board's words: Seed, Sprouting, Planted, Ripe, Harvested.</li>
+  </ul>
+</div>
+</div>
+
+<div id="sheet" hidden><b id="sheet-t"></b><p id="sheet-p"></p><button type="button" id="sheet-x">Close</button></div>
+
+<script>
+"use strict";
+// ---- the real values, 2 Nov 23:13 (/line/live, /board) ----
+const PLANTED = `F170|0|3||Blocked tickets: give the tests 30 minutes
+F187|0|3|g|Store every time in UTC
+F85|0|3|g|Real before and after pictures at sign-off
+F175|3|3|g|The factory cleans up its temp files
+F132|1|8|g|One view of the whole factory
+F162|0|1||No checkpoint before a review
+F144|0|1||A review reads the real page
+F67|0|2||Key points say what they ask of you
+F61|0|1||Claude's meters: at this rate
+F77|0|2||Allowance bars: the same length
+F98|0|2||A pressed button shows it is sending
+F62|0|1||A review on Now says which card
+F171|4|5|g|Each card once on the board
+F169|0|1||Let the planner search the web
+F165|2|3|g|A point opens its mock-up in one tap
+F75|0|1||When a plan gets approved
+F164|4|7|g|Plant a review's ideas
+F108|0|1||Desk boxes say when
+bug-02|0|1|b|Limit wait takes requests
+F33|0|2||Overview: how long check-all takes
+F65|0|5||Review rounds until you sign off
+F112|0|1||Plain words for "replan"
+F25|0|1||Does a plant check the current state?
+F9|34|36|g|Line polish
+F10|0|2||Crates on the belts
+bug-03|0|1|b|Roadmap items to seeds
+F37|1|3|g|Every number links to what it is
+F38|1|2|g|The new-version tag
+F58|0|1||Asking the lead through a plant
+F59|1|4|g|A weekly report page
+F68|8|9|g|Renamed SoftField
+F69|6|7|g|Light and night theme button
+F71|1|2|g|Longer timeouts
+F81|5|9|g|Factory theme on the older pages
+F86|0|3||Tracking the human's time
+F89|0|2||Claude's meters: a fresh reading
+F97|0|1||Needs you steps aside
+F121|0|6||Projects on any main branch
+F123|0|3||Projects page: drag into order
+F124|0|3||Pause one project
+F127|1|1|g|The factory is optional
+F136|0|3||init and a forgotten project
+F138|0|1||Run again right after Ctrl-C
+F139|1|1|g|Files in .softfield
+F147|0|1||Parked work when Claude runs out
+F149|2|2|g|Retire the backlog file
+F163|0|1||A browser check for htmx parts
+F177|0|2||Planner replies: real cost
+F178|0|3||Backups on the dashboard
+F179|0|4||Sonnet as the lead on easy tickets
+F184|0|1||The top bar's dot goes green
+F186|0|1||A sign-off stays signed
+F188|0|1||Drop the count from the phone bar
+F192|0|3||A fast lane request shows at once
+F193|0|1||The picker follows your order
+F196|0|3||A planted card with no tickets
+F203|1|2|g|A sign-off pushes to GitHub`.split("\n").map((l) => { const [key, done, total, f, title] = l.split("|"); return { key, done: +done, total: +total, growing: f === "g", bug: f === "b", title }; });
+const QUEUE_ROWS = [
+  [null, "batch", 0, "review F127"], ["f170-02-fix-after-try-again", "lead", 0], ["f170-03-desk-offers-the-fix", "developer", 1],
+  ["f170-04-blocked-ticket-page", "developer", 1], ["f187-01-runner-clocks-utc", "lead", 0], ["f187-03-old-times-to-utc", "lead", 0],
+  ["f85-01-pictures-at-the-review", "lead", 0], ["f85-02-before-and-after-on-the-card", "lead", 1], ["f85-03-planner-lists-the-pages", "lead", 1],
+  ["f132-02-overview-live-every-project", "lead", 0], ["f132-03-away-every-project", "developer", 1], ["f132-04-savings-on-project-page", "developer", 1],
+  ["f132-05-floor-every-project", "lead", 1], ["f132-06-jobs-runs-every-project", "developer", 1], ["f132-07-timeline-every-project", "developer", 1], ["f132-08-picker-in-the-tabs", "developer", 1],
+];
+const queueDoc = [];
+for (let i = 0; i < 105; i++) {
+  const r = QUEUE_ROWS[i] || ["later-" + i, "developer", 1];
+  queueDoc.push({ number: i + 1, ticket: r[0], role: r[0] ? null : "review", title: r[3] || null, kind: r[1], waits: r[2] ? ["another ticket"] : [] });
+}
+const rowsDoc = [
+  { key: "bugs", title: "Bugs: fixes outside the milestones", done: 2, ready: 2, running: 0, total: 4 },
+  { key: "f9-line-polish", title: "line polish", done: 34, ready: 2, running: 0, total: 36 },
+  { key: "f10-crates", title: "crates on the belts", done: 0, ready: 2, running: 0, total: 2 },
+  { key: "f25-whenever", title: "whenever i plant something, does it check the current state of things in case the seed is not relevant anymore?", done: 0, ready: 1, running: 0, total: 1 },
+];
+for (let i = 0; i < 52; i++) rowsDoc.push({ key: "x" + i, title: "", done: 0, ready: i < 46 ? 2 : 1, running: 0, total: 1 });
+const beltDoc = (id, label, today) => ({ id, label, today, carrying: false, from: id.split("→")[0], to: id.split("→")[1] });
+function baseDoc() {
+  return {
+    belts: [
+      beltDoc("seeds→planting", "sprouting", null), beltDoc("planting→rows", "planted", null), beltDoc("rows→queue", "tickets", null),
+      beltDoc("queue→lead", "lead tickets", 0), beltDoc("queue→developers", "developer", 1), beltDoc("lead→checks", "lead's work: to checks", 0),
+      beltDoc("developers→checks", "to checks", 3), beltDoc("checks→developers", "failed: retry", 2), beltDoc("checks→lead", "failed twice: direction · 3×: escalation", 0),
+      beltDoc("checks→merged", "merged", 0), beltDoc("merged→ripe", "ripened", 0), beltDoc("ripe→stash", "your sign-off", 7), beltDoc("merged→reviewers", "checkpoints", 0),
+    ],
+    stations: { seeds: 65, planting: 8, rows: 57, queue: 105, merged: 0, ripe: 2, stash: 65 },
+    field: {
+      seeds: 59, rows: rowsDoc, planted: PLANTED,
+      ripe: [{ key: "f172", title: "Mark a card to use Claude's reserve" }, { key: "f142", title: "Phone notifications: every project" }],
+      stash: ["f185", "f146", "f103", "f73", "f152", "f173", "f14", "f19", "f22", "f28", "f49", "f53"].map((key) => ({ key })),
+    },
+    machines: [
+      { id: "claude-opus", station: "lead", name: "Opus", where: "Claude", rating: "9.4", scale: 1.18, state: "working", stand_in: false, off: [], merged_today: 0, next_ticket: "f170-02-fix-after-try-again", crate: { ticket: null, role: "planner", title: "planner job 1678, on F199", kind: "batch", attempt: 10, minutes: 0 } },
+      { id: "claude-sonnet", station: "lead", name: "Sonnet", where: "Claude", rating: "4.5", scale: 0.98, state: "idle", stand_in: false, off: ["developer"], merged_today: 0, next_ticket: "f170-02-fix-after-try-again", crate: null },
+      { id: "copilot-auto", station: "reviewers", name: "Copilot", where: "Copilot", rating: "8.9", scale: 1.16, state: "idle", stand_in: true, off: ["checkpoint", "checkpoint-shadow"], merged_today: 0, crate: null },
+      { id: "local-qwen3.6-35b-a3b", station: "developers", name: "qwen3.6-35b-a3b", where: "local GPU", rating: "1", scale: 0.84, state: "idle", stand_in: false, off: [], merged_today: 0, crate: null },
+    ],
+    queue: queueDoc, merged: [], wait: null,
+  };
+}
+function momentDoc(which) {
+  const doc = baseDoc();
+  const opus = doc.machines[0], qwen = doc.machines[3];
+  if (which === "dev") {
+    opus.state = "idle"; opus.crate = null;
+    qwen.state = "working";
+    qwen.crate = { ticket: "f170-03-desk-offers-the-fix", role: "developer", title: "A blocked ticket on the desk shows the lead's fix", kind: "developer", attempt: 1, minutes: 22 };
+    doc.belts.find((b) => b.id === "queue→developers").carrying = true;
+  } else if (which === "limit") {
+    opus.state = "waiting"; opus.crate = null; opus.reset = "03:50";
+    doc.wait = { kind: "claude", station: "lead", machine: "claude-opus", words: "waiting for Claude's reset 03:50" };
+  }
+  return doc;
+}
+
+// ---- Today: copied from factory_dashboard/static/factory.js ----
+const NS = "http://www.w3.org/2000/svg";
+function add(parent, tag, attrs = {}, words = null) {
+  const node = document.createElementNS(NS, tag);
+  for (const [key, value] of Object.entries(attrs)) if (value !== null && value !== undefined) node.setAttribute(key, value);
+  if (words !== null) node.textContent = words;
+  parent.appendChild(node);
+  return node;
+}
+const text = (parent, x, y, words, cls = "", attrs = {}) => add(parent, "text", { x, y, class: cls, ...attrs }, words);
+const short = (ticket) => ticket.split("-").slice(0, 2).join("-");
+const cut = (words, n) => (words && words.length > n ? `${words.slice(0, n - 1)}…` : words || "");
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const make_link = (svg) => add(svg, "g", {});
+const BELTS = {
+  "seeds→planting": { path: "M150 140 L176 140", at: [163, 128], middle: true, short: true },
+  "planting→rows": { path: "M238 196 L238 262", at: [250, 236] },
+  "rows→queue": { path: "M294 500 L360 500", at: [300, 488] },
+  "queue→lead": { path: "M470 360 L520 360 L520 210 L560 210", at: [534, 320], turn: true },
+  "queue→developers": { path: "M462 480 L560 480", at: [470, 468] },
+  "lead→checks": { path: "M790 205 L1010 205 L1010 260", at: [800, 194] },
+  "developers→checks": { path: "M978 440 L1000 440 L1000 380", at: [1026, 410] },
+  "checks→developers": { path: "M1019 380 L1019 600 L626 600 L626 512", at: [700, 592], back: true, thin: true },
+  "checks→lead": { path: "M1040 260 L1040 236 L790 236", at: [800, 254], back: true, thin: true },
+  "checks→merged": { path: "M1056 320 L1120 320", at: [1062, 308] },
+  "merged→ripe": { path: "M1213 270 L1213 214", at: [1222, 246] },
+  "ripe→stash": { path: "M1306 150 L1316 150 L1316 470 L1306 470", at: [1300, 320], turn: true, end: true },
+  "merged→reviewers": { path: "M1150 270 L1150 248 L1080 248 L1080 162", at: [1145, 264], end: true },
+};
+function belt(svg, b, belts = BELTS) {
+  const where = belts[b.id];
+  if (!where) return;
+  const cls = ["belt", where.back ? "back" : "", b.today > 0 ? "today" : "", b.carrying ? "carrying" : ""].join(" ").trim();
+  const g = add(svg, "g", { class: cls });
+  const width = where.thin ? 10 : 13;
+  add(g, "path", { d: where.path, class: "bed", "stroke-width": width + 5 });
+  add(g, "path", { d: where.path, class: "rollers", "stroke-width": width });
+  const label = where.say || b.label;
+  const words = b.today === null ? (where.short ? "" : label) : where.short ? `${b.today} today` : `${label} · ${b.today} today`;
+  const [x, y] = where.at;
+  const attrs = {};
+  if (where.turn) attrs.transform = `rotate(-90 ${x} ${y})`;
+  if (where.middle) attrs["text-anchor"] = "middle";
+  if (where.end) attrs["text-anchor"] = "end";
+  text(g, x, y, words, "", attrs);
+}
+const station = (svg, id) => add(svg, "g", { class: "station", "data-station": id });
+function seeds(svg, doc, count, x, y, w, inside = false) {
+  const g = station(svg, "seeds");
+  const h = 106, mid = x + w / 2;
+  add(g, "path", { d: `M${x} ${y} L${x + w} ${y} L${x + w - 18} ${y + h} L${x + 18} ${y + h} Z`, class: "unit" });
+  const spots = [[-15, 80], [3, 88], [19, 78], [-5, 66], [13, 60], [-23, 66], [27, 64], [5, 50]];
+  spots.slice(0, Math.min(doc.field.seeds, spots.length)).forEach(([dx, dy]) => add(g, "ellipse", { cx: mid + dx, cy: y + dy, rx: 7, ry: 5, class: "seed" }));
+  const at = inside ? y + 18 : y + h + 20;
+  text(g, mid, at, "SEEDS", "head", { "text-anchor": "middle" });
+  text(g, mid, at + 16, `${plural(count.seeds, "ticket", "tickets")} set aside`, "dim", { "text-anchor": "middle" });
+}
+function planting(svg, count, x, y, w, h) {
+  const link = make_link(station(svg, "planting"));
+  const mid = x + w / 2;
+  add(link, "rect", { x, y, width: w, height: h, class: "unit" });
+  add(link, "rect", { x: x + w - 38, y: y - 34, width: 22, height: 34, class: "unit" });
+  text(link, mid, y + 28, "PLANTING", "head", { "text-anchor": "middle" });
+  text(link, mid, y + 46, "ideas you're planning", "", { "text-anchor": "middle" });
+  text(link, mid, y + 60, "with the lead", "", { "text-anchor": "middle" });
+  text(link, mid, y + 86, `${count.planting} in talks`, "dim", { "text-anchor": "middle" });
+}
+function rows(svg, doc, count, x, y, w, h, step, toward) {
+  const g = station(svg, "rows");
+  add(g, "rect", { x, y, width: w, height: h, class: "soil" });
+  text(g, x + 10, y + 22, "PLANTED ROWS", "head");
+  const bar = w - 64;
+  doc.field.rows.slice(0, 4).forEach((row, n) => {
+    const top = y + 54 + n * step, sx = x + 20, left = x + 40;
+    const r = add(make_link(g), "g", {});
+    add(r, "path", { class: "sprout", d: `M${sx} ${top + 14} v-22 M${sx} ${top + 2} c-8 0-11-4-11-9 8 0 11 4 11 9 M${sx} ${top - 2} c0-7 3-10 10-10 0 7-3 10-10 10 ` });
+    text(r, left, top - 2, cut(row.title ? `${row.key.toUpperCase()} · ${row.title}` : row.key.toUpperCase(), Math.floor((w - 50) / 7.2)), "name");
+    add(r, "rect", { x: left, y: top + 6, width: bar, height: 7, class: "bar-bg" });
+    add(r, "rect", { x: left, y: top + 6, width: row.total ? (bar * row.done) / row.total : 0, height: 7, class: "bar-fill" });
+    text(r, left, top + 28, `${row.done} of ${row.total} merged · ${row.ready} ready`, "dim");
+  });
+  const more = doc.field.rows.length > 4 ? `+ ${doc.field.rows.length - 4} more · ` : "";
+  const queued = doc.field.rows.reduce((sum, row) => sum + row.ready, 0);
+  text(g, x + 10, y + h - 10, `${more}${plural(count.rows, "row feeds", "rows feed")} ${plural(queued, "ticket", "tickets")} ${toward}`, "dim");
+}
+const QUEUE = { cols: 2, most: 16, width: 34, pitch: 38, rise: 22, bottom: 40, inside: false };
+function queue(svg, doc, x, y, w, h, fit = QUEUE) {
+  const g = station(svg, "queue");
+  const mid = x + w / 2;
+  add(g, "path", { d: `M${x} ${y} L${x + w} ${y} L${x + w - 18} ${y + h} L${x + 18} ${y + h} Z`, class: "unit" });
+  text(g, mid, fit.inside ? y + 20 : y - 10, `QUEUE · ${doc.queue.length}`, "head", { "text-anchor": "middle" });
+  const left = mid - (fit.cols * fit.pitch - (fit.pitch - fit.width)) / 2;
+  doc.queue.slice(0, fit.most).forEach((crate, i) => {
+    const col = i % fit.cols, row = Math.floor(i / fit.cols);
+    const cx = left + col * fit.pitch, cy = y + h - fit.bottom - row * fit.rise;
+    const c = add(g, "g", {});
+    add(c, "rect", { x: cx, y: cy, width: fit.width, height: 20, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
+    text(c, cx + fit.width / 2, cy + 14, String(crate.number), "on", { "text-anchor": "middle" });
+  });
+  if (fit.inside) { text(g, mid, y + 38, "in run order", "dim", { "text-anchor": "middle" }); return; }
+  if (doc.queue.length > fit.most) text(g, mid, y + 22, `+ ${doc.queue.length - fit.most} more`, "dim", { "text-anchor": "middle" });
+  text(g, mid, y + h + 20, "in run order", "dim", { "text-anchor": "middle" });
+}
+const AREAS = {
+  lead: { x: 560, y: 120, width: 230, height: 170, gap: 10 },
+  reviewers: { x: 810, y: 50, width: 280, height: 112, gap: 10, most: 140 },
+  developers: { x: 562, y: 404, width: 402, height: 108, gap: 12, most: 128, bay: { x: 548, y: 326, width: 430, height: 246 } },
+};
+function machine(svg, m, x, y, w, h) {
+  const working = m.state === "working";
+  const cls = ["machine", m.station, m.state, m.stand_in ? "stand-in" : "", working ? "on" : "", m.state === "idle" ? "idle" : ""].filter(Boolean).join(" ");
+  const g = add(svg, "g", { class: cls });
+  const tall = Math.round(30 * m.scale);
+  if (m.station !== "reviewers") {
+    add(g, "rect", { x: x + w - 34, y: y - tall, width: 18, height: tall, class: "unit" });
+    if (working) {
+      add(g, "circle", { cx: x + w - 25, cy: y - tall - 10, r: 6, class: "smoke" });
+      add(g, "circle", { cx: x + w - 18, cy: y - tall - 22, r: 8, class: "smoke" });
+    }
+  }
+  add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+  const left = x + 10;
+  let line = y + 20;
+  const rated = m.rating !== "" ? ` · ${m.rating}` : "";
+  if (m.station === "lead") {
+    text(g, left + 5, y + 25, "THE LEAD", "head big");
+    add(g, "rect", { x: left + 5, y: y + 38, width: w - 30, height: 28, class: "plate" });
+    text(g, left + 5 + (w - 30) / 2, y + 57, `${m.name.toUpperCase()}${rated}`, "on", { "text-anchor": "middle" });
+    line = y + 88;
+  } else {
+    text(g, left, line, cut(m.name.toUpperCase(), Math.floor((w - 16) / 8.5)), "head");
+    const wh = m.where === "local GPU" ? "local" : "cloud";
+    const words = cut(`${m.where.toUpperCase()}${rated}`, Math.floor((w - 24) / 4.6));
+    add(g, "rect", { x: left, y: line + 7, width: Math.min(w - 20, words.length * 5 + 12), height: 14, class: `plate ${wh}` });
+    text(g, left + 6, line + 17.5, words, `ptext ${wh}`);
+    line += 42;
+  }
+  if (working) for (let k = 0; k < 3; k++) add(g, "rect", { x: x + w - 38 + k * 9, y: y + 6, width: 6, height: 4, class: "led" });
+  if (working && m.crate) {
+    const c = m.crate;
+    add(g, "rect", { x: left, y: line - 14, width: 44, height: 22, class: `crate ${c.kind}` });
+    text(g, left + 22, line + 1, c.ticket ? short(c.ticket) : "batch", "on", { "text-anchor": "middle" });
+    text(g, left + 50, line + 1, `${c.minutes} min`, "name");
+    text(g, left, line + 26, `attempt ${c.attempt}`, "dim");
+  } else if (m.station === "lead" && m.next_ticket) {
+    text(g, left, line, `next: ${short(m.next_ticket)}`, "dim");
+  } else {
+    text(g, left, line, m.stand_in ? "standing by" : "idle", "dim");
+  }
+  if (m.off.length) text(g, left, y + h - 8, cut(`off: ${m.off.join(", ")}`, Math.floor((w - 16) / 6.5)), "dim");
+}
+function machines(svg, doc, areas = AREAS) {
+  for (const [name, area] of Object.entries(areas)) {
+    const own = doc.machines.filter((m) => m.station === name);
+    const g = add(svg, "g", { class: `station ${name}` });
+    if (name === "reviewers") text(g, area.x + 2, area.y - 10, "REVIEWERS", "head");
+    if (area.bay) {
+      const { x, y, width, height } = area.bay;
+      add(g, "rect", { x, y, width, height, class: "unit", "stroke-dasharray": "8 5", "fill-opacity": 0.4 });
+      text(g, x + 12, y + 20, "DEVELOPER BAY", "head");
+    }
+    const each = Math.min(area.most || area.width, (area.width - area.gap * (own.length - 1)) / own.length);
+    own.forEach((m, i) => machine(g, m, area.x + i * (each + area.gap), area.y, each, area.height));
+  }
+}
+function checks(svg, x, y, w, h) {
+  const g = station(svg, "checks");
+  const mid = x + w / 2;
+  add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+  add(g, "circle", { cx: mid, cy: y + 30, r: 10, class: "light" });
+  text(g, mid, y + 62, "CHECKS", "head", { "text-anchor": "middle" });
+  text(g, mid, y + 79, "ruff · mypy", "dim", { "text-anchor": "middle" });
+  text(g, mid, y + 95, "tests · gates", "dim", { "text-anchor": "middle" });
+}
+function merged(svg, doc, count, x, y, w, h) {
+  const g = station(svg, "merged");
+  add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+  text(g, x + 14, y + 22, `MERGED TODAY · ${count.merged}`, "head");
+}
+function ripe(svg, doc, count, x, y, w, h) {
+  const g = station(svg, "ripe");
+  add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+  add(g, "circle", { cx: x + 26, cy: y + 30, r: 12, class: "unit" });
+  text(g, x + 46, y + 28, `RIPE · ${count.ripe}`, "head big");
+  text(g, x + 46, y + 44, "needs your sign-off", "");
+  doc.field.ripe.slice(0, 3).forEach((m, i) => text(g, x + 14, y + 72 + i * 18, cut(`${m.key.toUpperCase()} · ${m.title || ""}`, Math.floor((w - 28) / 7.2)), "name"));
+}
+function stash(svg, doc, count, x, y, w, h, cols) {
+  const g = station(svg, "stash");
+  add(g, "rect", { x, y, width: w, height: h, class: "unit" });
+  text(g, x + 14, y + 22, `HARVEST STASH · ${count.stash}`, "head");
+  doc.field.stash.slice(0, cols * Math.floor((h - 60) / 30)).forEach((m, i) => {
+    const tx = x + 14 + (i % cols) * 56, ty = y + 36 + Math.floor(i / cols) * 30;
+    add(g, "rect", { x: tx, y: ty, width: 52, height: 26, class: "tile" });
+    text(g, tx + 26, ty + 17, m.key.toUpperCase(), "name", { "text-anchor": "middle" });
+  });
+  text(g, x + 14, y + h - 10, "latest first", "dim");
+}
+function soil(svg, id) {
+  const pattern = add(add(svg, "defs"), "pattern", { id, width: 10, height: 10, patternUnits: "userSpaceOnUse" });
+  add(pattern, "path", { d: "M0 10L10 0", class: "soil-line" });
+}
+function drawToday(svg, doc) {
+  soil(svg, "soil");
+  const count = doc.stations;
+  add(svg, "rect", { x: 12, y: 34, width: 300, height: 590, class: "field-plot" });
+  text(svg, 26, 56, "THE FIELD", "head");
+  seeds(svg, doc, count, 40, 90, 110);
+  planting(svg, count, 176, 92, 124, 104);
+  rows(svg, doc, count, 30, 262, 264, 300, 58, "→");
+  queue(svg, doc, 360, 330, 110, 230);
+  machines(svg, doc);
+  checks(svg, 982, 260, 74, 120);
+  merged(svg, doc, count, 1120, 270, 186, 100);
+  ripe(svg, doc, count, 1120, 84, 186, 130);
+  stash(svg, doc, count, 1120, 420, 186, 190, 3);
+  doc.belts.forEach((b) => belt(svg, b));
+}
+const PHONE_QUEUE = { cols: 3, most: 6, width: 30, pitch: 33, rise: 24, bottom: 30, inside: true };
+const PHONE_AREAS = {
+  lead: { x: 26, y: 630, width: 314, height: 140, gap: 0 },
+  reviewers: { x: 26, y: 812, width: 314, height: 112, gap: 22, most: 146 },
+  developers: { x: 36, y: 1032, width: 294, height: 112, gap: 8, most: 146, bay: { x: 26, y: 940, width: 314, height: 216 } },
+};
+const PHONE_BELTS = {
+  "seeds→planting": { path: "M158 92 L196 92", at: [177, 82], middle: true, short: true },
+  "planting→rows": { path: "M266 146 L266 176", at: [278, 166] },
+  "rows→queue": { path: "M179 438 L179 492", at: [192, 470] },
+  "queue→lead": { path: "M125 592 L125 630", at: [114, 614], end: true, short: true },
+  "queue→developers": { path: "M248 552 L350 552 L350 782 L183 782 L183 940", at: [196, 804], say: "developer" },
+  "lead→checks": { path: "M26 700 L7 700 L7 1272 L134 1272", at: [14, 1322], say: "lead's work" },
+  "developers→checks": { path: "M150 1156 L150 1196", at: [140, 1180], end: true },
+  "checks→developers": { path: "M208 1196 L208 1156", at: [218, 1180], back: true, thin: true, short: true },
+  "checks→lead": { path: "M134 1222 L19 1222 L19 740 L26 740", at: [30, 1212], back: true, thin: true, say: "back to the lead" },
+  "checks→merged": { path: "M179 1306 L179 1336", at: [192, 1325] },
+  "merged→ripe": { path: "M100 1432 L100 1462", at: [112, 1451] },
+  "ripe→stash": { path: "M100 1582 L100 1612", at: [112, 1601] },
+  "merged→reviewers": { path: "M340 1360 L351 1360 L351 868 L340 868", at: [338, 1252], end: true, back: true, thin: true, short: true },
+};
+function drawTodayPhone(svg, doc) {
+  soil(svg, "soil-phone");
+  const count = doc.stations;
+  add(svg, "rect", { x: 6, y: 8, width: 346, height: 438, class: "field-plot" });
+  text(svg, 16, 28, "THE FIELD", "head");
+  seeds(svg, doc, count, 16, 44, 150, true);
+  planting(svg, count, 196, 48, 140, 98);
+  rows(svg, doc, count, 16, 176, 326, 262, 50, "↓");
+  queue(svg, doc, 99, 492, 160, 100, PHONE_QUEUE);
+  machines(svg, doc, PHONE_AREAS);
+  checks(svg, 134, 1196, 90, 110);
+  merged(svg, doc, count, 26, 1336, 314, 96);
+  ripe(svg, doc, count, 26, 1462, 314, 120);
+  stash(svg, doc, count, 26, 1612, 314, 120, 5);
+  doc.belts.forEach((b) => belt(svg, b, PHONE_BELTS));
+}
+
+// ---- Proposed: one drawing, one table per shape (units on a 20-unit grid) ----
+const WIDE = {
+  w: 960, h: 540, statusY: 22,
+  zones: { field: [16, 36, 228, 360, "THE FIELD"], lead: [452, 36, 214, 168, "THE LEAD"], reviewers: [716, 210, 88, 118, "REVIEWERS"], developers: [452, 300, 214, 168, "DEVELOPER BAY"] },
+  seeds: [28, 66, 98, 76], sprouting: [134, 66, 98, 76],
+  planted: { x: 28, y: 178, w: 204, tile: 16, pitch: 18, head: 18 },
+  queue: { x: 284, y: 170, w: 124, h: 236, cols: 3, most: 15, crate: 28, pitch: 32, rise: 20 },
+  machines: { lead: [460, 64, 198, 130], reviewers: [722, 236, 76, 86], developers: [460, 328, 198, 130] }, most: 130,
+  checks: [694, 56, 78, 104], merged: [812, 36, 132, 112], ripe: [812, 196, 132, 116], stash: [812, 360, 132, 164],
+  legend: [16, 408, 228, 116],
+  belts: {
+    "seeds→planting": ["M126 104 H134"], "planting→rows": ["M183 142 V178"], "rows→queue": ["M232 290 H284"],
+    "queue→lead": ["M408 230 H430 V120 H452", 430, 180], "queue→developers": ["M408 350 H452", 430, 350],
+    "lead→checks": ["M666 90 H694", 680, 80], "checks→lead": ["M694 130 H666", 680, 120, true],
+    "developers→checks": ["M666 400 H706 V160", 706, 300], "checks→developers": ["M694 150 H682 V350 H666", 682, 250, true],
+    "checks→merged": ["M772 100 H812", 792, 100], "merged→ripe": ["M878 148 V196", 878, 172], "ripe→stash": ["M878 312 V360", 878, 336],
+    "merged→reviewers": ["M830 148 V180 H760 V210", 790, 180, true],
+  },
+};
+const TALL = {
+  w: 360, h: 640, statusY: 14,
+  zones: { field: [6, 22, 348, 106, "THE FIELD"], lead: [116, 136, 236, 106, "THE LEAD"], reviewers: [272, 262, 80, 112, "REVIEWERS"], developers: [116, 262, 136, 112, "DEVELOPER BAY"] },
+  seeds: [12, 42, 58, 80], sprouting: [76, 42, 58, 80],
+  planted: { x: 140, y: 42, w: 208, tile: 10, pitch: 11.4, head: 14 },
+  queue: { x: 12, y: 146, w: 88, h: 92, cols: 3, most: 6, crate: 19, pitch: 20, rise: 17 },
+  machines: { lead: [122, 158, 224, 78], reviewers: [277, 284, 70, 84], developers: [122, 284, 124, 84] }, most: 124,
+  checks: [134, 402, 100, 58], merged: [8, 500, 108, 124], ripe: [126, 500, 108, 124], stash: [244, 500, 108, 124],
+  legend: null,
+  belts: {
+    "seeds→planting": ["M70 82 H76"], "planting→rows": ["M134 82 H140"], "rows→queue": ["M56 128 V146"],
+    "queue→lead": ["M100 190 H116"], "queue→developers": ["M56 238 V318 H116", 56, 280],
+    "lead→checks": ["M257 242 V425 H234", 257, 330], "checks→lead": ["M234 440 H267 V242", 267, 390, true],
+    "developers→checks": ["M165 374 V402", 150, 388], "checks→developers": ["M205 402 V374", 220, 388, true],
+    "checks→merged": ["M134 432 H62 V500", 62, 470], "merged→ripe": ["M116 562 H126"], "ripe→stash": ["M234 562 H244", 239, 546],
+    "merged→reviewers": ["M96 500 V480 H312 V374", 200, 480, true],
+  },
+};
+const WHAT = {
+  seeds: ["Seed", "65 ideas and set-aside tickets. A conversation with the lead plans them. On the page: opens the list."],
+  sprouting: ["Sprouting", "8 cards being planned with the lead. On the page: opens the Planning room."],
+  planted: ["Planted", "57 cards in line for the factory, in the board's order; 19 have a ticket started. On the page: opens this list, each card a link to its page."],
+  queue: ["Queue", "105 tickets in run order. Faded, dashed crates wait for another ticket."],
+  checks: ["Checks", "The runner's checks on each ticket's work: the light flashes green for a pass, red for a fail."],
+  merged: ["Merged today", "Tickets whose work reached main today."],
+  ripe: ["Ripe", "Every ticket done and the review written: yours to sign off. On the page: opens the review."],
+  stash: ["Harvested", "65 cards signed off, the latest first."],
+  legend: ["How to read the map", "Orange crate: a lead ticket. Blue crate: a developer ticket. Peach crate: a review or a planner job.\nYellow belt: carrying now. Faint yellow: work went this way today, and its number says how many. Thin red belt: failed work coming back.\nA tile is a planted card: yellow fill, its merged tickets; orange edge, a ticket started; dashed, a bug."],
+};
+function what(g, key) { g.setAttribute("data-what", key); g.classList.add("tap"); }
+function ticks(g, x, y, w, h) {
+  const s = 7;
+  add(g, "path", { class: "tick", d: `M${x} ${y + s}V${y}H${x + s}M${x + w - s} ${y}H${x + w}V${y + s}M${x + w} ${y + h - s}V${y + h}H${x + w - s}M${x + s} ${y + h}H${x}V${y + h - s}` });
+}
+function zone(svg, [x, y, w, h, name]) {
+  const g = add(svg, "g", {});
+  add(g, "rect", { x, y, width: w, height: h, class: "zone" });
+  ticks(g, x, y, w, h);
+  const pw = name.length * 6.6 + 12;
+  add(g, "path", { class: "plate-b", d: `M${x} ${y}H${x + pw}l-6 13H${x}Z` });
+  text(g, x + 4, y + 10, name, "plate-t");
+}
+function mapBelt(svg, b, L) {
+  const where = L.belts[b.id];
+  if (!where) return;
+  const back = where[3];
+  const g = add(svg, "g", { class: ["belt", back ? "back" : "", b.today > 0 ? "today" : "", b.carrying ? "carrying" : ""].join(" ").trim(), "data-belt": b.id });
+  add(g, "path", { d: where[0], class: "bed" });
+  add(g, "path", { d: where[0], class: "rollers" });
+  if (b.today > 0 && where[1] !== undefined) {
+    const s = String(b.today), w = s.length * 6 + 6;
+    add(g, "rect", { x: where[1] - w / 2, y: where[2] - 6.5, width: w, height: 13, class: "chip" });
+    text(g, where[1], where[2] + 3, s, "chip-t", { "text-anchor": "middle" });
+  }
+}
+function mapMachine(svg, m, x, y, w, h, wait, tall) {
+  const clogged = wait && wait.machine === m.id;
+  const g = add(svg, "g", { class: `machine ${m.station} ${m.state}${clogged ? " clogged" : ""}`, "data-machine": m.id });
+  g.classList.add("tap");
+  add(g, "path", { class: "unit", d: `M${x} ${y}H${x + w - 8}l8 8V${y + h}H${x}Z` });
+  add(g, "rect", { x: x + 5, y: y + 5, width: 5, height: 5, class: "led" });
+  const r = Math.min(9, 6 + m.scale * 2);
+  add(g, "circle", { cx: x + w - 15, cy: y + 19, r, class: "vent" });
+  text(g, x + 14, y + 11, cut(m.name.toUpperCase(), Math.floor((w - 20) / 6)), "nm");
+  text(g, x + 5, y + 24, `${m.where === "local GPU" ? "local" : "cloud"}${m.rating !== "" ? ` · ${m.rating}` : ""}`, "dim");
+  const line = y + (tall ? 44 : 50);
+  if (clogged) {
+    add(g, "path", { d: `M${x + 11} ${line - 9} l6 11 h-12 Z`, class: "sign" });
+    text(g, x + 22, line, tall && w < 130 ? "for Claude" : "waits for Claude", "nm");
+    text(g, x + 5, line + 14, `reset ${m.reset}`, "dim");
+  } else if (m.state === "working" && m.crate) {
+    const c = m.crate;
+    add(g, "rect", { x: x + 5, y: line - 10, width: 40, height: 15, class: `crate ${c.kind}` });
+    text(g, x + 25, line + 1, c.ticket ? short(c.ticket) : "job", "on", { "text-anchor": "middle" });
+    text(g, x + 49, line + 1, `${c.minutes} min`, "nm");
+    text(g, x + 5, line + 16, `attempt ${c.attempt}`, "dim");
+  } else if (m.state === "waiting") {
+    text(g, x + 5, line, "limit", "nm");
+    text(g, x + 5, line + 14, `reset ${m.reset}`, "dim");
+  } else {
+    text(g, x + 5, line, m.stand_in ? "standby" : "idle", "dim");
+  }
+}
+function statusWords(doc) {
+  if (doc.wait) return { words: doc.wait.words, cls: "clog" };
+  const m = doc.machines.find((one) => one.state === "working");
+  if (!m) return { words: "nothing is running", cls: "" };
+  const c = m.crate;
+  const what_ = c.ticket ? short(c.ticket) : c.title;
+  return { words: `${m.name} · ${what_} · ${c.minutes} min`, cls: m.station === "developers" ? "at-dev" : "at-work" };
+}
+function drawMap(svg, doc, L) {
+  svg.replaceChildren();
+  const tall = L === TALL;
+  add(svg, "rect", { x: 0, y: 0, width: L.w, height: L.h, class: "ground" });
+  for (let x = 20; x < L.w; x += 20) add(svg, "path", { d: `M${x} 0V${L.h}`, class: "gridline" });
+  for (let y = 20; y < L.h; y += 20) add(svg, "path", { d: `M0 ${y}H${L.w}`, class: "gridline" });
+  // what runs now, always at the top
+  const s = statusWords(doc);
+  if (doc.wait) add(svg, "path", { d: `M12 ${L.statusY - 9} l6 11 h-12 Z`, class: "sign" });
+  text(svg, doc.wait ? 22 : 8, L.statusY, doc.wait ? s.words : `NOW  ${s.words}`, "status");
+  Object.values(L.zones).forEach((z) => zone(svg, z));
+  doc.belts.forEach((b) => mapBelt(svg, b, L));
+  // seed and sprouting: a big number on a plot
+  for (const [key, count, name] of [["seeds", doc.stations.seeds, "SEED"], ["sprouting", doc.stations.planting, "SPROUTING"]]) {
+    const [x, y, w, h] = L[key];
+    const g = add(svg, "g", {});
+    what(g, key);
+    add(g, "rect", { x, y, width: w, height: h, class: "seedplot" });
+    text(g, x + w / 2, y + h / 2 + 4, String(count), "num", { "text-anchor": "middle" });
+    text(g, x + w / 2, y + h - 7, name, "dim", { "text-anchor": "middle" });
+  }
+  // planted: one tile per card, in the board's order
+  const P = L.planted, cols = Math.floor(P.w / P.pitch);
+  const pg = add(svg, "g", {});
+  what(pg, "planted");
+  text(pg, P.x, P.y + 9, `PLANTED · ${doc.stations.rows}`, "title");
+  doc.field.planted.forEach((card, i) => {
+    const x = P.x + (i % cols) * P.pitch, y = P.y + P.head + Math.floor(i / cols) * P.pitch;
+    add(pg, "rect", { x, y, width: P.tile, height: P.tile, class: "tilebg" });
+    const fill = card.total ? (P.tile * card.done) / card.total : 0;
+    if (fill) add(pg, "rect", { x, y: y + P.tile - fill, width: P.tile, height: fill, class: "tilefill" });
+    add(pg, "rect", { x, y, width: P.tile, height: P.tile, class: `tileedge${card.growing ? " growing" : ""}${card.bug ? " bug" : ""}` });
+  });
+  if (!tall) text(pg, P.x, P.y + P.head + 6 * P.pitch + 14, "first in line: F170, Blocked tickets", "dim");
+  // the queue
+  const Q = L.queue, qg = add(svg, "g", {});
+  what(qg, "queue");
+  add(qg, "path", { class: "hopper", d: `M${Q.x} ${Q.y}H${Q.x + Q.w}L${Q.x + Q.w - 12} ${Q.y + Q.h}H${Q.x + 12}Z` });
+  text(qg, Q.x + Q.w / 2, Q.y + (tall ? 12 : 16), "QUEUE", "title", { "text-anchor": "middle" });
+  text(qg, Q.x + Q.w / 2, Q.y + (tall ? 34 : 46), String(doc.queue.length), tall ? "num small" : "num", { "text-anchor": "middle" });
+  const left = Q.x + (Q.w - (Q.cols * Q.pitch - (Q.pitch - Q.crate))) / 2;
+  doc.queue.slice(0, Q.most).forEach((crate, i) => {
+    const cx = left + (i % Q.cols) * Q.pitch, cy = Q.y + Q.h - 8 - Q.rise * (Math.floor(i / Q.cols) + 1) + 4;
+    add(qg, "rect", { x: cx, y: cy, width: Q.crate, height: Q.rise - 4, class: `crate ${crate.kind}${crate.waits.length ? " waits" : ""}` });
+    text(qg, cx + Q.crate / 2, cy + Q.rise - 8, String(crate.number), "on", { "text-anchor": "middle" });
+  });
+  // the machines, side by side in each zone
+  for (const [name, [x, y, w, h]] of Object.entries(L.machines)) {
+    const own = doc.machines.filter((m) => m.station === name);
+    const gap = 8, each = Math.min(L.most, (w - gap * (own.length - 1)) / own.length);
+    own.forEach((m, i) => mapMachine(svg, m, x + i * (each + gap), y, each, h, doc.wait, tall));
+  }
+  // checks: a gate with a light
+  { const [x, y, w, h] = L.checks, g = add(svg, "g", {});
+    what(g, "checks");
+    add(g, "path", { class: "gate", d: `M${x} ${y + 8}l8 -8H${x + w - 8}l8 8V${y + h - 8}l-8 8H${x + 8}l-8 -8Z` });
+    add(g, "circle", { cx: x + w / 2, cy: y + (tall ? 18 : 30), r: tall ? 8 : 11, class: "bulb" });
+    text(g, x + w / 2, y + h - (tall ? 12 : 20), "CHECKS", "title", { "text-anchor": "middle" }); }
+  // merged, ripe, harvested
+  const box = (key, r, name, num, cls, draw) => {
+    const [x, y, w, h] = r, g = add(svg, "g", {});
+    what(g, key);
+    add(g, "rect", { x, y, width: w, height: h, class: cls });
+    ticks(g, x, y, w, h);
+    text(g, x + 7, y + 15, name, "title");
+    text(g, x + 7, y + 42, String(num), "num");
+    if (draw) draw(g, x, y, w, h);
+  };
+  box("merged", L.merged, "MERGED TODAY", doc.stations.merged, "unit");
+  box("ripe", L.ripe, "RIPE", doc.stations.ripe, "ripebox", (g, x, y) => {
+    text(g, x + 34, y + 42, tall ? "sign off" : "yours to sign off", "dim");
+    doc.field.ripe.slice(0, 2).forEach((m, i) => text(g, x + 7, y + 60 + i * 15, m.key.toUpperCase(), "nm"));
+  });
+  box("stash", L.stash, "HARVESTED", doc.stations.stash, "unit", (g, x, y, w) => {
+    doc.field.stash.slice(0, tall ? 6 : 9).forEach((m, i) => {
+      const c = tall ? 3 : 3, tw = (w - 14 - (c - 1) * 3) / c;
+      add(g, "rect", { x: x + 7 + (i % c) * (tw + 3), y: y + 52 + Math.floor(i / c) * 20, width: tw, height: 17, class: "seedplot" });
+      text(g, x + 7 + (i % c) * (tw + 3) + tw / 2, y + 64 + Math.floor(i / c) * 20, m.key.toUpperCase(), "chip-t", { "text-anchor": "middle" });
+    });
+  });
+  // the key: on the wide map; on the phone, behind a "?"
+  if (L.legend) {
+    const [x, y, w, h] = L.legend, g = add(svg, "g", {});
+    what(g, "legend");
+    add(g, "rect", { x, y, width: w, height: h, class: "zone" });
+    ticks(g, x, y, w, h);
+    text(g, x + 8, y + 16, "HOW TO READ IT", "title");
+    [["lead", "lead ticket"], ["developer", "developer ticket"], ["batch", "review or planner job"]].forEach(([k, words], i) => {
+      add(g, "rect", { x: x + 8, y: y + 24 + i * 15, width: 14, height: 10, class: `crate ${k}` });
+      text(g, x + 28, y + 33 + i * 15, words);
+    });
+    add(g, "path", { d: `M${x + 8} ${y + 74}h14`, class: "swatch-line", stroke: "var(--roller)" });
+    text(g, x + 28, y + 77, "belt carrying now");
+    add(g, "path", { d: `M${x + 8} ${y + 89}h14`, class: "swatch-line", stroke: "var(--critical)", opacity: ".5" });
+    text(g, x + 28, y + 92, "failed work coming back");
+    text(g, x + 8, y + 107, "numbers: how many went that way today", "dim");
+  } else {
+    const g = add(svg, "g", {});
+    what(g, "legend");
+    add(g, "rect", { x: 330, y: 2, width: 26, height: 17, class: "seedplot" });
+    text(g, 343, 15, "?", "title", { "text-anchor": "middle" });
+  }
+}
+function drawStrip(doc) {
+  const s = statusWords(doc), read = document.getElementById("readout");
+  read.className = `readout ${s.cls}`;
+  read.replaceChildren();
+  if (doc.wait) { const b = document.createElement("span"); b.className = "sign"; b.textContent = "! "; read.append(b); }
+  read.append(doc.wait ? s.words : s.words);
+  const worker = doc.machines.find((m) => m.state === "working");
+  const list = document.getElementById("strip");
+  list.className = `strip${doc.belts.some((b) => b.carrying) ? " moving" : ""}`;
+  list.replaceChildren();
+  const stop = (label, cls, fill) => {
+    const li = document.createElement("li");
+    li.className = cls;
+    const box = document.createElement("div");
+    box.className = "box";
+    if (typeof fill === "string") box.textContent = fill; else box.append(fill);
+    const l = document.createElement("span");
+    l.className = "lbl";
+    l.textContent = label;
+    li.append(box, l);
+    li.setAttribute("data-open", "");
+    list.append(li);
+    return li;
+  };
+  stop("Planted", "", String(doc.stations.rows));
+  stop("Queue", "", String(doc.stations.queue));
+  const dots = document.createElement("div");
+  dots.className = "dots";
+  const color = { lead: "var(--opus)", developers: "var(--dev)", reviewers: "var(--sonnet)" };
+  doc.machines.forEach((m) => {
+    const d = document.createElement("i");
+    if (m.state === "working") { d.style.background = color[m.station]; d.style.borderColor = color[m.station]; }
+    if (doc.wait && doc.wait.machine === m.id) { d.style.background = "var(--clog)"; d.style.borderColor = "var(--clog)"; }
+    dots.append(d);
+  });
+  const li = stop(worker ? cut(worker.name, 8) : doc.wait ? "Waiting" : "Machines", doc.wait ? "clogged" : worker ? "on" : "", dots);
+  if (worker) li.style.setProperty("--c", color[worker.station]);
+  const bulb = document.createElement("div");
+  bulb.className = "bulb";
+  stop("Checks", "", bulb);
+  stop("Merged today", "", String(doc.stations.merged));
+  stop("Ripe", doc.stations.ripe ? "ripe" : "", String(doc.stations.ripe));
+}
+function paint(which) {
+  const doc = momentDoc(which);
+  drawStrip(doc);
+  drawMap(document.getElementById("map-tall"), doc, TALL);
+  drawMap(document.getElementById("map-wide"), doc, WIDE);
+}
+drawToday(document.getElementById("floor"), baseDoc());
+drawTodayPhone(document.getElementById("floor-phone"), baseDoc());
+paint("now");
+
+// ---- the switches and the sheet ----
+document.querySelectorAll("[data-show]").forEach((button) => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-show]").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+  document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+}));
+document.querySelectorAll("[data-moment]").forEach((button) => button.addEventListener("click", () => {
+  document.querySelectorAll("[data-moment]").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+  paint(button.dataset.moment);
+}));
+const sheet = document.getElementById("sheet");
+function say(title, words) {
+  document.getElementById("sheet-t").textContent = title;
+  document.getElementById("sheet-p").textContent = words;
+  sheet.hidden = false;
+}
+document.getElementById("sheet-x").addEventListener("click", () => { sheet.hidden = true; });
+document.addEventListener("click", (e) => {
+  const opener = e.target.closest("[data-open]");
+  if (opener) { document.getElementById("map-tall").scrollIntoView({ behavior: "smooth" }); return; }
+  const m = e.target.closest("[data-machine]");
+  if (m) {
+    const one = baseDoc().machines.find((x) => x.id === m.dataset.machine);
+    say(one.name, `${one.where}, rated ${one.rating}. Station: ${one.station === "developers" ? "the developer bay" : one.station === "lead" ? "the lead" : "reviewers"}. On the page: its crate, and a link to the agent.`);
+    return;
+  }
+  const w = e.target.closest("[data-what]");
+  if (w) { say(...WHAT[w.dataset.what]); return; }
+  const b = e.target.closest("[data-belt]");
+  if (b) {
+    const one = baseDoc().belts.find((x) => x.id === b.dataset.belt);
+    say(one.label, one.today === null ? "Cards move this way when you plan and approve them." : `${one.today} went this way today.`);
+  }
+});
+</script>
+</body>
+</html>
