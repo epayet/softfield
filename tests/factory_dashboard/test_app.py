@@ -2969,10 +2969,22 @@ def test_ago_shows_days_from_48_hours_on():
 
 
 def test_every_page_has_the_theme_button(client):
-    """Every page's top bar has the Light/Night button."""
+    """Every page's top bar has the Light/Night button with role, labels, and no text."""
     for path in PAGES:
         html = client.get(path).text
-        assert re.search(r'<button[^>]*id="theme-btn"[^>]*>', html), path
+        btn = re.search(r'<button([^>]*)id="theme-btn"([^>]*)>', html)
+        assert btn, path
+        attrs = btn.group(1) + btn.group(2)
+        assert 'role="switch"' in attrs, path
+        assert "aria-label=" in attrs, path
+        assert "aria-checked=" in attrs, path
+        assert "title=" in attrs, path
+        assert "theme-switch" in attrs, path
+        full = re.search(r'<button[^>]*id="theme-btn"[^>]*>(.*?)</button>', html, re.DOTALL)
+        assert full, path
+        inner = full.group(1)
+        text_only = re.sub(r"<[^>]*>", "", inner).strip()
+        assert not text_only, f"Button must have no text content: {path}"
 
 
 def test_the_theme_button_says_night_when_dark(page, client):
