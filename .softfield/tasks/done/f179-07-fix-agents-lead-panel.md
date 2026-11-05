@@ -31,3 +31,12 @@ f69-i-want-a-button-to-switch-C1849-3: The panel's Sonnet totals include Opus-ow
 - a browser test at a 1280 px wide viewport: the Sonnet `.fill`'s rendered width divided by the Opus `.fill`'s is about 0.17 (within 0.02), and both bars' labels are visible
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 6155
+gate_failures: ['task-tests', 'stopped']
+tokens: 4924536
+```
