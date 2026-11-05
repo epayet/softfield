@@ -11,6 +11,9 @@ I suspect we might need to increase the timeouts as the tests take quite some ti
 ### From F168: The full test suite takes 19 minutes and grows each day:… (merged by the lead on 2026-10-21)
 The full test suite takes 19 minutes and grows each day: find the slowest tests (tests/factory_dashboard/test_app.py takes 3 s a test) and make them faster
 
+### From F221: Tests are back to being slow again, probably some clock… (merged by the lead on 2026-11-05)
+Tests are back to being slow again, probably some clock related tests. Plan to improve test speed, we already run them in parallel they used to take about 4 minutes
+
 ## What we know (2026-10-09)
 - A developer attempt is already cut off at 45 min (`[timeouts] opencode = 2700` in `.softfield/project.toml`, raised from 30 in M4 when 8 of m4-06's 9 attempts hit it). An attempt that finishes at "almost 45 min" finishes just under the cut: the next slightly bigger one is lost.
 - `check-all` takes 5–10 min (ADR 23), and a developer runs it at least once, often two or three times. Tests are a third or more of an attempt.
