@@ -22,3 +22,12 @@ In `tests/factory_dashboard/test_app.py`, `test_no_border_radius_except_top_bar_
 - the gauge-mark and theme-switch checks and `pytest.fail` are back at the loop's level, so a rule with a `border-radius` other than the allowed ones fails the test (a test shows it, on a CSS string with a stray radius)
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 2649
+gate_failures: ['mypy']
+tokens: 1595340
+```
