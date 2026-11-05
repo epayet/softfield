@@ -1,4 +1,4 @@
-# Milestone F220: if i'm browsing a certain discussion or milestone in a…
+# Milestone F220: Switching project from an inner page goes back to that tab's own page
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-04.
