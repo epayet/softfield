@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F224 mock-up: Approve first</title>
+<style>
+  /* The dashboard's own tokens and rules (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --factory: #f2b10a; --sonnet: #ffc48a; --good: #5fd17a;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 16px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 8px 0 14px; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: flex; flex-direction: column; gap: 24px; }
+  .version > h2 { font: 700 16px var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 8px; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { flex-direction: row; align-items: flex-start; }
+    .version { flex: 1 1 0; min-width: 0; display: block !important; }
+  }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 6px; }
+  .phone { max-width: 390px; }
+
+  /* marks: what this card adds */
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .why { display: block; margin: 6px 0 2px; font: 12px/1.35 var(--mono); color: var(--good); }
+
+  /* --- the review's dock, copied --- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .panel > h2 { display: flex; align-items: center; gap: 10px; margin: -12px -14px 10px; padding: 7px 14px; background: var(--plate);
+    border-bottom: 1px solid var(--rule); font: 600 14px var(--display); text-transform: uppercase; letter-spacing: .08em; }
+  .panel > h2::after { content: ""; flex: 1; height: 8px; background: var(--stripe); opacity: .5; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em;
+    text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .actions { display: flex; flex-direction: column; gap: 8px; }
+  .aside { font-size: 13px; color: var(--muted); }
+  .count { font: 12.5px var(--mono); color: var(--muted); }
+  details > summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; color: var(--ink-2);
+    font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; }
+  details > div { display: flex; flex-direction: column; gap: 8px; }
+  details > div > span { font-size: 13px; color: var(--ink-2); }
+  .phone .actions.row { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .phone .actions.row .count { flex: 1 1 0; min-width: 0; line-height: 1.2; }
+  .phone .actions.row details[open] { flex: 1 1 100%; }
+
+  /* Approve first: the hazard stripe on the button, as the fast lane's plate has it */
+  .btn.first { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); gap: 10px; padding-left: 0; }
+  .btn.first i { width: 18px; align-self: stretch;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+
+  /* --- the board's cards, copied --- */
+  .stage { background: var(--bay); border: 1px solid var(--rule); margin-bottom: 8px; }
+  .stage-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--plate); border-bottom: 1px solid var(--rule); }
+  .stage-head b { font: 600 13px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .stage-head span { font: 12px var(--mono); color: var(--muted); }
+  .cards { display: flex; flex-direction: column; gap: 6px; padding: 8px; }
+  .card { --c: var(--factory); display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px; padding: 8px 10px;
+    background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--c); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); }
+  .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card-reserve { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 0;
+    background: var(--floor); font: 600 11px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--fg); }
+  .card-reserve i { width: 14px; align-self: stretch;
+    background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
+  .card-reserve.on-its-way { outline: 1px dashed var(--hazard); color: var(--hazard); }
+  .card.way { border-style: dashed; border-color: var(--hazard); border-left-style: solid; border-left-color: var(--c); }
+  [hidden] { display: none; }
+</style>
+</head>
+<body>
+<h1>F224: Approve first</h1>
+<p class="lede">The review page's dock and the board, with the plan on F222, A newly approved plan goes last on the board, as the example. The board's cards are today's first in line.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+
+<!-- Today: copied from factory_dashboard/templates/proposal.html and board.html -->
+<div class="version" data-version="today" hidden>
+  <h2>Today</h2>
+
+  <h3>Review page, wide screen</h3>
+  <section class="panel">
+    <h2>Your review</h2>
+    <div class="actions">
+      <span class="count">8 agreed · 0 to change</span>
+      <div><button type="button" class="btn go">Approve plan</button></div>
+      <details><summary>Reject…</summary><div><span>Won't do: the card's plan branch goes, with every draft on it. A card with nothing built goes too.</span><button type="button" class="btn plain">Reject</button></div></details>
+    </div>
+    <span class="aside">Every point is agreed unless you comment on it.</span>
+  </section>
+
+  <h3>Review page, phone</h3>
+  <section class="panel phone">
+    <div class="actions row">
+      <span class="count">8 agreed · 0 to change</span>
+      <button type="button" class="btn go">Approve plan</button>
+      <details><summary>Reject…</summary><div><span>Won't do: the card's plan branch goes, with every draft on it. A card with nothing built goes too.</span><button type="button" class="btn plain">Reject</button></div></details>
+    </div>
+  </section>
+
+  <h3>Board, after pressing Approve plan</h3>
+  <div class="stage">
+    <div class="stage-head"><b>Seed</b><span>29</span></div>
+    <div class="cards">
+      <div class="card"><span class="card-meta">F222 <span>factory</span></span><span class="card-title">A newly approved plan goes last on the board</span></div>
+    </div>
+  </div>
+  <p class="aside">Nothing on the board says it was approved until the runner's next pick. Going first takes three more steps: the approval, the Fast lane lever on the card's page, then a drag and Send new order.</p>
+</div>
+
+<!-- Proposed -->
+<div class="version" data-version="proposed">
+  <h2>Proposed</h2>
+
+  <h3>Review page, wide screen</h3>
+  <section class="panel">
+    <h2>Your review</h2>
+    <div class="actions">
+      <span class="count">8 agreed · 0 to change</span>
+      <div><button type="button" class="btn go">Approve plan</button></div>
+      <details class="new" open>
+        <summary>Approve first…</summary>
+        <div>
+          <span>It goes first on the board and into the fast lane: ahead of every other job, planning and reviews too, and it may use Claude's reserve. You can take it out of the lane on its card's page.</span>
+          <button type="button" class="btn first"><i></i>Approve first</button>
+        </div>
+      </details>
+      <details><summary>Reject…</summary><div><span>Won't do: the card's plan branch goes, with every draft on it. A card with nothing built goes too.</span><button type="button" class="btn plain">Reject</button></div></details>
+    </div>
+    <span class="aside">Every point is agreed unless you comment on it.</span>
+  </section>
+  <span class="why">New: a fold, as Reject… is, so going first takes two taps and says what it costs. Drawn open here; it starts closed.</span>
+
+  <h3>Review page, phone: closed</h3>
+  <section class="panel phone">
+    <div class="actions row">
+      <span class="count">8 agreed · 0 to change</span>
+      <button type="button" class="btn go">Approve plan</button>
+      <details class="new"><summary>First…</summary><div><span>It goes first on the board and into the fast lane: ahead of every other job, planning and reviews too, and it may use Claude's reserve. You can take it out of the lane on its card's page.</span><button type="button" class="btn first"><i></i>Approve first</button></div></details>
+      <details><summary>Reject…</summary><div><span>Won't do: the card's plan branch goes, with every draft on it. A card with nothing built goes too.</span><button type="button" class="btn plain">Reject</button></div></details>
+    </div>
+  </section>
+  <span class="why">The dock stays one row. Tap First… to see it open on a row of its own.</span>
+
+  <h3>Board, the moment you press it</h3>
+  <div class="stage">
+    <div class="stage-head"><b>Seed</b><span>29</span></div>
+    <div class="cards">
+      <div class="card way new"><span class="card-meta">F222 <span>factory</span></span><span class="card-title">A newly approved plan goes last on the board</span>
+        <span class="card-reserve on-its-way"><i></i>goes first · fast lane · on its way · at the runner's next pick</span></div>
+    </div>
+  </div>
+  <span class="why">New: the dashed plate shows at once. The Overview's Fast lane line names the card too.</span>
+
+  <h3>Board, once the runner has taken it</h3>
+  <div class="stage">
+    <div class="stage-head"><b>Planted</b><span>58</span></div>
+    <div class="cards">
+      <div class="card new"><span class="card-meta"><b>#1</b> F222 <span>factory</span></span><span class="card-title">A newly approved plan goes last on the board</span>
+        <span class="card-reserve"><i></i>fast lane</span></div>
+      <div class="card"><span class="card-meta"><b>#2</b> F219 <span>factory</span></span><span class="card-title">Lead tickets follow Claude's week pace; runner and dry run share one rule</span>
+        <span class="card-reserve"><i></i>fast lane</span></div>
+      <div class="card"><span class="card-meta"><b>#3</b> F169 <span>factory</span></span><span class="card-title">Let the planner search and read the web for research</span></div>
+    </div>
+  </div>
+  <span class="why">First in line, ahead of the card that was first, with the plain fast lane plate. Every other card keeps its order.</span>
+</div>
+
+</div>
+
+<script>
+function setUpSwitch() {
+  var buttons = document.querySelectorAll('.switch button');
+  buttons.forEach(function (button) {
+    button.addEventListener('click', function () {
+      buttons.forEach(function (other) {
+        other.setAttribute('aria-pressed', String(other === button));
+      });
+      document.querySelectorAll('[data-version]').forEach(function (version) {
+        version.hidden = version.dataset.version !== button.dataset.show;
+      });
+    });
+  });
+}
+setUpSwitch();
+</script>
+</body>
+</html>
