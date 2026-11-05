@@ -25,3 +25,12 @@ f81-08 removed `background: var(--hazard); color: var(--hazard-ink)` from `.proj
 - the rendered "Send new order" button carries both `btn` and `go`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1628
+gate_failures: []
+tokens: 882026
+```
