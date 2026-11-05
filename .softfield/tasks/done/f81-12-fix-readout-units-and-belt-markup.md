@@ -28,3 +28,12 @@ Files: `factory_dashboard/templates/_partials/running.html`, `factory_dashboard/
 - every `<li>` of Next in line sits directly in an `ol`/`ul` (the fast lane bay included), with no empty `<small>` or `.n` left, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2499
+gate_failures: []
+tokens: 2415795
+```
