@@ -1,6 +1,6 @@
 # Milestone F219: Lead tickets follow Claude's week pace; runner and dry run share one rule
 
-> **State:** ready · **Priority:** 100 · **Area:** factory
+> **State:** ready · **Priority:** 0 · **Area:** factory
 > Planted by the owner on 2026-11-04.
 
 ## Notes
