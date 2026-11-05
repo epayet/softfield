@@ -992,6 +992,79 @@ def test_a_last_rounds_fix_merge_stays_for_a_checkpoint(repo, monkeypatch):
     assert load_state(state_path).unchecked == ["m1-05-fix abc123 local-m"]
 
 
+def _fix_review(repo, monkeypatch, *, agent: str, over: bool, runs: bool):
+    """m1's review, whose round 1 writes ``m1-05-fix`` for ``agent``; the week is over its
+    pace line or not (``over``), and the queue runs the fix or leaves it in ready/ (``runs``).
+    Returns the prompts of its review jobs."""
+    _milestone_repo(repo)
+    prompts: list[str] = []
+
+    def run_claude(job, repo_, timeout, log_path, now, resume=None):
+        prompts.append(job.prompt)
+        if len(prompts) == 1:
+            path = repo_ / ".softfield" / "tasks" / "ready" / "m1-05-fix.md"
+            milestone_ticket(repo_, "ready", "m1-05-fix", "m1")
+            path.write_text(
+                path.read_text().replace("milestone: m1\n", f"milestone: m1\nagent: {agent}\n")
+            )
+            _review_writes(job, repo_, [{**LEAK, "id": "m1-F1"}])
+        else:
+            _review_writes(job, repo_, [{**LEAK, "id": "m1-F1", "resolved": True}])
+        return JobResult(ok=True, text="", duration_s=1.0)
+
+    def work_queue(s, milestone=None):
+        if runs and (s.tasks_dir("ready") / "m1-05-fix.md").is_file():
+            git(repo, "mv", ".softfield/tasks/ready/m1-05-fix.md", ".softfield/tasks/done/")
+            git(repo, "commit", "-q", "-m", "m1-05-fix: done")
+        return False
+
+    monkeypatch.setattr(claude, "run_claude", run_claude)
+    monkeypatch.setattr(milestone, "work_queue", work_queue)
+    monkeypatch.setattr(milestone, "run_e2e", lambda *a: GateResult("e2e", True, ""))
+    monkeypatch.setattr(
+        milestone, "_passed_over", lambda *a: "over the pace line" if over else None
+    )
+    return prompts
+
+
+def test_a_review_waits_for_a_lead_fix_the_week_holds(repo, monkeypatch):
+    """F219 D3: over the pace line the lead fix stays in ready/, so round 2 would read no
+    fixes: the review ends with no stop, and goes on from round 2 once the fix is done."""
+    prompts = _fix_review(repo, monkeypatch, agent="lead", over=True, runs=False)
+    cfg = _config(repo)
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == milestone.PARKED
+    assert len(prompts) == 1
+    state = load_state(cfg.runs_dir / "state.json")
+    assert "m1" not in state.review_stop and state.review_counts["m1"] == [1]
+    assert all(row["done"] is not None for row in _rows(repo, "work_queue"))
+    assert milestone.due_reviews(repo, state) == []  # the fix is still in ready/
+    git(repo, "mv", ".softfield/tasks/ready/m1-05-fix.md", ".softfield/tasks/done/")
+    git(repo, "commit", "-q", "-m", "m1-05-fix: done")
+    assert milestone.due_reviews(repo, state) == ["m1"]
+    assert milestone.review_milestone(cfg, "m1", "m1-start", park=True) == "clean"
+    assert len(prompts) == 2 and "Round 2" in prompts[1]
+
+
+def test_a_lead_fix_that_runs_leaves_round_2_as_before(repo, monkeypatch):
+    """On a fast lane card or with the week's lever on, the queue runs the fix."""
+    prompts = _fix_review(repo, monkeypatch, agent="lead", over=True, runs=True)
+    assert milestone.review_milestone(_config(repo), "m1", "m1-start", park=True) == "clean"
+    assert len(prompts) == 2
+
+
+def test_a_developers_fix_never_parks_the_review(repo, monkeypatch):
+    """The pace line passes over lead tickets only."""
+    prompts = _fix_review(repo, monkeypatch, agent="developer", over=True, runs=False)
+    milestone.review_milestone(_config(repo), "m1", "m1-start", park=True)
+    assert len(prompts) == 2
+
+
+def test_a_lead_fix_with_the_week_under_its_line_does_not_park(repo, monkeypatch):
+    prompts = _fix_review(repo, monkeypatch, agent="lead", over=False, runs=False)
+    milestone.review_milestone(_config(repo), "m1", "m1-start", park=True)
+    assert len(prompts) == 2
+
+
 def test_a_restart_with_no_round_left_stops_instead_of_restarting_again(repo, monkeypatch):
     """A last round's lead fix that changed the runner stops at `restart`; the restarted run
     has no round left, and must end the review or `runner run` restarts for ever."""

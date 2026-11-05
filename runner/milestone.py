@@ -11,9 +11,9 @@ from pathlib import Path
 
 import yaml
 
-from runner import console, look, metrics, prompts, shots
+from runner import console, look, metrics, prompts, router, shots
 from runner.agents import ANY, CHECK_COMMANDS, GIT_READ_COMMANDS, JobSpec
-from runner.config import Config, project_checks
+from runner.config import Config, project_checks, read_protected
 from runner.gates import GateResult
 from runner.gitops import Git, GitError, parse_trailers, with_trailers
 from runner.loop import (
@@ -25,7 +25,9 @@ from runner.loop import (
     RUNNER_AGENT,
     RunnerError,
     Session,
+    _passed_over,
     _record,
+    _windows_now,
     call_claude,
     clock,
     close_session,
@@ -67,6 +69,7 @@ from runner.tasks import (
     next_milestone_key,
     short_key,
     split_frontmatter,
+    task_ids,
 )
 from runner.usage import claude_tokens, transcripts_dir, work_summary
 
@@ -702,6 +705,24 @@ def _first_scope(s: Session, milestone: str, base: str) -> str:
 PARKED = "parked"  # no stop: the review waits in the queue for Claude (F53 D1)
 
 
+def _fix_held_by_the_week(s: Session, milestone: str) -> bool:
+    """Whether a lead ticket of ``milestone`` is ready to run, its dependencies done, and the
+    week's pace line passes it over now (ADR 44 item 6)."""
+    protected = tuple(read_protected(s.repo))
+    done = task_ids(s.tasks_dir("done"))
+    held = [
+        t
+        for t in load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff)
+        if short_key(t.milestone) == short_key(milestone)
+        and router.lead_only(t.agent, t.files, protected)
+        and all(d in done for d in t.depends_on)
+    ]
+    if not held:
+        return False
+    at = now()
+    return _passed_over(_windows_now(s, at), at) is not None
+
+
 def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = False) -> str:
     """Run review rounds until a stop rule fires. Returns the stop reason. The review is a
     queued job (ADR 22 item 1): `runner run` queued it, else it is queued here, and its row
@@ -792,6 +813,13 @@ def review_milestone(cfg: Config, milestone: str, base: str, *, park: bool = Fal
         if reason:
             stop = reason
             break
+        if _fix_held_by_the_week(s, milestone):
+            # a round that reads no fixes is paid for twice: no stop, it goes on from the
+            # next round once the fix is done (F219 D3)
+            s.running_row = None
+            finish_row(s, row)
+            close_session(s)
+            return PARKED
     if stop == "not started":  # no rounds left: a rerun after the owner decided something
         stop = s.state.review_stop.get(milestone, RESTART)
         if stop == RESTART:  # a restart with no round left would restart for ever
