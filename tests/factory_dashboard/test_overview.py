@@ -94,6 +94,103 @@ def test_a_job_with_a_fresh_heartbeat_is_running_now(client):
     assert "heartbeat" not in needs
     assert "idle" not in needs  # the runner is live, so the queue isn't waiting on it
 
+    # The readout structure: .readouts wrapper, individual .readout plates, number/unit/label.
+    now_html = re.search(r'<section[^>]*\bid="now"[^>]*>(.*?)</section>', html, re.S)
+    assert now_html, "no #now section"
+    # The .readouts wrapper exists
+    assert '<div class="readouts">' in now_html[1], "no .readouts wrapper"
+    plates = re.findall(r'<div class="readout">', now_html[1])
+    assert len(plates) >= 4, f"expected ≥4 readout plates, got {len(plates)}"
+
+    # Elapsed plate: <b>value<small>s</small></b><span>Elapsed</span>
+    elapsed = re.search(
+        r'<div class="readout"><b>([^<]+)<small>s</small></b><span>Elapsed</span></div>',
+        now_html[1],
+        re.S,
+    )
+    assert elapsed, "no elapsed readout plate"
+    assert "12 min" in elapsed[1]
+
+    # Tokens plate: <b>value<small>tokens</small></b><span>Read · N turns</span>
+    tokens = re.search(
+        r'<div class="readout"><b>([^<]+)<small>tokens</small></b>'
+        r"<span>Read · (\d+) turns</span></div>",
+        now_html[1],
+        re.S,
+    )
+    assert tokens, "no tokens readout plate"
+    assert "42k" in tokens[1]
+    assert tokens[2] == "17"
+
+    # Heartbeat plate: <b>value<small>ago</small></b><span>Heartbeat</span>
+    hb = re.search(
+        r'<div class="readout"><b>([^<]+)<small>ago</small></b><span>Heartbeat</span></div>',
+        now_html[1],
+        re.S,
+    )
+    assert hb, "no heartbeat readout plate"
+    assert "30 s" in hb[1]
+
+
+def test_a_waiting_job_shows_the_waiting_readout_plate(db_path):
+    """A running job whose run is waiting shows a .readout plate with the waiting message,
+    not tokens or elapsed/heartbeat."""
+    from runner import metrics
+
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1")
+        run = metrics.upsert_run(
+            conn,
+            project,
+            "20261002-130000",
+            command="milestone f1",
+            started=(NOW - timedelta(minutes=5)).isoformat(),
+            heartbeat=(NOW - timedelta(seconds=10)).isoformat(),
+        )
+        metrics.update_run_activity(conn, run, "waiting for Claude", "2026-10-02T15:00:00+00:00")
+        ticket = metrics.upsert_ticket(
+            conn, project, "f1-99-waiting", milestone_id=f1, kind="developer", state="running"
+        )
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket,
+            milestone_id=f1,
+            role="developer",
+            agent=LOCAL,
+            attempt=1,
+            started=(NOW - timedelta(minutes=5)).isoformat(),
+        )
+    finally:
+        conn.close()
+    from fastapi.testclient import TestClient as _TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = _TestClient(app, base_url="http://127.0.0.1:8765")
+    html = client.get("/live").text
+    now_section = re.search(r'<section[^>]*\bid="now"[^>]*>(.*?)</section>', html, re.S)
+    assert now_section, "no #now section"
+    # The readouts wrapper exists
+    assert '<div class="readouts">' in now_section[1], "no .readouts wrapper in waiting state"
+    # The waiting plate: a .readout with a <span> containing the waiting message
+    waiting = re.search(
+        r"<div class=\"readout\">"
+        r"<span>Waiting for Claude's limit to reset, until ([^<]+)</span></div>",
+        now_section[1],
+        re.S,
+    )
+    assert waiting, "no waiting readout plate"
+    assert "15:00" in waiting[1]
+    # No tokens plate in the waiting state
+    assert re.search(r"<small>tokens</small>", now_section[1], re.S) is None, (
+        "tokens plate should not appear in waiting state"
+    )
+
 
 def test_a_stale_heartbeat_is_a_needs_you_item_instead(serve):
     html = serve(heartbeat_age=timedelta(minutes=3)).get("/").text
