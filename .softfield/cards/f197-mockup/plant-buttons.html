@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F197 mock-up: Plant and ask the lead comes first</title>
+<style>
+  /* The dashboard's own tokens and buttons (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --factory: #f2b10a; --good: #5fd17a;
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    min-height: 44px; background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; margin-top: 8px; }
+  body[data-show="today"] [data-version="proposed"], body[data-show="proposed"] [data-version="today"] { display: none; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    body[data-show] [data-version] { display: block; }
+  }
+  .version-name { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); margin: 12px 0 0; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { color: var(--ink-2); font-size: 13px; margin: 8px 0 0; }
+  .note .new { padding: 0 4px; }
+
+  /* ---- the buttons, as drawn (dashboard.css) ---- */
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em;
+    text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: default; text-decoration: none; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .mark { display: inline-flex; outline: 1px dashed var(--good); outline-offset: 3px; }
+
+  /* ---- the Plant box, as templates/planning.html draws it ---- */
+  .plant { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .plant h2 { margin: 0; font: 600 14px var(--display); letter-spacing: .08em; text-transform: uppercase; }
+  .plant label { display: flex; flex-direction: column; gap: 3px; font-size: 13px; color: var(--muted); }
+  .plant textarea { font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; resize: none; width: 100%; }
+  .plant .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .plant .hint { font-size: 12.5px; color: var(--muted); }
+
+  /* ---- a review's idea plate, as F164's mock-up draws it (f164-03 is still to build it) ---- */
+  .idea { position: relative; background: var(--plate); border: 1px solid var(--rule); border-left: 4px solid var(--factory);
+    padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .idea .tag { font: 600 11px var(--mono); letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+  .idea .tag b { color: var(--ink-2); font-weight: 600; }
+  .idea q { quotes: none; }
+  .idea .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+</style>
+</head>
+<body data-show="proposed">
+<h1>F197: the lead's button comes first</h1>
+<p class="lede">The Plant box on the Planning page, with its words as they are today, and the review's idea plate that F164 is about to add.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+  <!-- Today: copied from factory_dashboard/templates/planning.html, lines 107 to 122 -->
+  <div data-version="today">
+    <p class="version-name">Today</p>
+    <h3>Plant box · Planning</h3>
+    <div class="plant">
+      <h2>Plant an idea</h2>
+      <label>What's on your mind? As rough as you like: the lead names the card
+        <textarea rows="4" placeholder="The pause button did nothing the first time…" readonly></textarea>
+      </label>
+      <div class="row">
+        <span class="btn go">Plant</span>
+        <span class="btn plain">Plant and ask the lead</span>
+        <span class="hint">Plant: a seed card that waits for you; write on its thread to send it to the lead. Plant and ask the lead: the lead answers it on its thread.</span>
+      </div>
+    </div>
+    <p class="note">Yellow goes to the plain Plant, though you ask the lead more often: 113 of your 180 plants that had the choice.</p>
+
+    <h3>A review's idea · F164's plan</h3>
+    <div class="idea">
+      <span class="tag">Idea 2 · factory · <b>for Softfield</b></span>
+      <q>Checkpoints on template work list the other pages that include a changed partial, and check each, so a shared partial can't break a page nobody opened.</q>
+      <div class="actions">
+        <span class="btn go">Plant</span>
+        <span class="btn plain">Plant and ask the lead</span>
+      </div>
+    </div>
+    <p class="note">Not built yet: F164's tickets copy the Plant box's order.</p>
+  </div>
+
+  <!-- Proposed -->
+  <div data-version="proposed">
+    <p class="version-name">Proposed</p>
+    <h3>Plant box · Planning</h3>
+    <div class="plant">
+      <h2>Plant an idea</h2>
+      <label>What's on your mind? As rough as you like: the lead names the card
+        <textarea rows="4" placeholder="The pause button did nothing the first time…" readonly></textarea>
+      </label>
+      <div class="row">
+        <span class="mark"><span class="btn go">Plant and ask the lead</span></span>
+        <span class="mark"><span class="btn plain">Plant</span></span>
+        <span class="hint new">Plant and ask the lead: the lead answers it on its thread. Plant: a seed card that waits for you; write on its thread to send it to the lead.</span>
+      </div>
+    </div>
+    <p class="note"><span class="new">Dashed green</span> marks each change: the two buttons swap places and colours, and the line beside them says them in the new order. What each button does stays the same.</p>
+
+    <h3>A review's idea · F164's plan</h3>
+    <div class="idea">
+      <span class="tag">Idea 2 · factory · <b>for Softfield</b></span>
+      <q>Checkpoints on template work list the other pages that include a changed partial, and check each, so a shared partial can't break a page nobody opened.</q>
+      <div class="actions">
+        <span class="mark"><span class="btn go">Plant and ask the lead</span></span>
+        <span class="mark"><span class="btn plain">Plant</span></span>
+      </div>
+    </div>
+    <p class="note">The same order wherever the two buttons sit together, the weekly report's ideas too, since they share this plate.</p>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.body.dataset.show = button.dataset.show;
+    });
+  });
+</script>
+</body>
+</html>
