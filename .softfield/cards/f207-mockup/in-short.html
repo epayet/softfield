@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F207 mock-up: In short, on a thread and on a review</title>
+<style>
+  /* The dashboard's own tokens and rules (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    color-scheme: dark;
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --sonnet: #ffc48a; --good: #5fd17a;
+    --accent: var(--sonnet); --ink: var(--fg);
+    --display: "Chakra Petch", "Bahnschrift", "DIN Alternate", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --stripe: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, transparent 6px 12px);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 20px; color: var(--ink); font: 15px/1.5 var(--body); background-color: var(--floor);
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  a { color: var(--accent); text-decoration: none; }
+  [hidden] { display: none !important; }
+
+  /* ---- the mock-up's own frame: not part of the pages ---- */
+  .sheet-title { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  .sheet-lede { color: var(--ink-2); max-width: 820px; margin: 0 0 8px; }
+  .page-name { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 26px 0 8px; }
+  .version-name { font: 600 12px var(--mono); color: var(--muted); margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px; min-height: 44px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }
+  .note { display: block; margin-top: 8px; font: 12.5px/1.4 var(--mono); color: var(--good); }
+  .why { margin: 8px 0 0; font-size: 13px; color: var(--ink-2); }
+  .compare { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; }
+  @media (min-width: 1000px) {
+    .switch { display: none; }
+    .compare { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+    .compare > [data-version][hidden] { display: block !important; }
+  }
+
+  /* ---- copied: the planning room's two pages (dashboard.css) ---- */
+  .main { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .fold { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: flex; align-items: center; cursor: pointer; }
+  .aside { font-size: 12.5px; color: var(--muted); }
+  .stamp { font: 600 12px var(--mono); color: var(--muted); }
+  .btn { font: 600 14px var(--display); letter-spacing: .04em; min-height: 44px; padding: 0 16px; border: 1px solid var(--rule); }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+  .btn.plain { background: var(--plate); color: var(--fg); }
+  .row-of { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .card-head { background: var(--bay); border: 1px solid var(--rule); border-left: 6px solid var(--c, var(--hazard)); padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .card-head h2 { margin: 0; font: 700 21px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+  .card-head h1 { margin: 0; font: 700 22px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
+  .said { margin: 0; white-space: pre-line; }
+  .message { background: var(--plate); border: 1px solid var(--rule); padding: 12px 16px; display: flex; flex-direction: column; gap: 6px; }
+  .message.lead-message { background: var(--bay); border-color: var(--opus); gap: 10px; }
+  .message .stamp.lead { color: var(--opus); }
+  .deck { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; gap: 10px; align-items: baseline; }
+  .point > b { font: 700 13px var(--mono); color: var(--muted); min-width: 22px; }
+  .point > div { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
+  .point > div > b { font-size: 15px; }
+  .point .answer { font-size: 14px; color: var(--ink-2); }
+  .point .action { font-size: 14px; }
+  .point .action > i { font-style: normal; color: var(--opus); font-weight: 600; }
+  #reply-box { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+  #reply-box label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+  textarea { font: 15px var(--body); color: var(--fg); background: var(--floor); border: 1px solid var(--rule); padding: 9px 10px; width: 100%; }
+  .tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--rule); align-self: flex-start; }
+  .tabs a { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 14px; min-height: 44px; display: inline-flex; align-items: center; border-right: 1px solid var(--rule); }
+  .tabs a[aria-current="page"] { color: var(--hazard-ink); background: var(--hazard); }
+  .frame { height: 150px; border: 1px solid var(--rule); background: var(--plate); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; text-align: center; padding: 10px; }
+  .lede { margin: 0; color: var(--ink-2); }
+  .key-point { background: var(--plate); border: 1px solid var(--rule); padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .key-point > b { font: 700 13px var(--mono); color: var(--muted); min-width: 26px; }
+  .key-point > div { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .key-point > div > span { font-size: 14px; color: var(--ink-2); }
+  .deck-nav { display: none; }
+  @media (max-width: 639px) {
+    body { padding: 12px; }
+    .frame { display: none; }  /* the mock-up's frame is hidden on a phone, as on the page */
+    .deck > .off { display: none !important; }
+    .deck-nav { display: flex; flex-direction: column; gap: 8px; }
+    .deck-dots { display: flex; gap: 4px; }
+    .deck-dots span { flex: 1; height: 6px; background: var(--rule); }
+    .deck-dots .at { outline: 2px solid var(--fg); outline-offset: 1px; }
+    .deck-arrows { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .deck-arrows button { font: 600 15px var(--display); color: var(--fg); background: var(--plate); border: 1px solid var(--rule); min-height: 44px; }
+    .deck-arrows button:disabled { color: var(--muted); }
+  }
+
+  /* ---- proposed: In short, a plate of its own, on the existing tokens ---- */
+  .in-short { position: relative; background: var(--plate); clip-path: var(--notch); padding: 10px 14px 12px 20px; display: flex; flex-direction: column; gap: 4px; }
+  .in-short::before { content: ""; position: absolute; inset: 0 auto 0 0; width: 8px; background: var(--stripe); }
+  .in-short > b { font: 700 12px var(--display); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-2); }
+  .in-short > p { margin: 0; font-size: 16px; line-height: 1.45; color: var(--fg); }
+</style>
+</head>
+<body>
+<h1 class="sheet-title">F207: In short</h1>
+<p class="sheet-lede">F192, A fast lane request shows on the board and Overview, as the lead replied on it: the card's real points and key points. The words in each In short are an example of what the new rule would have written. The dashed green marks and notes are this mock-up's, not the page's.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<h2 class="page-name">A card's thread</h2>
+<div class="compare">
+
+  <!-- Today: copied from factory_dashboard/templates/thread.html -->
+  <div data-version="today" hidden>
+    <p class="version-name">Today</p>
+    <div class="main">
+      <header class="card-head"><span class="stamp">softfield · factory</span><h2>A fast lane request shows on the board and Overview as soon as it's made</h2></header>
+      <article class="message lead-message">
+        <span class="stamp lead">The lead · 2026-11-02 22:19</span>
+        <details>
+          <summary class="fold">Full reply</summary>
+          <p class="said">This drafts a small plan with a mock-up: the board and the Overview show a fast lane request as soon as you make it.</p>
+        </details>
+        <ol class="deck">
+          <li class="point"><b>1</b><div><b>Why you don't see it today</b><span class="answer">Only the lever on the card's own page knows about your request. The board's plate reads the card's doc, and the runner writes that at its next pick. F170, Blocked tickets's request of 30 October was only taken on 2 November, so for three and a half days the board showed nothing.</span><span class="action"><i>→ </i>Ticket 01 puts a dashed plate on the card: "fast lane · on its way · at the runner's next pick". Turning it off shows "leaving the fast lane · on its way".</span></div></li>
+          <li class="point"><b>2</b><div><b>The back button needs its own fix</b><span class="answer">You said "when I go back". A phone's back button can bring the old page back from memory, and the board doesn't fetch itself again, so the new plate alone could still leave you looking at the old board. I read this from the code and haven't reproduced it on a phone.</span><span class="action"><i>→ </i>Ticket 02 makes the board redraw itself when you arrive by back or forward. If you have moves not yet sent, it leaves them alone.</span></div></li>
+          <li class="point"><b>3</b><div><b>I'd go further than the board: the Overview too</b><span class="answer">You asked for the board, but your rule is that a request shows wherever its result will appear, and the Overview's "Fast lane:" line and Next in line are two of those places.</span><span class="action"><i>→ </i>Ticket 03, which can run or be dropped separately from the other two. If you only want the board, reject it in your comments and I'll remove it.</span></div></li>
+          <li class="point"><b>4</b><div><b>The mark goes on the plate, not the card's edge</b><span class="answer">A card's dashed edge already means a sent reorder is on its way, and both can be true at once. A dashed plate keeps the two apart.</span><span class="action"><i>→ </i>Drawn in the mock-up, with Today and Proposed on real cards.</span></div></li>
+          <li class="point"><b>5</b><div><b>Where it lands in the line</b><span class="answer">Once approved, it joins the bottom of Planted, behind 54 cards. It's three small developer tickets.</span><span class="action"><i>→ </i>Drag it up the board if you want it soon; I'd put it just after F170, Blocked tickets.</span></div></li>
+        </ol>
+        <div class="deck-nav"><div class="deck-dots"></div><div class="deck-arrows"><button type="button" data-go="-1">◀</button><button type="button" data-go="1">▶</button></div></div>
+      </article>
+      <div id="reply-box"><span class="stamp">5 points · 0 comments</span><label>Anything else? A question, a new thought<textarea rows="2"></textarea></label><div class="row-of"><button type="button" class="btn go">Send</button><span class="aside">Every point is agreed unless you comment on it.</span></div></div>
+    </div>
+    <p class="why">The two lines are shut in a fold called "Full reply", though they aren't the full reply. What the reply comes to is spread over five boxes.</p>
+  </div>
+
+  <!-- Proposed -->
+  <div data-version="proposed">
+    <p class="version-name">Proposed</p>
+    <div class="main">
+      <header class="card-head"><span class="stamp">softfield · factory</span><h2>A fast lane request shows on the board and Overview as soon as it's made</h2></header>
+      <article class="message lead-message">
+        <span class="stamp lead">The lead · 2026-11-02 22:19</span>
+        <div class="in-short new">
+          <b>In short</b>
+          <p>A fast lane request shows only on the card's own page until the runner's next pick. I'd show it on the board and the Overview at once: three small developer tickets. From you: say if you want the board only (point 3).</p>
+        </div>
+        <span class="note">New: open above the points, always the first thing in the reply. The "Full reply" fold goes.</span>
+        <ol class="deck">
+          <li class="point"><b>1</b><div><b>Why you don't see it today</b><span class="answer">Only the lever on the card's own page knows about your request. The board's plate reads the card's doc, and the runner writes that at its next pick. F170, Blocked tickets's request of 30 October was only taken on 2 November, so for three and a half days the board showed nothing.</span><span class="action"><i>→ </i>Ticket 01 puts a dashed plate on the card: "fast lane · on its way · at the runner's next pick". Turning it off shows "leaving the fast lane · on its way".</span></div></li>
+          <li class="point"><b>2</b><div><b>The back button needs its own fix</b><span class="answer">You said "when I go back". A phone's back button can bring the old page back from memory, and the board doesn't fetch itself again, so the new plate alone could still leave you looking at the old board. I read this from the code and haven't reproduced it on a phone.</span><span class="action"><i>→ </i>Ticket 02 makes the board redraw itself when you arrive by back or forward. If you have moves not yet sent, it leaves them alone.</span></div></li>
+          <li class="point"><b>3</b><div><b>I'd go further than the board: the Overview too</b><span class="answer">You asked for the board, but your rule is that a request shows wherever its result will appear, and the Overview's "Fast lane:" line and Next in line are two of those places.</span><span class="action"><i>→ </i>Ticket 03, which can run or be dropped separately from the other two. If you only want the board, reject it in your comments and I'll remove it.</span></div></li>
+          <li class="point"><b>4</b><div><b>The mark goes on the plate, not the card's edge</b><span class="answer">A card's dashed edge already means a sent reorder is on its way, and both can be true at once. A dashed plate keeps the two apart.</span><span class="action"><i>→ </i>Drawn in the mock-up, with Today and Proposed on real cards.</span></div></li>
+          <li class="point"><b>5</b><div><b>Where it lands in the line</b><span class="answer">Once approved, it joins the bottom of Planted, behind 54 cards. It's three small developer tickets.</span><span class="action"><i>→ </i>Drag it up the board if you want it soon; I'd put it just after F170, Blocked tickets.</span></div></li>
+        </ol>
+        <div class="deck-nav"><div class="deck-dots"></div><div class="deck-arrows"><button type="button" data-go="-1">◀</button><button type="button" data-go="1">▶</button></div></div>
+      </article>
+      <div id="reply-box"><span class="stamp">5 points · 0 comments</span><label>Anything else? A question, a new thought<textarea rows="2"></textarea></label><div class="row-of"><button type="button" class="btn go">Send</button><span class="aside">Every point is agreed unless you comment on it.</span></div></div>
+    </div>
+    <p class="why">The points stay as they are: open on a wide screen, one at a time on a phone.</p>
+  </div>
+</div>
+
+<h2 class="page-name">A proposal's review</h2>
+<div class="compare">
+
+  <!-- Today: copied from factory_dashboard/templates/proposal.html -->
+  <div data-version="today" hidden>
+    <p class="version-name">Today</p>
+    <div class="main">
+      <a class="fold" href="#">‹ The planning room · f192</a>
+      <header class="card-head"><span class="stamp">Proposed by the lead</span><h1>Review A fast lane request shows on the board and Overview as soon as it's made</h1>
+        <nav class="tabs" aria-label="Proposals"><a href="#" aria-current="page">Plan · A fast lane request shows…</a><a href="#">Mockup · F192 mock-up</a></nav>
+      </header>
+      <p class="lede">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
+      <div class="deck">
+        <div class="key-point"><b>1</b><div><b>The problem</b><span>A lever you pull shows only on the card's own page until the runner's next pick; F170, Blocked tickets's waited three and a half days with nothing on the board.</span></div><button type="button" class="btn plain">Comment…</button></div>
+        <div class="key-point"><b>2</b><div><b>The board's plate</b><span>A card with an open request shows a dashed "fast lane · on its way · at the runner's next pick"; leaving, "leaving the fast lane · on its way".</span></div><button type="button" class="btn plain">Comment…</button></div>
+        <div class="key-point"><b>3</b><div><b>Back shows what is true now</b><span>The board redraws itself when you arrive by back or forward, and leaves moves not yet sent alone.</span></div><button type="button" class="btn plain">Comment…</button></div>
+      </div>
+      <div class="deck-nav"><div class="deck-dots"></div><div class="deck-arrows"><button type="button" data-go="-1">◀</button><button type="button" data-go="1">▶</button></div></div>
+    </div>
+    <p class="why">A review opens on its header, and with a mock-up, on the frame: nothing says what approving does until the key points, read one by one. Your review, Not now and What happens next are left out of this picture on both sides: they don't change.</p>
+  </div>
+
+  <!-- Proposed -->
+  <div data-version="proposed">
+    <p class="version-name">Proposed</p>
+    <div class="main">
+      <a class="fold" href="#">‹ The planning room · f192</a>
+      <header class="card-head"><span class="stamp">Proposed by the lead</span><h1>Review A fast lane request shows on the board and Overview as soon as it's made</h1>
+        <nav class="tabs" aria-label="Proposals"><a href="#" aria-current="page">Plan · A fast lane request shows…</a><a href="#">Mockup · F192 mock-up</a></nav>
+      </header>
+      <div class="in-short new">
+        <b>In short</b>
+        <p>Approving queues three small developer tickets: the board and the Overview show a fast lane request at once. Risk: a board left open still shows it only at its next load.</p>
+      </div>
+      <span class="note">New: right under the header, above a mock-up's frame when there is one. On a mock-up's tab it says what the picture shows.</span>
+      <p class="lede">Every key point, in plain words. Comment on what you'd change; the rest counts as agreed when you send.</p>
+      <div class="deck">
+        <div class="key-point"><b>1</b><div><b>The problem</b><span>A lever you pull shows only on the card's own page until the runner's next pick; F170, Blocked tickets's waited three and a half days with nothing on the board.</span></div><button type="button" class="btn plain">Comment…</button></div>
+        <div class="key-point"><b>2</b><div><b>The board's plate</b><span>A card with an open request shows a dashed "fast lane · on its way · at the runner's next pick"; leaving, "leaving the fast lane · on its way".</span></div><button type="button" class="btn plain">Comment…</button></div>
+        <div class="key-point"><b>3</b><div><b>Back shows what is true now</b><span>The board redraws itself when you arrive by back or forward, and leaves moves not yet sent alone.</span></div><button type="button" class="btn plain">Comment…</button></div>
+      </div>
+      <div class="deck-nav"><div class="deck-dots"></div><div class="deck-arrows"><button type="button" data-go="-1">◀</button><button type="button" data-go="1">▶</button></div></div>
+    </div>
+    <p class="why">An older proposal has no In short, and shows as it does today.</p>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+      document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== button.dataset.show; });
+    });
+  });
+  // The phone's deck, as deck.js draws it: one point at a time, a dot per point, ◀ ▶
+  document.querySelectorAll(".deck").forEach((deck) => {
+    const nav = deck.nextElementSibling;
+    const items = Array.from(deck.children);
+    const dots = nav.querySelector(".deck-dots");
+    items.forEach(() => dots.appendChild(document.createElement("span")));
+    let at = 0;
+    const draw = () => {
+      items.forEach((item, i) => item.classList.toggle("off", i !== at));
+      Array.from(dots.children).forEach((dot, i) => dot.classList.toggle("at", i === at));
+      nav.querySelector('[data-go="-1"]').disabled = at === 0;
+      nav.querySelector('[data-go="1"]').disabled = at === items.length - 1;
+    };
+    nav.querySelectorAll("[data-go]").forEach((button) => {
+      button.addEventListener("click", () => { at += Number(button.dataset.go); draw(); });
+    });
+    draw();
+  });
+</script>
+</body>
+</html>
