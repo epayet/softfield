@@ -24,3 +24,12 @@ Read `def fake_clock` in `tests/runner/test_loop.py` and `.softfield/cards/f38-t
 - every test in `tests/runner/test_loop.py` still passes, with its assertions unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1789
+gate_failures: []
+tokens: 1784168
+```
