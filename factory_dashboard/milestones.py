@@ -196,28 +196,23 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
         (project,),
     ).fetchall()
     seen = {row.key for row in with_data}
+    with_tickets = {
+        r["milestone_id"]
+        for r in conn.execute(
+            "SELECT t.milestone_id FROM tickets t JOIN projects p ON p.id = t.project_id"
+            " WHERE p.name = ? AND t.state IS NOT ?",
+            (project, metrics.REMOVED),
+        )
+    }
     no_data_rows: list[MilestoneRow] = []
     for m in no_data:
         if m["key"] not in seen:
             info = meta.get(m["key"], {})
-            mid = milestone_ids.get(m["key"])
             if (
                 info.get("state") is None
                 and info.get("ended") is None
                 and info.get("status") != "done"
-                and (
-                    mid is None
-                    or mid
-                    not in {
-                        r["milestone_id"]
-                        for r in conn.execute(
-                            "SELECT t.milestone_id FROM tickets t"
-                            " JOIN projects p ON p.id = t.project_id"
-                            " WHERE p.name = ? AND t.state IS NOT ?",
-                            (project, metrics.REMOVED),
-                        )
-                    }
-                )
+                and milestone_ids.get(m["key"]) not in with_tickets
             ):
                 continue
             no_data_rows.append(

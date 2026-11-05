@@ -750,6 +750,14 @@ _(to fill in at the M3 review)_
 - **Anything else:** removing the park at the reserve was tested thoroughly at the pick, but the review's rounds and `softfield milestone` also relied on a held ticket being parked. When a change removes a state, search for what reads the absence of work as well as what reads the state. The new rule also holds f9-29, the ticket meant to show it on the Overview, so a plan that counts on another card's ticket should say what happens if the rule holds that ticket.
 - **Decisions affected:** none. ADR 44 stands.
 
+### F171 (2026-11-05): each card once on the board, and fix tickets named after what they fix ([review](../reviews/f171-there-are-dupliacted-tickets-on-the.md))
+
+- **Q1:** five tickets: two by the local model, each passing on its second attempt, and three by the lead. Two checkpoints: Copilot's stand-in filed one should-fix, which `f171-05` fixed; Claude's second found nothing. Review round 1: one should-fix and four nits; two fixed by the review, three only reported.
+- **Q3:** the local model's two small dashboard tickets took 1.46 hours, 0.34 of it in failed attempts.
+- **Q5:** see the review's numbers.
+- **Anything else:** two tests written by the local model could never fail, because they looked for `F99` among rows keyed `f99-empty`, and the checkpoint called them sound. "Fails without the change" is written in every ticket's Done when, but nothing runs it. `f171-04` also waited 13 days after its card's other tickets had merged.
+- **Decisions affected:** none.
+
 ## 10. For the owner to decide at review time (each item can be accepted on its own)
 
 1. 4.1: queue mode by default, and park the automated review loop.

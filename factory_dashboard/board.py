@@ -366,8 +366,7 @@ def _cards(
         except OSError:
             protected = []
     milestones = conn.execute(
-        "SELECT m.*, m.state FROM milestones m JOIN projects p ON p.id = m.project_id"
-        " WHERE p.name = ?",
+        "SELECT m.* FROM milestones m JOIN projects p ON p.id = m.project_id WHERE p.name = ?",
         (project,),
     ).fetchall()
     mkey: dict[int, str] = {}  # milestone id → its short key (lowercase)

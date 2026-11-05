@@ -273,7 +273,8 @@ def test_an_empty_milestone_with_no_state_and_no_tickets_is_not_in_the_list(db_p
         conn.close()
     rows = milestone_rows(metrics.open_db(db_path), PROJECT)
     keys = {r.key for r in rows}
-    assert "F99" not in keys
+    assert "f99-empty" not in keys
+    assert keys  # the project's other milestones still show
 
 
 def test_an_empty_milestone_with_no_state_but_with_status_is_not_in_the_list(db_path):
@@ -288,7 +289,8 @@ def test_an_empty_milestone_with_no_state_but_with_status_is_not_in_the_list(db_
         conn.close()
     rows = milestone_rows(metrics.open_db(db_path), PROJECT)
     keys = {r.key for r in rows}
-    assert "F98" not in keys
+    assert "f98-empty" not in keys
+    assert keys  # the project's other milestones still show
 
 
 def test_milestone_detail_answers_200(milestone_detail_client):
