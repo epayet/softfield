@@ -1,4 +1,4 @@
-# Milestone F222: When milestones plans get approved, do they get added to…
+# Milestone F222: A newly approved plan goes last on the board
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-05.
