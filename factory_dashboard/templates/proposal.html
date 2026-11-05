@@ -119,6 +119,7 @@
           hx-vals='{"kind": "plant", "project": {{ project | tojson }}, "subject": {{ ("general/" ~ proposal.id) | tojson }}}'>Plant it</button>
         {% endif %}
       </div>
+      <span class="dock-gap"></span>
       {% if not (kind == "merge" and proposal.applied) %}
       {# F31 D2: won't do, in two taps, saying what it takes with it #}
       <details id="reject">

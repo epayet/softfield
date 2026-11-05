@@ -673,8 +673,9 @@ tr.few .gauge { opacity: .35; }
   .proposal-page #actions, .proposal-page .action-buttons { flex-direction: row; align-items: center; }
   .proposal-page #actions:has(#reject[open]) { flex-wrap: wrap; }
   .proposal-page .action-buttons { flex: 1 1 auto; min-width: 0; }
-  .proposal-page #review-count { flex: 1 1 0; min-width: 0; line-height: 1.2; }
-  .proposal-page #primary, .proposal-page #send-back, .proposal-page #reject:not([open]) { flex: 0 0 auto; }
+   .proposal-page #review-count { display: none; }
+   .proposal-page .dock-gap { flex: 1 1 auto; }
+   .proposal-page #primary, .proposal-page #send-back, .proposal-page #reject:not([open]) { flex: 0 0 auto; }
   .proposal-page #reject[open] { flex: 1 1 100%; }
   .proposal-page #review-status[data-has-answer="false"] { display: none; }
 }

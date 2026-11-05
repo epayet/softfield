@@ -47,6 +47,7 @@ from tests.factory_dashboard.test_planning import (
     _write,
 )
 from tests.factory_dashboard.test_proposal import (
+    ADR_ON_MAIN,
     _f6_mockup_review,
 )
 from tests.layout import DISPLAY, PHONE, layout_problems
@@ -1160,30 +1161,60 @@ def test_a_repo_that_is_not_a_folder_shows_no_note(planning, db_path, serve):
 
 
 def test_the_dock_is_compact_on_a_phone(page, planning, db_path, serve, checkout):
-    """At 390 × 844 the dock is at most 72 px tall and still holds the count, the button and
-    the closed Reject… fold on one row, the button in view; opened, the fold may grow the
-    dock."""
+    """At 390 × 844 the count leaves the bar; the dock is at most 72 px tall and holds the
+    button and the closed Reject… fold on one row, the fold to the right of the button;
+    opened, the fold may grow the dock. On a wide screen the count still shows."""
     _f6_mockup_review(db_path, planning, checkout)
     page.set_viewport_size(PHONE)
     _open(page, serve(), "/planning/f6/proposals/mockup")
+    assert not page.locator("#review-count").is_visible()
     dock = page.locator(".proposal-page .dock")
     height = dock.evaluate("e => e.offsetHeight")
     assert height <= 72, height
     assert not page.locator(".dock > h2").is_visible()
     assert not page.locator("#review-status").is_visible()
-    row = ("#review-count", "#approve-plan", "#reject > summary")
-    boxes = [page.locator(s).bounding_box() for s in row]
+    approve = page.locator("#approve-plan").bounding_box()
+    fold = page.locator("#reject > summary").bounding_box()
     dock_box = dock.bounding_box()
-    assert dock_box
-    for box in boxes:
-        assert box and dock_box["y"] <= box["y"]
-        assert box["y"] + box["height"] <= dock_box["y"] + height
+    assert approve and dock_box
+    assert approve["y"] >= dock_box["y"]
+    assert approve["y"] + approve["height"] <= dock_box["y"] + height
+    assert fold and dock_box
+    assert fold["y"] >= dock_box["y"]
+    assert fold["y"] + fold["height"] <= dock_box["y"] + height
+    assert approve["x"] < fold["x"]
     # this page is shorter than the screen, so the dock sits in the flow: Send at the bottom on a
     # long page is test_on_a_phone_one_point_shows_at_a_time's check
-    box = boxes[1]
-    assert box and box["y"] + box["height"] <= PHONE["height"]
+    assert approve["y"] + approve["height"] <= PHONE["height"]
     page.locator("#reject > summary").click()
     assert page.locator("#reject-button").is_visible()
+    # on a wide screen the count still shows
+    page.set_viewport_size(DISPLAY)
+    assert page.locator("#review-count").is_visible()
+
+
+def test_a_comment_writes_send_one_change_back_with_no_count(
+    page, planning, db_path, serve, checkout
+):
+    """With a comment written at 390 px the bar shows \"Send 1 change back\" and still no
+    count."""
+    git(checkout, "checkout", "-q", "-b", "plan/f6")
+    for rel, text in (
+        (".softfield/cards/f6-mockup/index.html", "<p>the desk</p>"),
+        (".softfield/adr/20-planning-room.md", ADR_ON_MAIN),
+    ):
+        (checkout / rel).parent.mkdir(parents=True, exist_ok=True)
+        (checkout / rel).write_text(text)
+    git(checkout, "add", "-A")
+    git(checkout, "commit", "-q", "-m", "drafts")
+    git(checkout, "checkout", "-q", "main")
+    _write(db_path, lambda conn: _review(conn, planning, "f6", _REVIEW_ADR))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f6/proposals/adr-20")
+    page.click(".key-point:visible .change-btn")
+    page.fill('textarea.comment[data-point="1"]', "This needs work.")
+    assert "SEND 1 CHANGE BACK" in page.locator("#send-back").inner_text()
+    assert not page.locator("#review-count").is_visible()
 
 
 # --- every number the lead writes links to what it names (F37 D2, D3) -------------------------
