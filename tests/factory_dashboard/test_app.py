@@ -3381,13 +3381,25 @@ def test_the_new_tokens_exist_in_light_root():
     assert "--tick" in light_block or "--ink-2" in light_block
 
 
+def test_grid_token_exists_in_both_themes():
+    """F215: --grid is defined in both the dark :root and the light theme block."""
+    css = (STATIC / "dashboard.css").read_text()
+    dark = _block(css, ":root {")
+    assert "--grid" in dark
+    light_start = css.index(':root[data-theme="light"]')
+    light_body_start = css.index("{", light_start) + 1
+    light_body_end = css.index("}", light_body_start)
+    light_block = css[light_start:light_body_end]
+    assert "--grid" in light_block
+
+
 def test_body_has_no_grid():
     """F215: the body has a background colour and no grid."""
     css = (STATIC / "dashboard.css").read_text()
     body_match = re.search(r"body\s*\{([^}]*)\}", css)
     assert body_match, "no body rule"
     body_decls = body_match[1]
-    assert "background-color" in body_decls
+    assert "background-color: var(--bg)" in body_decls
     assert "background-image" not in body_decls
     assert "background-size" not in body_decls
 
