@@ -30,3 +30,12 @@ Read `.softfield/cards/f206-developer-is-curre-tly-working-on.md` (D1 to D4). F1
 - the legend's faded entry reads "faded: nothing for developers to take"
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 4973
+gate_failures: ['task-tests']
+tokens: 6007023
+```
