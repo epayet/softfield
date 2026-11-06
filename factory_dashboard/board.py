@@ -86,7 +86,7 @@ class ReviewStep:
 
 @dataclass(frozen=True)
 class DevWork:
-    """What a planted card holds for the developers (F146 D4)."""
+    """What a planted card holds for the developers (F146 D4, F206 D1-D3)."""
 
     look: str  # ``can``, ``waits`` or ``none`` (D3)
     now: int = 0  # developer tickets that can start now
@@ -96,6 +96,9 @@ class DevWork:
     # on a ``can`` card: the first lead ticket left, else ``review``; ``review`` too on a card
     # whose every ticket is done
     then: str | None = None
+    running: tuple[str, ...] = ()  # running developer tickets (F206 D1)
+    with_lead: tuple[str, ...] = ()  # escalated developer tickets (F206 D3)
+    blocked: tuple[str, ...] = ()  # blocked developer tickets (F206 D3)
 
 
 @dataclass(frozen=True)
@@ -153,7 +156,8 @@ def _dev_resolver(
 ) -> Callable[[sqlite3.Row], frozenset[str]]:
     """For a ready developer ticket, the unfinished lead-side tickets it waits for, directly or
     through other developer tickets: none means developers alone can run it (F146 D2). A
-    dependency that isn't a ready developer ticket (set aside, blocked, unknown) is named."""
+    dependency that isn't a ready or running developer ticket (set aside, blocked, unknown) is
+    named. F206 D1: follows a running developer ticket as it follows a ready one."""
     seen: dict[str, frozenset[str]] = {}
 
     def leads(row: sqlite3.Row) -> frozenset[str]:
@@ -168,7 +172,7 @@ def _dev_resolver(
                 continue
             if (
                 other is not None
-                and other["state"] == "ready"
+                and other["state"] in ("ready", "running")
                 and _developer_ticket(other, protected)
             ):
                 found |= leads(other)
@@ -186,30 +190,63 @@ def _dev_work(
     leads: Callable[[sqlite3.Row], frozenset[str]],
     protected: list[str],
 ) -> DevWork:
-    """D3 and D4's line for one card's tickets (set-aside and removed ones already left out)."""
+    """D3 and D4's line for one card's tickets (set-aside and removed ones already left out).
+    F206: counts running tickets as developers' work; tracks escalated/blocked tickets."""
     now = after = waiting = 0
     waits_for: set[str] = set()
+    running: list[str] = []
+    with_lead: list[str] = []
+    blocked: list[str] = []
     for t in own:
-        if t["state"] != "ready" or not _developer_ticket(t, protected):
+        if not _developer_ticket(t, protected):
             continue
-        named = leads(t)
-        if named:
-            waiting += 1
-            waits_for |= named
-        elif all(rows.get(d) is not None and rows[d]["state"] == "done" for d in depends_on(t)):
-            now += 1
-        else:
-            after += 1
+        state = t["state"]
+        if state == "running":
+            running.append(t["ticket"])
+        elif state == "escalated":
+            with_lead.append(t["ticket"])
+        elif state == "blocked":
+            blocked.append(t["ticket"])
+        elif state == "ready":
+            named = leads(t)
+            if named:
+                waiting += 1
+                waits_for |= named
+            elif all(rows.get(d) is not None and rows[d]["state"] == "done" for d in depends_on(t)):
+                now += 1
+            else:
+                after += 1
     if now + after == 0 and waiting == 0:
-        # every ticket done: what is left is Claude's review, not the lead's tickets
-        done = bool(own) and all(t["state"] == "done" for t in own)
-        return DevWork("none", then="review" if done else None)
-    look = "can" if now + after else "waits"
+        # no ready developer tickets
+        if running or with_lead or blocked:
+            # running, escalated or blocked tickets: card is lit
+            look = "can"
+            # find the first lead-side ticket left
+            left = [t for t in own if t["state"] != "done" and not _developer_ticket(t, protected)]
+            then = left[0]["ticket"] if left else "review"
+        elif own and all(t["state"] == "done" for t in own):
+            # every ticket done: what is left is Claude's review, not the lead's tickets
+            return DevWork("none", then="review")
+        else:
+            # no developer tickets at all
+            return DevWork("none")
+    else:
+        look = "can" if now + after else "waits"
     then = None
     if look == "can":
         left = [t for t in own if t["state"] != "done" and not _developer_ticket(t, protected)]
         then = left[0]["ticket"] if left else "review"
-    return DevWork(look, now, after, waiting, tuple(sorted(waits_for)), then)
+    return DevWork(
+        look,
+        now,
+        after,
+        waiting,
+        tuple(sorted(waits_for)),
+        then,
+        tuple(running),
+        tuple(with_lead),
+        tuple(blocked),
+    )
 
 
 def _milestone_stage(m: sqlite3.Row, tickets: list[sqlite3.Row], threads: set[str]) -> str:
@@ -665,9 +702,10 @@ def board(
 def _developer_totals(
     conn: sqlite3.Connection, project: str, cards: list[Card]
 ) -> tuple[int, int, float | None]:
-    """The cards of look ``can``, their tickets, and those tickets' minutes (F146 D4)."""
+    """The cards of look ``can``, their tickets, and those tickets' minutes (F146 D4, F206 D2).
+    Running tickets count among the tickets developers can work on."""
     can = [c.developers for c in cards if c.developers and c.developers.look == "can"]
-    tickets = sum(d.now + d.after for d in can)
+    tickets = sum(d.now + d.after + len(d.running) for d in can)
     row = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
     minutes = ticket_minutes(conn, row["id"]) if row else []
     return len(can), tickets, tickets * statistics.median(minutes) if minutes else None

@@ -8,10 +8,16 @@
 
 {% from "_partials/stage_icon.html" import icon, plant %}
 
-{# In the developer's view, what a card holds for developers, in words (F146 D3, D4) #}
+{# In the developer's view, what a card holds for developers, in words (F146 D3, D4, F206) #}
 {% macro dev_tag(c) %}{% set d = c.developers %}
 <span class="dev-tag"><i class="pip"></i>
-  {%- if d.look == "can" -%}
+  {%- if d.with_lead -%}
+  developers tried {{ d.with_lead | join(', ') }} · now with the lead
+  {%- elif d.blocked -%}
+  {{ d.blocked | join(', ') }} is blocked
+  {%- elif d.look == "can" and d.running -%}
+  developers: working on {{ d.running[0] }}{% if d.now %} · {{ d.now }} now{% endif %}{% if d.after %} · {{ d.after }} after it{% endif %}{% if d.then == "review" %} · then Claude's review{% else %} · then the lead's <code>{{ d.then }}</code>{% endif %}
+  {%- elif d.look == "can" -%}
   developers: {{ d.now }} now{% if d.after %} · {{ d.after }} after it{% endif %} · then {% if d.then == "review" %}Claude's review{% else %}the lead's <code>{{ d.then }}</code>{% endif %}
   {%- elif d.look == "waits" -%}
   {{ d.waiting }} developer ticket{{ "" if d.waiting == 1 else "s" }} wait{{ "s" if d.waiting == 1 else "" }} for {% for t in d.waits_for %}<code>{{ t }}</code>{{ ", " if not loop.last }}{% endfor %}
@@ -127,7 +133,7 @@
     {% endfor %}
   </div>
   {% if view %}
-  <p class="legend dev-legend"><span><i class="pip can"></i>lit: developers can take a ticket now, or after another developer ticket</span><span><i class="pip waits"></i>half-dark: its developer work waits for a lead ticket</span><span><i class="pip none"></i>faded: lead only</span></p>
+  <p class="legend dev-legend"><span><i class="pip can"></i>lit: developers can take a ticket now, or after another developer ticket</span><span><i class="pip waits"></i>half-dark: its developer work waits for a lead ticket</span><span><i class="pip none"></i>faded: nothing for developers to take</span></p>
   {% endif %}
   {# the whole open order, which a send carries with its moves (F15 D10) #}
   <script type="application/json" id="board-line">{{ found.line | tojson }}</script>

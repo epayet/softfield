@@ -2036,12 +2036,12 @@ def _slot(html: str, link: str) -> tuple[list[str], str]:
 
 
 def _three_looks(db: Path) -> None:
-    """F70 developers can work on (1 now, 5 after it, then the lead's f70-07), F71 whose two
-    developer tickets wait for the lead's f71-01, and F72, lead only."""
+    """F70 developers can work on (1 running now, 5 after it, then the lead's f70-07), F71 whose
+    two developer tickets wait for the lead's f71-01, and F72, lead only."""
     write(
         db,
         _tickets(
-            ("f70-a", "f70-01", "developer", "ready", ()),
+            ("f70-a", "f70-01", "developer", "running", ()),
             *[("f70-a", f"f70-0{n}", "developer", "ready", ("f70-01",)) for n in range(2, 7)],
             ("f70-a", "f70-07", "lead", "ready", ("f70-02",)),
             ("f71-a", "f71-01", "lead", "ready", ()),
@@ -2077,7 +2077,7 @@ def test_each_planted_card_says_what_it_holds_for_developers(db_path):
     assert 'class="field dev-view"' in html
     assert _slot(html, "/milestones/f70-a") == (
         ["dev-can"],
-        "developers: 1 now · 5 after it · then the lead's f70-07",
+        "developers: working on f70-01 · 5 after it · then the lead's f70-07",
     )
     assert _slot(html, "/milestones/f71-a") == (
         ["dev-waits"],
@@ -2090,12 +2090,162 @@ def test_the_planted_head_counts_what_developers_can_work_on_and_how_long(db_pat
     _three_looks(db_path)
     monkeypatch.setattr("factory_dashboard.board.ticket_minutes", lambda conn, p: [50.5, 40, 60])
     head = _head(_columns(_page(_client(db_path), "?view=developers"))["planted"])
-    # one card, its six developer tickets, 6 × the median 50.5 minutes
+    # one card, its six developer tickets (1 running + 5 ready), 6 × the median 50.5 minutes
     assert head.endswith(
         "Developers can work on 1 card, 6 tickets , about 5 h 03 min,"
         " before every developer ticket left waits for the lead"
     )
     assert _hours(45.4) == "45 min"
+
+
+def test_a_running_dev_ticket_lights_its_card(db_path):
+    """A card with a running developer ticket and a ready lead ticket is lit and reads
+    "developers: working on f70-01 · then the lead's f70-02"."""
+    write(
+        db_path,
+        _tickets(
+            ("f70-a", "f70-01", "developer", "running", ()),
+            ("f70-a", "f70-02", "lead", "ready", ("f70-01",)),
+        ),
+    )
+    work = _work(db_path, "F70-A")
+    assert work.look == "can"
+    assert work.running == ("f70-01",)
+    assert work.now == 0
+    assert work.after == 0
+    assert work.then == "f70-02"
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f70-a") == (
+        ["dev-can"],
+        "developers: working on f70-01 · then the lead's f70-02",
+    )
+
+
+def test_a_dev_ticket_after_a_running_one_counts_as_after_not_waits(db_path):
+    """A card with a running developer ticket and a ready developer ticket that depends on it
+    is lit and reads "developers: working on f70-01 · 1 after it · then Claude's review",
+    and doesn't say the second ticket waits for the lead."""
+    write(
+        db_path,
+        _tickets(
+            ("f70-a", "f70-01", "developer", "running", ()),
+            ("f70-a", "f70-02", "developer", "ready", ("f70-01",)),
+        ),
+    )
+    work = _work(db_path, "F70-A")
+    assert work.look == "can"
+    assert work.running == ("f70-01",)
+    assert work.now == 0
+    assert work.after == 1
+    assert work.then == "review"
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f70-a") == (
+        ["dev-can"],
+        "developers: working on f70-01 · 1 after it · then Claude's review",
+    )
+
+
+def test_an_escalated_dev_ticket_reads_tried_and_now_with_the_lead(db_path):
+    """A card with an escalated developer ticket and a ready lead ticket is faded and reads
+    "developers tried f72-01 · now with the lead"."""
+    write(
+        db_path,
+        _tickets(
+            ("f72-a", "f72-01", "developer", "escalated", ()),
+            ("f72-a", "f72-02", "lead", "ready", ()),
+        ),
+    )
+    work = _work(db_path, "F72-A")
+    assert work.look == "can"
+    assert work.with_lead == ("f72-01",)
+    assert work.waiting == 0
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f72-a") == (
+        ["dev-can"],
+        "developers tried f72-01 · now with the lead",
+    )
+
+
+def test_a_blocked_dev_ticket_reads_is_blocked(db_path):
+    """A card with a blocked developer ticket and a ready lead ticket is faded and reads
+    "f72-01 is blocked"."""
+    write(
+        db_path,
+        _tickets(
+            ("f72-a", "f72-01", "developer", "blocked", ()),
+            ("f72-a", "f72-02", "lead", "ready", ()),
+        ),
+    )
+    work = _work(db_path, "F72-A")
+    assert work.look == "can"
+    assert work.blocked == ("f72-01",)
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f72-a") == (
+        ["dev-can"],
+        "f72-01 is blocked",
+    )
+
+
+def test_a_card_holding_only_lead_tickets_still_says_lead_only(db_path):
+    """A card holding only lead tickets still reads "lead only", and every line of
+    test_each_planted_card_says_what_it_holds_for_developers still passes."""
+    write(db_path, _tickets(("f72-a", "f72-01", "lead", "ready", ())))
+    found = read(db_path, developers=True)
+    assert card(found, "F72").developers == DevWork("none")
+    assert all(
+        c.developers == DevWork("none")
+        for stage in ("seed", "sprouting", "ripe", "harvested")
+        for c in found.stages[stage]
+    )
+
+
+def test_a_lit_card_with_escalated_dev_and_no_lead_ticket_says_then_the_leads_ticket(db_path):
+    """A lit card with an escalated developer ticket and a ready lead ticket reads
+    "developers tried f70-01 · now with the lead" and `then` is the lead ticket."""
+    write(
+        db_path,
+        _tickets(
+            ("f70-a", "f70-01", "developer", "escalated", ()),
+            ("f70-a", "f70-02", "lead", "ready", ()),
+        ),
+    )
+    work = _work(db_path, "F70-A")
+    assert work.look == "can"
+    assert work.with_lead == ("f70-01",)
+    assert work.then == "f70-02"
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f70-a") == (
+        ["dev-can"],
+        "developers tried f70-01 · now with the lead",
+    )
+
+
+def test_the_planted_head_counts_a_running_ticket(db_path, monkeypatch):
+    """The Planted stage's head counts a running ticket among the tickets developers can work on."""
+    monkeypatch.setattr("factory_dashboard.board.ticket_minutes", lambda conn, p: [])
+    write(
+        db_path,
+        _tickets(
+            ("f70-a", "f70-01", "developer", "running", ()),
+            ("f70-a", "f70-02", "developer", "ready", ("f70-01",)),
+        ),
+    )
+    found = read(db_path, developers=True)
+    # the running ticket + the ready ticket = 2 tickets developers can work on
+    assert found.developers == (1, 2, None)
+
+
+def test_the_legend_faded_entry_says_nothing_for_developers_to_take(db_path):
+    """The legend's faded entry reads "faded: nothing for developers to take"."""
+    write(
+        db_path,
+        _tickets(
+            ("f72-a", "f72-01", "lead", "ready", ()),
+        ),
+    )
+    html = _page(_client(db_path), "?view=developers")
+    assert "faded: nothing for developers to take" in html
+    assert "faded: lead only" not in html
 
 
 def test_off_the_lever_gives_the_normal_board_unchanged(db_path):
