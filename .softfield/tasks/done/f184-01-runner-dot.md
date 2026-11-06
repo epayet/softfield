@@ -31,3 +31,12 @@ Read `.softfield/cards/f184-when-check-all-is-running-the.md` (Outcome, "Why it 
 - "Idle: nothing to do", "Idle: …" lines and "Paused by you since …" keep the `idle` dot; running jobs keep `lead` or `developer`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2875
+gate_failures: []
+tokens: 3118512
+```
