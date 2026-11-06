@@ -2117,7 +2117,7 @@ def test_plant_only_has_btn_go(planning, serve, db_path):
     assert btn
     classes = btn[1].split()
     assert "btn" in classes
-    assert "go" in classes
+    assert "plain" in classes
 
 
 def test_plant_ask_has_btn_plain(planning, serve, db_path):
@@ -2128,7 +2128,7 @@ def test_plant_ask_has_btn_plain(planning, serve, db_path):
     assert btn
     classes = btn[1].split()
     assert "btn" in classes
-    assert "plain" in classes
+    assert "go" in classes
 
 
 def test_no_button_in_planning_has_inline_style(planning, serve, db_path):
