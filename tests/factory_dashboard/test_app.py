@@ -3381,15 +3381,15 @@ def test_the_new_tokens_exist_in_light_root():
     assert "--tick" in light_block or "--ink-2" in light_block
 
 
-def test_body_has_the_faint_grid():
-    """D3: the body has a 32 px grid from --grid."""
+def test_body_has_no_grid():
+    """F215: the body has a background colour and no grid."""
     css = (STATIC / "dashboard.css").read_text()
     body_match = re.search(r"body\s*\{([^}]*)\}", css)
     assert body_match, "no body rule"
     body_decls = body_match[1]
-    assert "linear-gradient" in body_decls, "grid requires linear-gradients"
-    assert "32px" in body_decls, "grid must be 32px"
-    assert "var(--grid)" in body_decls
+    assert "background-color" in body_decls
+    assert "background-image" not in body_decls
+    assert "background-size" not in body_decls
 
 
 def test_panel_has_position_relative_and_corner_ticks():
