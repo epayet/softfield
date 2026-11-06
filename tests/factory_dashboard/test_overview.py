@@ -7,9 +7,19 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlsplit
 
+import pytest
+
 from factory_dashboard.overview import queue, queued_jobs
 from runner import metrics
-from tests.factory_dashboard.conftest import LOCAL, NOW, OPUS, OTHER, PROJECT, SONNET
+from tests.factory_dashboard.conftest import (
+    LOCAL,
+    NOW,
+    OPUS,
+    OTHER,
+    PROJECT,
+    SONNET,
+    write_allowance,
+)
 from tests.layout import layout_problems
 
 CHARTS_JS = Path(__file__).parents[2] / "factory_dashboard" / "static" / "charts.js"
@@ -634,11 +644,44 @@ def test_a_reading_past_its_reset_says_reset_since_with_no_percentage(serve, db_
     assert row == "Claude 5-hour window reset since, no new reading kept for you from here"
 
 
-def test_each_claude_row_shows_its_own_read_label(allowance_client):
+@pytest.fixture
+def allowance_client_distinct_reads(db_path: Path):
+    """A client over the fixture with distinct read timestamps per Claude window."""
+    from fastapi.testclient import TestClient
+
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        write_allowance(conn)
+        # Write a different timestamp for SONNET's seven_day so each row shows its own "read at"
+        # (latest_readings picks the latest by `at` then `id`; OPUS was written last so its
+        # row has the highest id and wins. Remove it so SONNET's updated row is the winner.)
+        seven_day_read = (NOW - timedelta(minutes=30)).isoformat()
+        conn.execute(
+            "DELETE FROM usage_events WHERE agent = ? AND \"window\" = 'seven_day' "
+            "AND kind = 'reading'",
+            (OPUS,),
+        )
+        conn.execute(
+            "UPDATE usage_events SET at = ? "
+            "WHERE agent = ? AND \"window\" = 'seven_day' AND kind = 'reading'",
+            (seven_day_read, SONNET),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    return TestClient(app, base_url="http://127.0.0.1:8765")
+
+
+def test_each_claude_row_shows_its_own_read_label(allowance_client_distinct_reads):
     """Each Claude row of #allowance shows its own "read at …" (f89-02)."""
-    rows = allowance_rows(allowance_client.get("/").text)
+    rows = allowance_rows(allowance_client_distinct_reads.get("/").text)
     assert "read at 12:00" in rows["claude-five_hour"]
-    assert "read at 12:00" in rows["claude-seven_day"]
+    assert "read at 11:30" in rows["claude-seven_day"]
 
 
 def allowance_client_with(db_path: Path, tmp_path: Path, switches: dict[str, str]):

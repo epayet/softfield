@@ -296,7 +296,7 @@ def test_the_lead_window_says_read_at_when_reading_is_today(planning, db_path, s
     )
     html = _page(serve())
     tile = _text(_tile(html, "lead-window"))
-    assert "read at 03:59" in tile
+    assert tile.count("read at 03:59") == 1
 
 
 def test_the_lead_window_says_read_on_when_reading_is_not_today(planning, db_path, serve):
