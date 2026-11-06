@@ -25,3 +25,12 @@ Read `.softfield/cards/f220-if-i-m-browsing-a-certain.md` (D1–D3).
 - on the Board, Planning, Tickets and the Overview it submits to the page's own address, and on the Milestones list to `/milestones`
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2105
+gate_failures: []
+tokens: 3630737
+```
