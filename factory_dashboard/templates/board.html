@@ -40,7 +40,6 @@
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
   <span class="meter"><span style="width: {{ (100 * c.done / c.total) | round | int }}%"></span></span>
-  <span class="meter-ticks"></span>
   <span class="card-count">{{ c.done }} of {{ c.total }} ticket{{ "" if c.total == 1 else "s" }}{% if c.set_aside %} · {{ c.set_aside }} set aside, won't run{% endif %}</span>
   {% endif %}
   {% if c.note %}<span class="{{ 'card-action' if c.bug and c.stage == 'seed' else 'card-note' }}">{{ c.note }}</span>{% endif %}

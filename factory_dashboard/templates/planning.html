@@ -34,7 +34,6 @@
       <span class="{{ 'past-mark' if window and window.mark is not none and value >= window.mark else 'under-mark' }}" style="width: {{ '%.0f' | format(value * 100) }}%"></span>
       <span class="mark" title="the factory stops here; the rest is yours" style="left: {{ '%.0f' | format(((window.mark if window else none) or 0.75) * 100) }}%"></span>
     </div>
-    <div class="meter-ticks"></div>
     <p class="tile-small">5-hour window {{ window.percent if window and window.percent else "–" }}{{ " · " ~ (window.reset_label or window.status) if window and (window.reset_label or window.status) }} · planning may go past the 75% line, the factory stops there</p>
     {% set wvalue = (week.value or 0) if week else 0 %}
     <div class="meter">
@@ -43,7 +42,6 @@
       <span class="mark" title="{{ week.mark_label }}" style="left: {{ '%.0f' | format(week.mark * 100) }}%"></span>
       {% endif %}
     </div>
-    <div class="meter-ticks"></div>
     <p class="tile-small">week {{ week.percent if week and week.percent else "–" }}{{ " · " ~ (week.reset_label or week.status) if week and (week.reset_label or week.status) }}</p>
   </div>
 </section>

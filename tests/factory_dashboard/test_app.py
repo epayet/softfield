@@ -3726,13 +3726,15 @@ def test_meter_has_slot_styling():
     assert "inset: 1px" in meter_span[1]
 
 
-def test_gauge_has_quarter_ticks():
-    """The meter-ticks rule has quarter ticks under the meter."""
-    css = (STATIC / "dashboard.css").read_text()
-    gauge_block = re.search(r"\.meter-ticks\s*\{([^}]*)\}", css)
-    assert gauge_block
-    assert "background-image" in gauge_block[1] or "linear-gradient" in gauge_block[1]
-    assert "25%" in gauge_block[1], "quarter ticks use 25% spacing"
+def test_no_template_or_stylesheet_names_meter_ticks():
+    """f229-01: the strip is gone from every template and stylesheet,
+    so a later ticket can't bring it back."""
+    templates_dir = STATIC.parent / "templates"
+    for template in templates_dir.rglob("*.html"):
+        assert "meter-ticks" not in template.read_text(), f"{template.name} still names meter-ticks"
+    assert "meter-ticks" not in (STATIC / "dashboard.css").read_text(), (
+        "dashboard.css still names meter-ticks"
+    )
 
 
 # --- f85-02: Before and after on the card's page ---------------------------------------------

@@ -210,14 +210,10 @@ tbody tr:hover { background: var(--accent-wash); }
 .stat b { display: block; font: 600 20px var(--mono); font-variant-numeric: tabular-nums; }
 .stat span { color: var(--muted); font-size: 12.5px; }
 /* The fill is clipped, not the meter, so a mark overhangs it and reads in both themes (f8-06) */
-.meter { height: 12px; background: var(--floor); border: 1px solid var(--rule); position: relative; }
+.meter { height: 12px; background: var(--floor); border: 1px solid var(--rule); position: relative; margin-bottom: 6px; }
 .meter > span { position: absolute; inset: 1px auto 1px 1px; max-width: 100%; background: var(--c, var(--a2)); }
 .meter > .mark { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink);
   outline: 1px solid var(--surface); z-index: 1; }
-/* Meter ticks: quarter marks under the meter (CSS only) */
-.meter-ticks { height: 5px; margin-top: 2px; background: var(--plate); border: 1px solid var(--rule);
-  background-image: linear-gradient(90deg, var(--rule) 1px, transparent 1px);
-  background-size: 25% 100%; background-position: 0 0; background-repeat: repeat-x; }
 /* F84 D5: the one reply the lead is writing, in the planner's colour (a status, so the agent's
    colour); !important, over the dashed edge of a row on its way */
 .writing { border-left: 3px solid var(--opus) !important; }
@@ -864,7 +860,7 @@ main:has(.board) { max-width: 1360px; }
 .card-meta { font: 600 11px var(--mono); color: var(--muted); }
 .card-meta b { color: var(--fg); }
 .card-title { font: 600 14px/1.25 var(--body); }
-.card .meter { display: block; height: 8px; }
+.card .meter { display: block; height: 8px; margin-bottom: 0; }
 .card-count { font: 12px var(--mono); color: var(--muted); }
 .card-note, .card-now { font-size: 12.5px; line-height: 1.35; }
 .card-note { color: var(--muted); }
