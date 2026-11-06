@@ -338,8 +338,18 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     job = next((j for j in jobs if j.live), None)
     dot = "idle" if job is None else "developer" if job.role in DEVELOPER_ROLES else "lead"
     if asked == "pause":  # which job, still (the owner, 2026-10-08: the bar lost it)
-        doing = f"{job.ticket or f'{job.role}, job {job.job}'}" if job else "this job"
-        return Status(f"Pausing after {doing}", "warn asked", "resume", dot=dot)
+        if job:
+            doing = f"{job.ticket or f'{job.role}, job {job.job}'}"
+            return Status(f"Pausing after {doing}", "warn asked", "resume", dot=dot)
+        activity = next((r.activity for r in runs if r.activity), None)
+        if activity and " · " in activity:
+            parts = activity.removeprefix("Running: ").split(" · ")
+            doing = " · ".join(reversed(parts))
+        elif activity:
+            doing = activity
+        else:
+            doing = "this job"
+        return Status(f"Pausing after {doing}", "warn asked", "resume", dot="runner")
     waiting = next((r.waiting_until for r in runs if r.waiting_until), None)
     if waiting:
         words = f"Waiting for Claude until {_clock(waiting)}"
@@ -354,7 +364,7 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
         return Status("Idle: nothing to do", "", "pause")
     if activity.startswith(IDLE):
         return Status(activity, "", "pause")
-    return Status(f"Running: {activity}", "good", "pause")
+    return Status(f"Running: {activity}", "good", "pause", dot="runner")
 
 
 def top_bar(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Any]:

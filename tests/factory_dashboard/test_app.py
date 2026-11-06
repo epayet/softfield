@@ -2166,6 +2166,16 @@ def _pause_held_planner(serve, serve_between, db_path):
     return client
 
 
+def _runner_running(serve, serve_between, db_path):
+    return serve_between(activity="check-all · f1-04-live")
+
+
+def _runner_paused(serve, serve_between, db_path):
+    client = serve_between(activity="check-all · f1-04-live")
+    _ask(client, "pause")
+    return client
+
+
 def _lead_ticket(serve, serve_between, db_path):
     """A lead ticket, the only live job: on a run of its own beside a run between jobs."""
     client = serve_between(activity="picking the next ticket")
@@ -2227,6 +2237,9 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
         (_resume_asked, "Resuming… · coucou", "idle", {}),  # on its way: nothing to press
         (_waiting, "Waiting for Claude until 12:40", "waiting", PAUSE),  # one project
         (_stopped, "Stopped", "stopped", {}),
+        # the runner's own work: green dot that breathes (f184)
+        (_runner_running, "Running: check-all · f1-04-live", "runner", PAUSE),
+        (_runner_paused, "Pausing after f1-04-live · check-all", "runner", RESUME),
     ],
     ids=[
         "running",
@@ -2239,6 +2252,8 @@ PAUSE, RESUME = {"Pause after this job": "pause"}, {"Resume": "resume"}
         "resume-asked",
         "waiting",
         "stopped",
+        "runner-running",
+        "runner-paused",
     ],
 )
 def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
@@ -2251,6 +2266,30 @@ def test_the_top_bar_says_what_the_factory_does_with_pause_or_resume(
     assert re.search(
         r'<div id="factory-status"[^>]*hx-swap-oob="outerHTML"', client.get("/live").text
     )
+
+
+def test_the_pause_sign_s_data_asked_matches_the_server_words(serve_between, db_path):
+    """F184: when the runner runs with an activity, the ⏸ sign's data-asked holds the
+    reversed activity parts that the server would say when a pause is processed."""
+    client = _runner_running(serve_between, serve_between, db_path)
+    html = client.get("/").text
+    block = re.search(r'<div id="factory-status"[^>]*>(.*?)</div>', html, re.S)
+    assert block, "no #factory-status"
+    words = re.search(r'<span class="words" role="status">([^<]*)</span>', block[1])
+    assert words
+    sign = re.search(r'<button type="button" class="sign"([^>]*)>⏸</button>', block[1])
+    assert sign
+    data_asked = re.search(r'data-asked="([^"]*)"', sign[1])
+    assert data_asked
+    # data-asked is "Pausing after {reversed}" while words are "Running: {activity}"
+    # they match when the activity has no " · " (single-part activity)
+    activity = words[1].removeprefix("Running: ")
+    if " · " in activity:
+        parts = activity.split(" · ")
+        expected = "Pausing after " + " · ".join(reversed(parts))
+    else:
+        expected = f"Pausing after {activity}"
+    assert data_asked[1] == expected, f"{data_asked[1]} != {expected}"
 
 
 @pytest.mark.parametrize(
@@ -2283,6 +2322,7 @@ def test_the_status_dot_wears_the_floors_colours_from_the_tokens(serve):
 
     assert "background: var(--opus)" in rule(".factory-status .dot.lead")
     assert "background: var(--dev)" in rule(".factory-status .dot.developer")  # the floor's
+    assert "background: var(--good)" in rule(".factory-status .dot.runner")  # runner: green
     assert "background: var(--muted)" in rule(".factory-status .dot")
     assert "var(--opus)" in rule(".factory-status .dot.waiting, .factory-status .dot.stopped")
     assert "var(--muted)" in rule(".factory-status .dot.stopped")
@@ -2290,7 +2330,9 @@ def test_the_status_dot_wears_the_floors_colours_from_the_tokens(serve):
     breathing = re.findall(
         r"@media \(prefers-reduced-motion: no-preference\) \{\s*([^{]*)\{ animation: breathe", css
     )
-    assert breathing == [".factory-status .dot.lead, .factory-status .dot.developer "]
+    assert breathing == [
+        ".factory-status .dot.lead, .factory-status .dot.developer, .factory-status .dot.runner "
+    ]
     assert "rgba" not in rule(".factory-status .dot.lead") + rule(".factory-status .dot.developer")
     # what the owner asked shows on its way: a dashed orange edge (lead.md, 2026-10-07)
     assert "dashed var(--opus)" in rule("#factory-status.asked")
