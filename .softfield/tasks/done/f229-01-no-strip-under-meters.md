@@ -28,3 +28,12 @@ The picture to build: `.softfield/cards/f229-mockup/meters.html`. Decisions: D1 
 - each bar's fill and mark are drawn as before
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1923
+gate_failures: []
+tokens: 1430763
+```
