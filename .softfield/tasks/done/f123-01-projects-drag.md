@@ -28,3 +28,12 @@ Read `.softfield/cards/f123-projects-page-drag-to-reorder.md` (D1, D4). The pict
 - `test_an_order_not_taken_yet_shows_as_sent_and_cant_be_edited` is replaced by a test of the above
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2077
+gate_failures: []
+tokens: 1855227
+```
