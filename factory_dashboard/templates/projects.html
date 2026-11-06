@@ -34,24 +34,30 @@
     <input type="hidden" name="value" value="">
     <ol class="rank">
       {% for card in cards %}
-      <li class="proj" data-name="{{ card.name }}">
+      <li class="proj" data-key="{{ card.name }}" data-name="{{ card.name }}">
         <label class="place"><input type="number" min="1" max="{{ cards | length }}" value="{{ loop.index }}" inputmode="numeric"
-          aria-label="{{ card.name }}'s place"{% if asked %} class="asked" disabled{% endif %}><small>place</small></label>
-        <div class="name">{{ card.name }}</div>
-        {% if card.description %}<div class="what">{{ card.description }}</div>{% endif %}
-        {% if card.paused == "setting up" %}<div class="muted">Being set up on its computer; the runner takes it once that's done.</div>
-        {% elif card.paused %}<div class="muted">Paused: the runner leaves it alone.</div>{% endif %}
-        <div class="facts">
-          <span><b>{{ card.ready }}</b> ready</span>
-          {% if card.building %}<span><b>{{ card.building }}</b> building</span>{% endif %}
-          {% if card.ideas %}<span><b>{{ card.ideas }}</b> ideas</span>{% endif %}
-          {% if card.done %}<span><b>{{ card.done }}</b> done</span>{% endif %}
-          {% if card.for_you %}<span><b>{{ card.for_you }}</b> for you</span>{% else %}<span class="muted">nothing for you</span>{% endif %}
-        </div>
-        <div class="links">
-          <a href="/planning?project={{ card.name | urlencode }}">Planning</a>
-          <a href="/board?project={{ card.name | urlencode }}">Board</a>
-          <a href="/?project={{ card.name | urlencode }}">Overview</a>
+          aria-label="{{ card.name }}'s place" class="asked"><small>place</small></label>
+        <div class="plate">
+          <div class="head">
+            <span class="rankno">#{{ loop.index }}</span>
+            <span class="name">{{ card.name }}</span>
+          </div>
+          {% if card.description %}<div class="what">{{ card.description }}</div>{% endif %}
+          {% if card.paused == "setting up" %}<div class="muted">Being set up on its computer; the runner takes it once that's done.</div>
+          {% elif card.paused %}<div class="muted">Paused: the runner leaves it alone.</div>{% endif %}
+          <div class="facts">
+            <span><b>{{ card.ready }}</b> ready</span>
+            {% if card.building %}<span><b>{{ card.building }}</b> building</span>{% endif %}
+            {% if card.ideas %}<span><b>{{ card.ideas }}</b> ideas</span>{% endif %}
+            {% if card.done %}<span><b>{{ card.done }}</b> done</span>{% endif %}
+            {% if card.for_you %}<span><b>{{ card.for_you }}</b> for you</span>{% else %}<span class="muted">nothing for you</span>{% endif %}
+          </div>
+          <div class="links">
+            <a href="/planning?project={{ card.name | urlencode }}">Planning</a>
+            <a href="/board?project={{ card.name | urlencode }}">Board</a>
+            <a href="/?project={{ card.name | urlencode }}">Overview</a>
+          </div>
+          {% if asked %}<span class="way">on its way · at the runner's next pick</span>{% endif %}
         </div>
       </li>
       {% endfor %}

@@ -183,6 +183,8 @@ def test_now_names_the_job_running_in_any_project(projects_client):
 
 
 def test_an_order_not_taken_yet_shows_as_sent_and_cant_be_edited(projects_client, db_path):
+    """When a project_order waits, rows show the sent order and each reads "on its way · at the
+    runner's next pick"; no input is disabled."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.find_project(conn, PROJECT)
@@ -194,8 +196,16 @@ def test_an_order_not_taken_yet_shows_as_sent_and_cant_be_edited(projects_client
     html = projects_client.get("/projects").text
     order = section(html, "projects-order")
     assert order.index(PROJECT) < order.index("softfield")  # as sent
-    assert "On its way: the runner takes it at its next pick" in order
-    assert html.count('class="asked" disabled') == html.count('class="proj"') > 1
+    assert "on its way · at the runner's next pick" in order
+    rows = re.findall(r'<li class="proj"[^>]*data-key="([^"]*)"', html)
+    assert set(rows) == {"coucou", "softfield", "other"}
+
+
+def test_no_order_waiting_shows_no_on_its_way(projects_client):
+    """Without a project_order waiting, no row says "on its way"."""
+    html = projects_client.get("/projects").text
+    order = section(html, "projects-order")
+    assert "on its way" not in order
 
 
 @pytest.mark.parametrize("size", [PHONE, DISPLAY], ids=["phone", "display"])
