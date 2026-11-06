@@ -36,6 +36,9 @@
         {% elif a.status %}
         <small class="warnline">{{ a.status }}</small>
         {% endif %}
+        {% if a.read_label %}
+        <small>{{ a.read_label }}</small>
+        {% endif %}
         {% if a.mark_label %}
         <small>{{ a.mark_label }}</small>
         {% endif %}

@@ -597,6 +597,7 @@ class WindowAllowance:
     mark: float | None  # threshold mark (0..1) or None
     mark_label: str | None  # explanation of the mark
     reset_label: str | None  # e.g. "resets at 17:00" or "resets on Oct 9"
+    read_label: str | None  # e.g. "read at 03:59" or "read on Oct 26 22:10"
     status: str | None  # e.g. "reset since, no new reading" or "no data yet"
 
 
@@ -609,6 +610,13 @@ def _reset_label(resets: datetime, now: datetime) -> str:
     if resets.date() == now.astimezone().date():
         return f"resets at {resets:%H:%M}"
     return f"resets on {resets:%b} {resets.day} {resets:%H:%M}"
+
+
+def _read_label(at: datetime, now: datetime) -> str:
+    """A reading's time: "read at 03:59" today, "read on Oct 26 22:10" otherwise."""
+    if at.date() == now.astimezone().date():
+        return f"read at {at:%H:%M}"
+    return f"read on {at:%b} {at.day} {at:%H:%M}"
 
 
 def _agent_allowances(
@@ -628,7 +636,9 @@ def _agent_allowances(
         row = readings.get(wkey)
         value = None if row is None else row["value"]
         resets_at = None if row is None else row["resets_at"]
+        at = None if row is None else row["at"]
         resets = queries.local(resets_at) if resets_at else None
+        read_at = queries.local(at) if at else None
         if value is None:
             status: str | None = NO_DATA
         elif resets is not None and resets <= now:
@@ -646,6 +656,7 @@ def _agent_allowances(
                 mark=mark,
                 mark_label=mlabel,
                 reset_label=_reset_label(resets, now) if resets and status is None else None,
+                read_label=_read_label(read_at, now) if read_at and status is None else None,
                 status=status,
             )
         )

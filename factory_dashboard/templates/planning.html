@@ -24,7 +24,11 @@
   </div>
 
   <div id="lead-window" class="panel tile">
-    <h2 class="lead-window-heading">The lead's window</h2>
+    <h2 class="lead-window-heading">The lead's window
+      {% if window.read_label %}
+      <span class="stamp">{{ window.read_label }}</span>
+      {% endif %}
+    </h2>
     {% set value = (window.value or 0) if window else 0 %}
     <div class="meter">
       <span class="{{ 'past-mark' if window and window.mark is not none and value >= window.mark else 'under-mark' }}" style="width: {{ '%.0f' | format(value * 100) }}%"></span>

@@ -582,10 +582,11 @@ def test_each_allowance_row_shows_its_own_reading_and_reset(allowance_client):
     a later day's reset gives its date."""
     rows = allowance_client.get("/").text
     assert allowance_rows(rows) == {
-        "claude-five_hour": "Claude 5-hour window: 80% resets at 17:00 kept for you from here",
-        "claude-seven_day": "Claude week: 20% resets on Oct 9 12:00"
+        "claude-five_hour": "Claude 5-hour window: 80% resets at 17:00 read at 12:00"
+        " kept for you from here",
+        "claude-seven_day": "Claude week: 20% resets on Oct 9 12:00 read at 12:00"
         " reserve kept for the lead from here",
-        "copilot-month": "Copilot month: 2% resets on Nov 1 12:00",
+        "copilot-month": "Copilot month: 2% resets on Nov 1 12:00 read at 12:00",
     }
 
 
@@ -631,6 +632,13 @@ def test_a_reading_past_its_reset_says_reset_since_with_no_percentage(serve, db_
         conn.close()
     row = allowance_rows(client.get("/").text)["claude-five_hour"]
     assert row == "Claude 5-hour window reset since, no new reading kept for you from here"
+
+
+def test_each_claude_row_shows_its_own_read_label(allowance_client):
+    """Each Claude row of #allowance shows its own "read at …" (f89-02)."""
+    rows = allowance_rows(allowance_client.get("/").text)
+    assert "read at 12:00" in rows["claude-five_hour"]
+    assert "read at 12:00" in rows["claude-seven_day"]
 
 
 def allowance_client_with(db_path: Path, tmp_path: Path, switches: dict[str, str]):

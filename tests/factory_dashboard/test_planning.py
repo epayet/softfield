@@ -280,6 +280,51 @@ def test_the_lead_window_says_a_reset_since_and_no_reading(planning, db_path, se
     assert "resets" not in tile
 
 
+def test_the_lead_window_says_read_at_when_reading_is_today(planning, db_path, serve):
+    """A 5-hour reading taken at 03:59 today shows "read at 03:59" once (f89-02)."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_usage_event(
+            conn,
+            OPUS,
+            "2026-10-02T03:59:00+00:00",
+            "reading",
+            window="five_hour",
+            value=0.8,
+            resets_at=(NOW + timedelta(hours=2)).isoformat(),
+        ),
+    )
+    html = _page(serve())
+    tile = _text(_tile(html, "lead-window"))
+    assert "read at 03:59" in tile
+
+
+def test_the_lead_window_says_read_on_when_reading_is_not_today(planning, db_path, serve):
+    """A reading from the day before shows "read on <Mon> <d> <HH:MM>" (f89-02)."""
+    _write(
+        db_path,
+        lambda conn: metrics.add_usage_event(
+            conn,
+            OPUS,
+            "2026-10-01T22:10:00+00:00",
+            "reading",
+            window="five_hour",
+            value=0.8,
+            resets_at=(NOW + timedelta(hours=2)).isoformat(),
+        ),
+    )
+    html = _page(serve())
+    tile = _text(_tile(html, "lead-window"))
+    assert "read on Oct 1 22:10" in tile
+
+
+def test_the_lead_window_shows_no_read_when_no_reading(planning, db_path, serve):
+    """With no reading, the tile shows no "read" text (f89-02)."""
+    html = _page(serve())
+    tile = _text(_tile(html, "lead-window"))
+    assert "read" not in tile
+
+
 def test_the_lead_window_template_holds_no_status_words():
     """Both status sentences come from the row's status, never the template (f32-01)."""
     template = (
