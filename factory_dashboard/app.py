@@ -387,12 +387,9 @@ def render(
 ) -> HTMLResponse:
     """A page: ``template`` with the top bar's projects and live facts, and ``q`` to keep
     ``?project=``."""
-    names = [  # a forgotten project is in no list (`softfield forget`)
-        row["name"]
-        for row in conn.execute(
-            "SELECT name FROM projects WHERE coalesce(paused, '') != 'forgotten' ORDER BY name"
-        )
-    ]
+    from runner import metrics
+
+    names = [p.name for p in metrics.projects_in_order(conn)]
     # the clock a test pinned, as the routes' ``Now`` reads it
     now = request.app.dependency_overrides.get(get_now, get_now)()
     return templates.TemplateResponse(

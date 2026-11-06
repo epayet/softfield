@@ -90,6 +90,29 @@ def test_the_project_defaults_to_the_repos(client):
     assert re.search(r'<nav class="crumbs"[^>]*>.*coucou', html, re.S)
 
 
+def test_the_picker_follows_the_owner_s_project_order(db_path):
+    """F193 D1: the picker lists projects by the owner's order, not by name. A tie goes by
+    name. After set_project_order changes the order, the next page shows the new one."""
+    from factory_dashboard.app import create_app, get_now
+
+    conn = metrics.open_db(db_path)
+    try:
+        metrics.upsert_project(conn, "other")
+        metrics.set_project_order(conn, ["other", "coucou"])
+    finally:
+        conn.close()
+
+    app = create_app(db_path, PROJECT)
+    app.dependency_overrides[get_now] = lambda: NOW
+    client = TestClient(app, base_url="http://127.0.0.1:8765")
+
+    html = client.get("/").text
+    select_match = re.search(r'<select[^>]*name="project"[^>]*>(.*?)</select>', html, re.S)
+    assert select_match
+    options = re.findall(r'<option value="([^"]+)"', select_match.group(1))
+    assert options == ["other", "coucou"]
+
+
 def test_the_page_loads_its_scripts_and_styles_from_the_app(client):
     html = client.get("/").text
     for path in (
