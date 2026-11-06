@@ -30,3 +30,12 @@ The picture to build: `.softfield/cards/f89-mockup/lead-window.html` (Proposed).
 - assert within `#lead-window` and `#allowance`, on their text with tags stripped (`_text` in `tests/factory_dashboard/test_planning.py`)
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 3672
+gate_failures: []
+tokens: 3926591
+```
