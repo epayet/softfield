@@ -2109,26 +2109,38 @@ def test_a_held_reply_and_a_message_with_no_row_read_as_today(planning, db_path,
 # --- one button set (f81-03) --------------------------------------------------------------------
 
 
-def test_plant_only_has_btn_go(planning, serve, db_path):
-    """D5: #plant-only carries class 'btn go'."""
+def test_plant_only_has_btn_plain(planning, serve, db_path):
+    """D5: #plant-only carries class 'btn plain', says "Plant", and its onclick sets ask=''."""
     client = _line(serve, db_path, planning)
     html = _page(client)
     btn = re.search(r'<button[^>]*id="plant-only"[^>]*class="([^"]*)"', html)
     assert btn
     classes = btn[1].split()
-    assert "btn" in classes
-    assert "plain" in classes
+    assert classes == ["btn", "plain"]
+    assert re.search(r'id="plant-only"[^>]*>Plant</button>', html)
+    assert re.search(r"onclick=\"this\.form\.elements\.ask\.value = ''\"", html)
 
 
-def test_plant_ask_has_btn_plain(planning, serve, db_path):
-    """D5: #plant-ask carries class 'btn plain'."""
+def test_plant_ask_has_btn_go(planning, serve, db_path):
+    """D5: #plant-ask carries class 'btn go', says "Plant and ask the lead",
+    and its onclick sets ask='1'."""
     client = _line(serve, db_path, planning)
     html = _page(client)
     btn = re.search(r'<button[^>]*id="plant-ask"[^>]*class="([^"]*)"', html)
     assert btn
     classes = btn[1].split()
-    assert "btn" in classes
-    assert "go" in classes
+    assert classes == ["btn", "go"]
+    assert re.search(r'id="plant-ask"[^>]*>Plant and ask the lead</button>', html)
+    assert re.search(r"onclick=\"this\.form\.elements\.ask\.value = '1'\"", html)
+
+
+def test_plant_ask_precedes_plant_only(planning, serve, db_path):
+    """D5: #plant-ask comes before #plant-only in the HTML."""
+    client = _line(serve, db_path, planning)
+    html = _page(client)
+    ask_pos = html.index("plant-ask")
+    only_pos = html.index("plant-only")
+    assert ask_pos < only_pos
 
 
 def test_no_button_in_planning_has_inline_style(planning, serve, db_path):
