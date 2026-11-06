@@ -314,6 +314,7 @@ def milestones_list(request: Request, conn: Db, project: Project, now: Now) -> H
         "milestones.html",
         {
             "active": "/board",  # where its link is, now it has no tab (f5-17)
+            "picker_to": "/milestones",
             "milestones": rows,
             "rate": _rate_chart(conn, project),
             "esc": _esc_chart(conn, project),

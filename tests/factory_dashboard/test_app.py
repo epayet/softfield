@@ -4060,3 +4060,52 @@ def test_the_projects_send_order_button_carries_btn_and_go(client):
     classes = btn[1].split()
     assert "btn" in classes, f"button classes {classes} missing 'btn'"
     assert "go" in classes, f"button classes {classes} missing 'go'"
+
+
+# --- f220-01: picker action (D1–D3) -----------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("path", "expected_action"),
+    [
+        ("/planning", "/planning"),
+        ("/planning/f1", "/planning"),
+        ("/board", "/board"),
+        ("/milestones/f1", "/board"),
+        ("/tickets", "/tickets"),
+        ("/jobs", "/jobs"),
+        ("/jobs/1", "/jobs"),
+        ("/runs", "/runs"),
+        ("/runs/20261002-113500", "/runs"),
+        ("/projects", "/projects"),
+        ("/projects/coucou", "/projects"),
+        ("/", "/"),
+        ("/milestones", "/milestones"),
+    ],
+    ids=[
+        "planning",
+        "planning-thread",
+        "board",
+        "milestone-detail",
+        "tickets",
+        "jobs",
+        "job-detail",
+        "runs",
+        "run-detail",
+        "projects",
+        "project-detail",
+        "overview",
+        "milestones-list",
+    ],
+)
+def test_the_picker_form_action_follows_the_page(client, path, expected_action):
+    """F220 D1–D3: the picker form submits to the tab that is lit, or to milestones from the
+    milestones list (which lights Board). The test finds the form by its project select, not by
+    where it sits in the bar (f132-08 may move it)."""
+    html = client.get(path).text
+    form = re.search(r'<form[^>]*class="filters"[^>]*>(.*?)</form>', html, re.S)
+    assert form, f"no filters form found on {path}"
+    assert 'name="project"' in form[1], f"no project select in form on {path}"
+    action = re.search(r'action="([^"]*)"', form[0])
+    assert action, f"no action on the form on {path}"
+    assert action[1] == expected_action, f"{path}: action {action[1]} != {expected_action}"

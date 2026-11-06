@@ -180,7 +180,7 @@
       <small>{{ request.url.netloc }}</small>
     </a>
     {% include "_partials/bar_status.html" %}
-    <form class="filters" method="get">
+    <form class="filters" method="get" action="{{ picker_to or active }}">
       <label>Project
         <select name="project" onchange="this.form.submit()">
           {% for name in projects %}
