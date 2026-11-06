@@ -26,3 +26,12 @@ The picture to build is `.softfield/cards/f226-mockup/menu.html` (Proposed).
 - tapping a card still opens its page
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1534
+gate_failures: []
+tokens: 927829
+```
