@@ -25,3 +25,12 @@ The picture to build is "Proposed" in `.softfield/cards/f215-mockup/floor.html`.
 - `--grid` is still defined in both themes
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1352
+gate_failures: []
+tokens: 275544
+```
