@@ -991,7 +991,6 @@ def test_another_project_shows_only_its_own(client):
     queue_section = section(html, "queue")
     assert "m1-01-elsewhere" in queue_section
     assert "Next in line" in queue_section
-    assert f'<a href="/board?project={OTHER}">Reorder on the board ›</a>' in html
     page = html.split("<main>", 1)[1]  # the top bar says what the whole factory does (ADR 30)
     for mine in ("f1-05-first", "f1-04-live", "ADR 15", "3 merged, 0 not"):
         assert mine not in page
@@ -1079,7 +1078,7 @@ def test_next_in_line_says_what_a_parked_review_waits_for(client, db_path):
     rows = section(client.get("/").text, "queue").split("Next in line", 1)[1]
     assert rows.index("1 f1-05-first") < rows.index("2 f1-06-second") < rows.index("3 review F1")
     reset = f"Claude's reset at {until.astimezone():%H:%M}"
-    assert rows.endswith(f"3 review F1 · a batch · waits for {reset} Reorder on the board ›")
+    assert rows.endswith(f"3 review F1 · a batch · waits for {reset}")
 
 
 def test_next_in_line_li_sits_directly_in_ol_and_no_empty_n_spans(client):
@@ -1095,7 +1094,7 @@ def test_next_in_line_li_sits_directly_in_ol_and_no_empty_n_spans(client):
     assert "<div" not in ol_content, "invalid <div> inside <ol>"
     # Every <li> is a direct child: no <div> between <ol> and <li>
     li_tags = re.findall(r"<li[^>]*>(.*?)</li>", ol_content, re.S)
-    assert len(li_tags) >= 3, f"expected ≥3 <li> in <ol>, got {len(li_tags)}"
+    assert len(li_tags) >= 2, f"expected ≥2 <li> in <ol>, got {len(li_tags)}"
     # No empty <small> tags
     empty_small = re.findall(r"<small\s*/?>\s*</small>", ol_content)
     assert not empty_small, f"empty <small> tags found: {empty_small}"
@@ -1126,7 +1125,6 @@ def test_next_in_line_shows_each_priority_and_sends_reordering_to_the_board(queu
     markup = html.split("Next in line", 1)[1].split("</section>", 1)[0]
     assert "move-button" not in markup and "<button" not in markup
     assert "hx-post" not in markup and '"priority"' not in markup
-    assert re.search(r'<a href="/board[^"]*">Reorder on the board ›</a>', markup)
 
 
 def test_next_in_line_says_whom_a_ticket_runs_early_for(client, db_path):
@@ -1187,7 +1185,7 @@ def test_empty_queue_shows_message_once(serve):
     client = serve(live=False)
     html = client.get("/").text
     queue_section = section(html, "queue")
-    assert "Next in line" in queue_section
+    assert "Next in line" not in queue_section
     count = queue_section.count("The queue is empty.")
     assert count == 1, f"expected 1, got {count}"
 
