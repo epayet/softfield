@@ -25,3 +25,12 @@ The picture to build: `.softfield/cards/f227-mockup/queue-link.html`. Decisions:
 - with only a queued job, or only a due review, "Next in line" and its row still show
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2113
+gate_failures: []
+tokens: 1512848
+```
