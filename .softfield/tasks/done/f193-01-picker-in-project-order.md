@@ -24,3 +24,12 @@ Read `.softfield/cards/f193-the-project-picker-at-the-top.md` (D1).
 - a forgotten project is still not listed; a page opened on a project that isn't listed still shows it, last and selected
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 7023
+gate_failures: ['task-tests']
+tokens: 4100307
+```
