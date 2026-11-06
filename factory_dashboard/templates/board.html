@@ -57,13 +57,10 @@
 
 {# What the owner does with a card, which board.js copies into its ⋯ menu (F15 D7, f15-06) #}
 {% macro card_actions(c) %}
-<template class="card-actions">
-  {% if c.thread %}<a href="/planning/{{ c.thread }}{{ q }}">Open its conversation</a>{% endif %}
-  {% if c.thread and c.stage in ("seed", "sprouting") %}
-  <button type="button" class="set-aside" data-thread="{{ c.thread }}"{% if c.setting_aside %} disabled{% endif %}>{{ "Set aside · on its way" if c.setting_aside else "Set aside" }}</button>
-  {% endif %}
-  <a href="{{ card_href(c) }}">Open the card</a>
-</template>
+{% if c.thread %}<template class="card-actions">
+  <a href="/planning/{{ c.thread }}{{ q }}">Open its conversation</a>{% if c.stage in ("seed", "sprouting") %}
+  <button type="button" class="set-aside" data-thread="{{ c.thread }}"{% if c.setting_aside %} disabled{% endif %}>{{ "Set aside · on its way" if c.setting_aside else "Set aside" }}</button>{% endif %}
+</template>{% endif %}
 {%- endmacro %}
 
 {% block content %}

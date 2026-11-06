@@ -1432,32 +1432,33 @@ def _actions(html: str, key: str) -> list[tuple[str, str]] | None:
     return actions
 
 
-def test_each_placed_card_s_actions_lead_to_its_conversation_set_aside_and_its_page(
+def test_each_placed_card_s_actions_have_no_open_the_card_and_the_card_link_stays(
     board_db, board_client
 ):
     """F21 sprouts on a thread; F22 sprouts from its plan with none; F20 is a seed with none;
-    F23 is planted and given a thread here."""
+    F23 is planted and given a thread here. No card's actions hold "Open the card"; the card's
+    own link still goes to the card's page."""
     write(board_db, lambda conn, p: metrics.planner_thread(conn, p, "f23", NOW.isoformat()))
     html = _page(board_client)
     q = "?project=coucou"
+    # F21: sprouting with a thread → Open its conversation + Set aside
     assert _actions(html, "f21") == [
         ("Open its conversation", f"/planning/f21{q}"),
         ("Set aside", "f21"),
-        ("Open the card", f"/milestones/f21-parallel{q}"),
     ]
-    assert _actions(html, "f22") == [("Open the card", f"/milestones/f22-research{q}")]
-    assert _actions(html, "f20") == [("Open the card", f"/milestones/f20-duck-pond{q}")]
+    # F22: sprouting with no thread → no template
+    assert _actions(html, "f22") is None
+    # F20: seed with no thread → no template
+    assert _actions(html, "f20") is None
     # a planted card keeps its conversation but isn't set aside from the board
     assert _actions(html, "f23") == [
         ("Open its conversation", f"/planning/f23{q}"),
-        ("Open the card", f"/milestones/f23-planted{q}"),
     ]
     # a bug has no conversation, seed or planted
-    assert _actions(html, "bug-01-duck-count") == [
-        ("Open the card", f"/tickets/bug-01-duck-count{q}")
-    ]
-    assert _actions(html, "bug-02-stale") == [("Open the card", f"/tickets/bug-02-stale{q}")]
-    # every placed card's last action is its own card's link; ripe and harvested have none
+    assert _actions(html, "bug-01-duck-count") is None
+    assert _actions(html, "bug-02-stale") is None
+    # every placed card's actions hold no "Open the card"; the card's own link still goes to
+    # the card's page; ripe and harvested have no actions at all
     columns = _columns(html)
     for stage in STAGES:
         for key in re.findall(r'<div class="slot[^"]*" data-key="([^"]+)"', columns[stage]):
@@ -1465,10 +1466,11 @@ def test_each_placed_card_s_actions_lead_to_its_conversation_set_aside_and_its_p
             if stage in ("ripe", "harvested"):
                 assert actions is None, key
                 continue
+            assert actions is None or not any(a[0] == "Open the card" for a in actions), key
             link = re.search(
                 rf'data-key="{re.escape(key)}"[^>]*>\s*<a class="card[^"]*" href="([^"]+)"', html
             )
-            assert link and actions and actions[-1] == ("Open the card", unescape(link[1])), key
+            assert link, key
 
 
 def test_a_card_set_aside_on_its_way_says_so_and_can_t_be_pressed_again(board_db, board_client):
@@ -1510,7 +1512,6 @@ def test_the_menu_shows_a_card_s_actions_under_its_moves_and_sets_it_aside(page,
         "bottom",
         "open its conversation",
         "set aside",
-        "open the card",
         "close",
     ]
     for action in sheet.locator(".order-actions > *").all():
@@ -1539,7 +1540,7 @@ def test_the_menu_shows_a_card_s_actions_under_its_moves_and_sets_it_aside(page,
     page.locator('.slot[data-key="f20"] .more').click()
     assert [
         " ".join(t.split()).lower() for t in sheet.locator(".order-actions > *").all_inner_texts()
-    ] == ["open the card"]
+    ] == []
 
 
 def test_send_posts_the_whole_open_order_once_and_the_board_shows_it_on_its_way(page, board_db):
