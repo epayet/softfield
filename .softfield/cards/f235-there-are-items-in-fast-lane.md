@@ -1,4 +1,4 @@
-# Milestone F235: There are items in fast lane, why did they not pick up as…
+# Milestone F235: The fast lane goes before planner replies in the multi-project run
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-09.
