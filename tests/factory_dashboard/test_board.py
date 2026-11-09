@@ -2167,6 +2167,150 @@ def test_an_escalated_dev_ticket_reads_tried_and_now_with_the_lead(db_path):
     )
 
 
+def test_a_direction_waits_for_the_leads_direction(db_path):
+    """A ready developer ticket with an open direction row counts as with the lead: its card
+    is not lit (dev-waits), reads "developers tried f72-01 · waits for the lead's direction",
+    and is left out of Board.developers (F233 D1)."""
+    write(
+        db_path,
+        _tickets(
+            ("f72-a", "f72-01", "developer", "ready", ()),
+            ("f72-a", "f72-02", "lead", "ready", ()),
+        ),
+    )
+
+    def add_direction(conn: sqlite3.Connection, p: int) -> None:
+        metrics.queue_job(
+            conn,
+            p,
+            "direction",
+            "f72-01",
+            "needs direction",
+            NOW.isoformat(),
+            None,
+        )
+
+    write(db_path, add_direction)
+    work = _work(db_path, "F72-A")
+    assert work.look == "waits"
+    assert work.now == 0
+    assert work.after == 0
+    assert work.waiting == 1
+    assert work.waits_for == ("f72-01",)
+    assert work.waits_direction == ("f72-01",)
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f72-a") == (
+        ["dev-waits"],
+        "developers tried f72-01 · waits for the lead's direction",
+    )
+    # the ticket is left out of Board.developers
+    found = read(db_path, developers=True)
+    can = [
+        c.developers for c in found.stages["planted"] if c.developers and c.developers.look == "can"
+    ]
+    tickets = sum(d.now + d.after + len(d.running) for d in can)
+    assert tickets == 0
+
+
+def test_a_ready_ticket_depends_on_one_waiting_for_direction(db_path):
+    """A ready developer ticket that depends on one waiting for its direction counts as
+    waiting, and names it in waits_for (F233 D1)."""
+    write(
+        db_path,
+        _tickets(
+            ("f73-a", "f73-01", "developer", "ready", ()),
+            ("f73-a", "f73-02", "developer", "ready", ("f73-01",)),
+        ),
+    )
+
+    def add_direction(conn: sqlite3.Connection, p: int) -> None:
+        metrics.queue_job(
+            conn,
+            p,
+            "direction",
+            "f73-01",
+            "needs direction",
+            NOW.isoformat(),
+            None,
+        )
+
+    write(db_path, add_direction)
+    work = _work(db_path, "F73-A")
+    assert work.look == "waits"
+    assert work.now == 0
+    assert work.after == 0
+    assert work.waiting == 2
+    assert work.waits_for == ("f73-01",)
+    assert work.waits_direction == ("f73-01",)
+
+
+def test_a_card_with_direction_and_now_ticket_stays_lit(db_path):
+    """A card with one ticket waiting for its direction and another developers can take now
+    stays lit and counts only the second (F233 D5)."""
+    write(
+        db_path,
+        _tickets(
+            ("f74-a", "f74-01", "developer", "ready", ()),
+            ("f74-a", "f74-02", "developer", "ready", ()),
+        ),
+    )
+
+    def add_direction(conn: sqlite3.Connection, p: int) -> None:
+        metrics.queue_job(
+            conn,
+            p,
+            "direction",
+            "f74-01",
+            "needs direction",
+            NOW.isoformat(),
+            None,
+        )
+
+    write(db_path, add_direction)
+    work = _work(db_path, "F74-A")
+    assert work.look == "can"
+    assert work.now == 1
+    assert work.after == 0
+    assert work.waiting == 1
+    assert work.waits_for == ("f74-01",)
+    assert work.waits_direction == ("f74-01",)
+    html = _page(_client(db_path), "?view=developers")
+    assert _slot(html, "/milestones/f74-a") == (
+        ["dev-can"],
+        "developers: 1 now · then Claude's review",
+    )
+
+
+def test_a_direction_done_makes_the_ticket_count_again(db_path):
+    """Once the direction row is done, the ticket counts as it does today (F233 D4)."""
+    write(
+        db_path,
+        _tickets(
+            ("f75-a", "f75-01", "developer", "ready", ()),
+        ),
+    )
+
+    def add_and_finish_direction(conn: sqlite3.Connection, p: int) -> None:
+        qid = metrics.queue_job(
+            conn,
+            p,
+            "direction",
+            "f75-01",
+            "needs direction",
+            NOW.isoformat(),
+            None,
+        )
+        metrics.finish_queued(conn, qid, NOW.isoformat())
+
+    write(db_path, add_and_finish_direction)
+    work = _work(db_path, "F75-A")
+    assert work.look == "can"
+    assert work.now == 1
+    assert work.after == 0
+    assert work.waiting == 0
+    assert work.waits_direction == ()
+
+
 def test_a_blocked_dev_ticket_reads_is_blocked(db_path):
     """A card with a blocked developer ticket and a ready lead ticket is faded and reads
     "f72-01 is blocked"."""

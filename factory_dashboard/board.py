@@ -99,6 +99,7 @@ class DevWork:
     running: tuple[str, ...] = ()  # running developer tickets (F206 D1)
     with_lead: tuple[str, ...] = ()  # escalated developer tickets (F206 D3)
     blocked: tuple[str, ...] = ()  # blocked developer tickets (F206 D3)
+    waits_direction: tuple[str, ...] = ()  # developer tickets with an open direction row (F233)
 
 
 @dataclass(frozen=True)
@@ -152,12 +153,15 @@ def _developer_ticket(row: sqlite3.Row, protected: list[str]) -> bool:
 
 
 def _dev_resolver(
-    rows: dict[str, sqlite3.Row], protected: list[str]
+    rows: dict[str, sqlite3.Row],
+    protected: list[str],
+    open_directions: frozenset[str],
 ) -> Callable[[sqlite3.Row], frozenset[str]]:
     """For a ready developer ticket, the unfinished lead-side tickets it waits for, directly or
     through other developer tickets: none means developers alone can run it (F146 D2). A
     dependency that isn't a ready or running developer ticket (set aside, blocked, unknown) is
-    named. F206 D1: follows a running developer ticket as it follows a ready one."""
+    named. A dependency with an open direction row counts as lead-side (F233). F206 D1: follows
+    a running developer ticket as it follows a ready one."""
     seen: dict[str, frozenset[str]] = {}
 
     def leads(row: sqlite3.Row) -> frozenset[str]:
@@ -169,6 +173,9 @@ def _dev_resolver(
         for dep in depends_on(row):
             other = rows.get(dep)
             if other is not None and other["state"] == "done":
+                continue
+            if dep in open_directions:
+                found.add(dep)
                 continue
             if (
                 other is not None
@@ -189,14 +196,18 @@ def _dev_work(
     rows: dict[str, sqlite3.Row],
     leads: Callable[[sqlite3.Row], frozenset[str]],
     protected: list[str],
+    by_name: dict[str, sqlite3.Row],
+    open_directions: frozenset[str],
 ) -> DevWork:
     """D3 and D4's line for one card's tickets (set-aside and removed ones already left out).
-    F206: counts running tickets as developers' work; tracks escalated/blocked tickets."""
+    F206: counts running tickets as developers' work; tracks escalated/blocked tickets.
+    F233: tracks tickets with an open direction row as lead-side."""
     now = after = waiting = 0
     waits_for: set[str] = set()
     running: list[str] = []
     with_lead: list[str] = []
     blocked: list[str] = []
+    waits_direction: list[str] = []
     for t in own:
         if not _developer_ticket(t, protected):
             continue
@@ -208,14 +219,22 @@ def _dev_work(
         elif state == "blocked":
             blocked.append(t["ticket"])
         elif state == "ready":
-            named = leads(t)
-            if named:
+            if t["ticket"] in open_directions:
+                waits_direction.append(t["ticket"])
+                waits_for.add(t["ticket"])
                 waiting += 1
-                waits_for |= named
-            elif all(rows.get(d) is not None and rows[d]["state"] == "done" for d in depends_on(t)):
-                now += 1
             else:
-                after += 1
+                named = leads(t)
+                if named:
+                    waiting += 1
+                    waits_for |= named
+                elif all(
+                    by_name.get(d) is not None and by_name[d]["state"] == "done"
+                    for d in depends_on(t)
+                ):
+                    now += 1
+                else:
+                    after += 1
     if now + after == 0 and waiting == 0:
         # no ready developer tickets
         if running or with_lead or blocked:
@@ -246,6 +265,7 @@ def _dev_work(
         tuple(running),
         tuple(with_lead),
         tuple(blocked),
+        tuple(sorted(waits_direction)),
     )
 
 
@@ -423,14 +443,31 @@ def _cards(
         if t["state"] == "done":
             done_tickets.add(t["ticket"])
         by_name[t["ticket"]] = t
-    leads = _dev_resolver(by_name, protected)
+    # open direction rows: developer tickets waiting for the lead's direction (F233)
+    open_directions: frozenset[str] = frozenset(
+        r["subject"]
+        for r in conn.execute(
+            "SELECT subject FROM work_queue"
+            " JOIN projects p ON p.id = work_queue.project_id"
+            " WHERE p.name = ? AND kind = 'direction' AND done IS NULL",
+            (project,),
+        )
+    )
+    leads = _dev_resolver(by_name, protected, open_directions)
 
     def dev_work(stage: str, own: list[sqlite3.Row]) -> DevWork | None:
         if not developers:
             return None
         if stage != "planted":
             return DevWork("none")
-        return _dev_work([t for t in own if t["state"] not in _OFF], by_name, leads, protected)
+        return _dev_work(
+            [t for t in own if t["state"] not in _OFF],
+            by_name,
+            leads,
+            protected,
+            by_name,
+            open_directions,
+        )
 
     threads = {
         r["card"]

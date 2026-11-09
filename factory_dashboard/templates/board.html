@@ -13,6 +13,8 @@
 <span class="dev-tag"><i class="pip"></i>
   {%- if d.with_lead -%}
   developers tried {{ d.with_lead | join(', ') }} · now with the lead
+  {%- elif d.waits_direction and d.now + d.after == 0 -%}
+  developers tried {{ d.waits_direction | join(', ') }} · waits for the lead's direction
   {%- elif d.blocked -%}
   {{ d.blocked | join(', ') }} is blocked
   {%- elif d.look == "can" and d.running -%}
