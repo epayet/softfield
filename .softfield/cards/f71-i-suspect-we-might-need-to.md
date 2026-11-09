@@ -70,9 +70,23 @@ Found because `check-all` timed out at its 1,200 s limit that night, with every 
 - **Keep them all.** Developer attempts at 75 min, Claude's jobs at 75 and reviews at 60 fit: no Claude job was cut off, and the developers' cuts came from check-all eating 40–60 of their 75 minutes. With the suite 15 minutes shorter per run, a developer attempt gets 30–45 minutes back, more than any raise did. F148's answer: no bigger limit; the suite was the cause.
 - **The gate limit (`gate = 1200`) stays:** the suite on workers takes a quarter of it. Watch it from the jobs table at the periodic factory review (F59, F150).
 
+## What we saw on 2026-11-05 (F221, merged here: "back to being slow")
+- **The whole suite on workers grew a little:** the `all-tests` gate averaged 218 s on 10-23 and 247 s on 11-04, 303 s at most.
+- **The two gates around it run in one process** (`gate_task_tests`, `gate_tests_fail_on_main`): `test_board.py` alone takes 85 s and `test_overview.py` 122 s. On 11-04, `task-tests` averaged 194 s (414 s at most) and `tests-fail-on-main` 142 s (297 s at most; 505 s on 10-28). A passing developer attempt's three test gates took 387 s on 10-22 and 583 s on 11-04, and up to 728 s on 10-28.
+- **`tests-fail-on-main` runs every changed test file to the end,** though one failure already gives its answer.
+- **Real-time waits are still there:** f71-03 had waited for its place at the card's priority 100 since all its dependencies finished. `test_app.py` has nine `wait_for_timeout(6_000)` and `test_overview.py` one, and the pages' 5 s polls are waited on with `timeout=REFRESH` (12 s) in about 90 places. `test_line.py` already uses the fake clock, in about 40 tests.
+- **Not measured:** each test's own time. A planner job can't run pytest, so f71-03 measures first. The time zone fixture F187 added (`_utc_zone`) only sets an environment variable and is not the likely cause.
+
+## Decisions (2026-11-05)
+- **D9: the two gates use the workers too, and `tests-fail-on-main` stops at its first failure** (f71-04). The same tests give the same verdicts. Estimated: about 4 minutes off each passing attempt.
+- **D10: f71-03 goes next,** after f71-04, widened to every file with real-time waits. The card keeps the place the owner gave it on the board (3).
+- **Checked against main on 2026-11-09:** the gates (`runner/gates.py`) and the real-time waits in `test_app.py`, `test_overview.py`, `test_thread.py` and `test_planning.py` are unchanged; `test_board.py` gained F192's tests, with waits of 500 ms at most. The test gates still averaged 185 s (`task-tests`), 250 s (`all-tests`) and 151 s (`tests-fail-on-main`) on 11-06. `f71-04` is still free.
+- **D11: no new gate.** `test-patterns` already refuses a new `wait_for_timeout` on a developer's branch. Watching the suite's length stays with the periodic factory review (F59).
+
 ## Tickets
 | # | Id | Who | Difficulty | What |
 |---|----|-----|------------|------|
 | 01 | longer-attempts | lead | 1 | **Done on 2026-10-12** in a terminal session (commit `119a206`): `opencode = 3600`, `claude = 2700`. No ticket left |
 | 02 | slow-tests-study | lead | 4 | **Done on 2026-10-21** in a terminal session: Findings above; the suite runs on 16 workers |
-| 03 | browser-tests-on-a-fake-clock | lead | 5 | The browser tests on Playwright's fake clock, after f68-07 and f114-08/09/10 |
+| 04 | test-gates-on-workers | lead | 2 | D9: `task-tests` and `tests-fail-on-main` on the workers; the second stops at its first failure |
+| 03 | browser-tests-on-a-fake-clock | lead | 5 | D10: the browser tests on Playwright's fake clock, measured before and after. After 04 |
