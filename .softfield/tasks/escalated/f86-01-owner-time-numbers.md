@@ -30,3 +30,12 @@ Read `.softfield/cards/f86-idea-tracking-time-the-human-spent.md` (D1 to D5) and
 - `Week` has `owner`, with the week before's hours and wait; `series` gives `owner.hours` for every week, None for weeks before the first `owner_requests` row
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: escalated
+reason: gates failed 3x (last: protected-paths)
+attempts: 3
+tokens: 2085025
+logs: .softfield/var/runs/20261105-201955/f86-01-owner-time-numbers
+```
