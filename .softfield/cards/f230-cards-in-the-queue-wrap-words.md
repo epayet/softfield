@@ -1,4 +1,4 @@
-# Milestone F230: Cards in the queue wrap words weirdly, 1 word per line…
+# Milestone F230: Queue rows squeezed into the number column, one word per line
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-06.
