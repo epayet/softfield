@@ -29,3 +29,12 @@ Words, in `dev_tag` of `factory_dashboard/templates/board.html`: "developers tri
 - once the `direction` row is done, the ticket counts as it does today
 - a card with one ticket waiting for its direction and another developers can take now stays lit and counts only the second
 - the listed `tests:` pass, and fail without the change
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2540
+gate_failures: []
+tokens: 3422483
+```
