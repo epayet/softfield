@@ -1,4 +1,4 @@
-# Milestone F231: There are many bugs in the seed board row and I can't do…
+# Milestone F231: Triage the set-aside bugs, and a Remove button for the ones not worth a run
 
 > **State:** idea · **Priority:** 100 · **Area:** factory
 > Planted by the owner on 2026-11-06.
