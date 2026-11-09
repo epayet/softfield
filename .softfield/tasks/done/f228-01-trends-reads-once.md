@@ -29,3 +29,12 @@ Read `.softfield/cards/f228-loading-the-overview-page-is-slow.md` ("What happens
 - `trends`, `savings` and the Milestones page give the same numbers as before: the existing tests in the listed files pass unchanged
 - the listed `tests:` pass, and fail without the change
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 2124
+gate_failures: ['mypy', 'mypy']
+tokens: 3408957
+```
