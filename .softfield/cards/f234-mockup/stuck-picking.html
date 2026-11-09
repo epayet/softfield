@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F234 mock-up: "picking the next ticket" only while it picks</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark mode */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --opus: #ff9640; --dev: #5b9cf5; --good: #5fd17a;
+    --fail: #ec5458; --critical-ink: #ef6b6b;
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px;
+    background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size: 32px 32px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 1100px) { .versions { grid-template-columns: 1fr 1fr; } .versions [data-version] { display: block !important; } }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card changes */
+  .note { color: var(--ink-2); font-size: 13px; margin: 6px 0 0; }
+  .note b { color: var(--fg); }
+  [hidden] { display: none; }
+
+  /* ---- the top bar as drawn (dashboard.css) ---- */
+  header.bar { background: var(--floor); border: 1px solid var(--rule); display: grid; gap: 10px; padding: 12px 16px 10px; }
+  .bar-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 18px; }
+  .brand { font: 700 22px/1.1 var(--display); letter-spacing: .04em; display: flex; align-items: center; gap: 4px; color: var(--fg); min-height: 44px; }
+  .brand svg { width: 28px; height: 28px; }
+  .brand-soft { color: var(--hazard); } .brand-field { color: var(--good); }
+  .brand small { font: 400 12px var(--mono); color: var(--muted); margin-left: 8px; }
+  .hazard { height: 6px; background: repeating-linear-gradient(-45deg, var(--hazard) 0 10px, var(--floor) 10px 20px); opacity: .85; }
+  .factory-status { display: flex; align-items: center; gap: 4px; border: 1px solid transparent; padding: 0 2px; }
+  .dot-btn { width: 28px; height: 44px; display: grid; place-items: center; background: none; border: 0; padding: 0; }
+  .dot { width: 14px; height: 14px; border-radius: 50%; background: var(--muted); display: block; }
+  .dot.lead { background: var(--opus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--opus) 18%, transparent); }
+  .dot.developer { background: var(--dev); box-shadow: 0 0 0 4px color-mix(in srgb, var(--dev) 18%, transparent); }
+  .dot.runner { background: var(--good); box-shadow: 0 0 0 4px color-mix(in srgb, var(--good) 18%, transparent); }
+  .dot.waiting, .dot.stopped { background: none; width: 10px; height: 10px; border: 2px solid var(--opus); }
+  .dot.stopped { border-color: var(--muted); }
+  /* proposed: no progress for 5 minutes, a steady red dot (--fail): no other dot is red */
+  .dot.stuck { background: var(--fail); }
+  @media (prefers-reduced-motion: no-preference) {
+    .dot.lead, .dot.developer, .dot.runner { animation: breathe 2.6s ease-in-out infinite; }
+  }
+  @keyframes breathe { 50% { box-shadow: 0 0 0 7px transparent; } }
+  .words { font: 600 15px/1.3 var(--display); letter-spacing: .03em; padding-right: 6px; }
+  .words.fail { color: var(--critical-ink); }
+  .sign { width: 36px; height: 36px; display: grid; place-items: center; border: 1px solid var(--hazard);
+    background: var(--hazard); color: var(--hazard-ink); font-size: 18px; padding: 0; }
+  .phone .words { display: none; }
+
+  .key { list-style: none; margin: 8px 0 0; padding: 10px 14px; background: var(--bay); border: 1px solid var(--rule); display: grid; gap: 4px; }
+  .key li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .key .dot-btn { height: 28px; }
+</style>
+</head>
+<body>
+<h1>F234: "picking the next ticket" only while it picks</h1>
+<p class="lede">The top bar on any page on 2026-11-09, softfield between two jobs. travel-companion's run has said "picking the next ticket" since Nov 5 16:56 while running nothing (its 2 lead tickets, f10-01 and f11-01, aren't taken), and the bar ranks any "Running: …" above an idle line.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/base.html and _partials/bar_status.html -->
+<div data-version="today" hidden>
+  <h3>Today · wide screen</h3>
+  <header class="bar">
+    <div class="bar-top">
+      <span class="brand"><svg viewBox="0 0 28 28"><rect x="5" y="11" width="18" height="13" fill="#f2b10a" stroke="#1a1405"/><path d="M14 11 V4 M14 7 q-5 -3 -6 0 M14 6 q5 -3 6 0" stroke="#5fd17a" stroke-width="2" fill="none"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></span>
+      <div class="factory-status">
+        <button type="button" class="dot-btn"><i class="dot runner"></i></button>
+        <span class="words">Running: travel-companion · picking the next ticket</span>
+        <button type="button" class="sign">⏸</button>
+      </div>
+    </div>
+    <div class="hazard"></div>
+  </header>
+  <h3>Today · phone</h3>
+  <header class="bar phone">
+    <div class="bar-top">
+      <span class="brand"><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+      <div class="factory-status">
+        <button type="button" class="dot-btn"><i class="dot runner"></i></button>
+        <button type="button" class="sign">⏸</button>
+      </div>
+    </div>
+    <div class="hazard"></div>
+  </header>
+  <p class="note">Green and breathing for days, while nothing runs anywhere. On a phone only the dot shows, so it looks like the factory is working.</p>
+  <h3>Today · a runner that hung</h3>
+  <header class="bar">
+    <div class="bar-top">
+      <span class="brand"><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+      <div class="factory-status">
+        <button type="button" class="dot-btn"><i class="dot runner"></i></button>
+        <span class="words">Running: picking the next ticket</span>
+        <button type="button" class="sign">⏸</button>
+      </div>
+    </div>
+    <div class="hazard"></div>
+  </header>
+  <p class="note">The heartbeat is its own thread, so a stuck loop still looks live: same words, same green, forever.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>Proposed · wide screen (D1)</h3>
+  <header class="bar">
+    <div class="bar-top">
+      <span class="brand"><svg viewBox="0 0 28 28"><rect x="5" y="11" width="18" height="13" fill="#f2b10a" stroke="#1a1405"/><path d="M14 11 V4 M14 7 q-5 -3 -6 0 M14 6 q5 -3 6 0" stroke="#5fd17a" stroke-width="2" fill="none"/></svg><span class="brand-soft">Soft</span><span class="brand-field">Field</span><small>127.0.0.1</small></span>
+      <div class="factory-status">
+        <button type="button" class="dot-btn new"><i class="dot idle"></i></button>
+        <span class="words new">Idle: 2 tickets wait for their turn · travel-companion</span>
+        <button type="button" class="sign">⏸</button>
+      </div>
+    </div>
+    <div class="hazard"></div>
+  </header>
+  <p class="note"><b>Grey, with the reason:</b> a project that ran nothing in its turn says why it waits (the same idle line the runner already writes, F101). The exact reason is the runner's: here, its tickets waited while softfield took the turn.</p>
+  <h3>Proposed · phone</h3>
+  <header class="bar phone">
+    <div class="bar-top">
+      <span class="brand"><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+      <div class="factory-status">
+        <button type="button" class="dot-btn new"><i class="dot idle"></i></button>
+        <button type="button" class="sign">⏸</button>
+      </div>
+    </div>
+    <div class="hazard"></div>
+  </header>
+  <h3>Proposed · a runner that hung (D3)</h3>
+  <header class="bar">
+    <div class="bar-top">
+      <span class="brand"><span class="brand-soft">Soft</span><span class="brand-field">Field</span></span>
+      <div class="factory-status">
+        <button type="button" class="dot-btn new"><i class="dot stuck"></i></button>
+        <span class="words fail new">No progress since 16:02 · picking the next ticket</span>
+        <button type="button" class="sign">⏸</button>
+      </div>
+    </div>
+    <div class="hazard"></div>
+  </header>
+  <p class="note"><b>Steady red, no breathing:</b> red because no other dot is (yellow sat too close to the lead's orange). "picking the next ticket" normally lasts seconds; past 5 minutes the bar says since when nothing has moved. Check-all and the gates keep their green: they can rightly take long.</p>
+  <h3>Proposed · the dots</h3>
+  <ul class="key">
+    <li><span class="dot-btn"><i class="dot lead"></i></span> the lead (any Claude job) is on a job</li>
+    <li><span class="dot-btn"><i class="dot developer"></i></span> a developer is on a job</li>
+    <li><span class="dot-btn"><i class="dot runner"></i></span> the runner's own work: check-all, the gates, the warm-up, picking (seconds)</li>
+    <li class="new"><span class="dot-btn"><i class="dot stuck"></i></span> red: no progress for 5 minutes, the runner may be stuck</li>
+    <li><span class="dot-btn"><i class="dot idle"></i></span> nothing happening: idle, or every ticket waits (the words say why)</li>
+    <li><span class="dot-btn"><i class="dot waiting"></i></span> waiting for Claude</li>
+    <li><span class="dot-btn"><i class="dot stopped"></i></span> stopped</li>
+  </ul>
+</div>
+</div>
+
+<script>
+  function wireSwitch() {
+    const buttons = document.querySelectorAll(".switch button");
+    buttons.forEach(b => b.addEventListener("click", () => {
+      buttons.forEach(o => o.setAttribute("aria-pressed", String(o === b)));
+      document.querySelectorAll("[data-version]").forEach(v => { v.hidden = v.dataset.version !== b.dataset.show; });
+    }));
+  }
+  wireSwitch();
+</script>
+</body>
+</html>
