@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 import pytest
 
 from factory_dashboard import queries
-from factory_dashboard.reports import series, week, weeks
+from factory_dashboard.reports import PLANTING, STEERING, CardTime, owner_time, series, week, weeks
 from runner import metrics
 
 FACTORY = "softfield"
@@ -200,3 +200,176 @@ def test_series_is_the_same_weeks_oldest_first(db):
     assert [w.milestones_done for w in found[:4]] == [0, 0, 1, 1]
     assert found[2].previous is not None
     assert found[2].previous.monday == date(2026, 10, 5)
+
+
+# --- the owner's time (f86-01) ----------------------------------------------------------
+
+
+def _owner(tmp_path, presses=(), items=(), titles=()):
+    """The metrics database at ``tmp_path`` (the ``db`` fixture's, when a test uses both) with
+    the owner's ``presses`` (project, kind, subject, created: a datetime or the exact text),
+    the desk's ``items`` (project, created, resolved or None) and cards' ``titles``."""
+    path = tmp_path / "factory-metrics.sqlite"
+    conn = metrics.open_db(path)
+    try:
+        ids = {name: metrics.upsert_project(conn, name) for name in BOTH}
+        for project, kind, subject, at in presses:
+            created = at if isinstance(at, str) else at.isoformat()
+            metrics.add_request(conn, ids[project], kind, subject, None, created)
+        for number, (project, created, resolved) in enumerate(items):
+            item = metrics.upsert_owner_item(
+                conn, ids[project], "verdict", f"item-{number}", created=created.isoformat()
+            )
+            if resolved is not None:
+                metrics.resolve_owner_item(conn, item, resolved.isoformat())
+        for project, key, title in titles:
+            metrics.upsert_milestone(conn, ids[project], key, title=title)
+    finally:
+        conn.close()
+    return queries.connect(path)
+
+
+WEEK = date(2026, 10, 19)
+
+
+def test_three_actions_make_22_minutes_in_two_sittings(tmp_path):
+    at = [_at(10, 20, 10, 0), _at(10, 20, 10, 12), _at(10, 20, 11, 0)]
+    db = _owner(tmp_path, presses=[(FACTORY, "message", "f158", t) for t in at])
+    found = owner_time(db, [FACTORY], WEEK)
+    # 10:00 starts a sitting (5), 10:12 continues it (12), 11:00 is 48 min later (5).
+    assert found.hours == pytest.approx(22 / 60)
+    assert found.sittings == 2
+    assert found.days == 1
+    assert found.actions == {"message": 3}
+
+
+def test_offsets_are_ordered_and_subtracted_as_datetimes(tmp_path):
+    later, earlier = "2026-10-20T10:00:00+01:00", "2026-10-20T09:10:00+00:00"
+    db = _owner(
+        tmp_path, presses=[(FACTORY, "message", "f1", later), (FACTORY, "approve", "f1", earlier)]
+    )
+    found = owner_time(db, [FACTORY], WEEK)
+    # 09:00 UTC, then 09:10 UTC: 5 + 10 minutes. As text, 09:10 would come first and the
+    # gap be -10 minutes (-5 minutes in all).
+    assert found.hours == pytest.approx(15 / 60)
+    assert found.sittings == 1
+
+
+def test_by_card_has_the_cards_title_planting_and_steering_most_minutes_first(tmp_path):
+    db = _owner(
+        tmp_path,
+        presses=[
+            (FACTORY, "message", "f158-milestones-don-t", _at(10, 20, 10, 0)),
+            (FACTORY, "approve", "f158-milestones-don-t", _at(10, 20, 10, 12)),
+            (FACTORY, "message", "f158", _at(10, 20, 11, 0)),
+            # a plant goes to Planting even when its subject looks like a card
+            (FACTORY, "plant", "f200-a-new-idea", _at(10, 20, 14, 0)),
+            (FACTORY, "pause", None, _at(10, 20, 15, 0)),
+            (FACTORY, "reserve", "five_hour", _at(10, 20, 15, 10)),
+        ],
+        titles=[(FACTORY, "f158-milestones-don-t", "Milestones don't matter")],
+    )
+    assert owner_time(db, [FACTORY], WEEK).by_card == [
+        CardTime("f158", FACTORY, "Milestones don't matter", 22.0),
+        CardTime(None, None, STEERING, 15.0),  # 5 for the pause, 10 for the reserve
+        CardTime(None, None, PLANTING, 5.0),
+    ]
+
+
+def test_one_card_key_on_two_projects_is_two_cards_each_with_its_project(tmp_path):
+    db = _owner(
+        tmp_path,
+        presses=[
+            (FACTORY, "message", "f1", _at(10, 20, 10, 0)),
+            (TRAVEL, "message", "f1-first-trip", _at(10, 20, 10, 10)),
+        ],
+        titles=[(FACTORY, "f1", "Factory line"), (TRAVEL, "f1-first-trip", "First trip")],
+    )
+    assert owner_time(db, BOTH, WEEK).by_card == [
+        CardTime("f1", TRAVEL, "First trip", 10.0),
+        CardTime("f1", FACTORY, "Factory line", 5.0),
+    ]
+
+
+def test_one_project_counts_its_own_actions_and_items_and_two_count_both(tmp_path):
+    db = _owner(
+        tmp_path,
+        presses=[
+            (FACTORY, "message", "f1", _at(10, 20, 10, 0)),
+            (TRAVEL, "message", "f1", _at(10, 20, 10, 10)),
+        ],
+        items=[
+            (FACTORY, _at(10, 20, 8), _at(10, 20, 9)),
+            (TRAVEL, _at(10, 20, 8), _at(10, 20, 11)),
+        ],
+    )
+    factory, travel = owner_time(db, [FACTORY], WEEK), owner_time(db, [TRAVEL], WEEK)
+    both = owner_time(db, BOTH, WEEK)
+    # One sitting over both projects: the switch to travel-companion counts its 10 min gap.
+    assert [f.hours for f in (factory, travel, both)] == pytest.approx([5 / 60, 10 / 60, 15 / 60])
+    assert [f.sittings for f in (factory, travel, both)] == [1, 1, 1]
+    assert [f.waited_items for f in (factory, travel, both)] == [1, 1, 2]
+    assert [f.waited_hours for f in (factory, travel, both)] == pytest.approx([1.0, 3.0, 2.0])
+
+
+def test_waited_is_the_median_over_items_resolved_in_the_week(tmp_path):
+    db = _owner(
+        tmp_path,
+        items=[
+            (FACTORY, _at(10, 19, 8), _at(10, 19, 9)),  # 1 h
+            (FACTORY, _at(10, 20, 8), _at(10, 20, 10)),  # 2 h
+            (FACTORY, _at(10, 21, 8), _at(10, 21, 14)),  # 6 h
+            (FACTORY, _at(10, 17, 8), _at(10, 18, 14)),  # 30 h, resolved the week before
+            (FACTORY, _at(10, 20, 8), None),  # still open
+        ],
+    )
+    found = owner_time(db, [FACTORY], WEEK)
+    assert found.waited_items == 3
+    assert found.waited_hours == pytest.approx(2.0)
+    empty = owner_time(db, [FACTORY], date(2026, 10, 26))
+    assert empty.waited_items == 0
+    assert empty.waited_hours is None
+
+
+def test_week_has_the_owners_time_with_the_week_before(tmp_path):
+    db = _owner(
+        tmp_path,
+        presses=[
+            (FACTORY, "message", "f1", _at(10, 13, 10, 0)),
+            (FACTORY, "message", "f1", _at(10, 20, 10, 0)),
+            (FACTORY, "message", "f1", _at(10, 20, 10, 30)),
+        ],
+        items=[
+            (FACTORY, _at(10, 14, 8), _at(10, 14, 11)),
+            (FACTORY, _at(10, 21, 8), _at(10, 21, 9)),
+        ],
+    )
+    owner = week(db, [FACTORY], WEEK).owner
+    assert owner is not None
+    assert owner.hours == pytest.approx(10 / 60)
+    assert owner.hours_before == pytest.approx(5 / 60)
+    assert owner.waited_hours == pytest.approx(1.0)
+    assert owner.waited_hours_before == pytest.approx(3.0)
+    first = week(db, [FACTORY], date(2026, 10, 12)).owner
+    assert first is not None
+    assert first.hours_before is None  # the week of 5 Oct wasn't recorded
+    assert first.waited_hours_before is None
+    assert week(db, [FACTORY], date(2026, 10, 5)).owner is None
+
+
+def test_series_has_the_owners_hours_from_the_first_recorded_week(db, tmp_path):
+    # ``db`` writes the jobs (weeks from 28 Sep); ``_owner`` adds to the same file.
+    conn = _owner(
+        tmp_path,
+        presses=[
+            (TRAVEL, "message", "f1", _at(10, 13, 10, 0)),
+            (FACTORY, "message", "f1", _at(10, 20, 10, 0)),
+        ],
+    )
+    found = series(conn, BOTH)
+    assert [w.owner for w in found[:2]] == [None, None]  # 28 Sep, 5 Oct
+    assert [w.owner.hours for w in found[2:4] if w.owner] == [
+        pytest.approx(5 / 60),
+        pytest.approx(5 / 60),
+    ]
+    assert all(w.owner is not None and w.owner.hours == 0 for w in found[4:])
