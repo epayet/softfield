@@ -1235,3 +1235,127 @@ def test_no_lead_ticket_returns_empty_list(tmp_path):
     rows = lead_split(reading, PROJECT)
     assert rows == []
     reading.close()
+
+
+def test_lead_rates_runs_one_query_with_many_lead_tickets(db, tmp_path):
+    """_lead_rates runs one SQL statement regardless of how many lead tickets there are."""
+    from factory_dashboard.queries import _lead_rates, connect
+
+    writer = metrics.open_db(tmp_path / "factory-metrics.sqlite")
+    project_id = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project_id, "f1")
+    run = metrics.upsert_run(writer, project_id, "20261001-100000")
+    # Create 10 lead tickets with their jobs
+    for i in range(1, 11):
+        ticket = metrics.upsert_ticket(
+            writer,
+            project_id,
+            f"f1-lead-{i:02d}",
+            milestone_id=f1,
+            kind="lead",
+            state="done",
+            difficulty=4,
+            merged_by=OPUS,
+            commit="a" * 40,
+            lines_changed=100,
+        )
+        _job(
+            writer,
+            run,
+            f1,
+            ticket,
+            "lead-ticket",
+            OPUS,
+            1,
+            "passed",
+            cost_usd=3.0,
+            **CLAUDE_TOKENS,
+        )
+    writer.close()
+    conn = connect(tmp_path / "factory-metrics.sqlite")
+    queries_executed: list[str] = []
+    conn.set_trace_callback(lambda q: queries_executed.append(q))
+    _lead_rates(conn, project_id)
+    conn.close()
+    assert len(queries_executed) == 1
+
+
+def test_trends_runs_same_sql_count_with_one_or_ten_leads(db, tmp_path):
+    """trends runs the same number of SQL statements with 1 lead ticket as with 10."""
+    from factory_dashboard.queries import connect, trends
+
+    # First: count queries with 10 lead tickets
+    writer = metrics.open_db(tmp_path / "factory-metrics-10.sqlite")
+    project_id = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project_id, "f1")
+    run = metrics.upsert_run(writer, project_id, "20261001-100000")
+    for i in range(1, 11):
+        ticket = metrics.upsert_ticket(
+            writer,
+            project_id,
+            f"f1-lead-{i:02d}",
+            milestone_id=f1,
+            kind="lead",
+            state="done",
+            difficulty=4,
+            merged_by=OPUS,
+            commit="a" * 40,
+            lines_changed=100,
+        )
+        _job(
+            writer,
+            run,
+            f1,
+            ticket,
+            "lead-ticket",
+            OPUS,
+            1,
+            "passed",
+            cost_usd=3.0,
+            **CLAUDE_TOKENS,
+        )
+    writer.close()
+    conn = connect(tmp_path / "factory-metrics-10.sqlite")
+    queries_executed: list[str] = []
+    conn.set_trace_callback(lambda q: queries_executed.append(q))
+    trends(conn, PROJECT)
+    count_10 = len(queries_executed)
+    conn.close()
+
+    # Second: count queries with 1 lead ticket (same milestone structure)
+    writer2 = metrics.open_db(tmp_path / "factory-metrics-1.sqlite")
+    project_id2 = metrics.upsert_project(writer2, PROJECT)
+    f1_2 = metrics.upsert_milestone(writer2, project_id2, "f1")
+    run2 = metrics.upsert_run(writer2, project_id2, "20261001-100000")
+    ticket2 = metrics.upsert_ticket(
+        writer2,
+        project_id2,
+        "f1-lead-01",
+        milestone_id=f1_2,
+        kind="lead",
+        state="done",
+        difficulty=4,
+        merged_by=OPUS,
+        commit="a" * 40,
+        lines_changed=100,
+    )
+    _job(
+        writer2,
+        run2,
+        f1_2,
+        ticket2,
+        "lead-ticket",
+        OPUS,
+        1,
+        "passed",
+        cost_usd=3.0,
+        **CLAUDE_TOKENS,
+    )
+    writer2.close()
+    conn2 = connect(tmp_path / "factory-metrics-1.sqlite")
+    queries_executed2: list[str] = []
+    conn2.set_trace_callback(lambda q: queries_executed2.append(q))
+    trends(conn2, PROJECT)
+    count_1 = len(queries_executed2)
+    conn2.close()
+    assert count_1 == count_10

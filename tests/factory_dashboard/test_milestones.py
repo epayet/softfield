@@ -1867,3 +1867,22 @@ def test_pulling_the_lever_posts_its_request_and_shows_it_on_its_way(page, board
     finally:
         conn.close()
     assert [tuple(r) for r in rows] == [("f24", "on", None)]
+
+
+def test_get_milestones_calls_trends_once(milestones_client, monkeypatch):
+    """One GET /milestones calls queries.trends exactly once."""
+    call_count = 0
+
+    from factory_dashboard.queries import trends as real_trends
+
+    def counting_trends(conn, project):
+        nonlocal call_count
+        call_count += 1
+        return real_trends(conn, project)
+
+    monkeypatch.setattr(
+        "factory_dashboard.milestones.queries.trends",
+        counting_trends,
+    )
+    milestones_client.get("/milestones")
+    assert call_count == 1

@@ -315,21 +315,31 @@ def _lead_rates(conn: sqlite3.Connection, project_id: int) -> dict[int, tuple[fl
     """The lead's measured (dollars, token-equivalents) per line, by difficulty, from its
     merged tickets whose Claude jobs were recorded."""
     rows = conn.execute(
-        "SELECT id, difficulty, lines_changed FROM tickets WHERE project_id = ? AND kind = 'lead'"
-        ' AND "commit" IS NOT NULL AND lines_changed > 0 AND difficulty IS NOT NULL',
+        "SELECT t.id AS ticket_id, t.difficulty, t.lines_changed, j.cost_usd, j.tokens_in,"
+        " j.tokens_cached, j.tokens_out, j.role, j.agent FROM tickets t"
+        " JOIN jobs j ON j.ticket_id = t.id"
+        " WHERE t.project_id = ? AND t.kind = 'lead'"
+        ' AND t."commit" IS NOT NULL AND t.lines_changed > 0 AND t.difficulty IS NOT NULL',
         (project_id,),
     ).fetchall()
     totals: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
-    for ticket in rows:
-        jobs = conn.execute("SELECT * FROM jobs WHERE ticket_id = ?", (ticket["id"],)).fetchall()
-        lead = [j for j in jobs if _is_lead(j)]
-        if not lead:
+    seen: set[int] = set()
+    for row in rows:
+        if row["role"] not in LEAD_ROLES:
             continue
-        total = totals[ticket["difficulty"]]
-        total[0] += sum(dollars(j) for j in lead)
-        total[1] += sum(_equivalents(j) for j in lead)
-        total[2] += ticket["lines_changed"]
-    return {d: (dollars / lines, tokens / lines) for d, (dollars, tokens, lines) in totals.items()}
+        diff = row["difficulty"]
+        total = totals[diff]
+        total[0] += dollars(row)
+        total[1] += _equivalents(row)
+        tid = row["ticket_id"]
+        if tid not in seen:
+            seen.add(tid)
+            total[2] += row["lines_changed"]
+    return {
+        d: (dollars / lines, tokens / lines)
+        for d, (dollars, tokens, lines) in totals.items()
+        if lines > 0
+    }
 
 
 def _merged_itself(ticket: sqlite3.Row, jobs: Sequence[sqlite3.Row]) -> bool:
@@ -372,7 +382,9 @@ def _combine(per_agent: Sequence[Savings]) -> Savings:
 
 
 def _milestone_savings(
-    conn: sqlite3.Connection, milestone_id: int, rates: dict[int, tuple[float, float]]
+    conn: sqlite3.Connection,
+    milestone_id: int,
+    rates: dict[int, tuple[float, float]] | None = None,
 ) -> Savings:
     """Per delegated ticket: what the lead would have spent on the lines its developer merged,
     against the lead's jobs on it, the attempts of a developer that costs dollars (Sonnet),
@@ -392,7 +404,11 @@ def _milestone_savings(
         own = by_ticket.get(ticket["id"], [])
         merged_itself = _merged_itself(ticket, own)
         lines = int(ticket["lines_changed"] or 0) if merged_itself else 0
-        per_line = rates.get(ticket["difficulty"], (SEED_DOLLARS_PER_LINE, SEED_TOKENS_PER_LINE))
+        per_line = (
+            rates.get(ticket["difficulty"], (SEED_DOLLARS_PER_LINE, SEED_TOKENS_PER_LINE))
+            if rates is not None
+            else (SEED_DOLLARS_PER_LINE, SEED_TOKENS_PER_LINE)
+        )
         paid = [
             j for j in own if _is_lead(j) or (j["role"] in LOCAL_ROLES and is_claude(j["agent"]))
         ]
@@ -410,12 +426,18 @@ def _milestone_savings(
     return _combine(parts)
 
 
-def savings(conn: sqlite3.Connection, project: str, key: str | None = None) -> Savings:
+def savings(
+    conn: sqlite3.Connection,
+    project: str,
+    key: str | None = None,
+    rates: dict[int, tuple[float, float]] | None = None,
+) -> Savings:
     """D7's savings for one milestone, or for all of them with no ``key``."""
     project_id = _project_id(conn, project)
     if project_id is None:
         return Savings()
-    rates = _lead_rates(conn, project_id)
+    if rates is None:
+        rates = _lead_rates(conn, project_id)
     parts = [
         _milestone_savings(conn, m["id"], rates)
         for m in _milestones(conn, project)
@@ -1120,11 +1142,15 @@ def paused_since(conn: sqlite3.Connection) -> str | None:
 
 def trends(conn: sqlite3.Connection, project: str) -> list[Trend]:
     """Each milestone's results and savings, oldest first."""
+    project_id = _project_id(conn, project)
+    if project_id is None:
+        return []
+    rates = _lead_rates(conn, project_id)
     found = []
     for m in _milestones(conn, project):
         results = milestone_results(conn, project, m["key"])
         if results is not None:
-            found.append(Trend(results, savings(conn, project, m["key"])))
+            found.append(Trend(results, _milestone_savings(conn, m["id"], rates)))
     return found
 
 

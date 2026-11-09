@@ -120,9 +120,15 @@ def _with_priorities(
     return [replace(r, priority=cards[r.key]) if r.key in cards else r for r in rows]
 
 
-def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]:
+def milestone_rows(
+    conn: sqlite3.Connection,
+    project: str,
+    trends: list[queries.Trend] | None = None,
+) -> list[MilestoneRow]:
     """Every milestone's summary, grouped and sorted: in progress first (by latest job),
     then not started (by priority), then done (by end date)."""
+    if trends is None:
+        trends = queries.trends(conn, project)
     # Lookup table for milestone status and dates.
     milestone_meta = conn.execute(
         "SELECT m.key, m.status, m.started, m.ended, m.id, m.state FROM milestones m"
@@ -165,7 +171,7 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
 
     # Milestones with data from trends.
     with_data: list[MilestoneRow] = []
-    for trend in queries.trends(conn, project):
+    for trend in trends:
         r = trend.results
         s = trend.savings
         if r.merged == 0:
@@ -266,8 +272,12 @@ def milestone_rows(conn: sqlite3.Connection, project: str) -> list[MilestoneRow]
     return _with_priorities(conn, project, result)
 
 
-def _rate_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
-    points = [p for p in queries.trends(conn, project) if p.results.merged > 0]
+def _rate_chart(
+    conn: sqlite3.Connection, project: str, trends: list[queries.Trend] | None = None
+) -> dict[str, Any]:
+    if trends is None:
+        trends = queries.trends(conn, project)
+    points = [p for p in trends if p.results.merged > 0]
     return {
         "labels": [p.results.key.upper() for p in points],
         "rate": [
@@ -277,16 +287,24 @@ def _rate_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
     }
 
 
-def _esc_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
-    points = [p for p in queries.trends(conn, project) if p.results.merged > 0]
+def _esc_chart(
+    conn: sqlite3.Connection, project: str, trends: list[queries.Trend] | None = None
+) -> dict[str, Any]:
+    if trends is None:
+        trends = queries.trends(conn, project)
+    points = [p for p in trends if p.results.merged > 0]
     return {
         "labels": [p.results.key.upper() for p in points],
         "count": [p.results.escalations for p in points],
     }
 
 
-def _dollars_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
-    points = [p for p in queries.trends(conn, project) if p.results.merged > 0]
+def _dollars_chart(
+    conn: sqlite3.Connection, project: str, trends: list[queries.Trend] | None = None
+) -> dict[str, Any]:
+    if trends is None:
+        trends = queries.trends(conn, project)
+    points = [p for p in trends if p.results.merged > 0]
     return {
         "labels": [p.results.key.upper() for p in points],
         "dollars": [
@@ -296,8 +314,12 @@ def _dollars_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
     }
 
 
-def _savings_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
-    points = [p for p in queries.trends(conn, project) if p.results.merged > 0]
+def _savings_chart(
+    conn: sqlite3.Connection, project: str, trends: list[queries.Trend] | None = None
+) -> dict[str, Any]:
+    if trends is None:
+        trends = queries.trends(conn, project)
+    points = [p for p in trends if p.results.merged > 0]
     return {
         "labels": [p.results.key.upper() for p in points],
         "savings": [round(p.savings.net, 2) for p in points],
@@ -306,7 +328,8 @@ def _savings_chart(conn: sqlite3.Connection, project: str) -> dict[str, Any]:
 
 @router.get("/milestones", response_class=HTMLResponse)
 def milestones_list(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
-    rows = milestone_rows(conn, project)
+    trends = queries.trends(conn, project)
+    rows = milestone_rows(conn, project, trends)
     return render(
         request,
         conn,
@@ -316,10 +339,10 @@ def milestones_list(request: Request, conn: Db, project: Project, now: Now) -> H
             "active": "/board",  # where its link is, now it has no tab (f5-17)
             "picker_to": "/milestones",
             "milestones": rows,
-            "rate": _rate_chart(conn, project),
-            "esc": _esc_chart(conn, project),
-            "dollars": _dollars_chart(conn, project),
-            "savings": _savings_chart(conn, project),
+            "rate": _rate_chart(conn, project, trends),
+            "esc": _esc_chart(conn, project, trends),
+            "dollars": _dollars_chart(conn, project, trends),
+            "savings": _savings_chart(conn, project, trends),
         },
     )
 

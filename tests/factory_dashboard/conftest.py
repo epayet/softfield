@@ -78,7 +78,7 @@ LOCAL = "local-qwen3.6-35b-a3b"
 OTHER_LOCAL = "local-other"
 OPUS, SONNET = "claude-opus", "claude-sonnet"
 # Each Claude job in f1: 10k input + 100k cache reads (0.1) + 2k output (5) = 30k equivalents.
-CLAUDE_TOKENS: dict[str, int | float | None] = {
+CLAUDE_TOKENS: dict[str, int | None] = {
     "tokens_in": 10_000,
     "tokens_cached": 100_000,
     "tokens_out": 2_000,
