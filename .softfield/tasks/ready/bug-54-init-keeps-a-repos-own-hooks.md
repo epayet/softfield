@@ -18,6 +18,8 @@ tests:
 ### Context
 `setup.init` always runs `git config core.hooksPath .softfield/hooks`. ADR 41 item 1 says a person working without the factory sees a normal repo. A repo's own value is lost, and removing the factory doesn't bring it back. Leaving it costs little: the runner's gates still run on every ticket, and only the check at commit time is lost.
 
+Checked against main on 2026-11-09 (F231): `runner/setup.py` still runs that `git config` whatever the repo had.
+
 `init` returns `(origin, written)`, and `cli._machine_command` prints them. Hooks in `.git/hooks` with no `core.hooksPath` set are out of scope: the dot folder's README already says they don't run.
 
 ### Done when

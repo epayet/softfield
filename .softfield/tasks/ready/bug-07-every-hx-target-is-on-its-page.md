@@ -19,6 +19,7 @@ One dashboard test fails whenever a button's `hx-target` names an element its pa
 ### Context
 f159-01's Queue it button pointed `hx-target` at an element that existed only once the request was sent, so htmx sent nothing (it refuses a request whose target is missing), and every test passed: they read only the markup. The code is right today; this is the missing guard.
 - Read the fixtures at the top of `tests/factory_dashboard/test_app.py` and `tests/factory_dashboard/conftest.py`, and how `tests/factory_dashboard/test_tickets.py` builds a `later` ticket, for the data each page needs.
+- Checked against main on 2026-11-09 (F231): no test in `tests/factory_dashboard/test_app.py` reads `hx-target` yet.
 - The pages: `/tickets/<a later ticket>`, `/tickets`, `/board`, `/planning`, a card's thread (`/planning/<key>`), `/milestones/<key>`.
 
 ### Done when

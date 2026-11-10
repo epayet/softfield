@@ -19,6 +19,7 @@ A headless review can see the whole test suite finish inside one Bash call.
 ### Context
 Read the review prompt in `runner/prompts.py` (the line "fix it yourself now, keeping `uv run pytest -q {tests}` green") and where `runner/milestone.py` fills `{tests}`; `test_workers` in `runner/config.py` is how `softfield check-all` runs the suite on pytest-xdist's workers (F71). `runner/**` is protected: tests first.
 - `uv run pytest -q tests/runner tests/factory_dashboard`, the command a review is told to keep green, now takes longer than a Bash call's 10-minute limit: neither of F172's two review rounds saw it finish (78% and 93%); `tests/factory_dashboard/test_planning.py` alone takes about 4 minutes.
+- Checked against main on 2026-11-09 (F231): both review prompts in `runner/prompts.py` still say `uv run pytest -q {tests}`, with no workers.
 - Give the review's command the project's workers (`-n <test_workers>` when it is above 0), so it runs as `check-all` does.
 
 ### Done when

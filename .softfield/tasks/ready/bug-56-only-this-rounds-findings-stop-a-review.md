@@ -19,6 +19,7 @@ A review stops as "a finding came back a third time" only when one of its own fi
 `stop_reason` in `runner/review.py` tests every value in `seen`, which is `state.finding_seen`: all milestones' findings, kept for good. `m3-F7` has stood at 3 since M3, so any later review with one open finding stops after its first round, its fixes never re-reviewed. No other saved count reaches 3, yet 11 milestones have this stop reason, F2 and F159 among them.
 Fix: test only this round's findings that hold the review (`Finding.holds_review`), by their count in `seen`. The signature stays. Leave the saved `m3-F7` count alone: it stops mattering.
 `test_recurrence` in `tests/runner/test_review.py` is the worked example.
+Checked against main on 2026-11-09 (F231): `stop_reason` still tests `any(n >= 3 for n in seen.values())`.
 
 ### Done when
 - with `seen` holding another milestone's finding at 3, a round with an open finding of its own, below 3, gets `None`

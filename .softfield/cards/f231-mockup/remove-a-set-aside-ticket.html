@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>F231 mock-up: remove a set-aside ticket</title>
+<style>
+  /* The dashboard's own tokens (factory_dashboard/static/dashboard.css), dark theme */
+  :root {
+    --floor: #12161b; --bay: #181e25; --plate: #1f2730; --grid: #222b34; --rule: #303b47;
+    --fg: #dfe4e8; --ink-2: #b4bec8; --muted: #8794a2;
+    --hazard: #f2b10a; --hazard-ink: #1a1405; --fail: #ec5458; --factory: #f2b10a;
+    --sonnet: #ffc48a; --good: #5fd17a; --tick: var(--ink-2); --warn-ink: var(--hazard);
+    --notch: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+    --display: "Chakra Petch", "Bahnschrift", system-ui, sans-serif;
+    --body: "Barlow", "Segoe UI", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--floor); color: var(--fg); font: 15px/1.5 var(--body); padding: 20px; }
+  h1 { font: 700 20px var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0 0 4px; }
+  h3 { font: 600 13px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin: 22px 0 8px; }
+  p.lede { color: var(--ink-2); max-width: 760px; margin: 0 0 8px; }
+  a { color: var(--sonnet); text-decoration: none; }
+  .switch { display: inline-flex; margin: 12px 0 0; border: 1px solid var(--rule); }
+  .switch button { font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; padding: 10px 18px;
+    background: var(--bay); color: var(--muted); border: 0; cursor: pointer; }
+  .switch button[aria-pressed="true"] { background: var(--hazard); color: var(--hazard-ink); }
+  .versions { display: grid; gap: 24px; }
+  @media (min-width: 900px) {
+    .switch { display: none; }
+    .versions { grid-template-columns: 1fr 1fr; }
+    .versions > [hidden] { display: block !important; }
+    .versions > div::before { display: block; font: 700 14px var(--display); letter-spacing: .1em; text-transform: uppercase;
+      color: var(--hazard); margin: 8px 0 0; }
+    .versions > [data-version="today"]::before { content: "Today"; }
+    .versions > [data-version="proposed"]::before { content: "Proposed"; }
+  }
+  .phone { width: 390px; max-width: 100%; }
+  .new { outline: 1px dashed var(--good); outline-offset: 3px; }   /* what this card adds */
+  .note { display: block; font: 12px var(--mono); color: var(--good); margin: 6px 0 0; }
+  .legend { color: var(--ink-2); font-size: 13px; margin: 14px 0 0; max-width: 760px; }
+  [hidden] { display: none !important; }
+
+  /* ---- copied from dashboard.css: panels, buttons, the set-aside plate (f159) ---- */
+  .panel { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; min-width: 0; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; font: 600 13px var(--display); letter-spacing: .06em;
+    text-transform: uppercase; min-height: 44px; padding: 0 16px; border: 0; cursor: pointer; text-decoration: none; }
+  .btn.go { background: var(--hazard); color: var(--hazard-ink); clip-path: var(--notch); }
+  .btn.plain { background: transparent; color: var(--fg); border: 1px solid var(--rule); }
+  .aside { position: relative; border-color: var(--hazard); padding-top: 0; }
+  .aside .plate { display: flex; align-items: center; gap: 10px; margin: 0 -14px 10px; padding: 7px 14px;
+    background: repeating-linear-gradient(-45deg, var(--hazard) 0 6px, var(--hazard-ink) 6px 12px) left / 14px 100% no-repeat, var(--plate);
+    border-bottom: 1px solid var(--rule); padding-left: 26px; }
+  .aside .plate b { font: 700 13px var(--display); letter-spacing: .12em; text-transform: uppercase; }
+  .aside .plate span { font: 11px var(--mono); color: var(--muted); margin-left: auto; }
+  .aside::before, .aside::after { content: ""; position: absolute; width: 8px; height: 8px; border: 0 solid var(--tick); }
+  .aside::before { left: -1px; bottom: -1px; border-width: 0 0 2px 2px; }
+  .aside::after { right: -1px; bottom: -1px; border-width: 0 2px 2px 0; }
+  .aside .say { font-size: 15px; margin: 0 0 6px; }
+  .aside .then { color: var(--ink-2); font-size: 13.5px; margin: 0 0 12px; }
+  .aside .go { font: 700 14px var(--display); letter-spacing: .08em; text-transform: uppercase; min-height: 44px; padding: 0 20px; border: 0; cursor: pointer; }
+  .aside .way { display: none; border: 1px dashed var(--hazard); padding: 8px 10px; font: 600 12px/1.4 var(--mono); color: var(--hazard); }
+  .aside.sent .go, .aside.sent .buttons { display: none; } .aside.sent .way { display: block; }
+
+  /* the board's card (dashboard.css .card, .card.bug, .card-action, .card-way) */
+  .cards { display: flex; flex-direction: column; gap: 8px; padding: 10px; background: var(--bay); border: 1px solid var(--rule); }
+  .card { display: flex; flex-direction: column; justify-content: center; gap: 5px; min-height: 44px;
+    padding: 9px 10px; background: var(--plate); border: 1px solid var(--rule);
+    border-left: 4px solid var(--c, var(--muted)); color: var(--fg); overflow-wrap: anywhere; }
+  .card.factory { --c: var(--factory); }
+  .card.bug { border-left: 0; padding-left: 14px;
+    background: linear-gradient(var(--plate), var(--plate)) right / calc(100% - 4px) 100% no-repeat,
+      repeating-linear-gradient(-45deg, var(--fail) 0 4px, var(--plate) 4px 8px); }
+  .card-meta { font: 600 11px var(--mono); color: var(--muted); } .card-meta b { color: var(--fg); }
+  .card-title { font: 600 14px/1.25 var(--body); }
+  .card-action { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px; font-size: 12px; line-height: 1.35; }
+  .card.on-its-way { border-style: dashed; border-color: var(--hazard); }
+  .card-way { font: 600 11.5px/1.35 var(--mono); color: var(--hazard); }
+
+  /* ---- proposed: Remove beside Queue it, folded behind one more press, as Remove seed is ---- */
+  .aside .buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-start; }
+  .aside details.remove > summary { list-style: none; }
+  .aside details.remove > summary::-webkit-details-marker { display: none; }
+  .aside details.remove[open] > summary { border-color: var(--hazard); }
+  .aside .confirm { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 10px 0 0;
+    padding: 10px 12px; background: var(--plate); border-left: 3px solid var(--ink-2); }
+  .aside .confirm span { font-size: 14px; }
+  .aside .confirm small { flex-basis: 100%; color: var(--muted); font: 12px var(--mono); }
+  .aside .way.removing { border-style: dashed; }
+</style>
+</head>
+<body>
+<h1>F231: remove a set-aside ticket</h1>
+<p class="lede">A set-aside ticket's page, bug-12 as the example (it is on the list to remove), and its card in the board's Seed column. Today the only button is Queue it; proposed, Remove sits beside it.</p>
+<div class="switch" role="group" aria-label="Which version">
+  <button type="button" data-show="today" aria-pressed="false">Today</button>
+  <button type="button" data-show="proposed" aria-pressed="true">Proposed</button>
+</div>
+
+<div class="versions">
+<!-- Today: copied from factory_dashboard/templates/ticket.html (the #aside section) and board.html (card_link) -->
+<div data-version="today" hidden>
+  <h3>/tickets/bug-12-clear-out-marked-once-it-ran · phone</h3>
+  <div class="phone">
+    <section class="panel aside">
+      <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
+      <p class="say">This ticket won't run until you queue it.</p>
+      <p class="then">Queued, it joins the line at priority 36, behind the tickets that go first; move it on the board once it is there.</p>
+      <button type="button" class="go btn">Queue it</button>
+      <div class="way">Queue it · on its way · at the runner's next pick</div>
+    </section>
+  </div>
+  <h3>/board · the Seed column</h3>
+  <div class="cards phone">
+    <a class="card factory bug" href="#">
+      <span class="card-meta"><b>#8</b> <span>bug-12-clear-out-marked-once-it-ran</span> <span>bug · factory</span></span>
+      <span class="card-title">F55's one-time clear-out is marked done only after it has run, so a failure leaves it to run again.</span>
+      <span class="card-action">Set aside, won't run until you queue it ›</span>
+    </a>
+  </div>
+  <p class="legend">Nothing gets a set-aside ticket off the board but queuing it.</p>
+</div>
+
+<!-- Proposed -->
+<div data-version="proposed">
+  <h3>/tickets/bug-12-clear-out-marked-once-it-ran · phone · Remove pressed once</h3>
+  <div class="phone">
+    <section class="panel aside">
+      <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
+      <p class="say">This ticket won't run until you queue it<span class="new">, or you remove it</span>.</p>
+      <p class="then">Queued, it joins the line at priority 36, behind the tickets that go first; move it on the board once it is there.</p>
+      <div class="buttons">
+        <button type="button" class="go btn">Queue it</button>
+        <details class="remove new" open>
+          <summary class="btn plain">Remove</summary>
+        </details>
+        <div class="confirm new">
+          <span>Remove bug-12? It leaves the board and won't run.</span>
+          <button type="button" class="btn go">Remove</button>
+          <small>git keeps it, and its review still names the finding</small>
+        </div>
+      </div>
+      <span class="note">new: Remove, then one more press, as Remove seed asks on a card's thread</span>
+    </section>
+  </div>
+
+  <h3>The same page, Remove pressed</h3>
+  <div class="phone">
+    <section class="panel aside sent">
+      <div class="plate"><b>Set aside</b><span>.softfield/tasks/later/</span></div>
+      <p class="say">This ticket won't run until you queue it, or you remove it.</p>
+      <p class="then">Queued, it joins the line at priority 36, behind the tickets that go first; move it on the board once it is there.</p>
+      <div class="way removing new">Removing · on its way · at the runner's next pick</div>
+    </section>
+    <span class="note">new: the dashed plate at once, its buttons gone; the runner's answer lands under it</span>
+  </div>
+
+  <h3>/board · the Seed column, Remove pressed</h3>
+  <div class="cards phone">
+    <a class="card factory bug on-its-way new" href="#">
+      <span class="card-meta"><b>#8</b> <span>bug-12-clear-out-marked-once-it-ran</span> <span>bug · factory</span></span>
+      <span class="card-title">F55's one-time clear-out is marked done only after it has run, so a failure leaves it to run again.</span>
+      <span class="card-way">removing · on its way · at the runner's next pick</span>
+    </a>
+    <a class="card factory bug on-its-way new" href="#">
+      <span class="card-meta"><b>#41</b> <span>bug-56-only-this-rounds-findings-stop-a-review</span> <span>bug · factory</span></span>
+      <span class="card-title">A review stops as "a finding came back a third time" only when one of its own findings did, not because of any finding in any other milestone.</span>
+      <span class="card-way">queuing · on its way · at the runner's next pick</span>
+    </a>
+  </div>
+  <span class="note">new: a seed with a Remove or a Queue it waiting gets the dashed edge, as a reorder does; gone (or planted) once the runner takes it</span>
+  <p class="legend"><span class="new">Dashed green</span> marks what is new. A blocked ticket keeps Try again and Set aside; once set aside, it can be removed here like any other.</p>
+</div>
+</div>
+
+<script>
+  function showVersion(which) {
+    document.querySelectorAll(".switch button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.show === which)));
+    document.querySelectorAll("[data-version]").forEach((v) => { v.hidden = v.dataset.version !== which; });
+  }
+  document.querySelectorAll(".switch button").forEach((button) => {
+    button.addEventListener("click", () => showVersion(button.dataset.show));
+  });
+</script>
+</body>
+</html>
