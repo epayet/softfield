@@ -1,5 +1,7 @@
 # F9 line polish: review
 
+- **Status:** done, signed off by the owner on 2026-11-10.
+
 ## Sign-off sheet
 
 ### 1. What changed
