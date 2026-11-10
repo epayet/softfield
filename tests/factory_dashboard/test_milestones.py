@@ -1886,3 +1886,109 @@ def test_get_milestones_calls_trends_once(milestones_client, monkeypatch):
     )
     milestones_client.get("/milestones")
     assert call_count == 1
+
+
+def test_milestones_savings_includes_lead_ticket_without_jobs_in_jobs_in_rate(tmp_path):
+    """A lead ticket with no jobs still contributes its lines to the rate denominator,
+    lowering the per-line rate and thus the savings calculation."""
+
+    from factory_dashboard.queries import savings
+    from runner import metrics
+
+    db = tmp_path / "factory-metrics.sqlite"
+    conn = metrics.open_db(db)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f1 = metrics.upsert_milestone(conn, project, "f1", started="2026-10-01T09:00:00+02:00")
+        run = metrics.upsert_run(conn, project, "20261001-100000")
+
+        # Lead ticket 1: d3, 100 lines, with a $1.70 job
+        t1 = metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-01-lead",
+            milestone_id=f1,
+            kind="lead",
+            state="done",
+            difficulty=3,
+            merged_by="claude-opus",
+            commit="a" * 40,
+            lines_changed=100,
+        )
+        j1 = metrics.start_job(
+            conn,
+            run,
+            ticket_id=t1,
+            milestone_id=f1,
+            role="lead-ticket",
+            agent="claude-opus",
+            attempt=1,
+            started="2026-10-01T10:00:00+02:00",
+        )
+        metrics.finish_job(
+            conn,
+            j1,
+            ended="2026-10-01T10:10:00+02:00",
+            outcome="passed",
+            cost_usd=1.70,
+            tokens_in=10_000,
+            tokens_cached=100_000,
+            tokens_out=2_000,
+        )
+
+        # Lead ticket 2: d3, 50 lines, NO jobs at all
+        metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-02-lead",
+            milestone_id=f1,
+            kind="lead",
+            state="done",
+            difficulty=3,
+            merged_by="claude-opus",
+            commit="b" * 40,
+            lines_changed=50,
+        )
+
+        # Developer ticket: d3, 100 lines, merged by local
+        dev = metrics.upsert_ticket(
+            conn,
+            project,
+            "f1-03-dev",
+            milestone_id=f1,
+            kind="developer",
+            state="done",
+            difficulty=3,
+            merged_by="local-qwen3.6-35b-a3b",
+            commit="c" * 40,
+            lines_changed=100,
+        )
+        jdev = metrics.start_job(
+            conn,
+            run,
+            ticket_id=dev,
+            milestone_id=f1,
+            role="developer",
+            agent="local-qwen3.6-35b-a3b",
+            attempt=1,
+            started="2026-10-01T10:00:00+02:00",
+        )
+        metrics.finish_job(
+            conn,
+            jdev,
+            ended="2026-10-01T10:05:00+02:00",
+            outcome="passed",
+            tokens_in=200_000,
+            tokens_out=10_000,
+        )
+    finally:
+        conn.close()
+
+    # With the fix: rate = $1.70 / (100 + 50) lines
+    # Without the fix: rate = $1.70 / 100 lines (ticket 2 dropped)
+    s = savings(metrics.open_db(db), PROJECT, "f1")
+    # doing_itself: developer's 100 lines * rate
+    # The rate should be 1.70/150 per line (both lead tickets counted)
+    expected_rate = 1.70 / 150
+    expected_doing_itself = 100 * expected_rate
+    assert s.doing_itself == pytest.approx(expected_doing_itself)

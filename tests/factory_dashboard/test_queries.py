@@ -1237,6 +1237,93 @@ def test_no_lead_ticket_returns_empty_list(tmp_path):
     reading.close()
 
 
+def test_lead_rates_includes_lead_ticket_without_jobs_in_denominator(tmp_path):
+    """A lead ticket with no jobs still contributes its lines to the rate denominator."""
+    from factory_dashboard.queries import _lead_rates, connect
+
+    writer = metrics.open_db(tmp_path / "factory-metrics.sqlite")
+    project_id = metrics.upsert_project(writer, PROJECT)
+    f1 = metrics.upsert_milestone(writer, project_id, "f1")
+    run = metrics.upsert_run(writer, project_id, "20261001-100000")
+
+    # Lead ticket 1: d3, 100 lines, with a $1.70 job
+    t1 = metrics.upsert_ticket(
+        writer,
+        project_id,
+        "f1-01-lead",
+        milestone_id=f1,
+        kind="lead",
+        state="done",
+        difficulty=3,
+        merged_by=OPUS,
+        commit="a" * 40,
+        lines_changed=100,
+    )
+    _job(
+        writer,
+        run,
+        f1,
+        t1,
+        "lead-ticket",
+        OPUS,
+        1,
+        "passed",
+        cost_usd=1.70,
+        **CLAUDE_TOKENS,
+    )
+
+    # Lead ticket 2: d3, 50 lines, NO jobs at all
+    metrics.upsert_ticket(
+        writer,
+        project_id,
+        "f1-02-lead",
+        milestone_id=f1,
+        kind="lead",
+        state="done",
+        difficulty=3,
+        merged_by=OPUS,
+        commit="b" * 40,
+        lines_changed=50,
+    )
+
+    # Developer ticket: d4, should NOT be included in lead rates
+    dev = metrics.upsert_ticket(
+        writer,
+        project_id,
+        "f1-03-dev",
+        milestone_id=f1,
+        kind="developer",
+        state="done",
+        difficulty=4,
+        merged_by=LOCAL,
+        commit="c" * 40,
+        lines_changed=200,
+    )
+    _job(
+        writer,
+        run,
+        f1,
+        dev,
+        "developer",
+        LOCAL,
+        1,
+        "passed",
+        tokens_in=10_000,
+        tokens_out=1_000,
+    )
+
+    writer.close()
+    conn = connect(tmp_path / "factory-metrics.sqlite")
+    rates = _lead_rates(conn, project_id)
+    conn.close()
+
+    # d3: $1.70 / (100 + 50) lines = $0.01133... per line
+    # d4 should not appear (developer ticket)
+    assert 3 in rates
+    assert rates[3][0] == pytest.approx(1.70 / 150)
+    assert 4 not in rates
+
+
 def test_lead_rates_runs_one_query_with_many_lead_tickets(db, tmp_path):
     """_lead_rates runs one SQL statement regardless of how many lead tickets there are."""
     from factory_dashboard.queries import _lead_rates, connect
