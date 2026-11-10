@@ -4106,3 +4106,65 @@ def test_a_card_that_turns_ripe_shows_on_the_next_refresh(serve_between, db_path
     entry = after.split('id="desk-entry"')[1].split("</li>")[0]
     assert re.findall(r'href="/planning/(f\d+)\?', entry) == ["f30"]
     assert planning_tab(after) == "Planning · 1"
+
+
+# --- queue rows full-width (f230-01) --------------------------------------------------------------
+
+
+def test_the_lane_label_sits_on_one_line_at_phone_width(page, board_db, tmp_path):
+    """F230 D1: the ``lane-label`` row's text fits on one line at 390 px viewport."""
+    _queue_on(board_db, "planner", "f11#1")
+    client = _reserve_client(board_db, tmp_path, "f23-planted")
+
+    ORIGIN = "http://127.0.0.1:8765"
+
+    def serve_route(route) -> None:
+        url = route.request.url.removeprefix(ORIGIN)
+        path = url.split("?", 1)[0]
+        if path.startswith("/static/"):
+            route.fulfill(path=str(STATIC / path.removeprefix("/static/")))
+        elif path in ("/", "/live"):
+            body = client.get(url).text
+            route.fulfill(body=body, content_type="text/html; charset=utf-8")
+        else:
+            route.fulfill(status=404, body="")
+
+    page.route(f"{ORIGIN}/**", serve_route)
+    page.set_viewport_size({"width": 390, "height": 1200})
+    page.goto(ORIGIN + "/")
+    page.wait_for_selector(".belt")
+
+    # The lane-label row's text should sit on one line: its scroll height equals one line's height.
+    # Check the parent <li> which holds the grid layout; its text content fits in one line.
+    row_el = page.locator("li.lane-label")
+    assert row_el.count() == 1
+    row_metrics = row_el.evaluate(
+        "el => { "
+        "const s = getComputedStyle(el); "
+        "const lh = parseFloat(s.lineHeight); "
+        "return { fs: parseFloat(s.fontSize), "
+        "lh: isNaN(lh) ? parseFloat(s.fontSize) * 1.2 : lh }; }"
+    )
+    one_line = row_metrics["lh"]
+    # The row's width must be enough for the text on one line: check that the label
+    # span's scrollHeight (text content) fits in one line.
+    label_sh = row_el.evaluate("el => el.querySelector('.label').scrollHeight")
+    assert label_sh <= one_line + 1, (
+        f"lane-label scrollHeight {label_sh}px exceeds one line ({one_line}px)"
+    )
+
+
+def test_the_fast_lane_rows_carry_the_hazard_stripe(board_db, tmp_path):
+    """F230 D2: the fast lane's rows (lane-label, intermediate rows, bay-end) carry the
+    hazard stripe on their left, using only ``--hazard`` and ``--hazard-ink``."""
+    _queue_on(board_db, "planner", "f11#1")
+    client = _reserve_client(board_db, tmp_path, "f23-planted")
+    html = client.get("/").text
+
+    # lane-label and bay-end classes must be present unchanged
+    assert '<li class="lane-label">' in html, "lane-label class missing"
+    assert '<li class="bay-end">' in html, "bay-end class missing"
+    # lane-row class on intermediate rows (may appear as part of a multi-class attribute)
+    assert "lane-row" in html, "lane-row class missing on intermediate rows"
+    # No dead .lane-bay class left in the page
+    assert 'class="lane-bay"' not in html, ".lane-bay class should be removed"

@@ -304,15 +304,14 @@ tbody tr:hover { background: var(--accent-wash); }
 .belt li .n { font: 600 12px var(--mono); color: var(--muted); text-align: right; }
 .belt li.lead { border-left-color: var(--opus); } .belt li.developer { border-left-color: var(--dev); }
 .belt li b { font: 600 12px var(--mono); }
-.count { font: 700 28px/1 var(--display); color: var(--fg); }
-.count small { font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-left: 6px; }
-/* the fast lane's bay on top of Next in line (F172 D9): the hazard stripe and the ink, as .card-reserve */
-.lane-bay { display: grid; gap: 4px; padding: 6px 8px 8px 16px; background: var(--plate);
-  border: 1px solid var(--rule); position: relative; }
-.lane-bay::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
+/* rows without a number span both columns */
+.belt li:not(:has(> .n)) { grid-template-columns: 1fr; }
+/* the fast lane's bay on top of Next in line (F172 D9): the hazard stripe and the ink */
+.lane-label, .lane-row, .bay-end { position: relative; }
+.lane-label::before, .lane-row::before, .bay-end::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 5px;
   background: repeating-linear-gradient(135deg, var(--hazard) 0 4px, var(--hazard-ink) 4px 8px); }
-.lane-bay .label { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--fg); }
-.lane-bay .label span { font: 400 12px var(--body); text-transform: none; letter-spacing: 0;
+.lane-label .label { font: 700 12px var(--display); text-transform: uppercase; letter-spacing: .1em; color: var(--fg); }
+.lane-label .label span { font: 400 12px var(--body); text-transform: none; letter-spacing: 0;
   color: var(--muted); margin-left: 6px; }
 .lane-way { font: 600 11.5px var(--mono); color: var(--warn-ink); white-space: nowrap; }
 .warnline { color: var(--serious-ink); font-size: 13px; }
