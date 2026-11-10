@@ -46,9 +46,29 @@
   </div>
 </section>
 
-<div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select">
-{% if coming.items %}
-<section id="desk-coming" class="panel desk-coming" aria-label="{{ coming.name }}">
+  <div class="desk-row">
+  <div class="plant-column">
+  <div id="plant-row">
+  <form id="plant" class="panel plant-form" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
+    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1", again: this.elements.again.value || undefined})}'>
+    <h2>Plant an idea</h2>
+    <label class="edit-label">What's on your mind? As rough as you like: the lead names the card
+      <textarea name="text" rows="4" required placeholder="The pause button did nothing the first time…" class="edit-input"></textarea>
+    </label>
+    <div class="plant-actions">
+      <input type="hidden" name="ask" value="">
+      {# F48 D2: the refused note Try again put in the box; the send names it, once #}
+      <input type="hidden" name="again" value="">
+      <button type="submit" id="plant-ask" class="btn go" onclick="this.form.elements.ask.value = '1'">Plant and ask the lead</button>
+      <button type="submit" id="plant-only" class="btn plain" onclick="this.form.elements.ask.value = ''">Plant</button>
+      <span id="plant-status" class="plant-status">Plant and ask the lead: the lead answers it on its thread. Plant: a seed card that waits for you; write on its thread to send it to the lead.</span>
+    </div>
+  </form>
+  </div>
+
+  <div id="live-desk-coming" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk-coming" hx-swap="innerHTML" hx-disinherit="hx-select">
+  {% if coming.items %}
+  <section id="desk-coming" class="panel desk-coming" aria-label="{{ coming.name }}">
     <h2>{{ coming.name }} · {{ coming.items | length }}</h2>
     {% for item in coming.items %}
     <div class="desk-group">
@@ -102,24 +122,6 @@
   </section>
   {% endif %}
   </div>
-
-<div class="desk-row">
-  <div id="plant-row">
-  <form id="plant" class="panel plant-form" hx-post="/requests" hx-target="#plant-status" hx-swap="innerHTML"
-    hx-vals='js:{kind: "plant", project: {{ project | tojson }}, value: JSON.stringify({text: this.elements.text.value, ask: this.elements.ask.value === "1", again: this.elements.again.value || undefined})}'>
-    <h2>Plant an idea</h2>
-    <label class="edit-label">What's on your mind? As rough as you like: the lead names the card
-      <textarea name="text" rows="4" required placeholder="The pause button did nothing the first time…" class="edit-input"></textarea>
-    </label>
-    <div class="plant-actions">
-      <input type="hidden" name="ask" value="">
-      {# F48 D2: the refused note Try again put in the box; the send names it, once #}
-      <input type="hidden" name="again" value="">
-      <button type="submit" id="plant-ask" class="btn go" onclick="this.form.elements.ask.value = '1'">Plant and ask the lead</button>
-      <button type="submit" id="plant-only" class="btn plain" onclick="this.form.elements.ask.value = ''">Plant</button>
-      <span id="plant-status" class="plant-status">Plant and ask the lead: the lead answers it on its thread. Plant: a seed card that waits for you; write on its thread to send it to the lead.</span>
-    </div>
-  </form>
   </div>
 
   <div id="live-desk" hx-get="/planning{{ q }}" hx-trigger="every 5s [window.liveIdle()]" hx-select="#desk" hx-swap="innerHTML" hx-disinherit="hx-select">
@@ -266,7 +268,7 @@
     // while the new form is on its way (or never comes) must not plant it twice.
     form.elements.text.value = "";
     htmx.ajax("GET", window.location.href, {target: "#plant-row", select: "#plant-row", swap: "outerHTML"});
-    // F63 D1: Coming sits above the box, outside #plant-row, so it is drawn again on its own
+    // F198: Coming is drawn again on its own, beside #desk
     htmx.ajax("GET", window.location.href, {target: "#live-desk-coming", select: "#desk-coming", swap: "innerHTML"});
   });
   // The box emptied: what comes next is a new note, and the refused one keeps its card

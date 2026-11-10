@@ -1202,6 +1202,7 @@ def test_liveIdle_is_false_while_waiting_plant_is_open(page, planning, db_path, 
     """With one waiting plant in Coming, liveIdle is false while the waiting plant is
     open (details is open with input/textarea)."""
     note = _finished(db_path, planning, "plant", None, NOTE, None)
+    page.set_viewport_size({"width": 1280, "height": 1600})
     _open(page, serve())
     page.wait_for_selector("#desk-coming")
     assert page.evaluate("() => window.liveIdle()") is True
@@ -1213,6 +1214,7 @@ def test_liveIdle_is_true_again_when_waiting_plant_is_closed(page, planning, db_
     """With one waiting plant in Coming, liveIdle is true again once the waiting plant
     is closed (details is no longer open)."""
     note = _finished(db_path, planning, "plant", None, NOTE, None)
+    page.set_viewport_size({"width": 1280, "height": 1600})
     _open(page, serve())
     page.wait_for_selector("#desk-coming")
     page.click(f"#waiting-{note} summary")

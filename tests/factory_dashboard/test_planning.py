@@ -1098,14 +1098,80 @@ def test_desk_coming_poll_wrapper_absent_when_no_items(planning, serve):
     assert '<section id="desk-coming"' not in html
 
 
-def test_coming_then_plant_then_the_desk_then_archived(planning, db_path, serve):
-    """F63 D1, D2: what the owner just did first, then the box, the desk, and Archived last."""
+def test_plant_before_coming_before_desk_before_archived(planning, db_path, serve):
+    """F198 D1: plant first, then Coming (when present), the desk, and Archived last."""
     _finished(db_path, planning, "plant", None, NOTE, None)
     _archive(db_path, planning, "general", timedelta(hours=1))
     html = _page(serve())
-    marks = ['<section id="desk-coming"', 'id="plant"', 'id="desk"', 'id="archived"']
+    marks = ['id="plant"', '<section id="desk-coming"', 'id="desk"', 'id="archived"']
     places = [html.index(mark) for mark in marks]
     assert places == sorted(places)
+
+
+# --- Coming sits under the box (f198) --------------------------------------------------------
+
+
+def test_a_plant_stays_put_when_coming_appears(page, planning, db_path, serve):
+    """At 390 px and at 1280 px, #plant's top is the same before and after a plant is sent,
+    and #desk-coming shows below #plant."""
+    client = serve()
+    for width in [390, 1280]:
+        page.set_viewport_size({"width": width, "height": 800})
+        _open(page, client)
+        plant_top = page.locator("#plant").evaluate("el => el.getBoundingClientRect().top")
+        page.fill('#plant textarea[name="text"]', "A note about the frame")
+        page.click("#plant-only")
+        page.wait_for_selector("#desk-coming")
+        page.wait_for_timeout(100)
+        fresh_top = page.locator("#plant").evaluate("el => el.getBoundingClientRect().top")
+        assert abs(fresh_top - plant_top) <= 1
+        coming_top = page.locator("#desk-coming").evaluate("el => el.getBoundingClientRect().top")
+        assert coming_top >= plant_top
+
+
+def test_coming_shows_under_the_box_at_wide_and_phone_widths(page, planning, db_path, serve):
+    """At 1280 px, #desk-coming has the same left edge as #plant and #desk's top doesn't
+    move when it appears; at 390 px, #desk-coming is above #desk."""
+    client = serve()
+    page.set_viewport_size({"width": 1280, "height": 800})
+    _open(page, client)
+    plant_left = page.locator("#plant").evaluate("el => el.getBoundingClientRect().left")
+    desk_top_before = page.locator("#desk").evaluate("el => el.getBoundingClientRect().top")
+    page.fill('#plant textarea[name="text"]', "A note about the frame")
+    page.click("#plant-only")
+    page.wait_for_selector("#desk-coming")
+    page.wait_for_timeout(100)
+    coming_left = page.locator("#desk-coming").evaluate("el => el.getBoundingClientRect().left")
+    assert abs(coming_left - plant_left) <= 1
+    desk_top_after = page.locator("#desk").evaluate("el => el.getBoundingClientRect().top")
+    assert abs(desk_top_after - desk_top_before) <= 1
+    page.set_viewport_size({"width": 390, "height": 800})
+    _open(page, client)
+    page.fill('#plant textarea[name="text"]', "A note about the frame")
+    page.click("#plant-only")
+    page.wait_for_selector("#desk-coming")
+    coming_top = page.locator("#desk-coming").evaluate("el => el.getBoundingClientRect().top")
+    desk_top = page.locator("#desk").evaluate("el => el.getBoundingClientRect().top")
+    assert coming_top < desk_top
+
+
+def test_a_note_half_typed_survives_coming_poll(page, planning, db_path, serve):
+    """A note half typed in the box is still there after Coming's 5-second poll."""
+    client = serve()
+    _open(page, client)
+    page.fill('#plant textarea[name="text"]', "A note about the frame")
+    page.click("#plant-only")
+    page.wait_for_selector("#desk-coming")
+    page.wait_for_selector("#plant textarea")
+    # The form is cleared by the plant submit; type after it appears
+    page.type('#plant textarea[name="text"]', "half typed")
+    page.wait_for_timeout(100)
+    initial = page.input_value('#plant textarea[name="text"]')
+    assert initial == "half typed"
+    # Wait for a Coming poll (5 s interval)
+    page.wait_for_timeout(5500)
+    page.wait_for_timeout(100)
+    assert page.input_value('#plant textarea[name="text"]') == "half typed"
 
 
 # --- the desk and an open thread refresh by themselves (F19 review) ---------------------------
