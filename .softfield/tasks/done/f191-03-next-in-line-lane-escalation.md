@@ -24,3 +24,12 @@ Tests to follow: `test_a_direction_for_a_fast_lane_ticket_shows_in_the_bay_befor
 - An open escalation row for `f172-06-…`, with F172 in the fast lane and no ready F172 ticket, shows in the Fast lane bay, above the planner jobs.
 - The same row with F172 out of the lane shows where it does today.
 - A direction for a ready lane ticket still shows in the bay before its ticket (the existing test passes unchanged).
+
+```yaml
+# --- runner ---
+result: done
+attempts: 2
+duration_s: 6002
+gate_failures: ['stopped']
+tokens: 8502352
+```
