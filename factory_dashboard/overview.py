@@ -335,11 +335,13 @@ def queued_jobs(
     now: datetime,
     *,
     first: Collection[str] = frozenset(),
+    card_keys: Collection[str] = frozenset(),
 ) -> list[QueuedJob]:
     """The project's open ``work_queue`` rows, minus those whose ``started_job`` is still
     running, each with the order and wait from ``dispatch.plan``, a direction or escalation of
     ``first``'s tickets (the fast lane's) on top. Also includes open plant requests from
-    ``owner_requests``."""
+    ``owner_requests``. Escalations and directions whose subject starts with a ``card_keys``
+    short key (F191 D3) are treated as fast-lane rows even when the lane has no ready ticket."""
     from runner import dispatch
 
     found_project = conn.execute("SELECT id FROM projects WHERE name = ?", (project,)).fetchone()
@@ -360,6 +362,17 @@ def queued_jobs(
         row for row in rows if row["started_job"] is None or row["started_job"] not in running_jobs
     ]
     queued = [dispatch.Queued.from_row(row) for row in open_queues]
+    # Escalations and directions for a fast-lane card whose ticket has left ready/ (F191 D3)
+    if card_keys:
+        lane_subjects: set[str] = set()
+        for q in queued:
+            if (
+                q.kind in dispatch.GOES_WITH
+                and q.subject not in first
+                and any(q.subject.upper().startswith(k + "-") for k in card_keys)
+            ):
+                lane_subjects.add(q.subject)
+        first = set(first) | lane_subjects
     plan = dispatch.plan(queued, [], dispatch.Windows(), now, first=first)
     found: list[QueuedJob] = []
     for line in plan:
@@ -900,9 +913,9 @@ def _live_context(
         {c.key for c in reserve_cards if c.lane_asked != "off"},
     )
     lane_ids = {str(r["ticket"]) for r in lane}
-    qjobs = queued_jobs(conn, project, now, first=lane_ids)
     # "on its way" only on a row of the card asked in, not on a ticket it waits for elsewhere
     asked_in = {c.key for c in reserve_cards if c.lane_asked == "on"}
+    qjobs = queued_jobs(conn, project, now, first=lane_ids, card_keys=asked_in)
     lane = [
         {
             **r,
