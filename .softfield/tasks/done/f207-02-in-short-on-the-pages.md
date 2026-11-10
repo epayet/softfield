@@ -36,3 +36,9 @@ attempts: 3
 tokens: 1187051
 logs: .softfield/var/runs/20261106-011143/f207-02-in-short-on-the-pages
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
