@@ -26,3 +26,12 @@ f89-does-allowance-refresh-at-the-beginning-C1936-1: Lead tickets without lead j
 - what each finding describes no longer holds, and a test shows it
 - the listed `tests:` pass, and fail without the change
 - all gates pass
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 1806
+gate_failures: ['ruff', 'task-tests']
+tokens: 658371
+```
