@@ -15,14 +15,7 @@
       <span class="stamp">Proposed by the lead</span>
       <h1>Review {{ proposal.title }}</h1>
       {% if merge %}<span id="merge-words">{{ merge[:1] | upper }}{{ merge[1:] }}</span>{% endif %}
-      {% if proposals %}
-      <nav id="proposal-tabs" aria-label="Proposals">
-        {% for prop in proposals %}
-        {% set current = prop.link == request.url.path %}
-        <a href="{{ prop.link }}{{ q }}"{% if current %} aria-current="page"{% endif %}>{{ prop.kind | upper }} · {{ prop.title }}</a>
-        {% endfor %}
-      </nav>
-      {% endif %}
+      {% include "_partials/card_steps.html" %}
     </header>
 
     {# F207 D5: a proposal's tldr, open under the header, above a mock-up's frame; none, no plate #}

@@ -11,7 +11,7 @@
 import json
 import re
 import sqlite3
-from collections.abc import Collection
+from collections.abc import Callable, Collection, Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -70,6 +70,19 @@ router = APIRouter()
 
 _ADR_NUMBER = re.compile(r"(?:\.softfield/adr|docs/adr)/(\d+)-")
 _NEXT_PICK = "on its way · the runner applies it at its next pick"
+
+# F210 D8: a card's proposals read ADR, mock-up, plan or replan, merge, seed; anything else last
+_READING = {"adr": 0, "mockup": 1, "plan": 2, "replan": 2, "merge": 3, "seed": 4}
+
+
+def reading_order[T](
+    items: Iterable[T], proposal_of: Callable[[T], Mapping[str, object]]
+) -> list[T]:
+    """``items`` in a card's reading order (F210 D8), by the kind of each one's proposal dict;
+    items of the same kind keep their order."""
+    return sorted(
+        items, key=lambda item: _READING.get(str(proposal_of(item).get("kind")), len(_READING))
+    )
 
 
 def _asked(conn: sqlite3.Connection, project_id: int) -> list[str]:

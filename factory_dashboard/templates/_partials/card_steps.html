@@ -1,0 +1,15 @@
+{# F210 D3: a card's steps, the same strip on its thread and on each proposal's page: the
+   conversation, then each proposal in reading order (D8) with its state and key points. Links
+   only: the buttons stay on the review page (D4). Needs ``thread``, ``proposals`` and ``q``. #}
+{% if proposals %}
+{% set here = request.url.path %}
+<nav id="card-steps" class="steps" aria-label="This card's steps">
+  <h3>This card's steps</h3>
+  <ol>
+    <li><a href="/planning/{{ thread }}{{ q }}"{% if here == "/planning/" ~ thread %} aria-current="page"{% endif %}>Conversation</a></li>
+    {% for prop in proposals %}
+    <li><i aria-hidden="true">&rarr;</i><a href="{{ prop.link }}{{ q }}" title="{{ prop.title }}"{% if prop.state in ("being revised", "on its way") %} class="waits"{% endif %}{% if prop.link == here %} aria-current="page"{% endif %}>{{ prop.step }}<small><span class="state">{{ prop.state }}</span>{% if prop.points %} · {{ prop.points }} key point{{ "s" if prop.points != 1 }}{% endif %}</small></a></li>
+    {% endfor %}
+  </ol>
+</nav>
+{% endif %}

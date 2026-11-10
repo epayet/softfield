@@ -148,11 +148,18 @@
     {# F30 D1: the latest exchange first, Send under it, the older messages folded under it.
        Its stamp changes with what the runner and the lead write, for the poll below (F19). #}
     <div id="conversation">
-    <i id="conversation-stamp" hidden data-stamp="{{ next_reply }}|{{ earlier | length }}|{{ merged_on | length }}{% for m in messages %}|{{ m.author }} {{ m.at }} {{ m.waiting }} {{ m.change.id if m.change }}{% endfor %}"></i>
+    <i id="conversation-stamp" hidden data-stamp="{{ next_reply }}|{{ earlier | length }}|{{ merged_on | length }}{% for m in messages %}|{{ m.author }} {{ m.at }} {{ m.waiting }} {{ m.change.id if m.change }}{% endfor %}{% for p in proposals %}|{{ p.link }} {{ p.state }}{% endfor %}"></i>
     {% if next_reply %}
     <p id="waiting"{% if writing_now %} class="writing"{% endif %}>Next for the lead · {{ next_reply }}</p>
     {% endif %}
     {% for msg in messages %}{{ draw(msg) }}{% endfor %}
+
+    {# F210 D3: the card's steps under the latest exchange, above the reply box; the
+       conversation's redraws carry it (F100's "being revised" too) #}
+    {% if proposals %}
+    {% include "_partials/card_steps.html" %}
+    <p id="steps-note" class="aside">{% if proposals | selectattr("state", "equalto", "being revised") | list %}The lead is revising these after your message. {% endif %}Nothing becomes a ticket until you approve it.</p>
+    {% endif %}
 
     {% if merged_on %}
     <div id="merged-on" class="panel">
@@ -206,10 +213,6 @@
               select: "#conversation",
               swap: "innerHTML"
             });
-            // F100: the open proposals turn "being revised" with the message
-            if (document.getElementById("proposals")) {
-              htmx.ajax("GET", window.location.href, {target: "#proposals", select: "#proposals", swap: "outerHTML"});
-            }
           }, 100);
         }
       });
@@ -244,10 +247,6 @@
         const stamp = (c) => c.querySelector("#conversation-stamp").dataset.stamp;
         if (!fresh || !shown || stamp(fresh) === stamp(shown) || !window.liveIdle()) return;
         htmx.swap(shown, fresh.outerHTML, {swapStyle: "outerHTML"});
-        // F100: the proposals follow the conversation (being revised, or solid again)
-        const proposals = page.getElementById("proposals");
-        const listed = document.getElementById("proposals");
-        if (proposals && listed) htmx.swap(listed, proposals.outerHTML, {swapStyle: "outerHTML"});
       }, 5000);
       // f23-01: the summary on a point's details opens the box and focuses the textarea in the
       // tap itself (iOS Safari only raises the keyboard on the tap that touches the element).
@@ -293,19 +292,6 @@
     </div>
     {% endif %}
   </div>
-
-  {% if proposals %}
-  <aside id="proposals" class="panel" aria-label="Proposals">
-    <h2>Proposals from this card</h2>
-    {% for prop in proposals %}
-    <a href="{{ prop.link }}{{ q }}" class="proposal{% if prop.state == 'being revised' %} revising{% endif %}" style="--c: var({{ prop.color }})">
-      <span>{{ prop.kind | upper }} · <span class="state">{{ prop.state }}</span></span>
-      <b>{{ prop.title }}</b>
-    </a>
-    {% endfor %}
-    <p class="aside">{% if proposals | selectattr("state", "equalto", "being revised") | list %}The lead is revising these after your message. {% endif %}Nothing becomes a ticket until you approve it.</p>
-  </aside>
-  {% endif %}
 
 </div>
 <script src="{{ static('deck.js') }}"></script>

@@ -2344,7 +2344,7 @@ def test_the_thread_and_proposal_pages_say_being_revised(planning, db_path, serv
     _revising(db_path, planning)
     thread = _thread(client, "f85")
     assert _text(thread).count("being revised") >= 2
-    assert thread.count('class="proposal revising"') == 2
+    assert thread.count('class="waits"') == 2  # F210 D3: the strip's steps, dashed
     page = _review_page(client, "/planning/f85/proposals/plan")
     assert "Being revised" in page
     assert "Approve" in page and "Reject" in page

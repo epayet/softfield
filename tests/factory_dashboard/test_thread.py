@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
+from factory_dashboard.planning import reading_order
 from runner import metrics
 from tests.factory_dashboard.conftest import (
     NOW,
@@ -233,9 +234,9 @@ def test_the_in_short_plate_stays_in_place_on_a_phone(page, planning, db_path, s
     assert plate.is_visible() and plate.bounding_box() == before
 
 
-def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_path, serve):
+def test_the_strip_shows_each_proposal_open_or_answered(planning, db_path, serve):
     """The latest listing's proposals, each linking to its review page; one the owner approved
-    since is answered (D6)."""
+    since is answered (D6) and drawn as waiting."""
     _write(
         db_path,
         lambda conn: metrics.add_request(
@@ -243,11 +244,142 @@ def test_the_proposals_column_shows_each_proposal_open_or_answered(planning, db_
         ),
     )
     html = _thread(serve(), "f6")
-    found = re.findall(r'<a href="([^"?]+)[^"]*" class="proposal"[^>]*>(.*?)</a>', html, re.S)
-    assert [(link, _text(body)) for link, body in found] == [
-        ("/planning/f6/proposals/adr-20", "ADR · open ADR 20: the planning room"),
-        ("/planning/f6/proposals/plan", "PLAN · on its way F6 plan: 7 tickets"),
+    steps = [(link, words.split(" · ")[0], mark) for link, words, mark in _steps(html)]
+    assert steps == [
+        ("/planning/f6", "Conversation", "current"),
+        ("/planning/f6/proposals/adr-20", "ADR open", ""),
+        ("/planning/f6/proposals/plan", "Plan on its way", "waits"),
     ]
+
+
+# --- one strip of steps (F210 D3, D8) ------------------------------------------------------------
+
+_PLAN_2 = {**_REVIEW_PLAN, "key_points": [*_REVIEW_PLAN["key_points"]] * 2}
+_STRIP_MOCKUP = {**_REVIEW_PLAN, "id": "mock", "kind": "mockup", "title": "The strip, drawn"}
+_STRIP_ADR = {**_REVIEW_ADR, "id": "adr-9"}
+_STRIP_MERGE = {**_REVIEW_MERGE, "id": "merge-f3"}
+
+
+def _steps(html: str) -> list[tuple[str, str, str]]:
+    """The strip's steps: (link, words, "current" or "waits" or "")."""
+    nav = html.split('<nav id="card-steps"', 1)[1].split("</nav>", 1)[0]
+    return [
+        (
+            link,
+            _text(body),
+            "current" if 'aria-current="page"' in attrs else "waits" if "waits" in attrs else "",
+        )
+        for link, attrs, body in re.findall(r'<a href="([^"?]+)[^"]*"([^>]*)>(.*?)</a>', nav, re.S)
+    ]
+
+
+def test_the_strip_reads_conversation_mock_up_plan_under_the_reply(planning, db_path, serve):
+    """A reply listing a plan then a mock-up: under the lead's reply and above the reply box, a
+    strip reads Conversation (current), Mock-up, Plan, each with its state and key points and
+    linking to its page; no aside, and the note stays under the strip."""
+    _write(db_path, lambda conn: _review(conn, planning, "f85", _PLAN_2, _STRIP_MOCKUP))
+    html = _thread(serve(), "f85")
+    assert _steps(html) == [
+        ("/planning/f85", "Conversation", "current"),
+        ("/planning/f85/proposals/mock", "Mock-up open · 1 key point", ""),
+        ("/planning/f85/proposals/plan", "Plan open · 2 key points", ""),
+    ]
+    assert (
+        html.index('class="message lead-message"')
+        < html.index('id="card-steps"')
+        < html.index('id="steps-note"')
+        < html.index('<form id="reply"')
+    )
+    conversation = html.split('<div id="conversation">', 1)[1]
+    assert 'id="card-steps"' in conversation.split('<form id="reply"', 1)[0]
+    assert 'id="proposals"' not in html
+    note = html.split('id="steps-note"', 1)[1].split("</p>", 1)[0]
+    assert "Nothing becomes a ticket until you approve it." in note
+
+
+def test_the_strip_reads_adr_mock_up_plan_merge_whatever_the_listing(planning, db_path, serve):
+    """D8: a reply listing a plan, a merge, a mock-up and an ADR reads Conversation, ADR,
+    Mock-up, Plan, Merge."""
+    listed = (_REVIEW_PLAN, _STRIP_MERGE, _STRIP_MOCKUP, _STRIP_ADR)
+    _write(db_path, lambda conn: _review(conn, planning, "f85", *listed))
+    assert [words.split()[0] for _, words, _ in _steps(_thread(serve(), "f85"))] == [
+        "Conversation",
+        "ADR",
+        "Mock-up",
+        "Plan",
+        "Merge",
+    ]
+
+
+def test_reading_order_keeps_the_listing_within_a_kind_and_puts_unknown_kinds_last():
+    """D8: ADR, mock-up, plan and replan (one rank), merge, seed, anything else; same ranks
+    keep their order, whatever order they came in."""
+    kinds = ["other", "seed", "replan", "merge", "plan", "mockup", "adr", "plan"]
+    items = [(kind, n) for n, kind in enumerate(kinds)]
+    assert reading_order(items, lambda item: {"kind": item[0]}) == [
+        ("adr", 6),
+        ("mockup", 5),
+        ("replan", 2),
+        ("plan", 4),
+        ("plan", 7),
+        ("merge", 3),
+        ("seed", 1),
+        ("other", 0),
+    ]
+
+
+def test_a_thread_with_no_proposals_has_no_strip(planning, db_path, serve):
+    _lead_says(db_path, planning, "f85", "No proposal yet.")
+    html = _thread(serve(), "f85")
+    assert "No proposal yet." in _text(html)
+    assert 'id="card-steps"' not in html and 'id="steps-note"' not in html
+
+
+def test_on_a_phone_the_strip_comes_before_the_reply_box(page, planning, db_path, serve):
+    """At 390 px the strip sits above the reply box, each step at least 44 px tall, nothing
+    running off the screen."""
+    _write(db_path, lambda conn: _review(conn, planning, "f85", _PLAN_2, _STRIP_MOCKUP))
+    page.set_viewport_size(PHONE)
+    _open(page, serve(), "/planning/f85")
+    strip = page.locator("#card-steps").bounding_box()
+    page.evaluate("() => document.querySelector('.dock').style.position = 'static'")
+    reply = page.locator("#reply").bounding_box()
+    assert strip and reply and strip["y"] + strip["height"] <= reply["y"]
+    steps = page.locator("#card-steps a").all()
+    assert len(steps) == 3
+    for step in steps:
+        box = step.bounding_box()
+        assert box and box["height"] >= 44 and box["x"] + box["width"] <= PHONE["width"]
+    page.evaluate("() => document.querySelector('nav.tabs').setAttribute('data-layout', 'overlay')")
+    assert page.evaluate("() => document.documentElement.scrollWidth") <= PHONE["width"]
+    assert layout_problems(page) == []
+
+
+def test_the_owners_message_dashes_the_open_steps_without_a_reload(page, planning, db_path, serve):
+    """F100 in the strip: the owner sends a message, and the open proposals' steps say "being
+    revised", dashed in hazard, on the same load."""
+    _write(db_path, lambda conn: _review(conn, planning, "f85", _PLAN_2, _STRIP_MOCKUP))
+    _open(page, serve(), "/planning/f85")
+    page.evaluate("() => { window.loadedOnce = true; }")
+    assert page.locator("#card-steps a.waits").count() == 0
+    page.fill('#reply textarea[name="text"]', "Why two?")
+    page.click('#reply button[type="submit"]')
+    page.locator("#card-steps a.waits").nth(1).wait_for()
+    waits = page.locator("#card-steps a.waits").all()
+    assert [w.inner_text().split("\n", 1)[1] for w in waits] == [
+        "being revised · 1 key point",
+        "being revised · 2 key points",
+    ]
+    hazard = page.evaluate(
+        "() => { const p = document.createElement('p'); p.style.color = 'var(--hazard)';"
+        " document.body.append(p); const c = getComputedStyle(p).color; p.remove(); return c; }"
+    )
+    for step in waits:
+        border = step.evaluate(
+            "e => [getComputedStyle(e).borderTopStyle, getComputedStyle(e).borderTopColor]"
+        )
+        assert border == ["dashed", hazard]
+    assert page.evaluate("() => window.loadedOnce") is True
 
 
 def test_send_with_comments_posts_one_request(page, planning, db_path, serve):
@@ -910,10 +1042,10 @@ def test_a_lead_message_with_empty_proposals_keeps_earlier_on_thread_and_review(
     )
     # The thread should still show the earlier proposal with its approve button
     thread_html = _thread(serve(), "f9")
-    text = _text(thread_html)
-    assert "Parallel, said twice" in text
-    # The link to the proposal's review page is on the thread
+    # The link to the proposal's review page is on the thread, its step named by its title
+    # (F210 D3: the strip names the kind, the title is the link's)
     assert 'href="/planning/f9/proposals/merge-f9?' in thread_html
+    assert 'title="Parallel, said twice"' in thread_html
     # The proposal card shows it is still open
     assert '<span class="state">open</span>' in thread_html
     # The review page should show the proposal as open, not "replaced"

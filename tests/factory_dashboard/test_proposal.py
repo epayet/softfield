@@ -75,8 +75,9 @@ def test_an_adr_proposal_shows_its_points_in_order_with_their_flags(planning, db
         "2 Inside the runner One process.",
         "3 Opus, in your 25% The whole window.",
     ]
-    nav = html.split('<nav id="proposal-tabs"', 1)[1].split("</nav>", 1)[0]
-    assert re.findall(r'<a href="([^"?]+)[^"]*"( aria-current="page")?', nav) == [
+    nav = html.split('<nav id="card-steps"', 1)[1].split("</nav>", 1)[0]
+    assert re.findall(r'<a href="([^"?]+)[^>]*?( aria-current="page")?>', nav) == [
+        ("/planning/f6", ""),
         ("/planning/f6/proposals/adr-20", ' aria-current="page"'),
         ("/planning/f6/proposals/plan", ""),
     ]
@@ -88,6 +89,30 @@ def test_an_adr_proposal_shows_its_points_in_order_with_their_flags(planning, db
     }
     assert 'id="approve-plan"' not in html
     assert '<iframe id="mockup"' not in html
+
+
+def test_a_plans_page_shows_the_threads_strip_with_plan_current(planning, db_path, serve):
+    """F210 D3: a reply listing a plan then a mock-up; the plan's page has the thread's strip,
+    in the same order (D8), Plan current and Conversation linking to the thread, in the tabs'
+    place above the In short plate; no tabs."""
+    plan = {**_REVIEW_PLAN, "tldr": "Seven tickets, the desk first."}
+    _write(db_path, lambda conn: _review(conn, planning, "f85", plan, _REVIEW_MOCKUP))
+    client = serve()
+    html = _review_page(client, "/planning/f85/proposals/plan")
+    nav = html.split('<nav id="card-steps"', 1)[1].split("</nav>", 1)[0]
+    found = re.findall(r'<a href="([^"?]+)[^>]*?( aria-current="page")?>(.*?)</a>', nav, re.S)
+    assert [(link, _text(body), current) for link, current, body in found] == [
+        ("/planning/f85", "Conversation", ""),
+        ("/planning/f85/proposals/mockup", "Mock-up open", ""),
+        ("/planning/f85/proposals/plan", "Plan open · 1 key point", ' aria-current="page"'),
+    ]
+    thread = client.get("/planning/f85").text
+    thread_nav = thread.split('<nav id="card-steps"', 1)[1].split("</nav>", 1)[0]
+    assert re.findall(r'<a href="([^"?]+)', thread_nav) == [link for link, _, _ in found]
+    assert "proposal-tabs" not in html
+    header = html.split('<header class="card-head"', 1)[1].split("</header>", 1)[0]
+    assert 'id="card-steps"' in header
+    assert html.index('id="card-steps"') < html.index('class="in-short"')
 
 
 def test_a_comment_turns_the_primary_button_into_send_back(page, planning, db_path, serve):
@@ -855,10 +880,20 @@ def test_the_proposal_plate_stays_in_place_on_a_phone(page, planning, db_path, s
     _open(page, serve(), "/planning/f6/proposals/adr-20")
     plate = page.locator(".in-short")
     assert plate.inner_text().split() == f"IN SHORT {_TLDR}".split()
-    before = plate.bounding_box()
-    assert before and before["x"] >= 0 and before["x"] + before["width"] <= PHONE["width"]
+
+    def on_the_page() -> list[float]:
+        # where the plate sits on the page, not in the viewport: pressing ▶ under the fold
+        # scrolls the page (F210's strip sits above the plate)
+        box: list[float] = plate.evaluate(
+            "e => { const r = e.getBoundingClientRect();"
+            " return [r.x, r.y + window.scrollY, r.width, r.height]; }"
+        )
+        return box
+
+    before = on_the_page()
+    assert before[0] >= 0 and before[0] + before[2] <= PHONE["width"]
     shown = page.locator(".key-point:visible")
     first = shown.inner_text()
     page.locator(".deck-arrows button").all()[1].click()
     assert shown.count() == 1 and shown.inner_text() != first
-    assert plate.is_visible() and plate.bounding_box() == before
+    assert plate.is_visible() and on_the_page() == before

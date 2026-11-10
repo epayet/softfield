@@ -43,7 +43,13 @@ from factory_dashboard.merges import (
 )
 from factory_dashboard.milestones import _to_html
 from factory_dashboard.overview import Change, open_changes, running_jobs
-from factory_dashboard.planning import _open_proposals, _repo, _waiting_for_lead, desk_trail
+from factory_dashboard.planning import (
+    _open_proposals,
+    _repo,
+    _waiting_for_lead,
+    desk_trail,
+    reading_order,
+)
 from runner import metrics
 from runner.planner import (
     APPROVED,
@@ -99,6 +105,22 @@ class Proposal:
     color: str
     state: str  # F31 D3: open, on its way, approved, rejected or sent back; F100: being revised
     link: str
+    points: int = 0  # its key points (F210 D3)
+
+    @property
+    def step(self) -> str:
+        """Its name in the card's strip of steps (F210 D3)."""
+        return _STEP.get(self.kind, self.kind.capitalize() or "Proposal")
+
+
+_STEP = {
+    "adr": "ADR",
+    "mockup": "Mock-up",
+    "plan": "Plan",
+    "replan": "Replan",
+    "merge": "Merge",
+    "seed": "Seed",
+}
 
 
 def _header(conn: sqlite3.Connection, project_id: int, thread: str) -> tuple[str, str, bool]:
@@ -204,18 +226,19 @@ def _proposals(
     rows: list[sqlite3.Row],
     known: set[str] | None = None,
 ) -> list[Proposal]:
-    """The proposals in the thread's latest lead message that lists some, each with where it
-    stands (F31 D3); a merge whose card has left main is approved."""
+    """The proposals in the thread's latest lead message that lists some, in reading order
+    (F210 D8), each with where it stands (F31 D3); a merge whose card has left main is
+    approved."""
     lead = [r for r in rows if r["author"] == "lead" and _has_proposals(r["proposals"])]
     if not lead:
         return []
     requests = _since(conn, project_id, lead[-1]["at"])
     revising = thread in _waiting_for_lead(conn, project_id)  # F100
+    listed = [p for p in json.loads(lead[-1]["proposals"]) if isinstance(p, dict) and p.get("id")]
     found = []
-    for p in json.loads(lead[-1]["proposals"]):
-        if not isinstance(p, dict) or not p.get("id"):
-            continue
+    for p in reading_order(listed, lambda p: p):
         state = APPROVED if _gone_merge(p, known) else proposal_state(p, thread, requests)
+        points = p.get("key_points")
         found.append(
             Proposal(
                 str(p.get("kind") or ""),
@@ -223,6 +246,7 @@ def _proposals(
                 _KIND_COLOR.get(str(p.get("kind")), "--ink-2"),
                 REVISING if revising and state == OPEN else state,
                 f"/planning/{thread}/proposals/{p['id']}",
+                len(points) if isinstance(points, list) else 0,
             )
         )
     return found

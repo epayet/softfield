@@ -607,24 +607,29 @@ tr.few .gauge { opacity: .35; }
 .thread-page #reply { background: var(--bay); border: 1px solid var(--rule); padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
 .thread-page #progress { font: 12px var(--mono); color: var(--muted); }
 .thread-page #archive { margin-top: 6px; }
-.thread-page #proposals { flex: 1 1 280px; gap: 10px; }
-.thread-page #proposals > p { margin: 0; }
-.thread-page .proposal { background: var(--plate); border: 1px solid var(--rule); border-top: 3px solid var(--c); padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; color: var(--fg); min-height: 44px; box-sizing: border-box; }
-.thread-page .proposal > span { font: 600 11px var(--mono); color: var(--muted); }
-.thread-page .proposal.revising { border-style: dashed; border-color: var(--hazard); border-top-style: solid; border-top-color: var(--c); }  /* F100: being revised */
-.thread-page .proposal.revising .state { color: var(--hazard); }
+/* F210 D3: a card's steps, the same strip on its thread and its proposals' pages; the top
+   stripe is ornament, the current step in hazard, a step that waits (on its way, F100's being
+   revised) dashed */
+.steps { background: var(--bay); border: 1px solid var(--rule); max-width: 100%; box-sizing: border-box; }
+.steps::before { content: ""; display: block; height: 5px; background: repeating-linear-gradient(135deg, var(--hazard) 0 5px, var(--hazard-ink) 5px 10px); }
+.steps h3 { margin: 0; padding: 7px 10px 0; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.steps ol { list-style: none; margin: 0; padding: 6px 10px 10px; display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.steps li { display: contents; }
+.steps a { display: inline-flex; flex-direction: column; justify-content: center; min-height: 44px; padding: 2px 10px; box-sizing: border-box; font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--fg); background: var(--plate); border: 1px solid var(--rule); text-decoration: none; }
+.steps a small { font: 400 10.5px var(--mono); letter-spacing: 0; text-transform: none; color: var(--muted); }
+.steps a.waits { border: 1px dashed var(--hazard); }
+.steps a[aria-current="page"] { background: var(--hazard); color: var(--hazard-ink); border-color: var(--hazard); }
+.steps a[aria-current="page"] small { color: var(--hazard-ink); }
+.steps i { font-style: normal; color: var(--muted); }
+.thread-page #steps-note { margin: -6px 0 0; }
 .proposal-page .revising { margin: 0; padding: 8px 10px; border: 1px dashed var(--hazard); font-size: 13.5px; color: var(--ink-2); }
 .proposal-page .revising b { display: block; font: 600 11px var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--hazard); }
-.thread-page .proposal > b { font-size: 15px; }
 
 /* Proposal page; the header's colour is the proposal's (--c) */
 .proposal-page > .main > a:first-child { font: 600 12px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); min-height: 44px; display: inline-flex; align-items: center; }
 .proposal-page .card-head { gap: 8px; }
 .proposal-page .card-head h1 { margin: 0; font: 700 22px/1.2 var(--display); letter-spacing: .03em; text-transform: uppercase; }
 .proposal-page #merge-words { font: 600 13px var(--mono); color: var(--ink-2); }
-.proposal-page #proposal-tabs { display: flex; flex-wrap: wrap; border: 1px solid var(--rule); align-self: flex-start; }
-.proposal-page #proposal-tabs a { font: 600 12px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 14px; min-height: 44px; display: inline-flex; align-items: center; border-right: 1px solid var(--rule); text-decoration: none; box-sizing: border-box; }
-.proposal-page #proposal-tabs a[aria-current="page"] { color: var(--hazard-ink); background: var(--hazard); }
 .proposal-page .mockup-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px;
   font: 600 13px var(--display); letter-spacing: .06em; text-transform: uppercase; color: var(--accent);
   border: 1px solid var(--rule); background: var(--plate); text-decoration: none; margin-bottom: 8px; }
