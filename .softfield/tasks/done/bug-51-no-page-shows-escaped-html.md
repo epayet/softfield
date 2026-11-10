@@ -27,3 +27,12 @@ Checked against main on 2026-11-09 (F231): no test in `tests/factory_dashboard/t
 - the test fails when a page prints escaped markup, and passes on today's pages
 - the listed `tests:` pass
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1724
+gate_failures: []
+tokens: 793905
+```
