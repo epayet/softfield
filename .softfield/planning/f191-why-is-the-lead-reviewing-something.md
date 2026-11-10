@@ -157,3 +157,55 @@ The planning thread behind F191's plan, oldest first, as it was when the owner a
 >
 > Proposals:
 > - F191: a Claude limit never stops the factory, and the fast lane really goes first (plan)
+
+## The lead, 2026-11-10 17:45
+
+> Merged F238 here: The owner: during a milestone review, the runner should still apply other requests, so planning replies and approvals don't wait. Instead, F9's review (not in the fast lane) ran its fix tickets first. What the lead found (2026-11-10): round 1 ran from 14:24 to 14:51. Then the review's own queue ran f9-35 (14:51 to 15:20) and f9-36 (15:20 to 17:43, two attempts, a direction and a last attempt on the local model). Softfield's requests from 15:28 to 16:42 (a plant, the approvals of F211 and F236, a reorder, two removals) were applied only at 17:30. coaster-ranker's requests (accept ADR 1 and approve M1's plan at 14:31, a plant at 16:37) were still waiting at 17:45, because a review runs inline and every other project waits for it. Still open: the lead proposes to rewrite f191-05 so that, under softfield run, a round's fix tickets run in the main queue, behind every project's queued jobs and requests and ahead of other tickets, with no checkpoint before the next round. A request sent during a long ticket still waits for that ticket to end, as before.
+
+## The owner, 2026-11-10 17:45
+
+> From F238, merged here:
+> During a milestone review, the runner applies other jobs requests so that planning response, and approvals don't wait. Currently, a non fast lane milestone review triggered a fix instead of picking up my planning approvals and questions
+
+## The lead, 2026-11-10 17:47
+
+> I've rewritten `f191-05` as a replan. With it, a review hands its fix tickets back to the main queue after each round, so your requests and planning replies no longer wait for them. Please pause the factory before approving it.
+>
+> 1. **Why your approvals waited during F9's review**: Nothing was limited this time. F9, Line polish, had its review finish round 1 at 14:51 and then run its own fix tickets inside the review, f9-35 and f9-36, until 17:43. Your requests are only taken between jobs in the main queue, so Softfield's waited until 17:30. A review also holds every other project until it ends, so coaster-ranker's acceptance and approval from 14:31 were still waiting at 17:45.
+>    Action: Replan of f191-05 (point 2).
+> 2. **The change: a review hands its fixes back**: Under `softfield run`, after a round the review stops and goes back to the queue, unless that round was its last. Your requests and planning replies, and every project's queued jobs, then go first. The card's fix tickets come next among tickets, after the fast lane, so the review still gets its fixes promptly. Once they're done, the review comes due again and reads them in its next round. Their merges skip the checkpoint because that round reads them. This replaces the narrower version of f191-05 you approved (which only covered a fix stopped by a Claude limit). Since nothing runs in place after a round, the limit case is covered too.
+>    Action: Approve the replan below.
+> 3. **What it doesn't fix: the round itself**: A review round still runs while everything else waits: about 30 minutes on Claude (F9's took 27). A request sent during a round still waits for the round to end, and other projects too, just as a request sent during a long ticket waits for that ticket. Making a round itself not block other projects is a bigger change. I'd wait to see whether 30 minutes still bothers you once the fixes are out of the way.
+>    Action: Nothing for now. If it still bothers you, plant it and I'll plan it.
+> 4. **Fixes go ahead of the board's order**: A card's fix tickets go before other cards' tickets, even ones higher on the board. That's what happens today, since the review runs them straight away. Making them wait their card's turn would leave a review half done for days, with its next round waiting. The fast lane still goes before them.
+>    Action: Nothing: it's in the replan.
+> 5. **Pause the factory before you approve**: f191-04 is first in line and f191-05 comes straight after it. If the line reaches f191-05 before you approve, it builds the old, narrower version.
+>    Action: Press pause in the top bar now. Approving the replan lifts the pause.
+>
+> Proposals:
+> - F191: a review hands its fixes to the main queue, so your requests don't wait (replan)
+
+## The lead, 2026-11-10 17:48
+
+> Merged F240 here: Why is it replying to planning thread lower on project…
+
+## The owner, 2026-11-10 17:48
+
+> From F240, merged here:
+> Why is it replying to planning thread lower on project list? There are seeds and approvals pending on coaster ranker but the lead is currently replying to softfield thread
+
+## The lead, 2026-11-10 17:48
+
+> This answers your F240 question on this thread and updates the pending replan of `f191-05` to cover it. The lead is answering Softfield's threads from inside F9's review, so coaster-ranker still waits.
+>
+> 1. **Why Softfield's threads got answered before coaster-ranker**: F9, Line polish, has had its review open since 14:24. Between rounds the review runs its own project's queue: F9's fixes, then Softfield's other queued jobs, planning replies included. That's why the lead answered F238, F191 and F240, all from inside F9's review. The runner only goes back to your project order between jobs in its main queue, and it won't until the review ends. So coaster-ranker, first in that order, still has three requests waiting: accepting ADR 1 and approving M1's plan (both 14:31), and your plant (16:37).
+>    Action: The replan below fixes it (point 2). For today, see point 3.
+> 2. **The replan now covers this too**: After each round the review goes back to the main queue. There, your project order decides: coaster-ranker's requests and replies go first, then Softfield's, then F9's fixes. I added a test of exactly this case to f191-05: two projects, the reviewed one second in your order.
+>    Action: Approve the replan below. It's the same one as before, with this test added.
+> 3. **Today: restart the runner to free coaster-ranker**: F9's review still has a checkpoint and round 2 to run, then probably more fixes, so coaster-ranker could wait hours more. Your pause won't help, because planning jobs still run under a pause. Restarting the runner frees it: F9's review keeps its rounds and starts again from round 2 once it's due. A fresh start goes through your project order, so coaster-ranker's ADR, plan and plant come first. The cost is that F9's checkpoint and round 2 start again later.
+>    Action: Restart the runner once this reply shows. If you'd rather not, wait for F9's review to end. Either way, approve the replan.
+> 4. **Pause before you approve**: f191-04 is first in line and f191-05 comes straight after it. If the line reaches f191-05 before you approve, it builds the old version.
+>    Action: Press pause in the top bar, then approve. Approving lifts the pause.
+>
+> Proposals:
+> - F191: a review hands its fixes to the main queue, so your requests don't wait (replan)

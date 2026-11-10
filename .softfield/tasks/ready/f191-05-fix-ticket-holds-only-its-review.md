@@ -2,30 +2,34 @@
 id: f191-05-fix-ticket-holds-only-its-review
 milestone: f191-why-is-the-lead-reviewing-something
 agent: lead
-difficulty: 5
+difficulty: 6
 depends_on: [f191-04-limit-in-a-round-parks-the-review]
 files:
   - runner/loop.py
   - runner/milestone.py
   - tests/runner/test_milestone.py
+  - tests/runner/test_loop.py
 tests:
   - tests/runner/test_milestone.py
+  - tests/runner/test_loop.py
 ---
 
 ### Goal
-Under `softfield run`, the queue a review runs after a round never sleeps for a Claude limit: a job Claude can't take holds that review only, and the factory goes on.
+Under `softfield run`, a review hands its round's fix tickets to the main queue instead of running them itself, so the owner's requests, the planner's replies and the other projects never wait for a review's fixes, and nothing sleeps after a round.
 
 ### Context
-Read cause 4 and D5 in `.softfield/cards/f191-why-is-the-lead-reviewing-something.md`.
-- `runner/milestone.py`: in `review_milestone`, `work_queue(s, milestone=milestone)` runs after a round, then a stop `reason` ends the loop, then the exit for a fix the week holds (`_fix_held_by_the_week`, F219 D3: the row is finished, PARKED returns, no stop is recorded). Extend that exit, don't build a second one. `due_reviews` and `_reviewed` say why no stop may be recorded.
-- `runner/loop.py`: `work_queue` with no job calls `_wait_for_reset`, which sleeps to the first reset among parked tickets and every parked row it is given, a planner's or a checkpoint's as well as a fix ticket's. `wait=False` skips that sleep, but also `_hold_for_the_owner`, so with it alone the next round would start under a pause: the pause must still hold.
-- Tests to follow in `tests/runner/test_milestone.py`: `test_a_review_waits_for_a_lead_fix_the_week_holds` for the exit, `test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes` for the way back.
+Read cause 6 and D7 in `.softfield/cards/f191-why-is-the-lead-reviewing-something.md` (D7 replaces D5).
+- `runner/milestone.py`: in `review_milestone`, after a round, `work_queue(s, milestone=milestone)` runs the card's fixes, then a stop `reason` ends the loop, then `_fix_held_by_the_week`'s exit (F219 D3: row finished, PARKED, no stop recorded). With `park`, drop the inner queue and take that exit whenever the card has tickets left in `ready/`. Without `park` (`runner milestone`), keep today's loop. `due_reviews` and `_reviewed` say why no stop may be recorded.
+- `runner/loop.py`: `choose_ticket` (the lane's tickets first: the card's tickets go right after them), `_drop_covered_merges` (ADR 38: which merges skip the checkpoint), `dry_run_plan` (it calls `choose_ticket` too). `under_review(state)` is new, as D7 names it.
+- Tests to follow: `test_a_review_waits_for_a_lead_fix_the_week_holds` and `test_a_review_parked_between_rounds_resumes_at_its_round_on_its_own_fixes` in `tests/runner/test_milestone.py`; `_turns` and the `project_round` tests in `tests/runner/test_loop.py` for the round.
+- On 2026-11-10 F9's review kept the owner's requests waiting from 15:28 to 17:30, and coaster-ranker's from 14:31 past 17:45, while it ran f9-35 and f9-36 itself.
 
 ### Done when
-- A round files a lead fix ticket and a limit parks it: the review returns PARKED with no stop in `state.review_stop`, its row is done, and a developer ticket of another card runs next.
-- Once the fix ticket is done, the review comes due again and goes on from the next round.
-- The same on a last round (a stop `reason`): the stop is recorded as today, the run goes on and the fix runs in the main queue after the reset.
-- A round with no fix ticket, while a planner's or a checkpoint's row is parked until a reset: nothing sleeps; the next round parks through `park_review` if Claude is limited.
-- A fix ticket that runs and merges goes on as today, and the review ends on its stop.
-- The owner's pause during the inner queue holds it, as today: no round starts under a pause.
-- `runner milestone` still waits for the reset in place.
+- Under `softfield run`, a round (not the last) that files a fix ticket returns PARKED with its row done and no stop in `state.review_stop`. A planner job queued meanwhile, and another project's queued job, run before the fix.
+- With two projects, the reviewed one second in the owner's order: after the round, the first project's requests are applied and its planner job runs before the reviewed project's own planner job (`project_round`'s order, not the review's).
+- The fix then runs before every other ticket but the fast lane's and the parked ones whose reset has passed, the dry run naming it next too. The week's pace line and Claude's limits hold it as they hold any ticket.
+- Its merge doesn't count toward a checkpoint.
+- Once the card's tickets are done, the review comes due again and goes on from the next round, reading the fix.
+- A last round (a stop `reason`) records its stop and returns, and its fixes run in the main queue in the board's order and count toward a checkpoint, as ADR 38 has it.
+- After a round nothing sleeps, whatever is parked or limited.
+- `runner milestone` runs its review's fixes inside the review, as today.
