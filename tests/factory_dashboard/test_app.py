@@ -2349,12 +2349,14 @@ def test_the_status_dot_wears_the_floors_colours_from_the_tokens(serve):
     assert "background: var(--muted)" in rule(".factory-status .dot")
     assert "var(--opus)" in rule(".factory-status .dot.waiting, .factory-status .dot.stopped")
     assert "var(--muted)" in rule(".factory-status .dot.stopped")
-    # only a running job breathes, and never under reduced motion
+    # only a running job breathes, and never under reduced motion: the dot, and the lamp on the
+    # board's card at work (F209 D2)
     breathing = re.findall(
         r"@media \(prefers-reduced-motion: no-preference\) \{\s*([^{]*)\{ animation: breathe", css
     )
     assert breathing == [
-        ".factory-status .dot.lead, .factory-status .dot.developer, .factory-status .dot.runner "
+        ".factory-status .dot.lead, .factory-status .dot.developer, .factory-status .dot.runner ",
+        ".at-work-head .lamp.lit ",
     ]
     assert "rgba" not in rule(".factory-status .dot.lead") + rule(".factory-status .dot.developer")
     # what the owner asked shows on its way: a dashed orange edge (lead.md, 2026-10-07)
@@ -3662,6 +3664,9 @@ def test_no_border_radius_except_top_bar_status_dot():
             continue
         # The gauge mark dot is allowed (it's a light, not an ornament)
         if ".gauge .mark::after" in selector and "border-radius" in body:
+            continue
+        # The board's card at work has the dot's lamp (F209 D2)
+        if selector.strip() == ".at-work-head .lamp":
             continue
         # The theme switch plate and knob are allowed (it's a switch, not a panel)
         if ".theme-switch .plate" in selector and "border-radius" in body:

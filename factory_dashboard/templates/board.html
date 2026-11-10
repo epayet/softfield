@@ -38,6 +38,10 @@
 {% macro card_href(c) %}{{ '/tickets/' if c.bug else '/milestones/' }}{{ c.full_key | urlencode }}{{ q }}{% if c.stage == "ripe" and not c.bug %}#review{% endif %}{% endmacro %}
 {% macro card_link(c) %}
 <a class="card {{ c.area }}{% if c.bug %} bug{% endif %}{% if c.started %} started{% endif %}{% if c.on_its_way %} on-its-way{% endif %}" href="{{ card_href(c) }}">
+  {% set w = c.at_work %}
+  {% if w %}
+  <span class="at-work-head">{% if w.waiting_clock %}Waits for Claude until {{ w.waiting_clock }}{% else %}<i class="lamp lit"></i>Working now · {{ "a developer" if w.who == "developer" else "the lead" }}{% endif %}</span>
+  {% endif %}
   <span class="card-meta">{% if c.place %}<b>#{{ c.place }}</b> {% endif %}<span>{{ c.key }}</span> <span>{% if c.bug %}bug{% if c.area %} · {% endif %}{% endif %}{{ c.area }}</span>{% if c.started %} <span class="card-growing">{{ icon("growing", 14) }}growing</span>{% endif %}</span>
   <span class="card-title">{{ c.title or c.key }}</span>
   {% if c.total and c.stage != "harvested" %}
@@ -47,8 +51,8 @@
   {% if c.note %}<span class="{{ 'card-action' if c.bug and c.stage == 'seed' else 'card-note' }}">{{ c.note }}</span>{% endif %}
   {% if c.lane_asked == "on" %}<span class="card-reserve on-its-way"><i></i>fast lane · on its way · at the runner's next pick</span>{% elif c.lane_asked == "off" %}<span class="card-reserve on-its-way leaving"><i></i>leaving the fast lane · on its way</span>{% elif c.reserve %}<span class="card-reserve"><i></i>fast lane</span>{% endif %}
   {% if c.review_step %}<span class="card-review"><b>{{ c.review_step.label }}</b>{{ c.review_step.text }}</span>{% endif %}
-  {% if c.running %}
-  <span class="card-now"><b>Now:</b> {{ c.running.ticket }}{% if c.running.goal %} · {{ c.running.goal }}{% endif %} · {{ c.running.agent }}, attempt {{ c.running.attempt }}</span>
+  {% if w %}
+  <span class="at-work-doing">{% if w.ticket %}<code>{{ w.ticket }}</code>{% if w.goal %} · {{ w.goal }}{% endif %}{% else %}{{ w.role }}{% endif %} · {{ w.agent }}, attempt {{ w.attempt }}</span>
   {% endif %}
   {% if c.stage == "ripe" and not c.bug %}<span class="card-action">Read the review and sign off ›</span>{% endif %}
   {% if c.on_its_way %}<span class="card-way">on its way · was #{{ c.was }} · at the runner's next pick</span>{% endif %}
@@ -121,7 +125,7 @@
       </div>
       <div class="cards">
         {% for c in cards %}
-        <div class="slot{% if c.developers %} dev-{{ c.developers.look }}{% endif %}" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}{% if stage in ("seed", "sprouting", "planted") %}{{ card_actions(c) }}{% endif %}</div>
+        <div class="slot{% if c.developers %} dev-{{ c.developers.look }}{% endif %}{% if c.at_work %} at-work {{ c.at_work.who }}{% if c.at_work.waiting_clock %} held{% endif %}{% endif %}" data-key="{{ c.key | lower }}" data-stage="{{ stage }}">{{ card_link(c) }}{% if stage in ("seed", "sprouting", "planted") %}{{ card_actions(c) }}{% endif %}</div>
         {% else %}
         <div class="empty">{% include "_partials/idle_crate.svg" %}<span>Nothing here.</span></div>
         {% endfor %}
@@ -141,6 +145,8 @@
       <span><i class="swatch product"></i>product (for Mum)</span>
       <span><i class="swatch bug"></i>bug (striped edge, and says "bug")</span>
       <span><i class="swatch started"></i>growing (orange edge: a ticket has started)</span>
+      <span><i class="swatch at-work-lead"></i>working now: the lead</span>
+      <span><i class="swatch at-work-developer"></i>working now: a developer</span>
     </p>
     <a href="/{{ q }}">Planted cards feed the factory floor ›</a>
     {# the list has no tab (f5-17): it keeps each card's priority and the trend charts #}

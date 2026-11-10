@@ -202,13 +202,26 @@ def test_a_ready_card_with_a_ticket_merged_is_planted_started_and_shows_what_run
         False,
         1,
     )
-    assert growing.running is not None
+    assert growing.at_work is not None
     assert (
-        growing.running.ticket,
-        growing.running.goal,
-        growing.running.agent,
-        growing.running.attempt,
-    ) == ("f24-02-working", "Goal of f24-02-working.", LOCAL, 2)
+        growing.at_work.ticket,
+        growing.at_work.goal,
+        growing.at_work.agent,
+        growing.at_work.attempt,
+        growing.at_work.who,
+        growing.at_work.role,
+        growing.at_work.elapsed,
+        growing.at_work.waiting_clock,
+    ) == (
+        "f24-02-working",
+        "Goal of f24-02-working.",
+        LOCAL,
+        2,
+        "developer",
+        "developer",
+        timedelta(minutes=12),
+        None,
+    )
 
 
 def test_a_job_whose_run_stopped_beating_is_not_what_runs_now(board_db):
@@ -219,13 +232,13 @@ def test_a_job_whose_run_stopped_beating_is_not_what_runs_now(board_db):
     )
     growing = card(read(board_db), "F24")
     assert (growing.stage, growing.started) == ("planted", True)
-    assert growing.running is None
+    assert growing.at_work is None
 
 
 def test_a_planted_card_has_tickets_all_still_ready(board_db):
     planted = card(read(board_db), "F23")
     assert (planted.stage, planted.started) == ("planted", False)
-    assert (planted.done, planted.total, planted.running) == (0, 2, None)
+    assert (planted.done, planted.total, planted.at_work) == (0, 2, None)
 
 
 def test_every_ticket_done_is_planted_until_the_sheet_is_stored_then_ripe_then_harvested(
@@ -367,8 +380,155 @@ def test_a_ready_bug_with_a_running_job_is_planted_started_and_shows_it(board_db
     write(board_db, change)
     bug = card(read(board_db), "bug-02-stale")
     assert (bug.stage, bug.started) == ("planted", True)
-    assert bug.running is not None
-    assert (bug.running.ticket, bug.running.attempt) == ("bug-02-stale", 1)
+    assert bug.at_work is not None
+    assert (bug.at_work.ticket, bug.at_work.attempt, bug.at_work.who) == (
+        "bug-02-stale",
+        1,
+        "developer",
+    )
+
+
+# --- the card at work (F209 D1, D2) ------------------------------------------------------------
+
+
+def _live_job(
+    role: str,
+    ticket: str | None = None,
+    milestone: str | None = None,
+    run_dir: str = "20261002-113500",  # ``write_board``'s live run
+    agent: str = OPUS,
+) -> Callable[[sqlite3.Connection, int], None]:
+    """A running job, on a ticket or, with none, on a milestone (a review, a planner)."""
+
+    def change(conn: sqlite3.Connection, p: int) -> None:
+        run = metrics.upsert_run(
+            conn, p, run_dir, heartbeat=(NOW - timedelta(seconds=20)).isoformat()
+        )
+        ticket_id = milestone_id = None
+        if ticket is not None:
+            ticket_id, milestone_id = conn.execute(
+                "SELECT id, milestone_id FROM tickets WHERE ticket = ?", (ticket,)
+            ).fetchone()
+        if milestone is not None:
+            milestone_id = metrics.upsert_milestone(conn, p, milestone)
+        metrics.start_job(
+            conn,
+            run,
+            ticket_id=ticket_id,
+            milestone_id=milestone_id,
+            role=role,
+            agent=agent,
+            attempt=1,
+            started=(NOW - timedelta(minutes=3)).isoformat(),
+        )
+
+    return change
+
+
+def test_a_lead_tickets_live_job_lights_its_card_orange_on_the_page(board_db, board_client):
+    write(board_db, _live_job("lead-ticket", ticket="f23-01-first"))
+    f23 = card(read(board_db), "F23")
+    assert f23.at_work is not None
+    assert (f23.at_work.ticket, f23.at_work.who, f23.at_work.role) == (
+        "f23-01-first",
+        "lead",
+        "lead-ticket",
+    )
+    html = _page(board_client)
+    classes, _ = _slot(html, "/milestones/f23-planted")
+    assert {"at-work", "lead"} <= set(classes)
+    assert {"developer", "held"}.isdisjoint(classes)
+    _, words, raw = _card(html, "/milestones/f23-planted")
+    assert '<i class="lamp lit"></i>Working now · the lead</span>' in raw
+    assert f"f23-01-first · Goal of f23-01-first. · {OPUS}, attempt 1" in words
+    # the "Now:" line is gone, and a card with no live job is not lit
+    assert "card-now" not in html
+    classes, _ = _slot(html, "/milestones/f21-parallel")
+    assert "at-work" not in classes
+
+
+def test_a_developers_live_job_lights_its_card_blue_a_bugs_too(board_db, board_client):
+    html = _page(board_client)
+    classes, _ = _slot(html, "/milestones/f24-growing")
+    assert {"at-work", "developer"} <= set(classes)
+    assert "lead" not in classes
+    assert "Working now · a developer" in _card(html, "/milestones/f24-growing")[1]
+    write(board_db, _live_job("developer", ticket="bug-03-working", agent=LOCAL))
+    html = _page(board_client)
+    classes, _ = _slot(html, "/tickets/bug-03-working")
+    assert {"at-work", "developer"} <= set(classes)
+    _, words, _ = _card(html, "/tickets/bug-03-working")
+    assert words.startswith("Working now · a developer")
+    assert f"bug-03-working · Goal of bug-03-working. · {LOCAL}, attempt 1" in words
+
+
+def test_a_review_and_a_planner_light_the_card_their_milestone_names(board_db, board_client):
+    """D1: a job with no ticket lights its milestone's card, the planner's on a Sprouting
+    card. F25's ticket jobs ended: only the review lights it."""
+    write(board_db, _live_job("review", milestone="f25-unreviewed"))
+    write(board_db, _live_job("planner", milestone="f22-research", run_dir="20261002-120000"))
+    found = read(board_db)
+    review, planner = card(found, "F25"), card(found, "F22")
+    assert (review.stage, planner.stage) == ("planted", "sprouting")
+    assert review.at_work is not None and planner.at_work is not None
+    assert (review.at_work.ticket, review.at_work.role, review.at_work.who) == (
+        None,
+        "review",
+        "lead",
+    )
+    assert (planner.at_work.ticket, planner.at_work.role, planner.at_work.who) == (
+        None,
+        "planner",
+        "lead",
+    )
+    # no other card is lit by them: only F24's developer and these two
+    lit = {c.key for cards in found.stages.values() for c in cards if c.at_work}
+    assert lit == {"F24", "F25", "F22"}
+    html = _page(board_client)
+    classes, _ = _slot(html, "/milestones/f22-research")
+    assert {"at-work", "lead"} <= set(classes)
+    assert f"planner · {OPUS}, attempt 1" in _card(html, "/milestones/f22-research")[1]
+
+
+def test_a_job_waiting_for_claude_says_until_when_and_is_not_lit(paris, board_db, board_client):
+    def wait(conn: sqlite3.Connection, p: int) -> None:
+        run = metrics.upsert_run(conn, p, "20261002-113500")
+        metrics.update_run_activity(conn, run, "waiting for Claude", "2026-10-02T21:40:00+00:00")
+
+    write(board_db, wait)
+    growing = card(read(board_db), "F24")
+    assert growing.at_work is not None
+    assert growing.at_work.waiting_clock == "23:40"
+    html = _page(board_client)
+    classes, _ = _slot(html, "/milestones/f24-growing")
+    assert {"at-work", "developer", "held"} <= set(classes)
+    _, words, raw = _card(html, "/milestones/f24-growing")
+    assert words.startswith("Waits for Claude until 23:40")
+    assert "Working now" not in words
+    assert "lamp" not in raw
+
+
+def test_a_lit_card_keeps_its_place_and_its_growing_tag(board_db, board_client):
+    write(board_db, _live_job("lead-ticket", ticket="f23-01-first"))
+    write(
+        board_db,
+        _live_job("developer", ticket="bug-02-stale", agent=LOCAL, run_dir="20261002-120000"),
+    )
+    found = read(board_db)
+    assert keys(found, "planted")[:3] == ["F24", "F23", "bug-02-stale"]
+    assert [(c.key, c.place) for c in found.stages["planted"][:3]] == [
+        ("F24", 1),
+        ("F23", 2),
+        ("bug-02-stale", 3),
+    ]
+    _, words, _ = _card(_page(board_client), "/milestones/f24-growing")
+    assert "#1 F24 factory growing" in words
+
+
+def test_the_legend_names_both_colours_of_work(board_client):
+    html = _page(board_client)
+    assert '<i class="swatch at-work-lead"></i>working now: the lead' in html
+    assert '<i class="swatch at-work-developer"></i>working now: a developer' in html
 
 
 def test_cards_within_a_stage_come_in_priority_order_then_by_key(board_db):
@@ -977,7 +1137,9 @@ def test_a_started_card_shows_its_tickets_and_what_runs_now(board_client):
     html = _page(board_client)
     _, words, _ = _card(html, "/milestones/f24-growing")
     assert "1 of 3 tickets · 1 set aside" in words
-    assert f"Now: f24-02-working · Goal of f24-02-working. · {LOCAL}, attempt 2" in words
+    assert words.startswith("Working now · a developer #1 F24")
+    assert f"f24-02-working · Goal of f24-02-working. · {LOCAL}, attempt 2" in words
+    assert "Now:" not in words
     planted = _columns(html)["planted"]
     assert re.search(r'<span class="meter"><span style="width: 33%">', planted)
     # a ripe card carries the sign-off text
@@ -1353,7 +1515,8 @@ def test_dragging_a_card_by_its_grip_moves_it_and_back_again(page, board_db):
     assert "moved · was #4 · not sent yet" in _words(page, "f27")
     # the cards it passed are not moved, but their places change
     assert page.locator(".card.moved").count() == 1
-    assert _words(page, "f24").startswith("#2 F24")
+    # F24's live job heads its card (F209 D1): its place comes after "Working now"
+    assert _words(page, "f24").startswith("WORKING NOW · A DEVELOPER #2 F24")
     assert _bar(page) == "1 card moved. Nothing is sent yet."
     assert page.get_by_role("button", name="Send new order").is_visible()
     assert page.get_by_role("button", name="Cancel").is_visible()
@@ -2425,6 +2588,58 @@ def test_sending_from_the_view_posts_the_same_reorder(page, board_db):
     line.remove("f27")
     line.insert(line.index("f23"), "f27")
     assert [(r["kind"], json.loads(r["value"])) for r in rows] == [("reorder", line)]
+
+
+def test_in_the_developers_view_a_card_at_work_keeps_its_frame_at_full_strength(page, db_path):
+    """F209 D2: a developer at work on a card of each look (F70 can, F71 waits, F72 none: its
+    one ticket is a lead's, the job a developer's) is framed and headed in blue, unfaded; the
+    lead at work on F73 (none) keeps its orange frame. Colours are read off the legend's
+    swatches, in whichever theme the page opens."""
+    _three_looks(db_path)
+    write(
+        db_path,
+        _tickets(
+            ("f71-a", "f71-04", "developer", "running", ()),
+            ("f73-a", "f73-01", "lead", "ready", ()),
+        ),
+    )
+    for ticket, role in (
+        ("f70-01", "developer"),
+        ("f71-04", "developer"),
+        ("f72-01", "developer"),
+        ("f73-01", "lead-ticket"),
+    ):
+        write(db_path, _live_job(role, ticket=ticket))
+    page.set_viewport_size(PHONE)
+    open_page(page, _client(db_path), "/board?view=developers")
+    colour = {
+        who: page.locator(f".swatch.at-work-{who}").evaluate(
+            "el => getComputedStyle(el).backgroundColor"
+        )
+        for who in ("lead", "developer")
+    }
+    assert colour["lead"] != colour["developer"]
+    for key, look, who in (
+        ("f70", "dev-can", "developer"),
+        ("f71", "dev-waits", "developer"),
+        ("f72", "dev-none", "developer"),
+        ("f73", "dev-none", "lead"),
+    ):
+        slot = page.locator(f".slot[data-key={key}]")
+        assert slot.evaluate("el => [...el.classList]")[:2] == ["slot", look], key
+        assert slot.evaluate("el => getComputedStyle(el).opacity") == "1", key
+        assert colour[who] in slot.evaluate("el => getComputedStyle(el).boxShadow"), key
+        card_el = slot.locator(".card")
+        assert card_el.evaluate("el => getComputedStyle(el).borderTopColor") == colour[who], key
+        head = slot.locator(".at-work-head")
+        assert head.evaluate("el => getComputedStyle(el).backgroundColor") == colour[who], key
+        assert head.evaluate("el => getComputedStyle(el).opacity") == "1", key
+    # a faded card with nothing at work still fades, so the strength above is the work's
+    write(db_path, _tickets(("f74-a", "f74-01", "lead", "ready", ())))
+    open_page(page, _client(db_path), "/board?view=developers")
+    assert (
+        page.locator(".slot[data-key=f74]").evaluate("el => getComputedStyle(el).opacity") == "0.32"
+    )
 
 
 # --- a card with an open fast lane request (f192-01) -------------------------------------------

@@ -868,7 +868,7 @@ main:has(.board) { max-width: 1360px; }
 .card-title { font: 600 14px/1.25 var(--body); }
 .card .meter { display: block; height: 8px; margin-bottom: 0; }
 .card-count { font: 12px var(--mono); color: var(--muted); }
-.card-note, .card-now { font-size: 12.5px; line-height: 1.35; }
+.card-note { font-size: 12.5px; line-height: 1.35; }
 .card-note { color: var(--muted); }
 /* A card marked to use Claude's reserve (F172 D6): the lever's stripe and its words, no status colour */
 .card-reserve { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 0;
@@ -881,7 +881,6 @@ main:has(.board) { max-width: 1360px; }
 .card-review { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; line-height: 1.35;
   padding: 5px 8px; background: var(--floor); border-left: 2px solid var(--hazard); color: var(--ink-2); }
 .card-review b { font: 600 11px var(--display); letter-spacing: .08em; text-transform: uppercase; color: var(--fg); }
-.card-now b { color: var(--serious-ink); font-weight: 600; }
 .card code { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px;
   font-size: 12px; border-radius: 0; }
 .card-action { align-self: flex-start; background: var(--floor); color: var(--warn-ink); padding: 4px 6px;
@@ -940,6 +939,37 @@ main:has(.board) { max-width: 1360px; }
 .dev-can .dev-tag .pip, .dev-legend .can { background: var(--dev); }
 .dev-waits .dev-tag .pip, .dev-legend .waits { box-shadow: inset 0 0 0 2px var(--dev); }
 .dev-none .dev-tag .pip, .dev-legend .none { background: var(--opus); }
+/* The card at work (F209 D1, D2, after .softfield/cards/f209-mockup/working-now.html): a live
+   job's card has a thick frame, a filled "Working now" head and a wash in the colour of who
+   works, as the top bar's dot: orange the lead, blue a developer. A job waiting for Claude's
+   limit keeps the frame only. #field beats the started and bug cards' own edges; in the
+   developer's view the card stays at full strength, whatever it holds for developers */
+.slot.at-work.lead { --who: var(--opus); } .slot.at-work.developer { --who: var(--dev); }
+.slot.at-work { --wash: color-mix(in srgb, var(--who) 12%, var(--plate)); position: relative; z-index: 1; }
+.slot.at-work:not(.drop-before, .drop-after, .dragging) {
+  box-shadow: 0 0 0 2px var(--who), 0 0 18px color-mix(in srgb, var(--who) 40%, transparent); }
+#field .slot.at-work .card { border-color: var(--who); border-left-color: var(--c, var(--muted));
+  background: var(--wash); }
+#field .slot.at-work .card.bug { border-left: 0;
+  background: linear-gradient(var(--wash), var(--wash)) right / calc(100% - 4px) 100% no-repeat,
+    repeating-linear-gradient(-45deg, var(--fail) 0 4px, var(--plate) 4px 8px); }
+.at-work-head { display: flex; align-items: center; gap: 8px; margin: -9px -10px 2px; padding: 5px 10px;
+  background: var(--who); color: var(--hazard-ink); font: 700 12px var(--display); letter-spacing: .1em;
+  text-transform: uppercase; }
+.card.bug .at-work-head { margin-left: -14px; }
+.at-work-head .lamp { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--hazard-ink);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--hazard-ink) 25%, transparent); }
+@media (prefers-reduced-motion: no-preference) { .at-work-head .lamp.lit { animation: breathe 2.6s ease-in-out infinite; } }
+.at-work-doing { font-size: 13px; line-height: 1.35; }
+.card .at-work-doing code { font: 600 12px var(--mono); padding: 1px 4px; }
+.slot.at-work.held:not(.drop-before, .drop-after, .dragging) { box-shadow: 0 0 0 2px var(--who); }
+#field .slot.at-work.held .card { background: var(--plate); }
+#field .slot.at-work.held .card.bug { background: linear-gradient(var(--plate), var(--plate)) right / calc(100% - 4px) 100% no-repeat,
+    repeating-linear-gradient(-45deg, var(--fail) 0 4px, var(--plate) 4px 8px); }
+.slot.held .at-work-head { background: none; color: var(--who); }
+#field.dev-view .slot.at-work:not(.dragging) { opacity: 1; }
+#field.dev-view .slot.at-work .card { box-shadow: none; border-right-style: solid; }
+.swatch.at-work-lead { background: var(--opus); } .swatch.at-work-developer { background: var(--dev); }
 .field > .dev-legend { margin: 0; padding: 8px 14px; border-top: 1px solid var(--rule); }
 body.has-order-bar main { padding-bottom: 120px; }
 .order-bar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; display: flex; flex-wrap: wrap;

@@ -26,7 +26,7 @@ import sqlite3
 import statistics
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -34,7 +34,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
 from factory_dashboard.app import Db, Now, Project, render
-from factory_dashboard.line import _LONG_AGO, _natural, _when
+from factory_dashboard.line import _LONG_AGO, DEVELOPER_ROLES, _natural, _when
 from factory_dashboard.overview import Running, running_jobs
 from factory_dashboard.queries import depends_on, local, ticket_priority
 from runner import metrics
@@ -68,12 +68,17 @@ _OFF = ("later", metrics.REMOVED)  # tickets that count for no stage
 
 @dataclass(frozen=True)
 class Work:
-    """What runs now on a planted card."""
+    """A live job on a card (F209 D1): a ticket's on its card, a review's or a planner's on
+    the card its milestone names."""
 
-    ticket: str
+    ticket: str | None  # None for a job on the milestone itself (a review, a planner)
     goal: str | None
     agent: str
     attempt: int
+    who: str = "lead"  # ``lead`` or ``developer``: the top bar's dot's rule (``factory_status``)
+    role: str = ""
+    elapsed: timedelta = timedelta(0)
+    waiting_clock: str | None = None  # HH:MM while its run waits for Claude's limit: not lit
 
 
 @dataclass(frozen=True)
@@ -116,7 +121,7 @@ class Card:
     set_aside: int = 0
     note: str = ""
     started: bool = False  # a planted card with a ticket started: it says "growing" (F154 D3)
-    running: Work | None = None  # on a planted card, from a live job
+    at_work: Work | None = None  # its oldest live job, in any stage (F209 D1)
     review_step: ReviewStep | None = None  # on a started card with all tickets done
     place: int = 0  # its place in its stage, from 1; 0 in a stage not ``PLACED``
     on_its_way: bool = False  # an open reorder puts it out of place
@@ -529,12 +534,23 @@ def _cards(
             at_work.add(j["ticket_id"])
         if j["ended"]:
             ended[j["ticket_id"]] = max(_when(j["ended"]), ended.get(j["ticket_id"], _LONG_AGO))
-    live: dict[str, Work] = {}  # by ticket, its oldest live job
-    all_jobs: list[Running] = []  # every live job, once for the whole board
+    live: list[tuple[Running, Work]] = []  # every live job and its work, oldest first
+    all_jobs: list[Running] = []  # every running job, once for the whole board
     for job in running_jobs(conn, project, now):
         all_jobs.append(job)
-        if job.live and job.ticket:
-            live.setdefault(job.ticket, Work(job.ticket, job.title, job.agent, job.attempt))
+        if job.live:
+            who = "developer" if job.role in DEVELOPER_ROLES else "lead"
+            work = Work(
+                job.ticket,
+                job.title,
+                job.agent,
+                job.attempt,
+                who,
+                job.role,
+                job.elapsed,
+                job.waiting_clock,
+            )
+            live.append((job, work))
     # unresolved review-stop items, by milestone key
     stop_items: dict[str, str] = {}
     for r in conn.execute(
@@ -546,9 +562,18 @@ def _cards(
         mk = short_key(r["subject"])
         stop_items[mk] = r["text"] or ""
 
-    def running(own: list[sqlite3.Row]) -> Work | None:
+    def live_work(own: list[sqlite3.Row], milestone: str | None) -> Work | None:
+        """The oldest live job on one of these tickets, or, with no ticket, on this
+        milestone (its full key)."""
         names = {t["ticket"] for t in own}
-        return next((work for ticket, work in live.items() if ticket in names), None)
+        return next(
+            (
+                work
+                for job, work in live
+                if (job.ticket in names if job.ticket else milestone and job.milestone == milestone)
+            ),
+            None,
+        )
 
     found: list[tuple[Card, datetime]] = []  # each card, and when it was harvested
     for m in milestones:
@@ -574,7 +599,7 @@ def _cards(
                     stage=stage,
                     note=SET_ASIDE if stage == "seed" else "",
                     started=started,
-                    running=running([t]) if stage == "planted" else None,
+                    at_work=live_work([t], None),
                     developers=dev_work(stage, [t]),
                 )
                 found.append((card, ended.get(t["id"], _LONG_AGO)))
@@ -606,7 +631,7 @@ def _cards(
             reserve=stage in RESERVABLE and marked(repo, m["key"]),
             lane_asked=lane_requests.get(key.lower()) if stage in RESERVABLE else None,
             started=started,
-            running=running(counted) if stage == "planted" else None,
+            at_work=live_work(own, m["key"]),
             developers=dev_work(stage, own),
             thread=thread,
             setting_aside=bool(thread) and thread in setting_aside,
