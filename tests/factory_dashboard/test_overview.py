@@ -1638,7 +1638,11 @@ def write_away(conn: sqlite3.Connection) -> None:
         metrics.finish_job(conn, found, ended=f"2026-10-02T{ended}", outcome=outcome, cost_usd=cost)
 
     early, a = ticket("away-early", "done", LOCAL), ticket("away-a", "done", LOCAL)
-    b, c = ticket("away-b", "done", OPUS), ticket("away-c", "blocked")
+    b, c, none = (
+        ticket("away-b", "done", OPUS),
+        ticket("away-c", "blocked"),
+        ticket("away-none", "done"),
+    )
     job(early, "developer", LOCAL, 1, "07:00:00+00:00", "07:30:00+00:00", "passed")
     job(a, "developer", LOCAL, 1, "08:30:00+00:00", "09:10:00+00:00", "failed")
     job(a, "developer", LOCAL, 2, "09:10:00+00:00", "09:20:00+00:00", "passed")
@@ -1647,6 +1651,7 @@ def write_away(conn: sqlite3.Connection) -> None:
     job(c, "direction", OPUS, 1, "07:00:00+00:00", "07:10:00+00:00", "passed", 4.0)
     job(c, "last-attempt", LOCAL, 1, "12:40:00+02:00", "13:10:00+02:00", "failed")
     job(c, "developer", LOCAL, 2, "12:10:00+00:00", "12:30:00+00:00", "failed")
+    job(none, "developer", LOCAL, 1, "08:00:00+00:00", "08:10:00+00:00", "passed")
     job(None, "checkpoint", SONNET, 1, "11:00:00+00:00", "11:05:00+00:00", "passed", 0.5)
     metrics.upsert_owner_item(
         conn, project, "escalation", "away-c", created="2026-10-02T11:15:00+00:00"
@@ -1671,6 +1676,7 @@ def test_away_counts_what_happened_in_the_span_only(tmp_path):
     assert [(t.ticket, t.title, t.merged_by) for t in away.merged] == [
         ("away-b", "The away-b title.", OPUS),
         ("away-a", "The away-a title.", LOCAL),
+        ("away-none", "The away-none title.", None),
     ]  # latest first; away-early merged before the span
     assert away.failed == 2  # away-a's first attempt and away-c's last, not 05:10 or 12:30
     assert away.escalations == 1
@@ -1871,7 +1877,8 @@ def test_away_blocked_ids_links_in_summary(tmp_path):
 
 
 def test_away_no_merged_by_shows_no_label(client, db_path):
-    """A ticket with no merged_by shows no label in the HTML."""
+    """A ticket merged with no ``merged_by`` has a row in While you were away whose text
+    carries no agent name and none of ``1st try``, ``attempt``, ``lead ticket``."""
     conn = metrics.open_db(db_path)
     try:
         write_away(conn)
@@ -1879,24 +1886,18 @@ def test_away_no_merged_by_shows_no_label(client, db_path):
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    away_text = section(html, "away")
-    # away-a has merged_by=LOCAL so it should show a label
-    assert "qwen3.6-35b-a3b" in away_text
-    # But no ticket with no merged_by should have an .agent span or label text
-    from factory_dashboard import queries
-
-    conn = queries.connect(db_path)
-    try:
-        aw = queries.away(conn, PROJECT, since, NOW)
-    finally:
-        conn.close()
-    merged_names = {t.ticket for t in aw.merged}
-    assert "away-none" not in merged_names
+    # away-none is done with no merged_by, so its row should have no label text
+    row = away_row(html, "away-none")
+    text = row_text(row)
+    assert "qwen3.6-35b-a3b" not in text
+    assert "1st try" not in text
+    assert "attempt" not in text
+    assert "lead ticket" not in text
 
 
 def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
-    """A developer ticket merged by claude-opus after 3 developer jobs has the label
-    'after 3 developer attempts', and 'Opus' and 'finished' each appear once in its row."""
+    """A developer ticket merged by ``claude-opus`` after one developer job that passed reads
+    ``1st try`` in its row, and not ``after 1 developer attempt``."""
     conn = metrics.open_db(db_path)
     try:
         project = metrics.upsert_project(conn, PROJECT)
@@ -1907,46 +1908,31 @@ def test_away_developer_ticket_merged_by_opus_after_3_jobs(client, db_path):
         t = metrics.upsert_ticket(
             conn,
             project,
-            "away-opus-3",
+            "away-opus-1",
             milestone_id=f1,
             state="done",
             merged_by=OPUS,
             kind="developer",
-            title="Merged after 3.",
+            title="Merged after 1.",
         )
-        for n in range(1, 4):
-            jid = metrics.start_job(
-                conn,
-                run,
-                ticket_id=t,
-                milestone_id=f1,
-                role="developer",
-                agent=LOCAL,
-                attempt=n,
-                started=f"2026-10-02T09:{n:02d}:00+00:00",
-            )
-            metrics.finish_job(
-                conn, jid, ended=f"2026-10-02T09:{n + 10:02d}:00+00:00", outcome="failed"
-            )
-        esc = metrics.start_job(
+        jid = metrics.start_job(
             conn,
             run,
             ticket_id=t,
             milestone_id=f1,
-            role="escalation",
-            agent=OPUS,
+            role="developer",
+            agent=LOCAL,
             attempt=1,
-            started="2026-10-02T10:00:00+00:00",
+            started="2026-10-02T09:01:00+00:00",
         )
-        metrics.finish_job(conn, esc, ended="2026-10-02T10:10:00+00:00", outcome="passed")
+        metrics.finish_job(conn, jid, ended="2026-10-02T09:11:00+00:00", outcome="passed")
     finally:
         conn.close()
     since = datetime(2026, 10, 2, 8, 0, tzinfo=UTC)
     html = client.get("/?" + urlencode({"since": since.isoformat()})).text
-    row = row_text(away_row(html, "away-opus-3"))
-    assert "Opus away-opus-3 after 3 developer attempts · finished " in row
-    assert row.count("Opus") == 1
-    assert row.count("finished") == 1
+    row = row_text(away_row(html, "away-opus-1"))
+    assert "1st try" in row
+    assert "after 1 developer attempt" not in row
 
 
 def test_away_lead_ticket_shows_lead_ticket(client, db_path):
@@ -2069,7 +2055,7 @@ def test_each_away_ticket_takes_the_panels_width(page, serve, db_path):
             return [...panel.querySelectorAll("li .what")].map(w => w.offsetWidth / inner);
         }""",
     )
-    assert len(widths) == 3  # since 20:00 yesterday: away-early too
+    assert len(widths) == 4  # since 20:00 yesterday: away-early too; away-none added
     assert all(share >= 0.8 for share in widths), widths
 
 
