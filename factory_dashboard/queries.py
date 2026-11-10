@@ -317,7 +317,7 @@ def _lead_rates(conn: sqlite3.Connection, project_id: int) -> dict[int, tuple[fl
     rows = conn.execute(
         "SELECT t.id AS ticket_id, t.difficulty, t.lines_changed, j.cost_usd, j.tokens_in,"
         " j.tokens_cached, j.tokens_out, j.role, j.agent FROM tickets t"
-        " JOIN jobs j ON j.ticket_id = t.id"
+        " LEFT JOIN jobs j ON j.ticket_id = t.id"
         " WHERE t.project_id = ? AND t.kind = 'lead'"
         ' AND t."commit" IS NOT NULL AND t.lines_changed > 0 AND t.difficulty IS NOT NULL',
         (project_id,),
@@ -325,16 +325,18 @@ def _lead_rates(conn: sqlite3.Connection, project_id: int) -> dict[int, tuple[fl
     totals: dict[int, list[float]] = defaultdict(lambda: [0.0, 0.0, 0.0])
     seen: set[int] = set()
     for row in rows:
-        if row["role"] not in LEAD_ROLES:
-            continue
         diff = row["difficulty"]
         total = totals[diff]
-        total[0] += dollars(row)
-        total[1] += _equivalents(row)
+        # Count each merged lead ticket once for the denominator, regardless of jobs.
         tid = row["ticket_id"]
         if tid not in seen:
             seen.add(tid)
             total[2] += row["lines_changed"]
+        # Only sum dollars and tokens from lead-role jobs; non-lead jobs contribute none.
+        if row["role"] in LEAD_ROLES:
+            total[0] += dollars(row)
+        if row["role"] in LEAD_ROLES:
+            total[1] += _equivalents(row)
     return {
         d: (dollars / lines, tokens / lines)
         for d, (dollars, tokens, lines) in totals.items()
