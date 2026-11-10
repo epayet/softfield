@@ -5583,6 +5583,23 @@ def test_reserve_cards_follows_the_ready_tickets_only(repo):
     assert loop.reserve_cards(repo, ready) == set()
 
 
+def test_an_escalated_ticket_of_a_marked_card_keeps_the_lane(repo):
+    """F191 D2: the escalation moved the ticket out of ready/; its card's lane place stays, and
+    an unmarked card's escalated ticket is not in the lane."""
+    _marked(repo, "m3")
+    _card_ticket(repo, "m3-01-lead")
+    _card_ticket(repo, "m3-02-lead")
+    _card_ticket(repo, "m4-01-lead")
+    tasks = repo / ".softfield" / "tasks"
+    (tasks / "escalated").mkdir(parents=True, exist_ok=True)
+    for name in ("m3-02-lead", "m4-01-lead"):
+        (tasks / "ready" / f"{name}.md").rename(tasks / "escalated" / f"{name}.md")
+    ready = load_dir(tasks / "ready", 400)
+    escalated = load_dir(tasks / "escalated", 400)
+    assert loop.reserve_cards(repo, ready) == {"m3-01-lead"}
+    assert loop.lane_with_escalated(repo, ready, escalated) == {"m3-01-lead", "m3-02-lead"}
+
+
 def test_past_the_owners_25_percent_a_marked_cards_lead_ticket_runs(
     repo, fake_model, fake_lead, fake_clock, at_the_keyboard, monkeypatch
 ):

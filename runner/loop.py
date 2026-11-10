@@ -5679,7 +5679,10 @@ def work_queue(
             if take_tickets
             else None
         )
-        lane = reserve_cards(s.repo, ready)  # the fast lane (ADR 35)
+        # the fast lane (ADR 35), with the escalated tickets of its cards (F191 D2)
+        lane = lane_with_escalated(
+            s.repo, ready, load_dir(s.tasks_dir("escalated"), s.cfg.default_max_diff)
+        )
         if lane_only:  # the round's first pass (F235 D1): nothing but the lane
             rows = [r for r in rows if r.kind in dispatch.GOES_WITH and r.subject in lane]
             task = task if task is not None and task.id in lane else None
@@ -6082,6 +6085,14 @@ def reserve_cards(repo: Path, ready: list[Task]) -> set[str]:
     return found
 
 
+def lane_with_escalated(repo: Path, ready: list[Task], escalated: list[Task]) -> set[str]:
+    """`reserve_cards` plus the escalated tickets of a fast-lane card (F191 D2): the escalation
+    moved its ticket out of ready/, but the card's place in the lane stays."""
+    lane = reserve_cards(repo, ready)
+    # the same reading as `reserve_cards`, over the escalated tickets
+    return lane | reserve_cards(repo, escalated) & {t.id for t in escalated}
+
+
 def _uses_reserve(s: Session, task: Task) -> bool:
     """Whether ``task`` may use Claude's reserve without the owner's switch (`reserve_cards`)."""
     return task.id in reserve_cards(s.repo, load_dir(s.tasks_dir("ready"), s.cfg.default_max_diff))
@@ -6128,7 +6139,7 @@ def dry_run_plan(cfg: Config) -> None:
     )
     claude = _claude_windows_from(cfg, readings, refusals, at)
     windows = _pick_windows(state, claude, queued, at)
-    lane = reserve_cards(cfg.repo, ready)
+    lane = lane_with_escalated(cfg.repo, ready, load_dir(tasks / "escalated", cfg.default_max_diff))
     by_the_owner = state.owner_pause is not None
     # A parked row says its own wait in the list: only a parked ticket limits the other rows. A
     # ticket's line goes by what `choose_ticket` goes by, a parked row's limit included.
