@@ -44,3 +44,9 @@ attempts: 3
 tokens: 3800695
 logs: .softfield/var/runs/20261106-011143/f228-02-one-floor-per-request
 ```
+
+```yaml
+# --- runner ---
+result: done
+finished_by: lead
+```
