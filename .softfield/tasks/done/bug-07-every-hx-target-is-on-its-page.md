@@ -27,3 +27,12 @@ f159-01's Queue it button pointed `hx-target` at an element that existed only on
 - the test names the page and the missing id when it fails
 - a page rendered with a made-up `hx-target="#nowhere"` fails the check (a small case on a literal string, so the check itself can fail)
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 2194
+gate_failures: []
+tokens: 3160037
+```
