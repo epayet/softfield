@@ -4258,3 +4258,60 @@ def test_pressing_switch_starts_transitionrun_and_moves_knob(page, client):
     inside = page.locator("#theme-btn .plate").evaluate("el => el.clientHeight")
     top = knob.evaluate("el => parseFloat(getComputedStyle(el).top)")
     assert top == inside - 17, f"knob top {top}, plate inside {inside}"
+
+
+# --- hx-target guard (f159 review F1: bug-07) ---------------------------------------------
+
+_HX_TARGET_RE = re.compile(r'hx-target="(#\S+)"')
+_HX_TARGET_ID_RE = re.compile(r'id="([^"]*)"')
+
+
+def _check_hx_targets(html: str, page: str) -> list[str]:
+    """Return every missing target id on *page*, or an empty list if all are valid."""
+    problems: list[str] = []
+    for m in _HX_TARGET_RE.finditer(html):
+        target = m.group(1)
+        # Valid: ``this``, ``closest ``, ``next ``, ``previous ``, ``find ``
+        if target == "this" or target.startswith(("closest ", "next ", "previous ", "find ")):
+            continue
+        # Valid: an id that exists on the page (strip the leading ``#``)
+        ids = _HX_TARGET_ID_RE.findall(html)
+        if target.lstrip("#") in ids:
+            continue
+        problems.append(target)
+    return problems
+
+
+def test_every_hx_target_names_an_element_on_its_page(
+    later_client, tickets_client, client, serve, milestone_detail_with_scores_client
+):
+    """f159-01's Queue it button pointed ``hx-target`` at an element that existed only once
+    the request was sent, so htmx sent nothing. Every ``hx-target="#x"`` on these pages must
+    name an element with ``id="x"`` on the same page, or be ``this`` / ``closest `` /
+    ``next `` / ``previous `` / ``find ``."""
+    pages: list[tuple[str, str]] = [
+        ("later ticket", later_client.get("/tickets/f1-99-later").text),
+        ("tickets list", tickets_client.get("/tickets").text),
+        ("board", client.get("/board").text),
+        ("planning", serve().get("/planning").text),
+        ("thread", serve().get("/planning/f6").text),
+        ("milestone detail", milestone_detail_with_scores_client.get("/milestones/f1").text),
+    ]
+    for name, html in pages:
+        missing = _check_hx_targets(html, name)
+        assert missing == [], f"{name}: hx-target points to missing ids {missing}"
+
+
+def test_a_made_up_hx_target_fails_the_check(client):
+    """A page rendered with ``hx-target="#nowhere"`` fails the check, so the test itself
+    can fail."""
+    html = client.get("/board").text
+    # Inject a literal button that points to a definitely-missing id
+    injected = html.replace(
+        "</body>",
+        '  <button hx-target="#__hx_test_nowhere_xyz__">nowhere</button></body>',
+    )
+    problems = _check_hx_targets(injected, "/board (injected)")
+    assert problems == ["#__hx_test_nowhere_xyz__"], (
+        f"expected #__hx_test_nowhere_xyz__ to be detected, got {problems}"
+    )
