@@ -25,3 +25,12 @@ Read `machine` in `factory_dashboard/static/factory.js` (the idle lead draws a l
 - no assertion compares boxes the test computes from constants
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 3
+duration_s: 8521
+gate_failures: ['ruff', 'task-tests']
+tokens: 6064068
+```
