@@ -4005,3 +4005,74 @@ def test_the_fast_lane_takes_the_tickets_a_lane_ticket_waits_for_in_the_run_orde
     assert [r["ticket"] for r in lane] == ["f8-01-b", "f23-01-first", "f23-02-second"]
     assert [r["ticket"] for r in rest] == ["f9-01-a", None]
     assert fast_lane(rows, set()) == ([], rows)
+
+
+# --- F228-02: one floor per request -------------------------------------------------------
+
+
+def _counted(monkeypatch: pytest.MonkeyPatch, module: object, name: str) -> list[int]:
+    """``module.name`` wrapped to count its calls: one entry a call."""
+    original = getattr(module, name)
+    calls: list[int] = []
+
+    def counting(*args: Any, **kwargs: Any) -> Any:
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(module, name, counting)
+    return calls
+
+
+@pytest.mark.parametrize("path", ["/", "/live"])
+def test_one_request_builds_the_board_once(client, monkeypatch, path):
+    """F228 D3: the Overview and its 5-second refresh build the board once, not four times."""
+    from factory_dashboard import board
+
+    calls = _counted(monkeypatch, board, "_cards")
+    assert client.get(path).status_code == 200
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("path", ["/", "/live"])
+def test_one_request_builds_the_floor_once(client, monkeypatch, path):
+    """F228 D3: the Overview and its 5-second refresh build the floor once, not three times."""
+    from factory_dashboard import line
+
+    calls = _counted(monkeypatch, line, "trips")
+    assert client.get(path).status_code == 200
+    assert len(calls) == 1
+
+
+def test_a_page_with_no_count_of_its_own_still_shows_the_planning_tabs(serve_between, db_path):
+    """F228 D4: /runs gives the top bar no count, so the bar still reads the desk for it."""
+    client = serve_between()
+    sign_off_all(db_path)
+    lead_replies(db_path, "f7", "f8")
+    assert planning_tab(client.get("/runs").text) == "Planning · 2"
+    assert planning_tab(client.get("/").text) == "Planning · 2"
+
+
+def test_a_card_that_turns_ripe_shows_on_the_next_refresh(serve_between, db_path):
+    """F228: nothing is kept between requests, so a milestone reviewed with every ticket done
+    since the last /live shows on the desk entry, and in the tab's count, on the next one."""
+    client = serve_between()
+    sign_off_all(db_path)
+    before = client.get("/live").text
+    assert 'id="desk-entry"' not in before
+    assert planning_tab(before) == "Planning"
+    conn = metrics.open_db(db_path)
+    try:
+        project = metrics.upsert_project(conn, PROJECT)
+        f30 = metrics.upsert_milestone(
+            conn, project, "f30", title="Ripe now", status="review", signoff={"changed": "Ripe."}
+        )
+        metrics.upsert_ticket(
+            conn, project, "f30-01-ripe", milestone_id=f30, kind="developer", state="done"
+        )
+    finally:
+        conn.close()
+    after = client.get("/live").text
+    assert "1 thing waits for you on your desk" in section(after, "needs-you")
+    entry = after.split('id="desk-entry"')[1].split("</li>")[0]
+    assert re.findall(r'href="/planning/(f\d+)\?', entry) == ["f30"]
+    assert planning_tab(after) == "Planning · 1"

@@ -748,11 +748,14 @@ def _developer_totals(
     return len(can), tickets, tickets * statistics.median(minutes) if minutes else None
 
 
-def reserve_marked(conn: sqlite3.Connection, project: str, now: datetime) -> list[Card]:
+def reserve_marked(
+    conn: sqlite3.Connection, project: str, now: datetime, *, found: Board | None = None
+) -> list[Card]:
     """The planted cards marked to use Claude's reserve, or asked to (F192 D4), in the board's
     order: the Overview names them under Claude's meters (F172 D6). A marked card asked out
     stays until the runner applies it; its ``lane_asked`` says so."""
-    found = board(conn, project, now)
+    if found is None:
+        found = board(conn, project, now)
     return [
         c for stage in RESERVABLE for c in found.stages[stage] if c.reserve or c.lane_asked == "on"
     ]

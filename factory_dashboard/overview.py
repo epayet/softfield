@@ -25,6 +25,7 @@ from runner.state import load_state
 from runner.tasks import milestone_order, short_key
 
 if TYPE_CHECKING:
+    from factory_dashboard.board import Board  # board.py imports from here
     from factory_dashboard.coming import DeskItem  # coming.py imports from here
 
 router = APIRouter()
@@ -761,10 +762,17 @@ def fast_lane(
 # --- the routes ---------------------------------------------------------------------------
 
 
-def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, object]:
+def _live_context(
+    conn: sqlite3.Connection,
+    project: str,
+    now: datetime,
+    *,
+    line: dict[str, Any] | None = None,
+    cards: "Board | None" = None,
+) -> dict[str, object]:
     """What the ``/live`` partial draws: Needs you, then Now (what works and the next three in
     the run order)."""
-    from factory_dashboard.board import reserve_marked  # board.py imports from here
+    from factory_dashboard.board import board, reserve_marked  # board.py imports from here
     from factory_dashboard.coming import _card_titles  # coming.py imports from overview
     from factory_dashboard.line import live_line  # line.py imports LIVE from here
     from factory_dashboard.planning import (  # planning.py imports from overview at module level
@@ -778,11 +786,16 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     all_queued = queue(conn, project, now)
     # Mapping from ticket id to its ``waits_for`` reason, for tickets whose dependency isn't done.
     waits: dict[str, str] = {q.ticket: q.waits_for for q in all_queued if q.waits_for is not None}
+    # the board and the floor once a request (F228): each is built here only when not handed in
+    if cards is None:
+        cards = board(conn, project, now)
+    if line is None:
+        line = live_line(conn, project, now.astimezone(), cards=cards)
     # the fast lane's tickets, and their directions and escalations, go first (F172 D9)
-    reserve_cards = reserve_marked(conn, project, now)
+    reserve_cards = reserve_marked(conn, project, now, found=cards)
     # as the runner will once it applies the requests: a card asked out has left (F192 D4)
     lane, rest = fast_lane(
-        live_line(conn, project, now.astimezone())["queue"],
+        line["queue"],
         {c.key for c in reserve_cards if c.lane_asked != "off"},
     )
     lane_ids = {str(r["ticket"]) for r in lane}
@@ -809,7 +822,7 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
     if project_id is not None:
         card_titles = _card_titles(conn, project_id)
         proposals = _open_proposals(conn, project_id)
-    items = waiting_for_you(desk(conn, project, now))  # what the owner acted on waits on no one
+    items = waiting_for_you(desk(conn, project, now, line=line))  # acted on waits on no one
     if items:
         n = len(items)
         text = f"{n} thing{'s wait' if n != 1 else ' waits'} for you on your desk"
@@ -872,10 +885,12 @@ def _live_context(conn: sqlite3.Connection, project: str, now: datetime) -> dict
 
 @router.get("/", response_class=HTMLResponse)
 def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResponse:
+    from factory_dashboard.board import board  # board.py imports from here
     from factory_dashboard.line import SEEN, live_line, overnight
 
     local = now.astimezone()
-    line = live_line(conn, project, local)
+    cards = board(conn, project, now)
+    line = live_line(conn, project, local, cards=cards)
     milestone = current_milestone(conn, project)
 
     def url(path: str, since: datetime) -> str:
@@ -919,7 +934,7 @@ def overview(request: Request, conn: Db, project: Project, now: Now) -> HTMLResp
             "since": since,
             "choices": choices,
             "now": local,
-            **_live_context(conn, project, now),
+            **_live_context(conn, project, now, line=line, cards=cards),
             "milestone": milestone,
             "savings": queries.savings(conn, project, milestone["key"]) if milestone else None,
             "spend": spend_chart(conn, project),

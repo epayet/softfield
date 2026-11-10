@@ -367,14 +367,18 @@ def factory_status(conn: sqlite3.Connection, project: str, now: datetime) -> Sta
     return Status(f"Running: {activity}", "good", "pause", dot="runner")
 
 
-def top_bar(conn: sqlite3.Connection, project: str, now: datetime) -> dict[str, Any]:
+def top_bar(
+    conn: sqlite3.Connection, project: str, now: datetime, *, planning_count: int | None = None
+) -> dict[str, Any]:
     """The top bar's live facts on every page (f6-16): the factory's status and the Planning
     tab's count. ``render`` adds them to each page's first paint; ``/live`` refreshes them."""
     from factory_dashboard.planning import desk, waiting_for_you  # planning imports this module
 
     return {
         "bar_status": factory_wide_status(conn, project, now),
-        "planning_count": len(waiting_for_you(desk(conn, project, now))),
+        "planning_count": planning_count
+        if planning_count is not None
+        else len(waiting_for_you(desk(conn, project, now))),
     }
 
 
@@ -400,7 +404,7 @@ def render(
             "projects": names if project in names else [*names, project],
             "q": "?" + urlencode({"project": project}),
             "version_poll": VERSION_POLL.format(version=code_version()),
-            **top_bar(conn, project, now),
+            **top_bar(conn, project, now, planning_count=context.get("planning_count")),
             **context,
         },
     )

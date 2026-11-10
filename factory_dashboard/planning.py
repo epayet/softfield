@@ -15,6 +15,7 @@ from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
@@ -301,9 +302,13 @@ def _open_proposals(
     return items
 
 
-def _ripe(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskItem]:
+def _ripe(
+    conn: sqlite3.Connection, project: str, now: datetime, line: dict[str, Any] | None = None
+) -> list[DeskItem]:
     """Every ticket done, its review written, and not signed off, as the line's field has
     them (F50 D1)."""
+    if line is None:
+        line = live_line(conn, project, now)
     return [
         DeskItem(
             "ripe",
@@ -311,7 +316,7 @@ def _ripe(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskIte
             "reviewed · waits for your sign-off",
             f"/planning/{short_key(m['key'])}",
         )
-        for m in live_line(conn, project, now)["field"]["ripe"]
+        for m in line["field"]["ripe"]
     ]
 
 
@@ -572,7 +577,9 @@ def desk_trail(
     }
 
 
-def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGroup]:
+def desk(
+    conn: sqlite3.Connection, project: str, now: datetime, *, line: dict[str, Any] | None = None
+) -> list[DeskGroup]:
     """What waits for the owner (D6), in six groups in this order, empty ones included: what
     didn't go through first (F31 D9), blocked tickets (F106 D1), sign-offs, conversations
     (F185 D1), proposals, and seeds."""
@@ -588,7 +595,7 @@ def desk(conn: sqlite3.Connection, project: str, now: datetime) -> list[DeskGrou
         titles = _card_titles(conn, project_id)
         refusals = _refused(conn, project_id, titles)
         repo = _repo(conn, project)
-        ripe = _acted_on(conn, project_id, _ripe(conn, project, now))
+        ripe = _acted_on(conn, project_id, _ripe(conn, project, now, line=line))
         proposals = _open_proposals(
             conn, project_id, _known_cards(repo), repo, _revising(conn, project_id, project, now)
         )

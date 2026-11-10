@@ -32,7 +32,7 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -44,6 +44,9 @@ from factory_dashboard.overview import LIVE, live_runs
 from runner import dispatch, loop, metrics
 from runner.config import Config, load_config
 from runner.tasks import milestone_order, short_key
+
+if TYPE_CHECKING:
+    from factory_dashboard.board import Board  # board.py imports from here
 
 router = APIRouter()
 
@@ -628,7 +631,12 @@ def _due_reviews(conn: sqlite3.Connection, project: str, now: datetime) -> list[
 
 
 def live_line(
-    conn: sqlite3.Connection, project: str, now: datetime, at: datetime | None = None
+    conn: sqlite3.Connection,
+    project: str,
+    now: datetime,
+    at: datetime | None = None,
+    *,
+    cards: "Board | None" = None,
 ) -> dict[str, Any]:
     """D11's document at ``at`` (default ``now``): stations, machines with their state and
     crate, belts with that day's count (since ``at``'s midnight) and ``carrying``, Now and the
@@ -728,7 +736,8 @@ def live_line(
     if live:
         from factory_dashboard.board import board  # board.py imports from this module
 
-        cards = board(conn, project, now)
+        if cards is None:
+            cards = board(conn, project, now)
         stages = {stage: len(found) for stage, found in cards.stages.items()}
         count.update(
             seeds=stages["seed"],
