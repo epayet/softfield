@@ -24,3 +24,12 @@ Read `_label` in `factory_dashboard/queries.py` (the label a row of While you we
 - a developer ticket merged by `claude-opus` after one developer job that passed reads "1st try" in its row, and not "after 1 developer attempt"
 - the listed `tests:` pass, with no change outside `tests/`
 - all gates pass (see `docs/workflow.md`)
+
+```yaml
+# --- runner ---
+result: done
+attempts: 1
+duration_s: 1770
+gate_failures: []
+tokens: 1590804
+```
